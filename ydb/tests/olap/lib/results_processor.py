@@ -12,19 +12,25 @@ from time import time_ns
 class ResultsProcessor:
     class Endpoint:
         def __init__(self, ep: str, db: str, table: str, key: str, iam_file: str) -> None:
+            self._endpoint = ep
             self._driver = YdbCluster._create_ydb_driver(ep, db, oauth=key, iam_file=iam_file)
             self._db = db
             self._table = table
 
         def send_data(self, data):
             try:
+                logging.info(f"[ResultsProcessor] Sending data to YDB endpoint: {self._endpoint}, db: {self._db}, table: {self._table}")
+                logging.info(f"[ResultsProcessor] Data: {json.dumps(data)[:1000]}" + ("..." if len(json.dumps(data)) > 1000 else ""))
+                logging.info(f"[ResultsProcessor] Columns types: {ResultsProcessor._columns_types}")
                 ydb.retry_operation_sync(
                     lambda: self._driver.table_client.bulk_upsert(
                         os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
                     )
                 )
+                logging.info(f"[ResultsProcessor] Data sent successfully to {os.path.join(self._db, self._table)}")
             except BaseException as e:
-                logging.error(f'Exception while send results: {e}')
+                logging.error(f'[ResultsProcessor] Exception while send results: {e}')
+                # Не падаем, просто логируем ошибку
 
     _endpoints : list[ResultsProcessor.Endpoint] = None
     _run_id : int = None
@@ -51,11 +57,16 @@ class ResultsProcessor:
     @classmethod
     def get_endpoints(cls):
         if cls._endpoints is None:
+            logging.info(f"[ResultsProcessor] Initializing endpoints")
             endpoints = get_external_param('results-endpoint', 'grpc://ydb-ru-prestable.yandex.net:2135').split(',')
             dbs = get_external_param('results-db', '/ru-prestable/kikimr/preprod/olap-click-perf').split(',')
             tables = get_external_param('results-table', 'tests_results').split(',')
             count = max(len(endpoints), len(dbs), len(tables))
             common_key = os.getenv('RESULT_YDB_OAUTH', None)
+            
+            logging.info(f"[ResultsProcessor] Endpoints config: endpoints={endpoints}, dbs={dbs}, tables={tables}")
+            logging.info(f"[ResultsProcessor] Count: {count}, common_key exists: {common_key is not None}")
+            
             cls._endpoints = []
             for i in range(count):
                 ep = endpoints[i] if i < len(endpoints) else endpoints[-1]
@@ -65,7 +76,11 @@ class ResultsProcessor:
                 key = None
                 if iam_file is None:
                     key = os.getenv(f'RESULT_YDB_OAUTH_{i}', common_key)
+                
+                logging.info(f"[ResultsProcessor] Creating endpoint {i}: ep={ep}, db={db}, table={table}, key exists: {key is not None}")
                 cls._endpoints.append(ResultsProcessor.Endpoint(ep, db, table, key, iam_file))
+            
+            logging.info(f"[ResultsProcessor] Created {len(cls._endpoints)} endpoints")
         return cls._endpoints
 
     @classmethod
@@ -96,45 +111,59 @@ class ResultsProcessor:
         attempt: int | None = None,
         statistics: dict | None = None,
     ):
+        logging.info(f"[ResultsProcessor] upload_results called with: kind={kind}, suite={suite}, test={test}, is_successful={is_successful}")
+        logging.info(f"[ResultsProcessor] send_results flag: {cls.send_results}")
+        
         if not cls.send_results:
+            logging.info(f"[ResultsProcessor] send_results is False, returning early")
             return
 
-        def _get_duration(dur: float | None):
-            if dur is not None:
-                return int(1000000 * dur)
-            if duration is not None:
-                return int(1000000 * duration)
-            return None
+        try:
+            def _get_duration(dur: float | None):
+                if dur is not None:
+                    return int(1000000 * dur)
+                if duration is not None:
+                    return int(1000000 * duration)
+                return None
 
-        info = {'cluster': YdbCluster.get_cluster_info()}
+            info = {'cluster': YdbCluster.get_cluster_info()}
 
-        report_url = os.getenv('ALLURE_RESOURCE_URL', None)
-        if report_url is None:
-            sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
-            if sandbox_task_id is not None:
-                report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
-        if report_url is not None:
-            info['report_url'] = report_url
+            report_url = os.getenv('ALLURE_RESOURCE_URL', None)
+            if report_url is None:
+                sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
+                if sandbox_task_id is not None:
+                    report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+            if report_url is not None:
+                info['report_url'] = report_url
 
-        ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
-        if ci_launch_id:
-            info['ci_launch_id'] = ci_launch_id
+            ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
+            if ci_launch_id:
+                info['ci_launch_id'] = ci_launch_id
 
-        data = {
-            'Db': cls.get_cluster_id(),
-            'Kind': kind,
-            'Suite': suite,
-            'Test': test,
-            'Timestamp': int(1000000 * timestamp),
-            'RunId': cls.get_run_id(),
-            'Success': 1 if is_successful else 0,
-            'MinDuration': _get_duration(min_duration),
-            'MaxDuration': _get_duration(max_duration),
-            'MeanDuration': _get_duration(mean_duration),
-            'MedianDuration': _get_duration(median_duration),
-            'Attempt': attempt,
-            'Stats': json.dumps(statistics) if statistics is not None else None,
-            'Info': json.dumps(info),
-        }
-        for endpoint in cls.get_endpoints():
-            endpoint.send_data(data)
+            data = {
+                'Db': cls.get_cluster_id(),
+                'Kind': kind,
+                'Suite': suite,
+                'Test': test,
+                'Timestamp': int(1000000 * timestamp),
+                'RunId': cls.get_run_id(),
+                'Success': 1 if is_successful else 0,
+                'MinDuration': _get_duration(min_duration),
+                'MaxDuration': _get_duration(max_duration),
+                'MeanDuration': _get_duration(mean_duration),
+                'MedianDuration': _get_duration(median_duration),
+                'Attempt': attempt,
+                'Stats': json.dumps(statistics) if statistics is not None else None,
+                'Info': json.dumps(info),
+            }
+            
+            for endpoint in cls.get_endpoints():
+                try:
+                    endpoint.send_data(data)
+                except Exception as e:
+                    logging.error(f"[ResultsProcessor] Failed to send data to endpoint: {e}")
+                    # Продолжаем с другими endpoint'ами
+                    
+        except Exception as e:
+            logging.error(f"[ResultsProcessor] Error in upload_results: {e}")
+            # Не падаем, просто логируем ошибку

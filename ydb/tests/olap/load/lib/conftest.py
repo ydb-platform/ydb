@@ -325,18 +325,30 @@ class LoadSuiteBase:
             cls.__attach_logs(start_time=result.start_time, attach_name='kikimr', query_text=query_text)
         allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
         if upload:
-            ResultsProcessor.upload_results(
-                kind='Load',
-                suite=cls.suite(),
-                test=query_name,
-                timestamp=end_time,
-                is_successful=result.success,
-                min_duration=_get_duraton(stats, 'Min'),
-                max_duration=_get_duraton(stats, 'Max'),
-                mean_duration=_get_duraton(stats, 'Mean'),
-                median_duration=_get_duraton(stats, 'Median'),
-                statistics=stats,
-            )
+            # --- устанавливаем endpoint из ydb-endpoint параметра ---
+            ydb_endpoint = get_external_param('ydb-endpoint', '')
+            if ydb_endpoint:
+                result._workload_endpoint = ydb_endpoint
+            # --- используем endpoint из result (установленный выше) ---
+            endpoint = getattr(result, '_workload_endpoint', None)
+            db_field = endpoint if endpoint else ResultsProcessor.get_cluster_id()
+            
+            try:
+                ResultsProcessor.upload_results(
+                    kind='Load',
+                    suite=cls.suite(),
+                    test=query_name,
+                    timestamp=end_time,
+                    is_successful=result.success,
+                    statistics=stats,
+                )
+            except Exception as e:
+                logging.warning(f"Failed to upload results for {query_name}: {e}")
+                # Не падаем из-за ошибок upload в setup
+                if query_name == '_Verification':
+                    logging.info(f"Skipping upload error for setup verification")
+                else:
+                    result.add_warning(f"Upload failed: {e}")
         if not result.success:
             exc = pytest.fail.Exception('\n'.join([result.error_message, result.warning_message]))
             if result.traceback is not None:
@@ -440,6 +452,8 @@ class LoadSuiteBase:
         if query_name is None:
             query_name = f'Query{query_num:02d}'
         self.save_nodes_state()
+        # --- используем ydb-endpoint из параметров теста ---
+        endpoint = get_external_param('ydb-endpoint', '')
         result = YdbCliHelper.workload_run(
             path=path,
             query_names=[query_name],
@@ -452,6 +466,7 @@ class LoadSuiteBase:
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
         )[query_name]
+        result._workload_endpoint = endpoint
         self.process_query_result(result, query_name, True)
 
     @classmethod
@@ -505,195 +520,113 @@ class LoadSuiteBase:
         cls.__nodes_state = None
         return node_errors
 
-    @classmethod
-    def process_workload_result_with_diagnostics(cls, result: YdbCliHelper.WorkloadRunResult, workload_name: str, upload: bool):
-        """
-        Обрабатывает результаты workload с диагностической информацией о нодах.
-        Упрощенная версия без query-специфичной функциональности.
-        """
-        def _get_duraton(stats, field):
-            r = stats.get(field)
-            return float(r) / 1e3 if r is not None else None
-
-        def _duration_text(duration: float | int):
-            s = f'{int(duration)}s ' if duration >= 1 else ''
-            return f'{s}{int(duration * 1000) % 1000}ms'
-
-        # Обрабатываем только iterations для workload (без планов запросов)
-        for iter_num in sorted(result.iterations.keys()):
-            iter_res = result.iterations[iter_num]
-            s = allure.step(f'Workload Iteration {iter_num}')
-            if iter_res.time:
-                s.params['duration'] = _duration_text(iter_res.time)
-            try:
-                with s:
-                    if iter_res.error_message:
-                        pytest.fail(iter_res.error_message)
-            except BaseException:
-                pass
-
-        # Прикрепляем stdout/stderr если есть
-        if result.stdout is not None:
-            allure.attach(result.stdout, 'Workload stdout', attachment_type=allure.attachment_type.TEXT)
-
-        if result.stderr is not None:
-            allure.attach(result.stderr, 'Workload stderr', attachment_type=allure.attachment_type.TEXT)
-
-        end_time = time()
-
-        # Собираем диагностическую информацию о нодах
-        # Используем время начала workload (если доступно) для более точной диагностики
-        diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
-        node_errors = cls.check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
-
-        # Добавляем диагностическую информацию в статистику
-        if node_errors:
-            # Подсчитываем общую статистику по нодам
-            total_coredumps = sum(len(node_error.core_hashes) for node_error in node_errors)
-            nodes_with_oom = sum(1 for node_error in node_errors if node_error.was_oom)
-            nodes_with_cores = sum(1 for node_error in node_errors if node_error.core_hashes)
-
-            # Добавляем в статистику результата
-            result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
-            result.add_stat(workload_name, "total_coredumps", total_coredumps)
-            result.add_stat(workload_name, "nodes_with_oom", nodes_with_oom)
-            result.add_stat(workload_name, "nodes_with_coredumps", nodes_with_cores)
-
-            # Детальная информация по каждой ноде
-            node_details = {}
-            for node_error in node_errors:
-                node_key = node_error.node.slot
-                node_details[node_key] = {
-                    "host": node_error.node.host,
-                    "coredumps_count": len(node_error.core_hashes),
-                    "has_oom": node_error.was_oom,
-                    "coredump_hashes": [core_hash for _, core_hash in node_error.core_hashes]
-                }
-
-            result.add_stat(workload_name, "node_diagnostics", node_details)
-        else:
-            # Если проблем не найдено, тоже добавляем в статистику
-            result.add_stat(workload_name, "nodes_with_issues", 0)
-            result.add_stat(workload_name, "total_coredumps", 0)
-            result.add_stat(workload_name, "nodes_with_oom", 0)
-            result.add_stat(workload_name, "nodes_with_coredumps", 0)
-
-        # Собираем параметры workload из статистики
-        stats = result.get_stats(workload_name)
+    def _collect_workload_params(self, result, workload_name):
+        """Собирает параметры workload для отчёта"""
         workload_params = {}
+        workload_stats = result.get_stats(workload_name)
+        if workload_stats:
+            important_params = ['total_runs', 'planned_duration', 'actual_duration', 'use_iterations', 'workload_type', 'table_type']
+            for param in important_params:
+                if param in workload_stats:
+                    workload_params[param] = workload_stats[param]
+            if 'total_iterations' in workload_stats:
+                workload_params['total_iterations'] = workload_stats['total_iterations']
+            if 'total_threads' in workload_stats:
+                workload_params['total_threads'] = workload_stats['total_threads']
+            for key, value in workload_stats.items():
+                if key not in workload_params and key not in ['success_rate', 'successful_runs', 'failed_runs']:
+                    workload_params[key] = value
+        return workload_params
 
-        # Извлекаем полезные параметры из статистики
-        if stats.get('total_runs'):
-            workload_params['Total Runs'] = stats['total_runs']
-        if stats.get('planned_duration'):
-            workload_params['Planned Duration'] = f"{stats['planned_duration']}s"
-        if stats.get('use_chunks'):
-            workload_params['Use Chunks'] = 'Yes' if stats['use_chunks'] else 'No'
-        if stats.get('workload_type'):
-            workload_params['Workload Type'] = stats['workload_type']
-        if stats.get('table_type'):
-            workload_params['Table Type'] = stats['table_type']
-        if stats.get('path'):
-            workload_params['Path'] = stats['path']
+    def _diagnose_nodes(self, result, workload_name):
+        """Проводит диагностику нод (cores/oom) и возвращает список ошибок"""
+        try:
+            end_time = time()
+            diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
+            node_errors = type(self).check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
+        except Exception as e:
+            logging.error(f"Error getting nodes state: {e}")
+            result.add_warning(f"Error getting nodes state: {e}")
+            node_errors = []
+        return node_errors
 
-        # Добавляем информацию в allure отчет с node_errors
+    def _update_summary_flags(self, result, workload_name):
+        """Обновляет summary-флаги для warning/error по всем итерациям"""
+        has_warning = False
+        has_error = False
+        for iteration in getattr(result, "iterations", {}).values():
+            if hasattr(iteration, "warning_message") and iteration.warning_message:
+                has_warning = True
+            if hasattr(iteration, "error_message") and iteration.error_message:
+                has_error = True
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            stats["with_warnings"] = has_warning or bool(getattr(result, "warning_message", None))
+            stats["with_errors"] = has_error or bool(getattr(result, "error_message", None))
+
+    def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
+        """Формирует allure-отчёт по результатам workload"""
+        from ydb.tests.olap.lib.allure_utils import allure_test_description
+        end_time = time()
+        start_time = result.start_time if result.start_time else end_time - 1
+        additional_table_strings = {}
+        if workload_params.get('actual_duration') is not None:
+            actual_duration = workload_params['actual_duration']
+            planned_duration = workload_params.get('planned_duration', getattr(self, 'timeout', 0))
+            actual_minutes = int(actual_duration) // 60
+            actual_seconds = int(actual_duration) % 60
+            planned_minutes = int(planned_duration) // 60
+            planned_seconds = int(planned_duration) % 60
+            additional_table_strings['execution_time'] = f"Actual: {actual_minutes}m {actual_seconds}s (Planned: {planned_minutes}m {planned_seconds}s)"
+        if 'total_iterations' in workload_params and 'total_threads' in workload_params:
+            total_iterations = workload_params['total_iterations']
+            total_threads = workload_params['total_threads']
+            if total_iterations == 1 and total_threads > 1:
+                additional_table_strings['execution_mode'] = f"Single iteration with {total_threads} parallel threads"
+            elif total_iterations > 1:
+                avg_threads = workload_params.get('avg_threads_per_iteration', 1)
+                additional_table_strings['execution_mode'] = f"{total_iterations} iterations with avg {avg_threads:.1f} threads per iteration"
         allure_test_description(
-            cls.suite(), workload_name,
-            start_time=result.start_time, end_time=end_time, node_errors=node_errors,
-            workload_result=result, workload_params=workload_params
+            suite=type(self).suite(),
+            test=workload_name,
+            start_time=start_time,
+            end_time=end_time,
+            addition_table_strings=additional_table_strings,
+            node_errors=node_errors,
+            workload_result=result,
+            workload_params=workload_params,
+            use_node_subcols=use_node_subcols
         )
 
-        # Логируем статистику для отладки
-        logging.info(f"Workload {workload_name} statistics: {json.dumps(stats, indent=2)}")
-
-        for p in ['Mean']:
-            if p in stats:
-                allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
-
-        # Прикрепляем логи только при неуспешном выполнении
-        if os.getenv('NO_KUBER_LOGS') is None and not result.success:
-            cls.__attach_logs(start_time=result.start_time, attach_name='cluser', query_text='')
-
-        # Прикрепляем статистику
-        allure.attach(json.dumps(stats, indent=2), 'Workload Stats', attachment_type=allure.attachment_type.JSON)
-
-        # Детальная информация об ошибках для диагностики
-        if stats.get('errors') and any(stats['errors'].values()):
-            error_details = []
-            error_details.append(f"Error Summary from stats: {stats['errors']}")
-
-            if result.error_message:
-                error_details.append(f"Error Message: {result.error_message}")
-            if result.warning_message:
-                error_details.append(f"Warning Message: {result.warning_message}")
-            if result.stderr:
-                error_details.append(f"Stderr: {result.stderr}")
-            if result.stdout and "error" in result.stdout.lower():
-                error_details.append(f"Stdout (errors): {result.stdout}")
-
-            # Информация из iterations
-            for iter_num, iteration in result.iterations.items():
-                if iteration.error_message:
-                    error_details.append(f"Iteration {iter_num} error: {iteration.error_message}")
-
-            error_report = "\n\n".join(error_details)
-            allure.attach(error_report, 'Detailed Error Information', attachment_type=allure.attachment_type.TEXT)
-            logging.warning(f"Workload {workload_name} completed with errors: {error_report}")
-
-        # Дополнительная информация о диагностике нод
-        if node_errors:
-            node_diagnostics_details = []
-            node_diagnostics_details.append(f"Found issues on {len(node_errors)} nodes:")
-
-            for node_error in node_errors:
-                node_info = [f"Node: {node_error.node.slot} (host: {node_error.node.host})"]
-                if node_error.core_hashes:
-                    node_info.append(f"  - Coredumps: {len(node_error.core_hashes)}")
-                    for core_id, core_hash in node_error.core_hashes:
-                        node_info.append(f"    * ID: {core_id}, Hash: {core_hash}")
-                if node_error.was_oom:
-                    node_info.append("  - OOM detected")
-                node_diagnostics_details.append("\n".join(node_info))
-
-            diagnostics_report = "\n\n".join(node_diagnostics_details)
-            allure.attach(diagnostics_report, 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
-            logging.info(f"Node diagnostics for workload {workload_name}: {diagnostics_report}")
-        else:
-            allure.attach("No node issues detected during workload execution", 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
-            logging.info(f"No node issues detected for workload {workload_name}")
-
-        # Загружаем результаты если нужно
-        if upload:
-            ResultsProcessor.upload_results(
-                kind='Load',
-                suite=cls.suite(),
-                test=workload_name,
-                timestamp=end_time,
-                is_successful=result.success,
-                min_duration=_get_duraton(stats, 'Min'),
-                max_duration=_get_duraton(stats, 'Max'),
-                mean_duration=_get_duraton(stats, 'Mean'),
-                median_duration=_get_duraton(stats, 'Median'),
-                statistics=stats,
-            )
-
+    def _handle_final_status(self, result, workload_name, node_errors):
+        """Обрабатывает финальный статус теста: fail, broken, etc."""
+        # --- FAIL TEST IF CORES OR OOM FOUND ---
+        stats = result.get_stats(workload_name)
+        node_issues = stats.get("nodes_with_issues", 0) if stats else 0
+        if node_issues > 0:
+            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+            result.error_message = error_msg
+            pytest.fail(error_msg)
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
+        workload_errors = []
+        if result.errors:
+            for err in result.errors:
+                if "coredump" not in err and "OOM" not in err:
+                    workload_errors.append(err)
+        if workload_errors:
+            allure.dynamic.label("severity", "critical")
+            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
         # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
         if not result.success and result.error_message:
             # Создаем детальное сообщение об ошибке с контекстом
             error_details = []
-
-            # Основная ошибка
             error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
             error_details.append(f"Main error: {result.error_message}")
-
-            # Информация о выполненных итерациях
             if result.iterations:
                 error_details.append("\nExecution details:")
                 error_details.append(f"Total iterations attempted: {len(result.iterations)}")
-
                 failed_iterations = []
                 successful_iterations = []
-
                 for iter_num, iteration in result.iterations.items():
                     if iteration.error_message:
                         failed_iterations.append({
@@ -706,35 +639,26 @@ class LoadSuiteBase:
                             'iteration': iter_num,
                             'time': iteration.time
                         })
-
                 if failed_iterations:
                     error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
                     for fail_info in failed_iterations:
                         error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
-
                 if successful_iterations:
                     error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
                     for success_info in successful_iterations:
                         error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
-
-            # Добавляем stderr/stdout если есть полезная информация
             if result.stderr and result.stderr.strip():
-                # Берем последние 500 символов stderr для контекста
                 stderr_preview = result.stderr.strip()
                 if len(stderr_preview) > 500:
                     stderr_preview = "..." + stderr_preview[-500:]
                 error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
-
             if result.stdout and "error" in result.stdout.lower():
-                # Ищем строки с "error" в stdout
                 stdout_lines = result.stdout.split('\n')
                 error_lines = [line for line in stdout_lines if 'error' in line.lower()]
                 if error_lines:
                     error_details.append("\nError lines from STDOUT:")
-                    for line in error_lines[:5]:  # Показываем максимум 5 строк
+                    for line in error_lines[:5]:
                         error_details.append(f"  {line.strip()}")
-
-            # Информация о статистике если есть
             stats = result.get_stats(workload_name)
             if stats:
                 if 'successful_runs' in stats and 'total_runs' in stats:
@@ -744,26 +668,148 @@ class LoadSuiteBase:
                         error_details.append(f"  Failed runs: {stats['failed_runs']}")
                     if 'success_rate' in stats:
                         error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
-
-                # Показываем информацию о deployment если есть
                 if any(key.startswith('deployment_') for key in stats.keys()):
                     deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
                     if deployment_info:
                         error_details.append("\nDEPLOYMENT INFO:")
                         for key, value in deployment_info.items():
                             error_details.append(f"  {key}: {value}")
-
-            # Финальное сообщение
             detailed_error_message = "\n".join(error_details)
-
             exc = pytest.fail.Exception(detailed_error_message)
             if result.traceback is not None:
                 exc = exc.with_traceback(result.traceback)
             raise exc
-
-        # Логируем предупреждения, но не падаем
         if result.warning_message:
             logging.warning(f"Workload completed with warnings: {result.warning_message}")
+
+    def _upload_results(self, result, workload_name):
+        logging.info(f"[Upload] Starting _upload_results for {workload_name}")
+        logging.info(f"[Upload] send_results flag: {ResultsProcessor.send_results}")
+        
+        if not ResultsProcessor.send_results:
+            logging.info(f"[Upload] send_results is False, skipping upload")
+            return
+            
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            stats["aggregation_level"] = "aggregate"
+            stats["run_id"] = ResultsProcessor.get_run_id()
+        end_time = time()
+        # --- устанавливаем endpoint из ydb-endpoint параметра ---
+        ydb_endpoint = get_external_param('ydb-endpoint', '')
+        if ydb_endpoint:
+            result._workload_endpoint = ydb_endpoint
+        # --- используем endpoint из result (установленный выше) ---
+        endpoint = getattr(result, '_workload_endpoint', None)
+        db_field = endpoint if endpoint else ResultsProcessor.get_cluster_id()
+        
+        logging.info(f"[Upload] About to call ResultsProcessor.upload_results")
+        logging.info(f"[Upload] Parameters: kind=Load, suite={type(self).suite()}, test={workload_name}, is_successful={result.success}")
+        logging.info(f"[Upload] Db field: {db_field}")
+        
+        ResultsProcessor.upload_results(
+            kind='Load',
+            suite=type(self).suite(),
+            test=workload_name,
+            timestamp=end_time,
+            is_successful=result.success,
+            statistics=stats,
+        )
+        logging.info(f"[Upload] _upload_results completed for {workload_name}")
+
+    def _upload_results_per_workload_run(self, result, workload_name):
+        logging.info(f"[Upload] Starting _upload_results_per_workload_run for {workload_name}")
+        logging.info(f"[Upload] send_results flag: {ResultsProcessor.send_results}")
+        
+        if not ResultsProcessor.send_results:
+            logging.info(f"[Upload] send_results is False, skipping per-run upload")
+            return
+            
+        suite = type(self).suite()
+        agg_stats = result.get_stats(workload_name)
+        nemesis_enabled = agg_stats.get("nemesis_enabled") if agg_stats else None
+        run_id = ResultsProcessor.get_run_id()
+        
+        logging.info(f"[Upload] Processing {len(result.iterations)} iterations for per-run upload")
+        
+        for iter_num, iteration in result.iterations.items():
+            runs = getattr(iteration, "runs", None) or [iteration]
+            for run_idx, run in enumerate(runs):
+                if getattr(run, "error_message", None):
+                    resolution = "error"
+                elif getattr(run, "warning_message", None):
+                    resolution = "warning"
+                elif hasattr(run, "timeout") and run.timeout:
+                    resolution = "timeout"
+                else:
+                    resolution = "ok"
+
+                stats = {
+                    "iteration": iter_num,
+                    "run_index": run_idx,
+                    "duration": getattr(run, "time", None),
+                    "resolution": resolution,
+                    "error_message": getattr(run, "error_message", None),
+                    "warning_message": getattr(run, "warning_message", None),
+                    "nemesis_enabled": nemesis_enabled,
+                    "aggregation_level": "per_run",
+                    "run_id": run_id,
+                }
+                
+                logging.info(f"[Upload] Uploading per-run result: iter={iter_num}, run={run_idx}, resolution={resolution}")
+                
+                ResultsProcessor.upload_results(
+                    kind='Stress',
+                    suite=suite,
+                    test=f"{workload_name}__iter_{iter_num}__run_{run_idx}",
+                    timestamp=time(),
+                    is_successful=(resolution == "ok"),
+                    duration=stats["duration"],
+                    statistics=stats,
+                )
+        
+        logging.info(f"[Upload] _upload_results_per_workload_run completed for {workload_name}")
+
+    def process_workload_result_with_diagnostics(self, result, workload_name, check_scheme=True, use_node_subcols=False):
+        """
+        Обрабатывает результат workload с добавлением диагностической информации
+        """
+        logging.info(f"[Process] Starting process_workload_result_with_diagnostics for {workload_name}")
+        
+        # 1. Сбор параметров workload
+        workload_params = self._collect_workload_params(result, workload_name)
+        logging.info(f"[Process] Collected workload params: {list(workload_params.keys())}")
+
+        # 2. Диагностика нод (cores/oom)
+        node_errors = self._diagnose_nodes(result, workload_name)
+        logging.info(f"[Process] Node diagnostics completed, found {len(node_errors)} errors")
+
+        # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
+            logging.info(f"[Process] Added nodes_with_issues={len(node_errors)} to stats")
+
+        # 3. Формирование summary/статистики
+        self._update_summary_flags(result, workload_name)
+        logging.info(f"[Process] Summary flags updated")
+
+        # 4. Формирование allure-отчёта
+        self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
+        logging.info(f"[Process] Allure report created")
+
+        # 5. Обработка ошибок/статусов (fail, broken, etc) и upload результатов всегда
+        logging.info(f"[Process] About to handle final status and upload")
+        try:
+            self._handle_final_status(result, workload_name, node_errors)
+            logging.info(f"[Process] _handle_final_status completed without exception")
+        finally:
+            logging.info(f"[Process] Starting upload in finally block")
+            self._upload_results(result, workload_name)
+            self._upload_results_per_workload_run(result, workload_name)
+            logging.info(f"[Process] Upload completed in finally block")
+        
+        logging.info(f"[Process] process_workload_result_with_diagnostics completed for {workload_name}")
 
 
 class LoadSuiteParallel(LoadSuiteBase):

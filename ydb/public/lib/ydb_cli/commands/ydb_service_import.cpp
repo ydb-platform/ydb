@@ -54,34 +54,23 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("bucket", "S3 bucket")
         .Required().RequiredArgument("BUCKET").StoreResult(&AwsBucket);
 
-    TStringBuilder accessKeyHelp;
-    accessKeyHelp << "Access key id" << Endl
-        << "  Search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. \"AWS_ACCESS_KEY_ID\" environment variable" << Endl
-        << "    3. \"aws_access_key_id\" key in \"" << AwsCredentialsFile << "\" file";
-    config.Opts->AddLongOption("access-key", accessKeyHelp)
+    config.Opts->AddLongOption("access-key", "Access key id")
+        .Env("AWS_ACCESS_KEY_ID", false)
+        .ManualDefaultValueDescription(TStringBuilder() << colors.BoldColor() << "aws_access_key_id" << colors.OldColor() << " key in \"" << AwsCredentialsFile << "\" file")
         .RequiredArgument("STRING");
 
-    TStringBuilder secretKeyHelp;
-    secretKeyHelp << "Secret key" << Endl
-        << "  Search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. \"AWS_SECRET_ACCESS_KEY\" environment variable" << Endl
-        << "    3. \"aws_secret_access_key\" key in \"" << AwsCredentialsFile << "\" file";
-    config.Opts->AddLongOption("secret-key", secretKeyHelp)
+    config.Opts->AddLongOption("secret-key", "Secret key")
+        .Env("AWS_SECRET_ACCESS_KEY", false)
+        .ManualDefaultValueDescription(TStringBuilder() << colors.BoldColor() << "aws_secret_access_key" << colors.OldColor() << " key in \"" << AwsCredentialsFile << "\" file")
         .RequiredArgument("STRING");
 
-    TStringBuilder profileHelp;
-    profileHelp << "Named profile in \"" << AwsCredentialsFile << "\" file" << Endl
-        << "  Search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. \"AWS_PROFILE\" environment variable";
-    config.Opts->AddLongOption("aws-profile", profileHelp)
-        .RequiredArgument("STRING").DefaultValue(AwsDefaultProfileName);
+    config.Opts->AddLongOption("aws-profile", TStringBuilder() << "Named profile in \"" << AwsCredentialsFile << "\" file")
+        .RequiredArgument("STRING")
+        .Env("AWS_PROFILE", false)
+        .DefaultValue(AwsDefaultProfileName);
 
     TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
+    itemHelp << "Item specification" << Endl
         << "  Possible property names:" << Endl
         << TItem::FormatHelp(2);
     config.Opts->AddLongOption("item", itemHelp)
@@ -121,10 +110,6 @@ void TCommandImportFromS3::Parse(TConfig& config) {
     ParseAwsSecretKey(config, "secret-key");
 
     Items = TItem::Parse(config, "item");
-    if (Items.empty()) {
-        throw TMisuseException() << "At least one item should be provided";
-    }
-
 }
 
 void TCommandImportFromS3::ExtractParams(TConfig& config) {

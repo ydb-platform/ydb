@@ -4,7 +4,6 @@
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
 #include "engines/column_engine_logs.h"
-#include "engines/writer/buffer/actor.h"
 #include "engines/writer/buffer/actor2.h"
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"

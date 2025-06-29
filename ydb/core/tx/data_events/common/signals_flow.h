@@ -17,6 +17,7 @@ enum class EWriteStage {
     PackSlicesError,
     SuccessWritingToLocalDB,
     FailWritingToLocalDB,
+    Finished,
     Aborted,
     Replied
 };

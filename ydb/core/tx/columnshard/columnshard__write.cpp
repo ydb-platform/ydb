@@ -137,7 +137,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
 
     for (auto&& aggr : baseAggregations) {
         const auto& writeMeta = aggr->GetWriteMeta();
-        aggr->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
+        aggr->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Aborted);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "blobs_write_finished")("writing_size", aggr->GetSize())(
             "writing_id", writeMeta.GetId())("status", putResult.GetPutStatus());
         Counters.GetWritesMonitor()->OnFinishWrite(aggr->GetSize(), 1);

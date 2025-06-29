@@ -17,9 +17,9 @@ enum class EWriteStage {
     PackSlicesError,
     SuccessWritingToLocalDB,
     FailWritingToLocalDB,
-    Finished,
+    Replied,
     Aborted,
-    Replied
+    Finished
 };
 
 class TWriteFlowCounters: public NColumnShard::TCommonCountersOwner {

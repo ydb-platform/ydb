@@ -15,6 +15,10 @@ private:
     const std::shared_ptr<TPositiveControlInteger> QueueObjectsCount = std::make_shared<TPositiveControlInteger>();
 
 public:
+    bool CheckTotalLimit() const {
+        return GetTotalInFlight()->Val() < Config.GetDirectInflightGlobalLimit();
+    }
+
     const std::shared_ptr<TPositiveControlInteger>& GetTotalInFlight() const {
         return TotalInFlight;
     }

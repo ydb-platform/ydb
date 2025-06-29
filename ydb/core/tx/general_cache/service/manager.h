@@ -228,7 +228,7 @@ public:
     void DrainQueue() {
         THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
         while (RequestsQueue.size() && RequestedObjects.size() < Counters->GetConfig().GetDirectInflightSourceLimit() &&
-               Counters->GetTotalInFlight()->Val() < Counters->GetConfig().GetDirectInflightGlobalLimit()) {
+               Counters->CheckTotalLimit()) {
             auto request = std::move(RequestsQueue.front());
             RequestsQueue.pop_front();
             auto& sourceWaitObjects = request->GetWaitBySource(SourceId);
@@ -274,17 +274,13 @@ private:
 
     THashMap<TSourceId, TSourceInfo> SourcesInfo;
 
-    bool CheckTotalLimit() const {
-        return Counters->GetTotalInFlight()->Val() < Counters->GetConfig().GetDirectInflightGlobalLimit();
-    }
-
     void DrainQueue(const TSourceId sourceId) {
         MutableSourceInfo(sourceId).DrainQueue();
     }
 
     void DrainQueue() {
         for (auto&& i : SourcesInfo) {
-            if (!CheckTotalLimit()) {
+            if (!Counters->CheckTotalLimit()) {
                 return;
             }
             i.second.DrainQueue();
@@ -381,10 +377,10 @@ public:
     void OnAdditionalObjectsInfo(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "objects_info");
         const TMonotonic now = TMonotonic::Now();
-        const bool inFlightLimitBrokenBefore = !CheckTotalLimit();
+        const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
         AddObjects(sourceId, std::move(add), true, now);
         RemoveObjects(sourceId, std::move(remove), true, now);
-        const bool inFlightLimitBrokenAfter = !CheckTotalLimit();
+        const bool inFlightLimitBrokenAfter = !Counters->CheckTotalLimit();
         if (inFlightLimitBrokenBefore && !inFlightLimitBrokenAfter) {
             DrainQueue();
         } else {
@@ -396,11 +392,11 @@ public:
         const TSourceId sourceId, THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "on_result");
         const TMonotonic now = TMonotonic::Now();
-        const bool inFlightLimitBrokenBefore = !CheckTotalLimit();
+        const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
         AddObjects(sourceId, std::move(objects), false, now);
         RemoveObjects(sourceId, std::move(removed), false, now);
         MutableSourceInfo(sourceId).FailObjects(std::move(failed), now);
-        const bool inFlightLimitBrokenAfter = !CheckTotalLimit();
+        const bool inFlightLimitBrokenAfter = !Counters->CheckTotalLimit();
         if (inFlightLimitBrokenBefore && !inFlightLimitBrokenAfter) {
             DrainQueue();
         } else {

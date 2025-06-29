@@ -35,29 +35,30 @@ class WorkloadTestBase(LoadSuiteBase):
         Общая инициализация для workload тестов.
         Останавливает nemesis сервис на всех нодах кластера для чистого старта.
         """
-        cls._setup_start_time = time()
-        
-        # Останавливаем nemesis сервис на всех нодах кластера
-        try:
-            logging.info("Stopping nemesis service on all cluster nodes during setup")
+        with allure.step('Workload test setup: initialize and stop nemesis'):
+            cls._setup_start_time = time()
             
-            # Создаем сводный лог для Allure
-            setup_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            nemesis_log = [f"Setup class started at {setup_time}"]
-            
-            # Останавливаем nemesis через общий метод
-            cls._manage_nemesis(False, "Stopping nemesis during setup", nemesis_log)
-            
-        except Exception as e:
-            error_msg = f"Error stopping nemesis during setup: {e}"
-            logging.error(error_msg)
+            # Останавливаем nemesis сервис на всех нодах кластера
             try:
-                allure.attach(error_msg, 'Setup - Nemesis Error', attachment_type=allure.attachment_type.TEXT)
-            except Exception:
-                pass
-        
-        # Наследуемся от LoadSuiteBase
-        super().setup_class()
+                logging.info("Stopping nemesis service on all cluster nodes during setup")
+                
+                # Создаем сводный лог для Allure
+                setup_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                nemesis_log = [f"Setup class started at {setup_time}"]
+                
+                # Останавливаем nemesis через общий метод
+                cls._manage_nemesis(False, "Stopping nemesis during setup", nemesis_log)
+                
+            except Exception as e:
+                error_msg = f"Error stopping nemesis during setup: {e}"
+                logging.error(error_msg)
+                try:
+                    allure.attach(error_msg, 'Setup - Nemesis Error', attachment_type=allure.attachment_type.TEXT)
+                except Exception:
+                    pass
+            
+            # Наследуемся от LoadSuiteBase
+            super().setup_class()
 
     @classmethod
     def do_teardown_class(cls):
@@ -66,46 +67,55 @@ class WorkloadTestBase(LoadSuiteBase):
         Останавливает процессы workload на всех нодах кластера.
         Останавливает nemesis, если он был запущен.
         """
-        if not cls.workload_binary_name:
-            logging.warning(f"workload_binary_name not set for {cls.__name__}, skipping process cleanup")
-            return
+        with allure.step('Workload test teardown: cleanup processes and nemesis'):
+            if not cls.workload_binary_name:
+                logging.warning(f"workload_binary_name not set for {cls.__name__}, skipping process cleanup")
+                allure.attach(
+                    f"workload_binary_name not set for {cls.__name__}, skipping process cleanup",
+                    'Teardown - Skip Cleanup',
+                    attachment_type=allure.attachment_type.TEXT
+                )
+                return
 
-        logging.info(f"Starting {cls.__name__} teardown: stopping workload processes")
+            logging.info(f"Starting {cls.__name__} teardown: stopping workload processes")
 
-        try:
-            # Используем метод из LoadSuiteBase напрямую через наследование
-            cls.kill_workload_processes(
-                process_names=[cls.binaries_deploy_path + cls.workload_binary_name],
-                target_dir=cls.binaries_deploy_path
-            )
-            
-            # Останавливаем nemesis, если он был запущен
-            if getattr(cls, '_nemesis_started', False):
-                logging.info("Stopping nemesis service")
-                cls._stop_nemesis()
+            try:
+                # Используем метод из LoadSuiteBase напрямую через наследование
+                cls.kill_workload_processes(
+                    process_names=[cls.binaries_deploy_path + cls.workload_binary_name],
+                    target_dir=cls.binaries_deploy_path
+                )
                 
-        except Exception as e:
-            logging.error(f"Error during teardown: {e}")
+                # Останавливаем nemesis, если он был запущен
+                if getattr(cls, '_nemesis_started', False):
+                    logging.info("Stopping nemesis service")
+                    cls._stop_nemesis()
+                    
+            except Exception as e:
+                error_msg = f"Error during teardown: {e}"
+                logging.error(error_msg)
+                allure.attach(error_msg, 'Teardown Error', attachment_type=allure.attachment_type.TEXT)
 
     @classmethod
     def _stop_nemesis(cls):
         """Останавливает сервис nemesis на всех нодах кластера"""
-        try:
-            # Используем общий метод управления nemesis
-            nemesis_log = []
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            nemesis_log.append(f"Stopping nemesis service at {current_time}")
-            
-            cls._manage_nemesis(False, "Stopping nemesis during teardown", nemesis_log)
-            cls._nemesis_started = False
-                
-        except Exception as e:
-            error_msg = f"Error stopping nemesis: {e}"
-            logging.error(error_msg)
+        with allure.step('Stop nemesis service on all cluster nodes'):
             try:
-                allure.attach(error_msg, 'Nemesis Stop Error', attachment_type=allure.attachment_type.TEXT)
-            except Exception:
-                pass
+                # Используем общий метод управления nemesis
+                nemesis_log = []
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                nemesis_log.append(f"Stopping nemesis service at {current_time}")
+                
+                cls._manage_nemesis(False, "Stopping nemesis during teardown", nemesis_log)
+                cls._nemesis_started = False
+                    
+            except Exception as e:
+                error_msg = f"Error stopping nemesis: {e}"
+                logging.error(error_msg)
+                try:
+                    allure.attach(error_msg, 'Nemesis Stop Error', attachment_type=allure.attachment_type.TEXT)
+                except Exception:
+                    pass
 
     @classmethod
     def _manage_nemesis(cls, enable_nemesis: bool, operation_context: str = None, existing_log: list = None):

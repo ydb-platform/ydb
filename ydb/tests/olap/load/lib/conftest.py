@@ -662,6 +662,23 @@ class LoadSuiteBase:
             allure.attach("No node issues detected during workload execution", 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
             logging.info(f"No node issues detected for workload {workload_name}")
 
+        # --- FAIL TEST IF CORES OR OOM FOUND ---
+        stats = result.get_stats(workload_name)
+        node_issues = stats.get("nodes_with_issues", 0) if stats else 0
+        if node_issues > 0:
+            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+            pytest.fail(error_msg)
+
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
+        workload_errors = []
+        if result.errors:
+            for err in result.errors:
+                if "coredump" not in err and "OOM" not in err:
+                    workload_errors.append(err)
+        if workload_errors:
+            allure.dynamic.label("severity", "critical")
+            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
+
         # Загружаем результаты если нужно
         if upload:
             ResultsProcessor.upload_results(

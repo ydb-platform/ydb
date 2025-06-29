@@ -135,7 +135,7 @@ public:
         resourcesRequest.Memory = memoryLimits.MkqlLightProgramMemoryLimit;
 
         auto&& schedulableOptions = args.SchedulableOptions;
-#if defined(USE_HDRF_SCHEDULER)
+#if !defined(USE_OLD_SCHEDULER)
         schedulableOptions.SchedulableTask = SchedulableTaskFactory(args.TxId);
         schedulableOptions.IsSchedulable = !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
 #endif

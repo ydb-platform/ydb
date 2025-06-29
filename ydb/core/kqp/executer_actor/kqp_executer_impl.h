@@ -575,7 +575,7 @@ protected:
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
-#if defined(USE_HDRF_SCHEDULER)
+#if !defined(USE_OLD_SCHEDULER)
         const auto& poolId = GetUserRequestContext()->PoolId;
 
         auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();

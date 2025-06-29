@@ -30,8 +30,13 @@ SRCS(
     scheduler/new/kqp_schedulable_actor.cpp
     scheduler/new/tree/dynamic.cpp
     scheduler/new/tree/snapshot.cpp
-    scheduler/old/kqp_compute_scheduler.cpp
 )
+
+IF (USE_OLD_SCHEDULER)
+    SRCS(
+        scheduler/old/kqp_compute_scheduler.cpp
+    )
+ENDIF()
 
 PEERDIR(
     contrib/libs/apache/arrow

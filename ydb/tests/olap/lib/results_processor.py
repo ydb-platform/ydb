@@ -12,13 +12,14 @@ from time import time_ns
 class ResultsProcessor:
     class Endpoint:
         def __init__(self, ep: str, db: str, table: str, key: str, iam_file: str) -> None:
+            self._endpoint = ep
             self._driver = YdbCluster._create_ydb_driver(ep, db, oauth=key, iam_file=iam_file)
             self._db = db
             self._table = table
 
         def send_data(self, data):
             try:
-                logging.info(f"[ResultsProcessor] Sending data to YDB endpoint: {self._driver.endpoint}, db: {self._db}, table: {self._table}")
+                logging.info(f"[ResultsProcessor] Sending data to YDB endpoint: {self._endpoint}, db: {self._db}, table: {self._table}")
                 logging.info(f"[ResultsProcessor] Data: {json.dumps(data)[:1000]}" + ("..." if len(json.dumps(data)) > 1000 else ""))
                 logging.info(f"[ResultsProcessor] Columns types: {ResultsProcessor._columns_types}")
                 ydb.retry_operation_sync(

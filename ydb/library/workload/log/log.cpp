@@ -80,6 +80,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TLogGenerator::GetSupportedWorkl
     result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk_upsert", "Bulk upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::Select), "select", "Select some agregated queries");
+    result.emplace_back(static_cast<int>(EType::Delete), "delete", "Delete random rows from table near current ts");
     return result;
 }
 

@@ -31,9 +31,9 @@ CREATE EXTERNAL TABLE `s3_test_data` (
 
 Где:
 
-- `key, value` - список колонок данных и их типов;
+- `key, value` - список колонок данных и их типов, список допустимых типов описан в разделе [{#T}](formats.md#types);
 - `bucket` - имя [внешнего источника данных](../../datamodel/external_data_source.md) к S3 ({{ objstorage-name }});
-- `folder` - путь внутри бакета с данными;
+- `folder` - путь внутри бакета с данными. Поддерживаются wildcards `*`, подробнее [в разделе](external_data_source.md#path_format);
 - `csv_with_names` - один из [допустимых типов хранения данных](formats.md);
 - `gzip` - один из [допустимых алгоритмов сжатия](formats.md#compression).
 
@@ -60,3 +60,21 @@ WHERE
 
 1. Поддерживаются только запросы чтения данных - `SELECT` и `INSERT`, остальные виды запросов не поддерживаются.
 1. {% include [!](../_includes/datetime_limits.md)%}
+
+## Импорт данных из S3 в таблицу {#import-from-s3}
+
+{{ ydb-short-name }} поддерживает загрузку данных из S3 в таблицу {{ ydb-short-name }} с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). Параметры для создаваемой таблицы могут быть перечиленны в секции `WITH`, подробнее см. в статье [{#T}](../../../yql/reference/syntax/create_table/with.md).
+
+```yql
+CREATE TABLE column_table (
+    PRIMARY KEY (key)
+)
+WITH (
+    STORE = COLUMN
+)
+AS SELECT * FROM s3_test_data
+```
+
+В результате будет создана [колоночная таблица](../../datamodel/table.md#column-oriented-tables) со схемой, соответствующей использованной для импорта [внешней таблицы](../../datamodel/external_table.md). Колонки, указанные в `PRIMARY KEY`, должны быть помечены как `NOT NULL` во внешней таблице.
+
+Импорт данных из S3 в [строковые таблицы](../../datamodel/table.md#row-oriented-tables) с помощью внешних таблиц поддерживается только для данных размером до 1 ГБ. Импорт строковых таблиц без ограничения по размеру поддержан ввиде фоновой операции, которую можно зупустить через YDB CLI, подробнее см. в статье [{#T}](../../../reference/ydb-cli/export-import/import-s3.md).

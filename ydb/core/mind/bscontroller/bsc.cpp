@@ -2,6 +2,7 @@
 #include "config.h"
 #include "self_heal.h"
 #include "sys_view.h"
+#include "cluster_balancing.h"
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
@@ -547,6 +548,12 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
     }
     Y_ABORT_UNLESS(!SelfHealId);
     SelfHealId = Register(CreateSelfHealActor());
+
+    ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);
+    if (ClusterBalancingSettings.Enable) {
+        ClusterBalanceActorId = Register(CreateClusterBalancingActor(SelfId(), ClusterBalancingSettings));
+    }
+
     PushStaticGroupsToSelfHeal();
     Execute(CreateTxInitScheme());
 }
@@ -711,7 +718,7 @@ void TBlobStorageController::PassAway() {
         ResponsivenessPinger->Detach(TActivationContext::ActorContextFor(ResponsivenessActorID));
         ResponsivenessPinger = nullptr;
     }
-    for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId}) {
+    for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId}) {
         if (const TActorId actorId = std::exchange(*ptr, {})) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }

@@ -1,5 +1,4 @@
 #include "kqp_partition_helper.h"
-#include "kqp_table_resolver.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -421,6 +420,43 @@ TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::T
     return BuildFullRange(keyColumnTypes);
 }
 
+void FillFullRange(const TStageInfo& stageInfo, THashMap<ui64, TShardInfo>& shardInfoMap, bool read) {
+    for (ui64 i = 0; i < stageInfo.Meta.ShardKey->GetPartitions().size(); ++i) {
+        auto& partition = stageInfo.Meta.ShardKey->GetPartitions()[i];
+        auto& partitionRange = *partition.Range;
+        auto& shardInfo = shardInfoMap[partition.ShardId];
+
+        auto& ranges = read ? shardInfo.KeyReadRanges : shardInfo.KeyWriteRanges;
+
+        ranges.ConstructInPlace();
+
+        if (partitionRange.IsPoint) {
+            YQL_ENSURE(partitionRange.IsInclusive);
+            auto point = TSerializedTableRange(partitionRange.EndKeyPrefix.GetCells(), true, {}, true);
+            point.Point = true;
+
+            ranges->MakeFullRange(std::move(point));
+            continue;
+        }
+
+        if (i != 0) {
+            auto& prevPartition = stageInfo.Meta.ShardKey->GetPartitions()[i - 1];
+
+            ranges->MakeFull(TSerializedTableRange(prevPartition.Range->EndKeyPrefix.GetCells(), !prevPartition.Range->IsInclusive,
+                partitionRange.EndKeyPrefix.GetCells(), partitionRange.IsInclusive));
+        } else {
+            TVector<TCell> fromValues;
+            for (auto x : partitionRange.EndKeyPrefix.GetCells()) {
+                Y_UNUSED(x);
+                fromValues.emplace_back(TCell());
+            }
+
+            ranges->MakeFullRange(TSerializedTableRange(fromValues, true,
+                partitionRange.EndKeyPrefix.GetCells(), partitionRange.IsInclusive));
+        }
+    }
+}
+
 } // anonymous namespace
 
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
@@ -464,46 +500,6 @@ TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnT
     return serialized;
 }
 
-namespace {
-
-void FillFullRange(const TStageInfo& stageInfo, THashMap<ui64, TShardInfo>& shardInfoMap, bool read) {
-    for (ui64 i = 0; i < stageInfo.Meta.ShardKey->GetPartitions().size(); ++i) {
-        auto& partition = stageInfo.Meta.ShardKey->GetPartitions()[i];
-        auto& partitionRange = *partition.Range;
-        auto& shardInfo = shardInfoMap[partition.ShardId];
-
-        auto& ranges = read ? shardInfo.KeyReadRanges : shardInfo.KeyWriteRanges;
-
-        ranges.ConstructInPlace();
-
-        if (partitionRange.IsPoint) {
-            YQL_ENSURE(partitionRange.IsInclusive);
-            auto point = TSerializedTableRange(partitionRange.EndKeyPrefix.GetCells(), true, {}, true);
-            point.Point = true;
-
-            ranges->MakeFullRange(std::move(point));
-            continue;
-        }
-
-        if (i != 0) {
-            auto& prevPartition = stageInfo.Meta.ShardKey->GetPartitions()[i - 1];
-
-            ranges->MakeFull(TSerializedTableRange(prevPartition.Range->EndKeyPrefix.GetCells(), !prevPartition.Range->IsInclusive,
-                partitionRange.EndKeyPrefix.GetCells(), partitionRange.IsInclusive));
-        } else {
-            TVector<TCell> fromValues;
-            for (auto x : partitionRange.EndKeyPrefix.GetCells()) {
-                Y_UNUSED(x);
-                fromValues.emplace_back(TCell());
-            }
-
-            ranges->MakeFullRange(TSerializedTableRange(fromValues, true,
-                partitionRange.EndKeyPrefix.GetCells(), partitionRange.IsInclusive));
-        }
-    }
-}
-} // anonymous namespace
-
 TString TShardInfo::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
 {
     TStringBuilder sb;
@@ -512,78 +508,6 @@ TString TShardInfo::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const 
     sb << ", WriteRanges: " << (KeyWriteRanges ? KeyWriteRanges->ToString(keyTypes, typeRegistry) : "<none>");
     sb << " }";
     return sb;
-}
-
-THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& readRange, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
-{
-    auto guard = typeEnv.BindAllocator();
-    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-
-    const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
-    YQL_ENSURE(readRange.HasKeyRange());
-
-    auto range = MakeKeyRange(keyColumnTypes, readRange.GetKeyRange(), stageInfo, holderFactory, typeEnv);
-    isFullScan = IsFullRange(keyColumnTypes, range);
-
-    auto readPartitions = GetKeyRangePartitions(range.ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),
-        keyColumnTypes);
-
-    THashMap<ui64, TShardInfo> shardInfoMap;
-    for (TPartitionWithRange& partitionWithRange : readPartitions) {
-        auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
-
-        YQL_ENSURE(!shardInfo.KeyReadRanges);
-        shardInfo.KeyReadRanges.ConstructInPlace();
-
-        if (partitionWithRange.FullRange) {
-            shardInfo.KeyReadRanges->MakeFullRange(std::move(*partitionWithRange.FullRange));
-        } else if (!shardInfo.KeyReadRanges->IsFullRange()) {
-            shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
-        }
-    }
-
-    return shardInfoMap;
-}
-
-THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
-{
-    Y_UNUSED(holderFactory);
-    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-
-    const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
-    auto ranges = FillReadRangesInternal(keyColumnTypes, readRanges, stageInfo, typeEnv);
-    isFullScan = IsFullRange(keyColumnTypes, ranges);
-
-    THashMap<ui64, TShardInfo> shardInfoMap;
-
-    // KeyReadRanges must be sorted & non-intersecting, they came in such condition from predicate extraction.
-    for (auto& range: ranges) {
-        TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
-            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
-            : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
-
-        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
-            keyColumnTypes);
-
-        for (TPartitionWithRange& partitionWithRange : readPartitions) {
-            auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
-
-            if (!shardInfo.KeyReadRanges) {
-                shardInfo.KeyReadRanges.ConstructInPlace();
-            }
-
-            if (partitionWithRange.FullRange) {
-                shardInfo.KeyReadRanges->MakeFullRange(std::move(*partitionWithRange.FullRange));
-                continue;
-            }
-
-            shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
-        }
-    }
-
-    return shardInfoMap;
 }
 
 TVector<TSerializedPointOrRange> ExtractRanges(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
@@ -612,6 +536,80 @@ TVector<TSerializedPointOrRange> ExtractRanges(const NKqpProto::TKqpReadRangesSo
     }
 
     return ranges;
+}
+
+TMaybe<TSerializedTableRange> IntersectRanges(const TTableRange& first, const TTableRange& second, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (first.IsEmptyRange(keyTypes) || second.IsEmptyRange(keyTypes)) {
+        return Nothing();
+    }
+
+    TVector<TCell> intersectionFrom;
+    bool intersectionInclusiveFrom = true;
+
+    auto fromComparison = CompareBorders<true, true>(first.From, second.From, true, true, keyTypes);
+    if (fromComparison > 0) {
+        intersectionFrom.assign(first.From.begin(), first.From.end());
+        intersectionInclusiveFrom = first.InclusiveFrom;
+    } else if (fromComparison < 0) {
+        intersectionFrom.assign(second.From.begin(), second.From.end());
+        intersectionInclusiveFrom = second.InclusiveFrom;
+    } else {
+        intersectionFrom.assign(first.From.begin(), first.From.end());
+        intersectionInclusiveFrom = first.InclusiveFrom && second.InclusiveFrom;
+    }
+
+    TVector<TCell> intersectionTo;
+    bool intersectionInclusiveTo = true;
+
+    auto firstTo = first.Point ? first.From : first.To;
+    auto secondTo = second.Point ? second.From : second.To;
+    bool firstToInclusive = first.Point ? true : first.InclusiveTo;
+    bool secondToInclusive = second.Point ? true : second.InclusiveTo;
+
+    if (firstTo.empty() && secondTo.empty()) {
+        intersectionTo.clear();
+        intersectionInclusiveTo = true;
+    } else if (firstTo.empty()) {
+        intersectionTo.assign(secondTo.begin(), secondTo.end());
+        intersectionInclusiveTo = secondToInclusive;
+    } else if (secondTo.empty()) {
+        intersectionTo.assign(firstTo.begin(), firstTo.end());
+        intersectionInclusiveTo = firstToInclusive;
+    } else {
+        auto toComparison = CompareBorders<false, false>(firstTo, secondTo, true, true, keyTypes);
+        if (toComparison < 0) {
+            intersectionTo.assign(firstTo.begin(), firstTo.end());
+            intersectionInclusiveTo = firstToInclusive;
+        } else if (toComparison > 0) {
+            intersectionTo.assign(secondTo.begin(), secondTo.end());
+            intersectionInclusiveTo = secondToInclusive;
+        } else {
+            intersectionTo.assign(firstTo.begin(), firstTo.end());
+            intersectionInclusiveTo = firstToInclusive && secondToInclusive;
+        }
+    }
+
+    if (!intersectionTo.empty()) {
+        auto boundsComparison = CompareBorders<true, false>(intersectionFrom, intersectionTo,
+            intersectionInclusiveFrom, intersectionInclusiveTo, keyTypes);
+        if (boundsComparison > 0) {
+            return Nothing();
+        }
+    }
+
+    bool isPoint = false;
+    if (!intersectionTo.empty() && intersectionInclusiveFrom && intersectionInclusiveTo) {
+        auto equalityCheck = CompareBorders<true, false>(intersectionFrom, intersectionTo,
+            intersectionInclusiveFrom, intersectionInclusiveTo, keyTypes);
+
+        isPoint = (equalityCheck == 0);
+    }
+
+    if (isPoint) {
+        return TSerializedTableRange{intersectionFrom, true, intersectionFrom, true};
+    }
+
+    return TSerializedTableRange{intersectionFrom, intersectionInclusiveFrom, intersectionTo, intersectionInclusiveTo};
 }
 
 std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
@@ -649,99 +647,6 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadR
     }
     return {shard, result};
 }
-
-
-THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
-{
-    auto guard = typeEnv.BindAllocator();
-    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-
-    const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
-    auto ranges = ExtractRanges(source, stageInfo, holderFactory, typeEnv, guard);
-    isFullScan = IsFullRange(keyColumnTypes, ranges);
-
-    THashMap<ui64, TShardInfo> shardInfoMap;
-
-    // KeyReadRanges must be sorted & non-intersecting, they came in such condition from predicate extraction.
-    for (auto& range: ranges) {
-        TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
-            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
-            : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
-
-        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
-            keyColumnTypes);
-
-        for (TPartitionWithRange& partitionWithRange : readPartitions) {
-            auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
-
-            if (!shardInfo.KeyReadRanges) {
-                shardInfo.KeyReadRanges.ConstructInPlace();
-            }
-
-            if (partitionWithRange.FullRange) {
-                shardInfo.KeyReadRanges->MakeFullRange(std::move(*partitionWithRange.FullRange));
-                continue;
-            }
-
-            shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
-        }
-    }
-
-    return shardInfoMap;
-}
-
-
-THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
-{
-    Y_UNUSED(holderFactory);
-    auto guard = typeEnv.BindAllocator();
-    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-
-    YQL_ENSURE(tableInfo->TableKind == ETableKind::Olap);
-    YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
-
-    const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
-    auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, typeEnv);
-    isFullScan = IsFullRange(keyColumnTypes, ranges);
-
-    THashMap<ui64, TShardInfo> shardInfoMap;
-
-    if (ranges.empty())
-        return shardInfoMap;
-
-    for (const auto& partition :  stageInfo.Meta.ShardKey->GetPartitions()) {
-        if (!readRanges.HasTabletId() || readRanges.GetTabletId() == partition.ShardId) {
-            auto& shardInfo = shardInfoMap[partition.ShardId];
-
-            YQL_ENSURE(!shardInfo.KeyReadRanges);
-            shardInfo.KeyReadRanges.ConstructInPlace();
-            shardInfo.KeyReadRanges->CopyFrom(ranges);
-        }
-    }
-
-    return shardInfoMap;
-}
-
-THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
-{
-    switch (operation.GetTypeCase()) {
-        case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-            return PrunePartitions(operation.GetReadRanges(), stageInfo, holderFactory, typeEnv, isFullScan);
-        case NKqpProto::TKqpPhyTableOperation::kReadRange:
-            return PrunePartitions(operation.GetReadRange(), stageInfo, holderFactory, typeEnv, isFullScan);
-        case NKqpProto::TKqpPhyTableOperation::kLookup:
-            return PrunePartitions(operation.GetLookup(), stageInfo, holderFactory, typeEnv, isFullScan);
-        case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
-            return PrunePartitions(operation.GetReadOlapRange(), stageInfo, holderFactory, typeEnv, isFullScan);
-        default:
-            YQL_ENSURE(false, "Unexpected table scan operation: " << static_cast<ui32>(operation.GetTypeCase()));
-            break;
-    }
-}
-
 
 namespace {
 
@@ -872,41 +777,6 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
     return shardInfoMap;
 }
 
-} // namespace
-
-THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpLookup& lookup,
-    const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
-{
-    auto guard = typeEnv.BindAllocator();
-    YQL_CLOG(TRACE, ProviderKqp) << "PrunePartitions: " << lookup.DebugString();
-
-    if (!lookup.HasKeysValue()) {
-        THashMap<ui64, TShardInfo> shardInfoMap;
-        FillFullRange(stageInfo, shardInfoMap, /* read */ true);
-        isFullScan = true;
-        return shardInfoMap;
-    }
-
-    isFullScan = false;
-    switch (auto kind = lookup.GetKeysValue().GetKindCase()) {
-        case NKqpProto::TKqpPhyValue::kParamValue: {
-            return PartitionLookupByParameterValue(lookup.GetKeysValue().GetParamValue(), stageInfo,
-                holderFactory, typeEnv, isFullScan);
-        }
-
-        case NKqpProto::TKqpPhyValue::kRowsList: {
-            return PartitionLookupByRowsList(lookup.GetKeysValue().GetRowsList(), stageInfo,
-                holderFactory, typeEnv, isFullScan);
-        }
-
-        case NKqpProto::TKqpPhyValue::kParamElementValue:
-        case NKqpProto::TKqpPhyValue::kLiteralValue:
-        case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
-            YQL_ENSURE(false, "Unexpected lookup kind " << (int) kind);
-            return {};
-    }
-}
-
 template <typename TEffect>
 THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TEffect& effect,
     const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
@@ -950,30 +820,7 @@ THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TEffect& effect,
     return shardInfoMap;
 }
 
-THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyOpUpsertRows& effect, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
-{
-    return PruneEffectPartitionsImpl(effect, stageInfo, holderFactory, typeEnv);
-}
-
-THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyOpDeleteRows& effect, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
-{
-    return PruneEffectPartitionsImpl(effect, stageInfo, holderFactory, typeEnv);
-}
-
-THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
-{
-    switch(operation.GetTypeCase()) {
-        case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-            return PruneEffectPartitions(operation.GetUpsertRows(), stageInfo, holderFactory, typeEnv);
-        case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
-            return PruneEffectPartitions(operation.GetDeleteRows(), stageInfo, holderFactory, typeEnv);
-        default:
-            YQL_ENSURE(false, "Unexpected table operation: " << static_cast<ui32>(operation.GetTypeCase()));
-    }
-}
+} // anonymous namespace
 
 ui64 ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
@@ -1051,6 +898,258 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
     }
 
     return readSettings;
+}
+
+TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TPartitionPrunerConfig config)
+    : HolderFactory(&holderFactory)
+    , TypeEnv(&typeEnv)
+    , Config(std::move(config))
+{
+}
+
+THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo, bool& isFullScan) {
+    Y_UNUSED(Config);
+
+    switch (operation.GetTypeCase()) {
+        case NKqpProto::TKqpPhyTableOperation::kReadRanges:
+            return PrunePartitionsImpl(operation.GetReadRanges(), stageInfo, *HolderFactory, *TypeEnv, isFullScan);
+        case NKqpProto::TKqpPhyTableOperation::kReadRange:
+            return PrunePartitionsImpl(operation.GetReadRange(), stageInfo, *HolderFactory, *TypeEnv, isFullScan);
+        case NKqpProto::TKqpPhyTableOperation::kLookup:
+            return PrunePartitionsImpl(operation.GetLookup(), stageInfo, *HolderFactory, *TypeEnv, isFullScan);
+        case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+            return PrunePartitionsImpl(operation.GetReadOlapRange(), stageInfo, *HolderFactory, *TypeEnv, isFullScan);
+        default:
+            YQL_ENSURE(false, "Unexpected table scan operation: " << static_cast<ui32>(operation.GetTypeCase()));
+            break;
+    }
+}
+
+THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
+    auto guard = TypeEnv->BindAllocator();
+    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+
+    const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
+    auto ranges = ExtractRanges(source, stageInfo, *HolderFactory, *TypeEnv, guard);
+    isFullScan = IsFullRange(keyColumnTypes, ranges);
+
+    THashMap<ui64, TShardInfo> shardInfoMap;
+
+    // KeyReadRanges must be sorted & non-intersecting, they came in such condition from predicate extraction.
+    for (auto& range: ranges) {
+        TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
+            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
+            : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+        TVector<TPartitionWithRange> readPartitions;
+
+        if (Config.BatchOperationRange) {
+            isFullScan = false;
+            auto intersection = IntersectRanges(tableRange, Config.BatchOperationRange->ToTableRange(), keyColumnTypes);
+            if (!intersection) {
+                return {};
+            }
+
+            readPartitions = GetKeyRangePartitions(intersection->ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),
+            keyColumnTypes);
+            YQL_ENSURE(readPartitions.size() <= 1);
+        } else {
+            readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
+            keyColumnTypes);
+        }
+
+        for (TPartitionWithRange& partitionWithRange : readPartitions) {
+            auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
+
+            if (!shardInfo.KeyReadRanges) {
+                shardInfo.KeyReadRanges.ConstructInPlace();
+            }
+
+            if (partitionWithRange.FullRange) {
+                shardInfo.KeyReadRanges->MakeFullRange(std::move(*partitionWithRange.FullRange));
+                continue;
+            }
+
+            shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
+        }
+    }
+
+    return shardInfoMap;
+}
+
+THashMap<ui64, TShardInfo> TPartitionPruner::PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo) {
+    switch(operation.GetTypeCase()) {
+        case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+            return PruneEffectPartitionsImpl(operation.GetUpsertRows(), stageInfo, *HolderFactory, *TypeEnv);
+        case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
+            return PruneEffectPartitionsImpl(operation.GetDeleteRows(), stageInfo, *HolderFactory, *TypeEnv);
+        default:
+            YQL_ENSURE(false, "Unexpected table operation: " << static_cast<ui32>(operation.GetTypeCase()));
+    }
+}
+
+THashMap<ui64, TShardInfo> TPartitionPruner::PrunePartitionsImpl(const NKqpProto::TKqpPhyOpReadRange& readRange, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
+{
+    auto guard = typeEnv.BindAllocator();
+    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+
+    const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
+    YQL_ENSURE(readRange.HasKeyRange());
+
+    auto range = MakeKeyRange(keyColumnTypes, readRange.GetKeyRange(), stageInfo, holderFactory, typeEnv);
+    isFullScan = IsFullRange(keyColumnTypes, range);
+
+    TTableRange tableRange = range.ToTableRange();
+    TVector<TPartitionWithRange> readPartitions;
+
+    if (Config.BatchOperationRange) {
+        isFullScan = false;
+        auto intersection = IntersectRanges(tableRange, Config.BatchOperationRange->ToTableRange(), keyColumnTypes);
+        if (!intersection) {
+            return {};
+        }
+
+        readPartitions = GetKeyRangePartitions(intersection->ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),
+        keyColumnTypes);
+        YQL_ENSURE(readPartitions.size() <= 1);
+    } else {
+        readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
+        keyColumnTypes);
+    }
+
+    THashMap<ui64, TShardInfo> shardInfoMap;
+    for (TPartitionWithRange& partitionWithRange : readPartitions) {
+        auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
+
+        YQL_ENSURE(!shardInfo.KeyReadRanges);
+        shardInfo.KeyReadRanges.ConstructInPlace();
+
+        if (partitionWithRange.FullRange) {
+            shardInfo.KeyReadRanges->MakeFullRange(std::move(*partitionWithRange.FullRange));
+        } else if (!shardInfo.KeyReadRanges->IsFullRange()) {
+            shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
+        }
+    }
+
+    return shardInfoMap;
+}
+
+THashMap<ui64, TShardInfo> TPartitionPruner::PrunePartitionsImpl(const NKqpProto::TKqpPhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
+{
+    Y_UNUSED(holderFactory);
+    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+
+    const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
+    auto ranges = FillReadRangesInternal(keyColumnTypes, readRanges, stageInfo, typeEnv);
+    isFullScan = IsFullRange(keyColumnTypes, ranges);
+
+    THashMap<ui64, TShardInfo> shardInfoMap;
+
+    // KeyReadRanges must be sorted & non-intersecting, they came in such condition from predicate extraction.
+    for (auto& range: ranges) {
+        TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
+            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
+            : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+        TVector<TPartitionWithRange> readPartitions;
+
+        if (Config.BatchOperationRange) {
+            isFullScan = false;
+            auto intersection = IntersectRanges(tableRange, Config.BatchOperationRange->ToTableRange(), keyColumnTypes);
+            if (!intersection) {
+                return {};
+            }
+
+            readPartitions = GetKeyRangePartitions(intersection->ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),
+            keyColumnTypes);
+            YQL_ENSURE(readPartitions.size() <= 1);
+        } else {
+            readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
+            keyColumnTypes);
+        }
+
+        for (TPartitionWithRange& partitionWithRange : readPartitions) {
+            auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
+
+            if (!shardInfo.KeyReadRanges) {
+                shardInfo.KeyReadRanges.ConstructInPlace();
+            }
+
+            if (partitionWithRange.FullRange) {
+                shardInfo.KeyReadRanges->MakeFullRange(std::move(*partitionWithRange.FullRange));
+                continue;
+            }
+
+            shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
+        }
+    }
+
+    return shardInfoMap;
+}
+
+THashMap<ui64, TShardInfo> TPartitionPruner::PrunePartitionsImpl(const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
+{
+    Y_UNUSED(holderFactory);
+    auto guard = typeEnv.BindAllocator();
+    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+
+    YQL_ENSURE(tableInfo->TableKind == ETableKind::Olap);
+    YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
+
+    const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
+    auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, typeEnv);
+    isFullScan = IsFullRange(keyColumnTypes, ranges);
+
+    THashMap<ui64, TShardInfo> shardInfoMap;
+
+    if (ranges.empty())
+        return shardInfoMap;
+
+    for (const auto& partition :  stageInfo.Meta.ShardKey->GetPartitions()) {
+        if (!readRanges.HasTabletId() || readRanges.GetTabletId() == partition.ShardId) {
+            auto& shardInfo = shardInfoMap[partition.ShardId];
+
+            YQL_ENSURE(!shardInfo.KeyReadRanges);
+            shardInfo.KeyReadRanges.ConstructInPlace();
+            shardInfo.KeyReadRanges->CopyFrom(ranges);
+        }
+    }
+
+    return shardInfoMap;
+}
+
+THashMap<ui64, TShardInfo> TPartitionPruner::PrunePartitionsImpl(const NKqpProto::TKqpPhyOpLookup& lookup,
+    const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan)
+{
+    auto guard = typeEnv.BindAllocator();
+    YQL_CLOG(TRACE, ProviderKqp) << "PrunePartitions: " << lookup.DebugString();
+
+    if (!lookup.HasKeysValue()) {
+        THashMap<ui64, TShardInfo> shardInfoMap;
+        FillFullRange(stageInfo, shardInfoMap, /* read */ true);
+        isFullScan = true;
+        return shardInfoMap;
+    }
+
+    isFullScan = false;
+    switch (auto kind = lookup.GetKeysValue().GetKindCase()) {
+        case NKqpProto::TKqpPhyValue::kParamValue: {
+            return PartitionLookupByParameterValue(lookup.GetKeysValue().GetParamValue(), stageInfo,
+                holderFactory, typeEnv, isFullScan);
+        }
+
+        case NKqpProto::TKqpPhyValue::kRowsList: {
+            return PartitionLookupByRowsList(lookup.GetKeysValue().GetRowsList(), stageInfo,
+                holderFactory, typeEnv, isFullScan);
+        }
+
+        case NKqpProto::TKqpPhyValue::kParamElementValue:
+        case NKqpProto::TKqpPhyValue::kLiteralValue:
+        case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
+            YQL_ENSURE(false, "Unexpected lookup kind " << (int) kind);
+            return {};
+    }
 }
 
 bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions) {

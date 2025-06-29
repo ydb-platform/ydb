@@ -20,6 +20,11 @@ namespace NKafka {
 
         using TBase = NActors::TActorBootstrapped<TTransactionsCoordinator>;
 
+        struct TProducerInstance {
+            TProducerInstanceId Id;
+            ui64 TxnTimeoutMs;
+        };
+        
         struct TTransactionalRequest {
             TString TransactionalId;
             TProducerInstanceId ProducerState;
@@ -76,7 +81,7 @@ namespace NKafka {
             TMaybe<TString> GetTxnRequestError(const TTransactionalRequest& request);
             TString GetProducerIsOutdatedError(const TString& transactionalId, const TProducerInstanceId& currentProducerState, const TProducerInstanceId& newProducerState);
 
-            std::unordered_map<TString, TProducerInstanceId> ProducersByTransactionalId;
+            std::unordered_map<TString, TProducerInstance> ProducersByTransactionalId;
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
     };
 

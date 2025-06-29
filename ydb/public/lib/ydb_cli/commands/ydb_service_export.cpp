@@ -267,7 +267,7 @@ void TCommandExportToS3::Config(TConfig& config) {
         .DefaultValue(AwsDefaultProfileName);
 
     config.Opts->AddLongOption("destination-prefix", "Destination prefix for export in bucket, triggers writing the SchemaMapping file, required for encrypted backups")
-        .RequiredArgument("PATH").StoreResult(&CommonDestinationPrefix);
+        .RequiredArgument("PREFIX").StoreResult(&CommonDestinationPrefix);
 
     config.Opts->AddLongOption("root-path", "Root directory for the objects being exported, database root if not provided")
         .RequiredArgument("PATH").StoreResult(&CommonSourcePath);
@@ -366,6 +366,9 @@ void TCommandExportToS3::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
+        if (CommonSourcePath && item.Source && item.Source[0] != '/') {
+            item.Source = CommonSourcePath + "/" + item.Source;
+        }
         NConsoleClient::AdjustPath(item.Source, config);
     }
 }

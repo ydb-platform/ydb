@@ -104,7 +104,7 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
         for (auto&& i : writtenData.GetWriteResults()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_finished")(
                 "writing_id", i.GetWriteMeta().GetId());
-            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
+            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::SuccessWritingToLocalDB);
             Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }
@@ -112,12 +112,12 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
     } else {
         const TMonotonic now = TMonotonic::Now();
         for (auto&& i : writtenData.GetWriteResults()) {
+            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::FailWritingToLocalDB);
             Counters.OnWritePutBlobsFailed(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetCSCounters().OnWritePutBlobsFail(now - i.GetWriteMeta().GetWriteStartInstant());
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_error")(
                 "writing_id", i.GetWriteMeta().GetId())("reason", i.GetErrorMessage());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
-            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
         }
 
         Execute(new TTxBlobsWritingFailed(this, std::move(writtenData)), ctx);

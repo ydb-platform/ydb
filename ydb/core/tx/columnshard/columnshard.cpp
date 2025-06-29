@@ -32,7 +32,6 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     }
     InFlightReadsTracker.Stop(this);
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
-    ctx.Send(BufferizationInsertionWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationPortionsWriteActorId, new TEvents::TEvPoisonPill);
     if (!!OperationsManager) {
         OperationsManager->StopWriting();
@@ -120,7 +119,6 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Limits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
-    BufferizationInsertionWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);

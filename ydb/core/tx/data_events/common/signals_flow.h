@@ -9,10 +9,14 @@ enum class EWriteStage {
     Started,
     BuildBatch,
     WaitFlush,
-    BuildSlices,
-    BuildSlicesPack,
-    Result,
-    Finished,
+    SlicesConstruction,
+    SlicesReady,
+    SlicesError,
+    PackSlicesConstruction,
+    PackSlicesReady,
+    PackSlicesError,
+    SuccessWritingToLocalDB,
+    FailWritingToLocalDB,
     Aborted,
     Replied
 };

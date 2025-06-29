@@ -1,15 +1,4 @@
-#include <util/generic/algorithm.h>
-#include <util/string/builder.h>
-
-#include <ydb/library/protobuf_printer/security_printer.h>
-
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/tablet/tablet_exception.h>
-#include <ydb/core/tablet/tablet_exception.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
-
-#include "schemeshard__operation_part.h"
+#include "schemeshard__operation.h"
 
 #include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
@@ -20,9 +9,16 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_operation_factory.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 
-#include "schemeshard__operation.h"
+#include <ydb/library/protobuf_printer/security_printer.h>
+
+#include <util/generic/algorithm.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -94,14 +90,6 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
         OnComplete.ApplyOnComplete(Self, ctx);
     }
 };
-
-NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme::TEvModifySchemeTransaction& record) {
-    auto recordForPrint = record;
-    if (record.HasUserToken()) {
-        recordForPrint.SetUserToken("***hide token***");
-    }
-    return recordForPrint;
-}
 
 bool TSchemeShard::ProcessOperationParts(
     const TVector<ISubOperation::TPtr>& parts,
@@ -872,10 +860,6 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
                 .NotResolved();
         }
 
-        if (checks) {
-            checks.IsValidLeafName();
-        }
-
         if (!checks) {
             result.Status = checks.GetStatus();
             result.Reason = checks.GetError();
@@ -966,10 +950,6 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
                 checks
                     .NotEmpty()
                     .NotResolved();
-            }
-
-            if (checks && !exists) {
-                checks.IsValidLeafName();
             }
 
             if (!checks) {

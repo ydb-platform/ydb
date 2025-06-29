@@ -659,6 +659,16 @@ const TString& TCsvParser::GetHeaderRow() const {
     return HeaderRow;
 }
 
+bool IsConvertibleToYdbValue(const TString& value, const Ydb::Type& type) {
+    try {
+        TTypeParser parser(type);
+        FieldToValue(parser, value, std::nullopt, {}, "columnName");
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 }
 }
 

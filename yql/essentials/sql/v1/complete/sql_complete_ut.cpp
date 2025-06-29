@@ -905,6 +905,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
+                {BindingName, "$udf"},
                 {HintName, "XLOCK"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "PROCESS my_table USING $udf(TableRows()) WITH "), expected);
@@ -1105,8 +1106,11 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people` AS x"), expected);
         }
-        { // It is parsed into ``` SELECT x.FROM example.`/people` AS x ```
-            TVector<TCandidate> expected = {};
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "Age"},
+                {ColumnName, "Name"},
+            };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT x.# FROM example.`/people` AS x"), expected);
         }
         {
@@ -1138,6 +1142,71 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {ColumnName, "et.time"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ColumnsAtSubquery) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TString query = R"(
+                SELECT #
+                FROM (SELECT * FROM example.`/people`) AS ep
+                JOIN (SELECT room AS Room, time FROM example.`/yql/tutorial`) AS et ON 1 = 1
+            )";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "et.Room"},
+                {ColumnName, "et.time"},
+                {ColumnName, "ep.Age"},
+                {ColumnName, "ep.Name"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+        }
+        {
+            TString query = R"(
+                SELECT #
+                FROM example.`/yql/tutorial` AS x
+                JOIN example.`/yql/tutorial` AS y ON 1 = 1
+            )";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "y.course"},
+                {ColumnName, "x.course"},
+                {ColumnName, "x.room"},
+                {ColumnName, "y.room"},
+                {ColumnName, "x.time"},
+                {ColumnName, "y.time"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(7, engine, query), expected);
+        }
+        {
+            TString query = "SELECT # FROM (SELECT 1 AS x)";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "x"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query), expected);
+        }
+        {
+            TString query = R"(
+                SELECT #
+                FROM (
+                    SELECT epp.*, test
+                    FROM example.`/people` AS epp
+                    JOIN example.`/yql/tutorial` AS eqt ON TRUE
+                    JOIN testing ON TRUE
+                ) AS ep
+            )";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "ep.test"},
+                {ColumnName, "ep.Age"},
+                {ColumnName, "ep.Name"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, query), expected);
         }
     }
 

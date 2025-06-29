@@ -85,8 +85,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr), nullptr,
-          Counters.GetPortionIndexCounters(), info->TabletID)
+    , TablesManager(StoragesManager, nullptr, nullptr, Counters.GetPortionIndexCounters(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -796,7 +795,7 @@ void TColumnShard::SetupCleanupPortions() {
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     NOlap::NDataFetcher::TRequestInput rInput(
-        changes->GetPortionsToDrop(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier());
+        changes->GetPortionsToAccess(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier());
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
         std::make_shared<TCompactionExecutor>(
@@ -1061,13 +1060,14 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
 
 class TPortionConstructorV2 {
 private:
-    NOlap::TPortionInfo::TConstPtr PortionInfo;
+    YDB_READONLY_DEF(NOlap::TPortionInfo::TConstPtr, PortionInfo);
     std::optional<NOlap::TColumnChunkLoadContextV2> Records;
     std::optional<std::vector<NOlap::TIndexChunkLoadContext>> Indexes;
 
 public:
     TPortionConstructorV2(const NOlap::TPortionInfo::TConstPtr& portionInfo)
         : PortionInfo(portionInfo) {
+        AFL_VERIFY(PortionInfo);
     }
 
     bool IsReady() const {
@@ -1096,8 +1096,7 @@ public:
         AFL_VERIFY(PortionInfo);
         AFL_VERIFY(Records)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
         AFL_VERIFY(Indexes)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
-        std::vector<NOlap::TColumnChunkLoadContextV1> records = Records->BuildRecordsV1();
-        return NOlap::TPortionAccessorConstructor::BuildForLoading(std::move(PortionInfo), std::move(records), std::move(*Indexes));
+        return NOlap::TPortionAccessorConstructor::BuildForLoading(std::move(PortionInfo), Records->CreateBuildInfo(), std::move(*Indexes));
     }
 };
 
@@ -1126,9 +1125,7 @@ public:
     TAccessorsParsingTask(
         const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback, std::vector<TPortionConstructorV2>&& portions)
         : FetchCallback(callback)
-        , Portions(std::move(portions))
-    {
-
+        , Portions(std::move(portions)) {
     }
 };
 
@@ -1155,35 +1152,38 @@ public:
         bool reask = false;
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "TTxAskPortionChunks::Execute");
         for (auto&& i : PortionsByPath) {
+            const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
             for (auto&& c : i.second.GetConsumers()) {
                 NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", c.second.GetPortions().size());
-                for (auto&& p : c.second.GetPortions()) {
-                    auto itPortionConstructor = Constructors.find(p->GetAddress());
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", c.second.GetPortionsCount());
+                for (auto&& portion : c.second.GetPortions(granule)) {
+                    const ui64 p = portion->GetPortionId();
+                    const NOlap::TPortionAddress pAddress = portion->GetAddress();
+                    auto itPortionConstructor = Constructors.find(pAddress);
                     if (itPortionConstructor == Constructors.end()) {
-                        TPortionConstructorV2 constructor(p);
-                        itPortionConstructor = Constructors.emplace(p->GetAddress(), std::move(constructor)).first;
+                        TPortionConstructorV2 constructor(portion);
+                        itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
                     } else if (itPortionConstructor->second.IsReady()) {
                         continue;
                     }
                     if (!itPortionConstructor->second.HasRecords()) {
-                        auto rowset =
-                            db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(p->GetPathId().GetRawValue(), p->GetPortionId()).Select();
+                        auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", p->GetPathId())("portion_id", p->GetPortionId())(
-                                "debug", p->DebugString(true));
-                            NOlap::TColumnChunkLoadContextV2 info(rowset);
+                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
+                                "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
                     }
                     if (!itPortionConstructor->second.HasIndexes()) {
-                        if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
+                        if (!itPortionConstructor->second.GetPortionInfo()
+                                ->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())
+                                ->GetIndexesCount()) {
                             itPortionConstructor->second.SetIndexes({});
                         } else {
-                            auto rowset =
-                                db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId().GetRawValue(), p->GetPortionId()).Select();
+                            auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(i.first.GetRawValue(), p).Select();
                             if (!rowset.IsReady()) {
                                 reask = true;
                             } else {
@@ -1223,7 +1223,7 @@ public:
     }
 };
 
-void TColumnShard::Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
+void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
     Execute(new TTxAskPortionChunks(this, ev->Get()->GetCallback(), std::move(ev->Get()->DetachPortions())));
 }
 
@@ -1316,7 +1316,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, HandleInit);
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);
-        HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+        HFunc(TEvPrivate::TEvAskTabletDataAccessors, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         default:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected event in enqueue");

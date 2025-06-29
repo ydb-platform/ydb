@@ -51,7 +51,8 @@ TExprNode::TPtr ApplyExtractMembersToExtend(const TExprNode::TPtr& node, const T
     return ctx.NewCallable(node->Pos(), node->Content(), std::move(inputs));
 }
 
-TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+namespace {
+TExprNode::TPtr ApplyExtractMembersToSkipNullMembersLegacy(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoSkipNullMembers skipNullMembers(node);
     const auto& filtered = skipNullMembers.Members();
     if (!filtered) {
@@ -85,9 +86,7 @@ TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node
         .Done().Ptr();
 }
 
-TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx,
-    TOptimizeContext& optCtx, TStringBuf logSuffix)
-{
+TExprNode::TPtr ApplyExtractMembersToFilterNullMembersLegacy(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoFilterNullMembers filterNullMembers(node);
     if (!filterNullMembers.Input().Maybe<TCoAssumeAllMembersNullableAtOnce>()) {
         return {};
@@ -156,19 +155,13 @@ TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& no
 
     YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
 
-    static const char optName[] = "MemberNthOverFlatMap";
-    YQL_ENSURE(optCtx.Types);
-    const bool keepAssume = !IsOptimizerDisabled<optName>(*optCtx.Types);
-
-    auto innerExtract = Build<TCoExtractMembers>(ctx, filterNullMembers.Pos())
-        .Input(input)
-        .Members(extendedMembers ? extendedMembers : members)
-        .Done().Ptr();
-
     if (extendedMembers) {
         return Build<TCoExtractMembers>(ctx, filterNullMembers.Pos())
             .Input<TCoFilterNullMembers>()
-                .Input(ctx.WrapByCallableIf(keepAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(innerExtract)))
+                .Input<TCoExtractMembers>()
+                    .Input(input)
+                    .Members(extendedMembers)
+                .Build()
                 .Members(filteredMembers)
             .Build()
             .Members(members)
@@ -176,10 +169,85 @@ TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& no
     }
 
     return Build<TCoFilterNullMembers>(ctx, filterNullMembers.Pos())
-        .Input(ctx.WrapByCallableIf(keepAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(innerExtract)))
+        .Input<TCoExtractMembers>()
+            .Input(input)
+            .Members(members)
+        .Build()
         .Members(filteredMembers)
         .Done().Ptr();
 }
+
+} // namespace
+
+TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx,
+    TOptimizeContext& optCtx, TStringBuf logSuffix)
+{
+    static const char optName[] = "MemberNthOverFlatMap";
+    YQL_ENSURE(optCtx.Types);
+    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        return node->IsCallable("FilterNullMembers") ?
+            ApplyExtractMembersToFilterNullMembersLegacy(node, members, ctx, logSuffix) :
+            ApplyExtractMembersToSkipNullMembersLegacy(node, members, ctx, logSuffix);
+    }
+
+    TCoFilterNullMembersBase self(node);
+    TSet<TStringBuf> filteredMembers = GetFilteredMembers(self);
+    YQL_ENSURE(!filteredMembers.empty());
+    TSet<TStringBuf> extractedMembers;
+    for (const auto& atom : members->ChildrenList()) {
+        extractedMembers.insert(atom->Content());
+    }
+
+    TSet<TStringBuf> filteredAndExtracted;
+    std::set_intersection(filteredMembers.begin(), filteredMembers.end(),
+        extractedMembers.begin(), extractedMembers.end(),
+        std::inserter(filteredAndExtracted, filteredAndExtracted.end()));
+
+    auto filterInput = self.Input();
+    bool hasAssume = false;
+    if (auto maybeAssume = filterInput.Maybe<TCoAssumeAllMembersNullableAtOnce>()) {
+        filterInput = maybeAssume.Cast().Input();
+        hasAssume = true;
+    }
+
+    if (filteredAndExtracted == filteredMembers || (hasAssume && !filteredAndExtracted.empty())) {
+        // simple pushdown
+        YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << self.CallableName() << logSuffix;
+        auto newInput = ctx.NewCallable(self.Pos(), "ExtractMembers", { filterInput.Ptr(), members });
+        return ctx.NewCallable(self.Pos(), self.CallableName(), {
+            ctx.WrapByCallableIf(hasAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(newInput)),
+            MakeAtomList(self.Pos(), filteredAndExtracted, ctx)
+        });
+    }
+
+    TSet<TStringBuf> innerExtracted = extractedMembers;
+    if (hasAssume) {
+        YQL_ENSURE(filteredAndExtracted.empty());
+        // just leave single member
+        filteredMembers = { *filteredMembers.begin() };
+    }
+    innerExtracted.insert(filteredMembers.begin(), filteredMembers.end());
+
+    const auto inputType = GetSequenceItemType(filterInput, false);
+    YQL_ENSURE(inputType);
+    const size_t inputWidth = inputType->Cast<TStructExprType>()->GetSize();
+    YQL_ENSURE(inputWidth >= innerExtracted.size());
+
+    if (inputWidth == innerExtracted.size()) {
+        return {};
+    }
+
+    YQL_CLOG(DEBUG, Core) << "Push ExtractMembers over " << self.CallableName() << logSuffix;
+    auto newInput = ctx.NewCallable(self.Pos(), "ExtractMembers", { filterInput.Ptr(), MakeAtomList(self.Pos(), innerExtracted, ctx) });
+    auto newFilter = ctx.Builder(self.Pos())
+        .Callable(self.CallableName())
+            .Add(0, ctx.WrapByCallableIf(hasAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(newInput)))
+            .Add(1, MakeAtomList(self.Pos(), filteredMembers, ctx))
+        .Seal()
+        .Build();
+    return ctx.NewCallable(self.Pos(), "ExtractMembers", { newFilter, members });
+}
+
 
 TExprNode::TPtr ApplyExtractMembersToSortOrPruneKeys(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
     auto nodeIsPruneKeys = node->IsCallable("PruneKeys") || node->IsCallable("PruneAdjacentKeys");

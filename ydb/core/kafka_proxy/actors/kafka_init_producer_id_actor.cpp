@@ -293,7 +293,7 @@ namespace NKafka {
 
     // helper methods
     bool TKafkaInitProducerIdActor::IsTransactionalProducerInitialization() {
-        return NKikimr::AppData()->FeatureFlags.GetEnableKafkaTransactions() && !TransactionalId.empty();
+        return TransactionsEnabled() && !TransactionalId.empty();
     }
 
     EKafkaErrors TKafkaInitProducerIdActor::KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status) {

@@ -715,7 +715,8 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     }
 
     Y_ABORT_UNLESS(ClusterInfo->StateStorageInfo->RingGroups.size() > 0);
-    const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[0].NToSelect;
+    const ui32 ringGroupId = ClusterInfo->IsBridgeMode ? node.PileId : 0;
+    const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
     const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;
     ui32 restartRings = 0;
@@ -723,7 +724,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     ui32 disabledRings = 0;
     auto now = AppData(ctx)->TimeProvider->Now();
     TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
-    for (auto ringInfo : ClusterInfo->StateStorageRings) {
+    for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration);
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
                                                                  << "; State: " << TStateStorageRingInfo::RingStateToString(state));
@@ -943,14 +944,6 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
             }
             break;
         case MODE_FORCE_RESTART:
-            if (counters->GroupAlreadyHasLockedDisks() && !counters->GroupHasMoreThanOneDiskPerNode() && opts.PartialPermissionAllowed) {
-                TabletCounters->Cumulative()[COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED].Increment(1);
-                error.Code = TStatus::DISALLOW_TEMP;
-                error.Reason = "You cannot get two or more disks from the same group at the same time"
-                               " in partial permissions allowed mode";
-                error.Deadline = defaultDeadline;
-                return false;
-            }
             // Any number of down disks is OK for this mode.
             break;
         default:
@@ -1235,6 +1228,7 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
     host->SetInterconnectPort(node.IcPort);
     host->SetTimestamp(timestamp.GetValue());
     host->SetStartTimeSeconds(node.StartTime.Seconds());
+    host->SetPileId(node.PileId);
     node.Location.Serialize(host->MutableLocation(), false);
     for (auto marker : node.Markers) {
         host->AddMarkers(marker);

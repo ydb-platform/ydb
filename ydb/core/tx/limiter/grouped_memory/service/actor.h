@@ -36,6 +36,7 @@ public:
     void Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvStartProcessScope::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvFinishProcessScope::TPtr& ev);
+    void Handle(NEvents::TEvExternal::TEvUpdateMemoryLimits::TPtr& ev);
 
     void Bootstrap();
 
@@ -50,6 +51,7 @@ public:
             hFunc(NEvents::TEvExternal::TEvFinishProcess, Handle);
             hFunc(NEvents::TEvExternal::TEvStartProcessScope, Handle);
             hFunc(NEvents::TEvExternal::TEvFinishProcessScope, Handle);
+            hFunc(NEvents::TEvExternal::TEvUpdateMemoryLimits, Handle);
             default:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }

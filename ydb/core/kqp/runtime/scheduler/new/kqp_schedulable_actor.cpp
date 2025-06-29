@@ -59,6 +59,19 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
     }
 }
 
+void TSchedulableTask::IncreaseExtraUsage() {
+    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
+        ++parent->UsageExtra;
+    }
+}
+
+void TSchedulableTask::DecreaseExtraUsage(const TDuration& burstUsageExtra) {
+    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
+        --parent->UsageExtra;
+        parent->BurstUsageExtra += burstUsageExtra.MicroSeconds();
+    }
+}
+
 void TSchedulableTask::IncreaseBurstThrottle(const TDuration& burstThrottle) {
     for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
         parent->BurstThrottle += burstThrottle.MicroSeconds();

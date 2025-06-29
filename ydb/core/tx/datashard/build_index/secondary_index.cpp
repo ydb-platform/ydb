@@ -710,8 +710,8 @@ public:
         FillScanResponseCommonFields(response.get(), BuildIndexId, DataShardId, SeqNo);
         auto& rec = response->Record;
         rec.SetStatus(StatusCode);
-        rec.SetReadRows(ReadRows);
-        rec.SetReadBytes(ReadBytes);
+        rec.MutableMeteringStats()->SetReadRows(ReadRows);
+        rec.MutableMeteringStats()->SetReadBytes(ReadBytes);
         if (Issues) {
             NYql::IssuesToMessage(Issues, rec.MutableIssues());
         }

@@ -109,6 +109,13 @@ static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
 
     TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = DoBadRequest<TEvDataShard::TEvValidateUniqueIndexResponse>(server, sender, ev, datashards[0], expectedError, expectedErrorSubstring);
     UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetTabletId(), datashards[0]);
+
+    // Stats
+    // Invalid parameters => we scanned nothing
+    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetUploadRows(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetUploadBytes(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
 }
 
 Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
@@ -422,6 +429,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetTabletId(), datashards[0]);
+
+        // Stats
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetUploadRows(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetUploadBytes(), 0);
+
         return reply;
     }
 
@@ -537,6 +549,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo);
             AssertFirstIndexKey(reply, std::nullopt);
             AssertLastIndexKey(reply, std::nullopt);
+
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
 
         // Upsert unique values
@@ -547,6 +562,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo);
             AssertFirstIndexKey(reply, "(3, 300)");
             AssertLastIndexKey(reply, "(3, 300)");
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 1);
+            UNIT_ASSERT_GT(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
@@ -554,6 +571,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo);
             AssertFirstIndexKey(reply, "(1, 100)");
             AssertLastIndexKey(reply, "(5, 500)");
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 3);
+            UNIT_ASSERT_GT(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
 
 
@@ -573,12 +592,17 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, "/Root/table-2", indexColumns2);
             AssertFirstIndexKey(reply, std::nullopt, indexTypes2);
             AssertLastIndexKey(reply, std::nullopt, indexTypes2);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key_part1, key_part2, key_part3) VALUES (1, '1', 'one'), (1, '1', 'two');");
         {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, "/Root/table-2",
                 indexColumns2, Ydb::StatusIds::PRECONDITION_FAILED, "Duplicate key found: (key_part1=1, key_part2=1)");
+
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 2);
+            UNIT_ASSERT_GT(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
 
         // Handle NULLs
@@ -588,6 +612,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, "/Root/table-2", indexColumns2);
             AssertFirstIndexKey(reply, "(1, NULL)", indexTypes2);
             AssertLastIndexKey(reply, "(1, 1)", indexTypes2);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 2);
+            UNIT_ASSERT_GT(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
 
         // Two NULLs are not equal to each other
@@ -597,6 +623,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, "/Root/table-2", indexColumns2);
             AssertFirstIndexKey(reply, "(NULL, NULL)", indexTypes2);
             AssertLastIndexKey(reply, "(1, 1)", indexTypes2);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 5);
+            UNIT_ASSERT_GT(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
     }
 }

@@ -2414,6 +2414,5 @@ message TEvValidateUniqueIndexResponse {
     optional bytes FirstIndexKey = 7; // absent if no data in shard
     optional bytes LastIndexKey = 8; // absent if no data in shard
 
-    optional uint64 ReadRows = 9;
-    optional uint64 ReadBytes = 10;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 9;
 }

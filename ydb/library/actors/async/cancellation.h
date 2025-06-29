@@ -1,0 +1,529 @@
+#pragma once
+#include "async.h"
+#include "decorator.h"
+
+namespace NActors {
+
+    /**
+     * Returns a new TAsyncCancellationSource with currently running and
+     * non-cancelled handler attached as a sink when awaited. May only be
+     * used directly inside an async actor event handler.
+     */
+    inline auto TAsyncCancellationSource::WithCurrentHandler() {
+        return NDetail::TActorAsyncHandlerPromise::TCreateAttachedCancellationSourceOp{};
+    }
+
+    namespace NDetail {
+
+        template<class T>
+        class [[nodiscard]] TWithCancellationSourceAwaiter
+            : private TAsyncCancellable
+            , private TActorRunnableItem::TImpl<TWithCancellationSourceAwaiter<T>>
+            , public TAsyncDecoratorAwaiter<T, TWithCancellationSourceAwaiter<T>>
+        {
+            friend TActorRunnableItem::TImpl<TWithCancellationSourceAwaiter<T>>;
+            friend TAsyncDecoratorAwaiter<T, TWithCancellationSourceAwaiter<T>>;
+            using TBase = TAsyncDecoratorAwaiter<T, TWithCancellationSourceAwaiter<T>>;
+
+        public:
+            template<class TCallback>
+            TWithCancellationSourceAwaiter(TAsyncCancellationSource& source, TCallback&& callback)
+                : TBase(std::forward<TCallback>(callback))
+            {
+                Cancelled = source.IsCancelled();
+                if (!Cancelled) {
+                    source.AddSink(*this);
+                }
+            }
+
+            TWithCancellationSourceAwaiter& CoAwaitByValue() && noexcept {
+                return *this;
+            }
+
+        private:
+            void Cancel() noexcept override {
+                Y_ABORT_UNLESS(!Cancelled, "Unexpected Cancel() when already cancelled");
+                Cancelled = true;
+                if (Started) {
+                    // Note: we must not resume this work recursively
+                    if (auto next = TBase::Cancel()) {
+                        Scheduled = next;
+                        TActorRunnableQueue::Schedule(this);
+                    }
+                }
+            }
+
+            std::coroutine_handle<> Bypass() noexcept {
+                if (this->GetCancellation()) {
+                    if (!Cancelled) {
+                        // Don't want unexpected Cancel() calls in the future
+                        TAsyncCancellable::Unlink();
+                    }
+                    // Bypass everything when already cancelled by the caller
+                    return this->GetAsyncBody();
+                }
+                return nullptr;
+            }
+
+            std::coroutine_handle<> StartCancelled() noexcept {
+                // We should have bypassed everything
+                Y_ABORT("should never be called");
+            }
+
+            std::coroutine_handle<> Start() noexcept {
+                Started = true;
+                if (Cancelled) {
+                    if (auto next = TBase::Cancel()) [[unlikely]] {
+                        Y_ABORT("unexpected cancellation work before async body started");
+                    }
+                }
+                return TBase::Start();
+            }
+
+            std::coroutine_handle<> OnCancel() noexcept {
+                if (!Cancelled) {
+                    Cancelled = true;
+                    // Don't want unexpected Cancel() calls in the future
+                    TAsyncCancellable::Unlink();
+                    // We don't need to intercept unwind from now on
+                    return TBase::CancelWithBypass();
+                }
+                return nullptr;
+            }
+
+            std::coroutine_handle<> OnResume(std::coroutine_handle<> h) {
+                if (!Cancelled) {
+                    // Don't want unexpected Cancel() calls in the future
+                    TAsyncCancellable::Unlink();
+                }
+                if (Scheduled) {
+                    // We resume scheduled work now and postpone resume until later
+                    return std::exchange(Scheduled, h);
+                }
+                return h;
+            }
+
+            std::coroutine_handle<> OnUnwind(std::coroutine_handle<> h) {
+                if (!Cancelled) {
+                    // Don't want unexpected Cancel() calls in the future
+                    TAsyncCancellable::Unlink();
+                }
+                if (!h) {
+                    // Caller was not cancelled yet, resume with exception instead
+                    h = this->GetContinuation();
+                    ThrowException = true;
+                }
+                if (Scheduled) {
+                    // We resume scheduled work now and postpone unwind until later
+                    return std::exchange(Scheduled, h);
+                }
+                return h;
+            }
+
+            decltype(auto) Return() {
+                if (ThrowException) {
+                    throw TAsyncCancellation() << "operation cancelled";
+                }
+
+                return TBase::Return();
+            }
+
+            void DoRun(IActor*) noexcept {
+                Y_ABORT_UNLESS(Scheduled, "Scheduled without a coroutine to resume");
+                std::exchange(Scheduled, nullptr).resume();
+            }
+
+        private:
+            std::coroutine_handle<> Scheduled;
+            bool Started = false;
+            bool Cancelled = false;
+            bool ThrowException = false;
+        };
+
+    } // namespace NDetail
+
+    /**
+     * Runs the wrapped coroutine attached to this cancellation source when
+     * awaited. This allows cancelling this coroutine independently from
+     * caller cancellation.
+     */
+    template<class T>
+    inline auto TAsyncCancellationSource::WithCancellation(async<T> wrapped) {
+        return NDetail::TWithCancellationSourceAwaiter<T>(*this, [&wrapped]{ return wrapped.UnsafeMove(); });
+    }
+
+    /**
+     * Runs the wrapped coroutine attached to this cancellation source when
+     * awaited. This allows cancelling this coroutine independently from
+     * caller cancellation.
+     */
+    template<IsAsyncCoroutineCallable TCallback>
+    inline auto TAsyncCancellationSource::WithCancellation(TCallback&& callback) {
+        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+        using T = typename TCallbackResult::result_type;
+        return NDetail::TWithCancellationSourceAwaiter<T>(*this, std::forward<TCallback>(callback));
+    }
+
+    namespace NDetail {
+
+        template<class T>
+        class [[nodiscard]] TWithoutCancellationAwaiter {
+        public:
+            static constexpr bool IsActorAwareAwaiter = true;
+
+            template<class TCallback>
+            TWithoutCancellationAwaiter(TCallback&& callback)
+                : Coroutine(std::forward<TCallback>(callback)())
+            {}
+
+            TWithoutCancellationAwaiter& CoAwaitByValue() && noexcept {
+                return *this;
+            }
+
+        public:
+            bool await_ready() noexcept {
+                return false;
+            }
+
+            template<class TPromise>
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> caller) noexcept {
+                IActor& actor = caller.promise().GetActor();
+                Coroutine.GetHandle().promise().SetContinuation(actor, Source, caller);
+                return Coroutine.GetHandle();
+            }
+
+            T await_resume() {
+                return Coroutine.GetHandle().promise().ExtractValue();
+            }
+
+        private:
+            TAwaitCancelSource Source;
+            async<T> Coroutine;
+        };
+
+    } // namespace NDetail
+
+    /**
+     * Runs the wrapped coroutine when awaited, ignoring caller cancellation attempts.
+     */
+    template<class T>
+    inline auto WithoutCancellation(async<T> wrapped) {
+        return NDetail::TWithoutCancellationAwaiter<T>([&wrapped]{ return wrapped.UnsafeMove(); });
+    }
+
+    /**
+     * Runs the wrapped coroutine when awaited, ignoring caller cancellation attempts.
+     */
+    template<IsAsyncCoroutineCallable TCallback>
+    inline auto WithoutCancellation(TCallback&& callback) {
+        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+        using T = typename TCallbackResult::result_type;
+        return NDetail::TWithoutCancellationAwaiter<T>(std::forward<TCallback>(callback));
+    }
+
+    namespace NDetail {
+
+        template<class T>
+        concept IsOnCancelCallbackResultType = (
+            std::is_same_v<T, void> ||
+            std::is_same_v<T, bool> ||
+            std::is_same_v<T, async<void>> ||
+            std::is_same_v<T, async<bool>>);
+
+        template<class TCallback>
+        using TOnCancelCallbackResultType = decltype(std::declval<TCallback&&>()());
+
+        template<class TCallback>
+        concept IsOnCancelCallback = IsOnCancelCallbackResultType<TOnCancelCallbackResultType<TCallback>>;
+
+        // The default implementation is for types void and bool
+        template<class TOnCancelCallback, class TDerived, class T = TOnCancelCallbackResultType<TOnCancelCallback>>
+        class TInterceptCancellationBase {
+        protected:
+            TInterceptCancellationBase(TOnCancelCallback&& onCancelCallback)
+                : OnCancelCallback(std::forward<TOnCancelCallback>(onCancelCallback))
+            {}
+
+            bool InterceptCancel() noexcept {
+                try {
+                    if constexpr (std::is_same_v<T, void>) {
+                        std::forward<TOnCancelCallback>(OnCancelCallback)();
+                        return true;
+                    } else {
+                        static_assert(std::is_same_v<T, bool>, "OnCancelCallback must return either void or bool");
+                        return std::forward<TOnCancelCallback>(OnCancelCallback)();
+                    }
+                } catch (...) {
+                    Exception = std::current_exception();
+                    return true;
+                }
+            }
+
+            std::coroutine_handle<> InterceptResume(std::coroutine_handle<> h) noexcept {
+                return h;
+            }
+
+            std::coroutine_handle<> InterceptUnwind(std::coroutine_handle<> h) noexcept {
+                if (Exception) {
+                    return static_cast<TDerived&>(*this).GetErrorContinuation();
+                }
+                return h;
+            }
+
+            void InterceptReturn() {
+                if (Exception) {
+                    std::rethrow_exception(Exception);
+                }
+            }
+
+        private:
+            TOnCancelCallback&& OnCancelCallback;
+            std::exception_ptr Exception;
+        };
+
+        // This specialization is for types async<void> and async<bool>
+        template<class TOnCancelCallback, class TDerived, class T>
+        class TInterceptCancellationBase<TOnCancelCallback, TDerived, async<T>> {
+        private:
+            class TResumeCallback : private TAwaitCancelSource {
+                friend TInterceptCancellationBase;
+                friend TCallbackCoroutine<TResumeCallback>;
+
+            public:
+                IActor& GetActor() {
+                    return static_cast<TDerived&>(*Self).GetActor();
+                }
+
+                TAwaitCancelSource& GetAwaitCancelSource() {
+                    return *this;
+                }
+
+            private:
+                std::coroutine_handle<> operator()() {
+                    return Self->OnCancelFinished();
+                }
+
+            private:
+                TInterceptCancellationBase* Self = nullptr;
+            };
+
+        protected:
+            TInterceptCancellationBase(TOnCancelCallback&& onCancelCallback)
+                : OnCancelCallback(std::forward<TOnCancelCallback>(onCancelCallback))
+            {}
+
+            std::coroutine_handle<> InterceptCancel() noexcept {
+                try {
+                    ResumeProxy = MakeCallbackCoroutine<TResumeCallback>();
+                    ResumeProxy->Self = this;
+                    Coroutine.UnsafeMoveFrom(std::move(OnCancelCallback)());
+                } catch (...) {
+                    Exception = std::current_exception();
+                    if (Coroutine) {
+                        Coroutine.Destroy();
+                    }
+                    if (ResumeProxy) {
+                        ResumeProxy.destroy();
+                    }
+                    return nullptr;
+                }
+                Coroutine.GetHandle().promise().SetContinuation(ResumeProxy.GetHandle());
+                return Coroutine.GetHandle();
+            }
+
+            std::coroutine_handle<> InterceptResume(std::coroutine_handle<> h) noexcept {
+                if (Coroutine) {
+                    Continuation = h;
+                    // We need to cancel running OnCancel and wait until it finishes
+                    if (auto next = ResumeProxy->Cancel(ResumeProxy.GetHandle())) {
+                        return next;
+                    }
+                    return std::noop_coroutine();
+                }
+
+                return h;
+            }
+
+            std::coroutine_handle<> InterceptUnwind(std::coroutine_handle<> h) noexcept {
+                if (Coroutine) {
+                    Continuation = h;
+                    // We need to cancel running OnCancel and wait until it finishes
+                    if (auto next = ResumeProxy->Cancel(ResumeProxy.GetHandle())) {
+                        return next;
+                    }
+                    return std::noop_coroutine();
+                }
+
+                if (Exception) {
+                    return static_cast<TDerived&>(*this).GetErrorContinuation();
+                }
+
+                return h;
+            }
+
+            void InterceptReturn() {
+                if (Exception) {
+                    std::rethrow_exception(Exception);
+                }
+            }
+
+        private:
+            std::coroutine_handle<> OnCancelFinished() noexcept {
+                bool cancel = false;
+                TAsyncResult<T>& result = Coroutine.GetHandle().promise();
+                if (result.HasValue()) {
+                    if constexpr (std::is_same_v<T, void>) {
+                        cancel = true;
+                    } else {
+                        static_assert(std::is_same_v<T, bool>, "OnCancelCallback must return either async<void> or async<bool>");
+                        cancel = result.ExtractValue();
+                    }
+                } else if (result.HasException()) {
+                    Exception = result.ExtractException();
+                    try {
+                        std::rethrow_exception(Exception);
+                    } catch (const TAsyncCancellation&) {
+                        // This is not an error and swallowed
+                        Exception = nullptr;
+                    } catch (...) {}
+                    cancel = true;
+                }
+                // We need to free memory and call destructors in case of OnCancel unwind
+                Coroutine.Destroy();
+                ResumeProxy.destroy();
+                // Intercepted body may have finished already
+                if (Continuation) {
+                    if (Exception) {
+                        return static_cast<TDerived&>(*this).GetErrorContinuation();
+                    }
+                    return Continuation;
+                }
+                // Otherwise we might need to cancel currently running async body
+                if (auto next = static_cast<TDerived&>(*this).OnInterceptCancelResult(cancel)) {
+                    return next;
+                }
+                // We must return a valid coroutine handle
+                return std::noop_coroutine();
+            }
+
+        private:
+            TOnCancelCallback&& OnCancelCallback;
+            TCallbackCoroutine<TResumeCallback> ResumeProxy;
+            async<T> Coroutine = async<T>::UnsafeEmpty();
+            std::coroutine_handle<> Continuation;
+            std::exception_ptr Exception;
+        };
+
+        template<class T, class TOnCancelCallback>
+        class TInterceptCancellationAwaiter
+            : public TAsyncDecoratorAwaiter<T, TInterceptCancellationAwaiter<T, TOnCancelCallback>>
+            , private TInterceptCancellationBase<TOnCancelCallback, TInterceptCancellationAwaiter<T, TOnCancelCallback>>
+        {
+            friend TAsyncDecoratorAwaiter<T, TInterceptCancellationAwaiter<T, TOnCancelCallback>>;
+            friend TInterceptCancellationBase<TOnCancelCallback, TInterceptCancellationAwaiter<T, TOnCancelCallback>>;
+            using TDecorator = TAsyncDecoratorAwaiter<T, TInterceptCancellationAwaiter<T, TOnCancelCallback>>;
+            using TCancelInterceptor = TInterceptCancellationBase<TOnCancelCallback, TInterceptCancellationAwaiter<T, TOnCancelCallback>>;
+
+        public:
+            template<class TCallback>
+            TInterceptCancellationAwaiter(TCallback&& callback, TOnCancelCallback&& onCancelCallback)
+                : TDecorator(std::forward<TCallback>(callback))
+                , TCancelInterceptor(std::forward<TOnCancelCallback>(onCancelCallback))
+            {}
+
+            TInterceptCancellationAwaiter& CoAwaitByValue() && noexcept {
+                return *this;
+            }
+
+        private:
+            std::coroutine_handle<> Bypass() noexcept {
+                if (auto cancellation = TDecorator::GetCancellation()) {
+                    // Don't even try starting async body
+                    return cancellation;
+                }
+                return nullptr;
+            }
+
+            std::coroutine_handle<> StartCancelled() noexcept {
+                Y_ABORT("should never be called");
+            }
+
+            std::coroutine_handle<> OnCancel() noexcept {
+                if (IgnoreOnCancel) [[unlikely]] {
+                    return nullptr;
+                }
+
+                IgnoreOnCancel = true;
+                return OnInterceptCancelResult(TCancelInterceptor::InterceptCancel());
+            }
+
+            std::coroutine_handle<> OnInterceptCancelResult(bool cancel) noexcept {
+                if (cancel) {
+                    return TDecorator::Cancel();
+                }
+                return nullptr;
+            }
+
+            std::coroutine_handle<> OnInterceptCancelResult(std::coroutine_handle<> start) noexcept {
+                if (start) {
+                    return start;
+                }
+                return TDecorator::Cancel();
+            }
+
+            std::coroutine_handle<> OnResume(std::coroutine_handle<> h) noexcept {
+                IgnoreOnCancel = true;
+                return TCancelInterceptor::InterceptResume(h);
+            }
+
+            std::coroutine_handle<> OnUnwind(std::coroutine_handle<> h) noexcept {
+                IgnoreOnCancel = true;
+                return TCancelInterceptor::InterceptUnwind(h);
+            }
+
+            std::coroutine_handle<> GetErrorContinuation() noexcept {
+                return TDecorator::GetContinuation();
+            }
+
+            decltype(auto) Return() {
+                TCancelInterceptor::InterceptReturn();
+                return TDecorator::Return();
+            }
+
+        private:
+            bool IgnoreOnCancel = false;
+        };
+
+    } // namespace NDetail
+
+    /**
+     * Runs the wrapped coroutine when awaited, but calls (and optionally awaits) onCancelCallback when caller requests cancellation
+     *
+     * Cancellation to the wrapped coroutine is not propagated until onCancel returns void, returns true or throws an exception.
+     *
+     * When the wrapped coroutine returns early onCancelCallback is cancelled and awaited before returning to caller.
+     */
+    template<class T, NDetail::IsOnCancelCallback TOnCancelCallback>
+    inline auto InterceptCancellation(async<T> wrapped, TOnCancelCallback&& onCancelCallback) {
+        return NDetail::TInterceptCancellationAwaiter<T, TOnCancelCallback>(
+            [&wrapped]{ return wrapped.UnsafeMove(); },
+            std::forward<TOnCancelCallback>(onCancelCallback));
+    }
+
+    /**
+     * Runs the wrapped coroutine when awaited, but calls (and optionally awaits) onCancelCallback when caller requests cancellation
+     *
+     * Cancellation to the wrapped coroutine is not propagated until onCancel returns void, returns true or throws an exception.
+     *
+     * When the wrapped coroutine returns early onCancelCallback is cancelled and awaited before returning to caller.
+     */
+    template<IsAsyncCoroutineCallable TCallback, NDetail::IsOnCancelCallback TOnCancelCallback>
+    inline auto InterceptCancellation(TCallback&& callback, TOnCancelCallback&& onCancelCallback) {
+        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+        using T = typename TCallbackResult::result_type;
+        return NDetail::TInterceptCancellationAwaiter<T, TOnCancelCallback>(
+            std::forward<TCallback>(callback),
+            std::forward<TOnCancelCallback>(onCancelCallback));
+    }
+
+} // namespace NActors

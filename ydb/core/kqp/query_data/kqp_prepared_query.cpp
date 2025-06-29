@@ -131,10 +131,16 @@ TKqpPhyTxHolder::GetSchemeOpTempTablePath() const {
                     tableDesc = &modifyScheme.GetCreateIndexedTable().GetTableDescription();
                     break;
                 }
+                case NKikimrSchemeOp::ESchemeOpCreateColumnTable: {
+                    if (modifyScheme.GetCreateColumnTable().HasTemporary() && modifyScheme.GetCreateColumnTable().GetTemporary()) {
+                        return {{true, {modifyScheme.GetWorkingDir(), modifyScheme.GetCreateColumnTable().GetName()}}};
+                    }
+                    break;
+                }
                 default:
                     return std::nullopt;
             }
-            if (tableDesc->HasTemporary()) {
+            if (tableDesc && tableDesc->HasTemporary()) {
                 if (tableDesc->GetTemporary()) {
                     return {{true, {modifyScheme.GetWorkingDir(), tableDesc->GetName()}}};
                 }

@@ -58,7 +58,7 @@ public:
     void OnStage(const EWriteStage stage) const;
 
     ~TWriteMeta() {
-        if (CurrentStage != EWriteStage::Replied) {
+        if (CurrentStage != EWriteStage::Finished) {
             OnStage(EWriteStage::Aborted);
         }
     }

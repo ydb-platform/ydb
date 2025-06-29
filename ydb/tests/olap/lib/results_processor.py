@@ -30,6 +30,7 @@ class ResultsProcessor:
                 logging.info(f"[ResultsProcessor] Data sent successfully to {os.path.join(self._db, self._table)}")
             except BaseException as e:
                 logging.error(f'[ResultsProcessor] Exception while send results: {e}')
+                # Не падаем, просто логируем ошибку
 
     _endpoints : list[ResultsProcessor.Endpoint] = None
     _run_id : int = None
@@ -117,42 +118,52 @@ class ResultsProcessor:
             logging.info(f"[ResultsProcessor] send_results is False, returning early")
             return
 
-        def _get_duration(dur: float | None):
-            if dur is not None:
-                return int(1000000 * dur)
-            if duration is not None:
-                return int(1000000 * duration)
-            return None
+        try:
+            def _get_duration(dur: float | None):
+                if dur is not None:
+                    return int(1000000 * dur)
+                if duration is not None:
+                    return int(1000000 * duration)
+                return None
 
-        info = {'cluster': YdbCluster.get_cluster_info()}
+            info = {'cluster': YdbCluster.get_cluster_info()}
 
-        report_url = os.getenv('ALLURE_RESOURCE_URL', None)
-        if report_url is None:
-            sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
-            if sandbox_task_id is not None:
-                report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
-        if report_url is not None:
-            info['report_url'] = report_url
+            report_url = os.getenv('ALLURE_RESOURCE_URL', None)
+            if report_url is None:
+                sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
+                if sandbox_task_id is not None:
+                    report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+            if report_url is not None:
+                info['report_url'] = report_url
 
-        ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
-        if ci_launch_id:
-            info['ci_launch_id'] = ci_launch_id
+            ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
+            if ci_launch_id:
+                info['ci_launch_id'] = ci_launch_id
 
-        data = {
-            'Db': cls.get_cluster_id(),
-            'Kind': kind,
-            'Suite': suite,
-            'Test': test,
-            'Timestamp': int(1000000 * timestamp),
-            'RunId': cls.get_run_id(),
-            'Success': 1 if is_successful else 0,
-            'MinDuration': _get_duration(min_duration),
-            'MaxDuration': _get_duration(max_duration),
-            'MeanDuration': _get_duration(mean_duration),
-            'MedianDuration': _get_duration(median_duration),
-            'Attempt': attempt,
-            'Stats': json.dumps(statistics) if statistics is not None else None,
-            'Info': json.dumps(info),
-        }
-        for endpoint in cls.get_endpoints():
-            endpoint.send_data(data)
+            data = {
+                'Db': cls.get_cluster_id(),
+                'Kind': kind,
+                'Suite': suite,
+                'Test': test,
+                'Timestamp': int(1000000 * timestamp),
+                'RunId': cls.get_run_id(),
+                'Success': 1 if is_successful else 0,
+                'MinDuration': _get_duration(min_duration),
+                'MaxDuration': _get_duration(max_duration),
+                'MeanDuration': _get_duration(mean_duration),
+                'MedianDuration': _get_duration(median_duration),
+                'Attempt': attempt,
+                'Stats': json.dumps(statistics) if statistics is not None else None,
+                'Info': json.dumps(info),
+            }
+            
+            for endpoint in cls.get_endpoints():
+                try:
+                    endpoint.send_data(data)
+                except Exception as e:
+                    logging.error(f"[ResultsProcessor] Failed to send data to endpoint: {e}")
+                    # Продолжаем с другими endpoint'ами
+                    
+        except Exception as e:
+            logging.error(f"[ResultsProcessor] Error in upload_results: {e}")
+            # Не падаем, просто логируем ошибку

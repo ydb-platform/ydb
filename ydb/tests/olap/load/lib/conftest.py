@@ -326,14 +326,23 @@ class LoadSuiteBase:
             # --- используем endpoint из result (установленный выше) ---
             endpoint = getattr(result, '_workload_endpoint', None)
             db_field = endpoint if endpoint else ResultsProcessor.get_cluster_id()
-            ResultsProcessor.upload_results(
-                kind='Load',
-                suite=cls.suite(),
-                test=query_name,
-                timestamp=end_time,
-                is_successful=result.success,
-                statistics=stats,
-            )
+            
+            try:
+                ResultsProcessor.upload_results(
+                    kind='Load',
+                    suite=cls.suite(),
+                    test=query_name,
+                    timestamp=end_time,
+                    is_successful=result.success,
+                    statistics=stats,
+                )
+            except Exception as e:
+                logging.warning(f"Failed to upload results for {query_name}: {e}")
+                # Не падаем из-за ошибок upload в setup
+                if query_name == '_Verification':
+                    logging.info(f"Skipping upload error for setup verification")
+                else:
+                    result.add_warning(f"Upload failed: {e}")
         if not result.success:
             exc = pytest.fail.Exception('\n'.join([result.error_message, result.warning_message]))
             if result.traceback is not None:

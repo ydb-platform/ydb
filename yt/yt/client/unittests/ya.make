@@ -23,6 +23,7 @@ SRCS(
     time_text_ut.cpp
     node_directory_ut.cpp
     query_builder_ut.cpp
+    queue_static_export_config_ut.cpp
     read_limit_ut.cpp
     replication_card_ut.cpp
     replication_progress_ut.cpp

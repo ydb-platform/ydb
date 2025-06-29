@@ -9,11 +9,8 @@ namespace NSQLComplete {
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(
-                antlr4::TokenStream* tokens,
-                size_t cursorPosition,
-                const TEnvironment* env)
-                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
+            TVisitor(const TParsedInput& input, const TEnvironment* env)
+                : TSQLv1NarrowingVisitor(input)
                 , Env_(env)
             {
             }
@@ -78,12 +75,9 @@ namespace NSQLComplete {
 
     } // namespace
 
-    TMaybe<TUseContext> FindUseStatement(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition,
-        const TEnvironment& env) {
-        std::any result = TVisitor(tokens, cursorPosition, &env).visit(ctx);
+    // TODO(YQL-19747): Use any to maybe conversion function
+    TMaybe<TUseContext> FindUseStatement(TParsedInput input, const TEnvironment& env) {
+        std::any result = TVisitor(input, &env).visit(input.SqlQuery);
         if (!result.has_value()) {
             return Nothing();
         }

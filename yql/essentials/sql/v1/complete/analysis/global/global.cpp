@@ -2,6 +2,7 @@
 
 #include "column.h"
 #include "function.h"
+#include "input.h"
 #include "named_node.h"
 #include "parse_tree.h"
 #include "use.h"
@@ -87,18 +88,10 @@ namespace NSQLComplete {
     template <bool IsAnsiLexer>
     class TSpecializedGlobalAnalysis: public IGlobalAnalysis {
     public:
-        using TDefaultYQLGrammar = TAntlrGrammar<
-            NALADefaultAntlr4::SQLv1Antlr4Lexer,
-            NALADefaultAntlr4::SQLv1Antlr4Parser>;
-
-        using TAnsiYQLGrammar = TAntlrGrammar<
-            NALAAnsiAntlr4::SQLv1Antlr4Lexer,
-            NALAAnsiAntlr4::SQLv1Antlr4Parser>;
-
-        using G = std::conditional_t<
+        using TLexer = std::conditional_t<
             IsAnsiLexer,
-            TAnsiYQLGrammar,
-            TDefaultYQLGrammar>;
+            NALAAnsiAntlr4::SQLv1Antlr4Lexer,
+            NALADefaultAntlr4::SQLv1Antlr4Lexer>;
 
         TSpecializedGlobalAnalysis()
             : Chars_()
@@ -128,11 +121,17 @@ namespace NSQLComplete {
 
             TGlobalContext ctx;
 
-            // TODO(YQL-19747): Add ~ParseContext(Tokens, ParseTree, CursorPosition)
-            ctx.Use = FindUseStatement(sqlQuery, &Tokens_, input.CursorPosition, env);
-            ctx.Names = CollectNamedNodes(sqlQuery, &Tokens_, input.CursorPosition);
-            ctx.EnclosingFunction = EnclosingFunction(sqlQuery, &Tokens_, input.CursorPosition);
-            ctx.Column = InferColumnContext(sqlQuery, &Tokens_, input.CursorPosition);
+            TParsedInput parsed = {
+                .Original = input,
+                .Tokens = &Tokens_,
+                .Parser = &Parser_,
+                .SqlQuery = sqlQuery,
+            };
+
+            ctx.Use = FindUseStatement(parsed, env);
+            ctx.Names = CollectNamedNodes(parsed);
+            ctx.EnclosingFunction = EnclosingFunction(parsed);
+            ctx.Column = InferColumnContext(parsed);
 
             if (ctx.Use && ctx.Column) {
                 EnrichTableClusters(*ctx.Column, *ctx.Use);
@@ -176,9 +175,9 @@ namespace NSQLComplete {
         }
 
         antlr4::ANTLRInputStream Chars_;
-        G::TLexer Lexer_;
+        TLexer Lexer_;
         antlr4::CommonTokenStream Tokens_;
-        TDefaultYQLGrammar::TParser Parser_;
+        SQLv1 Parser_;
     };
 
     class TGlobalAnalysis: public IGlobalAnalysis {

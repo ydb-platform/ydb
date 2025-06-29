@@ -78,7 +78,7 @@ namespace NSQLComplete {
     struct TBindingName: TIndentifier {
     };
 
-    struct TUnkownName {
+    struct TUnknownName {
         TString Content;
         TString Type;
     };
@@ -94,7 +94,7 @@ namespace NSQLComplete {
         TClusterName,
         TColumnName,
         TBindingName,
-        TUnkownName>;
+        TUnknownName>;
 
     struct TNameConstraints {
         TMaybe<TPragmaName::TConstraints> Pragma;

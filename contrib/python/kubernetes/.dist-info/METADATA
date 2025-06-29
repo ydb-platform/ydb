@@ -1,6 +1,6 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: kubernetes
-Version: 32.0.1
+Version: 33.1.0
 Summary: Kubernetes python client
 Home-page: https://github.com/kubernetes-client/python
 Author: Kubernetes
@@ -42,6 +42,7 @@ Dynamic: description
 Dynamic: home-page
 Dynamic: keywords
 Dynamic: license
+Dynamic: license-file
 Dynamic: provides-extra
 Dynamic: requires-dist
 Dynamic: requires-python

@@ -723,6 +723,11 @@ class LoadSuiteBase:
         # 2. Диагностика нод (cores/oom)
         node_errors = self._diagnose_nodes(result, workload_name)
 
+        # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
+
         # 3. Формирование summary/статистики
         self._update_summary_flags(result, workload_name)
 

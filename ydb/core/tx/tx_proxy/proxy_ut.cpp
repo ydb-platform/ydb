@@ -43,8 +43,8 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetClient().FlatQuery(&env.GetRuntime(), query, res);
     }
 
-    Y_UNIT_TEST(Boot) {
-        TTestEnv env;
+    Y_UNIT_TEST_FLAG(Boot, EnableRealSystemViewPaths) {
+        TTestEnv env(EnableRealSystemViewPaths);
         auto lsroot = env.GetClient().Ls("/");
         Print(lsroot);
 
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             NTestLs::Finished(ls);
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, EnableRealSystemViewPaths ? 6 : 3);
         }
     }
 

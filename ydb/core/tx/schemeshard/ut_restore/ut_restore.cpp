@@ -5518,7 +5518,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
@@ -5767,7 +5767,7 @@ consumers {
         ui64 txId = 100;
 
         TS3Mock s3Mock({
-            {"/unknown_key", "unknown_scheme_object"}, 
+            {"/unknown_key", "unknown_scheme_object"},
             {"/metadata.json", R"({"version": 0})"}
         }, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());

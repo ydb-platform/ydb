@@ -214,4 +214,5 @@ message TFeatureFlags {
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
     optional bool EnableSystemNamesProtection = 190 [default = false];
+    optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
 }

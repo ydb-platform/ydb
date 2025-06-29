@@ -78,6 +78,7 @@ message THostState {
   repeated EMarker       Markers = 8;
   optional NActorsInterconnect.TNodeLocation Location = 9;
   optional uint32        StartTimeSeconds = 10;
+  optional uint32        PileId = 11;
 }
 
 message TClusterState {

@@ -142,13 +142,13 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildWideReadTable(node, ctx, *Types);
+        TExprBase output = KqpBuildWideReadTable(node, ctx, *GetTypes());
         DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteLength(node, ctx, *Types);
+        TExprBase output = DqPeepholeRewriteLength(node, ctx, *GetTypes());
         DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

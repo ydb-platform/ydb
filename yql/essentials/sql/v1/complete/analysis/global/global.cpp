@@ -1,5 +1,6 @@
 #include "global.h"
 
+#include "column.h"
 #include "function.h"
 #include "named_node.h"
 #include "parse_tree.h"
@@ -8,7 +9,73 @@
 #include <yql/essentials/sql/v1/complete/antlr4/pipeline.h>
 #include <yql/essentials/sql/v1/complete/syntax/ansi.h>
 
+#include <library/cpp/iterator/functools.h>
+
+#include <util/string/join.h>
+
 namespace NSQLComplete {
+
+    bool operator<(const TColumnId& lhs, const TColumnId& rhs) {
+        return std::tie(lhs.TableAlias, lhs.Name) < std::tie(rhs.TableAlias, rhs.Name);
+    }
+
+    TColumnContext TColumnContext::ExtractAliased(TMaybe<TStringBuf> alias) {
+        if (alias.Empty()) {
+            return *this;
+        }
+
+        auto aliasedTables = std::ranges::partition(Tables, [&](const auto& table) {
+            return table.Alias != alias;
+        });
+
+        auto aliasedColumns = std::ranges::partition(Columns, [&](const auto& column) {
+            return column.TableAlias != alias;
+        });
+
+        TVector<TAliased<TTableId>> tables(aliasedTables.begin(), aliasedTables.end());
+        TVector<TColumnId> columns(aliasedColumns.begin(), aliasedColumns.end());
+
+        Tables.erase(aliasedTables.begin(), aliasedTables.end());
+        Columns.erase(aliasedColumns.begin(), aliasedColumns.end());
+
+        return {
+            .Tables = std::move(tables),
+            .Columns = std::move(columns),
+        };
+    }
+
+    bool TColumnContext::IsAsterisk() const {
+        return Columns.size() == 1 &&
+               Columns[0].TableAlias.empty() &&
+               Columns[0].Name == "*";
+    }
+
+    TColumnContext TColumnContext::Renamed(TStringBuf alias) && {
+        for (TAliased<TTableId>& table : Tables) {
+            table.Alias = alias;
+        }
+        for (TColumnId& column : Columns) {
+            column.TableAlias = alias;
+        }
+        return *this;
+    }
+
+    TColumnContext operator|(TColumnContext lhs, TColumnContext rhs) {
+        lhs.Tables.reserve(lhs.Tables.size() + rhs.Tables.size());
+        lhs.Columns.reserve(lhs.Columns.size() + rhs.Columns.size());
+
+        std::move(rhs.Tables.begin(), rhs.Tables.end(), std::back_inserter(lhs.Tables));
+        std::move(rhs.Columns.begin(), rhs.Columns.end(), std::back_inserter(lhs.Columns));
+
+        SortUnique(lhs.Tables);
+        SortUnique(lhs.Columns);
+
+        return lhs;
+    }
+
+    TColumnContext TColumnContext::Asterisk() {
+        return {.Columns = {{.Name = "*"}}};
+    }
 
     class TErrorStrategy: public antlr4::DefaultErrorStrategy {
     public:
@@ -45,6 +112,17 @@ namespace NSQLComplete {
         }
 
         TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
+            TString recovered;
+            if (IsRecoverable(input)) {
+                recovered = TString(input.Text);
+
+                // - "_" is to parse `SELECT x._ FROM table`
+                //        instead of `SELECT x.FROM table`
+                recovered.insert(input.CursorPosition, "_");
+
+                input.Text = recovered;
+            }
+
             SQLv1::Sql_queryContext* sqlQuery = Parse(input.Text);
             Y_ENSURE(sqlQuery);
 
@@ -54,17 +132,47 @@ namespace NSQLComplete {
             ctx.Use = FindUseStatement(sqlQuery, &Tokens_, input.CursorPosition, env);
             ctx.Names = CollectNamedNodes(sqlQuery, &Tokens_, input.CursorPosition);
             ctx.EnclosingFunction = EnclosingFunction(sqlQuery, &Tokens_, input.CursorPosition);
+            ctx.Column = InferColumnContext(sqlQuery, &Tokens_, input.CursorPosition);
+
+            if (ctx.Use && ctx.Column) {
+                EnrichTableClusters(*ctx.Column, *ctx.Use);
+            }
 
             return ctx;
         }
 
     private:
+        bool IsRecoverable(TCompletionInput input) const {
+            static const TStringBuf prev = " ";
+            static const TStringBuf next = " .(";
+
+            TStringBuf s = input.Text;
+            size_t i = input.CursorPosition;
+
+            return (i < s.size() && prev.Contains(s[i]) || i == s.size()) &&
+                   (i > 0 /*  */ && next.Contains(s[i - 1]));
+        }
+
         SQLv1::Sql_queryContext* Parse(TStringBuf input) {
             Chars_.load(input.Data(), input.Size(), /* lenient = */ false);
             Lexer_.reset();
             Tokens_.setTokenSource(&Lexer_);
             Parser_.reset();
             return Parser_.sql_query();
+        }
+
+        void EnrichTableClusters(TColumnContext& column, const TUseContext& use) {
+            for (auto& table : column.Tables) {
+                if (table.Cluster.empty()) {
+                    table.Cluster = use.Cluster;
+                }
+            }
+        }
+
+        void DebugPrint(TStringBuf query, antlr4::ParserRuleContext* ctx) {
+            Cerr << "= = = = = = " << Endl;
+            Cerr << query << Endl;
+            Cerr << ctx->toStringTree(&Parser_, true) << Endl;
         }
 
         antlr4::ANTLRInputStream Chars_;
@@ -97,3 +205,22 @@ namespace NSQLComplete {
     }
 
 } // namespace NSQLComplete
+
+template <>
+void Out<NSQLComplete::TAliased<NSQLComplete::TTableId>>(IOutputStream& out, const NSQLComplete::TAliased<NSQLComplete::TTableId>& value) {
+    Out<NSQLComplete::TTableId>(out, value);
+    out << " AS " << value.Alias;
+}
+
+template <>
+void Out<NSQLComplete::TColumnId>(IOutputStream& out, const NSQLComplete::TColumnId& value) {
+    out << value.TableAlias << "." << value.Name;
+}
+
+template <>
+void Out<NSQLComplete::TColumnContext>(IOutputStream& out, const NSQLComplete::TColumnContext& value) {
+    out << "TColumnContext { ";
+    out << "Tables: " << JoinSeq(", ", value.Tables);
+    out << ", Columns: " << JoinSeq(", ", value.Columns);
+    out << " }";
+}

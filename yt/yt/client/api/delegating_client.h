@@ -331,6 +331,15 @@ public:
         const TAlterReplicationCardOptions& options),
         (replicationCardId, options))
 
+    DELEGATE_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (
+        const TChaosLeaseStartOptions& options),
+        (options));
+
+    DELEGATE_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options),
+        (chaosLeaseId, options));
+
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (
         const NYPath::TYPath& path,
         const TGetTablePivotKeysOptions& options),

@@ -69,6 +69,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
@@ -100,6 +101,7 @@ public:
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapPushdownProjections() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasMaxSequentialReadsInFlight() const;
@@ -196,12 +198,14 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapScalarApply = false;
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
+    bool EnableOlapPushdownProjections = false;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
+    bool GetEnableOlapPushdownProjections() const;
 };
 
 }

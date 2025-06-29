@@ -26,6 +26,7 @@ private:
     YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
+    YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
 };
 

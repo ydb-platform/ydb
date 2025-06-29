@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
             if (checkFunction(describeResult)) {
                 checkPassed = true;
                 break;
-            } 
+            }
             t.TestEnv->SimulateSleep(runtime, TDuration::MilliSeconds(10));
         }
         UNIT_ASSERT(checkPassed);
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
     Y_UNIT_TEST(TestServerlessComputeResourcesModeWithReboots) {
         TTestWithReboots t;
         t.GetTestEnvOptions().EnableServerlessExclusiveDynamicNodes(true);
-        
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 sharedHive = 0;
             ui64 tenantSchemeShard = 0;
@@ -72,24 +72,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
             );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+            ui64 subDomainPathId = 0;
+
             {
                 TInactiveZone inactive(activeZone);
 
                 ui64 sharedDbSchemeShard = 0;
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/SharedDB"),
+                const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
+                subDomainPathId = describeResult.GetPathId();
+                TestDescribeResult(describeResult,
                                     {NLs::PathExist,
                                      NLs::ExtractTenantSchemeshard(&sharedDbSchemeShard),
                                      NLs::ExtractDomainHive(&sharedHive),
                                      NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
-                
+
                 UNIT_ASSERT(sharedHive != 0
                             && sharedHive != (ui64)-1
                             && sharedHive != TTestTxConfig::Hive);
-                            
+
                 UNIT_ASSERT(sharedDbSchemeShard != 0
                             && sharedDbSchemeShard != (ui64)-1
                             && sharedDbSchemeShard != TTestTxConfig::SchemeShard);
-                
+
                 TestDescribeResult(DescribePath(runtime, sharedDbSchemeShard, "/MyRoot/SharedDB"),
                                     {NLs::PathExist,
                                      NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
@@ -99,11 +103,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
                 R"(
                     ResourcesDomainKey {
                         SchemeShard: %lu
-                        PathId: 3 
+                        PathId: %lu
                     }
                     Name: "ServerLess0"
                 )",
-                TTestTxConfig::SchemeShard
+                TTestTxConfig::SchemeShard, subDomainPathId
             );
             TestCreateExtSubDomain(runtime, ++t.TxId,  "/MyRoot", createData);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -124,7 +128,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
                 )"
             );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                
+
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
@@ -132,7 +136,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
                                     NLs::IsExternalSubDomain("ServerLess0"),
                                     NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared),
                                     NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
-                                    
+
                 UNIT_ASSERT(tenantSchemeShard != 0
                             && tenantSchemeShard != (ui64)-1
                             && tenantSchemeShard != TTestTxConfig::SchemeShard);

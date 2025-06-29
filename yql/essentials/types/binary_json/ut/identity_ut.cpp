@@ -41,7 +41,7 @@ public:
     void TestReadToJsonDom() {
         for (const TStringBuf json : TestCases) {
             const auto binaryJson = std::get<TBinaryJson>(NBinaryJson::SerializeToBinaryJson(json));
-            const auto value = NBinaryJson::ReadToJsonDom(binaryJson, &ValueBuilder);
+            const auto value = NBinaryJson::ReadToJsonDom(binaryJson, &ValueBuilder_);
             const auto jsonAfterBinaryJson = NDom::SerializeJsonDom(value);
 
             UNIT_ASSERT_VALUES_EQUAL(json, jsonAfterBinaryJson);
@@ -59,7 +59,7 @@ public:
 
     void TestSerializeDomToBinaryJson() {
         for (const TStringBuf json : TestCases) {
-            const auto dom = NDom::TryParseJsonDom(json, &ValueBuilder);
+            const auto dom = NDom::TryParseJsonDom(json, &ValueBuilder_);
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(dom);
             const auto jsonAfterBinaryJson = NBinaryJson::SerializeToJson(binaryJson);
 

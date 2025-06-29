@@ -71,9 +71,9 @@ public:
 
             block = good;
 
-            const auto muldiv = CallInst::Create(func, { GetterForInt128(left, block), NDecimal::GenConstant(Divider, context), GetterForInt128(right, block) }, "mul_and_div", block);
+            const auto muldiv = CallInst::Create(func, { GetterForInt128(left, block), NDecimal::GenConstant(Divider_, context), GetterForInt128(right, block) }, "mul_and_div", block);
 
-            const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block);
+            const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block);
             const auto nan = NDecimal::GenIsNonComparable(muldiv, context, block);
             const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, muldiv, ConstantInt::get(muldiv->getType(), 0), "plus", block);
 
@@ -87,9 +87,9 @@ public:
             block = done;
             return result;
         } else {
-            const auto muldiv = CallInst::Create(func, { GetterForInt128(left, block), NDecimal::GenConstant(Divider, context), GetterForInt128(right, block) }, "mul_and_div", block);
+            const auto muldiv = CallInst::Create(func, { GetterForInt128(left, block), NDecimal::GenConstant(Divider_, context), GetterForInt128(right, block) }, "mul_and_div", block);
 
-            const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block);
+            const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block);
             const auto nan = NDecimal::GenIsNonComparable(muldiv, context, block);
             const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, muldiv, ConstantInt::get(muldiv->getType(), 0), "plus", block);
 

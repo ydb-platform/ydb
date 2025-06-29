@@ -102,11 +102,11 @@ class TestLargeS3Import:
 
         cls.s3_url = "https://storage.yandexcloud.net"
         cls.s3_sink_bucket = "olap-exp-private"
-        cls.external_source_path = f"{YdbCluster.tables_path}/tpc_h_s3_parquet_import"
-        cls.external_sink_path = f"{YdbCluster.tables_path}/tpc_h_s3_parquet_export"
-        cls.external_table_path = f"{YdbCluster.tables_path}/s{cls.scale}/tpc_h_lineitem_s3_parquet_import"
-        cls.external_sink_table_path = f"{YdbCluster.tables_path}/s{cls.scale}/tpc_h_lineitem_s3_parquet_export"
-        cls.olap_table_path = f"{YdbCluster.tables_path}/s{cls.scale}/tpc_h_lineitem_olap"
+        cls.external_source_path = YdbCluster.get_tables_path("tpc_h_s3_parquet_import")
+        cls.external_sink_path = YdbCluster.get_tables_path("tpc_h_s3_parquet_export")
+        cls.external_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_s3_parquet_import")
+        cls.external_sink_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_s3_parquet_export")
+        cls.olap_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_olap")
         cls.table_size = {
             "1": 6001215,
             "10": 59986052,
@@ -122,7 +122,7 @@ class TestLargeS3Import:
                     f"external sink table: {cls.external_sink_table_path}")
         logger.info(f"target claster info, endpoint: {YdbCluster.ydb_endpoint}, "
                     f"database: {YdbCluster.ydb_database}, "
-                    f"tables path: {YdbCluster.tables_path}, "
+                    f"tables path: {YdbCluster.get_tables_path()}, "
                     f"has key {'YES' if os.getenv('OLAP_YDB_OAUTH', None) else 'NO'}")
         logger.info(f"results info, send-results: {ResultsProcessor.send_results}, "
                     f"endpoints: {get_external_param('results-endpoint', '-')}, "
@@ -152,7 +152,7 @@ class TestLargeS3Import:
         self.query(f"DROP TABLE IF EXISTS `{self.olap_table_path}`;")
 
     def setup_datasource(self):
-        logger.info(f"setupping datasource by path `{YdbCluster.tables_path}/`...")
+        logger.info(f"setupping datasource by path `{YdbCluster.get_tables_path()}/`...")
         self.query(f"""
             CREATE OR REPLACE EXTERNAL DATA SOURCE `{self.external_source_path}` WITH (
                 SOURCE_TYPE="ObjectStorage",

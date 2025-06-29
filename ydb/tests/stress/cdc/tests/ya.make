@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_TEST_PATH="ydb/tests/stress/cdc/cdc")
 
@@ -11,12 +11,12 @@ REQUIREMENTS(ram:32)
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
     ydb/tests/stress/cdc
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/stress
     ydb/tests/stress/cdc/workload
 )
 

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cinttypes>  // PRIu64 macro
+#include <climits>    // for UINT64_MAX
 #include <cstdarg>    // for va_list handling in bitmapOf()
 #include <cstdio>     // for std::printf() in the printf() method
 #include <cstring>    // for std::memcpy()
@@ -781,6 +782,9 @@ class Roaring64Map {
      * Returns true if the bitmap is full (cardinality is max uint64_t + 1).
      */
     bool isFull() const {
+        // This function is somewhat absurd. A full 64-bit bitmap would surely
+        // exceed our memory limits.
+#if SIZE_MAX >= UINT64_MAX
         // only bother to check if map is fully saturated
         //
         // we put std::numeric_limits<>::max/min in parentheses
@@ -793,6 +797,11 @@ class Roaring64Map {
                                      return roaring_map_entry.second.isFull();
                                  })
                    : false;
+#else
+        // if SIZE_MAX < UINT64_MAX, then we cannot represent a full bitmap
+        // in a 64-bit integer, so we return false.
+        return false;
+#endif
     }
 
     /**

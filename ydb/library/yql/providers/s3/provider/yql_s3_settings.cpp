@@ -37,7 +37,7 @@ TS3Settings::TConstPtr TS3Configuration::Snapshot() const {
 }
 
 bool TS3Configuration::HasCluster(TStringBuf cluster) const {
-    return ValidClusters.contains(cluster);
+    return GetValidClusters().contains(cluster);
 }
 
 void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx)

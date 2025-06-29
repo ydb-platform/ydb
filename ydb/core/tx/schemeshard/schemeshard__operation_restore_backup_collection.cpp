@@ -1,11 +1,14 @@
+#include "schemeshard__operation_restore_backup_collection.h"
+
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__op_traits.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard__operation.h"
-#include "schemeshard__operation_states.h"
-#include "schemeshard__operation_restore_backup_collection.h"
-#include "schemeshard__operation_change_path_state.h"
 #include "schemeshard__operation_base.h"
+#include "schemeshard__operation_change_path_state.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_states.h"
+
+#include <ydb/core/base/test_failure_injection.h>
 
 #include <util/generic/guid.h>
 
@@ -131,6 +134,10 @@ public:
     using TSubOperationWithContext::SelectStateFunc;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound))) {
+            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
+        }
+
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         LOG_I("TCreateRestoreOpControlPlane Propose"
@@ -140,6 +147,10 @@ public:
         TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
 
         const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
+
+        if (!bcPath.IsResolved()) {
+            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        }
 
         const auto& bc = context.SS->BackupCollections[bcPath->PathId];
 
@@ -208,6 +219,8 @@ public:
             op.AddIncrementalBackupTrimmedNames(TString(incrBackupName));
         }
 
+        context.MemChanges.GrabNewLongIncrementalRestoreOp(context.SS, OperationId);
+        context.SS->LongIncrementalRestoreOps[OperationId] = op;
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state
@@ -216,8 +229,9 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TCreateRestoreOpControlPlane");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TCreateRestoreOpControlPlane AbortPropose"
+            << ", opId: " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -258,6 +272,31 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     TVector<ISubOperation::TPtr> result;
 
     TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::BackupCollectionNotFound))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Backup collection not found")};
+        return result;
+    }
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::BackupChildrenEmpty))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusSchemeError, "Backup collection children empty")};
+        return result;
+    }
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::PathSplitFailure))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Path split failure")};
+        return result;
+    }
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::IncrementalBackupPathNotResolved))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Incremental backup path not resolved")};
+        return result;
+    }
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::CreateChangePathStateFailed))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, "Create change path state failed")};
+        return result;
+    }
 
     const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
     {

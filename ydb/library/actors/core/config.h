@@ -34,6 +34,10 @@ namespace NActors {
         bool UseRingQueue = false;
         ui16 MinLocalQueueSize = 0;
         ui16 MaxLocalQueueSize = 0;
+
+        // tiny-ydb configs
+        std::vector<i16> AdjacentPools;
+        i16 ForcedForeignSlotCount = 0;
     };
 
     struct TSharedExecutorPoolConfig {

@@ -71,7 +71,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
                 if (itBlobIdString == blobsIds.end()) {
                     itBlobIdString = blobsIds
                                          .emplace(r->GetBlobRange().GetBlobIdxVerified(),
-                                             portion.GetBlobId(r->GetBlobRange().GetBlobIdxVerified()).ToStringLegacy())
+                                             portionPtr.GetBlobId(r->GetBlobRange().GetBlobIdxVerified()).ToStringLegacy())
                                          .first;
                 }
                 NArrow::Append<arrow::StringType>(
@@ -104,7 +104,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::StringType>(*builders[7], ReadMetadata->GetEntityName(r->GetIndexId()).value_or("undefined"));
             NArrow::Append<arrow::UInt32Type>(*builders[8], r->GetIndexId());
             if (auto bRange = r->GetBlobRangeOptional()) {
-                std::string blobIdString = portion.GetBlobId(bRange->GetBlobIdxVerified()).ToStringLegacy();
+                std::string blobIdString = portionPtr.GetBlobId(bRange->GetBlobIdxVerified()).ToStringLegacy();
                 NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
                 NArrow::Append<arrow::UInt64Type>(*builders[10], bRange->Offset);
                 NArrow::Append<arrow::UInt64Type>(*builders[11], bRange->Size);

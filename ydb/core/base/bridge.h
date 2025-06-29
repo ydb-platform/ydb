@@ -1,5 +1,6 @@
 #pragma once
 
+#include "appdata_fwd.h"
 #include "defs.h"
 #include "blobstorage_common.h"
 
@@ -24,6 +25,10 @@ namespace NKikimr {
 
         using TPtr = std::shared_ptr<const TBridgeInfo>;
 
+        TBridgeInfo() = default;
+        TBridgeInfo(const TBridgeInfo&) = delete;
+        TBridgeInfo(TBridgeInfo&&) = default;
+
         const TPile *GetPile(TBridgePileId bridgePileId) const {
             Y_ABORT_UNLESS(bridgePileId.GetRawId() < Piles.size());
             return &Piles[bridgePileId.GetRawId()];
@@ -41,5 +46,7 @@ namespace NKikimr {
             }
         }
     };
+
+    bool IsBridgeMode(const TActorContext &ctx);
 
 } // NKikimr

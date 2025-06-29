@@ -372,6 +372,7 @@ enum EServiceKikimr {
     // Replication
     REPLICATION_CONTROLLER = 1200;
     REPLICATION_SERVICE = 1201;
+    LOCAL_YDB_PROXY = 1202;
 
     // Blob depot
     BLOB_DEPOT = 1300;
@@ -386,6 +387,8 @@ enum EServiceKikimr {
     METADATA_INITIALIZER = 1501;
     METADATA_MANAGER = 1502;
     METADATA_SECRET = 1503;
+
+    GENERAL_CACHE = 1504;
 
     // Tiering
     TX_TIERING = 1600;
@@ -421,6 +424,8 @@ enum EServiceKikimr {
     BSCONFIG = 3200;
 
     NAMESERVICE = 3300;
+
+    BRIDGE = 3400;
 };
 
 message TActivity {
@@ -1090,5 +1095,7 @@ message TActivity {
         BS_SYNC_BROKER = 660;
         BS_PROXY_CHECKINTEGRITY_ACTOR = 661;
         CMS_CONFIG_INFO_COLLECTOR = 662;
+        RECOMPUTE_KMEANS_SCAN_ACTOR = 663;
+        BS_HULL_SYNC_FULL_UNORDERED_DATA_PROTOCOL = 664;
     };
 };

@@ -30,6 +30,7 @@ struct TPDiskMockState::TImpl {
         ui64 LogDataSize = 0;
         bool Slain = false;
         ui64 LastLsn = 0;
+        ui32 Weight = 0;
         ui32 GroupSizeInUnits = 0;
     };
 
@@ -390,10 +391,7 @@ TString& TPDiskMockState::GetStateErrorReason() {
 ui32 TPDiskMockState::GetNumActiveSlots() const {
     size_t sum = 0;
     for (auto& [ownerId, owner] : Impl->Owners) {
-        // NOTE: the value is hardcoded intentionally.
-        // It's one of the limitations of pdisk mock
-        const ui32 slotSizeInUnits = 1u;
-        sum += TPDiskConfig::GetOwnerWeight(owner.GroupSizeInUnits, slotSizeInUnits);
+        sum += owner.Weight;
     }
     return sum;
 }
@@ -477,6 +475,7 @@ public:
             owner->CutLogId = ev->Get()->CutLogID;
             owner->Slain = false;
             owner->GroupSizeInUnits = ev->Get()->GroupSizeInUnits;
+            owner->Weight = TPDiskConfig::GetOwnerWeight(owner->GroupSizeInUnits, 0u);
 
             // drop data from any reserved chunks and return them to free pool
             Impl.ResetOwnerReservedChunks(*owner);
@@ -492,7 +491,7 @@ public:
             const ui64 bulkWriteBlockSize = 65536;
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::OK, seekTimeUs, readSpeedBps, writeSpeedBps,
                 readBlockSize, writeBlockSize, bulkWriteBlockSize, Impl.ChunkSize, Impl.AppendBlockSize, ownerId,
-                owner->OwnerRound, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, TString());
+                owner->OwnerRound, owner->Weight, 0u, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, TString());
             res->StartingPoints = owner->StartingPoints;
         } else {
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::INVALID_ROUND, "invalid owner round");
@@ -509,6 +508,7 @@ public:
         auto res = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(), TString());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
             owner->GroupSizeInUnits = msg->GroupSizeInUnits;
+            owner->Weight = TPDiskConfig::GetOwnerWeight(owner->GroupSizeInUnits, 0u);
         }
         Send(ev->Sender, res.release());
     }

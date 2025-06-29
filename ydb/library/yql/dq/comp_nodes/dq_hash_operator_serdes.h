@@ -78,8 +78,10 @@ namespace NDqHashOperatorParams
 
 struct TDqHashOperatorParams
 {
+    size_t InputWidth = 0;
     TKeyTypes KeyTypes;
-    std::vector<TType*> KeyAndStateItemTypes;
+    std::vector<TType*> KeyItemTypes;
+    std::vector<TType*> StateItemTypes;
     NDqHashOperatorCommon::TCombinerNodes Nodes;
 };
 

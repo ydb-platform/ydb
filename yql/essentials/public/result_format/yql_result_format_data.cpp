@@ -112,7 +112,7 @@ public:
 class TOptionalProcessor : public IDataProcessor {
 public:
     TOptionalProcessor(std::unique_ptr<IDataProcessor>&& inner)
-        : Inner(std::move(inner))
+        : Inner_(std::move(inner))
     {}
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
@@ -122,7 +122,7 @@ public:
             visitor.OnEmptyOptional();
         } else {
             visitor.OnBeforeOptionalItem();
-            Inner->Process(dataNode.AsList()[0], visitor);
+            Inner_->Process(dataNode.AsList()[0], visitor);
             visitor.OnAfterOptionalItem();
         }
 
@@ -130,13 +130,13 @@ public:
     }
 
 private:
-    const std::unique_ptr<IDataProcessor> Inner;
+    const std::unique_ptr<IDataProcessor> Inner_;
 };
 
 class TListProcessor : public IDataProcessor {
 public:
     TListProcessor(std::unique_ptr<IDataProcessor>&& inner)
-        : Inner(std::move(inner))
+        : Inner_(std::move(inner))
     {}
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
@@ -144,7 +144,7 @@ public:
         visitor.OnBeginList();
         for (const auto& item : dataNode.AsList()) {
             visitor.OnBeforeListItem();
-            Inner->Process(item, visitor);
+            Inner_->Process(item, visitor);
             visitor.OnAfterListItem();
         }
 
@@ -152,22 +152,22 @@ public:
     }
 
 private:
-    const std::unique_ptr<IDataProcessor> Inner;
+    const std::unique_ptr<IDataProcessor> Inner_;
 };
 
 class TTupleProcessor : public IDataProcessor {
 public:
     TTupleProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
-        : Inners(std::move(inners))
+        : Inners_(std::move(inners))
     {}
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList());
         visitor.OnBeginTuple();
-        CHECK(dataNode.AsList().size() == Inners.size());
-        for (ui32 i = 0; i < Inners.size(); ++i) {
+        CHECK(dataNode.AsList().size() == Inners_.size());
+        for (ui32 i = 0; i < Inners_.size(); ++i) {
             visitor.OnBeforeTupleItem();
-            Inners[i]->Process(dataNode.AsList()[i], visitor);
+            Inners_[i]->Process(dataNode.AsList()[i], visitor);
             visitor.OnAfterTupleItem();
         }
 
@@ -175,22 +175,22 @@ public:
     }
 
 private:
-    const TVector<std::unique_ptr<IDataProcessor>> Inners;
+    const TVector<std::unique_ptr<IDataProcessor>> Inners_;
 };
 
 class TStructProcessor : public IDataProcessor {
 public:
     TStructProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
-        : Inners(std::move(inners))
+        : Inners_(std::move(inners))
     {}
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList());
         visitor.OnBeginStruct();
-        CHECK(dataNode.AsList().size() == Inners.size());
-        for (ui32 i = 0; i < Inners.size(); ++i) {
+        CHECK(dataNode.AsList().size() == Inners_.size());
+        for (ui32 i = 0; i < Inners_.size(); ++i) {
             visitor.OnBeforeStructItem();
-            Inners[i]->Process(dataNode.AsList()[i], visitor);
+            Inners_[i]->Process(dataNode.AsList()[i], visitor);
             visitor.OnAfterStructItem();
         }
 
@@ -198,14 +198,14 @@ public:
     }
 
 private:
-    const TVector<std::unique_ptr<IDataProcessor>> Inners;
+    const TVector<std::unique_ptr<IDataProcessor>> Inners_;
 };
 
 class TDictProcessor : public IDataProcessor {
 public:
     TDictProcessor(std::unique_ptr<IDataProcessor>&& innerKey, std::unique_ptr<IDataProcessor>&& innerPayload)
-        : InnerKey(std::move(innerKey))
-        , InnerPayload(std::move(innerPayload))
+        : InnerKey_(std::move(innerKey))
+        , InnerPayload_(std::move(innerPayload))
     {}
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
@@ -215,10 +215,10 @@ public:
             CHECK(item.IsList() && item.AsList().size() == 2);
             visitor.OnBeforeDictItem();
             visitor.OnBeforeDictKey();
-            InnerKey->Process(item.AsList()[0], visitor);
+            InnerKey_->Process(item.AsList()[0], visitor);
             visitor.OnAfterDictKey();
             visitor.OnBeforeDictPayload();
-            InnerPayload->Process(item.AsList()[1], visitor);
+            InnerPayload_->Process(item.AsList()[1], visitor);
             visitor.OnAfterDictPayload();
             visitor.OnAfterDictItem();
         }
@@ -227,28 +227,28 @@ public:
     }
 
 private:
-    const std::unique_ptr<IDataProcessor> InnerKey;
-    const std::unique_ptr<IDataProcessor> InnerPayload;
+    const std::unique_ptr<IDataProcessor> InnerKey_;
+    const std::unique_ptr<IDataProcessor> InnerPayload_;
 };
 
 class TVariantProcessor : public IDataProcessor {
 public:
     TVariantProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
-        : Inners(std::move(inners))
+        : Inners_(std::move(inners))
     {}
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList() && dataNode.AsList().size() == 2);
         CHECK(dataNode.AsList()[0].IsString());
         ui32 index = FromString<ui32>(dataNode.AsList()[0].AsString());
-        CHECK(index < Inners.size());
+        CHECK(index < Inners_.size());
         visitor.OnBeginVariant(index);
-        Inners[index]->Process(dataNode.AsList()[1], visitor);
+        Inners_[index]->Process(dataNode.AsList()[1], visitor);
         visitor.OnEndVariant();
     }
 
 private:
-    const TVector<std::unique_ptr<IDataProcessor>> Inners;
+    const TVector<std::unique_ptr<IDataProcessor>> Inners_;
 };
 
 class TPgProcessor : public IDataProcessor {
@@ -269,162 +269,162 @@ public:
 class TDataProcessorBuilder : public TThrowingTypeVisitor {
 public:
     TDataProcessorBuilder() {
-        IsVariant.push_back(false);
+        IsVariant_.push_back(false);
     }
 
     IDataProcessor& GetResult() {
-        CHECK(Stack.size() == 1);
-        return *Stack.front();
+        CHECK(Stack_.size() == 1);
+        return *Stack_.front();
     }
 
     void OnVoid() final {
-        Stack.push_back(std::make_unique<TVoidProcessor>());
+        Stack_.push_back(std::make_unique<TVoidProcessor>());
     }
 
     void OnNull() final {
-        Stack.push_back(std::make_unique<TNullProcessor>());
+        Stack_.push_back(std::make_unique<TNullProcessor>());
     }
 
     void OnEmptyList() final {
-        Stack.push_back(std::make_unique<TEmptyListProcessor>());
+        Stack_.push_back(std::make_unique<TEmptyListProcessor>());
     }
 
     void OnEmptyDict() final {
-        Stack.push_back(std::make_unique<TEmptyDictProcessor>());
+        Stack_.push_back(std::make_unique<TEmptyDictProcessor>());
     }
 
     void OnBool() final {
-        Stack.push_back(std::make_unique<TBoolProcessor>());
+        Stack_.push_back(std::make_unique<TBoolProcessor>());
     }
 
     void OnInt8() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i8, &IDataVisitor::OnInt8>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i8, &IDataVisitor::OnInt8>>());
     }
 
     void OnUint8() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<ui8, &IDataVisitor::OnUint8>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<ui8, &IDataVisitor::OnUint8>>());
     }
 
     void OnInt16() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i16, &IDataVisitor::OnInt16>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i16, &IDataVisitor::OnInt16>>());
     }
 
     void OnUint16() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<ui16, &IDataVisitor::OnUint16>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<ui16, &IDataVisitor::OnUint16>>());
     }
 
     void OnInt32() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i32, &IDataVisitor::OnInt32>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i32, &IDataVisitor::OnInt32>>());
     }
 
     void OnUint32() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<ui32, &IDataVisitor::OnUint32>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<ui32, &IDataVisitor::OnUint32>>());
     }
 
     void OnInt64() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnInt64>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnInt64>>());
     }
 
     void OnUint64() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<ui64, &IDataVisitor::OnUint64>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<ui64, &IDataVisitor::OnUint64>>());
     }
 
     void OnFloat() final {
-        Stack.push_back(std::make_unique<TFloatingProcessor<float, FloatFromString, &IDataVisitor::OnFloat>>());
+        Stack_.push_back(std::make_unique<TFloatingProcessor<float, FloatFromString, &IDataVisitor::OnFloat>>());
     }
 
     void OnDouble() final {
-        Stack.push_back(std::make_unique<TFloatingProcessor<double, DoubleFromString, &IDataVisitor::OnDouble>>());
-    }    
+        Stack_.push_back(std::make_unique<TFloatingProcessor<double, DoubleFromString, &IDataVisitor::OnDouble>>());
+    }
 
     void OnString() final {
-        Stack.push_back(std::make_unique<TStringProcessor<&IDataVisitor::OnString>>());
+        Stack_.push_back(std::make_unique<TStringProcessor<&IDataVisitor::OnString>>());
     }
 
     void OnUtf8() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnUtf8>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnUtf8>>());
     }
 
     void OnYson() final {
-        Stack.push_back(std::make_unique<TYsonProcessor>());
+        Stack_.push_back(std::make_unique<TYsonProcessor>());
     }
 
     void OnJson() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnJson>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnJson>>());
     }
 
     void OnJsonDocument() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnJsonDocument>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnJsonDocument>>());
     }
 
     void OnUuid() final {
-        Stack.push_back(std::make_unique<TStringProcessor<&IDataVisitor::OnUuid>>());
+        Stack_.push_back(std::make_unique<TStringProcessor<&IDataVisitor::OnUuid>>());
     }
 
     void OnDyNumber() final {
-        Stack.push_back(std::make_unique<TStringProcessor<&IDataVisitor::OnDyNumber>>());
+        Stack_.push_back(std::make_unique<TStringProcessor<&IDataVisitor::OnDyNumber>>());
     }
 
     void OnDate() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<ui16, &IDataVisitor::OnDate>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<ui16, &IDataVisitor::OnDate>>());
     }
 
     void OnDatetime() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<ui32, &IDataVisitor::OnDatetime>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<ui32, &IDataVisitor::OnDatetime>>());
     }
 
     void OnTimestamp() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<ui64, &IDataVisitor::OnTimestamp>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<ui64, &IDataVisitor::OnTimestamp>>());
     }
 
     void OnTzDate() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzDate>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzDate>>());
     }
 
     void OnTzDatetime() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzDatetime>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzDatetime>>());
     }
 
     void OnTzTimestamp() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzTimestamp>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzTimestamp>>());
     }
 
     void OnInterval() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnInterval>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnInterval>>());
     }
 
     void OnDate32() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i32, &IDataVisitor::OnDate32>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i32, &IDataVisitor::OnDate32>>());
     }
 
     void OnDatetime64() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnDatetime64>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnDatetime64>>());
     }
 
     void OnTimestamp64() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnTimestamp64>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnTimestamp64>>());
     }
 
     void OnTzDate32() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzDate32>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzDate32>>());
     }
 
     void OnTzDatetime64() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzDatetime64>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzDatetime64>>());
     }
 
     void OnTzTimestamp64() final {
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzTimestamp64>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnTzTimestamp64>>());
     }
 
     void OnInterval64() final {
-        Stack.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnInterval64>>());
+        Stack_.push_back(std::make_unique<TIntegerProcessor<i64, &IDataVisitor::OnInterval64>>());
     }
 
     void OnDecimal(ui32 precision, ui32 scale) final {
         Y_UNUSED(precision);
         Y_UNUSED(scale);
-        Stack.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnDecimal>>());
+        Stack_.push_back(std::make_unique<TUtf8Processor<&IDataVisitor::OnDecimal>>());
     }
 
     void OnBeginOptional() final {
@@ -432,7 +432,7 @@ public:
 
     void OnEndOptional() final {
         auto inner = Pop();
-        Stack.push_back(std::make_unique<TOptionalProcessor>(std::move(inner)));
+        Stack_.push_back(std::make_unique<TOptionalProcessor>(std::move(inner)));
     }
 
     void OnBeginList() final {
@@ -440,52 +440,52 @@ public:
 
     void OnEndList() final {
         auto inner = Pop();
-        Stack.push_back(std::make_unique<TListProcessor>(std::move(inner)));
+        Stack_.push_back(std::make_unique<TListProcessor>(std::move(inner)));
     }
 
     void OnBeginTuple() final {
-        IsVariant.push_back(false);
-        Args.push_back(0);
+        IsVariant_.push_back(false);
+        Args_.push_back(0);
     }
 
     void OnTupleItem() final {
-        Args.back() += 1;
+        Args_.back() += 1;
     }
 
     void OnEndTuple() final {
-        const ui32 width = Args.back();
+        const ui32 width = Args_.back();
         auto inners = Pop(width);
-        if (!IsVariant[IsVariant.size() - 2]) {
-            Stack.push_back(std::make_unique<TTupleProcessor>(std::move(inners)));
+        if (!IsVariant_[IsVariant_.size() - 2]) {
+            Stack_.push_back(std::make_unique<TTupleProcessor>(std::move(inners)));
         } else {
-            Stack.push_back(std::make_unique<TVariantProcessor>(std::move(inners)));
+            Stack_.push_back(std::make_unique<TVariantProcessor>(std::move(inners)));
         }
 
-        Args.pop_back();
-        IsVariant.pop_back();
+        Args_.pop_back();
+        IsVariant_.pop_back();
     }
 
     void OnBeginStruct() final {
-        IsVariant.push_back(false);
-        Args.push_back(0);
+        IsVariant_.push_back(false);
+        Args_.push_back(0);
     }
 
     void OnStructItem(TStringBuf member) final {
         Y_UNUSED(member);
-        Args.back() += 1;
+        Args_.back() += 1;
     }
 
     void OnEndStruct() final {
-        const ui32 width = Args.back();
+        const ui32 width = Args_.back();
         auto inners = Pop(width);
-        if (!IsVariant[IsVariant.size() - 2]) {
-            Stack.push_back(std::make_unique<TStructProcessor>(std::move(inners)));
+        if (!IsVariant_[IsVariant_.size() - 2]) {
+            Stack_.push_back(std::make_unique<TStructProcessor>(std::move(inners)));
         } else {
-            Stack.push_back(std::make_unique<TVariantProcessor>(std::move(inners)));
+            Stack_.push_back(std::make_unique<TVariantProcessor>(std::move(inners)));
         }
 
-        Args.pop_back();
-        IsVariant.pop_back();
+        Args_.pop_back();
+        IsVariant_.pop_back();
     }
 
     void OnBeginDict() final {
@@ -500,15 +500,15 @@ public:
     void OnEndDict() final {
         auto innerPayload = Pop();
         auto innerKey = Pop();
-        Stack.push_back(std::make_unique<TDictProcessor>(std::move(innerKey), std::move(innerPayload)));
+        Stack_.push_back(std::make_unique<TDictProcessor>(std::move(innerKey), std::move(innerPayload)));
     }
 
     void OnBeginVariant() {
-        IsVariant.push_back(true);
+        IsVariant_.push_back(true);
     }
 
     void OnEndVariant() {
-        IsVariant.pop_back();
+        IsVariant_.pop_back();
     }
 
     void OnBeginTagged(TStringBuf tag) {
@@ -521,19 +521,19 @@ public:
     void OnPg(TStringBuf name, TStringBuf category) final {
         Y_UNUSED(name);
         Y_UNUSED(category);
-        Stack.push_back(std::make_unique<TPgProcessor>());
+        Stack_.push_back(std::make_unique<TPgProcessor>());
     }
 
 private:
     std::unique_ptr<IDataProcessor> Pop() {
-        CHECK(!Stack.empty());
-        auto res = std::move(Stack.back());
-        Stack.pop_back();
+        CHECK(!Stack_.empty());
+        auto res = std::move(Stack_.back());
+        Stack_.pop_back();
         return res;
     }
 
     TVector<std::unique_ptr<IDataProcessor>> Pop(ui32 width) {
-        CHECK(Stack.size() >= width);
+        CHECK(Stack_.size() >= width);
         TVector<std::unique_ptr<IDataProcessor>> res;
         res.reserve(width);
         for (ui32 i = 0; i < width; ++i) {
@@ -545,9 +545,9 @@ private:
     }
 
 private:
-    TVector<std::unique_ptr<IDataProcessor>> Stack;
-    TVector<ui32> Args;
-    TVector<bool> IsVariant;
+    TVector<std::unique_ptr<IDataProcessor>> Stack_;
+    TVector<ui32> Args_;
+    TVector<bool> IsVariant_;
 };
 
 void ParseData(const NYT::TNode& typeNode, const NYT::TNode& dataNode, IDataVisitor& visitor) {
@@ -557,12 +557,12 @@ void ParseData(const NYT::TNode& typeNode, const NYT::TNode& dataNode, IDataVisi
 }
 
 TDataBuilder::TDataBuilder() {
-    Stack.push_back(&Root);
+    Stack_.push_back(&Root_);
 }
 
 const NYT::TNode& TDataBuilder::GetResult() const {
-    CHECK(Stack.size() == 1);
-    return Root;
+    CHECK(Stack_.size() == 1);
+    return Root_;
 }
 
 void TDataBuilder::OnVoid() {
@@ -843,15 +843,15 @@ void TDataBuilder::OnPg(TMaybe<TStringBuf> value, bool isUtf8) {
 }
 
 NYT::TNode& TDataBuilder::Top() {
-    return *Stack.back();
+    return *Stack_.back();
 }
 
 void TDataBuilder::Push(NYT::TNode* value) {
-    Stack.push_back(value);
+    Stack_.push_back(value);
 }
 
 void TDataBuilder::Pop() {
-    Stack.pop_back();
+    Stack_.pop_back();
 }
 
 void TSameActionDataVisitor::OnVoid() {

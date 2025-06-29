@@ -179,7 +179,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
-    friend class TWaitEraseTablesTxSubscriber;
+    friend class TWaitOnProposeTxSubscriberBase;
     friend class TTxPersistSubDomainOutOfSpace;
     friend class TTxPersistSubDomainPathId;
     friend class TSpaceWatcher;
@@ -292,7 +292,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
-    void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
@@ -450,7 +450,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
-            HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+            HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
 
             default:
@@ -506,7 +506,6 @@ private:
     TActorId ResourceSubscribeActor;
     TActorId BufferizationInsertionWriteActorId;
     TActorId BufferizationPortionsWriteActorId;
-    TActorId DataAccessorsControlActorId;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
 
     TActorId StatsReportPipe;
@@ -562,6 +561,8 @@ private:
         const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(
         const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunMoveTable(
+        const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);

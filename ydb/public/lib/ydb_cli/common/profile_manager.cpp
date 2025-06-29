@@ -164,8 +164,7 @@ private:
             if (TFileStat(configFilePath).Mode & (S_IRGRP | S_IROTH)) {
                 int chmodResult = Chmod(configFilePath.GetPath().c_str(), S_IRUSR | S_IWUSR);
                 if (chmodResult) {
-                    Cerr << "Couldn't change permissions for the file \"" << configFilePath.GetPath() << "\"" << Endl;
-                    exit(chmodResult);
+                    throw yexception() << "Couldn't change permissions for the file \"" << configFilePath.GetPath() << "\"";
                 }
             }
             TFileOutput resultConfigFile(TFile(configFilePath, CreateAlways | WrOnly | AWUser | ARUser));

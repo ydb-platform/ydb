@@ -5,7 +5,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NYdb::NTopic::NTests {
+
+using namespace std::chrono_literals;
+namespace NYdb::inline Dev::NTopic::NTests {
 
 Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
@@ -25,7 +27,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         auto writeMessages = [&](size_t n) {
             auto writer = client.CreateSimpleBlockingWriteSession(TWriteSessionSettings()
-                .Path(TEST_TOPIC)
+                .Path(setup.GetTopicPath())
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .ProducerId(TEST_MESSAGE_GROUP_ID));
 
@@ -43,8 +45,8 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         auto gotSecondMessage = NThreading::NewPromise();
 
         auto readerSettings = TReadSessionSettings()
-            .ConsumerName(TEST_CONSUMER)
-            .AppendTopics(TEST_TOPIC)
+            .ConsumerName(setup.GetConsumerName())
+            .AppendTopics(setup.GetTopicPath())
             // .DirectRead(true)
             ;
 
@@ -75,17 +77,17 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         gotFirstMessage.GetFuture().Wait();
 
-        auto getPartitionGeneration = [&client]() {
-            auto description = client.DescribePartition(TEST_TOPIC, 0, TDescribePartitionSettings().IncludeLocation(true)).GetValueSync();
+        auto getPartitionGeneration = [&client, &setup]() {
+            auto description = client.DescribePartition(setup.GetTopicPath(), 0, TDescribePartitionSettings().IncludeLocation(true)).GetValueSync();
             return description.GetPartitionDescription().GetPartition().GetPartitionLocation()->GetGeneration();
         };
 
         auto firstGenerationId = getPartitionGeneration();
 
-        setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
+        setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());
 
         while (firstGenerationId == getPartitionGeneration()) {
-            Sleep(TDuration::MilliSeconds(100));
+            std::this_thread::sleep_for(100ms);
         }
 
         writeMessages(1);
@@ -107,7 +109,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         auto writeMessages = [&](size_t n) {
             auto writer = client.CreateSimpleBlockingWriteSession(TWriteSessionSettings()
-                .Path(TEST_TOPIC)
+                .Path(setup.GetTopicPath())
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .ProducerId(TEST_MESSAGE_GROUP_ID));
 
@@ -125,8 +127,8 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         auto gotSecondMessage = NThreading::NewPromise();
 
         auto readerSettings = TReadSessionSettings()
-            .ConsumerName(TEST_CONSUMER)
-            .AppendTopics(TEST_TOPIC)
+            .ConsumerName(setup.GetConsumerName())
+            .AppendTopics(setup.GetTopicPath())
             // .DirectRead(true)
             ;
 
@@ -154,17 +156,17 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         gotFirstMessage.GetFuture().Wait();
 
-        auto getPartitionGeneration = [&client]() {
-            auto description = client.DescribePartition(TEST_TOPIC, 0, TDescribePartitionSettings().IncludeLocation(true)).GetValueSync();
+        auto getPartitionGeneration = [&client, &setup]() {
+            auto description = client.DescribePartition(setup.GetTopicPath(), 0, TDescribePartitionSettings().IncludeLocation(true)).GetValueSync();
             return description.GetPartitionDescription().GetPartition().GetPartitionLocation()->GetGeneration();
         };
 
         auto firstGenerationId = getPartitionGeneration();
 
-        setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
+        setup.GetServer().KillTopicPqrbTablet(setup.GetFullTopicPath());
 
         while (firstGenerationId == getPartitionGeneration()) {
-            Sleep(TDuration::MilliSeconds(100));
+            std::this_thread::sleep_for(100ms);
         }
 
         writeMessages(1);

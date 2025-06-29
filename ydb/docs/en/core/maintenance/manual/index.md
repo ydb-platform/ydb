@@ -1,24 +1,27 @@
-# Overview of cluster disk subsystem management
+# Overview
 
-Managing a cluster's disk subsystem includes the following actions:
+This section contains information about {{ ydb-short-name }} cluster maintenance operations.
 
-* Editing the cluster configuration:
+Main topics:
 
-  * [{#T}](cluster_expansion.md)
-  * [{#T}](adding_storage_groups.md)
-  * [{#T}](../../devops/manual/state-storage-move.md)
-  * [{#T}](../../devops/manual/static-group-move.md)
-
-* Maintenance:
-
-  * [{#T}](node_restarting.md)
-  * [{#T}](scrubbing.md)
-  * [{#T}](selfheal.md)
-  * [{#T}](../../devops/manual/decommissioning.md)
-  * [{#T}](moving_vdisks.md)
-
-* Troubleshooting:
-
-  * [{#T}](failure_model.md)
-  * [{#T}](balancing_load.md)
-  * [{#T}](disk_end_space.md)
+* [{#T}](../../devops/configuration-management/configuration-v2/state-storage-move.md)
+* [{#T}](../../devops/configuration-management/configuration-v2/static-group-move.md)
+* [{#T}](adding_storage_groups.md)
+* [{#T}](moving_vdisks.md)
+* [{#T}](balancing_load.md)
+* [{#T}](selfheal.md)
+* [{#T}](scrubbing.md)
+* [{#T}](disk_end_space.md)
+* [{#T}](../../devops/deployment-options/manual/decommissioning.md)
+* [{#T}](failure_model.md)
+* [{#T}](node_restarting.md)
+* [{#T}](dynamic-config.md)
+* [{#T}](cluster_expansion.md)
+* [{#T}](cms.md)
+* [{#T}](change_actorsystem_configs.md)
+* [{#T}](config-overview.md)
+* [{#T}](dynamic-config-selectors.md)
+* [{#T}](dynamic-config-volatile-config.md)
+* [{#T}](replacing_nodes.md)
+* [{#T}](blobdepot.md)
+* [{#T}](blobdepot_decommit.md)

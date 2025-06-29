@@ -5,6 +5,7 @@ SRCS(
     balancer.h
     boot_queue.cpp
     boot_queue.h
+    bridge_pile_info.h
     data_center_info.h
     domain_info.cpp
     domain_info.h
@@ -81,6 +82,7 @@ SRCS(
     tx__unlock_tablet.cpp
     tx__update_dc_followers.cpp
     tx__update_domain.cpp
+    tx__update_pile.cpp
     tx__update_tablet_groups.cpp
     tx__update_tablet_metrics.cpp
     tx__update_tablet_status.cpp

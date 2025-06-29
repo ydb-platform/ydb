@@ -359,6 +359,61 @@ bool IsNoPush(const TExprNode& node) {
     return node.IsCallable({"NoPush", "Likely"});
 }
 
+bool IsAlreadyDistinct(const TExprNode& node, const THashSet<TString>& columns) {
+    if (auto distinct = node.GetConstraint<TDistinctConstraintNode>()) {
+        if (distinct->ContainsCompleteSet(std::vector<std::string_view>(columns.cbegin(), columns.cend()))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsOrdered(const TExprNode& node, const THashSet<TString>& columns) {
+    if (auto sorted = node.GetConstraint<TSortedConstraintNode>()) {
+        for (const auto& item : sorted->GetContent()) {
+            size_t foundItemNamesCount = 0;
+            bool found = false;
+            for (const auto& path : item.first) {
+                if (path.size() == 1 && columns.contains(path.front())) {
+                    foundItemNamesCount++;
+                    found = true;
+                    break;
+                }
+            }
+            if (foundItemNamesCount == columns.size()) {
+                return true;
+            }
+
+            // Required columns are not sorted by prefix.
+            if (!found) {
+                break;
+            }
+        }
+    }
+
+    return false;
+}
+
+TExprNode::TPtr MakePruneKeysExtractorLambda(const TExprNode& node, const THashSet<TString>& columns, TExprContext& ctx) {
+    return ctx.Builder(node.Pos())
+        .Lambda()
+            .Param("item")
+            .List(0)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                    ui32 i = 0;
+                    for (const auto& column : columns) {
+                        parent.Callable(i++, "Member")
+                            .Arg(0, "item")
+                            .Atom(1, column)
+                        .Seal();
+                    }
+                    return parent;
+                })
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     auto columnOrder = typeCtx.LookupColumnOrder(src);
     if (!columnOrder) {
@@ -1276,6 +1331,25 @@ void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySel
     } else if (keySelectorBody->IsCallable("Member") && keySelectorBody->Child(0) == keySelectorArg) {
         columns.push_back(keySelectorBody->Child(1)->Content());
     }
+}
+
+TSet<TStringBuf> GetFilteredMembers(const TCoFilterNullMembersBase& node) {
+    TSet<TStringBuf> memberNames;
+    if (node.Members().IsValid()) {
+        for (const auto& atom : node.Members().Cast()) {
+            memberNames.insert(atom.Value());
+        }
+    } else {
+        const TTypeAnnotationNode* itemType = GetSequenceItemType(node.Input(), false);
+        YQL_ENSURE(itemType);
+        const TStructExprType* structType = itemType->Cast<TStructExprType>();
+        for (auto entry : structType->GetItems()) {
+            if (entry->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+                memberNames.insert(entry->GetName());
+            }
+        }
+    }
+    return memberNames;
 }
 
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables) {
@@ -2467,8 +2541,10 @@ TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& 
     auto status = IsWideSequenceBlockType(*rootType) ? TOperationProgress::EOpBlockStatus::Full : TOperationProgress::EOpBlockStatus::None;
     bool stop = false;
     VisitExpr(*pRoot, [&](const TExprNode& node) {
-        if (stop || node.IsLambda()) {
+        if (stop || node.IsArguments()) {
             return false;
+        } else if (node.IsLambda()) {
+            return true;
         }
 
         const TTypeAnnotationNode* nodeType = node.GetTypeAnn();

@@ -30,6 +30,7 @@ DEFINE_ENUM(EPipelineState,
 YT_DEFINE_ERROR_ENUM(
     ((SpecVersionMismatch)             (3300))
     ((PipelineStateVersionMismatch)    (3301))
+    ((FlowViewKeeperIsNotInitialized)  (3302))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);

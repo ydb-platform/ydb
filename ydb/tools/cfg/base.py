@@ -272,6 +272,7 @@ def normalize_domain(domain_name):
 
 class ClusterDetailsProvider(object):
     def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
+
         if not validator:
             validator = validation.default_validator()
 
@@ -449,7 +450,7 @@ class ClusterDetailsProvider(object):
         if self._hosts is not None:
             return self._hosts
         futures = []
-        for node_id, host_description in enumerate(self.__cluster_description.get("hosts"), 1):
+        for node_id, host_description in enumerate(self.__cluster_description.get("hosts", []), 1):
             futures.append(self._thread_pool.submit(self.__collect_host_info, node_id, host_description))
 
         r = []

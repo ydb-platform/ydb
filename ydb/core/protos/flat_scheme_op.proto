@@ -575,6 +575,7 @@ message TCompactionSelectorConstructorContainer {
 
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
+    optional uint64 NodePortionsCountLimit = 2;
 
     message TLOptimizer {
 
@@ -2236,6 +2237,7 @@ message TExportMetadata {
 message TSysViewDescription {
     optional string Name = 1;
     optional NKikimrSysView.ESysViewType Type = 2;
+    optional NKikimrProto.TPathID SourceObject = 3;
 }
 
 message TLongIncrementalRestoreOp {

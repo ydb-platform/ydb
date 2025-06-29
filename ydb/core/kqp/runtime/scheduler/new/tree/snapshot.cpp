@@ -49,33 +49,58 @@ void TTreeElementBase::UpdateTopDown() {
     }
 
     // At this moment we know own fair-share. Need to calibrate children.
-    ui64 totalWeightedDemand = 0;
-    std::vector<ui64> weightedDemand;
 
-    weightedDemand.resize(Children.size());
-    for (size_t i = 0, s = Children.size(); i < s; ++i) {
-        const auto& child = Children.at(i);
-        weightedDemand.at(i) = child->GetWeight() * child->Demand;
-        totalWeightedDemand += weightedDemand.at(i);
-    }
+    // Fair-share variant (for pools and databases)
+    if (!IsLeaf() && !Children.at(0)->IsLeaf()) {
+        ui64 totalWeightedDemand = 0;
+        std::vector<ui64> weightedDemand;
 
-    for (size_t i = 0, s = Children.size(); i < s; ++i) {
-        const auto& child = Children.at(i);
-        if (totalWeightedDemand > 0) {
-            child->FairShare = weightedDemand.at(i) * FairShare / totalWeightedDemand;
-        } else {
-            child->FairShare = 0;
+        weightedDemand.resize(Children.size());
+        for (size_t i = 0, s = Children.size(); i < s; ++i) {
+            const auto& child = Children.at(i);
+            weightedDemand.at(i) = child->GetWeight() * child->Demand;
+            totalWeightedDemand += weightedDemand.at(i);
         }
-        child->UpdateTopDown();
 
-        // TODO: looks a little bit hacky.
-        if (auto query = std::dynamic_pointer_cast<TQuery>(child); query && query->Origin) {
-            query->Origin->SetSnapshot(query);
-            query->Origin = nullptr;
+        for (size_t i = 0, s = Children.size(); i < s; ++i) {
+            const auto& child = Children.at(i);
+            if (totalWeightedDemand > 0) {
+                // TODO: distribute resources lost because of integer division.
+                child->FairShare = weightedDemand.at(i) * FairShare / totalWeightedDemand;
+            } else {
+                child->FairShare = 0;
+            }
+            child->UpdateTopDown();
         }
     }
+    // FIFO variant (for queries)
+    else {
+        // TODO: stable sort children by weight
 
-    // TODO: distribute resources lost because of integer division.
+        auto leftFairShare = FairShare;
+
+        // Give at least 1 fair-share for each demanding child
+        for (size_t i = 0, s = Children.size(); i < s && leftFairShare > 0; ++i) {
+            const auto& child = Children.at(i);
+            if (child->Demand > 0) {
+                child->FairShare = 1;
+                --leftFairShare;
+            }
+        }
+
+        for (size_t i = 0, s = Children.size(); i < s; ++i) {
+            const auto& child = Children.at(i);
+            auto demand = child->Demand > 0 ? child->Demand - 1 : 0;
+            child->FairShare += Min(leftFairShare, demand);
+            leftFairShare = leftFairShare <= demand ? 0 : leftFairShare - demand;
+
+            // TODO: looks a little bit hacky.
+            if (auto query = std::dynamic_pointer_cast<TQuery>(child); query && query->Origin) {
+                query->Origin->SetSnapshot(query);
+                query->Origin = nullptr;
+            }
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

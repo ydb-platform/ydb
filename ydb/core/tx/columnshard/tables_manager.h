@@ -121,6 +121,11 @@ public:
         Versions.insert(snapshot);
     }
 
+    void UpdateLocalPathId(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId newPathId) {
+        Schema::SaveTableSchemeShardLocalPathId(db, InternalPathId, newPathId);
+        SchemeShardLocalPathId = newPathId;
+    }
+
     bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
         if (!DropVersion) {
             return false;
@@ -199,19 +204,20 @@ class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal; // Paths that are being renamed
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
     TTtlVersions Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
-    std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
+    NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
-    static constexpr ui64 MaxInternalPathIdDefault = 1'000'000'000; //Use a value presumably greater than any really used
-    TInternalPathId MaxInternalPathId = TInternalPathId::FromRawValue(MaxInternalPathIdDefault); //Max internal path id ever used in this tablet
+    bool GenerateInternalPathId;
+    TInternalPathId MaxInternalPathId;
 
     friend class TTxInit;
 
@@ -274,6 +280,10 @@ public:
     bool HasPrimaryIndex() const {
         return !!PrimaryIndex;
     }
+
+    void MoveTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
+    void MoveTableProgress(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
+
 
     NOlap::IColumnEngine& MutablePrimaryIndex() {
         Y_ABORT_UNLESS(!!PrimaryIndex);

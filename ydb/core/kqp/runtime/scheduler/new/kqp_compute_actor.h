@@ -36,14 +36,9 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void PassAway() override {
-            PassedAway = true;
-
-            if (IsSchedulable()) {
-                if (!IsThrottled()) {
-                    StopExecution();
-                }
-
-                // TODO: do we need to send anything to scheduler?
+            if (!PassedAway) {
+                PassedAway = true;
+                StopExecution();
             }
 
             TBase::PassAway();
@@ -59,24 +54,19 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void DoExecuteImpl() override {
-            // TODO: use single "now" moment for delay, throttle and resume?
             // TODO: account waiting on mailbox?
 
-            if (IsSchedulable()) {
-                if (auto delay = CalculateDelay(Now())) {
-                    if (!IsThrottled()) {
-                        Throttle();
-                    }
-                    this->Schedule(*delay, new NActors::TEvents::TEvWakeup(TAG_WAKEUP_RESUME));
-                    return;
+            const auto now = Now();
+
+            if (StartExecution(now)) {
+                TBase::DoExecuteImpl();
+                if (!PassedAway) {
+                    StopExecution();
                 }
+                return;
             }
 
-            StartExecution(IsThrottled() ? Resume() : TDuration::Zero());
-            TBase::DoExecuteImpl();
-            if (!PassedAway) {
-                StopExecution();
-            }
+            this->Schedule(CalculateDelay(now), new NActors::TEvents::TEvWakeup(TAG_WAKEUP_RESUME));
         }
 
     private:

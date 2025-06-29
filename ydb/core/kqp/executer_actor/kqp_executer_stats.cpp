@@ -230,6 +230,7 @@ void TExternalStats::Resize(ui32 taskCount) {
     ExternalBytes.ResizeByTasks(taskCount);
     FirstMessageMs.ResizeByTasks(taskCount);
     LastMessageMs.ResizeByTasks(taskCount);
+    WaitOutputTimeUs.ResizeByTasks(taskCount);
     TaskCount = taskCount;
 }
 

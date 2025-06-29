@@ -7,6 +7,7 @@ SRCS(
     distconf.h
     distconf_binding.cpp
     distconf_cache.cpp
+    distconf_connectivity.cpp
     distconf_console.cpp
     distconf_dynamic.cpp
     distconf_generate.cpp

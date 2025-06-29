@@ -1,11 +1,10 @@
 #include "schemeshard_build_index_tx_base.h"
 
-#include "schemeshard_impl.h"
-#include "schemeshard_identificators.h"
+#include "schemeshard__operation_side_effects.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_build_index_helpers.h"
-
-#include "schemeshard__operation_side_effects.h"
+#include "schemeshard_identificators.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -96,8 +95,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         auto& processed = buildInfo.Processed;
         auto& billed = buildInfo.Billed;
 
-        TBillingStats toBill = processed - billed;
-        if (!toBill) {
+        auto toBill = processed - billed;
+        if (TMeteringStatsHelper::IsZero(toBill)) {
             continue;
         }
 
@@ -152,7 +151,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         billed += toBill;
         Self->PersistBuildIndexBilled(db, buildInfo);
 
-        ui64 requestUnits = TRUCalculator::Calculate(toBill);
+        TString requestUnitsExplain;
+        ui64 requestUnits = TRUCalculator::Calculate(toBill, requestUnitsExplain);
 
         const TString billRecord = TBillRecord()
             .Id(id)
@@ -163,9 +163,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
             .ToString();
 
-        LOG_D("ApplyBill: made a bill"
-              << ", buildInfo: " << buildInfo
-              << ", record: '" << billRecord << "'");
+        LOG_N("ApplyBill: make a bill, id#" << buildId
+            << ", billRecord: " << billRecord
+            << ", toBill: " << toBill
+            << ", explain: " << requestUnitsExplain
+            << ", buildInfo: " << buildInfo);
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
         // send message at Complete stage

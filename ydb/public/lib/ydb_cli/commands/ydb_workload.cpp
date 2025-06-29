@@ -47,7 +47,7 @@ TCommandWorkload::TCommandWorkload()
 {
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
-    //AddCommand(std::make_unique<TCommandTPCC>());
+    AddCommand(std::make_unique<TCommandTPCC>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
     }
@@ -353,8 +353,11 @@ int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
     Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
     Params.DbPath = config.Database;
+    Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
+    Params.Init();
+    workloadGen->Init();
     return RunWorkload(*workloadGen, Type);
 }
 
@@ -393,6 +396,7 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
     Params.DbPath = config.Database;
+    Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     auto result = DoRun(*workloadGen, config);
     if (!DryRun) {

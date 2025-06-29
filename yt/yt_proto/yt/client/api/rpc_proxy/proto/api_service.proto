@@ -2051,6 +2051,17 @@ message TRspAlterReplicationCard
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqPingChaosLease
+{
+    required NYT.NProto.TGuid chaos_lease_id = 1; // NChaosClient::TChaosLeaseId
+    optional bool ping_ancestors = 2 [default = true];
+}
+
+message TRspPingChaosLease
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TFetchChunkSpecConfig
 {
     optional int32 max_chunk_per_fetch = 1;

@@ -171,6 +171,7 @@ namespace Tests {
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
         NYql::ISolomonGateway::TPtr SolomonGateway;
+        NYql::IPqGateway::TPtr PqGateway;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
@@ -353,13 +354,17 @@ namespace Tests {
         void SetupDefaultProfiles();
 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
-            return RootGRpc.GRpcServerRootCounters;
+            const auto tenantIt = TenantsGRpc.find(Settings->DomainName);
+            Y_ABORT_UNLESS(tenantIt != TenantsGRpc.end());
+            Y_ABORT_UNLESS(!tenantIt->second.empty());
+            return tenantIt->second.begin()->second.GRpcServerRootCounters;
         }
 
         void ShutdownGRpc() {
-            RootGRpc.Shutdown();
             for (auto& [_, tenantGRpc] : TenantsGRpc) {
-                tenantGRpc.Shutdown();
+                for (auto& [_, nodeGRpc] : tenantGRpc) {
+                    nodeGRpc.Shutdown();
+                }
             }
         }
 
@@ -407,8 +412,7 @@ namespace Tests {
             }
         };
 
-        TGRpcInfo RootGRpc;
-        std::unordered_map<TString, TGRpcInfo> TenantsGRpc;
+        std::unordered_map<TString, std::unordered_map<ui32, TGRpcInfo>> TenantsGRpc;  // tenant -> nodeIdx -> GRpcInfo
     };
 
     class TClient {

@@ -85,6 +85,11 @@ namespace NKikimr::NHullComp {
             Y_DEBUG_ABORT_UNLESS(levelOfInterest.has_value() == !compact.TablesToDelete.Empty());
 
             if (levelOfInterest) {
+                if (HullCtx->VCtx->ActorSystem) {
+                    LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                        HullCtx->VCtx->VDiskLogPrefix << "TStrategyExplicit decided to compact level" << *levelOfInterest
+                        << " task# " << (Task ? Task->ToString() : "nullptr"));
+                }
                 return ActCompactSsts;
             } else {
                 done = true;

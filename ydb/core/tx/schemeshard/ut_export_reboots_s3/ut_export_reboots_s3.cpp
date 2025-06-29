@@ -3,9 +3,9 @@
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
-#include <util/string/printf.h>
-
 #include <library/cpp/testing/hook/hook.h>
+
+#include <util/string/printf.h>
 
 using namespace NKikimrSchemeOp;
 using namespace NKikimr::NWrappers::NTestHelpers;

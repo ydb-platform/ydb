@@ -300,7 +300,7 @@ SELECT Yson::ConvertToBoolDict($yson, Yson::Options(false as Strict)); --- { "y"
 SELECT Yson::ConvertToDoubleDict($yson, Yson::Options(false as Strict)); --- { "x": 5.5 }
 ```
 
-If you need to use the same Yson library settings throughout the query, it's more convenient to use [PRAGMA yson.AutoConvert;](../../syntax/pragma.md#yson.autoconvert) and/or [PRAGMA yson.Strict;](../../syntax/pragma.md#yson.strict). Only with these `PRAGMA` you can affect implicit calls to the Yson library occurring when you work with Yson/Json data types.
+If you need to use the same Yson library settings throughout the query, it's more convenient to use [PRAGMA yson.AutoConvert;](../../syntax/pragma/yson.md#autoconvert) and/or [PRAGMA yson.Strict;](../../syntax/pragma/yson.md#strict). Only with these `PRAGMA` you can affect implicit calls to the Yson library occurring when you work with Yson/Json data types.
 
 ## See also
 

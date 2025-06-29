@@ -158,11 +158,12 @@ A **primary index** or **primary key index** is the main data structure used to 
 
 A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
-A special type of **secondary index** is singled out separately - [vector index] (#vector-index).
+A special type of **secondary index** is singled out separately - [vector index](#vector-index).
 
 #### Vector Index {#vector-index}
 
-**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily. The capabilities of {{ ydb-short-name }} regarding vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
+**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
+The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
 **Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
 
@@ -314,7 +315,7 @@ An **[access right](../security/authorization.md#right)** is an entity that repr
 
 ### Access right inheritance {#access-right-inheritance}
 
-**Access right inheritance** refers to the mechanism by which [access rights](#access-right) are automatically passed down from parent [access objects](#access-object) to child access objects within a database structure. This ensures that permissions granted at a higher level in the hierarchy are applied to all sub-levels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
+**Access rights inheritance** is a mechanism by which [access rights](#access-right) granted on parent [access objects](#access-object) are inherited by child objects in the hierarchical structure of the database. This ensures that permissions granted at a higher level in the hierarchy are applied to all sublevels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
 
 ### Access control list {#access-control-list}
 

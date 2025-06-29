@@ -668,6 +668,13 @@ class LoadSuiteBase:
             logging.warning(f"Workload completed with warnings: {result.warning_message}")
 
     def _upload_results(self, result, workload_name):
+        logging.info(f"[Upload] Starting _upload_results for {workload_name}")
+        logging.info(f"[Upload] send_results flag: {ResultsProcessor.send_results}")
+        
+        if not ResultsProcessor.send_results:
+            logging.info(f"[Upload] send_results is False, skipping upload")
+            return
+            
         stats = result.get_stats(workload_name)
         if stats is not None:
             stats["aggregation_level"] = "aggregate"
@@ -680,6 +687,11 @@ class LoadSuiteBase:
         # --- используем endpoint из result (установленный выше) ---
         endpoint = getattr(result, '_workload_endpoint', None)
         db_field = endpoint if endpoint else ResultsProcessor.get_cluster_id()
+        
+        logging.info(f"[Upload] About to call ResultsProcessor.upload_results")
+        logging.info(f"[Upload] Parameters: kind=Load, suite={type(self).suite()}, test={workload_name}, is_successful={result.success}")
+        logging.info(f"[Upload] Db field: {db_field}")
+        
         ResultsProcessor.upload_results(
             kind='Load',
             suite=type(self).suite(),
@@ -688,12 +700,23 @@ class LoadSuiteBase:
             is_successful=result.success,
             statistics=stats,
         )
+        logging.info(f"[Upload] _upload_results completed for {workload_name}")
 
     def _upload_results_per_workload_run(self, result, workload_name):
+        logging.info(f"[Upload] Starting _upload_results_per_workload_run for {workload_name}")
+        logging.info(f"[Upload] send_results flag: {ResultsProcessor.send_results}")
+        
+        if not ResultsProcessor.send_results:
+            logging.info(f"[Upload] send_results is False, skipping per-run upload")
+            return
+            
         suite = type(self).suite()
         agg_stats = result.get_stats(workload_name)
         nemesis_enabled = agg_stats.get("nemesis_enabled") if agg_stats else None
         run_id = ResultsProcessor.get_run_id()
+        
+        logging.info(f"[Upload] Processing {len(result.iterations)} iterations for per-run upload")
+        
         for iter_num, iteration in result.iterations.items():
             runs = getattr(iteration, "runs", None) or [iteration]
             for run_idx, run in enumerate(runs):
@@ -717,6 +740,9 @@ class LoadSuiteBase:
                     "aggregation_level": "per_run",
                     "run_id": run_id,
                 }
+                
+                logging.info(f"[Upload] Uploading per-run result: iter={iter_num}, run={run_idx}, resolution={resolution}")
+                
                 ResultsProcessor.upload_results(
                     kind='Stress',
                     suite=suite,
@@ -726,34 +752,49 @@ class LoadSuiteBase:
                     duration=stats["duration"],
                     statistics=stats,
                 )
+        
+        logging.info(f"[Upload] _upload_results_per_workload_run completed for {workload_name}")
 
     def process_workload_result_with_diagnostics(self, result, workload_name, check_scheme=True, use_node_subcols=False):
         """
         Обрабатывает результат workload с добавлением диагностической информации
         """
+        logging.info(f"[Process] Starting process_workload_result_with_diagnostics for {workload_name}")
+        
         # 1. Сбор параметров workload
         workload_params = self._collect_workload_params(result, workload_name)
+        logging.info(f"[Process] Collected workload params: {list(workload_params.keys())}")
 
         # 2. Диагностика нод (cores/oom)
         node_errors = self._diagnose_nodes(result, workload_name)
+        logging.info(f"[Process] Node diagnostics completed, found {len(node_errors)} errors")
 
         # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
         stats = result.get_stats(workload_name)
         if stats is not None:
             result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
+            logging.info(f"[Process] Added nodes_with_issues={len(node_errors)} to stats")
 
         # 3. Формирование summary/статистики
         self._update_summary_flags(result, workload_name)
+        logging.info(f"[Process] Summary flags updated")
 
         # 4. Формирование allure-отчёта
         self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
+        logging.info(f"[Process] Allure report created")
 
         # 5. Обработка ошибок/статусов (fail, broken, etc) и upload результатов всегда
+        logging.info(f"[Process] About to handle final status and upload")
         try:
             self._handle_final_status(result, workload_name, node_errors)
+            logging.info(f"[Process] _handle_final_status completed without exception")
         finally:
+            logging.info(f"[Process] Starting upload in finally block")
             self._upload_results(result, workload_name)
             self._upload_results_per_workload_run(result, workload_name)
+            logging.info(f"[Process] Upload completed in finally block")
+        
+        logging.info(f"[Process] process_workload_result_with_diagnostics completed for {workload_name}")
 
 
 class LoadSuiteParallel(LoadSuiteBase):

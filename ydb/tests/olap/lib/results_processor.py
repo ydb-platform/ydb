@@ -56,11 +56,16 @@ class ResultsProcessor:
     @classmethod
     def get_endpoints(cls):
         if cls._endpoints is None:
+            logging.info(f"[ResultsProcessor] Initializing endpoints")
             endpoints = get_external_param('results-endpoint', 'grpc://ydb-ru-prestable.yandex.net:2135').split(',')
             dbs = get_external_param('results-db', '/ru-prestable/kikimr/preprod/olap-click-perf').split(',')
             tables = get_external_param('results-table', 'tests_results').split(',')
             count = max(len(endpoints), len(dbs), len(tables))
             common_key = os.getenv('RESULT_YDB_OAUTH', None)
+            
+            logging.info(f"[ResultsProcessor] Endpoints config: endpoints={endpoints}, dbs={dbs}, tables={tables}")
+            logging.info(f"[ResultsProcessor] Count: {count}, common_key exists: {common_key is not None}")
+            
             cls._endpoints = []
             for i in range(count):
                 ep = endpoints[i] if i < len(endpoints) else endpoints[-1]
@@ -70,7 +75,11 @@ class ResultsProcessor:
                 key = None
                 if iam_file is None:
                     key = os.getenv(f'RESULT_YDB_OAUTH_{i}', common_key)
+                
+                logging.info(f"[ResultsProcessor] Creating endpoint {i}: ep={ep}, db={db}, table={table}, key exists: {key is not None}")
                 cls._endpoints.append(ResultsProcessor.Endpoint(ep, db, table, key, iam_file))
+            
+            logging.info(f"[ResultsProcessor] Created {len(cls._endpoints)} endpoints")
         return cls._endpoints
 
     @classmethod
@@ -101,7 +110,11 @@ class ResultsProcessor:
         attempt: int | None = None,
         statistics: dict | None = None,
     ):
+        logging.info(f"[ResultsProcessor] upload_results called with: kind={kind}, suite={suite}, test={test}, is_successful={is_successful}")
+        logging.info(f"[ResultsProcessor] send_results flag: {cls.send_results}")
+        
         if not cls.send_results:
+            logging.info(f"[ResultsProcessor] send_results is False, returning early")
             return
 
         def _get_duration(dur: float | None):

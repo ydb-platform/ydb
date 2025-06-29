@@ -566,6 +566,9 @@ class WorkloadTestBase(LoadSuiteBase):
             nemesis: Запускать ли сервис nemesis через 15 секунд после начала выполнения workload
             nodes_percentage: Процент нод кластера для запуска workload (от 1 до 100)
         """
+        logging.info(f"[ExecuteTest] Starting execute_workload_test for {workload_name}")
+        logging.info(f"[ExecuteTest] Parameters: duration_value={duration_value}, use_chunks={use_chunks}, nemesis={nemesis}, nodes_percentage={nodes_percentage}")
+        
         # Для обратной совместимости переименовываем параметр use_chunks в use_iterations
         use_iterations = use_chunks
         
@@ -583,7 +586,8 @@ class WorkloadTestBase(LoadSuiteBase):
         additional_stats["nodes_percentage"] = nodes_percentage
         additional_stats["use_iterations"] = use_iterations
 
-        return self._execute_workload_with_deployment(
+        logging.info(f"[ExecuteTest] About to call _execute_workload_with_deployment")
+        result = self._execute_workload_with_deployment(
             workload_name=workload_name,
             command_args_template=command_args,
             duration_param=duration_param,
@@ -593,6 +597,9 @@ class WorkloadTestBase(LoadSuiteBase):
             nodes_percentage=nodes_percentage,
             nemesis=nemesis
         )
+        logging.info(f"[ExecuteTest] _execute_workload_with_deployment completed")
+        logging.info(f"[ExecuteTest] execute_workload_test completed for {workload_name}")
+        return result
 
     def _execute_workload_with_deployment(self, workload_name: str, command_args_template: str, 
                                          duration_param: str, duration_value: float, 
@@ -614,20 +621,26 @@ class WorkloadTestBase(LoadSuiteBase):
         logging.info(f"=== Starting workload execution for {workload_name} ===")
 
         # ФАЗА 1: ПОДГОТОВКА
+        logging.info(f"[Execute] Starting Phase 1: Preparation")
         preparation_result = self._prepare_workload_execution(
             workload_name, duration_value, use_chunks, duration_param, nodes_percentage
         )
+        logging.info(f"[Execute] Phase 1 completed")
 
         # ФАЗА 2: ВЫПОЛНЕНИЕ
+        logging.info(f"[Execute] Starting Phase 2: Execution")
         execution_result = self._execute_workload_runs(
             workload_name, command_args_template, duration_param,
             use_chunks, preparation_result, nemesis
         )
+        logging.info(f"[Execute] Phase 2 completed")
 
         # ФАЗА 3: РЕЗУЛЬТАТЫ
+        logging.info(f"[Execute] Starting Phase 3: Results")
         final_result = self._finalize_workload_results(
             workload_name, execution_result, additional_stats, duration_value, use_chunks
         )
+        logging.info(f"[Execute] Phase 3 completed")
 
         logging.info(f"=== Workload test completed for {workload_name} ===")
         return final_result
@@ -1455,28 +1468,38 @@ class WorkloadTestBase(LoadSuiteBase):
         # Для обратной совместимости переименовываем параметр use_chunks в use_iterations
         use_iterations = use_chunks
         
+        logging.info(f"[Finalize] Starting _finalize_workload_results for {workload_name}")
+        
         with allure.step('Phase 3: Finalize results and diagnostics'):
             overall_result = execution_result['overall_result']
             successful_runs = execution_result['successful_runs']
             total_runs = execution_result['total_runs']
 
+            logging.info(f"[Finalize] Processing results: {successful_runs}/{total_runs} successful runs")
+
             # Проверяем состояние схемы
             self._check_scheme_state()
+            logging.info(f"[Finalize] Scheme state checked")
 
             # Анализируем результаты и добавляем ошибки/предупреждения
             self._analyze_execution_results(overall_result, successful_runs, total_runs, use_iterations)
+            logging.info(f"[Finalize] Execution results analyzed")
 
             # Собираем и добавляем статистику
             self._add_execution_statistics(
                 overall_result, workload_name, execution_result,
                 additional_stats, duration_value, use_iterations
             )
+            logging.info(f"[Finalize] Execution statistics added")
 
             # Финальная обработка с диагностикой
             overall_result.workload_start_time = execution_result['workload_start_time']
+            logging.info(f"[Finalize] About to call process_workload_result_with_diagnostics")
             self.process_workload_result_with_diagnostics(overall_result, workload_name, False, use_node_subcols=True)
+            logging.info(f"[Finalize] process_workload_result_with_diagnostics completed")
 
             logging.info(f"Final result: success={overall_result.success}, successful_runs={successful_runs}/{total_runs}")
+            logging.info(f"[Finalize] _finalize_workload_results completed for {workload_name}")
             return overall_result
 
     def process_workload_result_with_diagnostics(self, result: YdbCliHelper.WorkloadRunResult, workload_name: str, 

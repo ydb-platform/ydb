@@ -319,16 +319,19 @@ class LoadSuiteBase:
             cls.__attach_logs(start_time=result.start_time, attach_name='kikimr', query_text=query_text)
         allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
         if upload:
+            # --- устанавливаем endpoint из ydb-endpoint параметра ---
+            ydb_endpoint = get_external_param('ydb-endpoint', '')
+            if ydb_endpoint:
+                result._workload_endpoint = ydb_endpoint
+            # --- используем endpoint из result (установленный выше) ---
+            endpoint = getattr(result, '_workload_endpoint', None)
+            db_field = endpoint if endpoint else ResultsProcessor.get_cluster_id()
             ResultsProcessor.upload_results(
                 kind='Load',
                 suite=cls.suite(),
                 test=query_name,
                 timestamp=end_time,
                 is_successful=result.success,
-                min_duration=_get_duraton(stats, 'Min'),
-                max_duration=_get_duraton(stats, 'Max'),
-                mean_duration=_get_duraton(stats, 'Mean'),
-                median_duration=_get_duraton(stats, 'Median'),
                 statistics=stats,
             )
         if not result.success:
@@ -434,6 +437,8 @@ class LoadSuiteBase:
         if query_name is None:
             query_name = f'Query{query_num:02d}'
         self.save_nodes_state()
+        # --- используем ydb-endpoint из параметров теста ---
+        endpoint = get_external_param('ydb-endpoint', '')
         result = YdbCliHelper.workload_run(
             path=path,
             query_names=[query_name],
@@ -446,6 +451,7 @@ class LoadSuiteBase:
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
         )[query_name]
+        result._workload_endpoint = endpoint
         self.process_query_result(result, query_name, True)
 
     @classmethod
@@ -584,6 +590,7 @@ class LoadSuiteBase:
         node_issues = stats.get("nodes_with_issues", 0) if stats else 0
         if node_issues > 0:
             error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+            result.error_message = error_msg
             pytest.fail(error_msg)
         # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
         workload_errors = []
@@ -666,6 +673,13 @@ class LoadSuiteBase:
             stats["aggregation_level"] = "aggregate"
             stats["run_id"] = ResultsProcessor.get_run_id()
         end_time = time()
+        # --- устанавливаем endpoint из ydb-endpoint параметра ---
+        ydb_endpoint = get_external_param('ydb-endpoint', '')
+        if ydb_endpoint:
+            result._workload_endpoint = ydb_endpoint
+        # --- используем endpoint из result (установленный выше) ---
+        endpoint = getattr(result, '_workload_endpoint', None)
+        db_field = endpoint if endpoint else ResultsProcessor.get_cluster_id()
         ResultsProcessor.upload_results(
             kind='Load',
             suite=type(self).suite(),
@@ -734,13 +748,12 @@ class LoadSuiteBase:
         # 4. Формирование allure-отчёта
         self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
 
-        # 5. Обработка ошибок/статусов (fail, broken, etc)
-        self._handle_final_status(result, workload_name, node_errors)
-
-        # 6. Загрузка агрегированных результатов
-        self._upload_results(result, workload_name)
-        # 7. Загрузка результатов по каждому запуску workload
-        self._upload_results_per_workload_run(result, workload_name)
+        # 5. Обработка ошибок/статусов (fail, broken, etc) и upload результатов всегда
+        try:
+            self._handle_final_status(result, workload_name, node_errors)
+        finally:
+            self._upload_results(result, workload_name)
+            self._upload_results_per_workload_run(result, workload_name)
 
 
 class LoadSuiteParallel(LoadSuiteBase):

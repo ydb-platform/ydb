@@ -219,7 +219,7 @@ TCommandExportToS3::TCommandExportToS3()
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
-        {"Destination", {{"destination", "dst", "d"}, "S3 object key prefix. Not recommended for encrypted exports", false}},
+        {"Destination", {{"destination", "dst", "d"}, "S3 object key prefix", true}},
     });
 }
 
@@ -266,6 +266,24 @@ void TCommandExportToS3::Config(TConfig& config) {
         .Env("AWS_PROFILE", false)
         .DefaultValue(AwsDefaultProfileName);
 
+    config.Opts->AddLongOption("destination-prefix", "Destination prefix for export in bucket, triggers writing the SchemaMapping file, required for encrypted backups")
+        .RequiredArgument("PATH").StoreResult(&CommonDestinationPrefix);
+
+    config.Opts->AddLongOption("root-path", "Root directory for the objects being exported, database root if not provided")
+        .RequiredArgument("PATH").StoreResult(&CommonSourcePath);
+
+    config.Opts->AddLongOption("include", "Schema objects to be included in the export")
+        .RequiredArgument("PATH").Handler([this](const TString& arg) {
+            TItem item;
+            item.Source = arg;
+            Items.emplace_back(std::move(item));
+        });
+
+    config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
+        .RequiredArgument("STRING").Handler([this](const TString& arg) {
+            ExclusionPatterns.emplace_back(TRegExMatch(arg));
+        });
+
     TStringBuilder itemHelp;
     itemHelp << "Item specification";
     if (config.HelpCommandVerbosiltyLevel >= 2) {
@@ -275,11 +293,6 @@ void TCommandExportToS3::Config(TConfig& config) {
     }
     config.Opts->AddLongOption("item", itemHelp)
         .RequiredArgument("PROPERTY=VALUE,...");
-
-    config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
-        .RequiredArgument("STRING").Handler([this](const TString& arg) {
-            ExclusionPatterns.emplace_back(TRegExMatch(arg));
-        });
 
     config.Opts->AddLongOption("description", "Textual description of export operation")
         .RequiredArgument("STRING").StoreResult(&Description);
@@ -304,12 +317,6 @@ void TCommandExportToS3::Config(TConfig& config) {
             << colors.BoldColor() << "false" << colors.OldColor()
             << " - Path-Style URL.")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
-
-    config.Opts->AddLongOption("source-path", "Root folder for the objects being exported, database root if not provided")
-        .RequiredArgument("PATH").StoreResult(&CommonSourcePath);
-
-    config.Opts->AddLongOption("destination-prefix", "Destination prefix for export in bucket, triggers writing the SchemaMapping file, required for encrypted backups")
-        .RequiredArgument("PATH").StoreResult(&CommonDestinationPrefix);
 
     TStringBuilder encryptionAlgorithmHelp;
     encryptionAlgorithmHelp << "Encryption algorithm";
@@ -348,7 +355,8 @@ void TCommandExportToS3::Parse(TConfig& config) {
     ParseAwsAccessKey(config, "access-key");
     ParseAwsSecretKey(config, "secret-key");
 
-    Items = TItem::Parse(config, "item");
+    auto items = TItem::Parse(config, "item");
+    Items.insert(Items.end(), items.begin(), items.end());
     if (Items.empty() && !CommonDestinationPrefix) {
         throw TMisuseException() << "No destination prefix was provided";
     }

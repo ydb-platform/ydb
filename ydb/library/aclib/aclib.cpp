@@ -135,7 +135,7 @@ void TUserToken::AddGroupSID(const TSID& groupSID) {
 }
 
 bool TUserToken::IsSystemUser() const {
-    return GetUserSID().EndsWith("@" BUILTIN_SYSTEM_DOMAIN);
+    return GetUserSID().EndsWith("@" AUTH_DOMAIN_SYSTEM);
 }
 
 TSecurityObject::TSecurityObject(const NACLibProto::TSecurityObject& protoSecObj, bool isContainer)
@@ -385,7 +385,7 @@ bool TACL::HasAccess(const NACLib::TSID& sid) {
             return true;
         }
     }
-    
+
     return false;
 }
 
@@ -813,12 +813,12 @@ TString AccessRightsToString(ui32 accessRights) {
 }
 
 const NACLib::TUserToken& TSystemUsers::Metadata() {
-    static TUserToken GlobalMetadataUser = TUserToken(BUILTIN_ACL_METADATA, {});
+    static TUserToken GlobalMetadataUser = TUserToken(SYSTEM_SID_METADATA, {});
     return GlobalMetadataUser;
 }
 
 const NACLib::TUserToken& TSystemUsers::Tmp() {
-    static TUserToken GlobalTmpUser = TUserToken(BUILTIN_ACL_TMP, {});
+    static TUserToken GlobalTmpUser = TUserToken(SYSTEM_SID_TMP, {});
     return GlobalTmpUser;
 }
 

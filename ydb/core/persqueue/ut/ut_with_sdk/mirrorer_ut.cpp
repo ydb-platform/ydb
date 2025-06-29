@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         mirrorFrom.SetConsumer("some_user");
         mirrorFrom.SetSyncWriteTime(true);
         //mirrorFrom.SetDatabase("/Root");
-        //mirrorFrom.MutableCredentials()->SetOauthToken("test_user@" BUILTIN_ACL_DOMAIN);
+        //mirrorFrom.MutableCredentials()->SetOauthToken("test_user@" AUTH_DOMAIN_BUILTIN);
 
         server.AnnoyingClient->CreateTopic(
             dstTopicFullName,

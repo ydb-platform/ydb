@@ -985,7 +985,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .SetEnableResourcePools(true));
         auto db = kikimr.GetQueryClient();
 
-        const TString userSID = TStringBuilder() << "test@" << BUILTIN_ACL_DOMAIN;
+        const TString userSID = TStringBuilder() << "test@" << AUTH_DOMAIN_BUILTIN;
         const TString schemeSql = TStringBuilder() << R"(
             CREATE RESOURCE POOL MyPool WITH (
                 CONCURRENT_QUERY_LIMIT=0

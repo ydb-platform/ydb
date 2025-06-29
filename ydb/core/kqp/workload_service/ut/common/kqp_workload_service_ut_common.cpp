@@ -222,7 +222,7 @@ private:
     std::unordered_set<TActorId> RunningRequests;
 };
 
-// The only purpose is to allow BUILTIN_SYSTEM_DOMAIN users
+// The only purpose is to allow AUTH_DOMAIN_SYSTEM users
 struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
     TFakeTicketParserActor()
         : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StateFunc)
@@ -233,7 +233,7 @@ struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
     )
 
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-        Y_ABORT_UNLESS(ev->Get()->Ticket.EndsWith(BUILTIN_SYSTEM_DOMAIN));
+        Y_ABORT_UNLESS(ev->Get()->Ticket.EndsWith(AUTH_DOMAIN_SYSTEM));
         NACLib::TUserToken::TUserTokenInitFields args;
         args.UserSID = ev->Get()->Ticket;
         TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
@@ -344,7 +344,7 @@ private:
             .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
             .SetDatabase(TStringBuilder() << "/" << Settings_.DomainName_));
 
-        TableClient_ = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver_, NYdb::NTable::TClientSettings().AuthToken("user@" BUILTIN_SYSTEM_DOMAIN));
+        TableClient_ = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver_, NYdb::NTable::TClientSettings().AuthToken("user@" AUTH_DOMAIN_SYSTEM));
         TableClientSession_ = std::make_unique<NYdb::NTable::TSession>(TableClient_->CreateSession().GetValueSync().GetSession());
 
         Tenants_ = std::make_unique<TTenants>(Server_);

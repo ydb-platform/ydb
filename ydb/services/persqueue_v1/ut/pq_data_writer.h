@@ -81,7 +81,7 @@ public:
 
         if (checkACL) {
             NACLib::TDiffACL acl;
-            acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, clientId + "@" BUILTIN_ACL_DOMAIN);
+            acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, clientId + "@" AUTH_DOMAIN_BUILTIN);
             Client.ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
 
             Ydb::PersQueue::V1::MigrationStreamingReadClientMessage req;

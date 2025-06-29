@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         auto settings = TQueryRunnerSettings().HangUpDuringExecution(true);
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings);
-        ydb->WaitQueryExecution(hangingRequest);        
+        ydb->WaitQueryExecution(hangingRequest);
 
         auto delayedRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings);
         TSampleQueries::CheckCancelled(hangingRequest.GetResult());
@@ -739,7 +739,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
                 MEMBER_NAME=")" << settings.UserSID_ << R"("
             );
         )", TQueryRunnerSettings()
-            .UserSID(BUILTIN_ACL_METADATA)
+            .UserSID(SYSTEM_SID_METADATA)
             .Database(settings.Database_)
             .NodeIndex(settings.NodeIndex_)
             .PoolId(NResourcePool::DEFAULT_POOL_ID)

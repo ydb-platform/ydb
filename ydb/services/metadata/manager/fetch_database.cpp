@@ -67,7 +67,7 @@ private:
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
             {{}},
             Database ? Database : AppData()->TenantName,
-            MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})
+            MakeIntrusive<NACLib::TUserToken>(SYSTEM_SID_METADATA, TVector<NACLib::TSID>{})
         );
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);

@@ -72,7 +72,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
         // TODO(xenoxeno): ?
         //descr->SetCreateTxId(0);
         //descr->SetCreateStep(0);
-        //descr->SetOwner(BUILTIN_ACL_ROOT);
+        //descr->SetOwner(BUILTIN_SID_ROOT);
     }
 
     void FillSystemViewDirEntry(NKikimrSchemeOp::TDirEntry* self, ui64 schemeShardId) {

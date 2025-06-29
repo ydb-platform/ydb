@@ -103,7 +103,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         }
 
         if (owner.empty()) {
-            owner = BUILTIN_ACL_ROOT;
+            owner = BUILTIN_SID_ROOT;
         }
 
         TPathElement::TPtr newPath = new TPathElement(Self->RootPathId(), Self->RootPathId(), Self->RootPathId(), joinedRootPath, owner);
@@ -208,7 +208,7 @@ struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
             return;
         }
 
-        if (root.Base()->Owner != BUILTIN_ACL_ROOT) {
+        if (root.Base()->Owner != BUILTIN_SID_ROOT) {
             OnComplete.Send(answerTo, reply.Release());
             return;
         }

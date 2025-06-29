@@ -75,9 +75,9 @@ public:
             diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, userSID);
         }
         diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
+        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_SID_ROOT);
 
-        auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
+        auto token = MakeIntrusive<NACLib::TUserToken>(SYSTEM_SID_METADATA, TVector<NACLib::TSID>{});
         Register(CreatePoolCreatorActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, NResourcePool::TPoolSettings(), token, diffAcl));
     }
 

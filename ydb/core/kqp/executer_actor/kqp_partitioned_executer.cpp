@@ -345,7 +345,7 @@ private:
         }
     }
 
-    void FillTableMetaInfo() {
+    TMaybe<NKikimrKqp::TKqpTableSinkSettings> FillSinkSettings() {
         NKikimrKqp::TKqpTableSinkSettings settings;
 
         for (const auto& tx : PreparedQuery->GetTransactions()) {
@@ -353,15 +353,26 @@ private:
                 for (const auto& sink : stage.GetSinks()) {
                     if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                        break;
-                    }
+                        if (!settings.GetIsIndexImplTable()) {
+                            return settings;
+                        }
+                    } 
                 }
             }
         }
 
-        TableId = MakeTableId(settings.GetTable());
+        return Nothing();
+    }
 
-        switch (settings.GetType()) {
+    void FillTableMetaInfo() {
+        auto settings = FillSinkSettings();
+        if (!settings) {
+            YQL_ENSURE(false, "Cannot execute a request without sinks");
+        }
+
+        TableId = MakeTableId(settings->GetTable());
+
+        switch (settings->GetType()) {
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
@@ -373,11 +384,11 @@ private:
                 break;
         }
 
-        KeyIds.reserve(settings.GetKeyColumns().size());
-        KeyColumnTypes.reserve(settings.GetKeyColumns().size());
+        KeyIds.reserve(settings->GetKeyColumns().size());
+        KeyColumnTypes.reserve(settings->GetKeyColumns().size());
 
-        for (int i = 0; i < settings.GetKeyColumns().size(); ++i) {
-            const auto& column = settings.GetKeyColumns()[i];
+        for (int i = 0; i < settings->GetKeyColumns().size(); ++i) {
+            const auto& column = settings->GetKeyColumns()[i];
             const auto* typeInfo = column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr;
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(), typeInfo);
 

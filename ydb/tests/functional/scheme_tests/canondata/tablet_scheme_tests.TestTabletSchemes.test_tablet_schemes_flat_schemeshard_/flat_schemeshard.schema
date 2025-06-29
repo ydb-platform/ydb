@@ -5243,6 +5243,16 @@
                 "ColumnId": 43,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 44,
+                "ColumnName": "CpuTimeUsBilled",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 45,
+                "ColumnName": "CpuTimeUsProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5291,7 +5301,9 @@
                     40,
                     41,
                     42,
-                    43
+                    43,
+                    44,
+                    45
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5584,6 +5596,11 @@
                 "ColumnId": 12,
                 "ColumnName": "ReadBytesProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "CpuTimeUsProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5601,7 +5618,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,

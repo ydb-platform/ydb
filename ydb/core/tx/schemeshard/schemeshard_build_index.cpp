@@ -229,7 +229,8 @@ void TSchemeShard::PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexB
         NIceDb::TUpdate<Schema::IndexBuild::UploadRowsProcessed>(indexInfo.Processed.GetUploadRows()),
         NIceDb::TUpdate<Schema::IndexBuild::UploadBytesProcessed>(indexInfo.Processed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuild::ReadRowsProcessed>(indexInfo.Processed.GetReadRows()),
-        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesProcessed>(indexInfo.Processed.GetReadBytes())
+        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesProcessed>(indexInfo.Processed.GetReadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::CpuTimeUsProcessed>(indexInfo.Processed.GetCpuTimeUs())
     );
 }
 
@@ -238,7 +239,8 @@ void TSchemeShard::PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::UploadRowsBilled>(indexInfo.Billed.GetUploadRows()),
         NIceDb::TUpdate<Schema::IndexBuild::UploadBytesBilled>(indexInfo.Billed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuild::ReadRowsBilled>(indexInfo.Billed.GetReadRows()),
-        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesBilled>(indexInfo.Billed.GetReadBytes())
+        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesBilled>(indexInfo.Billed.GetReadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::CpuTimeUsBilled>(indexInfo.Processed.GetCpuTimeUs())
     );
 }
 
@@ -251,7 +253,8 @@ void TSchemeShard::PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, TIndexBu
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadRowsProcessed>(shardStatus.Processed.GetUploadRows()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadBytesProcessed>(shardStatus.Processed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadRowsProcessed>(shardStatus.Processed.GetReadRows()),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes())
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::CpuTimeUsProcessed>(shardStatus.Processed.GetCpuTimeUs())
     );
 }
 
@@ -274,7 +277,8 @@ void TSchemeShard::PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuild
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadRowsProcessed>(shardStatus.Processed.GetUploadRows()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadBytesProcessed>(shardStatus.Processed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadRowsProcessed>(shardStatus.Processed.GetReadRows()),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes())
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::CpuTimeUsProcessed>(shardStatus.Processed.GetCpuTimeUs())
     );
 }
 

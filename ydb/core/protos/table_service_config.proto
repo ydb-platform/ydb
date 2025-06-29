@@ -276,13 +276,7 @@ message TTableServiceConfig {
 
     optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
 
-    enum EIndexAutoChooseMode {
-        DISABLED = 0;
-        ONLY_FULL_KEY = 1; // Accepts iff point prefix includes all key columns
-        ONLY_POINTS = 2; // Accepts iff point prefix len > 0
-        MAX_USED_PREFIX = 3;
-    }
-    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
+    reserved 50; // optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
 
     reserved 51; // optional bool EnableColumnsWithDefault = 51 [default = true];
 

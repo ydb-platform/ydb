@@ -1352,9 +1352,6 @@ private:
                 &effectiveSettings
             );
             SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
-            if (astRes.ActualSyntaxType == NYql::ESyntaxType::Pg) {
-                SessionCtx->Config().IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX;
-            }
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
             queryAst = query.AstResult->Ast;

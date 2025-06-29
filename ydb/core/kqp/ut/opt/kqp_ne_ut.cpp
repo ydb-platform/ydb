@@ -14,7 +14,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(StreamLookupWithView) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
         appConfig.MutableFeatureFlags()->SetEnableViews(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
@@ -1369,7 +1368,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         if (UseSink) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-    
+
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
@@ -1792,12 +1791,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         if (UseSink) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-    
+
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
             UNIT_ASSERT(stats.query_phases(0).table_access(0).updates().bytes() > 0);
-            UNIT_ASSERT(stats.query_phases(0).duration_us() > 0); 
+            UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
@@ -2380,7 +2379,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 // from master - should read
                 CheckTableReads(session, tablePath, false, true);
                 // from followers - should NOT read
-                CheckTableReads(session, tablePath, true, false); 
+                CheckTableReads(session, tablePath, true, false);
             }
         };
 
@@ -4067,7 +4066,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(PrimaryView) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -4089,7 +4087,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(AutoChooseIndex) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_POINTS);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -4112,7 +4109,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(AutoChooseIndexOrderByLimit) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -4172,7 +4168,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(AutoChooseIndexOrderByLambda) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -4235,7 +4230,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(MultipleBroadcastJoin) {
         TKikimrSettings kisettings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
         kisettings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(kisettings);

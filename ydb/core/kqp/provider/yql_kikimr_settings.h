@@ -8,7 +8,6 @@
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NKikimrConfig {
-    enum TTableServiceConfig_EIndexAutoChooseMode : int;
     enum TTableServiceConfig_EBlockChannelsMode : int;
 }
 
@@ -169,7 +168,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
     bool EnableAstCache = false;
     bool EnablePgConstsToParams = false;
     ui64 ExtractPredicateRangesLimit = 0;

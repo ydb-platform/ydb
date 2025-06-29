@@ -18,13 +18,17 @@ class ResultsProcessor:
 
         def send_data(self, data):
             try:
+                logging.info(f"[ResultsProcessor] Sending data to YDB endpoint: {self._driver.endpoint}, db: {self._db}, table: {self._table}")
+                logging.info(f"[ResultsProcessor] Data: {json.dumps(data)[:1000]}" + ("..." if len(json.dumps(data)) > 1000 else ""))
+                logging.info(f"[ResultsProcessor] Columns types: {ResultsProcessor._columns_types}")
                 ydb.retry_operation_sync(
                     lambda: self._driver.table_client.bulk_upsert(
                         os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
                     )
                 )
+                logging.info(f"[ResultsProcessor] Data sent successfully to {os.path.join(self._db, self._table)}")
             except BaseException as e:
-                logging.error(f'Exception while send results: {e}')
+                logging.error(f'[ResultsProcessor] Exception while send results: {e}')
 
     _endpoints : list[ResultsProcessor.Endpoint] = None
     _run_id : int = None

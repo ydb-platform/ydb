@@ -92,6 +92,7 @@ class YdbCliHelper:
         def get_stats(self, test: str) -> dict[str, dict[str, Any]]:
             result = self._stats.get(test, {})
             result.update({
+                'with_warnings': bool(self.warning_message),
                 'with_warrnings': bool(self.warning_message),
                 'with_errors': bool(self.error_message),
                 'errors': self.get_error_stats()

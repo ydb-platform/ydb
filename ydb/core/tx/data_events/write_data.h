@@ -51,13 +51,13 @@ private:
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
     std::optional<ui64> LockId;
     const std::shared_ptr<TWriteFlowCounters> Counters;
-    NCounters::TStateSignalsOperator<NEvWrite::EWriteStage>::TGuard StateGuard;
+    mutable NOlap::NCounters::TStateSignalsOperator<NEvWrite::EWriteStage>::TGuard StateGuard;
 
 public:
     void OnStage(const EWriteStage stage) const;
 
     ~TWriteMeta() {
-        if (CurrentStage != EWriteStage::Finished) {
+        if (StateGuard.GetStage() != EWriteStage::Finished) {
             OnStage(EWriteStage::Aborted);
         }
     }

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/signals/owner.h>
+#include <ydb/library/signals/states.h>
 
 namespace NKikimr::NEvWrite {
 
@@ -28,10 +29,10 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr DurationToFinish;
     NMonitoring::TDynamicCounters::TCounterPtr DurationToAbort;
-    TStateSignalsOperator<EWriteStage> Tracing;
+    NOlap::NCounters::TStateSignalsOperator<EWriteStage> Tracing;
 
 public:
-    TStateSignalsOperator<EWriteStage>& MutableTracing() {
+    NOlap::NCounters::TStateSignalsOperator<EWriteStage>& MutableTracing() {
         return Tracing;
     }
 

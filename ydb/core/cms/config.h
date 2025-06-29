@@ -32,6 +32,7 @@ struct TCmsSentinelConfig {
     ui32 DataCenterRatio;
     ui32 RoomRatio;
     ui32 RackRatio;
+    ui32 PileRatio;
     ui32 FaultyPDisksThresholdPerNode;
 
     TMaybeFail<EPDiskStatus> EvictVDisksStatus;
@@ -50,6 +51,7 @@ struct TCmsSentinelConfig {
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
+        config.SetPileRatio(PileRatio);
         config.SetFaultyPDisksThresholdPerNode(FaultyPDisksThresholdPerNode);
 
         SaveStateLimits(config);
@@ -70,6 +72,7 @@ struct TCmsSentinelConfig {
         DataCenterRatio = config.GetDataCenterRatio();
         RoomRatio = config.GetRoomRatio();
         RackRatio = config.GetRackRatio();
+        PileRatio = config.GetPileRatio();
         FaultyPDisksThresholdPerNode = config.GetFaultyPDisksThresholdPerNode();
 
         auto newStateLimits = LoadStateLimits(config);

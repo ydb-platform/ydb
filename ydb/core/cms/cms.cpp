@@ -715,7 +715,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     }
 
     Y_ABORT_UNLESS(ClusterInfo->StateStorageInfo->RingGroups.size() > 0);
-    const ui32 ringGroupId = ClusterInfo->IsBridgeMode ? node.PileId : 0;
+    const ui32 ringGroupId = ClusterInfo->IsBridgeMode ? *node.PileId : 0;
     const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
     const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;
@@ -1228,7 +1228,9 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
     host->SetInterconnectPort(node.IcPort);
     host->SetTimestamp(timestamp.GetValue());
     host->SetStartTimeSeconds(node.StartTime.Seconds());
-    host->SetPileId(node.PileId);
+    if (node.PileId.Defined()) {
+        host->SetPileId(*node.PileId);
+    }
     node.Location.Serialize(host->MutableLocation(), false);
     for (auto marker : node.Markers) {
         host->AddMarkers(marker);

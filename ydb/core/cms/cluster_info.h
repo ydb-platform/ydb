@@ -345,7 +345,7 @@ public:
     TString PreviousTenant;
     TServices Services;
     TInstant StartTime;
-    ui32 PileId;
+    TMaybeFail<ui32> PileId;
 
     TVector<TSimpleSharedPtr<INodesChecker>> NodeGroups;
 };

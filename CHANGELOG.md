@@ -6,11 +6,41 @@
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 17394:Added counters to the spilling IO queue to track the number of waiting operations. Documentation is under construction #17599. [#17394](https://github.com/ydb-platform/ydb/pull/17394) ([Filitov Mikhail](https://github.com/lll-phill-lll))
-* 17362: Add support for [google breakpad](https://chromium.googlesource.com/breakpad/breakpad) inside YDB. Now you can set a minidumps path using an environment variable.
+* 17362:Add support for [google breakpad](https://chromium.googlesource.com/breakpad/breakpad) inside YDB. Now you can set a minidumps path using an environment variable.
 [#17362](https://github.com/ydb-platform/ydb/pull/17362) ([Олег](https://github.com/iddqdex))
 * 17148:Extended federated query capabilities to support a new external data source [Prometheus](https://en.wikipedia.org/wiki/Prometheus_(software)). Documentation is under construction YQ-4261 [#17148](https://github.com/ydb-platform/ydb/pull/17148) ([Stepan](https://github.com/pstpn))
 * 17007:Extended federated query capabilities to support a new external data source [Apache Iceberg](https://iceberg.apache.org). Documentation is under construction YQ-4266 [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
 * 16076:Added automatic cleanup of temporary tables and directories created during S3 export operations. Previously, users had to manually remove temporary directories and tables that were created as part of the export pipeline. [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
+* 20284:Added GeneralCache limit control to MemoryController [#20284](https://github.com/ydb-platform/ydb/pull/20284) ([Vladilen](https://github.com/Vladilen))
+* 20176:Auto create and drop service consumer for topic compactification. [#20176](https://github.com/ydb-platform/ydb/pull/20176) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
+* 19994:Added CS Group Memory Limiter and Blob cache configuration to MemoryController (#19708) [#19994](https://github.com/ydb-platform/ydb/pull/19994) ([Vladilen](https://github.com/Vladilen))
+* 19989:RequireDbPrefixInSecretName flag has been added [#19989](https://github.com/ydb-platform/ydb/pull/19989) ([Oleg Doronin](https://github.com/dorooleg))
+* 19678:- Support https://cwiki.apache.org/confluence/display/KAFKA/Idempotent+Producer in our implementation of Kafka protocol. [#19678](https://github.com/ydb-platform/ydb/pull/19678) ([qyryq](https://github.com/qyryq))
+* 19444:Introduce new UnorderedData protocol of full synchronization which allows to take hull index snapshot only once per full sync session. New protocol will be used to send DoNotKeep flags from Phantom Flag Storage, which will be sent without relying on linear order. For now the new protocol is disabled by default. [#19444](https://github.com/ydb-platform/ydb/pull/19444) ([Sergey Belyakov](https://github.com/serbel324))
+* 19337:* Introduced two new Distributed Storage parameters — `GroupSizeInUnits` property of storage groups and `SlotSizeInUnits` of PDisks. Docs: #19364 [#19337](https://github.com/ydb-platform/ydb/pull/19337) ([Yaroslav Dynnikov](https://github.com/rosik))
+* 18955:Added new external data source to ydb topics.
+Example:
+```
+  CREATE OBJECT token_secret (TYPE SECRET) WITH (value = "...");
+
+  CREATE EXTERNAL DATA SOURCE `source_name` WITH (
+      SOURCE_TYPE="Ydb",
+      LOCATION="ydb.serverless.yandexcloud.net:2135",
+      DATABASE_NAME="/ru-central1/b1gtl2kg13him37quoo6/etni8pumlo8mo3e0cemr",
+      AUTH_METHOD="TOKEN",
+      USE_TLS="true",
+      TOKEN_SECRET_NAME="token_secret");
+
+   SELECT * FROM `source_name`.`topic_name`
+      WITH (
+           FORMAT="json_each_row",
+           SCHEMA=(cnt UInt64 NOT NULL,  k String NOT NULL))
+      LIMIT 1;
+```
+... [#18955](https://github.com/ydb-platform/ydb/pull/18955) ([Dmitry Kardymon](https://github.com/kardymonds))
+* 18544:Added shared metadata cache
+Now flag `EnableSharedMetadataAccessorCache` (turned on buy default) makes all column shard on one node share the same metadata cache
+Also `SharedMetadataAccessorCacheSize` param sets the size of the cache (1Gb by default) [#18544](https://github.com/ydb-platform/ydb/pull/18544) ([Iurii Kravchenko](https://github.com/XJIE6))
 
 ### Bug fixes
 
@@ -24,3 +54,45 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
 * 17198:Fixed an issue with UUID data type handling in YDB CLI backup/restore operations. [#17198](https://github.com/ydb-platform/ydb/pull/17198) ([Semyon Danilov](https://github.com/SammyVimes))
 * 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
+* 20307:[Ticket](https://github.com/ydb-platform/ydb/issues/20293) [#20307](https://github.com/ydb-platform/ydb/pull/20307) ([Evgenik2](https://github.com/Evgenik2))
+* 20243:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20243](https://github.com/ydb-platform/ydb/pull/20243) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20238:CS fixed race in CPU limiter [#20238](https://github.com/ydb-platform/ydb/pull/20238) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 20223:Do not fold SafeCast because it could produce unexpected result
+Fix for KIKIMR-23489 [#20223](https://github.com/ydb-platform/ydb/pull/20223) ([Denis Khalikov](https://github.com/denis0x0D))
+* 20217:Режим доступности Force теперь игнорирует лимиты недоступных узлов. Фиксит [#18604](https://github.com/ydb-platform/ydb/issues/18604). [#20217](https://github.com/ydb-platform/ydb/pull/20217) ([Ilia Shakhov](https://github.com/pixcc))
+* 20175:fixes https://github.com/ydb-platform/ydb/issues/17462
+fixes https://github.com/ydb-platform/ydb/issues/20294 [#20175](https://github.com/ydb-platform/ydb/pull/20175) ([pilik](https://github.com/pashandor789))
+* 20157:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20157](https://github.com/ydb-platform/ydb/pull/20157) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 20138:Issue: https://github.com/ydb-platform/ydb/issues/20139 [#20138](https://github.com/ydb-platform/ydb/pull/20138) ([Semyon Danilov](https://github.com/SammyVimes))
+* 20084:Поправил коммит оффсетов сообщений топика при чтении. До фикса пользователь получал ошибку "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown\n"
+Сломали начиная с 25-1-2 [#20084](https://github.com/ydb-platform/ydb/pull/20084) ([Nikolay Shestakov](https://github.com/nshestakov))
+
+### Performance
+
+* 20195:- Use pool's usage and fair-share to limit schedulable tasks - instead of query's ones.
+- Fix burst throttle metric.
+- Add histogram of delays metric.
+- Use FIFO distribution for queries fair-share (not used, but improves performance). [#20195](https://github.com/ydb-platform/ydb/pull/20195) ([Ivan](https://github.com/abyss7))
+* 20128:Added a cache of SchemeNavigate responses. Users will receive faster confirmation that the server has written the message. [#20128](https://github.com/ydb-platform/ydb/pull/20128) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 20048:Upsert operation will ignore last DefaulFilledColumnsCnt columns if row exist. This logic allow QP to avoid reading rows to check if it exists (whole operation with default columns is processed at shard), thus we'll have faster upserts for tables with defaults. [#20048](https://github.com/ydb-platform/ydb/pull/20048) ([r314-git](https://github.com/r314-git))
+* 19724:The new config option is `buffer_page_alloc_size` with default 4Kb [#19724](https://github.com/ydb-platform/ydb/pull/19724) ([Ivan](https://github.com/abyss7))
+* 19687:Password verification is extracted to a separate actor from `TSchemeShard` local transaction. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
+
+### YDB UI
+
+* 20040:Enable verbose memory limit by default in recipe [#20040](https://github.com/ydb-platform/ydb/pull/20040) ([Ivan](https://github.com/abyss7))
+* 19680:Implement select functionality of vector workload
+
+Supported options:
+  --table VAL             Table name.                          Default: "vector_index_workload".
+  --index VAL             Index name.                          Default: "index".
+  --targets VAL           Number of vectors to search as targets.                          Default: 100.
+  --limit VAL             Number of top vector to return.                          Default: 5.
+  --kmeans-tree-clusters VAL                          Number of top clusters during search.                          Default: 1.
+  --recall-threads VAL    Number of threads for concurrent queries during recall  measurement.                          Default: 10.
+  --recall                Measure recall metrics. It trains on 'targets' vector  by bruce-force search.  Default: 0.
+
+  
+Example of usage:
+`ydb  workload vector run select --table wikipedia --index prefix_index --recall` [#19680](https://github.com/ydb-platform/ydb/pull/19680) ([azevaykin](https://github.com/azevaykin))
+

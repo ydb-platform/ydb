@@ -421,6 +421,7 @@ private:
         YQL_ENSURE(idx < TablePartitioning->size());
 
         auto partition = std::make_shared<TPartitionInfo>();
+        StartedPartitions[idx] = partition;
 
         partition->EndRange = TablePartitioning->at(idx).Range;
         if (idx > 0 && !TablePartitioning->at(idx).Range.Empty()) {
@@ -432,7 +433,6 @@ private:
         partition->LimitSize = Settings.MaxBatchSize;
         partition->RetryDelayMs = Settings.StartRetryDelayMs;
 
-        StartedPartitions[idx] = partition;
         return partition;
     }
 
@@ -492,13 +492,14 @@ private:
     }
 
     void Abort() {
+        Become(&TKqpPartitionedExecuter::AbortState);
+
         if (CheckExecutersAreFinished()) {
             PE_LOG_I("All executers have been finished, abort KqpPartitionedExecuterActor");
             return RuntimeError(ReturnStatus, ReturnIssues);
         }
 
         SendAbortToExecuters();
-        Become(&TKqpPartitionedExecuter::AbortState);
     }
 
     void SendAbortToExecuters() {
@@ -529,11 +530,8 @@ private:
 
     void OnSuccessResponse(TPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
         TSerializedCellVec maxKey = GetMaxCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
-        if (!maxKey.GetCells().empty()) {
-            partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(maxKey,
-                /* IsInclusive */ false,
-                /* IsPoint */ false
-            );
+        if (maxKey) {
+            partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(maxKey, /* IsInclusive */ false, /* IsPoint */ false);
             return RetryPartExecution(partInfo);
         }
 
@@ -589,16 +587,14 @@ private:
     }
 
     TSerializedCellVec GetMaxCellVecKey(TVector<TSerializedCellVec>&& rows, TVector<ui32>&& rowKeyIds) const {
-        YQL_ENSURE(rowKeyIds.empty() || KeyIds.size() == rowKeyIds.size());
+        YQL_ENSURE(rowKeyIds.empty() || KeyIds.size() <= rowKeyIds.size());
 
-        // Sometimes SchemeCache and KqpReadActor returns keys in the different order, so we need to reorder the second ones
+        // Sometimes SchemeCache and KqpReadActor return keys in the different order, so we need to reorder the second ones
         std::transform(rows.begin(), rows.end(), rows.begin(), [&](TSerializedCellVec& key) {
-            const size_t keySize = key.GetCells().size();
-
             TVector<TCell> newKey;
-            newKey.reserve(keySize);
+            newKey.reserve(KeyIds.size());
 
-            for (auto& keyId : KeyIds) {
+            for (auto keyId : KeyIds) {
                 auto it = std::find(rowKeyIds.begin(), rowKeyIds.end(), keyId);
                 if (it != rowKeyIds.end()) {
                     newKey.emplace_back(key.GetCells()[it - rowKeyIds.begin()]);

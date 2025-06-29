@@ -66,13 +66,15 @@ private:
                 THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses,
                 THashMap<NGeneralCache::TGlobalPortionAddress, TString>&& errorAddresses) const override {
                 AFL_VERIFY(removedAddresses.empty());
-                AFL_VERIFY(errorAddresses.empty());
                 THashMap<ui64, TPortionDataAccessor> objects;
                 for (auto&& i : objectAddresses) {
                     objects.emplace(i.first.GetPortionId(), std::move(i.second));
                 }
                 TDataAccessorsResult result;
                 result.AddData(std::move(objects));
+                for (auto&& i : errorAddresses) {
+                    result.AddError(i.first.GetPathId(), i.second);
+                }
                 AccessorsCallback->OnResult(RequestId, std::move(result));
             }
 
@@ -91,13 +93,15 @@ private:
         THashMap<NGeneralCache::TGlobalPortionAddress, TPortionDataAccessor> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
         add.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), accessor.GetPortionInfo().GetAddress()), accessor);
-        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(std::move(add), std::move(remove));
+        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
+            GetTabletActorId(), std::move(add), std::move(remove));
     }
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) override {
         THashMap<NGeneralCache::TGlobalPortionAddress, TPortionDataAccessor> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
         remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), portion->GetAddress()));
-        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(std::move(add), std::move(remove));
+        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
+            GetTabletActorId(), std::move(add), std::move(remove));
     }
 
 public:

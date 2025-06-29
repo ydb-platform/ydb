@@ -44,7 +44,12 @@ class TPortionsMetadataCachePolicy {
 public:
     using TAddress = TGlobalPortionAddress;
     using TObject = TPortionDataAccessor;
+    using TSourceId = NActors::TActorId;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
+
+    static TSourceId GetSourceId(const TAddress& address) {
+        return address.GetTabletActorId();
+    }
 
     static EConsumer DefaultConsumer() {
         return EConsumer::UNDEFINED;

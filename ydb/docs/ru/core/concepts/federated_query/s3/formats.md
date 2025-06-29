@@ -240,7 +240,11 @@ WITH
 - ZSTD
 - LZ4_RAW
 
+{% note info %}
+
 Запись в формате Parquet возможна только с использованием алгоритма сжатия [Snappy](https://ru.wikipedia.org/wiki/Snappy_(библиотека)).
+
+{% endnote %}
 
 {% cut "Пример запроса" %}
 
@@ -367,4 +371,6 @@ Year,Manufacturer,Model,Price
 |`List<T>`, `Tuple<Type1, ..., TypeN>`|✓            |✓              |✓       |✓            |✓      |    |
 |`Struct<Name1:Type1, ..., NameN:TypeN>`,<br/>`Variant<Name1:Type1, Name2:Type2>`,<br/>`Dict<String, Type>`, `Dict<Utf8, Type>`|||✓||||
 
-Для всех форматов чтения из S3 и записи в S3, кроме `json_list`, разрешено использовать тип `Optional<T>` только когда `T` - [примитивный YQL тип](../../../yql/reference/types/primitive.md).
+Подробнее про контейнерные типы `List`, `Tuple`, `Struct`, `Variant` и `Dict` см. в [документации по YQL](../../../yql/reference/types/containers.md).
+
+Для всех форматов чтения из S3 и записи в S3, кроме `json_list`, разрешено использовать тип `Optional<T>` только когда `T` - [примитивный YQL тип](../../../yql/reference/types/primitive.md). Подробнее про опциональные типы см. в статье [{#T}](../../../yql/reference/types/optional.md).

@@ -31,7 +31,8 @@ WITH
     )
 )
 WHERE
-    year=2021 AND month=02
+    year=2021
+    AND month=02
 ```
 
 Если схема партицирования данных не указана, то из S3 ({{ objstorage-full-name }}) будут считаны *все* хранимые данные, но в результате обработки данные за все другие даты будут отброшены.
@@ -55,10 +56,11 @@ WITH
     PARTITIONED_BY = (year, month)
 )
 WHERE
-    year=2021 AND month=02
+    year=2021
+    AND month=02
 ```
 
-то в процессе исполнения запроса из S3 ({{ objstorage-full-name }}) будут считаны не все данные, а только данные за февраль 2021-го года, что существенно сократит объем обрабатываемых данных и ускорит обработку, при этом результаты обоих запросов будут идентичны.
+то в процессе исполнения запроса из S3 ({{ objstorage-full-name }}) будут считаны не все данные, а только данные за февраль 2021-го года, что существенно сократит объем обрабатываемых данных и ускорит обработку, при этом результаты обоих запросов будут идентичны. Поддерживаемые типы данных для колонок патиционирования описаны [ниже](#supported-types).
 
 {% note info %}
 
@@ -66,7 +68,7 @@ WHERE
 
 {% endnote %}
 
-## Синтаксис для внешних источников данных { #syntax-external-data-source }
+## Синтаксис для внешних источников данных {#syntax-external-data-source}
 
 При работе на уровне [внешних источников данных](../../datamodel/external_data_source.md) партицирование задается с помощью параметра `partitioned_by`, где в круглых скобках задается список колонок.
 
@@ -74,7 +76,7 @@ WHERE
 SELECT
     *
 FROM
-    <object_storage_external_source_name>.<path>
+    <object_storage_external_datasource_name>.<path>
 WITH
 (
     SCHEMA =
@@ -115,7 +117,7 @@ month=03
     year=2021
 ```
 
-## Синтаксис для внешних таблиц { #syntax-external-table }
+## Синтаксис для внешних таблиц {#syntax-external-table}
 
 Рекомендованным способом работы с партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md), для них в параметре `partitioned_by` задаётся список колонок в JSON формате при создании таблицы:
 
@@ -140,7 +142,8 @@ SELECT
 FROM
     `objectstorage_data`
 WHERE
-    year=2021 AND month=02
+    year=2021
+    AND month=02
 ```
 
 В общем виде синтакис создания внешних таблиц с настройками партицирования выглядит следующим образом:
@@ -151,7 +154,7 @@ CREATE EXTERNAL TABLE <external_table> (
     <field2> <type2> NOT NULL,
     <field3> <type3> NOT NULL
 ) WITH (
-    DATA_SOURCE = "<object_storage_external_source_name>",
+    DATA_SOURCE = "<object_storage_external_datasource_name>",
     LOCATION = "<path>",
     PARTITIONED_BY = "['<field2>', '<field3>']",
     <format_settings>
@@ -160,7 +163,7 @@ CREATE EXTERNAL TABLE <external_table> (
 
 Запрещено создавать таблицу, схема которой состоит только из колонок партицирования.
 
-## Поддерживаемые типы данных
+## Поддерживаемые типы данных {#supported-types}
 
 Партицирование возможно только по следующему набору типов данных YQL:
 

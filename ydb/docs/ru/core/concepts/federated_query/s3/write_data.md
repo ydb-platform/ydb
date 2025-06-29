@@ -20,7 +20,7 @@ SELECT
 
 ```yql
 INSERT INTO
-    <object_storage_external_source_name>.`<write_folder>`
+    <object_storage_external_datasource_name>.`<write_folder>`
 WITH
 (
     FORMAT = "<file_format>",
@@ -33,7 +33,7 @@ WITH
 
 Где:
 
-* `object_storage_external_source_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
+* `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
 * `write_folder` — путь к фолдеру внутри бакета, в который будет вестись запись (не пустой путь, заканчивающийся на '/'), фолдер не должен быть корнем бакета.
 * `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
@@ -73,4 +73,4 @@ FROM table
 
 Рекомендованным форматом экспорта является `parquet`, для него оптимизированы сценарии импорта и экспорта.
 
-Экспорт из [колоночных таблиц](../../datamodel/table.md#column-oriented-tables) (OLAP-таблиц) поддерживается без ограничений. Экспорт из [строковых таблиц](../../datamodel/table.md#row-oriented-tables) поддерживается только для таблиц размером до 1 ГБ. Экспорт строковых таблиц без ограничения по размеру поддержан через YDB CLI, подробнее см. в статье [{#T}](../../../reference/ydb-cli/export-import/export-s3.md).
+Экспорт из [колоночных таблиц](../../datamodel/table.md#column-oriented-tables) (OLAP-таблиц) поддерживается без ограничений. Экспорт из [строковых таблиц](../../datamodel/table.md#row-oriented-tables) поддерживается только для таблиц размером до 1 ГБ. Экспорт строковых таблиц без ограничения по размеру поддержан ввиде фоновой операции, которую можно зупустить через YDB CLI, подробнее см. в статье [{#T}](../../../reference/ydb-cli/export-import/export-s3.md).

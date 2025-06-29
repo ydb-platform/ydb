@@ -70,7 +70,7 @@ WITH
 SELECT
   <expression>
 FROM
-  <object_storage_external_source_name>.`<file_path>`
+  <object_storage_external_datasource_name>.`<file_path>`
 WITH
 (
   FORMAT = "<file_format>",
@@ -84,7 +84,7 @@ WHERE
 
 Где:
 
-* `object_storage_external_source_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
+* `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
@@ -125,7 +125,7 @@ Year Int32 NOT NULL
 SELECT
   <expression>
 FROM
-  <object_storage_external_source_name>.`<file_path>`
+  <object_storage_external_datasource_name>.`<file_path>`
 WITH
 (
   FORMAT = "<file_format>",
@@ -138,7 +138,7 @@ WHERE
 
 Где:
 
-* `object_storage_external_source_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
+* `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [ниже](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах. Поддерживаются все форматы, кроме `raw` и `json_as_string`.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
@@ -147,7 +147,8 @@ WHERE
 
 Ограничения для автоматического вывода схемы:
 
-* Вывод схемы для форматов данных `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row` делается только по первым 10 МБ данных из файла.
+* Вывод схемы делается по данным только из одного файла
+* Для форматов данных `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row` вывод схемы делается по первым 10 МБ данных из файла.
 * Вывод схемы для файлов с форматом `parquet` возможен только, если размер метаданных файла не превышает 10 МБ.
 
 ### Форматы путей к данным {#path_format}

@@ -37,7 +37,8 @@ WITH
     PARTITIONED_BY = (year, month)
 )
 WHERE
-    year=2021 AND month=02
+    year=2021
+    AND month=02
 ```
 
 То есть при работе с партицированными данными выполняется полный листинг содержимого S3 ({{objstorage-full-name}}), что может занимать продолжительное время на бакетах большого размера.
@@ -85,7 +86,8 @@ WITH
     } @@
 )
 WHERE
-    year=2021 AND month=02
+    year=2021
+    AND month=02
 ```
 
 В примере выше указывается, что данные существуют за каждый год и каждый месяц с 2010 по 2022 годы, при этом в бакете данные размещены в каталогах вида `2022/12`. Если данные за какой-то период отсутствуют внутри бакета, то это не приводит к ошибкам, запрос выполнится успешно, а данные будут пропущены в расчетах.
@@ -96,7 +98,7 @@ WHERE
 SELECT
     *
 FROM
-    <object_storage_external_source_name>.<path>
+    <object_storage_external_datasource_name>.<path>
 WITH
 (
     SCHEMA =
@@ -125,7 +127,7 @@ WHERE
 
 ## Синтаксис для внешних таблиц {#syntax-external-table}
 
-Рекомендованным способом работы с расширенным партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md), для них нужно перечислить список настроек "partition projection" при создании таблицы:
+Рекомендованным способом работы с расширенным партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md), для них можно перечислить список настроек "partition projection" при создании таблицы:
 
 ```yql
 CREATE EXTERNAL TABLE `objectstorage_data` (
@@ -162,7 +164,8 @@ SELECT
 FROM
     `objectstorage_data`
 WHERE
-    year=2021 AND month=02
+    year=2021
+    AND month=02
 ```
 
 В общем виде синтакис создания внешних таблиц с настройками расширенного партицирования выглядит следующим образом:
@@ -173,7 +176,7 @@ CREATE EXTERNAL TABLE <external_table> (
     <field2> <type2> NOT NULL,
     <field3> <type3> NOT NULL
 ) WITH (
-    DATA_SOURCE = "<object_storage_external_source_name>",
+    DATA_SOURCE = "<object_storage_external_datasource_name>",
     LOCATION = "<path>",
     PARTITIONED_BY = "['<field2>', '<field3>']",
     `projection.enabled` = <"true"|"false">,

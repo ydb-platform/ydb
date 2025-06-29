@@ -1105,6 +1105,13 @@ namespace NKikimr::NBsController {
             pb->SetOperatingStatus(status.OperatingStatus);
             pb->SetExpectedStatus(status.ExpectedStatus);
 
+            if (group.BridgeGroupInfo) {
+                NKikimrBlobStorage::TGroupInfo groupInfoPb;
+                bool success = groupInfoPb.ParseFromString(*group.BridgeGroupInfo);
+                Y_DEBUG_ABORT_UNLESS(success);
+                pb->SetIsProxyGroup(groupInfoPb.BridgeGroupIdsSize() != 0);
+            }
+            
             if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE || group.VirtualGroupState) {
                 auto *vgi = pb->MutableVirtualGroupInfo();
                 if (group.VirtualGroupState) {

@@ -71,6 +71,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks
         std::atomic<ui64> WaitingTasksTime = 0; // sum of average execution time for all throttled tasks
 
+        NMonitoring::THistogramPtr Delay; // TODO: hacky counter for delays from queries - initialize from pool
+
     private:
         const TQueryId Id;
     };

@@ -25,7 +25,10 @@ class TReadyEventReaderBase
 {
 protected:
     //! Return ready event without starting wait timer. Intended for internal use in subclasses.
-    const TFuture<void>& ReadyEvent() const;
+    TFuture<void> ReadyEvent() const;
+
+    //! Checks that ReadyEvent is set and the result is not an error.
+    bool IsReadyEventSetAndOK() const;
 
     //! Set ready event. Ready event is wrapped with a callback which
     //! stops wait timer when ready event is ready.
@@ -35,6 +38,7 @@ protected:
     TDuration GetWaitTime() const;
 
 private:
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     TFuture<void> ReadyEvent_ = VoidFuture;
 
     //! This timer is started when GetReadyEvent() is invoked and stopped when ready event is set.

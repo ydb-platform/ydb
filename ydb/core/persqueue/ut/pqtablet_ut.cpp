@@ -97,12 +97,14 @@ struct TWriteRequestParams {
 using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
 using TPQTabletMock = NKikimr::NPQ::NHelpers::TPQTabletMock;
 
-}
+} // namespace NHelpers
 
 Y_UNIT_TEST_SUITE(TPQTabletTests) {
 
 class TPQTabletFixture : public NUnitTest::TBaseFixture {
 protected:
+
+    inline static const TString DEFAULT_OWNER = "-=[ 0wn3r ]=-";
     struct TProposeTransactionResponseMatcher {
         TMaybe<ui64> TxId;
         TMaybe<NKikimrPQ::TEvProposeTransactionResult::EStatus> Status;
@@ -223,12 +225,17 @@ protected:
     bool FoundPQWriteTxs = false;
 
     void SendGetOwnershipRequest(const TGetOwnershipRequestParams& params);
-    void WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher);
+    // returns ownerCookie
+    TString WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher);
     void SyncGetOwnership(const TGetOwnershipRequestParams& params,
-                          const TGetOwnershipResponseMatcher& matcher);
+                             const TGetOwnershipResponseMatcher& matcher);
 
     void SendWriteRequest(const TWriteRequestParams& params);
     void WaitWriteResponse(const TWriteResponseMatcher& matcher);
+
+    // returns owner cookie for this supportive partition
+    TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId);
+    void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie);
 
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
@@ -246,6 +253,11 @@ protected:
     void SendSaveTxState(TAutoPtr<IEventHandle>& event);
 
     void WaitForTheTransactionToBeDeleted(ui64 txId);
+    
+    TVector<TString> WaitForExactSupportivePartitionsCount(ui32 expectedCount);
+    TVector<TString> GetSupportivePartitionsKeysFromKV();
+    NKikimrPQ::TTabletTxInfo WaitForExactTxWritesCount(ui32 expectedCount);
+    NKikimrPQ::TTabletTxInfo GetTxWritesFromKV();
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -672,7 +684,8 @@ void TPQTabletFixture::SendGetOwnershipRequest(const TGetOwnershipRequestParams&
                request.release());
 }
 
-void TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher)
+// returns owner cookie
+TString TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
     UNIT_ASSERT(event != nullptr);
@@ -689,6 +702,8 @@ void TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatch
         UNIT_ASSERT(event->Record.HasErrorCode());
         UNIT_ASSERT_VALUES_EQUAL((int)*matcher.ErrorCode, (int)event->Record.GetErrorCode());
     }
+
+    return event->Record.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 }
 
 void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
@@ -732,6 +747,60 @@ void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
 
     SendToPipe(Ctx->Edge,
                event.Release());
+}
+
+TString TPQTabletFixture::CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId) {
+    EnsurePipeExist();
+
+    auto request = MakeGetOwnershipRequest({.Partition=0,
+                     .WriteId=TWriteId{producerInstanceId},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=4}, Pipe);
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             request.release(),
+                             0, 0);
+
+    return WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
+}
+
+void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie) {
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(0);
+    request->SetCookie(123);
+    request->SetOwnerCookie(ownerCookie);
+    request->SetMessageNo(0);
+
+    auto* writeId = request->MutableWriteId();
+    writeId->SetKafkaTransaction(true);
+    auto* requestProducerInstanceId = writeId->MutableKafkaProducerInstanceId();
+    requestProducerInstanceId->SetId(producerInstanceId.Id);
+    requestProducerInstanceId->SetEpoch(producerInstanceId.Epoch);
+
+    EnsurePipeExist();
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    auto cmdWrite = request->AddCmdWrite();
+    cmdWrite->SetSourceId(std::to_string(producerInstanceId.Id));
+    cmdWrite->SetSeqNo(0);
+    TString data = "123test123";
+    cmdWrite->SetData(data);
+    cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    cmdWrite->SetDisableDeduplication(true);
+    cmdWrite->SetUncompressedSize(data.size());
+    cmdWrite->SetIgnoreQuotaDeadline(true);
+    cmdWrite->SetExternalOperation(true);
+
+    SendToPipe(Ctx->Edge, event.Release());
+
+    // wait for response
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+    UNIT_ASSERT(response != nullptr);
+    UNIT_ASSERT(response->Record.GetPartitionResponse().HasCookie());
+    UNIT_ASSERT_VALUES_EQUAL(123, response->Record.GetPartitionResponse().GetCookie());
 }
 
 void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
@@ -1115,6 +1184,103 @@ void TPQTabletFixture::WaitForTheTransactionToBeDeleted(ui64 txId)
     }
 
     UNIT_FAIL("Too many attempts");
+}
+
+TVector<TString> TPQTabletFixture::WaitForExactSupportivePartitionsCount(ui32 expectedCount) {
+    for (size_t i = 0; i < 200; ++i) {
+        auto result = GetSupportivePartitionsKeysFromKV();
+
+        if (result.empty() && expectedCount == 0) {
+            return result;
+        } else if (expectedCount == result.size()) {
+            return result;
+        } else {
+            Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
+        }
+    }
+
+    UNIT_FAIL("Too many attempts");
+    return {};
+}
+
+NKikimrPQ::TTabletTxInfo TPQTabletFixture::WaitForExactTxWritesCount(ui32 expectedCount) {
+    for (size_t i = 0; i < 200; ++i) {
+        auto result = GetTxWritesFromKV();
+
+        if (result.TxWritesSize() == 0 && expectedCount == 0) {
+            return result;
+        } else if (expectedCount == result.TxWritesSize()) {
+            return result;
+        } else {
+            Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
+        }
+    }
+
+    UNIT_FAIL("Too many attempts");
+    return {};
+}
+
+std::string GetSupportivePartitionKeyFrom() {
+    return std::string{TKeyPrefix::EServiceType::ServiceTypeData};
+}
+
+std::string GetSupportivePartitionKeyTo() {
+    return std::string{static_cast<char>(TKeyPrefix::EServiceType::ServiceTypeData + 1)};
+}
+
+TVector<TString> TPQTabletFixture::GetSupportivePartitionsKeysFromKV() {
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    auto cmd = request->Record.AddCmdReadRange();
+    auto range = cmd->MutableRange();
+    range->SetFrom(GetSupportivePartitionKeyFrom());
+    range->SetIncludeFrom(true);
+    range->SetTo(GetSupportivePartitionKeyTo());
+    range->SetIncludeTo(false);
+    cmd->SetIncludeData(false);
+    SendToPipe(Ctx->Edge, request.release());
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    TVector<TString> supportivePartitionsKeys;
+    const auto& result = response->Record.GetReadRangeResult(0);
+    if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+        for (ui32 i = 0; i < result.PairSize(); i++) {
+            supportivePartitionsKeys.emplace_back(result.GetPair(i).GetKey());
+        }
+        return supportivePartitionsKeys;
+    } else if (result.GetStatus() == NKikimrProto::NODATA) {
+        return supportivePartitionsKeys;
+    } else {
+        UNIT_FAIL("Unexpected status from KV tablet" << result.GetStatus());
+        return {};
+    }
+}
+
+NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    auto* cmd = request->Record.AddCmdRead();
+    cmd->SetKey("_txinfo");
+    SendToPipe(Ctx->Edge, request.release());
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    const auto& result = response->Record.GetReadResult(0);
+    if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+        NKikimrPQ::TTabletTxInfo info;
+        if (!info.ParseFromString(result.GetValue())) {
+            UNIT_FAIL("tx writes read error");
+        }
+        return info;
+    } else if (result.GetStatus() == NKikimrProto::NODATA) {
+        return {};
+    } else {
+        UNIT_FAIL("Unexpected status from KV tablet" << result.GetStatus());
+        return {};
+    }
 }
 
 Y_UNIT_TEST_F(Parallel_Transactions_1, TPQTabletFixture)
@@ -1651,7 +1817,7 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_2, TPQTabletFixture)
 
     SendGetOwnershipRequest({.Partition=0,
                             .WriteId=writeId,
-                            .Owner="-=[ 0wn3r ]=-",
+                            .Owner=DEFAULT_OWNER,
                             .Cookie=cookie});
     WaitGetOwnershipResponse({.Cookie=cookie});
 
@@ -1673,7 +1839,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
     SyncGetOwnership({.Partition=partitionId,
                      .WriteId=writeId,
                      .NeedSupportivePartition=true,
-                     .Owner="-=[ 0wn3r ]=-",
+                     .Owner=DEFAULT_OWNER,
                      .Cookie=4},
                      {.Cookie=4,
                      .Status=NMsgBusProxy::MSTATUS_OK});
@@ -1686,7 +1852,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 
     SyncGetOwnership({.Partition=partitionId,
                      .WriteId=writeId,
-                     .Owner="-=[ 0wn3r ]=-",
+                     .Owner=DEFAULT_OWNER,
                      .Cookie=5},
                      {.Cookie=5,
                      .Status=NMsgBusProxy::MSTATUS_ERROR});
@@ -2146,6 +2312,104 @@ Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
 
     UNIT_ASSERT_EQUAL(preparedCount, 1000);
     UNIT_ASSERT_EQUAL(overloadedCount, 2);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
+{
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+
+    // validate supportive partition was created
+    WaitForExactSupportivePartitionsCount(1);
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), true);
+
+    // increment time till after kafka txn timeout
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+
+    // wait till supportive partition for this kafka transaction is deleted
+    WaitForExactSupportivePartitionsCount(0);
+    // validate that TxWrite for this transaction is deleted
+    auto txInfo2 = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo2.TxWritesSize(), 0);
+}
+
+Y_UNIT_TEST_F(Non_Kafka_Transaction_Supportive_Partitions_Should_Not_Be_Deleted_After_Timeout, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    // create Topic API transaction
+    SyncGetOwnership({.Partition=0,
+                     .WriteId=TWriteId{0, 3},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=4},
+                     {.Cookie=4,
+                     .Status=NMsgBusProxy::MSTATUS_OK});
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), false);
+
+    // create Kafka transaction
+    CreateSupportivePartitionForKafka({1, 0});
+    auto txInfo2 = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo2.TxWritesSize(), 2);
+
+    // increment time till after kafka txn timeout
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+
+    // wait till supportive partition for this kafka transaction is deleted
+    auto txInfo3 = WaitForExactTxWritesCount(1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo3.GetTxWrites(0).GetKafkaTransaction(), false);
+}
+
+Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Should_Be_Deleted, TPQTabletFixture)
+{
+    NKafka::TProducerInstanceId producerInstanceId1 = {1, 0};
+    NKafka::TProducerInstanceId producerInstanceId2 = {2, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    
+    // create first kafka-transacition and write data to it
+    TString ownerCookie1 = CreateSupportivePartitionForKafka(producerInstanceId1);
+    SendKafkaTxnWriteRequest(producerInstanceId1, ownerCookie1);
+    WaitForExactSupportivePartitionsCount(1);
+    ResetPipe();
+
+    // advance time to value strictly less then kafka transaction timeout
+    ui64 testTimeAdvanceMs = KAFKA_TRANSACTION_DELETE_DELAY_MS / 2;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(testTimeAdvanceMs));
+    
+    // create second kafka-transacition and write data to it
+    EnsurePipeExist();
+    TString ownerCookie2 = CreateSupportivePartitionForKafka(producerInstanceId2);
+    SendKafkaTxnWriteRequest(producerInstanceId2, ownerCookie2);
+    WaitForExactSupportivePartitionsCount(2);
+
+    // increment time till after timeout for the first transaction
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(
+        Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() + testTimeAdvanceMs + 1));
+    // trigger expired transactions cleanup
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+
+    // wait till supportive partition for first kafka transaction is deleted
+    WaitForExactSupportivePartitionsCount(1);
+    // validate that TxWrite for first transaction is deleted and for the second is preserved
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId2.Id);
 }
 
 }

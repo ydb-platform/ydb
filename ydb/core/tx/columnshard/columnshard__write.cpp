@@ -275,8 +275,8 @@ public:
         }
         proto.SetLockId(WriteCommit->GetLockId());
         TxOperator = Self->GetProgressTxController().StartProposeOnExecute(
-            TTxController::TTxInfo(kind, WriteCommit->GetTxId(), Source, Self->GetProgressTxController().GetAllowedStep(), 
-            Cookie, {}), proto.SerializeAsString(), txc);
+            TTxController::TTxInfo(kind, WriteCommit->GetTxId(), Source, Self->GetProgressTxController().GetAllowedStep(), Cookie, {}),
+            proto.SerializeAsString(), txc);
         return true;
     }
 
@@ -334,6 +334,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto& record = ev->Get()->Record;
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
+    std::optional<TDuration> writeTimeout;
+    if (record.HasTimeoutSeconds()) {
+        writeTimeout = TDuration::Seconds(record.GetTimeoutSeconds());
+    }
 
     if (!TablesManager.GetPrimaryIndex()) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
@@ -427,7 +431,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(operation.GetTableId());
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
-    const auto& pathId = TUnifiedPathId{*internalPathId, schemeShardLocalPathId};
+    const auto& pathId = TUnifiedPathId{ *internalPathId, schemeShardLocalPathId };
     if (!TablesManager.IsReadyForStartWrite(*internalPathId, false)) {
         sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
         return;
@@ -474,7 +478,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour));
+    WriteTasksQueue->Enqueue(TWriteTask(
+        arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour, writeTimeout, record.GetTxId()));
     WriteTasksQueue->Drain(false, ctx);
 }
 

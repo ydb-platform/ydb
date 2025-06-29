@@ -1333,6 +1333,25 @@ void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySel
     }
 }
 
+TSet<TStringBuf> GetFilteredMembers(const TCoFilterNullMembersBase& node) {
+    TSet<TStringBuf> memberNames;
+    if (node.Members().IsValid()) {
+        for (const auto& atom : node.Members().Cast()) {
+            memberNames.insert(atom.Value());
+        }
+    } else {
+        const TTypeAnnotationNode* itemType = GetSequenceItemType(node.Input(), false);
+        YQL_ENSURE(itemType);
+        const TStructExprType* structType = itemType->Cast<TStructExprType>();
+        for (auto entry : structType->GetItems()) {
+            if (entry->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+                memberNames.insert(entry->GetName());
+            }
+        }
+    }
+    return memberNames;
+}
+
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables) {
     const TExprNode* p = &node;
     while (p->IsCallable(skipCallables)) {
@@ -2522,8 +2541,10 @@ TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& 
     auto status = IsWideSequenceBlockType(*rootType) ? TOperationProgress::EOpBlockStatus::Full : TOperationProgress::EOpBlockStatus::None;
     bool stop = false;
     VisitExpr(*pRoot, [&](const TExprNode& node) {
-        if (stop || node.IsLambda()) {
+        if (stop || node.IsArguments()) {
             return false;
+        } else if (node.IsLambda()) {
+            return true;
         }
 
         const TTypeAnnotationNode* nodeType = node.GetTypeAnn();

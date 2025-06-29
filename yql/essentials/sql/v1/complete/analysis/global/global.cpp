@@ -15,13 +15,66 @@
 
 namespace NSQLComplete {
 
-    TVector<TTableId> TColumnContext::TablesWithAlias(TStringBuf alias) const {
-        if (alias.empty()) {
-            return TVector<TTableId>(Tables.begin(), Tables.end());
+    bool operator<(const TColumnId& lhs, const TColumnId& rhs) {
+        return std::tie(lhs.TableAlias, lhs.Name) < std::tie(rhs.TableAlias, rhs.Name);
+    }
+
+    TColumnContext TColumnContext::ExtractAliased(TMaybe<TStringBuf> alias) {
+        if (alias.Empty()) {
+            return *this;
         }
 
-        auto filtered = NFuncTools::Filter([&](const auto& x) { return x.Alias == alias; }, Tables);
-        return TVector<TTableId>(filtered.begin(), filtered.end());
+        auto aliasedTables = std::ranges::partition(Tables, [&](const auto& table) {
+            return table.Alias != alias;
+        });
+
+        auto aliasedColumns = std::ranges::partition(Columns, [&](const auto& column) {
+            return column.TableAlias != alias;
+        });
+
+        TVector<TAliased<TTableId>> tables(aliasedTables.begin(), aliasedTables.end());
+        TVector<TColumnId> columns(aliasedColumns.begin(), aliasedColumns.end());
+
+        Tables.erase(aliasedTables.begin(), aliasedTables.end());
+        Columns.erase(aliasedColumns.begin(), aliasedColumns.end());
+
+        return {
+            .Tables = std::move(tables),
+            .Columns = std::move(columns),
+        };
+    }
+
+    bool TColumnContext::IsAsterisk() const {
+        return Columns.size() == 1 &&
+               Columns[0].TableAlias.empty() &&
+               Columns[0].Name == "*";
+    }
+
+    TColumnContext TColumnContext::Renamed(TStringBuf alias) && {
+        for (TAliased<TTableId>& table : Tables) {
+            table.Alias = alias;
+        }
+        for (TColumnId& column : Columns) {
+            column.TableAlias = alias;
+        }
+        return *this;
+    }
+
+    TColumnContext operator|(TColumnContext lhs, TColumnContext rhs) {
+        lhs.Tables.reserve(lhs.Tables.size() + rhs.Tables.size());
+        lhs.Columns.reserve(lhs.Columns.size() + rhs.Columns.size());
+
+        std::move(rhs.Tables.begin(), rhs.Tables.end(), std::back_inserter(lhs.Tables));
+        std::move(rhs.Columns.begin(), rhs.Columns.end(), std::back_inserter(lhs.Columns));
+
+        SortUnique(lhs.Tables);
+        SortUnique(lhs.Columns);
+
+        return lhs;
+    }
+
+    TColumnContext TColumnContext::Asterisk() {
+        return {.Columns = {{.Name = "*"}}};
     }
 
     class TErrorStrategy: public antlr4::DefaultErrorStrategy {
@@ -59,6 +112,17 @@ namespace NSQLComplete {
         }
 
         TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
+            TString recovered;
+            if (IsRecoverable(input)) {
+                recovered = TString(input.Text);
+
+                // - "_" is to parse `SELECT x._ FROM table`
+                //        instead of `SELECT x.FROM table`
+                recovered.insert(input.CursorPosition, "_");
+
+                input.Text = recovered;
+            }
+
             SQLv1::Sql_queryContext* sqlQuery = Parse(input.Text);
             Y_ENSURE(sqlQuery);
 
@@ -78,6 +142,17 @@ namespace NSQLComplete {
         }
 
     private:
+        bool IsRecoverable(TCompletionInput input) const {
+            static const TStringBuf prev = " ";
+            static const TStringBuf next = " .(";
+
+            TStringBuf s = input.Text;
+            size_t i = input.CursorPosition;
+
+            return (i < s.size() && prev.Contains(s[i]) || i == s.size()) &&
+                   (i > 0 /*  */ && next.Contains(s[i - 1]));
+        }
+
         SQLv1::Sql_queryContext* Parse(TStringBuf input) {
             Chars_.load(input.Data(), input.Size(), /* lenient = */ false);
             Lexer_.reset();
@@ -92,6 +167,12 @@ namespace NSQLComplete {
                     table.Cluster = use.Cluster;
                 }
             }
+        }
+
+        void DebugPrint(TStringBuf query, antlr4::ParserRuleContext* ctx) {
+            Cerr << "= = = = = = " << Endl;
+            Cerr << query << Endl;
+            Cerr << ctx->toStringTree(&Parser_, true) << Endl;
         }
 
         antlr4::ANTLRInputStream Chars_;
@@ -132,8 +213,14 @@ void Out<NSQLComplete::TAliased<NSQLComplete::TTableId>>(IOutputStream& out, con
 }
 
 template <>
+void Out<NSQLComplete::TColumnId>(IOutputStream& out, const NSQLComplete::TColumnId& value) {
+    out << value.TableAlias << "." << value.Name;
+}
+
+template <>
 void Out<NSQLComplete::TColumnContext>(IOutputStream& out, const NSQLComplete::TColumnContext& value) {
     out << "TColumnContext { ";
     out << "Tables: " << JoinSeq(", ", value.Tables);
+    out << ", Columns: " << JoinSeq(", ", value.Columns);
     out << " }";
 }

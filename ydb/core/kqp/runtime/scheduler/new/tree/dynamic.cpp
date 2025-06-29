@@ -65,7 +65,7 @@ TPool::TPool(const TString& id, const TIntrusivePtr<TKqpCounters>& counters, con
 
     auto group = counters->GetKqpCounters()->GetSubgroup("scheduler/pool", Id);
 
-    // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account the microseconds precision
+    // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
     Counters.Limit     = group->GetCounter("Limit",     false);
     Counters.Guarantee = group->GetCounter("Guarantee", false);
@@ -75,6 +75,9 @@ TPool::TPool(const TString& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters.Usage     = group->GetCounter("Usage",     true);
     Counters.Throttle  = group->GetCounter("Throttle",  true);
     Counters.FairShare = group->GetCounter("FairShare", true);  // snapshot
+
+    Counters.Delay     = group->GetHistogram("Delay",
+        NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() const {
@@ -98,6 +101,8 @@ void TPool::AddQuery(const TQueryPtr& query) {
     Y_ENSURE(!Queries.contains(query->GetId()));
     Queries.emplace(query->GetId(), query);
     AddChild(query);
+
+    query->Delay = Counters.Delay;
 }
 
 void TPool::RemoveQuery(const TQueryId& queryId) {

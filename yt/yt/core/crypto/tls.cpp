@@ -19,6 +19,8 @@
 
 #include <library/cpp/openssl/io/stream.h>
 
+#include <util/string/hex.h>
+
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -88,6 +90,19 @@ void TSslDeleter::operator()(SSL_CTX* ctx) const noexcept
 void TSslDeleter::operator()(SSL* ssl) const noexcept
 {
     SSL_free(ssl);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString GetFingerprintSHA256(const TX509Ptr& certificate)
+{
+    auto md_type = EVP_sha256();
+    unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned int md_len = 0;
+    if (!X509_digest(certificate.get(), md_type, md, &md_len)) {
+        THROW_ERROR GetLastSslError("X509_digest() failed");
+    }
+    return HexEncode(md, md_len);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

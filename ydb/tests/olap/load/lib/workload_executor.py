@@ -1,6 +1,7 @@
 import allure
 import logging
 import os
+import pytest
 import yatest.common
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,6 +13,8 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.allure_utils import NodeErrors
+from ydb.tests.olap.lib.results_processor import ResultsProcessor
+from ydb.tests.olap.lib.utils import get_external_param
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -1513,6 +1516,8 @@ class WorkloadTestBase(LoadSuiteBase):
             check_scheme: Проверять ли схему базы данных
             use_node_subcols: Использовать ли подколонки для нод в таблице итераций
         """
+        logging.info(f"[WorkloadProcess] Starting process_workload_result_with_diagnostics for {workload_name}")
+        
         with allure.step(f'Process workload result for {workload_name}'):
             # Собираем информацию о параметрах workload для заголовка
             workload_params = {}
@@ -1537,6 +1542,8 @@ class WorkloadTestBase(LoadSuiteBase):
                     if key not in workload_params and key not in ['success_rate', 'successful_runs', 'failed_runs']:
                         workload_params[key] = value
             
+            logging.info(f"[WorkloadProcess] Collected workload params: {list(workload_params.keys())}")
+            
             # Собираем информацию об ошибках нод
             node_errors = []
             
@@ -1551,6 +1558,8 @@ class WorkloadTestBase(LoadSuiteBase):
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
+            
+            logging.info(f"[WorkloadProcess] Node diagnostics completed, found {len(node_errors)} errors")
             
             # Вычисляем время выполнения
             end_time = time()
@@ -1587,6 +1596,8 @@ class WorkloadTestBase(LoadSuiteBase):
                     avg_threads = workload_params.get('avg_threads_per_iteration', 1)
                     additional_table_strings['execution_mode'] = f"{total_iterations} iterations with avg {avg_threads:.1f} threads per iteration"
             
+            logging.info(f"[WorkloadProcess] About to create allure report")
+            
             # Создаем отчет
             allure_test_description(
                 suite="workload",
@@ -1599,3 +1610,214 @@ class WorkloadTestBase(LoadSuiteBase):
                 workload_params=workload_params,
                 use_node_subcols=use_node_subcols
             )
+            
+            logging.info(f"[WorkloadProcess] Allure report created")
+            logging.info(f"[WorkloadProcess] About to handle final status and upload")
+            
+            # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
+            stats = result.get_stats(workload_name)
+            if stats is not None:
+                result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
+                logging.info(f"[WorkloadProcess] Added nodes_with_issues={len(node_errors)} to stats")
+
+            # 3. Формирование summary/статистики
+            self._update_summary_flags(result, workload_name)
+            logging.info(f"[WorkloadProcess] Summary flags updated")
+
+            # 5. Обработка ошибок/статусов (fail, broken, etc) и upload результатов всегда
+            try:
+                self._handle_final_status(result, workload_name, node_errors)
+                logging.info(f"[WorkloadProcess] _handle_final_status completed without exception")
+            finally:
+                logging.info(f"[WorkloadProcess] Starting upload in finally block")
+                self._upload_results(result, workload_name)
+                self._upload_results_per_workload_run(result, workload_name)
+                logging.info(f"[WorkloadProcess] Upload completed in finally block")
+            
+            logging.info(f"[WorkloadProcess] process_workload_result_with_diagnostics completed for {workload_name}")
+
+    def _upload_results(self, result, workload_name):
+        logging.info(f"[WorkloadUpload] Starting _upload_results for {workload_name}")
+        logging.info(f"[WorkloadUpload] send_results flag: {ResultsProcessor.send_results}")
+        
+        if not ResultsProcessor.send_results:
+            logging.info(f"[WorkloadUpload] send_results is False, skipping upload")
+            return
+            
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            stats["aggregation_level"] = "aggregate"
+            stats["run_id"] = ResultsProcessor.get_run_id()
+        end_time = time()
+        # --- устанавливаем endpoint из ydb-endpoint параметра ---
+        ydb_endpoint = get_external_param('ydb-endpoint', '')
+        if ydb_endpoint:
+            result._workload_endpoint = ydb_endpoint
+        # --- используем endpoint из result (установленный выше) ---
+        endpoint = getattr(result, '_workload_endpoint', None)
+        db_field = endpoint if endpoint else ResultsProcessor.get_cluster_id()
+        
+        logging.info(f"[WorkloadUpload] About to call ResultsProcessor.upload_results")
+        logging.info(f"[WorkloadUpload] Parameters: kind=Load, suite=workload, test={workload_name}, is_successful={result.success}")
+        logging.info(f"[WorkloadUpload] Db field: {db_field}")
+        
+        ResultsProcessor.upload_results(
+            kind='Load',
+            suite="workload",
+            test=workload_name,
+            timestamp=end_time,
+            is_successful=result.success,
+            statistics=stats,
+        )
+        logging.info(f"[WorkloadUpload] _upload_results completed for {workload_name}")
+
+    def _upload_results_per_workload_run(self, result, workload_name):
+        logging.info(f"[WorkloadUpload] Starting _upload_results_per_workload_run for {workload_name}")
+        logging.info(f"[WorkloadUpload] send_results flag: {ResultsProcessor.send_results}")
+        
+        if not ResultsProcessor.send_results:
+            logging.info(f"[WorkloadUpload] send_results is False, skipping per-run upload")
+            return
+            
+        suite = "workload"
+        agg_stats = result.get_stats(workload_name)
+        nemesis_enabled = agg_stats.get("nemesis_enabled") if agg_stats else None
+        run_id = ResultsProcessor.get_run_id()
+        
+        logging.info(f"[WorkloadUpload] Processing {len(result.iterations)} iterations for per-run upload")
+        
+        for iter_num, iteration in result.iterations.items():
+            runs = getattr(iteration, "runs", None) or [iteration]
+            for run_idx, run in enumerate(runs):
+                if getattr(run, "error_message", None):
+                    resolution = "error"
+                elif getattr(run, "warning_message", None):
+                    resolution = "warning"
+                elif hasattr(run, "timeout") and run.timeout:
+                    resolution = "timeout"
+                else:
+                    resolution = "ok"
+
+                stats = {
+                    "iteration": iter_num,
+                    "run_index": run_idx,
+                    "duration": getattr(run, "time", None),
+                    "resolution": resolution,
+                    "error_message": getattr(run, "error_message", None),
+                    "warning_message": getattr(run, "warning_message", None),
+                    "nemesis_enabled": nemesis_enabled,
+                    "aggregation_level": "per_run",
+                    "run_id": run_id,
+                }
+                
+                logging.info(f"[WorkloadUpload] Uploading per-run result: iter={iter_num}, run={run_idx}, resolution={resolution}")
+                
+                ResultsProcessor.upload_results(
+                    kind='Stress',
+                    suite=suite,
+                    test=f"{workload_name}__iter_{iter_num}__run_{run_idx}",
+                    timestamp=time(),
+                    is_successful=(resolution == "ok"),
+                    duration=stats["duration"],
+                    statistics=stats,
+                )
+        
+        logging.info(f"[WorkloadUpload] _upload_results_per_workload_run completed for {workload_name}")
+
+    def _update_summary_flags(self, result, workload_name):
+        """Обновляет summary-флаги для warning/error по всем итерациям"""
+        has_warning = False
+        has_error = False
+        for iteration in getattr(result, "iterations", {}).values():
+            if hasattr(iteration, "warning_message") and iteration.warning_message:
+                has_warning = True
+            if hasattr(iteration, "error_message") and iteration.error_message:
+                has_error = True
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            stats["with_warnings"] = has_warning or bool(getattr(result, "warning_message", None))
+            stats["with_errors"] = has_error or bool(getattr(result, "error_message", None))
+
+    def _handle_final_status(self, result, workload_name, node_errors):
+        """Обрабатывает финальный статус теста: fail, broken, etc."""
+        # --- FAIL TEST IF CORES OR OOM FOUND ---
+        stats = result.get_stats(workload_name)
+        node_issues = stats.get("nodes_with_issues", 0) if stats else 0
+        if node_issues > 0:
+            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+            result.error_message = error_msg
+            pytest.fail(error_msg)
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
+        workload_errors = []
+        if result.errors:
+            for err in result.errors:
+                if "coredump" not in err and "OOM" not in err:
+                    workload_errors.append(err)
+        if workload_errors:
+            allure.dynamic.label("severity", "critical")
+            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
+        # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
+        if not result.success and result.error_message:
+            # Создаем детальное сообщение об ошибке с контекстом
+            error_details = []
+            error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
+            error_details.append(f"Main error: {result.error_message}")
+            if result.iterations:
+                error_details.append("\nExecution details:")
+                error_details.append(f"Total iterations attempted: {len(result.iterations)}")
+                failed_iterations = []
+                successful_iterations = []
+                for iter_num, iteration in result.iterations.items():
+                    if iteration.error_message:
+                        failed_iterations.append({
+                            'iteration': iter_num,
+                            'error': iteration.error_message,
+                            'time': iteration.time
+                        })
+                    else:
+                        successful_iterations.append({
+                            'iteration': iter_num,
+                            'time': iteration.time
+                        })
+                if failed_iterations:
+                    error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
+                    for fail_info in failed_iterations:
+                        error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
+                if successful_iterations:
+                    error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
+                    for success_info in successful_iterations:
+                        error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
+            if result.stderr and result.stderr.strip():
+                stderr_preview = result.stderr.strip()
+                if len(stderr_preview) > 500:
+                    stderr_preview = "..." + stderr_preview[-500:]
+                error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
+            if result.stdout and "error" in result.stdout.lower():
+                stdout_lines = result.stdout.split('\n')
+                error_lines = [line for line in stdout_lines if 'error' in line.lower()]
+                if error_lines:
+                    error_details.append("\nError lines from STDOUT:")
+                    for line in error_lines[:5]:
+                        error_details.append(f"  {line.strip()}")
+            stats = result.get_stats(workload_name)
+            if stats:
+                if 'successful_runs' in stats and 'total_runs' in stats:
+                    error_details.append("\nRUN STATISTICS:")
+                    error_details.append(f"  Successful runs: {stats['successful_runs']}/{stats['total_runs']}")
+                    if 'failed_runs' in stats:
+                        error_details.append(f"  Failed runs: {stats['failed_runs']}")
+                    if 'success_rate' in stats:
+                        error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
+                if any(key.startswith('deployment_') for key in stats.keys()):
+                    deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
+                    if deployment_info:
+                        error_details.append("\nDEPLOYMENT INFO:")
+                        for key, value in deployment_info.items():
+                            error_details.append(f"  {key}: {value}")
+            detailed_error_message = "\n".join(error_details)
+            exc = pytest.fail.Exception(detailed_error_message)
+            if result.traceback is not None:
+                exc = exc.with_traceback(result.traceback)
+            raise exc
+        if result.warning_message:
+            logging.warning(f"Workload completed with warnings: {result.warning_message}")

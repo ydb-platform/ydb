@@ -1,21 +1,19 @@
 import yatest.common
 import logging
+import os
 
 
 def get_external_param(name: str, default: str = '') -> str:
-    """Получает внешний параметр из yatest.common.get_param"""
-    try:
-        value = yatest.common.get_param(name, default)
-        logging.info(f"[Utils] get_external_param({name}) = '{value}' (default='{default}')")
-        return value
-    except Exception as e:
-        logging.warning(f"[Utils] Error getting external param {name}: {e}, using default '{default}'")
-        return default
+    """Получает внешний параметр из переменной окружения или аргументов командной строки"""
+    result = os.getenv(name, default)
+    if name == 'send-results':
+        logging.info(f"[Utils] get_external_param({name}) = '{result}' (default='{default}')")
+    return result
 
 
 def external_param_is_true(param_name: str) -> bool:
-    """Проверяет, что внешний параметр равен 'true' (case-insensitive)"""
-    value = get_external_param(param_name, '')
-    result = value.lower() == 'true'
-    logging.info(f"[Utils] external_param_is_true({param_name}) = {result} (value='{value}')")
+    """Проверяет, является ли внешний параметр истинным"""
+    result = get_external_param(param_name, '').lower() in ('1', 'true', 'yes', 'on')
+    if param_name == 'send-results':
+        logging.info(f"[Utils] external_param_is_true({param_name}) = {result}")
     return result

@@ -41,11 +41,19 @@ namespace NSQLComplete {
             TString Cluster;
             TString Path;
             THashSet<EObjectKind> Kinds;
-            bool IsQuoted = false;
 
             bool HasCluster() const {
                 return !Cluster.empty();
             }
+        };
+
+        struct TColumn {
+            TString Table;
+        };
+
+        struct TQuotation {
+            bool AtLhs = false;
+            bool AtRhs = false;
         };
 
         TKeywords Keywords;
@@ -55,10 +63,14 @@ namespace NSQLComplete {
         TMaybe<THint> Hint;
         TMaybe<TObject> Object;
         TMaybe<TCluster> Cluster;
+        TMaybe<TColumn> Column;
         bool Binding = false;
+
+        TQuotation IsQuoted;
         TEditRange EditRange;
     };
 
+    // TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
     class ILocalSyntaxAnalysis {
     public:
         using TPtr = THolder<ILocalSyntaxAnalysis>;
@@ -68,6 +80,9 @@ namespace NSQLComplete {
     };
 
     ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(
-        TLexerSupplier lexer, const THashSet<TString>& IgnoredRules);
+        TLexerSupplier lexer,
+        const THashSet<TString>& ignoredRules,
+        const THashMap<TString, THashSet<TString>>& disabledPreviousByToken,
+        const THashMap<TString, THashSet<TString>>& forcedPreviousByToken);
 
 } // namespace NSQLComplete

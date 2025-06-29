@@ -25,5 +25,6 @@ pkgs: attrs: with pkgs; rec {
 
   cmakeFlags = [
     "-Dlzma=ON"
+    "-Dlibdeflate=OFF"
   ];
 }

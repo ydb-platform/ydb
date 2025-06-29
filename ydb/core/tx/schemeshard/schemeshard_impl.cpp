@@ -1,32 +1,38 @@
-#include "schemeshard.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_login_helper.h"
 #include "schemeshard_svp_migration.h"
+
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
+#include "schemeshard.h"
 #include "schemeshard__data_erasure_manager.h"
+#include "schemeshard_svp_migration.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/tablet/tablet_counters_aggregator.h>
-#include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
-#include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
-#include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/sys_view/partition_stats/partition_stats.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
-#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/sys_view/partition_stats/partition_stats.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
-#include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/library/login/password_checker/password_checker.h>
+
 #include <ydb/library/login/account_lockout/account_lockout.h>
+#include <ydb/library/login/password_checker/password_checker.h>
+
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+
 #include <util/random/random.h>
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
@@ -287,6 +293,30 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
         NKikimrTxDataShard::TX_KIND_SCHEME, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, SelectProcessingParams(pathId)
     );
+}
+
+THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
+        const TPathId& pathId, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const
+{
+    return MakeHolder<TEvColumnShard::TEvProposeTransaction>(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA, TabletID(), ctx.SelfID,
+        ui64(opId.GetTxId()), body, seqNo,  SelectProcessingParams(pathId),
+        0, 0
+    );
+}
+
+THolder<::NActors::IEventBase> TSchemeShard::MakeShardProposal(
+        const TPath& path, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const
+{
+    if (path->IsTable()) {
+        return MakeDataShardProposal(path->PathId, opId, body, ctx);
+    } else if (path->IsColumnTable()) {
+        return MakeColumnShardProposal(path->PathId, opId, seqNo, body, ctx);
+    } else {
+        Y_ABORT();
+    }
 }
 
 TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
@@ -4727,6 +4757,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     ctx.Send(SchemeBoardPopulator, new TEvents::TEvPoisonPill());
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
+    ctx.Send(LoginHelper, new TEvents::TEvPoisonPill());
 
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
@@ -4843,6 +4874,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     Execute(CreateTxInitSchema(), ctx);
 
     SubscribeConsoleConfigs(ctx);
+
+    LoginHelper = Register(CreateLoginHelper(this->LoginProvider).Release());
 }
 
 // This is overriden as noop in order to activate the table only at the end of Init transaction
@@ -5067,6 +5100,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
@@ -5104,6 +5138,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
+        HFuncTraced(TEvPrivate::TEvLoginFinalize, Handle);
         HFuncTraced(TEvSchemeShard::TEvListUsers, Handle);
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
@@ -7795,6 +7830,10 @@ void TSchemeShard::SetShardsQuota(ui64 value) {
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {
     Execute(CreateTxLogin(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvLoginFinalize::TPtr &ev, const TActorContext &ctx) {
+    Execute(CreateTxLoginFinalize(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvListUsers::TPtr &ev, const TActorContext &ctx) {

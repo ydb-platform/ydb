@@ -1,9 +1,6 @@
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-namespace NKikimr::NSchemeShard {
-    extern bool isSysDirCreateAllowed;
-}
 namespace {
 
     using namespace NSchemeShardUT_Private;
@@ -11,34 +8,23 @@ namespace {
     using NKikimrSysView::ESysViewType;
 
     void ExpectEqualSysViewDescription(const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
-                                       const TString& sysViewName,
-                                       const ESysViewType sysViewType) {
+        const TString& sysViewName, const ESysViewType sysViewType, const TPathId& sourceObjectPathId)
+    {
         UNIT_ASSERT(describeResult.HasPathDescription());
         UNIT_ASSERT(describeResult.GetPathDescription().HasSysViewDescription());
         const auto& sysViewDescription = describeResult.GetPathDescription().GetSysViewDescription();
         UNIT_ASSERT_VALUES_EQUAL(sysViewDescription.GetName(), sysViewName);
         UNIT_ASSERT(sysViewDescription.GetType() == sysViewType);
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(sysViewDescription.GetSourceObject()), sourceObjectPathId);
     }
-
-    class TSysDirCreateGuard : public TNonCopyable {
-    public:
-        TSysDirCreateGuard() {
-            NKikimr::NSchemeShard::isSysDirCreateAllowed = true;
-        }
-
-        ~TSysDirCreateGuard() {
-            NKikimr::NSchemeShard::isSysDirCreateAllowed = false;
-        }
-    };
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
     Y_UNIT_TEST(CreateSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 
@@ -51,8 +37,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+            const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+            const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
         }
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -60,17 +48,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+            const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+            const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
         }
     }
 
     Y_UNIT_TEST(DropSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -92,10 +81,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(CreateExistingSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 
@@ -115,16 +103,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
                           {EStatus::StatusSchemeError, EStatus::StatusAlreadyExists});
         env.TestWaitNotification(runtime, txId);
         const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+        const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+        const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
     }
 
     Y_UNIT_TEST(AsyncCreateDifferentSysViews) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 
@@ -145,22 +134,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/sys_view_1");
+            const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+            const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "sys_view_1", ESysViewType::EPartitionStats);
+            ExpectEqualSysViewDescription(describeResult, "sys_view_1", ESysViewType::EPartitionStats, domainPathId);
         }
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/sys_view_2");
+            const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+            const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "sys_view_2", ESysViewType::ENodes);
+            ExpectEqualSysViewDescription(describeResult, "sys_view_2", ESysViewType::ENodes, domainPathId);
         }
     }
 
     Y_UNIT_TEST(AsyncCreateDirWithSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         AsyncMkDir(runtime, ++txId, "/MyRoot", ".sys");
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                            R"(
@@ -175,16 +167,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.sys"), {NLs::Finished});
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+        const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+        const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
     }
 
     Y_UNIT_TEST(AsyncCreateSameSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 
@@ -206,16 +199,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+        const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+        const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
     }
 
     Y_UNIT_TEST(AsyncDropSameSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -240,10 +234,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(ReadOnlyMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
         SetSchemeshardReadOnlyMode(runtime, true);
@@ -274,10 +267,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(EmptyName) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 

@@ -1,11 +1,10 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard__op_traits.h"
-
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -76,7 +75,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
     {
         TString msg = "invalid table name: ";
-        if(!baseTablePath.IsValidLeafName(msg)) {
+        if(!baseTablePath.IsValidLeafName(context.UserToken.Get(), msg)) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
         }
     }
@@ -138,7 +137,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         TPath indexPath = baseTablePath.Child(indexName);
         {
             TString msg = "invalid table index name: ";
-            if (!indexPath.IsValidLeafName(msg)) {
+            if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
             }
         }
@@ -165,7 +164,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         TPath sequencePath = baseTablePath.Child(sequenceName);
         {
             TString msg = "invalid sequence name: ";
-            if (!sequencePath.IsValidLeafName(msg)) {
+            if (!sequencePath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
             }
         }

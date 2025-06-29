@@ -23,8 +23,10 @@ RECURSE_FOR_TESTS(
     ut_external_table_reboots
     ut_extsubdomain
     ut_extsubdomain_reboots
+    ut_failure_injection
     ut_filestore_reboots
     ut_incremental_restore
+    ut_incremental_restore_reboots
     ut_index
     ut_index_build
     ut_index_build_reboots
@@ -51,6 +53,7 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_subdomain
     ut_subdomain_reboots
+    ut_system_names
     ut_sysview
     ut_sysview_reboots
     ut_topic_splitmerge
@@ -85,12 +88,15 @@ SRCS(
     schemeshard__init_schema.cpp
     schemeshard__list_users.cpp
     schemeshard__login.cpp
+    schemeshard__login_finalize.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
     schemeshard__notify.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
     schemeshard__operation.h
+    schemeshard__op_traits.cpp
+    schemeshard__op_traits.h
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp
@@ -249,6 +255,8 @@ SRCS(
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
+    schemeshard_login_helper.cpp
+    schemeshard_login_helper.h
     schemeshard_path.cpp
     schemeshard_path.h
     schemeshard_path_describer.cpp
@@ -261,6 +269,8 @@ SRCS(
     schemeshard_shard_deleter.h
     schemeshard_svp_migration.cpp
     schemeshard_svp_migration.h
+    schemeshard_system_names.cpp
+    schemeshard_system_names.h
     schemeshard_tx_infly.h
     schemeshard_types.cpp
     schemeshard_types.h

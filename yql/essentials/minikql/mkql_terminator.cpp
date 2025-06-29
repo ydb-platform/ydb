@@ -16,14 +16,14 @@ TTerminateException::TTerminateException()
 thread_local ITerminator* TBindTerminator::Terminator = nullptr;
 
 TBindTerminator::TBindTerminator(ITerminator* terminator)
-    : PreviousTerminator(Terminator)
+    : PreviousTerminator_(Terminator)
 {
     Terminator = terminator;
 }
 
 TBindTerminator::~TBindTerminator()
 {
-    Terminator = PreviousTerminator;
+    Terminator = PreviousTerminator_;
 }
 
 TThrowingBindTerminator::TThrowingBindTerminator()

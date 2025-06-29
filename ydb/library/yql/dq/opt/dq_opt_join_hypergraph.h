@@ -558,7 +558,7 @@ public:
             shuffleOrderingIdxByNodeIdx[i] = fdStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle, nullptr);
         }
 
-        TOrderingsStateMachine orderingsFSM(std::move(fdStorage));
+        TOrderingsStateMachine orderingsFSM(std::move(fdStorage), TOrdering::EShuffle);
 
         for (std::size_t i = 0; i < edges.size(); ++i) {
             edges[i].FDs = orderingsFSM.GetFDSet(fdsByEdgeIdx[i]);

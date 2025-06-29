@@ -23,6 +23,8 @@ using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
 
+auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoSortBase::Match(node); };
+
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
@@ -39,10 +41,11 @@ public:
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStagesKeepSorted));
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStages));
         AddHandler(0, &TKqlSequencer::Match, HNDL(BuildSequencerStages));
-        AddHandler(0, [](auto) { return true; }, HNDL(RemoveRedundantSortByPk));
+        AddHandler(0, IsSort, HNDL(RemoveRedundantSortOverReadTable));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapProjections));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
@@ -55,7 +58,7 @@ public:
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
-        AddHandler(0, &TCoTopBase::Match, HNDL(BuildTopStageRemoveSort<false>));
+        AddHandler(0, IsSort, HNDL(BuildTopStageRemoveSort<false>));
         AddHandler(0, &TCoTop::Match, HNDL(BuildTopStage<false>));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
         AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<false>));
@@ -104,7 +107,7 @@ public:
         AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
         AddHandler(1, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<true>));
         AddHandler(1, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<true>));
-        AddHandler(1, &TCoTopBase::Match, HNDL(BuildTopStageRemoveSort<true>));
+        AddHandler(1, IsSort, HNDL(BuildTopStageRemoveSort<true>));
         AddHandler(1, &TCoTop::Match, HNDL(BuildTopStage<true>));
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
         AddHandler(1, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<true>));
@@ -183,7 +186,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildStreamIdxLookupJoinStagesKeepSorted(TExprBase node, TExprContext& ctx) {
-        bool ruleEnabled = KqpCtx.Config->OrderPreservingLookupJoinEnabled();
+        bool ruleEnabled = true;
         TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSorted(node, ctx, TypesCtx, ruleEnabled);
         DumpAppliedRule("BuildStreamIdxLookupJoinStagesKeepSorted", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -201,9 +204,9 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RemoveRedundantSortByPk(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRemoveRedundantSortByPk(node, ctx, KqpCtx);
-        DumpAppliedRule("RemoveRedundantSortByPk", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> RemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRemoveRedundantSortOverReadTable(node, ctx, KqpCtx, TypesCtx);
+        DumpAppliedRule("RemoveRedundantSortOverReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -234,6 +237,12 @@ protected:
     TMaybeNode<TExprBase> PushOlapFilter(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("PushOlapFilter", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> PushOlapProjections(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpPushOlapProjections(node, ctx, KqpCtx, TypesCtx);
+        DumpAppliedRule("PushOlapProjections", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -358,7 +367,7 @@ protected:
     TMaybeNode<TExprBase> BuildTopStageRemoveSort(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        bool ruleEnabled = KqpCtx.Config->OrderPreservingLookupJoinEnabled();
+        bool ruleEnabled = true;
         TExprBase output = KqpBuildTopStageRemoveSort(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal, ruleEnabled);
         DumpAppliedRule("BuildTopStageRemoveSort", node.Ptr(), output.Ptr(), ctx);
         return output;

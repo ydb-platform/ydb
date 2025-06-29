@@ -341,183 +341,183 @@ class TOperatorsParser : public TParser {
 public:
     TOperatorsParser(TOperators& operators, const THashMap<TString, ui32>& typeByName, const TTypes& types,
         const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos)
-        : Operators(operators)
-        , TypeByName(typeByName)
-        , Types(types)
-        , ProcByName(procByName)
-        , Procs(procs)
-        , LazyInfos(lazyInfos)
+        : Operators_(operators)
+        , TypeByName_(typeByName)
+        , Types_(types)
+        , ProcByName_(procByName)
+        , Procs_(procs)
+        , LazyInfos_(lazyInfos)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
-            LastOperator.OperId = FromString<ui32>(value);
+            LastOperator_.OperId = FromString<ui32>(value);
         } else if (key == "oprname") {
-            LastOperator.Name = value;
+            LastOperator_.Name = value;
         } else if (key == "descr") {
-            LastOperator.Descr = value;
+            LastOperator_.Descr = value;
         } else if (key == "oprkind") {
             if (value == "r") {
-                LastOperator.Kind = EOperKind::RightUnary;
+                LastOperator_.Kind = EOperKind::RightUnary;
             } else if (value == "l") {
-                LastOperator.Kind = EOperKind::LeftUnary;
+                LastOperator_.Kind = EOperKind::LeftUnary;
             }
         } else if (key == "oprleft") {
             if (value != "0") {
-                auto typeIdPtr = TypeByName.FindPtr(value);
+                auto typeIdPtr = TypeByName_.FindPtr(value);
                 Y_ENSURE(typeIdPtr);
-                LastOperator.LeftType = *typeIdPtr;
+                LastOperator_.LeftType = *typeIdPtr;
             }
         } else if (key == "oprright") {
             if (value != "0") {
-                auto typeIdPtr = TypeByName.FindPtr(value);
+                auto typeIdPtr = TypeByName_.FindPtr(value);
                 Y_ENSURE(typeIdPtr);
-                LastOperator.RightType = *typeIdPtr;
+                LastOperator_.RightType = *typeIdPtr;
             }
         } else if (key == "oprresult") {
-            auto typeIdPtr = TypeByName.FindPtr(value);
+            auto typeIdPtr = TypeByName_.FindPtr(value);
             Y_ENSURE(typeIdPtr);
-            LastOperator.ResultType = *typeIdPtr;
+            LastOperator_.ResultType = *typeIdPtr;
         } else if (key == "oprcode") {
-            LastCode = value;
+            LastCode_ = value;
         } else if (key == "oprnegate") {
-            LastNegate = value;
+            LastNegate_ = value;
         } else if (key == "oprcom") {
-            LastCom = value;
+            LastCom_ = value;
         }
     }
 
     void OnFinish() override {
-        if (IsSupported) {
-            auto pos = LastCode.find('(');
-            auto code = LastCode.substr(0, pos);
-            auto procIdPtr = ProcByName.FindPtr(code);
+        if (IsSupported_) {
+            auto pos = LastCode_.find('(');
+            auto code = LastCode_.substr(0, pos);
+            auto procIdPtr = ProcByName_.FindPtr(code);
             // skip operator if proc isn't builtin, e.g. path_contain_pt
             if (!procIdPtr) {
-                IsSupported = false;
+                IsSupported_ = false;
             } else {
                 for (auto procId : *procIdPtr) {
-                    auto procPtr = Procs.FindPtr(procId);
+                    auto procPtr = Procs_.FindPtr(procId);
                     Y_ENSURE(procPtr);
-                    if (ValidateOperArgs(LastOperator, procPtr->ArgTypes, Types)) {
-                        Y_ENSURE(!LastOperator.ProcId);
-                        LastOperator.ProcId = procId;
+                    if (ValidateOperArgs(LastOperator_, procPtr->ArgTypes, Types_)) {
+                        Y_ENSURE(!LastOperator_.ProcId);
+                        LastOperator_.ProcId = procId;
                     }
                 }
 
                 // can be missing for example jsonb - _text
-                if (LastOperator.ProcId) {
-                    Y_ENSURE(!LastOperator.Name.empty());
-                    Operators[LastOperator.OperId] = LastOperator;
+                if (LastOperator_.ProcId) {
+                    Y_ENSURE(!LastOperator_.Name.empty());
+                    Operators_[LastOperator_.OperId] = LastOperator_;
                 }
 
-                if (!LastCom.empty()) {
-                    LazyInfos[LastOperator.OperId].Com = LastCom;
+                if (!LastCom_.empty()) {
+                    LazyInfos_[LastOperator_.OperId].Com = LastCom_;
                 }
 
-                if (!LastNegate.empty()) {
-                    LazyInfos[LastOperator.OperId].Negate = LastNegate;
+                if (!LastNegate_.empty()) {
+                    LazyInfos_[LastOperator_.OperId].Negate = LastNegate_;
                 }
             }
         }
 
-        LastOperator = TOperDesc();
-        LastCode = "";
-        LastNegate = "";
-        LastCom = "";
-        IsSupported = true;
+        LastOperator_ = TOperDesc();
+        LastCode_ = "";
+        LastNegate_ = "";
+        LastCom_ = "";
+        IsSupported_ = true;
     }
 
 private:
-    TOperators& Operators;
-    const THashMap<TString, ui32>& TypeByName;
-    const TTypes& Types;
-    const THashMap<TString, TVector<ui32>>& ProcByName;
-    const TProcs& Procs;
-    THashMap<ui32, TLazyOperInfo>& LazyInfos;
-    TOperDesc LastOperator;
-    bool IsSupported = true;
-    TString LastCode;
-    TString LastNegate;
-    TString LastCom;
+    TOperators& Operators_;
+    const THashMap<TString, ui32>& TypeByName_;
+    const TTypes& Types_;
+    const THashMap<TString, TVector<ui32>>& ProcByName_;
+    const TProcs& Procs_;
+    THashMap<ui32, TLazyOperInfo>& LazyInfos_;
+    TOperDesc LastOperator_;
+    bool IsSupported_ = true;
+    TString LastCode_;
+    TString LastNegate_;
+    TString LastCom_;
 };
 
 class TProcsParser : public TParser {
 public:
     TProcsParser(TProcs& procs, const THashMap<TString, ui32>& typeByName)
-        : Procs(procs)
-        , TypeByName(typeByName)
+        : Procs_(procs)
+        , TypeByName_(typeByName)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
-            LastProc.ProcId = FromString<ui32>(value);
+            LastProc_.ProcId = FromString<ui32>(value);
         } else if (key == "provariadic") {
-            auto idPtr = TypeByName.FindPtr(value);
+            auto idPtr = TypeByName_.FindPtr(value);
             Y_ENSURE(idPtr);
-            LastProc.VariadicType = *idPtr;
+            LastProc_.VariadicType = *idPtr;
         } else if (key == "descr") {
-            LastProc.Descr = value;
+            LastProc_.Descr = value;
         } else if (key == "prokind") {
             if (value == "f") {
-                LastProc.Kind = EProcKind::Function;
+                LastProc_.Kind = EProcKind::Function;
             } else if (value == "a") {
-                LastProc.Kind = EProcKind::Aggregate;
+                LastProc_.Kind = EProcKind::Aggregate;
             } else if (value == "w") {
-                LastProc.Kind = EProcKind::Window;
+                LastProc_.Kind = EProcKind::Window;
             } else {
-                IsSupported = false;
+                IsSupported_ = false;
             }
         } else if (key == "prorettype") {
-            auto idPtr = TypeByName.FindPtr(value);
+            auto idPtr = TypeByName_.FindPtr(value);
             Y_ENSURE(idPtr);
-            LastProc.ResultType = *idPtr;
+            LastProc_.ResultType = *idPtr;
         } else if (key == "proname") {
-            LastProc.Name = value;
+            LastProc_.Name = value;
         } else if (key == "prosrc") {
-            LastProc.Src = value;
+            LastProc_.Src = value;
         } else if (key == "prolang") {
             if (value == "sql") {
-                LastProc.Lang = LangSQL;
+                LastProc_.Lang = LangSQL;
             } else if (value == "c") {
-                LastProc.Lang = LangC;
+                LastProc_.Lang = LangC;
             } else {
-                IsSupported = false;
+                IsSupported_ = false;
             }
         } else if (key == "proargtypes") {
             TVector<TString> strArgs;
             Split(value, " ", strArgs);
-            LastProc.ArgTypes.reserve(strArgs.size());
+            LastProc_.ArgTypes.reserve(strArgs.size());
             for (const auto& s : strArgs) {
-                auto idPtr = TypeByName.FindPtr(s);
+                auto idPtr = TypeByName_.FindPtr(s);
                 Y_ENSURE(idPtr);
-                LastProc.ArgTypes.push_back(*idPtr);
+                LastProc_.ArgTypes.push_back(*idPtr);
             }
         } else if (key == "proisstrict") {
-            LastProc.IsStrict = (value == "t");
+            LastProc_.IsStrict = (value == "t");
         } else if (key == "proretset") {
-            LastProc.ReturnSet = (value == "t");
+            LastProc_.ReturnSet = (value == "t");
         } else if (key == "proallargtypes") {
-            AllArgTypesStr = value;
+            AllArgTypesStr_ = value;
         } else if (key == "proargmodes") {
-            ArgModesStr = value;
+            ArgModesStr_ = value;
         } else if (key == "proargnames") {
-            ArgNamesStr = value;
+            ArgNamesStr_ = value;
         }
     }
 
     void OnFinish() override {
-        if (IsSupported) {
-            if (LastProc.VariadicType) {
-                Y_ENSURE(!ArgModesStr.empty());
+        if (IsSupported_) {
+            if (LastProc_.VariadicType) {
+                Y_ENSURE(!ArgModesStr_.empty());
             }
 
-            if (!ArgModesStr.empty()) {
-                Y_ENSURE(ArgModesStr.front() == '{');
-                Y_ENSURE(ArgModesStr.back() == '}');
+            if (!ArgModesStr_.empty()) {
+                Y_ENSURE(ArgModesStr_.front() == '{');
+                Y_ENSURE(ArgModesStr_.back() == '}');
                 TVector<TString> modes;
-                Split(ArgModesStr.substr(1, ArgModesStr.size() - 2), ",", modes);
-                Y_ENSURE(modes.size() >= LastProc.ArgTypes.size());
+                Split(ArgModesStr_.substr(1, ArgModesStr_.size() - 2), ",", modes);
+                Y_ENSURE(modes.size() >= LastProc_.ArgTypes.size());
                 ui32 inputArgsCount = 0;
                 bool startedVarArgs = false;
                 bool startedOutArgs = false;
@@ -530,73 +530,73 @@ public:
                     } else {
                         Y_ENSURE(!startedVarArgs && !startedOutArgs);
                         Y_ENSURE(modes[i] == "v");
-                        Y_ENSURE(LastProc.VariadicType);
+                        Y_ENSURE(LastProc_.VariadicType);
                         startedVarArgs = true;
                     }
                 }
 
-                if (LastProc.VariadicType) {
-                    Y_ENSURE(LastProc.ArgTypes.size() > inputArgsCount);
-                    LastProc.VariadicArgType = LastProc.ArgTypes[inputArgsCount];
-                    Y_ENSURE(LastProc.VariadicArgType);
+                if (LastProc_.VariadicType) {
+                    Y_ENSURE(LastProc_.ArgTypes.size() > inputArgsCount);
+                    LastProc_.VariadicArgType = LastProc_.ArgTypes[inputArgsCount];
+                    Y_ENSURE(LastProc_.VariadicArgType);
                 }
 
-                LastProc.ArgTypes.resize(inputArgsCount);
+                LastProc_.ArgTypes.resize(inputArgsCount);
             }
         }
 
-        if (IsSupported) {
-            auto variadicDelta = LastProc.VariadicType ? 1 : 0;
-            if (!ArgNamesStr.empty()) {
-                Y_ENSURE(ArgNamesStr.front() == '{');
-                Y_ENSURE(ArgNamesStr.back() == '}');
+        if (IsSupported_) {
+            auto variadicDelta = LastProc_.VariadicType ? 1 : 0;
+            if (!ArgNamesStr_.empty()) {
+                Y_ENSURE(ArgNamesStr_.front() == '{');
+                Y_ENSURE(ArgNamesStr_.back() == '}');
                 TVector<TString> names;
-                Split(ArgNamesStr.substr(1, ArgNamesStr.size() - 2), ",", names);
-                Y_ENSURE(names.size() >= LastProc.ArgTypes.size() + variadicDelta);
-                LastProc.OutputArgNames.insert(LastProc.OutputArgNames.begin(), names.begin() + LastProc.ArgTypes.size() + variadicDelta, names.end());
-                if (LastProc.VariadicType) {
-                    LastProc.VariadicArgName = names[LastProc.ArgTypes.size()];
+                Split(ArgNamesStr_.substr(1, ArgNamesStr_.size() - 2), ",", names);
+                Y_ENSURE(names.size() >= LastProc_.ArgTypes.size() + variadicDelta);
+                LastProc_.OutputArgNames.insert(LastProc_.OutputArgNames.begin(), names.begin() + LastProc_.ArgTypes.size() + variadicDelta, names.end());
+                if (LastProc_.VariadicType) {
+                    LastProc_.VariadicArgName = names[LastProc_.ArgTypes.size()];
                 }
 
-                LastProc.InputArgNames.insert(LastProc.InputArgNames.begin(), names.begin(), names.begin() + LastProc.ArgTypes.size());
+                LastProc_.InputArgNames.insert(LastProc_.InputArgNames.begin(), names.begin(), names.begin() + LastProc_.ArgTypes.size());
             }
 
-            if (!AllArgTypesStr.empty()) {
-                Y_ENSURE(!ArgModesStr.empty());
-                Y_ENSURE(AllArgTypesStr.front() == '{');
-                Y_ENSURE(AllArgTypesStr.back() == '}');
+            if (!AllArgTypesStr_.empty()) {
+                Y_ENSURE(!ArgModesStr_.empty());
+                Y_ENSURE(AllArgTypesStr_.front() == '{');
+                Y_ENSURE(AllArgTypesStr_.back() == '}');
                 TVector<TString> types;
-                Split(AllArgTypesStr.substr(1, AllArgTypesStr.size() - 2), ",", types);
-                Y_ENSURE(types.size() >= LastProc.ArgTypes.size() + variadicDelta);
+                Split(AllArgTypesStr_.substr(1, AllArgTypesStr_.size() - 2), ",", types);
+                Y_ENSURE(types.size() >= LastProc_.ArgTypes.size() + variadicDelta);
 
-                for (size_t i = LastProc.ArgTypes.size() + variadicDelta; i < types.size(); ++i) {
-                    auto idPtr = TypeByName.FindPtr(types[i]);
+                for (size_t i = LastProc_.ArgTypes.size() + variadicDelta; i < types.size(); ++i) {
+                    auto idPtr = TypeByName_.FindPtr(types[i]);
                     Y_ENSURE(idPtr);
-                    LastProc.OutputArgTypes.push_back(*idPtr);
+                    LastProc_.OutputArgTypes.push_back(*idPtr);
                 }
             }
         }
 
-        if (IsSupported) {
-            Y_ENSURE(!LastProc.Name.empty());
-            Procs[LastProc.ProcId] = LastProc;
+        if (IsSupported_) {
+            Y_ENSURE(!LastProc_.Name.empty());
+            Procs_[LastProc_.ProcId] = LastProc_;
         }
 
-        IsSupported = true;
-        LastProc = TProcDesc();
-        AllArgTypesStr = "";
-        ArgModesStr = "";
-        ArgNamesStr = "";
+        IsSupported_ = true;
+        LastProc_ = TProcDesc();
+        AllArgTypesStr_ = "";
+        ArgModesStr_ = "";
+        ArgNamesStr_ = "";
     }
 
 private:
-    TProcs& Procs;
-    const THashMap<TString, ui32>& TypeByName;
-    TProcDesc LastProc;
-    bool IsSupported = true;
-    TString AllArgTypesStr;
-    TString ArgModesStr;
-    TString ArgNamesStr;
+    TProcs& Procs_;
+    const THashMap<TString, ui32>& TypeByName_;
+    TProcDesc LastProc_;
+    bool IsSupported_ = true;
+    TString AllArgTypesStr_;
+    TString ArgModesStr_;
+    TString ArgNamesStr_;
 };
 
 struct TLazyTypeInfo {
@@ -613,45 +613,45 @@ struct TLazyTypeInfo {
 class TTypesParser : public TParser {
 public:
     TTypesParser(TTypes& types, THashMap<ui32, TLazyTypeInfo>& lazyInfos)
-        : Types(types)
-        , LazyInfos(lazyInfos)
+        : Types_(types)
+        , LazyInfos_(lazyInfos)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
-            LastType.TypeId = FromString<ui32>(value);
+            LastType_.TypeId = FromString<ui32>(value);
         } else if (key == "array_type_oid") {
-            LastType.ArrayTypeId = FromString<ui32>(value);
+            LastType_.ArrayTypeId = FromString<ui32>(value);
         } else if (key == "descr") {
-            LastType.Descr = value;
+            LastType_.Descr = value;
         } else if (key == "typname") {
-            LastType.Name = value;
+            LastType_.Name = value;
         } else if (key == "typcategory") {
             Y_ENSURE(value.size() == 1);
-            LastType.Category = value[0];
+            LastType_.Category = value[0];
         } else if (key == "typlen") {
             if (value == "NAMEDATALEN") {
-                LastType.TypeLen = 64;
+                LastType_.TypeLen = 64;
             } else if (value == "SIZEOF_POINTER") {
-                LastType.TypeLen = 8;
+                LastType_.TypeLen = 8;
             } else {
-                LastType.TypeLen = FromString<i32>(value);
+                LastType_.TypeLen = FromString<i32>(value);
             }
         } else if (key == "typalign") {
             if (value == "ALIGNOF_POINTER") {
-                LastType.TypeAlign = 'i'; // doesn't matter for pointers
+                LastType_.TypeAlign = 'i'; // doesn't matter for pointers
             } else {
                 Y_ENSURE(value.size() == 1);
-                LastType.TypeAlign = value[0];
+                LastType_.TypeAlign = value[0];
             }
         } else if (key == "typdelim") {
             Y_ENSURE(value.size() == 1);
-            LastType.TypeDelim = value[0];
+            LastType_.TypeDelim = value[0];
         } else if (key == "typtype") {
             Y_ENSURE(value.size() == 1);
             const auto typType = value[0];
 
-            LastType.TypType =
+            LastType_.TypType =
                     (typType == 'b') ? ETypType::Base :
                     (typType == 'c') ? ETypType::Composite :
                     (typType == 'd') ? ETypType::Domain :
@@ -662,99 +662,99 @@ public:
                     ythrow yexception() << "Unknown typtype value: " << value;
         } else if (key == "typcollation") {
             // hardcode collations for now. There are only three of 'em in .dat file
-            LastType.TypeCollation =
+            LastType_.TypeCollation =
                     (value == "default") ? DefaultCollationOid :
                     (value == "C") ? C_CollationOid :
                     (value == "POSIX") ? PosixCollationOid :
                     ythrow yexception() << "Unknown typcollation value: " << value;
         } else if (key == "typelem") {
-            LastLazyTypeInfo.ElementType = value; // resolve later
+            LastLazyTypeInfo_.ElementType = value; // resolve later
         } else if (key == "typinput") {
-            LastLazyTypeInfo.InFunc = value; // resolve later
+            LastLazyTypeInfo_.InFunc = value; // resolve later
         } else if (key == "typoutput") {
-            LastLazyTypeInfo.OutFunc = value; // resolve later
+            LastLazyTypeInfo_.OutFunc = value; // resolve later
         } else if (key == "typsend") {
-            LastLazyTypeInfo.SendFunc = value; // resolve later
+            LastLazyTypeInfo_.SendFunc = value; // resolve later
         } else if (key == "typreceive") {
-            LastLazyTypeInfo.ReceiveFunc = value; // resolve later
+            LastLazyTypeInfo_.ReceiveFunc = value; // resolve later
         } else if (key == "typmodin") {
-            LastLazyTypeInfo.ModInFunc = value; // resolve later
+            LastLazyTypeInfo_.ModInFunc = value; // resolve later
         } else if (key == "typmodout") {
-            LastLazyTypeInfo.ModOutFunc = value; // resolve later
+            LastLazyTypeInfo_.ModOutFunc = value; // resolve later
         } else if (key == "typsubscript") {
-            LastLazyTypeInfo.SubscriptFunc = value; // resolve later
+            LastLazyTypeInfo_.SubscriptFunc = value; // resolve later
         } else if (key == "typbyval") {
             if (value == "f") {
-                LastType.PassByValue = false;
+                LastType_.PassByValue = false;
             } else if (value == "t" || value == "FLOAT8PASSBYVAL") {
-                LastType.PassByValue = true;
+                LastType_.PassByValue = true;
             } else {
                 ythrow yexception() << "Unknown typbyval value: " << value;
             }
         } else if (key == "typispreferred") {
-            LastType.IsPreferred = (value == "t");
+            LastType_.IsPreferred = (value == "t");
         }
     }
 
     void OnFinish() override {
-        Y_ENSURE(!LastType.Name.empty());
-        Y_ENSURE(LastType.TypeLen != 0);
-        if (LastType.TypeLen < 0 || LastType.TypeLen > 8) {
-            Y_ENSURE(!LastType.PassByValue);
+        Y_ENSURE(!LastType_.Name.empty());
+        Y_ENSURE(LastType_.TypeLen != 0);
+        if (LastType_.TypeLen < 0 || LastType_.TypeLen > 8) {
+            Y_ENSURE(!LastType_.PassByValue);
         }
 
-        Types[LastType.TypeId] = LastType;
-        if (LastType.ArrayTypeId) {
-            auto arrayType = LastType;
+        Types_[LastType_.TypeId] = LastType_;
+        if (LastType_.ArrayTypeId) {
+            auto arrayType = LastType_;
             arrayType.Name = "_" + arrayType.Name;
             arrayType.ElementTypeId = arrayType.TypeId;
-            arrayType.TypeId = LastType.ArrayTypeId;
+            arrayType.TypeId = LastType_.ArrayTypeId;
             arrayType.PassByValue = false;
             arrayType.TypeLen = -1;
-            Types[LastType.ArrayTypeId] = arrayType;
+            Types_[LastType_.ArrayTypeId] = arrayType;
         }
 
-        LazyInfos[LastType.TypeId] = LastLazyTypeInfo;
-        if (LastType.ArrayTypeId) {
-            LastLazyTypeInfo.OutFunc = "array_out";
-            LastLazyTypeInfo.InFunc = "array_in";
-            LastLazyTypeInfo.SendFunc = "array_send";
-            LastLazyTypeInfo.ReceiveFunc = "array_recv";
-            LastLazyTypeInfo.ElementType = "";
-            LazyInfos[LastType.ArrayTypeId] = LastLazyTypeInfo;
+        LazyInfos_[LastType_.TypeId] = LastLazyTypeInfo_;
+        if (LastType_.ArrayTypeId) {
+            LastLazyTypeInfo_.OutFunc = "array_out";
+            LastLazyTypeInfo_.InFunc = "array_in";
+            LastLazyTypeInfo_.SendFunc = "array_send";
+            LastLazyTypeInfo_.ReceiveFunc = "array_recv";
+            LastLazyTypeInfo_.ElementType = "";
+            LazyInfos_[LastType_.ArrayTypeId] = LastLazyTypeInfo_;
         }
 
-        LastType = TTypeDesc();
-        LastLazyTypeInfo = TLazyTypeInfo();
+        LastType_ = TTypeDesc();
+        LastLazyTypeInfo_ = TLazyTypeInfo();
     }
 
 private:
-    TTypes& Types;
-    THashMap<ui32, TLazyTypeInfo>& LazyInfos;
-    TTypeDesc LastType;
-    TLazyTypeInfo LastLazyTypeInfo;
+    TTypes& Types_;
+    THashMap<ui32, TLazyTypeInfo>& LazyInfos_;
+    TTypeDesc LastType_;
+    TLazyTypeInfo LastLazyTypeInfo_;
 };
 
 class TCastsParser : public TParser {
 public:
     TCastsParser(TCasts& casts, const THashMap<TString, ui32>& typeByName, const TTypes& types,
         const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
-        : Casts(casts)
-        , TypeByName(typeByName)
-        , Types(types)
-        , ProcByName(procByName)
-        , Procs(procs)
+        : Casts_(casts)
+        , TypeByName_(typeByName)
+        , Types_(types)
+        , ProcByName_(procByName)
+        , Procs_(procs)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "castsource") {
-            auto typePtr = TypeByName.FindPtr(value);
+            auto typePtr = TypeByName_.FindPtr(value);
             Y_ENSURE(typePtr);
-            LastCast.SourceId = *typePtr;
+            LastCast_.SourceId = *typePtr;
         } else if (key == "casttarget") {
-            auto typePtr = TypeByName.FindPtr(value);
+            auto typePtr = TypeByName_.FindPtr(value);
             Y_ENSURE(typePtr);
-            LastCast.TargetId = *typePtr;
+            LastCast_.TargetId = *typePtr;
         } else if (key == "castfunc") {
             if (value != "0") {
                 if (value.Contains('(')) {
@@ -769,20 +769,20 @@ public:
 
                     auto funcName = value.substr(0, pos1);
                     auto inputType = value.substr(pos1 + 1, pos2 - pos1 - 1);
-                    auto inputTypeIdPtr = TypeByName.FindPtr(inputType);
+                    auto inputTypeIdPtr = TypeByName_.FindPtr(inputType);
                     Y_ENSURE(inputTypeIdPtr);
-                    auto procIdPtr = ProcByName.FindPtr(funcName);
+                    auto procIdPtr = ProcByName_.FindPtr(funcName);
                     Y_ENSURE(procIdPtr);
                     bool found = false;
                     for (const auto& procId : *procIdPtr) {
-                        auto procPtr = Procs.FindPtr(procId);
+                        auto procPtr = Procs_.FindPtr(procId);
                         Y_ENSURE(procPtr);
                         if (procPtr->ArgTypes.size() < 1) {
                             continue;
                         }
 
-                        if (IsCompatibleTo(*inputTypeIdPtr, procPtr->ArgTypes[0], Types)) {
-                            LastCast.FunctionId = procPtr->ProcId;
+                        if (IsCompatibleTo(*inputTypeIdPtr, procPtr->ArgTypes[0], Types_)) {
+                            LastCast_.FunctionId = procPtr->ProcId;
                             found = true;
                             break;
                         }
@@ -790,22 +790,22 @@ public:
 
                     if (!found) {
                         // e.g. convert circle to 12-vertex polygon, used sql proc
-                        IsSupported = false;
+                        IsSupported_ = false;
                     }
                 } else {
-                    auto procIdPtr = ProcByName.FindPtr(value);
+                    auto procIdPtr = ProcByName_.FindPtr(value);
                     Y_ENSURE(procIdPtr);
                     Y_ENSURE(procIdPtr->size() == 1);
-                    LastCast.FunctionId = procIdPtr->at(0);
+                    LastCast_.FunctionId = procIdPtr->at(0);
                 }
             }
         } else if (key == "castmethod") {
             if (value == "f") {
-                LastCast.Method = ECastMethod::Function;
+                LastCast_.Method = ECastMethod::Function;
             } else if (value == "i") {
-                LastCast.Method = ECastMethod::InOut;
+                LastCast_.Method = ECastMethod::InOut;
             } else if (value == "b") {
-                LastCast.Method = ECastMethod::Binary;
+                LastCast_.Method = ECastMethod::Binary;
             } else {
                 ythrow yexception() << "Unknown castmethod value: " << value;
             }
@@ -813,7 +813,7 @@ public:
             Y_ENSURE(value.size() == 1);
             const auto castCtx = value[0];
 
-            LastCast.CoercionCode =
+            LastCast_.CoercionCode =
                     (castCtx == 'i') ? ECoercionCode::Implicit :
                     (castCtx == 'a') ? ECoercionCode::Assignment :
                     (castCtx == 'e') ? ECoercionCode::Explicit :
@@ -822,130 +822,130 @@ public:
     }
 
     void OnFinish() override {
-        if (IsSupported) {
-            auto id = 1 + Casts.size();
-            Casts[id] = LastCast;
+        if (IsSupported_) {
+            auto id = 1 + Casts_.size();
+            Casts_[id] = LastCast_;
         }
 
-        LastCast = TCastDesc();
-        IsSupported = true;
+        LastCast_ = TCastDesc();
+        IsSupported_ = true;
     }
 
 private:
-    TCasts& Casts;
-    const THashMap<TString, ui32>& TypeByName;
-    const TTypes& Types;
-    const THashMap<TString, TVector<ui32>>& ProcByName;
-    const TProcs& Procs;
-    TCastDesc LastCast;
-    bool IsSupported = true;
+    TCasts& Casts_;
+    const THashMap<TString, ui32>& TypeByName_;
+    const TTypes& Types_;
+    const THashMap<TString, TVector<ui32>>& ProcByName_;
+    const TProcs& Procs_;
+    TCastDesc LastCast_;
+    bool IsSupported_ = true;
 };
 
 class TAggregationsParser : public TParser {
 public:
     TAggregationsParser(TAggregations& aggregations, const THashMap<TString, ui32>& typeByName,
         const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
-        : Aggregations(aggregations)
-        , TypeByName(typeByName)
-        , Types(types)
-        , ProcByName(procByName)
-        , Procs(procs)
+        : Aggregations_(aggregations)
+        , TypeByName_(typeByName)
+        , Types_(types)
+        , ProcByName_(procByName)
+        , Procs_(procs)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
-        Y_UNUSED(ProcByName);
+        Y_UNUSED(ProcByName_);
         if (key == "aggtranstype") {
-            auto typeId = TypeByName.FindPtr(value);
+            auto typeId = TypeByName_.FindPtr(value);
             Y_ENSURE(typeId);
-            LastAggregation.TransTypeId = *typeId;
+            LastAggregation_.TransTypeId = *typeId;
         } else if (key == "aggfnoid") {
-            LastOid = value;
+            LastOid_ = value;
         } else if (key == "aggtransfn") {
-            LastTransFunc = value;
+            LastTransFunc_ = value;
         } else if (key == "aggfinalfn") {
-            LastFinalFunc = value;
+            LastFinalFunc_ = value;
         } else if (key == "aggcombinefn") {
-            LastCombineFunc = value;
+            LastCombineFunc_ = value;
         } else if (key == "aggserialfn") {
-            LastSerializeFunc = value;
+            LastSerializeFunc_ = value;
         } else if (key == "aggdeserialfn") {
-            LastDeserializeFunc = value;
+            LastDeserializeFunc_ = value;
         } else if (key == "aggkind") {
             if (value == "n") {
-                LastAggregation.Kind = EAggKind::Normal;
+                LastAggregation_.Kind = EAggKind::Normal;
             } else if (value == "o") {
-                LastAggregation.Kind = EAggKind::OrderedSet;
+                LastAggregation_.Kind = EAggKind::OrderedSet;
             } else if (value == "h") {
-                LastAggregation.Kind = EAggKind::Hypothetical;
+                LastAggregation_.Kind = EAggKind::Hypothetical;
             } else {
                 ythrow yexception() << "Unknown aggkind value: " << value;
             }
         } else if (key == "agginitval") {
-            LastAggregation.InitValue = value;
+            LastAggregation_.InitValue = value;
         } else if (key == "aggfinalextra") {
-            LastAggregation.FinalExtra = (value == "t");;
+            LastAggregation_.FinalExtra = (value == "t");;
         } else if (key == "aggnumdirectargs") {
-            LastAggregation.NumDirectArgs = FromString<ui32>(value);
+            LastAggregation_.NumDirectArgs = FromString<ui32>(value);
         }
     }
 
     void OnFinish() override {
-        if (IsSupported) {
+        if (IsSupported_) {
             if (FillSupported()) {
-                Aggregations[LastAggregation.AggId] = LastAggregation;
+                Aggregations_[LastAggregation_.AggId] = LastAggregation_;
             }
         }
 
-        LastAggregation = TAggregateDesc();
-        IsSupported = true;
-        LastOid = "";
-        LastTransFunc = "";
-        LastFinalFunc = "";
-        LastCombineFunc = "";
-        LastSerializeFunc = "";
-        LastDeserializeFunc = "";
+        LastAggregation_ = TAggregateDesc();
+        IsSupported_ = true;
+        LastOid_ = "";
+        LastTransFunc_ = "";
+        LastFinalFunc_ = "";
+        LastCombineFunc_ = "";
+        LastSerializeFunc_ = "";
+        LastDeserializeFunc_ = "";
     }
 
     bool FillSupported() {
-        Y_ENSURE(LastAggregation.TransTypeId);
-        Y_ENSURE(LastOid);
-        Y_ENSURE(LastTransFunc);
-        auto transFuncIdsPtr = ProcByName.FindPtr(LastTransFunc);
+        Y_ENSURE(LastAggregation_.TransTypeId);
+        Y_ENSURE(LastOid_);
+        Y_ENSURE(LastTransFunc_);
+        auto transFuncIdsPtr = ProcByName_.FindPtr(LastTransFunc_);
         if (!transFuncIdsPtr) {
             // e.g. variadic ordered_set_transition_multi
             return false;
         }
 
         for (const auto id : *transFuncIdsPtr) {
-            auto procPtr = Procs.FindPtr(id);
+            auto procPtr = Procs_.FindPtr(id);
             Y_ENSURE(procPtr);
             if (procPtr->ArgTypes.size() >= 1 &&
-                IsCompatibleTo(LastAggregation.TransTypeId, procPtr->ArgTypes[0], Types)) {
-                Y_ENSURE(!LastAggregation.TransFuncId);
-                LastAggregation.TransFuncId = id;
+                IsCompatibleTo(LastAggregation_.TransTypeId, procPtr->ArgTypes[0], Types_)) {
+                Y_ENSURE(!LastAggregation_.TransFuncId);
+                LastAggregation_.TransFuncId = id;
             }
         }
 
-        Y_ENSURE(LastAggregation.TransFuncId);
+        Y_ENSURE(LastAggregation_.TransFuncId);
 
         // oid format: name(arg1,arg2...)
-        auto pos1 = LastOid.find('(');
+        auto pos1 = LastOid_.find('(');
         if (pos1 != TString::npos) {
-            LastAggregation.Name = LastOid.substr(0, pos1);
+            LastAggregation_.Name = LastOid_.substr(0, pos1);
             auto pos = pos1 + 1;
             for (;;) {
-                auto nextPos = Min(LastOid.find(',', pos), LastOid.find(')', pos));
+                auto nextPos = Min(LastOid_.find(',', pos), LastOid_.find(')', pos));
                 Y_ENSURE(nextPos != TString::npos);
                 if (pos == nextPos) {
                     break;
                 }
 
-                auto arg = LastOid.substr(pos, nextPos - pos);
-                auto argTypeId = TypeByName.FindPtr(arg);
+                auto arg = LastOid_.substr(pos, nextPos - pos);
+                auto argTypeId = TypeByName_.FindPtr(arg);
                 Y_ENSURE(argTypeId);
-                LastAggregation.ArgTypes.push_back(*argTypeId);
+                LastAggregation_.ArgTypes.push_back(*argTypeId);
                 pos = nextPos;
-                if (LastOid[pos] == ')') {
+                if (LastOid_[pos] == ')') {
                     break;
                 } else {
                     ++pos;
@@ -953,45 +953,45 @@ public:
             }
         } else {
             // no signature in oid, use transfunc
-            LastAggregation.Name = LastOid;
-            auto procPtr = Procs.FindPtr(LastAggregation.TransFuncId);
+            LastAggregation_.Name = LastOid_;
+            auto procPtr = Procs_.FindPtr(LastAggregation_.TransFuncId);
             Y_ENSURE(procPtr);
-            LastAggregation.ArgTypes = procPtr->ArgTypes;
-            Y_ENSURE(LastAggregation.ArgTypes.size() >= 1);
-            Y_ENSURE(IsCompatibleTo(LastAggregation.TransTypeId, LastAggregation.ArgTypes[0], Types));
-            LastAggregation.ArgTypes.erase(LastAggregation.ArgTypes.begin());
+            LastAggregation_.ArgTypes = procPtr->ArgTypes;
+            Y_ENSURE(LastAggregation_.ArgTypes.size() >= 1);
+            Y_ENSURE(IsCompatibleTo(LastAggregation_.TransTypeId, LastAggregation_.ArgTypes[0], Types_));
+            LastAggregation_.ArgTypes.erase(LastAggregation_.ArgTypes.begin());
         }
 
-        Y_ENSURE(!LastAggregation.Name.empty());
-        auto funcIdsPtr = ProcByName.FindPtr(LastAggregation.Name);
+        Y_ENSURE(!LastAggregation_.Name.empty());
+        auto funcIdsPtr = ProcByName_.FindPtr(LastAggregation_.Name);
         Y_ENSURE(funcIdsPtr);
         if (funcIdsPtr->size() == 1) {
-            LastAggregation.AggId = funcIdsPtr->front();
+            LastAggregation_.AggId = funcIdsPtr->front();
         } else {
             for (const auto id : *funcIdsPtr) {
-                auto procPtr = Procs.FindPtr(id);
+                auto procPtr = Procs_.FindPtr(id);
                 Y_ENSURE(procPtr);
-                if (ValidateArgs(procPtr->ArgTypes, LastAggregation.ArgTypes, Types, procPtr->VariadicType)) {
-                    LastAggregation.AggId = id;
+                if (ValidateArgs(procPtr->ArgTypes, LastAggregation_.ArgTypes, Types_, procPtr->VariadicType)) {
+                    LastAggregation_.AggId = id;
                     break;
                 }
             }
         }
 
-        Y_ENSURE(LastAggregation.AggId);
-        if (!ResolveFunc(LastFinalFunc, LastAggregation.FinalFuncId, 1)) {
+        Y_ENSURE(LastAggregation_.AggId);
+        if (!ResolveFunc(LastFinalFunc_, LastAggregation_.FinalFuncId, 1)) {
             return false;
         }
 
-        if (!ResolveFunc(LastCombineFunc, LastAggregation.CombineFuncId, 2)) {
+        if (!ResolveFunc(LastCombineFunc_, LastAggregation_.CombineFuncId, 2)) {
             return false;
         }
 
-        if (!ResolveFunc(LastSerializeFunc, LastAggregation.SerializeFuncId, 1)) {
+        if (!ResolveFunc(LastSerializeFunc_, LastAggregation_.SerializeFuncId, 1)) {
             return false;
         }
 
-        if (!ResolveFunc(LastDeserializeFunc, LastAggregation.DeserializeFuncId, 0)) {
+        if (!ResolveFunc(LastDeserializeFunc_, LastAggregation_.DeserializeFuncId, 0)) {
             return false;
         }
 
@@ -1000,7 +1000,7 @@ public:
 
     bool ResolveFunc(const TString& name, ui32& funcId, ui32 stateArgsCount) {
         if (name) {
-            auto funcIdsPtr = ProcByName.FindPtr(name);
+            auto funcIdsPtr = ProcByName_.FindPtr(name);
             if (!funcIdsPtr) {
                 return false;
             }
@@ -1010,12 +1010,12 @@ public:
             }
 
             for (const auto id : *funcIdsPtr) {
-                auto procPtr = Procs.FindPtr(id);
+                auto procPtr = Procs_.FindPtr(id);
                 Y_ENSURE(procPtr);
                 bool found = true;
                 if (stateArgsCount > 0 && procPtr->ArgTypes.size() == stateArgsCount) {
                     for (ui32 i = 0; i < stateArgsCount; ++i) {
-                        if (!IsCompatibleTo(LastAggregation.TransTypeId, procPtr->ArgTypes[i], Types)) {
+                        if (!IsCompatibleTo(LastAggregation_.TransTypeId, procPtr->ArgTypes[i], Types_)) {
                             found = false;
                             break;
                         }
@@ -1035,134 +1035,134 @@ public:
     }
 
 private:
-    TAggregations& Aggregations;
-    const THashMap<TString, ui32>& TypeByName;
-    const TTypes& Types;
-    const THashMap<TString, TVector<ui32>>& ProcByName;
-    const TProcs& Procs;
-    TAggregateDesc LastAggregation;
-    bool IsSupported = true;
-    TString LastOid;
-    TString LastTransFunc;
-    TString LastFinalFunc;
-    TString LastCombineFunc;
-    TString LastSerializeFunc;
-    TString LastDeserializeFunc;
+    TAggregations& Aggregations_;
+    const THashMap<TString, ui32>& TypeByName_;
+    const TTypes& Types_;
+    const THashMap<TString, TVector<ui32>>& ProcByName_;
+    const TProcs& Procs_;
+    TAggregateDesc LastAggregation_;
+    bool IsSupported_ = true;
+    TString LastOid_;
+    TString LastTransFunc_;
+    TString LastFinalFunc_;
+    TString LastCombineFunc_;
+    TString LastSerializeFunc_;
+    TString LastDeserializeFunc_;
 };
 
 class TOpFamiliesParser : public TParser {
 public:
     TOpFamiliesParser(TOpFamilies& opFamilies)
-        : OpFamilies(opFamilies)
+        : OpFamilies_(opFamilies)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
-            LastOpfId = FromString<ui32>(value);
+            LastOpfId_ = FromString<ui32>(value);
         } else if (key == "opfmethod") {
             if (value == "btree" || value == "hash") {
-                LastOpfMethod = value;
+                LastOpfMethod_ = value;
             } else {
-                IsSupported = false;
+                IsSupported_ = false;
             }
         } else if (key == "opfname") {
-            LastOpfName = value;
+            LastOpfName_ = value;
         }
     }
 
     void OnFinish() override {
-        if (IsSupported) {
-            Y_ENSURE(LastOpfId != InvalidOid);
+        if (IsSupported_) {
+            Y_ENSURE(LastOpfId_ != InvalidOid);
 
             // opfamily references have opf_method/opf_name format in PG catalogs
             TOpFamilyDesc desc;
-            desc.Name = LastOpfMethod + "/" + LastOpfName;
-            desc.FamilyId = LastOpfId;
-            Y_ENSURE(OpFamilies.emplace(desc.Name, desc).second);
+            desc.Name = LastOpfMethod_ + "/" + LastOpfName_;
+            desc.FamilyId = LastOpfId_;
+            Y_ENSURE(OpFamilies_.emplace(desc.Name, desc).second);
         }
 
-        IsSupported = true;
-        LastOpfId = InvalidOid;
-        LastOpfMethod.clear();
-        LastOpfName.clear();
+        IsSupported_ = true;
+        LastOpfId_ = InvalidOid;
+        LastOpfMethod_.clear();
+        LastOpfName_.clear();
     }
 
 private:
-    TOpFamilies& OpFamilies;
+    TOpFamilies& OpFamilies_;
 
-    ui32 LastOpfId = InvalidOid;
+    ui32 LastOpfId_ = InvalidOid;
 
-    TString LastOpfMethod;
-    TString LastOpfName;
-    bool IsSupported = true;
+    TString LastOpfMethod_;
+    TString LastOpfName_;
+    bool IsSupported_ = true;
 };
 
 class TOpClassesParser : public TParser {
 public:
     TOpClassesParser(TOpClasses& opClasses, const THashMap<TString, ui32>& typeByName,
                      const TOpFamilies &opFamilies)
-            : OpClasses(opClasses)
-            , TypeByName(typeByName)
-            , OpFamilies(opFamilies)
+            : OpClasses_(opClasses)
+            , TypeByName_(typeByName)
+            , OpFamilies_(opFamilies)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "opcmethod") {
             if (value == "btree") {
-                LastOpClass.Method = EOpClassMethod::Btree;
+                LastOpClass_.Method = EOpClassMethod::Btree;
             } else if (value == "hash") {
-                LastOpClass.Method = EOpClassMethod::Hash;
+                LastOpClass_.Method = EOpClassMethod::Hash;
             } else {
-                IsSupported = false;
+                IsSupported_ = false;
             }
         } else if (key == "opcintype") {
-            auto idPtr = TypeByName.FindPtr(value);
+            auto idPtr = TypeByName_.FindPtr(value);
             Y_ENSURE(idPtr);
-            LastOpClass.TypeId = *idPtr;
+            LastOpClass_.TypeId = *idPtr;
         } else if (key == "opcname") {
-            LastOpClass.Name = value;
+            LastOpClass_.Name = value;
         } else if (key == "opcfamily") {
-            LastOpClass.Family = value;
-            auto opFamilyPtr = OpFamilies.FindPtr(value);
+            LastOpClass_.Family = value;
+            auto opFamilyPtr = OpFamilies_.FindPtr(value);
 
             if (opFamilyPtr) {
-                LastOpClass.FamilyId = opFamilyPtr->FamilyId;
+                LastOpClass_.FamilyId = opFamilyPtr->FamilyId;
             } else {
-                IsSupported = false;
+                IsSupported_ = false;
             }
         } else if (key == "opcdefault") {
-            IsDefault = (value[0] != 'f');
+            IsDefault_ = (value[0] != 'f');
         }
     }
 
 void OnFinish() override {
     // Only default opclasses are used so far
-    if (IsSupported && IsDefault) {
-        Y_ENSURE(!LastOpClass.Name.empty());
+    if (IsSupported_ && IsDefault_) {
+        Y_ENSURE(!LastOpClass_.Name.empty());
 
-        const auto key = std::make_pair(LastOpClass.Method, LastOpClass.TypeId);
+        const auto key = std::make_pair(LastOpClass_.Method, LastOpClass_.TypeId);
 
-        if (OpClasses.contains(key)) {
+        if (OpClasses_.contains(key)) {
             throw yexception() << "Duplicate opclass: (" << (key.first == EOpClassMethod::Btree ? "btree" : "hash")
                                << ", " << key.second << ")";
         }
-        OpClasses[key] = LastOpClass;
+        OpClasses_[key] = LastOpClass_;
     }
 
-    IsSupported = true;
-    IsDefault = true;
-    LastOpClass = TOpClassDesc();
+    IsSupported_ = true;
+    IsDefault_ = true;
+    LastOpClass_ = TOpClassDesc();
 }
 
 private:
-    TOpClasses& OpClasses;
+    TOpClasses& OpClasses_;
 
-    const THashMap<TString, ui32>& TypeByName;
-    const TOpFamilies OpFamilies;
+    const THashMap<TString, ui32>& TypeByName_;
+    const TOpFamilies OpFamilies_;
 
-    TOpClassDesc LastOpClass;
-    bool IsSupported = true;
-    bool IsDefault = true;
+    TOpClassDesc LastOpClass_;
+    bool IsSupported_ = true;
+    bool IsDefault_ = true;
 };
 
 class TAmOpsParser : public TParser {
@@ -1170,76 +1170,76 @@ public:
     TAmOpsParser(TAmOps& amOps, const THashMap<TString, ui32>& typeByName, const TTypes& types,
         const THashMap<TString, TVector<ui32>>& operatorsByName, const TOperators& operators,
         const TOpFamilies &opFamilies)
-        : AmOps(amOps)
-        , TypeByName(typeByName)
-        , Types(types)
-        , OperatorsByName(operatorsByName)
-        , Operators(operators)
-        , OpFamilies(opFamilies)
+        : AmOps_(amOps)
+        , TypeByName_(typeByName)
+        , Types_(types)
+        , OperatorsByName_(operatorsByName)
+        , Operators_(operators)
+        , OpFamilies_(opFamilies)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "amopfamily") {
-            LastAmOp.Family = value;
-            auto opFamilyPtr = OpFamilies.FindPtr(value);
+            LastAmOp_.Family = value;
+            auto opFamilyPtr = OpFamilies_.FindPtr(value);
             if (opFamilyPtr) {
-                LastAmOp.FamilyId = opFamilyPtr->FamilyId;
+                LastAmOp_.FamilyId = opFamilyPtr->FamilyId;
             } else {
-                IsSupported = false;
+                IsSupported_ = false;
             }
         } else if (key == "amoplefttype") {
-            auto leftTypePtr = TypeByName.FindPtr(value);
+            auto leftTypePtr = TypeByName_.FindPtr(value);
             Y_ENSURE(leftTypePtr);
-            LastAmOp.LeftType = *leftTypePtr;
+            LastAmOp_.LeftType = *leftTypePtr;
         } else if (key == "amoprighttype") {
-            auto rightTypePtr = TypeByName.FindPtr(value);
+            auto rightTypePtr = TypeByName_.FindPtr(value);
             Y_ENSURE(rightTypePtr);
-            LastAmOp.RightType = *rightTypePtr;
+            LastAmOp_.RightType = *rightTypePtr;
         } else if (key == "amopstrategy") {
-            LastAmOp.Strategy = FromString<ui32>(value);
+            LastAmOp_.Strategy = FromString<ui32>(value);
         } else if (key == "amopopr") {
             auto pos = value.find('(');
             Y_ENSURE(pos != TString::npos);
-            LastOp = value.substr(0, pos);
+            LastOp_ = value.substr(0, pos);
         }
     }
 
     void OnFinish() override {
-        if (IsSupported) {
-            auto operIdPtr = OperatorsByName.FindPtr(LastOp);
+        if (IsSupported_) {
+            auto operIdPtr = OperatorsByName_.FindPtr(LastOp_);
             Y_ENSURE(operIdPtr);
             for (const auto& id : *operIdPtr) {
-                const auto& d = Operators.FindPtr(id);
+                const auto& d = Operators_.FindPtr(id);
                 Y_ENSURE(d);
                 if (d->Kind == EOperKind::Binary &&
-                    IsCompatibleTo(LastAmOp.LeftType, d->LeftType, Types) &&
-                    IsCompatibleTo(LastAmOp.RightType, d->RightType, Types)) {
-                    Y_ENSURE(!LastAmOp.OperId);
-                    LastAmOp.OperId = d->OperId;
+                    IsCompatibleTo(LastAmOp_.LeftType, d->LeftType, Types_) &&
+                    IsCompatibleTo(LastAmOp_.RightType, d->RightType, Types_)) {
+                    Y_ENSURE(!LastAmOp_.OperId);
+                    LastAmOp_.OperId = d->OperId;
                 }
             }
 
-            Y_ENSURE(LastAmOp.OperId);
-            AmOps[std::make_tuple(LastAmOp.FamilyId, LastAmOp.Strategy, LastAmOp.LeftType, LastAmOp.RightType)] = LastAmOp;
+            Y_ENSURE(LastAmOp_.OperId);
+            AmOps_[std::make_tuple(LastAmOp_.FamilyId, LastAmOp_.Strategy, LastAmOp_.LeftType, LastAmOp_.RightType)] = LastAmOp_;
         }
 
-        LastAmOp = TAmOpDesc();
-        LastOp = "";
-        IsSupported = true;
+        LastAmOp_ = TAmOpDesc();
+        LastOp_ = "";
+        IsSupported_ = true;
     }
 
 private:
-    TAmOps& AmOps;
+    TAmOps& AmOps_;
 
-    const THashMap<TString, ui32>& TypeByName;
-    const TTypes& Types;
-    const THashMap<TString, TVector<ui32>>& OperatorsByName;
-    const TOperators& Operators;
-    const TOpFamilies& OpFamilies;
+    const THashMap<TString, ui32>& TypeByName_;
+    const TTypes& Types_;
+    const THashMap<TString, TVector<ui32>>& OperatorsByName_;
+    const TOperators& Operators_;
+    const TOpFamilies& OpFamilies_;
 
-    TAmOpDesc LastAmOp;
-    TString LastOp;
-    bool IsSupported = true;
+    TAmOpDesc LastAmOp_;
+    TString LastOp_;
+    bool IsSupported_ = true;
 };
 
 
@@ -1281,140 +1281,140 @@ public:
     TAmProcsParser(TAmProcs& amProcs, const THashMap<TString, ui32>& typeByName,
         const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs,
         const TOpFamilies& opFamilies)
-        : AmProcs(amProcs)
-        , TypeByName(typeByName)
-        , ProcByName(procByName)
-        , Procs(procs)
-        , OpFamilies(opFamilies)
+        : AmProcs_(amProcs)
+        , TypeByName_(typeByName)
+        , ProcByName_(procByName)
+        , Procs_(procs)
+        , OpFamilies_(opFamilies)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "amprocfamily") {
-            LastAmProc.Family = value;
-            auto opFamilyPtr = OpFamilies.FindPtr(value);
+            LastAmProc_.Family = value;
+            auto opFamilyPtr = OpFamilies_.FindPtr(value);
 
             if (opFamilyPtr) {
-                LastAmProc.FamilyId = opFamilyPtr->FamilyId;
+                LastAmProc_.FamilyId = opFamilyPtr->FamilyId;
             } else {
-                IsSupported = false;
+                IsSupported_ = false;
             }
         } else if (key == "amproclefttype") {
-            auto leftTypePtr = TypeByName.FindPtr(value);
+            auto leftTypePtr = TypeByName_.FindPtr(value);
             Y_ENSURE(leftTypePtr);
-            LastAmProc.LeftType = *leftTypePtr;
+            LastAmProc_.LeftType = *leftTypePtr;
         } else if (key == "amprocrighttype") {
-            auto rightTypePtr = TypeByName.FindPtr(value);
+            auto rightTypePtr = TypeByName_.FindPtr(value);
             Y_ENSURE(rightTypePtr);
-            LastAmProc.RightType = *rightTypePtr;
+            LastAmProc_.RightType = *rightTypePtr;
         } else if (key == "amprocnum") {
-            LastAmProc.ProcNum = FromString<ui32>(value);
+            LastAmProc_.ProcNum = FromString<ui32>(value);
         } else if (key == "amproc") {
-            LastName = value;
+            LastName_ = value;
         }
     }
 
     void OnFinish() override {
-        if (IsSupported) {
-            if (LastName.find('(') == TString::npos) {
-                auto procIdPtr = ProcByName.FindPtr(LastName);
+        if (IsSupported_) {
+            if (LastName_.find('(') == TString::npos) {
+                auto procIdPtr = ProcByName_.FindPtr(LastName_);
                 Y_ENSURE(procIdPtr);
                 for (const auto& id : *procIdPtr) {
-                    const auto& d = Procs.FindPtr(id);
+                    const auto& d = Procs_.FindPtr(id);
                     Y_ENSURE(d);
-                    Y_ENSURE(!LastAmProc.ProcId);
-                    LastAmProc.ProcId = d->ProcId;
+                    Y_ENSURE(!LastAmProc_.ProcId);
+                    LastAmProc_.ProcId = d->ProcId;
                 }
 
-                Y_ENSURE(LastAmProc.ProcId);
-                AmProcs[std::make_tuple(LastAmProc.FamilyId, LastAmProc.ProcNum, LastAmProc.LeftType, LastAmProc.RightType)] = LastAmProc;
+                Y_ENSURE(LastAmProc_.ProcId);
+                AmProcs_[std::make_tuple(LastAmProc_.FamilyId, LastAmProc_.ProcNum, LastAmProc_.LeftType, LastAmProc_.RightType)] = LastAmProc_;
             }
         }
 
-        LastAmProc = TAmProcDesc();
-        LastName = "";
-        IsSupported = true;
+        LastAmProc_ = TAmProcDesc();
+        LastName_ = "";
+        IsSupported_ = true;
     }
 
 private:
-    TAmProcs& AmProcs;
+    TAmProcs& AmProcs_;
 
-    const THashMap<TString, ui32>& TypeByName;
-    const THashMap<TString, TVector<ui32>>& ProcByName;
-    const TProcs& Procs;
-    const TOpFamilies& OpFamilies;
+    const THashMap<TString, ui32>& TypeByName_;
+    const THashMap<TString, TVector<ui32>>& ProcByName_;
+    const TProcs& Procs_;
+    const TOpFamilies& OpFamilies_;
 
-    TAmProcDesc LastAmProc;
-    TString LastName;
-    bool IsSupported = true;
+    TAmProcDesc LastAmProc_;
+    TString LastName_;
+    bool IsSupported_ = true;
 };
 
 class TConversionsParser : public TParser {
 public:
     TConversionsParser(TConversions& conversions, const THashMap<TString, TVector<ui32>>& procByName)
-        : Conversions(conversions)
-        , ProcByName(procByName)
+        : Conversions_(conversions)
+        , ProcByName_(procByName)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
-            LastConversion.ConversionId = FromString<ui32>(value);
+            LastConversion_.ConversionId = FromString<ui32>(value);
         } else if (key == "conforencoding") {
             Y_ENSURE(value.StartsWith("PG_"));
-            LastConversion.From = value.substr(3);
+            LastConversion_.From = value.substr(3);
         } else if (key == "descr") {
-            LastConversion.Descr = value;
+            LastConversion_.Descr = value;
         } else if (key == "contoencoding") {
             Y_ENSURE(value.StartsWith("PG_"));
-            LastConversion.To = value.substr(3);
+            LastConversion_.To = value.substr(3);
         } else if (key == "conproc") {
-            auto found = ProcByName.FindPtr(value);
+            auto found = ProcByName_.FindPtr(value);
             if (found && found->size() == 1) {
-                LastConversion.ProcId = found->front();
+                LastConversion_.ProcId = found->front();
             }
         }
     }
 
     void OnFinish() override {
-        if (LastConversion.ProcId) {
-            Conversions[std::make_pair(LastConversion.From, LastConversion.To)] = LastConversion;
+        if (LastConversion_.ProcId) {
+            Conversions_[std::make_pair(LastConversion_.From, LastConversion_.To)] = LastConversion_;
         }
 
-        LastConversion = TConversionDesc();
+        LastConversion_ = TConversionDesc();
     }
 
 private:
-    TConversions& Conversions;
+    TConversions& Conversions_;
 
-    const THashMap<TString, TVector<ui32>>& ProcByName;
+    const THashMap<TString, TVector<ui32>>& ProcByName_;
 
-    TConversionDesc LastConversion;
+    TConversionDesc LastConversion_;
 };
 
 class TLanguagesParser : public TParser {
 public:
     TLanguagesParser(TLanguages& languages)
-        : Languages(languages)
+        : Languages_(languages)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
-            LastLanguage.LangId = FromString<ui32>(value);
+            LastLanguage_.LangId = FromString<ui32>(value);
         } else if (key == "lanname") {
-            LastLanguage.Name = value;
+            LastLanguage_.Name = value;
         } else if (key == "descr") {
-            LastLanguage.Descr = value;
+            LastLanguage_.Descr = value;
         }
     }
 
     void OnFinish() override {
-        Languages[LastLanguage.LangId] = LastLanguage;
-        LastLanguage = TLanguageDesc();
+        Languages_[LastLanguage_.LangId] = LastLanguage_;
+        LastLanguage_ = TLanguageDesc();
     }
 
 private:
-    TLanguages& Languages;
+    TLanguages& Languages_;
 
-    TLanguageDesc LastLanguage;
+    TLanguageDesc LastLanguage_;
 };
 
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,

@@ -16,17 +16,47 @@ namespace NSQLComplete {
         }
 
         NThreading::TFuture<TValue> operator()(TKey key) const {
-            return Cache_->Get(key).Apply([cache = Cache_,
-                                           query = Query_,
-                                           key = std::move(key)](auto f) {
-                typename ICache<TKey, TValue>::TEntry entry = f.ExtractValue();
-                if (entry.IsExpired) {
-                    query(key).Apply([cache, key = std::move(key)](auto f) {
-                        cache->Update(key, f.ExtractValue());
-                    });
+            auto promise = NThreading::NewPromise<TValue>();
+            Cache_->Get(key).Apply([cache = Cache_,
+                                    query = Query_,
+                                    key = std::move(key),
+                                    promise](auto f) mutable {
+                typename ICache<TKey, TValue>::TEntry entry;
+                try {
+                    entry = f.ExtractValue();
+                } catch (...) {
+                    promise.SetException(std::current_exception());
+                    return;
                 }
-                return std::move(entry.Value);
+
+                if (!entry.IsExpired) {
+                    Y_ENSURE(entry.Value.Defined());
+                    promise.SetValue(std::move(*entry.Value));
+                    return;
+                }
+
+                bool isEmpty = entry.Value.Empty();
+                if (!isEmpty) {
+                    promise.SetValue(std::move(*entry.Value));
+                }
+
+                query(key).Apply([cache, key = std::move(key), isEmpty, promise](auto f) mutable {
+                    TValue value;
+                    try {
+                        value = f.ExtractValue();
+                    } catch (...) {
+                        promise.SetException(std::current_exception());
+                        return;
+                    }
+
+                    if (isEmpty) {
+                        promise.SetValue(value);
+                    }
+
+                    cache->Update(key, std::move(value));
+                });
             });
+            return promise;
         }
 
     private:

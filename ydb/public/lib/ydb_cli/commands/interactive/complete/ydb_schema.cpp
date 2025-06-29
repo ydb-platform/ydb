@@ -1,6 +1,7 @@
 #include "ydb_schema.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
 
@@ -32,6 +33,23 @@ namespace NYdb::NConsoleClient {
                 .Apply([this, folder](auto f) { return this->Convert(folder, f.ExtractValue()); });
         }
 
+        NThreading::TFuture<TMaybe<NSQLComplete::TTableDetails>>
+        DescribeTable(const TString& /* cluster */, const TString& path) const override {
+            auto promise = NThreading::NewPromise<TMaybe<NSQLComplete::TTableDetails>>();
+            NTable::TTableClient(Driver_)
+                .GetSession(NTable::TCreateSessionSettings())
+                .Apply([this, path, promise](auto f) mutable {
+                    static_cast<NTable::TCreateSessionResult>(f.ExtractValue())
+                        .GetSession()
+                        .DescribeTable(Qualified(path))
+                        .Apply([this, path, promise](auto f) mutable {
+                            NTable::TDescribeTableResult result = f.ExtractValue();
+                            promise.SetValue(Convert(path, std::move(result)));
+                        });
+                });
+            return promise;
+        }
+
     private:
         TString Qualified(TString folder) const {
             if (!folder.StartsWith('/')) {
@@ -45,7 +63,7 @@ namespace NYdb::NConsoleClient {
             if (!result.IsSuccess()) {
                 if (IsVerbose_) {
                     Cerr << "ListDirectory('" << folder << "') failed: "
-                         << result.GetIssues().ToOneLineString();
+                         << result.GetIssues().ToOneLineString() << Endl;
                 }
                 return {};
             }
@@ -103,10 +121,28 @@ namespace NYdb::NConsoleClient {
                     return "View";
                 case NScheme::ESchemeEntryType::ResourcePool:
                     return "ResourcePool";
+                case NScheme::ESchemeEntryType::SysView:
+                    return "SysView";
                 case NScheme::ESchemeEntryType::Unknown:
                 default:
                     return "Unknown";
             }
+        }
+
+        TMaybe<NSQLComplete::TTableDetails> Convert(TString path, NTable::TDescribeTableResult result) const {
+            if (!result.IsSuccess()) {
+                if (IsVerbose_) {
+                    Cerr << "DescribeTable('" << path << "') failed: "
+                         << result.GetIssues().ToOneLineString() << Endl;
+                }
+                return Nothing();
+            }
+
+            NSQLComplete::TTableDetails details;
+            for (TColumn column : result.GetTableDescription().GetColumns()) {
+                details.Columns.emplace_back(std::move(column.Name));
+            }
+            return details;
         }
 
         TDriver Driver_;

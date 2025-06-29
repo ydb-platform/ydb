@@ -33,7 +33,7 @@ namespace {
         return 0;
     }
 #endif
-    bool comp(const TDllInfo& a, const TDllInfo& b) {
+    bool Comp(const TDllInfo& a, const TDllInfo& b) {
         return strcmp(a.Path, b.Path) < 0;
     }
 
@@ -49,7 +49,7 @@ namespace NYql {
             memset(&dlInfo, 0, sizeof(dlInfo));
             auto ret = dladdr(reinterpret_cast<void*>(addr), &dlInfo);
             if (ret) {
-                auto it = std::lower_bound(DLLs, DLLs + DLLCount, std::remove_reference_t<decltype(DLLs[0])> {dlInfo.dli_fname, {}}, comp);
+                auto it = std::lower_bound(DLLs, DLLs + DLLCount, std::remove_reference_t<decltype(DLLs[0])> {dlInfo.dli_fname, {}}, Comp);
                 if (it != DLLs + DLLCount && !strcmp(it->Path, dlInfo.dli_fname)) {
                     File = it->Path;
                     Address -= it->BaseAddress;
@@ -63,7 +63,7 @@ namespace NYql {
             DLLCount = 0;
             dl_iterate_phdr(DlIterCallback, &DLLs);
 #endif
-            std::stable_sort(DLLs, DLLs + DLLCount, comp);
+            std::stable_sort(DLLs, DLLs + DLLCount, Comp);
             size_t cnt = CollectBacktrace(Stack, Limit, data);
             return CollectFrames(frames, Stack, cnt);
         }
@@ -76,3 +76,4 @@ namespace NYql {
         }
     }
 }
+

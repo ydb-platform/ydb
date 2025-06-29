@@ -9,25 +9,27 @@ class TCustomListValue : public TComputationValue<TCustomListValue> {
 public:
     TCustomListValue(TMemoryUsageInfo* memInfo)
         : TComputationValue(memInfo)
+        , Length(Length_)
+        , HasItems(HasItems_)
     {
     }
 
 private:
     bool HasFastListLength() const override {
-        return bool(Length);
+        return bool(Length_);
     }
 
     ui64 GetListLength() const override {
-        if (!Length) {
-            ui64 length = Iterator ? 1ULL : 0ULL;
-            for (const auto it = Iterator ? std::move(Iterator) : NUdf::TBoxedValueAccessor::GetListIterator(*this); it.Skip();) {
+        if (!Length_) {
+            ui64 length = Iterator_ ? 1ULL : 0ULL;
+            for (const auto it = Iterator_ ? std::move(Iterator_) : NUdf::TBoxedValueAccessor::GetListIterator(*this); it.Skip();) {
                 ++length;
             }
 
-            Length = length;
+            Length_ = length;
         }
 
-        return *Length;
+        return *Length_;
     }
 
     ui64 GetEstimatedListLength() const override {
@@ -35,27 +37,31 @@ private:
     }
 
     bool HasListItems() const override {
-        if (HasItems) {
-            return *HasItems;
+        if (HasItems_) {
+            return *HasItems_;
         }
 
-        if (Length) {
-            HasItems = (*Length != 0);
-            return *HasItems;
+        if (Length_) {
+            HasItems_ = (*Length_ != 0);
+            return *HasItems_;
         }
 
         auto iter = NUdf::TBoxedValueAccessor::GetListIterator(*this);
-        HasItems = iter.Skip();
-        if (*HasItems) {
-            Iterator = std::move(iter);
+        HasItems_ = iter.Skip();
+        if (*HasItems_) {
+            Iterator_ = std::move(iter);
         }
-        return *HasItems;
+        return *HasItems_;
     }
 
 protected:
-    mutable std::optional<ui64> Length;
-    mutable std::optional<bool> HasItems;
-    mutable NUdf::TUnboxedValue Iterator;
+    mutable std::optional<ui64> Length_;
+    mutable std::optional<bool> HasItems_;
+    mutable NUdf::TUnboxedValue Iterator_;
+
+    //FIXME Remove
+    std::optional<ui64>& Length; // NOLINT(readability-identifier-naming)
+    std::optional<bool>& HasItems; // NOLINT(readability-identifier-naming)
 };
 
 class TForwardListValue : public TCustomListValue {
@@ -67,7 +73,7 @@ public:
     private:
         bool Next(NUdf::TUnboxedValue& value) override;
 
-        const NUdf::TUnboxedValue Stream;
+        const NUdf::TUnboxedValue Stream_;
     };
 
     TForwardListValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream);
@@ -75,7 +81,7 @@ public:
 private:
     NUdf::TUnboxedValue GetListIterator() const override;
 
-    mutable NUdf::TUnboxedValue Stream;
+    mutable NUdf::TUnboxedValue Stream_;
 };
 
 class TExtendListValue : public TCustomListValue {
@@ -89,8 +95,8 @@ public:
         bool Next(NUdf::TUnboxedValue& value) override;
         bool Skip() override;
 
-        const TUnboxedValueVector Iters;
-        ui32 Index;
+        const TUnboxedValueVector Iters_;
+        ui32 Index_;
     };
 
     TExtendListValue(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& lists);
@@ -102,7 +108,7 @@ private:
     ui64 GetListLength() const override;
     bool HasListItems() const override;
 
-    const TUnboxedValueVector Lists;
+    const TUnboxedValueVector Lists_;
 };
 
 class TExtendStreamValue : public TComputationValue<TExtendStreamValue> {
@@ -116,8 +122,8 @@ public:
 private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value);
 
-    const TUnboxedValueVector Lists;
-    ui32 Index = 0;
+    const TUnboxedValueVector Lists_;
+    ui32 Index_ = 0;
 };
 
 }

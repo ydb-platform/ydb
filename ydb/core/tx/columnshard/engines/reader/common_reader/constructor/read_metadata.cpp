@@ -105,7 +105,7 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
         lockInfo.SetLockId(LockSharingInfo->GetLockId());
         lockInfo.SetGeneration(LockSharingInfo->GetGeneration());
         lockInfo.SetDataShard(tabletId);
-        lockInfo.SetCounter(LockSharingInfo->GetCounter());
+        lockInfo.SetCounter(LockSharingInfo->GetInternalGenerationCounter());
         PathId.SchemeShardLocalPathId.ToProto(lockInfo);
         lockInfo.SetHasWrites(LockSharingInfo->HasWrites());
         if (LockSharingInfo->IsBroken()) {

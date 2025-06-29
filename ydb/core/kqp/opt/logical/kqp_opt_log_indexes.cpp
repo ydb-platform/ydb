@@ -144,12 +144,13 @@ bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& index
     return IsTableExistsKeySelector(node.KeySelectorLambda(), indexDesc, columns);
 }
 
-bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top) {
+bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
     Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
     // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
+    const auto& col = indexDesc.KeyColumns.back();
     auto checkMember = [&] (const TExprBase& expr) {
         auto member = expr.Maybe<TCoMember>();
-        return member && member.Cast().Name().Value() == indexDesc.KeyColumns.back();
+        return member && member.Cast().Name().Value() == col;
     };
     auto checkUdf = [&] (const TExprBase& expr, bool checkMembers) {
         auto apply = expr.Maybe<TCoApply>();
@@ -175,18 +176,31 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
         auto& desc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
         switch (desc.settings().settings().metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return !asc && methodName == "Knn.InnerProductSimilarity";
+                if (!asc && methodName == "Knn.InnerProductSimilarity") {
+                    return true;
+                }
+                error = TStringBuilder() << "Knn::InnerProductSimilarity(" << col << ", ...) DESC";
+                return false;
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
-                if (asc) {
-                    return methodName == "Knn.CosineDistance";
-                } else {
-                    return methodName == "Knn.CosineSimilarity";
+                if (asc && methodName == "Knn.CosineDistance" ||
+                    !asc && methodName == "Knn.CosineSimilarity") {
+                    return true;
                 }
+                error = TStringBuilder() << "Knn::CosineSimilarity(" << col << ", ...) DESC or Knn::CosineDistance(" << col << ", ...) ASC";
+                return false;
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return asc && methodName == "Knn.ManhattanDistance";
+                if (asc && methodName == "Knn.ManhattanDistance") {
+                    return true;
+                }
+                error = TStringBuilder() << "Knn::ManhattanDistance(" << col << ", ...) ASC";
+                return false;
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return asc && methodName == "Knn.EuclideanDistance";
+                if (asc && methodName == "Knn.EuclideanDistance") {
+                    return true;
+                }
+                error = TStringBuilder() << "Knn::EuclideanDistance(" << col << ", ...) ASC";
+                return false;
             default:
                 Y_UNREACHABLE();
         }
@@ -987,10 +1001,12 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         };
         const auto* lambdaArgs = topBase.KeySelectorLambda().Args().Raw();
         auto lambdaBody = topBase.KeySelectorLambda().Body();
-        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase);
+        TString error;
+        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
         if (indexDesc->KeyColumns.size() > 1) {
             if (!canUseVectorIndex) {
-                return reject("sorting doesn't call distance function, reference distance from projection not supported yet");
+                return reject(TStringBuilder() << "sorting must contain distance: "
+                    << error << ", reference distance from projection not supported yet");
             }
             if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
                 return reject("only simple conditions supported for now");
@@ -1001,7 +1017,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         if (!canUseVectorIndex) {
             auto argument = lambdaBody.Maybe<TCoMember>().Struct().Maybe<TCoArgument>();
             if (!argument) {
-                return reject("sorting doesn't contain distance");
+                return reject(TStringBuilder() << "sorting must contain distance: " << error);
             }
             auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
             if (!asStruct) {
@@ -1031,11 +1047,11 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                     continue;
                 }
                 lambdaBody = TExprBase{argChildren[1]};
-                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase);
+                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
                 break;
             }
             if (!canUseVectorIndex) {
-                return reject("neither projection nor sorting contain distance");
+                return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args().Raw();
         }
@@ -1080,6 +1096,10 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
 
     auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable,
         extraColumns, filter);
+
+    if (!lookup.Maybe<TKqlStreamLookupTable>()) {
+        return node;
+    }
 
     return Build<TCoTopBase>(ctx, node.Pos())
         .CallableName(node.Ref().Content())

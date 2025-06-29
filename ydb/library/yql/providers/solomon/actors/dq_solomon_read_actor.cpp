@@ -104,7 +104,7 @@ public:
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {
-        assert(MaxPointsPerOneMetric != 0);
+        assert(MaxPointsPerOneRequest != 0);
         Y_UNUSED(counters);
         SOURCE_LOG_D("Init");
         IngressStats.Level = statsLevel;
@@ -493,11 +493,11 @@ private:
             return result;
         }
 
-        result.reserve(pointsCount / MaxPointsPerOneMetric);
+        result.reserve(pointsCount / MaxPointsPerOneRequest);
         auto rangeDuration = to - from;
-        for (ui64 i = 0; i < pointsCount; i += MaxPointsPerOneMetric) {
+        for (ui64 i = 0; i < pointsCount; i += MaxPointsPerOneRequest) {
             double start = i;
-            double end = std::min(i + MaxPointsPerOneMetric, pointsCount);
+            double end = std::min(i + MaxPointsPerOneRequest, pointsCount);
             result.emplace_back(
                 from + rangeDuration * start / pointsCount,
                 from + rangeDuration * end / pointsCount
@@ -531,7 +531,7 @@ private:
     std::deque<NSo::TTimeseries> MetricsData;
     size_t ListedMetricsCount = 0;
     size_t CompletedMetricsCount = 0;
-    const ui64 MaxPointsPerOneMetric = 1000000;
+    const ui64 MaxPointsPerOneRequest = 10000;
 
     TString SourceId;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;

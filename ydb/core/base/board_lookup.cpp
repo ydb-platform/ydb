@@ -71,13 +71,12 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     };
 
     struct TReplicaGroup {
-        TVector<TReplica> Replicas;
-        bool WriteOnly;
-        ui32 WaitForReplicasToSuccess;
+        TVector<TReplica> Replicas = {};
+        ui32 WaitForReplicasToSuccess = 0;
 
         TString ToString() {
             TStringStream str;
-            str << "{ WriteOnly: " << WriteOnly << ", WaitForReplicasToSuccess: " << WaitForReplicasToSuccess 
+            str << "{ WaitForReplicasToSuccess: " << WaitForReplicasToSuccess 
                 << " Replicas: [" << JoinSeq(",", Replicas) << "] }";
             return str.Str();
         }
@@ -138,7 +137,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         for (const auto &rg : ReplicaGroups)
             for (const auto &replica : rg.Replicas) {
                 if (Subscriber) {
-                    Send(replica.Replica, new TEvStateStorage::TEvReplicaBoardUnsubscribe());
+                    Send(replica.Replica, new TEvStateStorage::TEvReplicaBoardUnsubscribe(ClusterStateGeneration, ClusterStateGuid));
                 }
                 if (replica.Replica.NodeId() != SelfId().NodeId()) {
                     Send(TActivationContext::InterconnectProxy(replica.Replica.NodeId()), new TEvents::TEvUnsubscribe());
@@ -163,8 +162,6 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     bool AnyGroupStatsHasInfo() {
         for (auto groupIdx : xrange(ReplicaGroups.size())) {
-            if (ReplicaGroups[groupIdx].WriteOnly)
-                continue;
             if (Stats[groupIdx].HasInfo >= ReplicaGroups[groupIdx].WaitForReplicasToSuccess)
                 return true;
         }
@@ -173,8 +170,6 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     bool AllStatsHasAndHasNoInfo() {
         for (auto groupIdx : xrange(ReplicaGroups.size())) {
-            if (ReplicaGroups[groupIdx].WriteOnly)
-                continue;
             if (Stats[groupIdx].HasInfo + Stats[groupIdx].NoInfo != ReplicaGroups[groupIdx].WaitForReplicasToSuccess)
                 return false;
         }
@@ -183,8 +178,6 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     bool AllStatsReplied() {
         for (auto groupIdx : xrange(ReplicaGroups.size())) {
-            if (ReplicaGroups[groupIdx].WriteOnly)
-                continue;
             if (Stats[groupIdx].Replied != ReplicaGroups[groupIdx].Replicas.size())
                 return false;
         }
@@ -193,8 +186,6 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     bool AllStatsNotAvailable() {
         for (auto groupIdx : xrange(ReplicaGroups.size())) {
-            if (ReplicaGroups[groupIdx].WriteOnly)
-                continue;
             if (Stats[groupIdx].NotAvailable <= (ReplicaGroups[groupIdx].Replicas.size() - ReplicaGroups[groupIdx].WaitForReplicasToSuccess))
                 return false;
         }
@@ -247,11 +238,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ReplicaGroups.resize(msg->ReplicaGroups.size());
         for (ui32 replicaGroupIdx : xrange(msg->ReplicaGroups.size())) {
             const auto &msgReplicaGroups = msg->ReplicaGroups[replicaGroupIdx];
+            if (msgReplicaGroups.WriteOnly || msgReplicaGroups.State == ERingGroupState::DISCONNECTED)
+                continue;
             auto &replicaGroups = ReplicaGroups[replicaGroupIdx];
             replicaGroups.Replicas.resize(msgReplicaGroups.Replicas.size());
-            replicaGroups.WriteOnly = msgReplicaGroups.WriteOnly;
-            if (msgReplicaGroups.WriteOnly || msgReplicaGroups.State != ERingGroupState::PRIMARY)
-                continue;
             for (auto idx : xrange(msgReplicaGroups.Replicas.size())) {
                 const TActorId &msgReplica = msgReplicaGroups.Replicas[idx];
                 Send(msgReplica,
@@ -286,7 +276,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     void Handle(TEvStateStorage::TEvReplicaBoardInfoUpdate::TPtr &ev) {
         const auto [groupIdx, idx, reconnectNumber] = DecodeCookie(ev->Cookie);
 
-        if (groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size() || !CheckConfigVersion(ev->Sender, ev->Get()))
+        if (!CheckConfigVersion(ev->Sender, ev->Get()) || groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size())
             return;
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
 
@@ -348,7 +338,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     void Handle(TEvStateStorage::TEvReplicaBoardInfo::TPtr &ev) {
         const auto [groupIdx, idx, reconnectNumber] = DecodeCookie(ev->Cookie);
 
-        if (groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size() || !CheckConfigVersion(ev->Sender, ev->Get())) {
+        if (!CheckConfigVersion(ev->Sender, ev->Get()) || groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size()) {
             return;
         }
 

@@ -3,6 +3,8 @@ PY3TEST()
 TEST_SRCS(
     test_config_with_metadata.py
     test_generate_dynamic_config.py
+    test_distconf_generate_config.py
+    test_distconf_reassign_state_storage.py
     test_distconf.py
     test_config_migration.py
     test_configuration_version.py
@@ -24,11 +26,10 @@ ELSE()
 ENDIF()
 
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")
 DEPENDS(
-    ydb/apps/ydbd
     ydb/apps/ydb
 )
 

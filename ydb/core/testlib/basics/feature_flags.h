@@ -78,6 +78,8 @@ public:
     FEATURE_FLAG_SETTER(EnablePermissionsExport)
     FEATURE_FLAG_SETTER(EnableShowCreate)
     FEATURE_FLAG_SETTER(EnableLocalDBBtreeIndex)
+    FEATURE_FLAG_SETTER(EnableSharedMetadataAccessorCache)
+    FEATURE_FLAG_SETTER(EnableSystemNamesProtection)
 
     #undef FEATURE_FLAG_SETTER
 };

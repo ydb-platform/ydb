@@ -1,27 +1,20 @@
 # -*- coding: utf-8 -*-
 import os
+import pytest
 import yatest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                additional_log_configs={
-                    "CHANGE_EXCHANGE": LogLevels.DEBUG,
-                },
-            )
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            additional_log_configs={
+                "CHANGE_EXCHANGE": LogLevels.DEBUG,
+            },
         )
-        cls.cluster.start()
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
 
     def test(self):
         cmd = [

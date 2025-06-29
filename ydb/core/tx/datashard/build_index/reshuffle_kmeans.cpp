@@ -113,7 +113,6 @@ public:
         , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
-        Clusters->SetClusters(TVector<TString>{request.GetClusters().begin(), request.GetClusters().end()});
 
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
@@ -143,8 +142,8 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) final
     {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
 
         Uploader.Finish(record, status);
 
@@ -200,7 +199,7 @@ public:
         // LOG_T("Feed " << Debug());
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         Feed(key, *row);
 
@@ -425,10 +424,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
             badRequest("Wrong upload");
         }
 
-        if (request.ClustersSize() < 1) {
-            badRequest("Should be requested at least single cluster");
-        }
-
         const auto parent = request.GetParent();
         NTable::TLead lead;
         if (parent == 0) {
@@ -465,19 +460,21 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
             }
         }
 
+        // 3. Validating vector index settings
+        TString error;
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
+        if (!clusters) {
+            badRequest(error);
+        } else if (request.ClustersSize() < 1) {
+            badRequest("Should be requested for at least one cluster");
+        } else if (!clusters->SetClusters(TVector<TString>{request.GetClusters().begin(), request.GetClusters().end()})) {
+            badRequest("Clusters have invalid format");
+        }
+
         if (trySendBadRequest()) {
             return;
         }
 
-        // 3. Validating vector index settings
-        TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
-        if (!clusters) {
-            badRequest(error);
-            auto sent = trySendBadRequest();
-            Y_ENSURE(sent);
-            return;
-        }
         TAutoPtr<NTable::IScan> scan = new TReshuffleKMeansScan(
             TabletID(), userTable, std::move(lead), request, ev->Sender, std::move(response), std::move(clusters)
         );

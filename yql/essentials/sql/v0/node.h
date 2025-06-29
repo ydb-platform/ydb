@@ -129,7 +129,7 @@ namespace NSQLTranslationV0 {
         bool IsOverWindow() const;
         bool HasState(ENodeState state) const {
             PrecacheState();
-            return State.Test(state);
+            return State_.Test(state);
         }
 
         virtual bool IsNull() const;
@@ -204,10 +204,10 @@ namespace NSQLTranslationV0 {
         virtual void DoAdd(TPtr node);
 
     protected:
-        TPosition Pos;
-        TString Label;
-        mutable TNodeState State;
-        bool AsInner = false;
+        TPosition Pos_;
+        TString Label_;
+        mutable TNodeState State_;
+        bool AsInner_ = false;
     };
     typedef INode::TPtr TNodePtr;
 
@@ -234,14 +234,14 @@ namespace NSQLTranslationV0 {
 
         TAstNode* Translate(TContext& ctx) const override;
         const TString& GetContent() const {
-            return Content;
+            return Content_;
         }
 
         const TString* GetAtomContent() const override;
 
     protected:
-        TString Content;
-        ui32 Flags;
+        TString Content_;
+        ui32 Flags_;
 
         void DoUpdateState() const override;
     };
@@ -253,7 +253,7 @@ namespace NSQLTranslationV0 {
         {}
 
         TNodePtr DoClone() const final {
-            return new TAstAtomNodeImpl(Pos, Content, Flags);
+            return new TAstAtomNodeImpl(Pos_, Content_, Flags_);
         }
     };
 
@@ -264,10 +264,10 @@ namespace NSQLTranslationV0 {
         TAstNode* Translate(TContext& ctx) const override;
 
         TPtr DoClone() const final {
-            return new TAstDirectNode(Node);
+            return new TAstDirectNode(Node_);
         }
     protected:
-        TAstNode* Node;
+        TAstNode* Node_;
     };
 
     class TAstListNode: public INode {
@@ -289,8 +289,8 @@ namespace NSQLTranslationV0 {
         void UpdateStateByListNodes(const TVector<TNodePtr>& Nodes) const;
 
     protected:
-        TVector<TNodePtr> Nodes;
-        mutable TMaybe<bool> CacheGroupKey;
+        TVector<TNodePtr> Nodes_;
+        mutable TMaybe<bool> CacheGroupKey_;
     };
 
     class TAstListNodeImpl final: public TAstListNode {
@@ -320,11 +320,11 @@ namespace NSQLTranslationV0 {
         TString GetCallExplain() const;
 
     protected:
-        TString OpName;
-        i32 MinArgs;
-        i32 MaxArgs;
-        TVector<TNodePtr> Args;
-        mutable TMaybe<bool> CacheGroupKey;
+        TString OpName_;
+        i32 MinArgs_;
+        i32 MaxArgs_;
+        TVector<TNodePtr> Args_;
+        mutable TMaybe<bool> CacheGroupKey_;
 
         void DoUpdateState() const override;
     };
@@ -345,7 +345,7 @@ namespace NSQLTranslationV0 {
         bool DoInit(TContext& ctx, ISource* src) override;
 
     private:
-        const ui32 ReqArgsCount;
+        const ui32 ReqArgsCount_;
     };
 
     class TCallDirectRow final : public TCallNode {
@@ -367,10 +367,10 @@ namespace NSQLTranslationV0 {
     protected:
         template<class TNodeType>
         TPtr CallNodeClone() const {
-            return new TNodeType(GetPos(), OpName, MinArgs, MaxArgs, CloneContainer(Args));
+            return new TNodeType(GetPos(), OpName_, MinArgs_, MaxArgs_, CloneContainer(Args_));
         }
-        TString FuncAlias;
-        TNodePtr WinAggrGround;
+        TString FuncAlias_;
+        TNodePtr WinAggrGround_;
     };
 
     class TWinRowNumber final: public TWinAggrEmulation {
@@ -536,9 +536,9 @@ namespace NSQLTranslationV0 {
         bool Empty() const;
 
     private:
-        TMaybe<TString> Explicit;
-        TNodePtr Node; // atom or evaluation node
-        TString Repr;
+        TMaybe<TString> Explicit_;
+        TNodePtr Node_; // atom or evaluation node
+        TString Repr_;
     };
 
     struct TWriteSettings {
@@ -575,15 +575,15 @@ namespace NSQLTranslationV0 {
 
     private:
         static const TString Empty;
-        TNodePtr Node;
-        TString ColumnName;
-        TNodePtr ColumnExpr;
-        TString Source;
-        bool GroupKey = false;
-        bool Artificial = false;
-        bool Reliable = true;
-        bool UseSource = false;
-        bool UseSourceAsColumn = false;
+        TNodePtr Node_;
+        TString ColumnName_;
+        TNodePtr ColumnExpr_;
+        TString Source_;
+        bool GroupKey_ = false;
+        bool Artificial_ = false;
+        bool Reliable_ = true;
+        bool UseSource_ = false;
+        bool UseSourceAsColumn_ = false;
     };
 
     class TArgPlaceholderNode final: public INode
@@ -603,7 +603,7 @@ namespace NSQLTranslationV0 {
         bool DoInit(TContext& ctx, ISource* src) override;
 
     private:
-        TString Name;
+        TString Name_;
     };
 
     enum class EAggregateMode {
@@ -623,7 +623,7 @@ namespace NSQLTranslationV0 {
         TPtr GetTupleElement(size_t index) const override;
         TNodePtr DoClone() const final;
     private:
-        const TVector<TNodePtr> Exprs;
+        const TVector<TNodePtr> Exprs_;
     };
 
     class TStructNode: public TAstListNode {
@@ -633,11 +633,11 @@ namespace NSQLTranslationV0 {
         bool DoInit(TContext& ctx, ISource* src) override;
         TNodePtr DoClone() const final;
         const TVector<TNodePtr>& GetExprs() {
-            return Exprs;
+            return Exprs_;
         }
 
     private:
-        const TVector<TNodePtr> Exprs;
+        const TVector<TNodePtr> Exprs_;
     };
 
     class IAggregation: public INode {
@@ -671,10 +671,10 @@ namespace NSQLTranslationV0 {
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
         TAstNode* Translate(TContext& ctx) const override;
 
-        TString Name;
-        const TString Func;
-        const EAggregateMode AggMode;
-        TString DistinctKey;
+        TString Name_;
+        const TString Func_;
+        const EAggregateMode AggMode_;
+        TString DistinctKey_;
     };
 
     enum class EExprSeat: int {
@@ -774,22 +774,22 @@ namespace NSQLTranslationV0 {
         const TVector<TNodePtr>& Expressions(EExprSeat exprSeat) const;
         TNodePtr AliasOrColumn(const TNodePtr& node, bool withSource);
 
-        THashSet<TString> ExprAliases;
-        THashMap<TString, TString> GroupByColumnAliases;
-        TVector<TNodePtr> Filters;
-        TSet<TString> GroupKeys;
-        TVector<TString> OrderedGroupKeys;
-        std::array<TVector<TNodePtr>, static_cast<unsigned>(EExprSeat::Max)> NamedExprs;
-        TVector<TAggregationPtr> Aggregations;
-        TMultiMap<TString, TAggregationPtr> AggregationOverWindow;
-        TMultiMap<TString, TNodePtr> FuncOverWindow;
-        TWinSpecs WinSpecs;
-        THoppingWindowSpecPtr HoppingWindowSpec;
-        TVector<ISource*> UsedSources;
-        TString FlattenMode;
-        bool FlattenColumns = false;
-        THashMap<TString, ui32> GenIndexes;
-        TVector<TString> TmpWindowColumns;
+        THashSet<TString> ExprAliases_;
+        THashMap<TString, TString> GroupByColumnAliases_;
+        TVector<TNodePtr> Filters_;
+        TSet<TString> GroupKeys_;
+        TVector<TString> OrderedGroupKeys_;
+        std::array<TVector<TNodePtr>, static_cast<unsigned>(EExprSeat::Max)> NamedExprs_;
+        TVector<TAggregationPtr> Aggregations_;
+        TMultiMap<TString, TAggregationPtr> AggregationOverWindow_;
+        TMultiMap<TString, TNodePtr> FuncOverWindow_;
+        TWinSpecs WinSpecs_;
+        THoppingWindowSpecPtr HoppingWindowSpec_;
+        TVector<ISource*> UsedSources_;
+        TString FlattenMode_;
+        bool FlattenColumns_ = false;
+        THashMap<TString, ui32> GenIndexes_;
+        TVector<TString> TmpWindowColumns_;
     };
 
     typedef TIntrusivePtr<ISource> TSourcePtr;
@@ -825,8 +825,8 @@ namespace NSQLTranslationV0 {
         TAstNode* Translate(TContext& ctx) const override;
         TPtr DoClone() const final;
     private:
-        TVector<TNodePtr> Exprs;
-        TString Meaning;
+        TVector<TNodePtr> Exprs_;
+        TString Meaning_;
     };
 
     class TLiteralNode: public TAstListNode {
@@ -839,10 +839,10 @@ namespace NSQLTranslationV0 {
         void DoUpdateState() const override;
         TPtr DoClone() const override;
     protected:
-        bool Null;
-        bool Void;
-        TString Type;
-        TString Value;
+        bool Null_;
+        bool Void_;
+        TString Type_;
+        TString Value_;
     };
 
     template<typename T>

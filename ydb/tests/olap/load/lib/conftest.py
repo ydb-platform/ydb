@@ -19,6 +19,7 @@ from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
+import ydb.tests.olap.lib.remote_execution as re
 
 
 class LoadSuiteBase:
@@ -84,9 +85,8 @@ class LoadSuiteBase:
     def check_tables_size(cls, folder: Optional[str], tables: dict[str, int]):
         wait_error = YdbCluster.wait_ydb_alive(
             int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), (
-                f'{YdbCluster.tables_path}/{folder}'
-                if folder is not None
-                else [f'{YdbCluster.tables_path}/{t}' for t in tables.keys()]
+                folder if folder is not None
+                else [t for t in tables.keys()]
             ))
         if wait_error is not None:
             pytest.fail(f'Cluster is dead: {wait_error}')
@@ -107,15 +107,20 @@ class LoadSuiteBase:
             pytest.fail(f'Unexpected tables size in `{folder}`:\n {msg}')
 
     @staticmethod
-    def __execute_ssh(host: str, cmd: str):
-        ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-        ssh_user = os.getenv('SSH_USER')
-        if ssh_user is not None:
-            ssh_cmd += ['-l', ssh_user]
-        ssh_key_file = os.getenv('SSH_KEY_FILE')
-        if ssh_key_file is not None:
-            ssh_cmd += ['-i', ssh_key_file]
-        return yatest.common.execute(ssh_cmd + [host, cmd], wait=False, text=True)
+    def execute_ssh(host: str, cmd: str):
+        local = re.is_localhost(host)
+        if local:
+            ssh_cmd = cmd
+        else:
+            ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+            ssh_user = os.getenv('SSH_USER')
+            if ssh_user is not None:
+                ssh_cmd += ['-l', ssh_user]
+            ssh_key_file = os.getenv('SSH_KEY_FILE')
+            if ssh_key_file is not None:
+                ssh_cmd += ['-i', ssh_key_file]
+            ssh_cmd += [host, cmd]
+        return yatest.common.execute(ssh_cmd, wait=False, text=True, shell=local)
 
     @classmethod
     def __hide_query_text(cls, text, query_text):
@@ -136,7 +141,7 @@ class LoadSuiteBase:
         for host in hosts:
             for c in exec_kikimr.keys():
                 try:
-                    exec_kikimr[c][host] = cls.__execute_ssh(host, cmd.format(
+                    exec_kikimr[c][host] = cls.execute_ssh(host, cmd.format(
                         storage='kikimr',
                         container=f' -m k8s_container:{c}' if c else ''
                     ))
@@ -144,7 +149,7 @@ class LoadSuiteBase:
                     logging.error(e)
             for c in exec_start.keys():
                 try:
-                    exec_start[c][host] = cls.__execute_ssh(host, cmd.format(
+                    exec_start[c][host] = cls.execute_ssh(host, cmd.format(
                         storage='kikimr-start',
                         container=f' -m k8s_container:{c}' if c else ''))
                 except BaseException as e:
@@ -175,7 +180,7 @@ class LoadSuiteBase:
     @classmethod
     def __get_core_hashes_by_pod(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
         core_processes = {
-            h: cls.__execute_ssh(h, 'sudo flock /tmp/brk_pad /Berkanavt/breakpad/bin/kikimr_breakpad_analizer.sh')
+            h: cls.execute_ssh(h, 'sudo flock /tmp/brk_pad /Berkanavt/breakpad/bin/kikimr_breakpad_analizer.sh')
             for h in hosts
         }
 
@@ -184,9 +189,9 @@ class LoadSuiteBase:
             exec.wait(check_exit_code=False)
             if exec.returncode != 0:
                 logging.error(f'Error while process coredumps on host {h}: {exec.stderr}')
-            exec = cls.__execute_ssh(h, ('find /coredumps/ -name "sended_*.json" '
-                                         f'-mmin -{(10 + time() - start_time) / 60} -mmin +{(-10 + time() - end_time) / 60}'
-                                         ' | while read FILE; do cat $FILE; echo -n ","; done'))
+            exec = cls.execute_ssh(h, ('find /coredumps/ -name "sended_*.json" '
+                                       f'-mmin -{(10 + time() - start_time) / 60} -mmin +{(-10 + time() - end_time) / 60}'
+                                       ' | while read FILE; do cat $FILE; echo -n ","; done'))
             exec.wait(check_exit_code=False)
             if exec.returncode == 0:
                 for core in json.loads(f'[{exec.stdout.strip(",")}]'):
@@ -205,7 +210,7 @@ class LoadSuiteBase:
         oom_cmd = f'sudo journalctl -k -q --no-pager -S "{start}" -U "{end}" --grep "Out of memory: Kill" --case-sensitive=false'
         ooms = set()
         for h in hosts:
-            exec = cls.__execute_ssh(h, oom_cmd)
+            exec = cls.execute_ssh(h, oom_cmd)
             exec.wait(check_exit_code=False)
             if exec.returncode == 0:
                 if exec.stdout:

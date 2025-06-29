@@ -14,8 +14,13 @@ struct TSchedulableTask {
     explicit TSchedulableTask(const NHdrf::NDynamic::TQueryPtr& query);
     ~TSchedulableTask();
 
-    void IncreaseUsage(const TDuration& burstThrottle);
+    bool TryIncreaseUsage();
+    void IncreaseUsage();
     void DecreaseUsage(const TDuration& burstUsage);
+
+    void IncreaseBurstThrottle(const TDuration& burstThrottle);
+    void IncreaseThrottle();
+    void DecreaseThrottle();
 
     NHdrf::NDynamic::TQueryPtr Query;
 };
@@ -33,24 +38,23 @@ protected:
     static TMonotonic Now();
     bool IsSchedulable() const;
 
-    void StartExecution(const TDuration& burstThrottle);
+    bool StartExecution(TMonotonic now);
     void StopExecution();
 
-    void Throttle();
-    bool IsThrottled() const;
-    TDuration Resume();
-
-    std::optional<TDuration> CalculateDelay(TMonotonic now) const;
-
-    void AccountThrottledTime(TMonotonic now);
+    TDuration CalculateDelay(TMonotonic now) const;
 
 private:
+    void Resume();
+
     TSchedulableTaskPtr SchedulableTask;
     const bool Schedulable;
     THPTimer Timer;
+    bool Executed = false;
     bool Throttled = false;
     TMonotonic StartThrottle;
-    TDuration BatchTime;
+
+    TDuration LastExecutionTime;
+    ui64 ExecuteAttempts = 0;
 };
 
 } // namespace NKikimr::NKqp::NScheduler

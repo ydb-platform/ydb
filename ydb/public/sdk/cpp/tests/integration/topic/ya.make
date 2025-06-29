@@ -27,6 +27,7 @@ SRCS(
     basic_usage.cpp
     describe_topic.cpp
     local_partition.cpp
+    topic_to_table.cpp
     trace.cpp
 )
 

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.2.0)
+VERSION(2.3.2)
 
-ORIGINAL_SOURCE(https://github.com/apolukhin/pfr_non_boost/archive/2.2.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/apolukhin/pfr_non_boost/archive/2.3.2.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/pfr/include

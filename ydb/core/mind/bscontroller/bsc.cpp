@@ -219,6 +219,10 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         // Console tablet, which is the source of truth for this case
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
     }
+
+    if (Loaded) {
+        ApplyStorageConfig();
+    }
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {

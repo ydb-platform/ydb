@@ -59,13 +59,13 @@ class TMiniKQLComputationNodePackTest: public TTestBase {
     using TValuePackerType = typename TPackerTraits<Fast, Transport>::TPackerType;
 protected:
     TMiniKQLComputationNodePackTest()
-        : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
-        , RandomProvider(CreateDefaultRandomProvider())
-        , Alloc(__LOCATION__)
-        , Env(Alloc)
-        , PgmBuilder(Env, *FunctionRegistry)
-        , MemInfo("Memory")
-        , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
+        : FunctionRegistry_(CreateFunctionRegistry(CreateBuiltinRegistry()))
+        , RandomProvider_(CreateDefaultRandomProvider())
+        , Alloc_(__LOCATION__)
+        , Env_(Alloc_)
+        , PgmBuilder_(Env_, *FunctionRegistry_)
+        , MemInfo_("Memory")
+        , HolderFactory_(Alloc_.Ref(), MemInfo_, FunctionRegistry_.Get())
         , ArrowPool_(NYql::NUdf::GetYqlMemoryPool())
     {
     }
@@ -111,8 +111,8 @@ protected:
         for (ui32 val: xrange(0, 10)) {
             listValues = listValues.Append(NUdf::TUnboxedValuePod(val));
         }
-        TType* listType = PgmBuilder.NewListType(PgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-        const NUdf::TUnboxedValue value = HolderFactory.CreateDirectListHolder(std::move(listValues));
+        TType* listType = PgmBuilder_.NewListType(PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id));
+        const NUdf::TUnboxedValue value = HolderFactory_.CreateDirectListHolder(std::move(listValues));
         const auto uValue = TestPackUnpack(listType, value, "Type:List(ui32)");
 
         UNIT_ASSERT_VALUES_EQUAL(uValue.GetListLength(), 10);
@@ -133,8 +133,8 @@ protected:
             }
             listValues = listValues.Append(std::move(uVal));
         }
-        TType* listType = PgmBuilder.NewListType(PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)));
-        const NUdf::TUnboxedValue value = HolderFactory.CreateDirectListHolder(std::move(listValues));
+        TType* listType = PgmBuilder_.NewListType(PgmBuilder_.NewOptionalType(PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)));
+        const NUdf::TUnboxedValue value = HolderFactory_.CreateDirectListHolder(std::move(listValues));
         const auto uValue = TestPackUnpack(listType, value, "Type:List(Optional(utf8))");
 
         UNIT_ASSERT_VALUES_EQUAL(uValue.GetListLength(), 10);
@@ -153,13 +153,13 @@ protected:
 
     void TestTupleType() {
         std::vector<TType*> tupleElemenTypes;
-        tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[0]));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[0]));
-        tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[3]));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[3]));
-        TType* tupleType = PgmBuilder.NewTupleType(tupleElemenTypes);
+        tupleElemenTypes.push_back(PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[0]));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[0]));
+        tupleElemenTypes.push_back(PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[3]));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[3]));
+        TType* tupleType = PgmBuilder_.NewTupleType(tupleElemenTypes);
 
         TUnboxedValueVector tupleElemens;
         tupleElemens.push_back(MakeString("01234567890123456789"));
@@ -169,7 +169,7 @@ protected:
         tupleElemens.push_back(NUdf::TUnboxedValuePod());
         tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
 
-        const NUdf::TUnboxedValue value = HolderFactory.VectorAsArray(tupleElemens);
+        const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(tupleElemens);
         const auto uValue = TestPackUnpack(tupleType, value, "Type:Tuple");
 
         {
@@ -202,14 +202,14 @@ protected:
 
     void TestStructType() {
         const std::vector<std::pair<std::string_view, TType*>> structElemenTypes = {
-            {"a", PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)},
-            {"b", PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
-            {"c", PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
-            {"d", PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)},
-            {"e", PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id, true)},
-            {"f", PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id, true)}
+            {"a", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)},
+            {"b", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
+            {"c", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
+            {"d", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id)},
+            {"e", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, true)},
+            {"f", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, true)}
         };
-        TType* structType = PgmBuilder.NewStructType(structElemenTypes);
+        TType* structType = PgmBuilder_.NewStructType(structElemenTypes);
 
         TUnboxedValueVector structElemens;
         structElemens.push_back(MakeString("01234567890123456789"));
@@ -219,7 +219,7 @@ protected:
         structElemens.push_back(NUdf::TUnboxedValuePod());
         structElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
 
-        const NUdf::TUnboxedValue value = HolderFactory.VectorAsArray(structElemens);
+        const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(structElemens);
         const auto uValue = TestPackUnpack(structType, value, "Type:Struct");
 
         {
@@ -251,10 +251,10 @@ protected:
     }
 
     void TestOptionalType() {
-        TType* type = PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id);
-        type = PgmBuilder.NewOptionalType(type);
-        type = PgmBuilder.NewOptionalType(type);
-        type = PgmBuilder.NewOptionalType(type);
+        TType* type = PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id);
+        type = PgmBuilder_.NewOptionalType(type);
+        type = PgmBuilder_.NewOptionalType(type);
+        type = PgmBuilder_.NewOptionalType(type);
 
         NUdf::TUnboxedValue uValue = NUdf::TUnboxedValuePod();
         uValue = TestPackUnpack(type, uValue, "Type:Optional, Value:null");
@@ -280,15 +280,15 @@ protected:
     }
 
     void TestDictType() {
-        TType* keyType = PgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
-        TType* payloadType = PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
-        TType* dictType = PgmBuilder.NewDictType(keyType, payloadType, false);
+        TType* keyType = PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id);
+        TType* payloadType = PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+        TType* dictType = PgmBuilder_.NewDictType(keyType, payloadType, false);
 
         TValuesDictHashSingleFixedMap<ui32> map;
         map[4] = NUdf::TUnboxedValuePod::Embedded("4");
         map[10] = NUdf::TUnboxedValuePod::Embedded("10");
         map[1] = NUdf::TUnboxedValuePod::Embedded("1");
-        const NUdf::TUnboxedValue value = HolderFactory.CreateDirectHashedSingleFixedMapHolder<ui32, false>(std::move(map), std::nullopt);
+        const NUdf::TUnboxedValue value = HolderFactory_.CreateDirectHashedSingleFixedMapHolder<ui32, false>(std::move(map), std::nullopt);
 
         const auto uValue = TestPackUnpack(dictType, value, "Type:Dict");
 
@@ -301,21 +301,21 @@ protected:
 
     void TestVariantTypeOverStruct() {
         const std::vector<std::pair<std::string_view, TType*>> structElemenTypes = {
-            {"a", PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)},
-            {"b", PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
-            {"d", PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)}
+            {"a", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)},
+            {"b", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
+            {"d", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id)}
         };
-        TType* structType = PgmBuilder.NewStructType(structElemenTypes);
-        TestVariantTypeImpl(PgmBuilder.NewVariantType(structType));
+        TType* structType = PgmBuilder_.NewStructType(structElemenTypes);
+        TestVariantTypeImpl(PgmBuilder_.NewVariantType(structType));
     }
 
     void TestVariantTypeOverTuple() {
         std::vector<TType*> tupleElemenTypes;
-        tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[0]));
-        tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
-        TType* tupleType = PgmBuilder.NewTupleType(tupleElemenTypes);
-        TestVariantTypeImpl(PgmBuilder.NewVariantType(tupleType));
+        tupleElemenTypes.push_back(PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[0]));
+        tupleElemenTypes.push_back(PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id));
+        TType* tupleType = PgmBuilder_.NewTupleType(tupleElemenTypes);
+        TestVariantTypeImpl(PgmBuilder_.NewVariantType(tupleType));
     }
 
     void ValidateEmbeddedLength(TChunkedBuffer buf, const TString& info) {
@@ -359,13 +359,13 @@ protected:
                 UNIT_ASSERT_VALUES_EQUAL_C(packedValue.Size(), *expectedLength, additionalMsg);
             }
             ValidateEmbeddedLength(packedValue, additionalMsg);
-            return packer.Unpack(std::move(packedValue), HolderFactory);
+            return packer.Unpack(std::move(packedValue), HolderFactory_);
         } else {
             if (expectedLength) {
                 UNIT_ASSERT_VALUES_EQUAL_C(packedValue.Size(), *expectedLength, additionalMsg);
             }
             ValidateEmbeddedLength(packedValue, additionalMsg);
-            return packer.Unpack(packedValue, HolderFactory);
+            return packer.Unpack(packedValue, HolderFactory_);
         }
     }
 
@@ -386,7 +386,7 @@ protected:
     template <typename T>
     void TestNumericType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType));
+        TValuePackerType packer(false, PgmBuilder_.NewDataType(schemeType));
 
         TestNumericValue<T>(Max<T>(), packer, typeDesc);
         TestNumericValue<T>(Min<T>(), packer, typeDesc);
@@ -411,7 +411,7 @@ protected:
     template <typename T>
     void TestOptionalNumericType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:Optional(" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)));
+        TValuePackerType packer(false, PgmBuilder_.NewOptionalType(PgmBuilder_.NewDataType(schemeType)));
         TestOptionalNumericValue<T>(std::optional<T>(Max<T>()), packer, typeDesc);
         TestOptionalNumericValue<T>(std::optional<T>(Min<T>()), packer, typeDesc);
         TestOptionalNumericValue<T>(std::optional<T>(), packer, typeDesc, 1);
@@ -428,7 +428,7 @@ protected:
 
     void TestStringType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType));
+        TValuePackerType packer(false, PgmBuilder_.NewDataType(schemeType));
         TestStringValue("0123456789012345678901234567890123456789", packer, typeDesc, 40 + 4);
         TestStringValue("[]", packer, typeDesc, Fast ? (2 + 4) : (2 + 1));
         TestStringValue("1234567", packer, typeDesc, Fast ? (7 + 4) : (7 + 1));
@@ -442,7 +442,7 @@ protected:
     void TestUuidType() {
         auto schemeType = NUdf::TDataType<NUdf::TUuid>::Id;
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType));
+        TValuePackerType packer(false, PgmBuilder_.NewDataType(schemeType));
         TestStringValue("0123456789abcdef", packer, typeDesc, Fast ? 16 : (16 + 4));
     }
 
@@ -459,7 +459,7 @@ protected:
 
     void TestOptionalStringType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:Optional(" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)));
+        TValuePackerType packer(false, PgmBuilder_.NewOptionalType(PgmBuilder_.NewDataType(schemeType)));
         TestOptionalStringValue("0123456789012345678901234567890123456789", packer, typeDesc, Fast ? (40 + 4 + 1) : (40 + 4));
         TestOptionalStringValue(std::nullopt, packer, typeDesc, 1);
         TestOptionalStringValue("[]", packer, typeDesc, Fast ? (2 + 4 + 1) : (2 + 1));
@@ -472,7 +472,7 @@ protected:
         TString descr = TStringBuilder() << "Type:Variant("
             << static_cast<TVariantType*>(variantType)->GetUnderlyingType()->GetKindAsStr() << ')';
         {
-            const NUdf::TUnboxedValue value = HolderFactory.CreateVariantHolder(MakeString("01234567890123456789"), 0);
+            const NUdf::TUnboxedValue value = HolderFactory_.CreateVariantHolder(MakeString("01234567890123456789"), 0);
             const auto uValue = TestPackUnpack(variantType, value, descr);
 
             UNIT_ASSERT_VALUES_EQUAL(uValue.GetVariantIndex(), 0);
@@ -480,7 +480,7 @@ protected:
             UNIT_ASSERT_VALUES_EQUAL(std::string_view(e.AsStringRef()), "01234567890123456789");
         }
         {
-            const NUdf::TUnboxedValue value = HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(), 1);
+            const NUdf::TUnboxedValue value = HolderFactory_.CreateVariantHolder(NUdf::TUnboxedValuePod(), 1);
             const auto uValue = TestPackUnpack(variantType, value, descr);
 
             UNIT_ASSERT_VALUES_EQUAL(uValue.GetVariantIndex(), 1);
@@ -488,7 +488,7 @@ protected:
             UNIT_ASSERT(!e);
         }
         {
-            const NUdf::TUnboxedValue value = HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(ui64(12345)), 2);
+            const NUdf::TUnboxedValue value = HolderFactory_.CreateVariantHolder(NUdf::TUnboxedValuePod(ui64(12345)), 2);
             const auto uValue = TestPackUnpack(variantType, value, descr);
 
             UNIT_ASSERT_VALUES_EQUAL(uValue.GetVariantIndex(), 2);
@@ -499,19 +499,19 @@ protected:
 
     NUdf::TUnboxedValue MakeTupleValue(TType*& tupleType, bool forPerf = false) {
         std::vector<TType*> tupleElemenTypes;
-        tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[0]));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[0]));
-        tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[3]));
-        tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[3]));
+        tupleElemenTypes.push_back(PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[0]));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[0]));
+        tupleElemenTypes.push_back(PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[3]));
+        tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(tupleElemenTypes[3]));
         if (!forPerf) {
-            tupleElemenTypes.push_back(PgmBuilder.NewDecimalType(16, 8));
-            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(22, 3)));
-            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(35, 2)));
-            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(29, 0)));
+            tupleElemenTypes.push_back(PgmBuilder_.NewDecimalType(16, 8));
+            tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(PgmBuilder_.NewDecimalType(22, 3)));
+            tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(PgmBuilder_.NewDecimalType(35, 2)));
+            tupleElemenTypes.push_back(PgmBuilder_.NewOptionalType(PgmBuilder_.NewDecimalType(29, 0)));
         }
-        tupleType = PgmBuilder.NewTupleType(tupleElemenTypes);
+        tupleType = PgmBuilder_.NewTupleType(tupleElemenTypes);
 
         auto inf = NYql::NDecimal::FromString("inf", 16, 8);
         auto dec1 = NYql::NDecimal::FromString("12345.673", 22, 3);
@@ -531,7 +531,7 @@ protected:
             tupleElemens.push_back(NUdf::TUnboxedValuePod());
         }
 
-        return HolderFactory.VectorAsArray(tupleElemens);
+        return HolderFactory_.VectorAsArray(tupleElemens);
     }
 
     void ValidateTupleValue(const NUdf::TUnboxedValue& value, bool forPerf = false) {
@@ -562,27 +562,27 @@ protected:
 
     void TestPairPackPerformance() {
         std::vector<TType*> tupleElemenTypes;
-        tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-        tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-        TType* tupleType = PgmBuilder.NewTupleType(tupleElemenTypes);
+        tupleElemenTypes.push_back(PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id));
+        tupleElemenTypes.push_back(PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id));
+        TType* tupleType = PgmBuilder_.NewTupleType(tupleElemenTypes);
 
         TUnboxedValueVector tupleElemens;
         tupleElemens.push_back(NUdf::TUnboxedValuePod(ui32(12345)));
         tupleElemens.push_back(NUdf::TUnboxedValuePod(ui32(67890)));
 
-        const NUdf::TUnboxedValue value = HolderFactory.VectorAsArray(tupleElemens);
+        const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(tupleElemens);
         TestPackPerformance(tupleType, value);
     }
 
     void TestShortStringPackPerformance() {
         const auto v = NUdf::TUnboxedValuePod::Embedded("01234");
-        TType* type = PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+        TType* type = PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
         TestPackPerformance(type, v);
     }
 
     void TestIntegerPackPerformance() {
         const auto& v = NUdf::TUnboxedValuePod(ui64("123456789ULL"));
-        TType* type = PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id);
+        TType* type = PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id);
         TestPackPerformance(type, v);
     }
 
@@ -616,15 +616,15 @@ protected:
                 UNIT_ASSERT_VALUES_EQUAL(result.Size(), packed.size());
                 UNIT_ASSERT(result.Size() != result.ContigousSize());
 
-                ValidateTupleValue(packer.Unpack(std::move(result), HolderFactory));
+                ValidateTupleValue(packer.Unpack(std::move(result), HolderFactory_));
             }
         }
     }
 
     void TestIncrementalPacking() {
         if constexpr (Transport) {
-            auto itemType = PgmBuilder.NewDataType(NUdf::TDataType<char *>::Id);
-            auto listType = PgmBuilder.NewListType(itemType);
+            auto itemType = PgmBuilder_.NewDataType(NUdf::TDataType<char *>::Id);
+            auto listType = PgmBuilder_.NewListType(itemType);
             TValuePackerType packer(false, itemType);
             TValuePackerType listPacker(false, listType);
 
@@ -639,7 +639,7 @@ protected:
 
             auto serialized = packer.Finish();
 
-            auto listObj = listPacker.Unpack(TChunkedBuffer(serialized), HolderFactory);
+            auto listObj = listPacker.Unpack(TChunkedBuffer(serialized), HolderFactory_);
             UNIT_ASSERT_VALUES_EQUAL(listObj.GetListLength(), count);
             const auto iter = listObj.GetListIterator();
             for (NUdf::TUnboxedValue uVal; iter.Next(uVal);) {
@@ -648,7 +648,7 @@ protected:
             }
 
             TUnboxedValueBatch items;
-            packer.UnpackBatch(std::move(serialized), HolderFactory, items);
+            packer.UnpackBatch(std::move(serialized), HolderFactory_, items);
             UNIT_ASSERT_VALUES_EQUAL(items.RowCount(), count);
             items.ForEachRow([&](const NUdf::TUnboxedValue& value) {
                 UNIT_ASSERT(value);
@@ -685,24 +685,24 @@ protected:
     class TArgsDispatcher : public IArgsDispatcher {
     public:
         TArgsDispatcher(TValue& dst, const std::vector<TValue>& choices)
-            : Dst(dst)
-            , Choices(choices)
+            : Dst_(dst)
+            , Choices_(choices)
         {
             UNIT_ASSERT_C(!choices.empty(), "Choices should not be empty");
         }
 
         ui64 GetSize() const {
-            return Choices.size();
+            return Choices_.size();
         }
 
         void Set(ui64 index) {
-            UNIT_ASSERT_LE_C(index + 1, Choices.size(), "Invalid args dispatcher index");
-            Dst = Choices[index];
+            UNIT_ASSERT_LE_C(index + 1, Choices_.size(), "Invalid args dispatcher index");
+            Dst_ = Choices_[index];
         }
 
     private:
-        TValue& Dst;
-        const std::vector<TValue> Choices;
+        TValue& Dst_;
+        const std::vector<TValue> Choices_;
     };
 
     void DoTestBlockPacking(const TBlockTestArgs& args) {
@@ -710,29 +710,29 @@ protected:
         ui64 offset = args.Offset;
         ui64 len = args.Len;
         if constexpr (Transport) {
-            auto strType = PgmBuilder.NewDataType(NUdf::TDataType<char*>::Id);
-            auto ui32Type = PgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
-            auto ui64Type = PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id);
-            auto optStrType = PgmBuilder.NewOptionalType(strType);
-            auto optUi32Type = PgmBuilder.NewOptionalType(ui32Type);
+            auto strType = PgmBuilder_.NewDataType(NUdf::TDataType<char*>::Id);
+            auto ui32Type = PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id);
+            auto ui64Type = PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id);
+            auto optStrType = PgmBuilder_.NewOptionalType(strType);
+            auto optUi32Type = PgmBuilder_.NewOptionalType(ui32Type);
 
-            auto tupleOptUi32StrType = PgmBuilder.NewTupleType({ optUi32Type, strType });
-            auto optTupleOptUi32StrType = PgmBuilder.NewOptionalType(tupleOptUi32StrType);
+            auto tupleOptUi32StrType = PgmBuilder_.NewTupleType({ optUi32Type, strType });
+            auto optTupleOptUi32StrType = PgmBuilder_.NewOptionalType(tupleOptUi32StrType);
 
-            auto blockUi32Type = PgmBuilder.NewBlockType(ui32Type, TBlockType::EShape::Many);
-            auto blockOptStrType = PgmBuilder.NewBlockType(optStrType, TBlockType::EShape::Many);
-            auto scalarOptStrType = PgmBuilder.NewBlockType(optStrType, TBlockType::EShape::Scalar);
-            auto blockOptTupleOptUi32StrType = PgmBuilder.NewBlockType(optTupleOptUi32StrType, TBlockType::EShape::Many);
-            auto scalarUi64Type = PgmBuilder.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
+            auto blockUi32Type = PgmBuilder_.NewBlockType(ui32Type, TBlockType::EShape::Many);
+            auto blockOptStrType = PgmBuilder_.NewBlockType(optStrType, TBlockType::EShape::Many);
+            auto scalarOptStrType = PgmBuilder_.NewBlockType(optStrType, TBlockType::EShape::Scalar);
+            auto blockOptTupleOptUi32StrType = PgmBuilder_.NewBlockType(optTupleOptUi32StrType, TBlockType::EShape::Many);
+            auto scalarUi64Type = PgmBuilder_.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
 
-            auto tzDateType = PgmBuilder.NewDataType(NUdf::EDataSlot::TzDate);
-            auto blockTzDateType = PgmBuilder.NewBlockType(tzDateType, TBlockType::EShape::Many);
-            auto nullType = PgmBuilder.NewNullType();
-            auto blockNullType = PgmBuilder.NewBlockType(nullType, TBlockType::EShape::Many);
+            auto tzDateType = PgmBuilder_.NewDataType(NUdf::EDataSlot::TzDate);
+            auto blockTzDateType = PgmBuilder_.NewBlockType(tzDateType, TBlockType::EShape::Many);
+            auto nullType = PgmBuilder_.NewNullType();
+            auto blockNullType = PgmBuilder_.NewBlockType(nullType, TBlockType::EShape::Many);
 
             auto rowType =
                 legacyStruct
-                    ? PgmBuilder.NewStructType({
+                    ? PgmBuilder_.NewStructType({
                           {"A", blockUi32Type},
                           {"B", blockOptStrType},
                           {"_yql_block_length", scalarUi64Type},
@@ -741,7 +741,7 @@ protected:
                           {"c", blockTzDateType},
                           {"nill", blockNullType},
                       })
-                    : PgmBuilder.NewMultiType(
+                    : PgmBuilder_.NewMultiType(
                           {blockUi32Type, blockOptStrType, scalarOptStrType,
                            blockOptTupleOptUi32StrType, blockTzDateType, blockNullType, scalarUi64Type});
 
@@ -820,13 +820,13 @@ protected:
             }
             TUnboxedValueVector columns;
             for (auto& datum : datums) {
-                columns.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
+                columns.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum)));
             }
 
             TValuePackerType packer(false, rowType, {}, ArrowPool_, args.MinFillPercentage);
             if (legacyStruct) {
                 TUnboxedValueVector columnsCopy = columns;
-                NUdf::TUnboxedValue row = HolderFactory.VectorAsArray(columnsCopy);
+                NUdf::TUnboxedValue row = HolderFactory_.VectorAsArray(columnsCopy);
                 packer.AddItem(row);
             } else {
                 packer.AddWideItem(columns.data(), columns.size());
@@ -834,7 +834,7 @@ protected:
             TChunkedBuffer packed = packer.Finish();
 
             TUnboxedValueBatch unpacked(rowType);
-            packer.UnpackBatch(std::move(packed), HolderFactory, unpacked);
+            packer.UnpackBatch(std::move(packed), HolderFactory_, unpacked);
 
             UNIT_ASSERT_VALUES_EQUAL(unpacked.RowCount(), 1);
 
@@ -939,13 +939,13 @@ protected:
     }
 
 private:
-    TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-    TScopedAlloc Alloc;
-    TTypeEnvironment Env;
-    TProgramBuilder PgmBuilder;
-    TMemoryUsageInfo MemInfo;
-    THolderFactory HolderFactory;
+    TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry_;
+    TIntrusivePtr<IRandomProvider> RandomProvider_;
+    TScopedAlloc Alloc_;
+    TTypeEnvironment Env_;
+    TProgramBuilder PgmBuilder_;
+    TMemoryUsageInfo MemInfo_;
+    THolderFactory HolderFactory_;
     arrow::MemoryPool* const ArrowPool_;
 };
 

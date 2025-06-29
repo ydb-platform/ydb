@@ -77,7 +77,7 @@ public:
         block = work;
 
         const auto itemsType = PointerType::getUnqual(valueType);
-        const auto itemsPtr = *Stateless || ctx.AlwaysInline ?
+        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
             new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
             new AllocaInst(itemsType, 0U, "items_ptr", block);
 
@@ -253,7 +253,7 @@ public:
         block = work;
 
         const auto itemsType = PointerType::getUnqual(valueType);
-        const auto itemsPtr = *Stateless || ctx.AlwaysInline ?
+        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
             new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
             new AllocaInst(itemsType, 0U, "items_ptr", block);
 

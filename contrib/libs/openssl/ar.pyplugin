@@ -54,6 +54,9 @@ def gen_renames(p, d):
 def rename_syms(where, ret):
     p = 'v1_'
 
+    if where == '/':
+        where = ''
+
     # find symbols to rename
     syms = run(where + 'llvm-nm', '--extern-only', '--defined-only', '-A', ret)
 

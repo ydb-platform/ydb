@@ -385,7 +385,7 @@ public:
     }
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
-        return Portion->RestoreBlobRange(rangeLink);
+        return GetStageData().GetPortionAccessor().RestoreBlobRange(rangeLink);
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {

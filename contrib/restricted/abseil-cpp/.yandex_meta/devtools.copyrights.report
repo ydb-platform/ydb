@@ -57,9 +57,6 @@ BELONGS ya.make
         absl/base/internal/exception_safety_testing.h [1:1]
         absl/base/internal/exception_testing.h [1:1]
         absl/base/internal/identity.h [1:1]
-        absl/base/internal/inline_variable.h [1:1]
-        absl/base/internal/inline_variable_testing.h [1:1]
-        absl/base/internal/invoke.h [1:1]
         absl/base/internal/low_level_alloc.cc [1:1]
         absl/base/internal/low_level_alloc.h [1:1]
         absl/base/internal/low_level_scheduling.h [1:1]
@@ -125,6 +122,8 @@ BELONGS ya.make
         absl/random/internal/chi_square.h [1:1]
         absl/random/internal/distribution_test_util.cc [1:1]
         absl/random/internal/distribution_test_util.h [1:1]
+        absl/random/internal/entropy_pool.cc [1:1]
+        absl/random/internal/entropy_pool.h [1:1]
         absl/random/internal/explicit_seed_seq.h [1:1]
         absl/random/internal/fast_uniform_bits.h [1:1]
         absl/random/internal/fastmath.h [1:1]
@@ -132,8 +131,6 @@ BELONGS ya.make
         absl/random/internal/iostream_state_saver.h [1:1]
         absl/random/internal/nonsecure_base.h [1:1]
         absl/random/internal/platform.h [1:1]
-        absl/random/internal/pool_urbg.cc [1:1]
-        absl/random/internal/pool_urbg.h [1:1]
         absl/random/internal/randen.cc [1:1]
         absl/random/internal/randen.h [1:1]
         absl/random/internal/randen_detect.cc [1:1]
@@ -222,10 +219,6 @@ BELONGS ya.make
         absl/time/time.cc [1:1]
         absl/time/time.h [1:1]
         absl/types/any.h [2:2]
-        absl/types/bad_any_cast.cc [1:1]
-        absl/types/bad_optional_access.cc [1:1]
-        absl/types/bad_variant_access.cc [1:1]
-        absl/types/internal/optional.h [1:1]
         absl/types/optional.h [1:1]
         absl/types/span.h [2:2]
         absl/utility/utility.h [1:1]
@@ -269,7 +262,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        absl/base/internal/nullability_impl.h [1:1]
+        absl/base/internal/nullability_deprecated.h [1:1]
         absl/base/no_destructor.h [1:1]
         absl/base/nullability.h [1:1]
         absl/base/prefetch.h [1:1]
@@ -293,7 +286,6 @@ BELONGS ya.make
         absl/synchronization/internal/waiter_base.h [1:1]
         absl/synchronization/internal/win32_waiter.cc [1:1]
         absl/synchronization/internal/win32_waiter.h [1:1]
-        absl/utility/internal/if_constexpr.h [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2277624a2da390a98ec17138cb6dc2a5
 BELONGS ya.make
@@ -445,11 +437,7 @@ BELONGS ya.make
         absl/time/civil_time.cc [1:1]
         absl/time/civil_time.h [1:1]
         absl/time/internal/get_current_time_chrono.inc [1:1]
-        absl/types/bad_any_cast.h [1:1]
-        absl/types/bad_optional_access.h [1:1]
-        absl/types/bad_variant_access.h [1:1]
         absl/types/compare.h [1:1]
-        absl/types/internal/variant.h [1:1]
         absl/types/variant.h [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 58e60221a225d38384f3c66b2400cc91
@@ -568,7 +556,6 @@ BELONGS ya.make
         absl/log/internal/vlog_config.h [1:1]
         absl/log/internal/voidify.h [1:1]
         absl/log/log.h [1:1]
-        absl/log/log_entry.cc [2:2]
         absl/log/log_entry.h [1:1]
         absl/log/log_sink.cc [1:1]
         absl/log/log_sink.h [1:1]
@@ -578,7 +565,6 @@ BELONGS ya.make
         absl/log/structured.h [1:1]
         absl/log/vlog_is_on.h [1:1]
         absl/strings/charset.h [1:1]
-        absl/strings/cord_buffer.cc [1:1]
         absl/strings/has_absl_stringify.h [1:1]
         absl/strings/internal/cord_data_edge.h [1:1]
         absl/strings/internal/damerau_levenshtein_distance.cc [1:1]
@@ -623,6 +609,22 @@ BELONGS ya.make
     Files with this license:
         absl/debugging/internal/demangle_rust.cc [38:40]
 
+KEEP     COPYRIGHT_SERVICE_LABEL cf1ca39881e3a11851beebfeb11f8493
+BELONGS ya.make
+    License text:
+        // Copyright 2025 The Abseil Authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        absl/base/internal/iterator_traits.h [1:1]
+        absl/base/internal/iterator_traits_test_helper.h [1:1]
+        absl/container/internal/hashtable_control_bytes.h [1:1]
+        absl/container/internal/raw_hash_set_resize_impl.h [1:1]
+        absl/debugging/internal/addresses.h [1:1]
+        absl/hash/internal/weakly_mixed_integer.h [1:1]
+
 KEEP     COPYRIGHT_SERVICE_LABEL d34864d3c7c7a5ffae3d414344aa54a8
 BELONGS ya.make
     License text:
@@ -632,7 +634,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        absl/base/internal/fast_type_id.h [2:2]
+        absl/base/fast_type_id.h [1:1]
         absl/base/internal/strerror.cc [1:1]
         absl/base/internal/strerror.h [1:1]
         absl/debugging/symbolize_darwin.inc [1:1]

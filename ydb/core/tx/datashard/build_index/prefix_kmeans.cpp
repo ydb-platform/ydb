@@ -80,6 +80,7 @@ protected:
     TBufferData* PrefixBuf = nullptr;
 
     const ui32 Dimensions = 0;
+    const ui32 K = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
@@ -124,6 +125,7 @@ public:
         , BuildId{request.GetId()}
         , Uploader(request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
+        , K(request.GetK())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -132,7 +134,6 @@ public:
         , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
-        Clusters->Init(request.GetK(), request.GetNeedsRounds());
 
         const auto& embedding = request.GetEmbeddingColumn();
         TVector<TString> data{request.GetDataColumns().begin(), request.GetDataColumns().end()};
@@ -202,8 +203,8 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) final
     {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
 
         Uploader.Finish(record, status);
 
@@ -259,7 +260,7 @@ public:
         // LOG_T("Feed " << Debug());
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         if (Prefix && !TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
             if (!FinishPrefix()) {
@@ -272,16 +273,16 @@ public:
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
 
             // write {Prefix..., Parent} row to PrefixBuf:
-            auto pk = TSerializedCellVec::Serialize(Prefix.GetCells());
-            std::array<TCell, 1> cells;
-            cells[0] = TCell::Make(Parent);
-            TSerializedCellVec::UnsafeAppendCells(cells, pk);
-            PrefixBuf->AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize({}));
+            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
+            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
+            pk.push_back(TCell::Make(Parent));
+
+            PrefixBuf->AddRow(pk, {});
         }
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
-            PrefixRows.AddRow(TSerializedCellVec{key}, TSerializedCellVec::Serialize(*row));
-            if (HasReachedLimits(PrefixRows, ScanSettings)) {
+            PrefixRows.AddRow(key, *row);
+            if (PrefixRows.HasReachedLimits(ScanSettings)) {
                 PrefixRows.Clear();
                 IsPrefixRowsValid = false;
             }
@@ -353,7 +354,7 @@ protected:
     }
 
     void StartNewPrefix() {
-        Parent = Child + Clusters->GetK();
+        Parent = Child + K;
         Child = Parent + 1;
         State = EState::SAMPLE;
         Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
@@ -385,7 +386,7 @@ protected:
             IsFirstPrefixFeed = false;
 
             if (IsPrefixRowsValid) {
-                LOG_T("FinishPrefix not finished, manually feeding " << PrefixRows.Size() << " saved rows " << Debug());
+                LOG_T("FinishPrefix not finished, manually feeding " << PrefixRows.GetRows() << " saved rows " << Debug());
                 for (ui64 iteration = 0; ; iteration++) {
                     for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
                         TSerializedCellVec row(row_);
@@ -411,17 +412,25 @@ protected:
     {
         if (State == EState::SAMPLE) {
             State = EState::KMEANS;
-            if (!Clusters->SetClusters(Sampler.Finish().second)) {
+            auto rows = Sampler.Finish().second;
+            if (rows.size() == 0) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
                 return true;
             }
-            Clusters->InitAggregatedClusters();
+            if (rows.size() < K) {
+                // if this datashard have less than K valid embeddings for this parent
+                // lets make single centroid for it
+                rows.resize(1);
+            }
+            bool ok = Clusters->SetClusters(std::move(rows));
+            Y_ENSURE(ok);
+            Clusters->SetRound(1);
             return false; // do KMEANS
         }
 
         if (State == EState::KMEANS) {
-            if (Clusters->RecomputeClusters()) {
+            if (Clusters->NextRound()) {
                 FormLevelRows();
                 State = UploadState;
                 return false; // do UPLOAD_*
@@ -473,7 +482,7 @@ protected:
     void FeedKMeans(TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
+            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
     }
 
@@ -639,7 +648,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
         if (!clusters) {
             badRequest(error);
             auto sent = trySendBadRequest();

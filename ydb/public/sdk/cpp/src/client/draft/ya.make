@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    ydb_bridge.cpp
     ydb_dynamic_config.cpp
     ydb_replication.cpp
     ydb_scripting.cpp

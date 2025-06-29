@@ -27,6 +27,7 @@ RECURSE(
     conveyor
     conveyor_composite
     columnshard
+    general_cache
     coordinator
     datashard
     locks

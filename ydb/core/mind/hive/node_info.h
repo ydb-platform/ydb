@@ -164,6 +164,10 @@ public:
         return VolatileState == EVolatileState::Connecting || VolatileState == EVolatileState::Connected;
     }
 
+    TNodeId GetId() const {
+        return Id;
+    }
+
     bool MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;

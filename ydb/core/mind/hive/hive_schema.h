@@ -326,9 +326,10 @@ struct Schema : NIceDb::Schema {
         struct State : Column<2, NScheme::NTypeIds::Uint32> { using Type = NKikimrBridge::TClusterState::EPileState; };
         struct IsPrimary : Column<3, NScheme::NTypeIds::Bool> {};
         struct IsPromoted : Column<4, NScheme::NTypeIds::Bool> {};
+        struct Drain : Column<5, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
 
         using TKey = TableKey<Id>;
-        using TColumns = TableColumns<Id, State, IsPrimary, IsPromoted>;
+        using TColumns = TableColumns<Id, State, IsPrimary, IsPromoted, Drain>;
     };
 
     using TTables = SchemaTables<

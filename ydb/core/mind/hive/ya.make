@@ -10,6 +10,7 @@ SRCS(
     domain_info.cpp
     domain_info.h
     drain.cpp
+    drain.h
     fill.cpp
     hive.cpp
     hive.h

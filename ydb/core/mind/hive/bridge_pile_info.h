@@ -7,6 +7,8 @@ struct TBridgePileInfo {
     NKikimrBridge::TClusterState::EPileState State = NKikimrBridge::TClusterState::DISCONNECTED;
     bool IsPrimary = false;
     bool IsPromoted = false;
+    bool Drain = false;
+    TVector<TActorId> DrainInitiators; // Currently always empty
 
     std::unordered_set<TNodeId> Nodes;
 
@@ -25,6 +27,10 @@ struct TBridgePileInfo {
             && State == other.State
             && IsPrimary == other.IsPrimary
             && IsPromoted == other.IsPromoted;
+    }
+
+    ui32 GetId() const {
+        return Id.GetRawId();
     }
 };
 } // namespace NKikimr::NHive

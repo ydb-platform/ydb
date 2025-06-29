@@ -286,10 +286,13 @@ struct THiveSharedSettings {
     }
 };
 
+using TDrainTarget = std::variant<TNodeId, TBridgePileId>;
+
 struct TDrainSettings {
     bool Persist = true;
     NKikimrHive::EDrainDownPolicy DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART;
     ui32 DrainInFlight = 0;
+    bool Forward = true;
 };
 
 struct TBalancerSettings {

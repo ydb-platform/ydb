@@ -24,8 +24,7 @@ enum class EWriteStage {
 
 class TWriteFlowCounters: public NColumnShard::TCommonCountersOwner {
 private:
-    using TBaseSignals = TCommonCountersOwner;
-    using TBaseTracing = TStateSignalsOperator<EWriteStage>;
+    using TBase = TCommonCountersOwner;
 
     NMonitoring::TDynamicCounters::TCounterPtr DurationToFinish;
     NMonitoring::TDynamicCounters::TCounterPtr DurationToAbort;

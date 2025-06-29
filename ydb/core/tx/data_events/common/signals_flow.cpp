@@ -5,8 +5,8 @@
 namespace NKikimr::NEvWrite {
 
 TWriteFlowCounters::TWriteFlowCounters()
-    : TBaseSignals("CSWriteFlow")
-    , TBaseTracing(*this, "write_state") {
+    : TBase("CSWriteFlow")
+    , Tracing(*this, "write_state") {
     DurationToAbort = TBase::GetDeriviative("Aborted/SumDuration");
     DurationToFinish = TBase::GetDeriviative("Finished/SumDuration");
 }

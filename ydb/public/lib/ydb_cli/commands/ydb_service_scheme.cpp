@@ -279,8 +279,9 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::CoordinationNode:
         return DescribeCoordinationNode(driver);
     case NScheme::ESchemeEntryType::Replication:
+        return DescribeReplication(driver);
     case NScheme::ESchemeEntryType::Transfer:
-        return DescribeReplication(driver, entry.Type);
+        return DescribeTransfer(driver);
     case NScheme::ESchemeEntryType::View:
         return DescribeView(driver);
     case NScheme::ESchemeEntryType::ExternalDataSource:
@@ -597,15 +598,15 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
-    const auto& desc = result.GetReplicationDescription();
+int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDescribeTransferResult& result) const {
+    const auto& desc = result.GetTransferDescription();
 
     Cout << Endl << "State: ";
     switch (desc.GetState()) {
-    case NReplication::TReplicationDescription::EState::Running:
+    case NReplication::TTransferDescription::EState::Running:
         Cout << desc.GetState();
         break;
-    case NReplication::TReplicationDescription::EState::Error:
+    case NReplication::TTransferDescription::EState::Error:
         Cout << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
         break;
     default:
@@ -613,9 +614,6 @@ int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDes
     }
 
     const auto& connParams = desc.GetConnectionParams();
-    const auto& srcDatabase = connParams.GetDatabase();
-    const auto& dstDatabase = Database;
-
     bool isLocal = connParams.GetDiscoveryEndpoint().empty();
     if (!isLocal) {
         Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
@@ -632,39 +630,31 @@ int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDes
         }
     }
 
-    if (const auto& items = desc.GetItems(); !items.empty()) {
-        TVector<TString> columnNames = { "#", "Source", "Destination" };
-
-        TPrettyTable table(columnNames, TPrettyTableConfig().WithoutRowDelimiters());
-        for (const auto& item : items) {
-            table.AddRow()
-                .Column(0, item.Id)
-                .Column(1, SkipDatabasePrefix(TStringBuf(item.SrcPath), TStringBuf(srcDatabase)))
-                .Column(2, SkipDatabasePrefix(TStringBuf(item.DstPath), TStringBuf(dstDatabase)));
-        }
-        Cout << Endl << "Items:" << Endl << table;
-    }
+    Cout << Endl << "Source path: " << desc.GetSrcPath();
+    Cout << Endl << "Desctination path: " << desc.GetDstPath();
+    Cout << Endl << "Consumer: " << desc.GetConsumerName();
+    Cout << Endl << "Transformation lambda: " << desc.GetConsumerName();
 
     Cout << Endl;
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::DescribeReplication(const TDriver& driver, const NScheme::ESchemeEntryType type) {
+int TCommandDescribe::DescribeReplication(const TDriver& driver) {
     NReplication::TReplicationClient client(driver);
     auto settings = NReplication::TDescribeReplicationSettings()
         .IncludeStats(ShowStats);
 
     auto result = client.DescribeReplication(Path, settings).ExtractValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
+}
 
-    switch(type) {
-        case Dev::NScheme::ESchemeEntryType::Replication:
-            return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
-        case Dev::NScheme::ESchemeEntryType::Transfer:
-            return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintTransferResponsePretty);
-        default:
-            return EXIT_FAILURE;
-    }
+int TCommandDescribe::DescribeTransfer(const TDriver& driver) {
+    NReplication::TReplicationClient client(driver);
+
+    auto result = client.DescribeTransfer(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintTransferResponsePretty);
 }
 
 int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {

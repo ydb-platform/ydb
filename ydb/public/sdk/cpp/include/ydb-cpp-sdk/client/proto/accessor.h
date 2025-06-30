@@ -49,6 +49,7 @@ public:
     static const Ydb::Coordination::DescribeNodeResult& GetProto(const NYdb::NCoordination::TNodeDescription &describeNodeResult);
 #ifdef YDB_SDK_INTERNAL_CLIENTS
     static const Ydb::Replication::DescribeReplicationResult& GetProto(const NYdb::NReplication::TDescribeReplicationResult& desc);
+    static const Ydb::Replication::DescribeTransferResult& GetProto(const NYdb::NReplication::TDescribeTransferResult& desc);
     static const Ydb::View::DescribeViewResult& GetProto(const NYdb::NView::TDescribeViewResult& desc);
 #endif
 

@@ -219,11 +219,26 @@ void TMetricHistory::Load(const NJson::TJsonValue& node, ui64 explicitMinTime, u
     std::vector<ui64> values;
 
     bool even = true;
+    bool first_item = true;
+    ui64 last_time = 0;
 
     for (const auto& subNode : node.GetArray()) {
         ui64 i = subNode.GetIntegerSafe();
-        if (even) times.push_back(i);
-        else values.push_back(i);
+        if (even) {
+            if (first_item) {
+                first_item = false;
+            } else {
+                // time should increase monotonously
+                if (i <= last_time) {
+                    // just ignore tail otherwise
+                    break;
+                }
+            }
+            times.push_back(i);
+            last_time = i;
+        } else {
+            values.push_back(i);
+        }
         even = !even;
     }
 

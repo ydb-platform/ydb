@@ -62,7 +62,6 @@ public:
         , TabletId(state.TabletId)
         , Generation(state.Generation)
     {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", TabletId);
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();

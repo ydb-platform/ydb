@@ -229,7 +229,7 @@ THoldingFileStorage& TUserDataStorage::GetHoldingFileStorage() {
 
 TUserDataBlock* TUserDataStorage::FreezeUdfNoThrow(const TUserDataKey& key,
                                                     TString& errorMessage,const TString& customUdfPrefix,
-                                                    NUdf::ELogLevel logLevel) {
+                                                    NUdf::ELogLevel logLevel, const TStringBuf& alias) {
     TUserDataBlock* block = FreezeNoThrow(key, errorMessage);
     if (!block) {
         return nullptr;
@@ -250,7 +250,7 @@ TUserDataBlock* TUserDataStorage::FreezeUdfNoThrow(const TUserDataKey& key,
         YQL_PROFILE_SCOPE(DEBUG, scope.c_str());
         Y_ENSURE(UdfResolver_);
         Y_ENSURE(UdfIndex_);
-        LoadRichMetadataToUdfIndex(*UdfResolver_, *block, TUdfIndex::EOverrideMode::ReplaceWithNew, *UdfIndex_, FileStorage_, logLevel);
+        LoadRichMetadataToUdfIndex(*UdfResolver_, *block, TUdfIndex::EOverrideMode::ReplaceWithNew, *UdfIndex_, FileStorage_, logLevel, alias);
     } catch (const std::exception& e) {
         errorMessage = TStringBuilder() << "Failed to scan udf with key " << key << ", details: " << e.what();
         return nullptr;

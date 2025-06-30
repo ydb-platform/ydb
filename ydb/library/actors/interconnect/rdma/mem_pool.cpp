@@ -387,7 +387,7 @@ namespace NInterconnect::NRdma {
         }
 
     private:
-        static constexpr size_t ChunkSize = 16 << 20;
+        static constexpr size_t ChunkSize = 64 << 20;
         static constexpr size_t MaxChunks = 1 << 5; //must be power of two
         static constexpr size_t CacheLineSz = 64;
         static constexpr size_t ChunkGap = CacheLineSz / sizeof(TChunk*); // Distance between elemets to prevent cache line sharing

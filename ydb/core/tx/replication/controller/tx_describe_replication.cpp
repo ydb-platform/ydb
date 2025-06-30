@@ -267,6 +267,15 @@ public:
             break;
         }
 
+        if (replication->GetConfig().HasTransferSpecific()) {
+            auto& specific = replication->GetConfig().GetTransferSpecific();
+
+            auto& transferSpecific = *Result->Record.MutableTransferSpecific();
+            transferSpecific.SetTransformationLambda(specific.GetTarget().GetTransformLambda());
+            transferSpecific.SetConsumerName(specific.GetTarget().GetConsumerName());
+            transferSpecific.MutableBatchingSettings()->CopyFrom(specific.GetBatching());
+        }
+
         return true;
     }
 

@@ -99,8 +99,9 @@ private:
     int DescribeCoordinationNode(const TDriver& driver);
     int PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const;
 
-    int DescribeReplication(const TDriver& driver);
+    int DescribeReplication(const TDriver& driver, const NScheme::ESchemeEntryType type);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+    int PrintTransferResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
 
     int DescribeView(const TDriver& driver);
     int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;

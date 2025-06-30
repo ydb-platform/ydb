@@ -279,7 +279,8 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::CoordinationNode:
         return DescribeCoordinationNode(driver);
     case NScheme::ESchemeEntryType::Replication:
-        return DescribeReplication(driver);
+    case NScheme::ESchemeEntryType::Transfer:
+        return DescribeReplication(driver, entry.Type);
     case NScheme::ESchemeEntryType::View:
         return DescribeView(driver);
     case NScheme::ESchemeEntryType::ExternalDataSource:
@@ -596,7 +597,59 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::DescribeReplication(const TDriver& driver) {
+int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
+    const auto& desc = result.GetReplicationDescription();
+
+    Cout << Endl << "State: ";
+    switch (desc.GetState()) {
+    case NReplication::TReplicationDescription::EState::Running:
+        Cout << desc.GetState();
+        break;
+    case NReplication::TReplicationDescription::EState::Error:
+        Cout << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
+        break;
+    default:
+        break;
+    }
+
+    const auto& connParams = desc.GetConnectionParams();
+    const auto& srcDatabase = connParams.GetDatabase();
+    const auto& dstDatabase = Database;
+
+    bool isLocal = connParams.GetDiscoveryEndpoint().empty();
+    if (!isLocal) {
+        Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
+        Cout << Endl << "Database: " << connParams.GetDatabase();
+
+        switch (connParams.GetCredentials()) {
+        case NReplication::TConnectionParams::ECredentials::Static:
+            Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
+            Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
+            break;
+        case NReplication::TConnectionParams::ECredentials::OAuth:
+            Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
+            break;
+        }
+    }
+
+    if (const auto& items = desc.GetItems(); !items.empty()) {
+        TVector<TString> columnNames = { "#", "Source", "Destination" };
+
+        TPrettyTable table(columnNames, TPrettyTableConfig().WithoutRowDelimiters());
+        for (const auto& item : items) {
+            table.AddRow()
+                .Column(0, item.Id)
+                .Column(1, SkipDatabasePrefix(TStringBuf(item.SrcPath), TStringBuf(srcDatabase)))
+                .Column(2, SkipDatabasePrefix(TStringBuf(item.DstPath), TStringBuf(dstDatabase)));
+        }
+        Cout << Endl << "Items:" << Endl << table;
+    }
+
+    Cout << Endl;
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeReplication(const TDriver& driver, const NScheme::ESchemeEntryType type) {
     NReplication::TReplicationClient client(driver);
     auto settings = NReplication::TDescribeReplicationSettings()
         .IncludeStats(ShowStats);
@@ -604,7 +657,14 @@ int TCommandDescribe::DescribeReplication(const TDriver& driver) {
     auto result = client.DescribeReplication(Path, settings).ExtractValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
+    switch(type) {
+        case Dev::NScheme::ESchemeEntryType::Replication:
+            return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
+        case Dev::NScheme::ESchemeEntryType::Transfer:
+            return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintTransferResponsePretty);
+        default:
+            return EXIT_FAILURE;
+    }
 }
 
 int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {

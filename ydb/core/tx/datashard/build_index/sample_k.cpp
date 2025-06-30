@@ -171,6 +171,7 @@ public:
         auto& record = Response->Record;
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
         if (HasBuildError) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);

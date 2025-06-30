@@ -1380,6 +1380,9 @@ struct Schema : NIceDb::Schema {
         struct EndTime : Column<42, NScheme::NTypeIds::Uint64> {};
         struct UserSID : Column<43, NScheme::NTypeIds::Utf8> {};
 
+        struct CpuTimeUsBilled : Column<44, NScheme::NTypeIds::Uint64> {};
+        struct CpuTimeUsProcessed : Column<45, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1424,7 +1427,9 @@ struct Schema : NIceDb::Schema {
             ReadBytesProcessed,
             StartTime,
             EndTime,
-            UserSID
+            UserSID,
+            CpuTimeUsBilled,
+            CpuTimeUsProcessed
         >;
     };
 
@@ -1500,6 +1505,8 @@ struct Schema : NIceDb::Schema {
         struct ReadRowsProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<12, NScheme::NTypeIds::Uint64> {};
 
+        struct CpuTimeUsProcessed : Column<13, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
             Id,
@@ -1513,7 +1520,8 @@ struct Schema : NIceDb::Schema {
             RowsProcessed,
             BytesProcessed,
             ReadRowsProcessed,
-            ReadBytesProcessed
+            ReadBytesProcessed,
+            CpuTimeUsProcessed
         >;
     };
 

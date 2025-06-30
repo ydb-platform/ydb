@@ -56,5 +56,5 @@ ALTER SEQUENCE `/Root/users/_serial_column_user_id` RESTART;
 
 ## See also
 
-* [{#T}](create-table.md)
+* [{#T}](create_table/index.md)
 * [{#T}](../types/serial.md)

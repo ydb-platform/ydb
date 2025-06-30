@@ -45,7 +45,7 @@ void TCommandWorkloadTopicInit::Config(TConfig& config)
         .DefaultValue(false)
         .StoreTrue(&Scenario.TopicAutoscaling);
     config.Opts->AddLongOption('m', "auto-partitioning-max-partitions-count", "Max number of partitions in the topic.")
-        .DefaultValue(1024)
+        .Optional()
         .StoreResult(&Scenario.TopicMaxPartitionCount);
     config.Opts->AddLongOption("auto-partitioning-stabilization-window-seconds", "Duration in seconds of high or low load before automatically scale the number of partitions")
         .DefaultValue(15)

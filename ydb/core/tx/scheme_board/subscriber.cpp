@@ -785,7 +785,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     static bool ShouldIgnore(const TProxyGroup& proxyGroup) {
-        return proxyGroup.WriteOnly || proxyGroup.State == ERingGroupState::DISCONNECTED;
+        return proxyGroup.WriteOnly || proxyGroup.State != ERingGroupState::PRIMARY;
     }
 
     bool IsMajorityReached() const {
@@ -799,10 +799,11 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             }
         }
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
-            if (ShouldIgnore(ProxyGroups[groupIdx])) {
+            const auto& proxyGroup = ProxyGroups[groupIdx];
+            if (ShouldIgnore(proxyGroup)) {
                 continue;
             }
-            if (responsesByGroup[groupIdx] <= ProxyGroups[groupIdx].Proxies.size() / 2) {
+            if (responsesByGroup[groupIdx] <= proxyGroup.Proxies.size() / 2) {
                 return false;
             }
         }
@@ -1063,6 +1064,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 continue;
             }
             auto& proxyGroup = ProxyGroups.emplace_back();
+            proxyGroup.WriteOnly = replicaGroup.WriteOnly;
+            proxyGroup.State = replicaGroup.State;
 
             proxyGroup.Proxies.reserve(replicaGroup.Replicas.size());
             for (size_t i = 0; i < replicaGroup.Replicas.size(); ++i) {

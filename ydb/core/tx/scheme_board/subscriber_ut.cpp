@@ -548,7 +548,7 @@ TVector<TActorId> GetReplicasRequiredForQuorum(const TVector<TStateStorageInfo::
 
     for (size_t i = 0; i < ringGroups.size(); ++i) {
         const auto& ringGroup = ringGroups[i];
-        if (ShouldIgnore(ringGroup)) {
+        if (ringGroup.WriteOnly || ringGroup.State != ERingGroupState::PRIMARY) {
             // not participating in the quorum
             continue;
         }
@@ -564,6 +564,20 @@ TVector<TActorId> GetReplicasRequiredForQuorum(const TVector<TStateStorageInfo::
     }
 
     return requiredReplicas;
+}
+
+TStateStorageInfo::TRingGroup GetReplicaRingGroup(TActorId target, const TVector<TStateStorageInfo::TRingGroup>& ringGroups) {
+    for (const auto& ringGroup : ringGroups) {
+        for (const auto& ring : ringGroup.Rings) {
+            for (const auto& replica : ring.Replicas) {
+                if (replica == target) {
+                    return ringGroup;
+                }
+            }
+        }
+    }
+    UNIT_FAIL("Replica: " << target << " is not a part of any ring group.");
+    return {};
 }
 
 }
@@ -678,7 +692,8 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
 
         {
             const auto replicaToKill = requiredReplicas[RandomNumber(requiredReplicas.size())];
-            Cerr << "Poisoning replica: " << replicaToKill << '\n';
+            const auto& ringGroup = GetReplicaRingGroup(replicaToKill, stateStorageInfo->RingGroups);
+            Cerr << "Poisoning replica: " << replicaToKill << " whose ring group state is: " << static_cast<int>(ringGroup.State) << '\n';
             runtime.Send(replicaToKill, edge, new TEvents::TEvPoisonPill());
 
             ++cookie;
@@ -700,6 +715,10 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
 
     Y_UNIT_TEST(OneDisconnectedRingGroup) {
         TestSyncQuorum({ {.State = PRIMARY}, {.State = DISCONNECTED} });
+    }
+
+    Y_UNIT_TEST(OneSynchronizedRingGroup) {
+        TestSyncQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} });
     }
 
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {

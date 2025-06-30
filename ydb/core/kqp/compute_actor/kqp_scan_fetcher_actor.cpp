@@ -509,11 +509,6 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
         ev->Record.SetCpuGroupThreadsLimit(*cpuGroupThreadsLimit);
         ev->Record.SetCpuGroupName(CPULimits.GetCPUGroupName());
     }
-    TString strCursor = cursor ? cursor->DebugString() : TString("START");
-    while (strCursor.find("\n") != std::string::npos) {
-        strCursor.replace(strCursor.find("\n"), 1, ' ');
-    }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "start ScanData")("scan_id", scanId)("gen", gen)("cursor", strCursor);
 
     ev->Record.SetDataFormat(Meta.GetDataFormat());
     return ev;
@@ -537,15 +532,11 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
 
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
-    TString strCursor = state->LastCursorProto ? state->LastCursorProto->DebugString() : TString("NO_CURSOR");
-    while (strCursor.find("\n") != std::string::npos) {
-        strCursor.replace(strCursor.find("\n"), 1, ' ');
-    }
     const ui64 rowsCount = msg.GetRowsCount();
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)
-        ("generation", msg.Generation)("exceeded", msg.RequestedBytesLimitReached)("scan", ScanId)(
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)(
+        "generation", msg.Generation)("exceeded", msg.RequestedBytesLimitReached)("scan", ScanId)(
         "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(
-        "in flight scans", InFlightShards.GetScansCount())("cursor", strCursor)(
+        "in flight scans", InFlightShards.GetScansCount())("cursor", state->CursorDebugString())(
         "in flight shards", InFlightShards.GetShardsCount())("delayed_for_seconds_by_ratelimiter", latency.SecondsFloat())(
         "tablet_id", state->TabletId)("locks", msg.LocksInfo.Locks.size())("broken locks", msg.LocksInfo.BrokenLocks.size());
     auto shardScanner = InFlightShards.GetShardScannerVerified(state->TabletId);

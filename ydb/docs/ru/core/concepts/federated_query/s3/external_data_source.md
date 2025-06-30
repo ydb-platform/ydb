@@ -89,7 +89,7 @@ WHERE
 * `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
 * `schema_definition` — [описание схемы хранимых данных](#schema) в файлах, обязательно.
-* `format_settings` — опциональные [параметры форматирования](#format_settings)
+* `format_settings` — опциональные [параметры форматирования](#format_settings).
 
 ### Описание схемы данных {#schema}
 

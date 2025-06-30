@@ -309,6 +309,14 @@ const TPausedState& TTransferDescription::GetPausedState() const {
     return std::get<TPausedState>(State_);
 }
 
+TDescribeTransferResult::TDescribeTransferResult(TStatus&& status, Ydb::Replication::DescribeTransferResult&& desc)
+    : NScheme::TDescribePathResult(std::move(status), desc.self())
+    , TransferDescription_(desc)
+    , Proto_(std::make_unique<Ydb::Replication::DescribeTransferResult>())
+{
+    *Proto_ = std::move(desc);
+}
+
 
 class TReplicationClient::TImpl: public TClientImplCommon<TReplicationClient::TImpl> {
 public:

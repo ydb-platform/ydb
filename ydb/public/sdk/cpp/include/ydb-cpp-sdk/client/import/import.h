@@ -116,8 +116,9 @@ public:
     };
 
     TListObjectsInS3ExportResult(TStatus&& status, const Ydb::Import::ListObjectsInS3ExportResult& proto);
-    TListObjectsInS3ExportResult(TListObjectsInS3ExportResult&&) = default;
+    TListObjectsInS3ExportResult(TListObjectsInS3ExportResult&&);
     TListObjectsInS3ExportResult(const TListObjectsInS3ExportResult&);
+    ~TListObjectsInS3ExportResult();
 
     const std::vector<TItem>& GetItems() const;
     const std::string& NextPageToken() const { return NextPageToken_; }

@@ -109,6 +109,10 @@ TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(const TListObjectsInS
 {
 }
 
+TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(TListObjectsInS3ExportResult&&) = default;
+
+TListObjectsInS3ExportResult::~TListObjectsInS3ExportResult() = default;
+
 const std::vector<TListObjectsInS3ExportResult::TItem>& TListObjectsInS3ExportResult::GetItems() const {
     return Items_;
 }

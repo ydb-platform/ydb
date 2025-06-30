@@ -44,7 +44,7 @@ public:
     virtual void Continue() = 0;
     virtual void HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) = 0;
     virtual void OnDone(const TPathId& pathId, NIceDb::TNiceDb& db) = 0;
-    virtual void OnDone(const TTabletId& tabletId, NIceDb::TNiceDb& db) = 0;
+    virtual bool OnDone(const TTabletId& tabletId, NIceDb::TNiceDb& db) = 0;
     virtual void ScheduleRequestToBSC() = 0;
     virtual void SendRequestToBSC() = 0;
     virtual void Complete() = 0;
@@ -53,6 +53,8 @@ public:
     virtual bool Remove(const TShardIdx& shardIdx) = 0;
     virtual void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) = 0;
     virtual void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) = 0;
+    virtual bool CanDeleteShard(const TShardIdx& shardIdx) = 0;
+    virtual void MarkShardForDelete(const TShardIdx& shardIdx) = 0;
 
     void Clear();
 
@@ -119,7 +121,7 @@ public:
     void Continue() override;
     void HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) override;
     void OnDone(const TPathId& pathId, NIceDb::TNiceDb& db) override;
-    void OnDone(const TTabletId& tabletId, NIceDb::TNiceDb& db) override;
+    bool OnDone(const TTabletId& tabletId, NIceDb::TNiceDb& db) override;
     void ScheduleRequestToBSC() override;
     void SendRequestToBSC() override;
     void Complete() override;
@@ -128,6 +130,8 @@ public:
     bool Remove(const TShardIdx& shardIdx) override;
     void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
     void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) override;
+    bool CanDeleteShard(const TShardIdx& shardIdx) override;
+    void MarkShardForDelete(const TShardIdx& shardIdx) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);
@@ -166,6 +170,7 @@ private:
     TQueue* Queue = nullptr;
     THashMap<TShardIdx, EDataErasureStatus> WaitingDataErasureShards;
     THashMap<TShardIdx, TActorId> ActivePipes;
+    THashSet<TShardIdx> ShardsMarkedToDelete;
 
 public:
     TTenantDataErasureManager(TSchemeShard* const schemeShard, const NKikimrConfig::TDataErasureConfig& config);
@@ -181,7 +186,7 @@ public:
     void Continue() override;
     void HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) override;
     void OnDone(const TPathId& pathId, NIceDb::TNiceDb& db) override;
-    void OnDone(const TTabletId& tabletId, NIceDb::TNiceDb& db) override;
+    bool OnDone(const TTabletId& tabletId, NIceDb::TNiceDb& db) override;
     void ScheduleRequestToBSC() override;
     void SendRequestToBSC() override;
     void Complete() override;
@@ -190,6 +195,8 @@ public:
     bool Remove(const TShardIdx& shardIdx) override;
     void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
     void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) override;
+    bool CanDeleteShard(const TShardIdx& shardIdx) override;
+    void MarkShardForDelete(const TShardIdx& shardIdx) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);

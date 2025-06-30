@@ -8561,6 +8561,11 @@
                 "ColumnId": 3,
                 "ColumnName": "Status",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "NeedDelete",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -8569,7 +8574,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -5111,6 +5111,10 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvCdcStreamScanResponse, Handle);
         // } // NCdcStreamScan
 
+        //namespace NIncrementalRestore {
+        HFuncTraced(TEvPrivate::TEvRunIncrementalRestore, Handle);
+        // } // NIncrementalRestore
+
         // namespace NLongRunningCommon {
         HFuncTraced(TEvTxAllocatorClient::TEvAllocateResult, Handle);
         HFuncTraced(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);

@@ -44,7 +44,7 @@ struct TShardState: public TCommonRetriesState {
     TString CursorDebugString() const {
         TString strCursor = LastCursorProto ? LastCursorProto->DebugString() : TString("START");
         while (strCursor.find("\n") != std::string::npos) {
-            strCursor.replace(strCursor.find("\n"), 1, ' ');
+            strCursor.replace(strCursor.find("\n"), 1, " ");
         }
         return strCursor;
     }

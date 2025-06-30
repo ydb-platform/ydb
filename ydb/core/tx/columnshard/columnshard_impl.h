@@ -504,7 +504,6 @@ private:
     TInstant LastStatsReport;
 
     TActorId ResourceSubscribeActor;
-    TActorId BufferizationInsertionWriteActorId;
     TActorId BufferizationPortionsWriteActorId;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
 

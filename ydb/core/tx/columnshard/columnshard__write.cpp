@@ -104,7 +104,7 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
         for (auto&& i : writtenData.GetWriteResults()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_finished")(
                 "writing_id", i.GetWriteMeta().GetId());
-            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
+            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::SuccessWritingToLocalDB);
             Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }
@@ -112,12 +112,12 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
     } else {
         const TMonotonic now = TMonotonic::Now();
         for (auto&& i : writtenData.GetWriteResults()) {
+            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::FailWritingToLocalDB);
             Counters.OnWritePutBlobsFailed(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetCSCounters().OnWritePutBlobsFail(now - i.GetWriteMeta().GetWriteStartInstant());
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_error")(
                 "writing_id", i.GetWriteMeta().GetId())("reason", i.GetErrorMessage());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
-            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
         }
 
         Execute(new TTxBlobsWritingFailed(this, std::move(writtenData)), ctx);
@@ -137,7 +137,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
 
     for (auto&& aggr : baseAggregations) {
         const auto& writeMeta = aggr->GetWriteMeta();
-        aggr->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
+        aggr->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Aborted);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "blobs_write_finished")("writing_size", aggr->GetSize())(
             "writing_id", writeMeta.GetId())("status", putResult.GetPutStatus());
         Counters.GetWritesMonitor()->OnFinishWrite(aggr->GetSize(), 1);

@@ -24,7 +24,8 @@ void TExtension::ReplyAndPassAway() {
 
 void TExtension::ContinueAndPassAway() {
     if (!Context->Route.empty()) {
-        Send(Context->Route.Next(), new TEvPrivate::TEvExtensionRequest(std::move(Context)));
+        const auto route = Context->Route.Next();
+        Send(route, new TEvPrivate::TEvExtensionRequest(std::move(Context)));
         PassAway();
     } else {
         ReplyAndPassAway();

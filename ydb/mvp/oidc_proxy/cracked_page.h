@@ -2,6 +2,7 @@
 
 #include "oidc_settings.h"
 #include <ydb/library/actors/http/http_proxy.h>
+#include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
 namespace NMVP::NOIDC {

@@ -188,9 +188,9 @@ struct TEvPrivate {
     };
 
     struct TEvExtensionRequest : NActors::TEventLocal<TEvExtensionRequest, EvExtensionRequest> {
-        THolder<TExtensionContext> Context;
+        TIntrusivePtr<TExtensionContext> Context;
 
-        TEvExtensionRequest(THolder<TExtensionContext>&& context)
+        TEvExtensionRequest(TIntrusivePtr<TExtensionContext>&& context)
             : Context(std::move(context))
         {}
     };

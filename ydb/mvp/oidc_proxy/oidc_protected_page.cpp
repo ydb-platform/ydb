@@ -41,12 +41,13 @@ void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomi
             return SendSecureHttpRequest(response);
         }
     }
-    ExtensionManager->StartExtensionProcess(Request, event);
+    ExtensionManager->StartExtensionProcess(std::move(Request), std::move(event));
     PassAway();
 }
 
 void THandlerSessionServiceCheck::HandleEnrichmentTimeout() {
-    ExtensionManager->StartExtensionProcess(Request);
+    ExtensionManager->StartExtensionProcess(std::move(Request));
+    PassAway();
 }
 
 void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse::TPtr event) {

@@ -22,7 +22,7 @@ TCrackedPage::TCrackedPage(TStringBuf url)
 
 TCrackedPage::TCrackedPage(const NHttp::THttpIncomingRequestPtr& request)
     : TCrackedPage(request->URL.SubStr(1))
-    {}
+{}
 
 bool TCrackedPage::IsSchemeValid() const {
     return SchemeValid;

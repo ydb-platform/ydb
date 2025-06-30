@@ -10,9 +10,9 @@ TExtensionManager::TExtensionManager(const TActorId sender,
                                      const TCrackedPage& protectedPage,
                                      const TString authHeader)
     : Settings(settings)
-    , AuthHeader(authHeader)
+    , AuthHeader(std::move(authHeader))
 {
-    ExtensionCtx = MakeHolder<TExtensionContext>();
+    ExtensionCtx = MakeIntrusive<TExtensionContext>();
     ExtensionCtx->Params = MakeHolder<TProxiedResponseParams>();
     ExtensionCtx->Params->ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
     ExtensionCtx->Sender = sender;
@@ -22,7 +22,7 @@ void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
     ExtensionCtx->Params->Request = std::move(request);
 }
 
-void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
+void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (!event) {
         ExtensionCtx->Params->ResponseError = "Timeout while waiting for whoami info";
         ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
@@ -39,7 +39,7 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
 }
 
 void TExtensionManager::AddExtensionWhoami() {
-    enrichmentExtension = true;
+    EnrichmentExtension = true;
     AddExtension(NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoami(Settings, AuthHeader)));
 }
 
@@ -80,15 +80,16 @@ void TExtensionManager::ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& 
 }
 
 bool TExtensionManager::HasEnrichmentExtension() {
-    return enrichmentExtension;
+    return EnrichmentExtension;
 }
 
 void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
                                               NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
-    SetRequest(request);
-    SetOverrideResponse(event);
+    SetRequest(std::move(request));
+    SetOverrideResponse(std::move(event));
 
-    NActors::TActivationContext::ActorSystem()->Send(ExtensionCtx->Route.Next(), new TEvPrivate::TEvExtensionRequest(std::move(ExtensionCtx)));
+    const auto route = ExtensionCtx->Route.Next();
+    NActors::TActivationContext::ActorSystem()->Send(route, new TEvPrivate::TEvExtensionRequest(std::move(ExtensionCtx)));
 }
 
 } // NMVP::NOIDC

@@ -5,10 +5,10 @@
 namespace NMVP::NOIDC {
 
 struct TExtensionManager {
-    THolder<TExtensionContext> ExtensionCtx;
-    const TOpenIdConnectSettings& Settings;
+    TIntrusivePtr<TExtensionContext> ExtensionCtx;
+    const TOpenIdConnectSettings Settings;
     TString AuthHeader;
-    bool enrichmentExtension = false;
+    bool EnrichmentExtension = false;
 
 public:
     TExtensionManager(const TActorId sender,
@@ -22,7 +22,7 @@ public:
 
 private:
     void SetRequest(NHttp::THttpIncomingRequestPtr request);
-    void SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event);
+    void SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
     bool NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const;
     void AddExtensionWhoami();
     void AddExtensionFinal();

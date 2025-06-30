@@ -7,7 +7,7 @@ namespace NMVP::NOIDC {
 class TExtension : public NActors::TActorBootstrapped<TExtension> {
 protected:
     const TOpenIdConnectSettings Settings;
-    THolder<TExtensionContext> Context;
+    TIntrusivePtr<TExtensionContext> Context;
 
 public:
     TExtension(const TOpenIdConnectSettings& settings)

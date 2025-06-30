@@ -22,7 +22,7 @@ struct TProxiedResponseParams {
     THolder<NHttp::THeadersBuilder> HeadersOverride;
 };
 
-struct TExtensionContext {
+struct TExtensionContext : public TThrRefBase {
     struct TRoute: public TQueue<NActors::TActorId> {
         TActorId Next() {
             if (empty()) {

@@ -90,6 +90,9 @@ void TVectorSampler::SelectPredefinedVectors() {
 }
 
 void TVectorSampler::SampleExistingVectors() {
+    Y_ABORT_UNLESS(Params.KeyIsInt, "Sampling source data is only supported with integer key column, "
+        "but key column '%s' is not of an integer type.", Params.KeyColumn.c_str());
+
     Cout << "Sampling " << Params.Targets << " vectors from dataset..." << Endl;
 
     // Create a local random generator

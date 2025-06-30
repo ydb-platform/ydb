@@ -122,10 +122,9 @@ void TVectorWorkloadParams::Init() {
                 str.resize(str.size()-1);
             PrefixType = str;
         }
-        if (column.Name == KeyColumn)
-            Y_ABORT_UNLESS(column.Type.ToString().contains("int") || column.Type.ToString().contains("Int"),
-                "Key column '%s' in index '%s' must be an integer type. Found type: %s",
-                KeyColumn.c_str(), IndexName.c_str(), column.Type.ToString().c_str());
+        if (column.Name == KeyColumn) {
+            KeyIsInt = (column.Type.ToString().contains("int") || column.Type.ToString().contains("Int"));
+        }
     }
 
     if (!TableRowCount) {

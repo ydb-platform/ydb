@@ -26,7 +26,7 @@ public:
 
 private:
     // Process index query results (internal method)
-    void ProcessIndexQueryResult(const NYdb::NQuery::TExecuteQueryResult& result, size_t targetIndex, const std::vector<ui64>& etalons, bool verbose);
+    void ProcessIndexQueryResult(const NYdb::NQuery::TExecuteQueryResult& result, size_t targetIndex, const std::vector<std::string>& etalons, bool verbose);
 
     const TVectorWorkloadParams& Params;
 

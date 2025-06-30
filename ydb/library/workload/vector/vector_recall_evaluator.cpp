@@ -70,7 +70,7 @@ void TVectorRecallEvaluator::MeasureRecall(const TVectorSampler& sampler) {
         }
 
         // Wait for all scan queries in this batch to complete and build ground truth
-        std::unordered_map<size_t, std::vector<ui64>> batchEtalons;
+        std::unordered_map<size_t, std::vector<std::string>> batchEtalons;
         for (auto& [targetIndex, asyncResult] : asyncScanQueries) {
             auto result = asyncResult.GetValueSync();
             Y_ABORT_UNLESS(result.IsSuccess(), "Scan query failed for target %zu: %s",
@@ -80,13 +80,12 @@ void TVectorRecallEvaluator::MeasureRecall(const TVectorSampler& sampler) {
             NYdb::TResultSetParser parser(resultSet);
 
             // Build etalons for this target locally
-            std::vector<ui64> etalons;
+            std::vector<std::string> etalons;
             etalons.reserve(Params.Limit);
 
             // Extract all IDs from the result set
             while (parser.TryNextRow()) {
-                ui64 id = parser.ColumnParser("id").GetUint64();
-                etalons.push_back(id);
+                etalons.push_back(parser.ColumnParser("id").GetString());
             }
             if (etalons.empty()) {
                 Cerr << "Warning: target " << targetIndex << " have empty etalon sets" << Endl;
@@ -130,7 +129,8 @@ size_t TVectorRecallEvaluator::GetProcessedTargets() const {
 }
 
 // Process index query results
-void TVectorRecallEvaluator::ProcessIndexQueryResult(const NYdb::NQuery::TExecuteQueryResult& queryResult, size_t targetIndex, const std::vector<ui64>& etalons, bool verbose) {
+void TVectorRecallEvaluator::ProcessIndexQueryResult(const NYdb::NQuery::TExecuteQueryResult& queryResult,
+    size_t targetIndex, const std::vector<std::string>& etalons, bool verbose) {
     if (!queryResult.IsSuccess()) {
         // Ignore the error. It's printed in the verbose mode
         return;
@@ -141,18 +141,17 @@ void TVectorRecallEvaluator::ProcessIndexQueryResult(const NYdb::NQuery::TExecut
     NYdb::TResultSetParser parser(resultSet);
 
     // Extract IDs from index search results
-    std::vector<ui64> indexResults;
+    std::vector<std::string> indexResults;
     while (parser.TryNextRow()) {
-        ui64 id = parser.ColumnParser("id").GetUint64();
-        indexResults.push_back(id);
+        indexResults.push_back(parser.ColumnParser("id").GetString());
     }
 
     // Create etalon set for efficient lookup
-    std::unordered_set<ui64> etalonSet(etalons.begin(), etalons.end());
+    std::unordered_set<std::string> etalonSet(etalons.begin(), etalons.end());
 
     // Check if target ID is first in results
     if (!indexResults.empty() && !etalons.empty()) {
-        ui64 targetId = etalons[0]; // First etalon is the target ID itself
+        const std::string & targetId = etalons[0]; // First etalon is the target ID itself
 
         if (verbose && indexResults[0] != targetId) {
             Cerr << "Warning: Target ID " << targetId << " is not the first result for target "

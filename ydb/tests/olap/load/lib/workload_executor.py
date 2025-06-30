@@ -208,6 +208,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 def prepare_nemesis_config(host):
                     host_log = []
                     host_log.append(f"\n--- {host} ---")
+                    logging.info(f"Starting nemesis config preparation for {host}")
                     
                     try:
                         # 1. Устанавливаем права на выполнение для nemesis
@@ -244,10 +245,20 @@ class WorkloadTestBase(LoadSuiteBase):
                         
                         # 3. Копируем config.yaml в cluster.yaml
                         cluster_path = get_external_param('cluster_path', '')
+                        logging.info(f"Cluster path for {host}: {cluster_path}")
+                        
                         if cluster_path:
-                            # Если указан cluster_path, копируем файл с локальной машины
-                            local_config_path = os.path.join(cluster_path, 'config.yaml')
+                            # Если указан cluster_path, используем его как есть
+                            local_config_path = cluster_path
                             host_log.append(f"Copying from {local_config_path}")
+                            logging.info(f"Copying config file from {local_config_path} to {host}")
+                            
+                            # Проверяем, существует ли файл
+                            if not os.path.exists(local_config_path):
+                                error_msg = f"Config file does not exist: {local_config_path}"
+                                host_log.append(error_msg)
+                                logging.error(error_msg)
+                                return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
                             
                             # Используем готовую функцию copy_file
                             copy_result = copy_file(
@@ -257,16 +268,32 @@ class WorkloadTestBase(LoadSuiteBase):
                                 raise_on_error=False
                             )
                             
-                            if copy_result is None:
-                                error_msg = f"Failed to copy config.yaml to cluster.yaml on {host}"
+                            if copy_result is None or copy_result == "":
+                                error_msg = f"Failed to copy config file to cluster.yaml on {host} - copy_file returned: {copy_result}"
                                 host_log.append(error_msg)
+                                logging.error(error_msg)
+                                # Попробуем получить больше информации об ошибке
+                                try:
+                                    # Проверим размер файла
+                                    file_size = os.path.getsize(local_config_path)
+                                    logging.info(f"Local config file size: {file_size} bytes")
+                                    
+                                    # Проверим права доступа
+                                    file_mode = oct(os.stat(local_config_path).st_mode)[-3:]
+                                    logging.info(f"Local config file permissions: {file_mode}")
+                                    
+                                except Exception as e:
+                                    logging.error(f"Error checking file properties: {e}")
+                                
                                 return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
                             else:
-                                host_log.append(f"Copied config.yaml to cluster.yaml: {copy_result}")
+                                host_log.append(f"Copied config file to cluster.yaml: {copy_result}")
+                                logging.info(f"Successfully copied config file to {host}: {copy_result}")
                         else:
                             # Если cluster_path не указан, используем локальное копирование
                             copy_cmd = "sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/cluster.yaml"
                             host_log.append("Using local cp command")
+                            logging.info(f"Using local cp command on {host}: {copy_cmd}")
                             
                             copy_result = execute_command(
                                 host=host,
@@ -278,15 +305,19 @@ class WorkloadTestBase(LoadSuiteBase):
                             if copy_stderr and "error" in copy_stderr.lower():
                                 error_msg = f"Error copying config.yaml to cluster.yaml on {host}: {copy_stderr}"
                                 host_log.append(error_msg)
+                                logging.error(error_msg)
                                 return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
                             else:
                                 host_log.append("Copied config.yaml to cluster.yaml")
+                                logging.info(f"Successfully copied config.yaml on {host} using local cp")
                         
+                        logging.info(f"Completed nemesis config preparation for {host}")
                         return {'host': host, 'success': True, 'log': host_log}
                             
                     except Exception as e:
                         error_msg = f"Exception on {host}: {e}"
                         host_log.append(error_msg)
+                        logging.error(f"Exception during nemesis config preparation for {host}: {e}")
                         return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
                 
                 # Выполняем файловые операции параллельно
@@ -1429,6 +1460,7 @@ class WorkloadTestBase(LoadSuiteBase):
         # Группируем итерации по их номеру для определения реального количества итераций и потоков
         iterations_by_number = {}
         threads_by_iteration = {}
+        
         
         # Анализируем все итерации и группируем их по номеру итерации
         for iter_num, iteration in overall_result.iterations.items():

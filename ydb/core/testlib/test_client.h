@@ -238,7 +238,7 @@ namespace Tests {
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
         TServerSettings& SetColumnShardReaderClassName(const TString& className) {
-            AppConfig->MutableColumnShardConfig()->SetColumnShardReaderClassName(className);
+            AppConfig->MutableColumnShardConfig()->SetReaderClassName(className);
         }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory

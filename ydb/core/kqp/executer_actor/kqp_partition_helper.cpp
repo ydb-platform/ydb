@@ -951,7 +951,6 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRang
 
             readPartitions = GetKeyRangePartitions(intersection->ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),
             keyColumnTypes);
-            YQL_ENSURE(readPartitions.size() <= 1);
         } else {
             readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
             keyColumnTypes);
@@ -1011,7 +1010,6 @@ THashMap<ui64, TShardInfo> TPartitionPruner::PrunePartitionsImpl(const NKqpProto
 
         readPartitions = GetKeyRangePartitions(intersection->ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),
         keyColumnTypes);
-        YQL_ENSURE(readPartitions.size() <= 1);
     } else {
         readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
         keyColumnTypes);
@@ -1062,7 +1060,6 @@ THashMap<ui64, TShardInfo> TPartitionPruner::PrunePartitionsImpl(const NKqpProto
 
             readPartitions = GetKeyRangePartitions(intersection->ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),
             keyColumnTypes);
-            YQL_ENSURE(readPartitions.size() <= 1);
         } else {
             readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
             keyColumnTypes);

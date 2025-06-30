@@ -95,9 +95,9 @@ public:
     }
 
     void Bootstrap() {
-        ResolvePartitioning();
-
         Become(&TKqpPartitionedExecuter::PrepareState);
+
+        ResolvePartitioning();
     }
 
     STFUNC(PrepareState) {
@@ -112,7 +112,7 @@ public:
             RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
                 NYql::TIssues({NYql::TIssue(TStringBuilder()
-                    << "from state handler = " << CurrentStateFuncName())}));
+                    << "KqpPartitionedExecuterActor got an unknown error, state = " << CurrentStateFuncName())}));
         }
     }
 
@@ -124,8 +124,8 @@ public:
         if (request->ErrorCount > 0) {
             return RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
-                    << ", failed to get table")}));
+                NYql::TIssues({NYql::TIssue(TStringBuilder()
+                    << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, state = " << CurrentStateFuncName())}));
         }
 
         YQL_ENSURE(request->ResultSet.size() == 1);
@@ -145,9 +145,9 @@ public:
             << " , status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
             << ", message: " << issues.ToOneLineString() << ", abort child executers");
 
-            ReturnIssues = issues;
-            ReturnIssues.AddIssue(YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                TStringBuilder() << "from KqpPartitionedExecuterActor, state = " << CurrentStateFuncName()));
+            ReturnIssues.AddIssues(issues);
+            ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
+                << "while preparing/executing by KqpPartitionedExecuterActor"));
 
             auto [_, partInfo] = *it;
             AbortBuffer(partInfo->ExecuterId);
@@ -172,7 +172,7 @@ public:
             RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
                 NYql::TIssues({NYql::TIssue(TStringBuilder()
-                    << "from state handler = " << CurrentStateFuncName())}));
+                    << "KqpPartitionedExecuterActor got an unknown error, state = " << CurrentStateFuncName())}));
         }
     }
 
@@ -209,8 +209,8 @@ public:
 
         ForgetPartition(partInfo);
 
-        ReturnIssues.AddIssue(YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-            TStringBuilder() << "from KqpPartitionedExecuterActor, state = " << CurrentStateFuncName()));
+        ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "while executing by KqpPartitionedExecuterActor"));
 
         RuntimeError(response->GetStatus(), ReturnIssues);
     }
@@ -241,7 +241,7 @@ public:
 
         switch (msg.StatusCode) {
             case NYql::NDqProto::StatusIds::SUCCESS:
-                YQL_ENSURE(false);
+                YQL_ENSURE(false, "KqpBufferWriteActor should not return success by TEvKqpBuffer::TEvError");
                 break;
             case NYql::NDqProto::StatusIds::UNSPECIFIED:
             case NYql::NDqProto::StatusIds::ABORTED:
@@ -249,12 +249,17 @@ public:
             case NYql::NDqProto::StatusIds::OVERLOADED:
                 return ScheduleRetryWithNewLimit(partInfo);
             default:
-                ForgetPartition(partInfo);
-                RuntimeError(
-                    Ydb::StatusIds::INTERNAL_ERROR,
-                    NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
-                        << ", from KqpBufferWriteActor by KqpPartitionedExecuterActor")}));
+                break;
         }
+
+        ForgetPartition(partInfo);
+
+        ReturnIssues.AddIssues(msg.Issues);
+
+        RuntimeError(
+            Ydb::StatusIds::INTERNAL_ERROR,
+            NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "while executing by KqpPartitionedExecuterActor")}));
     }
 
     STFUNC(AbortState) {
@@ -270,7 +275,8 @@ public:
         } catch (...) {
             RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue(CurrentStateFuncName())}));
+                NYql::TIssues({NYql::TIssue(TStringBuilder()
+                    << "KqpPartitionedExecuterActor got an unknown error, state = " << CurrentStateFuncName())}));
         }
     }
 
@@ -420,12 +426,12 @@ private:
     void CreateExecutersWithBuffers() {
         YQL_ENSURE(TablePartitioning);
 
+        Become(&TKqpPartitionedExecuter::ExecuteState);
+
         auto partCount = std::min(Settings.PartitionExecutionLimit, TablePartitioning->size());
         while (NextPartitionIndex < partCount) {
             CreateExecuterWithBuffer(NextPartitionIndex++, /* isRetry */ false);
         }
-
-        Become(&TKqpPartitionedExecuter::ExecuteState);
     }
 
     TPartitionInfo::TPtr CreatePartition(TPartitionIndex idx) {
@@ -631,7 +637,7 @@ private:
 
             YQL_ENSURE(cells.size() == resultCells.size());
 
-            if (CompareTypedCellVectors(resultCells.data(), cells.data(), KeyColumnTypes.data(), KeyColumnTypes.size()) < 0) {
+            if (CompareTypedCellVectors(resultCells.data(), cells.data(), KeyColumnTypes.data(), KeyColumnTypes.size()) > 0) {
                 result = row;
             }
         }
@@ -681,7 +687,6 @@ private:
 
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
-
 
     TVector<ui32> KeyIds;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;

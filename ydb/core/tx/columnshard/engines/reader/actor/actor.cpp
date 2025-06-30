@@ -72,10 +72,12 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         Become(&TColumnShardScan::StateScan);
         ContinueProcessing();
     }
-    StartWaitOutput = TInstant::Now();
 }
 
 void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
+    if (ChunksLimiter.HasMore()) {
+        WaitTime = TInstant::Now() - StartWaitTime;
+    }
     auto g = Stats->MakeGuard("task_result");
     auto result = ev->Get()->ExtractResult();
     if (result.IsFail()) {
@@ -88,22 +90,15 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
             ScanIterator->Apply(result.GetResult());
         }
     }
-    if (StartWaitInput) {
-        WaitInputTime += TInstant::Now() - StartWaitInput;
-        StartWaitInput = TInstant::Zero();
-    }
     ContinueProcessing();
 }
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
+    StartWaitTime = TInstant::Now();
     auto g = Stats->MakeGuard("ack");
 
     AFL_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
-    if (StartWaitOutput) {
-        WaitOutputTime += TInstant::Now() - StartWaitOutput;
-        StartWaitOutput = TInstant::Zero();
-    }
 
     AFL_VERIFY(ev->Get()->Generation == ScanGen)("ev_gen", ev->Get()->Generation)("scan_gen", ScanGen);
 
@@ -296,10 +291,6 @@ void TColumnShardScan::ContinueProcessing() {
         LastResultInstant = TMonotonic::Now();
     }
 
-    if (ChunksLimiter.HasMore()) {
-        StartWaitInput = TInstant::Now();
-    }
-
     if (ScanIterator) {
         // Switch to the next range if the current one is finished
         if (ScanIterator->Finished()) {
@@ -401,10 +392,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
-    Result->WaitTime = WaitOutputTime - WaitInputTime;
-    if (Result->RequestedBytesLimitReached) {
-        StartWaitOutput = TInstant::Now();
-    }
+    Result->WaitTime = WaitTime;
 
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
 

@@ -1065,6 +1065,9 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             }
         }
 
+        ClusterStateGeneration = ev->Get()->ClusterStateGeneration;
+        ClusterStateGuid = ev->Get()->ClusterStateGuid;
+
         this->Become(&TDerived::StateWork);
     }
 
@@ -1220,6 +1223,9 @@ private:
     ui64 CurrentSyncRequest;
     TSet<TActorId> PendingSync;
     TMap<TActorId, bool> ReceivedSync;
+
+    ui64 ClusterStateGeneration = 0;
+    ui64 ClusterStateGuid = 0;
 
 }; // TSubscriber
 

@@ -66,6 +66,11 @@ class TReplica: public TMonitorableActor<TReplica> {
     };
 
 public:
+    TReplica(const TIntrusivePtr<TStateStorageInfo>& info)
+        : ClusterStateGeneration(info->ClusterStateGeneration)
+        , ClusterStateGuid(info->ClusterStateGuid)
+    {}
+
     enum ESubscriptionType {
         SUBSCRIPTION_UNSPECIFIED, // for filtration
         SUBSCRIPTION_BY_PATH,
@@ -1300,13 +1305,15 @@ private:
     TDoubleIndexedMap<TString, TPathId, TDescription, TMerger, THashMap, TMap> Descriptions;
     TMap<TActorId, std::variant<TString, TPathId>, TActorId::TOrderedCmp> Subscribers;
     THashMap<ui64, TSet<TActorId>> WaitStrongNotifications;
+    ui64 ClusterStateGeneration = 0;
+    ui64 ClusterStateGuid = 0;
 
 }; // TReplica
 
 } // NSchemeBoard
 
-IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32) {
-    return new NSchemeBoard::TReplica();
+IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>& info, ui32) {
+    return new NSchemeBoard::TReplica(info);
 }
 
 } // NKikimr

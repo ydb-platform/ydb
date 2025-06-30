@@ -438,6 +438,9 @@ public:
             }
 
             notify->Record.SetVersion(GetVersion());
+            Y_ABORT_UNLESS(Owner);
+            notify->Record.SetClusterStateGeneration(Owner->ClusterStateGeneration);
+            notify->Record.SetClusterStateGuid(Owner->ClusterStateGuid);
 
             if (!IsEmpty() || IsExplicitlyDeleted() || forceStrong) {
                 notify->Record.SetStrong(true);

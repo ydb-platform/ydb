@@ -52,7 +52,7 @@ namespace {
     }
 
     template <typename TPath>
-    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record) {
+    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record, ui64 clusterStateGeneration = 0, ui64 clusterStateGuid = 0) {
         bool valid = false;
 
         if (record.HasPath()) {
@@ -61,6 +61,13 @@ namespace {
 
         if (!valid && (record.HasPathOwnerId() && record.HasLocalPathId())) {
             valid = IsSame(path, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
+        }
+
+        if (valid && clusterStateGeneration && record.HasClusterStateGeneration()) {
+            valid = (clusterStateGeneration == record.GetClusterStateGeneration());
+        }
+        if (valid && clusterStateGuid && record.HasClusterStateGuid()) {
+            valid = (clusterStateGuid == record.GetClusterStateGuid());
         }
 
         return valid;
@@ -832,7 +839,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
-        if (!IsValidNotification(Path, ev->Get()->GetRecord())) {
+        if (!IsValidNotification(Path, ev->Get()->GetRecord(), ClusterStateGeneration, ClusterStateGuid)) {
             SBS_LOG_E("Suspicious " << ev->Get()->ToString()
                 << ": sender# " << ev->Sender);
             return;

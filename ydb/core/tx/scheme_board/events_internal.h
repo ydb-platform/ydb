@@ -310,6 +310,10 @@ TString PrintPath(const IEventBase* ev, const NKikimrSchemeBoard::TEvNotify& rec
 
 struct TEvNotify: public TEventPreSerializedPB<TEvNotify, NKikimrSchemeBoard::TEvNotify, TSchemeBoardEvents::EvNotify> {
     TEvNotify() = default;
+    TEvNotify(ui64 clusterStateGeneration, ui64 clusterStateGuid) {
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
+    }
 
     TString ToString() const override {
         return PrintPath(this, Record);

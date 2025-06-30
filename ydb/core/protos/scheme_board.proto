@@ -135,6 +135,9 @@ message TEvNotify {
 
     optional NKikimrProto.TPathID PathSubdomainPathId = 8;
     repeated uint64 PathAbandonedTenantsSchemeShards = 9;
+
+    optional uint64 ClusterStateGeneration = 10;
+    optional fixed64 ClusterStateGuid = 11;
 }
 
 message TEvNotifyAck {

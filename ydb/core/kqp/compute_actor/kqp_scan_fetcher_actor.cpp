@@ -87,7 +87,8 @@ void TKqpScanFetcherActor::Bootstrap() {
     for (auto&& c : ComputeActorIds) {
         Sender<TEvScanExchange::TEvRegisterFetcher>().SendTo(c);
     }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size());
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("self_if", SelfId())("compute", ComputeActorIds.size())(
+        "shards", PendingShards.size());
     StartTableScan();
     Become(&TKqpScanFetcherActor::StateFunc);
     Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());
@@ -610,7 +611,7 @@ void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
             "TKqpScanFetcherActor: broken pipe with tablet " << state->TabletId << ", retries limit exceeded (" << state->TotalRetries << ")");
         SendGlobalFail(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             TStringBuilder() << "Retries limit with shard " << state->TabletId << " exceeded.");
-        return;
+        return PassAway();
     }
 
     // note: it might be possible that shard is already removed after successful split/merge operation and cannot be found

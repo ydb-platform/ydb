@@ -644,6 +644,10 @@ Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
         TestSinglePathUpdate({ {.State = PRIMARY}, {.State = DISCONNECTED} });
     }
 
+    Y_UNIT_TEST(OneSynchronizedRingGroup) {
+        TestSinglePathUpdate({ {.State = PRIMARY}, {.State = SYNCHRONIZED} });
+    }
+
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {
         TestSinglePathUpdate({ {.State = PRIMARY}, {.State = PRIMARY, .WriteOnly = true} });
     }

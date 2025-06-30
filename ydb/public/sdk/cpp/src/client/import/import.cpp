@@ -113,6 +113,16 @@ TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(TListObjectsInS3Expor
 
 TListObjectsInS3ExportResult::~TListObjectsInS3ExportResult() = default;
 
+TListObjectsInS3ExportResult& TListObjectsInS3ExportResult::operator=(TListObjectsInS3ExportResult&&) = default;
+
+TListObjectsInS3ExportResult& TListObjectsInS3ExportResult::operator=(const TListObjectsInS3ExportResult& result) {
+    TStatus::operator=(result);
+    Items_ = result.Items_;
+    NextPageToken_ = result.NextPageToken_;
+    Proto_ = std::make_unique<Ydb::Import::ListObjectsInS3ExportResult>(*result.Proto_);
+    return *this;
+}
+
 const std::vector<TListObjectsInS3ExportResult::TItem>& TListObjectsInS3ExportResult::GetItems() const {
     return Items_;
 }

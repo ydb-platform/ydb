@@ -120,6 +120,9 @@ public:
     TListObjectsInS3ExportResult(const TListObjectsInS3ExportResult&);
     ~TListObjectsInS3ExportResult();
 
+    TListObjectsInS3ExportResult& operator=(TListObjectsInS3ExportResult&&);
+    TListObjectsInS3ExportResult& operator=(const TListObjectsInS3ExportResult&);
+
     const std::vector<TItem>& GetItems() const;
     const std::string& NextPageToken() const { return NextPageToken_; }
 

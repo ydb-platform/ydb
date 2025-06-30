@@ -270,11 +270,13 @@ TClusterMap::TClusterMap(TSentinelState::TPtr state)
 
 void TClusterMap::AddPDisk(const TPDiskID& id, const bool inGoodState) {
     Y_ABORT_UNLESS(State->Nodes.contains(id.NodeId));
-    const auto& location = State->Nodes[id.NodeId].Location;
+    const auto& node = State->Nodes[id.NodeId];
+    const auto& location = node.Location;
 
     ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
     ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id);
     ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
+    ByPile[node.PileId.Defined() ? ToString(*node.PileId) : ""].insert(id);
     NodeByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id.NodeId);
 
     if (!inGoodState) {
@@ -284,11 +286,13 @@ void TClusterMap::AddPDisk(const TPDiskID& id, const bool inGoodState) {
 
 /// TGuardian
 
-TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio, ui32 faultyPDisksThresholdPerNode)
+TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio,
+                     ui32 roomRatio, ui32 rackRatio, ui32 pileRatio, ui32 faultyPDisksThresholdPerNode)
     : TClusterMap(state)
     , DataCenterRatio(dataCenterRatio)
     , RoomRatio(roomRatio)
     , RackRatio(rackRatio)
+    , PileRatio(pileRatio)
     , FaultyPDisksThresholdPerNode(faultyPDisksThresholdPerNode)
 {
 }
@@ -348,6 +352,20 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
             }
             EraseNodesIf(result, [&rack = kv.second](const TPDiskID& id) {
                 return rack.contains(id);
+            });
+        }
+    }
+
+    for (const auto& kv : ByPile) {
+        Y_ABORT_UNLESS(all.ByPile.contains(kv.first));
+
+        if (kv.first && !CheckRatio(kv, all.ByPile, PileRatio)) {
+            LOG_IGNORED(Pile);
+            for (auto& pdisk : kv.second) {
+                disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::RATIO_BY_PILE);
+            }
+            EraseNodesIf(result, [&pile = kv.second](const TPDiskID& id) {
+                return pile.contains(id);
             });
         }
     }
@@ -513,6 +531,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     SentinelState->Nodes.emplace(host.GetNodeId(), TNodeInfo{
                         .Host = host.GetName(),
                         .Location = NActors::TNodeLocation(host.GetLocation()),
+                        .PileId = host.HasPileId() ? TMaybeFail<ui32>(host.GetPileId()) : Nothing(),
                         .Markers = std::move(markers),
                     });
                 }
@@ -971,7 +990,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         TClusterMap all(SentinelState);
-        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio, Config.FaultyPDisksThresholdPerNode);
+        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio, Config.PileRatio, Config.FaultyPDisksThresholdPerNode);
         TClusterMap::TPDiskIDSet alwaysAllowed;
 
         for (auto& pdisk : SentinelState->PDisks) {

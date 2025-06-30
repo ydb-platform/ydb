@@ -198,7 +198,7 @@ size_t TVectorSampler::GetTargetCount() const {
     return SelectTargets.size();
 }
 
-NYdb::TValue TVectorSampler::GetPrefixValue(size_t targetIndex) const {
+const NYdb::TValue TVectorSampler::GetPrefixValue(size_t targetIndex) const {
     return *SelectTargets.at(targetIndex).PrefixValue;
 }
 

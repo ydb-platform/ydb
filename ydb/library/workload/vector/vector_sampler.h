@@ -21,7 +21,7 @@ public:
     // Target access methods
     const std::string& GetTargetEmbedding(size_t index) const;
     size_t GetTargetCount() const;
-    NYdb::TValue GetPrefixValue(size_t targetIndex) const;
+    const NYdb::TValue GetPrefixValue(size_t targetIndex) const;
 
 private:
     const TVectorWorkloadParams& Params;

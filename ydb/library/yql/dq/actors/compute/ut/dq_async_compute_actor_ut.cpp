@@ -64,15 +64,6 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
 
 using namespace NKikimr::NMiniKQL;
 
-struct TDummyMemoryQuotaManager: IMemoryQuotaManager {
-    bool AllocateQuota(ui64 /*memorySize*/) override { return true; }
-    void FreeQuota(ui64 /*memorySize*/) override { }
-    ui64 GetCurrentQuota() const override { return ~0u; }
-    ui64 GetMaxMemorySize() const override { return ~0u; }
-    bool IsReasonableToUseSpilling() const override { return false; }
-    TString MemoryConsumptionDetails() const override { return "No details"; }
-};
-
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory() {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterMockProviderFactories(*factory);
@@ -425,7 +416,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         memoryLimits.MkqlLightProgramMemoryLimit = 10_MB;
         memoryLimits.MkqlHeavyProgramMemoryLimit = 20_MB;
         memoryLimits.MkqlProgramHardMemoryLimit = 30_MB;
-        memoryLimits.MemoryQuotaManager = std::make_shared<TDummyMemoryQuotaManager>();
+        memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 32_MB);
         auto actor = CreateDqAsyncComputeActor(
                 EdgeActor, // executerId,
                 LogPrefix,

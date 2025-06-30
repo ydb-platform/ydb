@@ -1525,42 +1525,8 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
     }
 
     std::unordered_map<TString, NYql::NDqProto::TDqTableStats*> currentTableStats;
+
     for (auto& [stageId, stageStat] : StageStats) {
-        auto& stageStats = *protoStages[stageStat.StageId.StageId];
-        stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
-        stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
-
-        stageStats.SetBaseTimeMs(BaseTimeMs);
-        stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
-        ExportAggStats(stageStat.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
-        stageStat.MaxMemoryUsage.ExportAggStats(BaseTimeMs, *stageStats.MutableMaxMemoryUsage());
-
-        ExportAggStats(stageStat.InputRows, *stageStats.MutableInputRows());
-        ExportAggStats(stageStat.InputBytes, *stageStats.MutableInputBytes());
-        ExportAggStats(stageStat.OutputRows, *stageStats.MutableOutputRows());
-        ExportAggStats(stageStat.OutputBytes, *stageStats.MutableOutputBytes());
-        ExportAggStats(stageStat.ResultRows, *stageStats.MutableResultRows());
-        ExportAggStats(stageStat.ResultBytes, *stageStats.MutableResultBytes());
-        ExportAggStats(stageStat.IngressRows, *stageStats.MutableIngressRows());
-        ExportAggStats(stageStat.IngressBytes, *stageStats.MutableIngressBytes());
-        ExportAggStats(stageStat.IngressDecompressedBytes, *stageStats.MutableIngressDecompressedBytes());
-        ExportAggStats(stageStat.EgressRows, *stageStats.MutableEgressRows());
-        ExportAggStats(stageStat.EgressBytes, *stageStats.MutableEgressBytes());
-
-        ExportOffsetAggStats(stageStat.StartTimeMs, *stageStats.MutableStartTimeMs(), BaseTimeMs);
-        ExportOffsetAggStats(stageStat.FinishTimeMs, *stageStats.MutableFinishTimeMs(), BaseTimeMs);
-        ExportAggStats(stageStat.DurationUs, *stageStats.MutableDurationUs());
-        stageStat.WaitInputTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableWaitInputTimeUs());
-        stageStat.WaitOutputTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableWaitOutputTimeUs());
-        stageStats.SetUpdateTimeMs(stageStat.UpdateTimeMs > BaseTimeMs ? stageStat.UpdateTimeMs - BaseTimeMs : 0);
-
-        stageStat.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
-        stageStat.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
-        stageStat.SpillingComputeTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
-        stageStat.SpillingChannelTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
-
-        FillStageDurationUs(stageStats);
-
         for (auto& [path, t] : stageStat.Tables) {
             NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
             if (auto it = currentTableStats.find(path); it != currentTableStats.end()) {
@@ -1584,6 +1550,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         if (CollectFullStats(StatsMode)) {
             auto& stageStats = *protoStages[stageStat.StageId.StageId];
             stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
+            stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
 
             stageStats.SetBaseTimeMs(BaseTimeMs);
             stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());

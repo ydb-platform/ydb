@@ -473,7 +473,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         const auto columns = IsWide ? static_cast<TMultiType *>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType *>(dqInputChannel->GetInputType())->GetMembersCount();
         while (dqInputChannel->Pop(batch)) {
             if (IsWide) {
-                if (!batch.ForEachRowWide([this, &cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
+                if (!batch.ForEachRowWide([this, cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
                     LOG_D("WideRow:");
                     if (row) {
                         UNIT_ASSERT_EQUAL(width, columns);
@@ -492,7 +492,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     return false;
                 }
             } else {
-                if (!batch.ForEachRow([this, &cb, columns](const NUdf::TUnboxedValue& row) {
+                if (!batch.ForEachRow([this, cb, columns](const NUdf::TUnboxedValue& row) {
                     LOG_D("Row:");
                     if (row) {
                         for(ui32 col = 0; col < columns; ++col) {

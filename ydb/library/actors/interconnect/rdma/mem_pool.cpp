@@ -185,11 +185,25 @@ namespace NInterconnect::NRdma {
     }
 
     TMemRegionPtr IMemPool::Alloc(int size) noexcept {
-        return TMemRegionPtr(AllocImpl(size));
+        TMemRegion* region = nullptr;
+        while (!region) {
+            region = AllocImpl(size);
+            if (!region) {
+                std::this_thread::yield();
+            } 
+        }
+        return TMemRegionPtr(region);
     }
 
     TRcBuf IMemPool::AllocRcBuf(int size) noexcept {
-        return TRcBuf(IContiguousChunk::TPtr(AllocImpl(size)));
+        TMemRegion* region = nullptr;
+        while (!region) {
+            region = AllocImpl(size);
+            if (!region) {
+                std::this_thread::yield();
+            } 
+        }
+        return TRcBuf(IContiguousChunk::TPtr(region));
     }
 
     class TMemPoolBase: public IMemPool, public std::enable_shared_from_this<TMemPoolBase> {
@@ -220,7 +234,7 @@ namespace NInterconnect::NRdma {
             void* auxPtr = new((char*)ptr + (size - sizeof(TAuxData))) TAuxData;
             auto mrs = registerMemory(ptr, size, Ctxs);
             if (mrs.empty()) {
-                std::free(ptr);
+                Y_ABORT_UNLESS(false, "UNABLE TO REGISTER MEMORY");
                 return nullptr;
             }
 
@@ -351,7 +365,7 @@ namespace NInterconnect::NRdma {
             } while (attempt--);
 
             if (!chunk) {
-                chunk = AllocNewChunk<TAuxChunkData>(size);
+                chunk = AllocNewChunk<TAuxChunkData>(ChunkSize);
                 if (!chunk) {
                     return nullptr; 
                 }
@@ -364,14 +378,15 @@ namespace NInterconnect::NRdma {
             while (PushChunk(startPos, ActiveAndFree, chunk.Get()) == -1) {
                 std::this_thread::yield();
             }
-            return new TMemRegion(chunk , offset, size);
+            return new TMemRegion(chunk, offset, size);
         }
 
         void Free(TMemRegion&&, TChunk& chunk) noexcept override {
             TAuxChunkData* auxData = CastToAuxChunkData(&chunk);
             if (auxData->IsInactive() && chunk.RefCount() == (1 + 1)) { // last MemRegion for chunk: 1 ref from TMemRegion and 1 is "manual" during allocation 
                 Y_ABORT_UNLESS(auxData->InactivePos < (int)Inactive.size());
-                Y_ABORT_UNLESS(Inactive[auxData->InactivePos].load() == &chunk);
+                Y_ABORT_UNLESS(Inactive[auxData->InactivePos].load() == &chunk, "chunk: %p, expected: %p",
+                    (void*)&chunk, Inactive[auxData->InactivePos].load());
                 Inactive[auxData->InactivePos].store(nullptr);
                 auxData->Allocated.store(0);
                 auxData->InactivePos.store(-1);
@@ -387,7 +402,7 @@ namespace NInterconnect::NRdma {
         }
 
     private:
-        static constexpr size_t ChunkSize = 64 << 20;
+        static constexpr size_t ChunkSize = 32 << 20;
         static constexpr size_t MaxChunks = 1 << 5; //must be power of two
         static constexpr size_t CacheLineSz = 64;
         static constexpr size_t ChunkGap = CacheLineSz / sizeof(TChunk*); // Distance between elemets to prevent cache line sharing

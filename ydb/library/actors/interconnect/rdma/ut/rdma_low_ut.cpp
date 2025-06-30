@@ -66,7 +66,8 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
         auto cqActorId = actorSystem->Register(CreateCqActor(1));
         auto cqPtr = GetCqHandle(actorSystem.Get(), ctx, cqActorId);
 
-        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        //auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
 
         TQueuePair qp1;
         {
@@ -117,7 +118,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
         auto [actorSystem, ctx] = PrepareTestRuntime();
         auto cqActorId = actorSystem->Register(CreateCqActor(1));
 
-        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
         
         // Number of attempt to trigger overflow
         int attempt = 10000;

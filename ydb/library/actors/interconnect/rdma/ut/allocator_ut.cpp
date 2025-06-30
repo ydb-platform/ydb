@@ -120,6 +120,45 @@ Y_UNIT_TEST_SUITE(Allocator) {
         Cerr << "Average time per allocation: " << s / NUM_THREADS << " ms" << Endl;
     }
 
+    Y_UNIT_TEST(AllocMemoryWithMemPoolAsyncRandomOrderDealloc) {
+        const ui32 NUM_THREADS = 4;
+        const ui32 NUM_ALLOC = 10000000;
+        const ui32 BUF_SIZE = 4 * 1024;
+
+        auto memPool = CreateMemPool<true>();
+
+        std::vector<std::thread> threads;
+        std::vector<ui64> times(NUM_THREADS);
+
+        std::vector<NInterconnect::NRdma::TMemRegionPtr> regions(NUM_THREADS);
+        std::mutex mtx;
+
+        for (ui32 i = 0; i < NUM_THREADS; ++i) {
+            threads.emplace_back([memPool, &t=times[i], &mtx, &regions]() {
+                auto now = TInstant::Now();
+                for (ui32 j = 0; j < NUM_ALLOC; ++j) {
+                    auto memRegion = memPool->Alloc(BUF_SIZE);
+                    UNIT_ASSERT_C(memRegion->GetAddr(), "invalid address");
+                    size_t pos = (size_t)rand() % NUM_THREADS;
+                    mtx.lock();
+                    regions[pos] = std::move(memRegion);
+                    mtx.unlock();
+                }
+                t = (TInstant::Now() - now).MicroSeconds();
+            });
+        }
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        double s = 0;
+        for (const auto& t : times) {
+            s += t / 1000.0 / NUM_ALLOC;
+        }
+        Cerr << "Average time per allocation: " << s / NUM_THREADS << " ms" << Endl;
+    }
+
+
     Y_UNIT_TEST_TWIN(MemRegRcBuf, IncrementalPool) {
         auto memPool = CreateMemPool<IncrementalPool>();
         TRcBuf data = memPool->AllocRcBuf(BUF_SIZE);

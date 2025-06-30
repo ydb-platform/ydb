@@ -19,7 +19,7 @@ namespace NInterconnect::NRdma {
 
     class TMemRegion: public NNonCopyable::TMoveOnly, public IContiguousChunk {
     public:
-        TMemRegion(TChunkPtr chunk, uint32_t size, uint32_t offset) noexcept;
+        TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept;
         ~TMemRegion();
 
         void*    GetAddr() const;

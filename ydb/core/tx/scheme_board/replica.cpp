@@ -1121,7 +1121,7 @@ private:
         }
 
         if (auto cookie = info.ProcessSyncRequest()) {
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), false, ClusterStateGeneration, ClusterStateGuid), 0, *cookie);
         }
     }
 
@@ -1143,7 +1143,7 @@ private:
                 version = GetVersion(TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
             }
 
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version), 0, ev->Cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, false, ClusterStateGeneration, ClusterStateGuid), 0, ev->Cookie);
             return;
         }
 
@@ -1165,7 +1165,7 @@ private:
         auto cookie = info.ProcessSyncRequest();
         Y_ABORT_UNLESS(cookie && *cookie == ev->Cookie);
 
-        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
+        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), false, ClusterStateGeneration, ClusterStateGuid), 0, *cookie);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {

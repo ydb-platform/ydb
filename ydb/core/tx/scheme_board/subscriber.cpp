@@ -944,6 +944,26 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             return;
         }
 
+        const auto& record = ev->Get()->Record;
+        if (ClusterStateGeneration && record.HasClusterStateGeneration()
+            && ClusterStateGeneration != record.GetClusterStateGeneration()) {
+            SBS_LOG_D("Cluster State Generation mismatch in sync version response"
+                << ": sender# " << ev->Sender
+                << ", cookie# " << ev->Cookie
+                << ", subscriber generation# " << ClusterStateGeneration
+                << ", replica generation# " << record.GetClusterStateGeneration());
+            return;
+        }
+        if (ClusterStateGuid && record.HasClusterStateGuid()
+            && ClusterStateGuid != record.GetClusterStateGuid()) {
+            SBS_LOG_D("Cluster State Guid mismatch in sync version response"
+                << ": sender# " << ev->Sender
+                << ", cookie# " << ev->Cookie
+                << ", subscriber GUID# " << ClusterStateGuid
+                << ", replica GUID# " << record.GetClusterStateGuid());
+            return;
+        }
+
         if (!ProxyToGroupMap.contains(ev->Sender)) {
             SBS_LOG_E("Sync sender is unknown"
                 << ": sender# " << ev->Sender
@@ -953,7 +973,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         PendingSync.erase(it);
         Y_ABORT_UNLESS(!ReceivedSync.contains(ev->Sender));
-        ReceivedSync[ev->Sender] = ev->Get()->Record.GetPartial();
+        ReceivedSync[ev->Sender] = record.GetPartial();
 
         TVector<ui32> successesByGroup(ProxyGroups.size(), 0);
         TVector<ui32> failuresByGroup(ProxyGroups.size(), 0);

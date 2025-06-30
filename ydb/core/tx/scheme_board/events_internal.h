@@ -362,15 +362,23 @@ struct TEvSyncVersionRequest: public TEventPB<TEvSyncVersionRequest, NKikimrSche
 struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSchemeBoard::TEvSyncVersionResponse, TSchemeBoardEvents::EvSyncVersionResponse> {
     TEvSyncVersionResponse() = default;
 
-    explicit TEvSyncVersionResponse(const ui64 version, const bool partial = false) {
+    explicit TEvSyncVersionResponse(const ui64 version, const bool partial = false, TMaybe<ui64> clusterStateGeneration = Nothing(), TMaybe<ui64> clusterStateGuid = Nothing()) {
         Record.SetVersion(version);
         Record.SetPartial(partial);
+        if (clusterStateGeneration) {
+            Record.SetClusterStateGeneration(*clusterStateGeneration);
+        }
+        if (clusterStateGuid) {
+            Record.SetClusterStateGuid(*clusterStateGuid);
+        }
     }
 
     TString ToString() const override {
         return TStringBuilder() << ToStringHeader() << " {"
             << " Version: " << Record.GetVersion()
             << " Partial: " << Record.GetPartial()
+            << " Cluster State Generation: " << Record.GetClusterStateGeneration()
+            << " Cluster State GUID: " << Record.GetClusterStateGuid()
         << " }";
     }
 };

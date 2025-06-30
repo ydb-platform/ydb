@@ -151,4 +151,6 @@ message TEvSyncVersionRequest {
 message TEvSyncVersionResponse {
     optional uint64 Version = 1;
     optional bool Partial = 2;
+    optional uint64 ClusterStateGeneration = 3;
+    optional fixed64 ClusterStateGuid = 4;
 }

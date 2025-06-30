@@ -766,11 +766,13 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         for (auto [receivedVal, receivedCnt] : receivedData) {
             UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);
         }
-        WEAK_UNIT_ASSERT(!!watermark);
-        if (watermark) {
-            LOG_D("Last watermark " << *watermark);
-        } else {
-            LOG_E("NO WATERMARK");
+        if (doWatermark) {
+            WEAK_UNIT_ASSERT(!!watermark);
+            if (watermark) {
+                LOG_D("Last watermark " << *watermark);
+            } else {
+                LOG_E("NO WATERMARK");
+            }
         }
     }
 };

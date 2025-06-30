@@ -533,15 +533,30 @@ class LoadSuiteBase:
         """Обновляет summary-флаги для warning/error по всем итерациям"""
         has_warning = False
         has_error = False
+        
+        # Проверяем ошибки и предупреждения в итерациях
         for iteration in getattr(result, "iterations", {}).values():
             if hasattr(iteration, "warning_message") and iteration.warning_message:
                 has_warning = True
             if hasattr(iteration, "error_message") and iteration.error_message:
                 has_error = True
+        
+        # Проверяем ошибки и предупреждения в основном результате
+        if result.warnings:
+            has_warning = True
+        if result.errors:
+            has_error = True
+        
+        # Для обратной совместимости также проверяем старые поля
+        if hasattr(result, "warning_message") and result.warning_message:
+            has_warning = True
+        if hasattr(result, "error_message") and result.error_message:
+            has_error = True
+            
         stats = result.get_stats(workload_name)
         if stats is not None:
-            stats["with_warnings"] = has_warning or bool(getattr(result, "warning_message", None))
-            stats["with_errors"] = has_error or bool(getattr(result, "error_message", None))
+            stats["with_warnings"] = has_warning
+            stats["with_errors"] = has_error
 
     def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
         """Формирует allure-отчёт по результатам workload"""
@@ -589,7 +604,7 @@ class LoadSuiteBase:
         workload_errors = []
         if result.errors:
             for err in result.errors:
-                if "coredump" not in err and "OOM" not in err:
+                if "coredump" not in err.lower() and "oom" not in err.lower():
                     workload_errors.append(err)
         if workload_errors:
             allure.dynamic.label("severity", "critical")

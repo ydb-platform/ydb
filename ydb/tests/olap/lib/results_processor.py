@@ -112,6 +112,31 @@ class ResultsProcessor:
             return None
 
         info = {'cluster': YdbCluster.get_cluster_info()}
+        
+        # Добавляем дополнительную информацию о кластере
+        try:
+            nodes = YdbCluster.get_cluster_nodes(db_only=True)
+            cluster_info = info['cluster']
+            cluster_info['endpoint'] = YdbCluster.ydb_endpoint
+            cluster_info['nodes_count'] = len(nodes)
+            cluster_info['nodes_info'] = []
+            
+            # Собираем информацию о нодах
+            for node in nodes:
+                node_info = {
+                    'host': node.host,
+                    'role': str(node.role),
+                    'version': node.version,
+                    'start_time': node.start_time,
+                    'disconnected': node.disconnected
+                }
+                cluster_info['nodes_info'].append(node_info)
+                
+        except Exception as e:
+            logging.warning(f"Could not collect detailed cluster info: {e}")
+            # Добавляем базовую информацию
+            info['cluster']['endpoint'] = YdbCluster.ydb_endpoint
+            info['cluster']['error'] = str(e)
 
         report_url = os.getenv('ALLURE_RESOURCE_URL', None)
         if report_url is None:

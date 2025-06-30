@@ -1657,3 +1657,58 @@ class WorkloadTestBase(LoadSuiteBase):
             # --- Загрузка результатов ---
             self._upload_results(result, workload_name)
             self._upload_results_per_workload_run(result, workload_name)
+
+    def _upload_results(self, result, workload_name):
+        """Переопределенный метод для workload тестов с kind='Stability'"""
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            stats["aggregation_level"] = "aggregate"
+            stats["run_id"] = ResultsProcessor.get_run_id()
+        end_time = time()
+        ResultsProcessor.upload_results(
+            kind='Stability',
+            suite=type(self).suite(),
+            test=workload_name,
+            timestamp=end_time,
+            is_successful=result.success,
+            statistics=stats,
+        )
+
+    def _upload_results_per_workload_run(self, result, workload_name):
+        """Переопределенный метод для workload тестов с kind='Stability'"""
+        suite = type(self).suite()
+        agg_stats = result.get_stats(workload_name)
+        nemesis_enabled = agg_stats.get("nemesis_enabled") if agg_stats else None
+        run_id = ResultsProcessor.get_run_id()
+        for iter_num, iteration in result.iterations.items():
+            runs = getattr(iteration, "runs", None) or [iteration]
+            for run_idx, run in enumerate(runs):
+                if getattr(run, "error_message", None):
+                    resolution = "error"
+                elif getattr(run, "warning_message", None):
+                    resolution = "warning"
+                elif hasattr(run, "timeout") and run.timeout:
+                    resolution = "timeout"
+                else:
+                    resolution = "ok"
+
+                stats = {
+                    "iteration": iter_num,
+                    "run_index": run_idx,
+                    "duration": getattr(run, "time", None),
+                    "resolution": resolution,
+                    "error_message": getattr(run, "error_message", None),
+                    "warning_message": getattr(run, "warning_message", None),
+                    "nemesis_enabled": nemesis_enabled,
+                    "aggregation_level": "per_run",
+                    "run_id": run_id,
+                }
+                ResultsProcessor.upload_results(
+                    kind='Stability',
+                    suite=suite,
+                    test=f"{workload_name}__iter_{iter_num}__run_{run_idx}",
+                    timestamp=time(),
+                    is_successful=(resolution == "ok"),
+                    duration=stats["duration"],
+                    statistics=stats,
+                )

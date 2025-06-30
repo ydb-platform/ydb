@@ -581,6 +581,8 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
                     index, key, partitionStat.GetLastMessageMs(), false, EPartitionedAggKind::PartitionedAggMax);
                 asyncBufferStats.External.SetNonZero(asyncBufferStats.External.WaitOutputTimeUs,
                     index, key, partitionStat.GetWaitOutputTimeUs(), false, EPartitionedAggKind::PartitionedAggMax);
+                asyncBufferStats.External.SetNonZero(asyncBufferStats.External.Finished,
+                    index, key, partitionStat.GetFinished(), false, EPartitionedAggKind::PartitionedAggMax);
             }
         }
     }
@@ -727,6 +729,7 @@ void MergeExternal(NDqProto::TDqExternalAggrStats& asyncAggr, const NDqProto::TD
     MergeAggr(*asyncAggr.MutableFirstMessageMs(), asyncStat.GetFirstMessageMs());
     MergeAggr(*asyncAggr.MutableLastMessageMs(), asyncStat.GetLastMessageMs());
     asyncAggr.SetPartitionCount(asyncAggr.GetPartitionCount() + asyncStat.GetExternalRows().GetCnt());
+    asyncAggr.SetFinishedPartitionCount(asyncAggr.GetFinishedPartitionCount() + asyncStat.GetFinishedPartitionCount());
 }
 
 ui64 UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDqAsyncBufferStats& asyncStat) noexcept {
@@ -857,7 +860,14 @@ void TQueryExecutionStats::Prepare() {
             auto [it, inserted] = StageStats.try_emplace(stageId);
             Y_ENSURE(inserted);
             it->second.StageId = stageId;
-            it->second.SetHistorySampleCount(HistorySampleCount);
+            if (info.Meta.ColumnTableInfoPtr) {
+                it->second.Ingress["CS"].External.PartitionCount = info.Meta.ColumnTableInfoPtr->Description.GetColumnShardCount();
+            }
+        }
+        // tasks
+        for (auto& task : TasksGraph->GetTasks()) {
+            auto& stageStats = StageStats[task.StageId];
+            stageStats.Task2Index.emplace(task.Id, stageStats.Task2Index.size());
         }
         // connections
         for (auto& [_, stageStats] : StageStats) {
@@ -866,17 +876,16 @@ void TQueryExecutionStats::Prepare() {
             for (const auto& input : stage.GetInputs()) {
                 auto& peerStageStats = StageStats[NYql::NDq::TStageId(stageStats.StageId.TxId, input.GetStageIndex())];
                 stageStats.InputStages.push_back(&peerStageStats);
+                stageStats.Input.emplace(peerStageStats.StageId.StageId, 0);
                 peerStageStats.OutputStages.push_back(&stageStats);
+                peerStageStats.Output.emplace(stageStats.StageId.StageId, 0);
             }
         }
-        // tasks
-        for (auto& task : TasksGraph->GetTasks()) {
-            auto& stageStats = StageStats[task.StageId];
-            stageStats.Task2Index.emplace(task.Id, stageStats.Task2Index.size());
-        }
+        // stages postprocessing
         for (auto& [_, stageStats] : StageStats) {
             stageStats.TaskCount = (stageStats.Task2Index.size() + 3) & ~3;
             stageStats.Resize(stageStats.TaskCount);
+            stageStats.SetHistorySampleCount(HistorySampleCount);
         }
     }
 }
@@ -963,12 +972,13 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         for (auto& externalPartition : sourcesStat.GetExternalPartitions()) {
             const auto& [it, inserted] = externalPartitionStat.Stat.emplace(externalPartition.GetPartitionId(),
                 TExternalPartitionStat(externalPartition.GetExternalRows(), externalPartition.GetExternalBytes(),
-                externalPartition.GetFirstMessageMs(), externalPartition.GetLastMessageMs()));
+                externalPartition.GetFirstMessageMs(), externalPartition.GetLastMessageMs(), externalPartition.GetFinished()));
             if (!inserted) {
                 it->second.ExternalRows += externalPartition.GetExternalRows();
                 it->second.ExternalBytes += externalPartition.GetExternalBytes();
                 it->second.FirstMessageMs = NonZeroMin(it->second.FirstMessageMs, externalPartition.GetFirstMessageMs());
                 it->second.LastMessageMs = std::max(it->second.LastMessageMs, externalPartition.GetLastMessageMs());
+                it->second.Finished |= externalPartition.GetFinished();
             }
         }
 
@@ -1519,7 +1529,8 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     data.External.ExternalBytes.ExportAggStats(BaseTimeMs, *external.MutableExternalBytes());
     ExportOffsetAggStats(data.External.FirstMessageMs.Values, *external.MutableFirstMessageMs(), BaseTimeMs);
     ExportOffsetAggStats(data.External.LastMessageMs.Values, *external.MutableLastMessageMs(), BaseTimeMs);
-    external.SetPartitionCount(data.External.Indices.size());
+    external.SetPartitionCount(std::max<ui32>(data.External.PartitionCount, data.External.Indices.size()));
+    external.SetFinishedPartitionCount(data.External.Finished.Sum);
     ExportAggAsyncStats(data.Ingress, *stats.MutableIngress());
     ExportAggAsyncStats(data.Push, *stats.MutablePush());
     ExportAggAsyncStats(data.Pop, *stats.MutablePop());
@@ -1733,6 +1744,7 @@ void TQueryExecutionStats::Finish() {
             auto& externalPartitionStat = ExternalPartitionStats[stageStats->GetStageId()];
             auto& ingress = (*stageStats->MutableIngress())[externalPartitionStat.Name];
             auto& external = *ingress.MutableExternal();
+            ui32 finishedPartitions = 0;
             for (auto& [partitionId, partitionStat] : externalPartitionStat.Stat) {
                 auto& externalRows = *external.MutableExternalRows();
                 externalRows.SetMin(NonZeroMin(externalRows.GetMin(), partitionStat.ExternalRows));
@@ -1757,11 +1769,23 @@ void TQueryExecutionStats::Finish() {
                 lastMessageMs.SetMax(std::max(lastMessageMs.GetMax(), partitionStat.LastMessageMs));
                 lastMessageMs.SetSum(lastMessageMs.GetSum() + partitionStat.LastMessageMs);
                 lastMessageMs.SetCnt(lastMessageMs.GetCnt() + 1);
+
+                finishedPartitions += partitionStat.Finished;
             }
             external.SetPartitionCount(external.GetPartitionCount() + externalPartitionStat.Stat.size());
+            external.SetFinishedPartitionCount(external.GetFinishedPartitionCount() + finishedPartitions);
+
+            auto it = StageStats.find(stageId);
+            if (it != StageStats.end()) {
+                auto it1 = it->second.Ingress.find(externalPartitionStat.Name);
+                if (it1 != it->second.Ingress.end()) {
+                    external.SetPartitionCount(std::max<ui32>(it1->second.External.PartitionCount, external.GetPartitionCount()));
+                }
+            }
         }
 
         AdjustBaseTime(stageStats);
+
         auto it = StageStats.find(stageId);
         if (it != StageStats.end()) {
             it->second.ExportHistory(BaseTimeMs, *stageStats);

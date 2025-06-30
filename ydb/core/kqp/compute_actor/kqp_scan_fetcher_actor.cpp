@@ -509,8 +509,11 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
         ev->Record.SetCpuGroupThreadsLimit(*cpuGroupThreadsLimit);
         ev->Record.SetCpuGroupName(CPULimits.GetCPUGroupName());
     }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "start ScanData")("scan_id", scanId)("gen", gen)(
-        "cursor", cursor ? cursor->DebugString() : TString("START"));
+    TString strCursor = cursor ? cursor->DebugString() : TString("START");
+    while (strCursor.find("\n") != string::npos) {
+        strCursor.erase(str.find("\n"), 1);
+    }
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "start ScanData")("scan_id", scanId)("gen", gen)("cursor", strCursor);
 
     ev->Record.SetDataFormat(Meta.GetDataFormat());
     return ev;

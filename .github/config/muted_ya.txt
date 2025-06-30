@@ -99,9 +99,11 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut [*/*] chunk chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read DirectReadWithClient.ManyMessages
+ydb/public/sdk/cpp/tests/integration/topic/with_direct_read TxUsageQuery.WriteToTopic_Demo_26
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read [*/*] chunk chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
+ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestReadAtTimestamp_3
 ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/backup_ut CommonEncryptionRequirementsTest.CommonEncryptionRequirements
 ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
@@ -207,6 +209,7 @@ ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_upd
 ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates4-invalid_pile_id]
 ydb/tests/functional/bridge test_bridge.py.flake8
 ydb/tests/functional/config [test_distconf.py */*] chunk chunk
+ydb/tests/functional/config [test_distconf_generate_config.py */*] chunk chunk
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationToV2.test_migration_to_v2
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_distconf
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
@@ -216,7 +219,6 @@ ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStor
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageNoChanges.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageReuseSameNodes.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageToTheSameConfig.test_cluster_change_state_storage
-ydb/tests/functional/config [test_distconf_generate_config.py */*] chunk chunk
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig2Nodes.test
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig3Nodes.test
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig9Nodes.test

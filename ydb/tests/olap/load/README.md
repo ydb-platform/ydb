@@ -6,8 +6,13 @@
 2. [Настройка полей для выгрузки в YDB](#настройка-полей-для-выгрузки-в-ydb)
 3. [Определение статуса теста](#определение-статуса-теста)
 4. [Добавление функций, выполняемых перед workload](#добавление-функций-выполняемых-перед-workload)
-5. [Стадии подготовки workload'ов](#стадии-подготовки-workloadов)
-6. [Примеры использования](#примеры-использования)
+5. [Setup и Teardown](#setup-и-teardown)
+6. [Nemesis (Chaos Testing)](#nemesis-chaos-testing)
+7. [Механика работы Chunks (Итераций)](#механика-работы-chunks-итераций)
+8. [Стадии подготовки workload'ов](#Примеры-wokrloadов-разной-сложности)
+9. [Примеры использования](#примеры-использования)
+10. [Структура файлов и ya.make](#структура-файлов-и-yamake)
+11. [Запуск тестов](#Пример-запуска-теста)
 
 ---
 
@@ -78,12 +83,15 @@ class TestMyWorkload(MyWorkloadBase):
     timeout = int(get_external_param('workload_duration', 100))
 ```
 
-### 2. Регистрация теста в pytest
+### 2. Создание wrapper файла
 
-Тест автоматически будет обнаружен pytest'ом, если:
-- Файл находится в `ydb/tests/olap/load/lib/`
-- Класс наследуется от `WorkloadTestBase`
-- Методы начинаются с `test_`
+Создайте файл `ydb/tests/olap/load/test_my_workload.py`:
+
+```python
+from .lib.workload_my_workload import TestMyWorkload
+
+# Тест автоматически будет импортирован и запущен
+```
 
 ---
 
@@ -234,6 +242,42 @@ def _cleanup_workload_data(cls):
 
 ---
 
+## Setup и Teardown
+
+### Автоматические действия
+
+**Setup (setup_class):**
+- Подготовка workload бинарных файлов
+- Копирование файлов на ноды кластера
+- Инициализация окружения
+
+**Teardown (teardown_class):**
+- Остановка nemesis (если был запущен)
+- Очистка временных файлов
+- Сбор диагностики
+
+### Когда nemesis включается
+
+Nemesis автоматически включается при:
+- Передаче параметра `nemesis=True` в `execute_workload_test()`
+- Наличии файла конфигурации nemesis в `cluster_path`
+
+### Поведение по умолчанию
+
+```python
+# По умолчанию:
+# - nemesis = False (не запускается)
+# - nodes_percentage = 100 (все ноды)
+# - use_chunks = False (без разбивки на итерации)
+# - duration_param = "--duration"
+
+# Автоматические действия:
+# - В setup: подготовка файлов, копирование на ноды
+# - В teardown: остановка nemesis, очистка, сбор диагностики
+```
+
+---
+
 ## Nemesis (Chaos Testing)
 
 ### Включение nemesis
@@ -290,7 +334,183 @@ def test_workload_with_nemesis_param(self, nemesis_enabled: bool):
 
 ---
 
-## Стадии подготовки workload'ов
+## Механика работы Chunks (Итераций)
+
+### **Что такое chunks и зачем они нужны?**
+
+**Chunks (итерации)** - это механизм разбиения длительного workload теста на несколько коротких итераций для:
+
+1. **Улучшения диагностики** - каждая итерация выполняется отдельно, что позволяет точно определить, на каком этапе произошла ошибка
+2. **Снижения риска потери данных** - если одна итерация упадет, остальные продолжат работу
+3. **Более точной статистики** - можно анализировать производительность по каждой итерации отдельно
+4. **Лучшего контроля ресурсов** - каждая итерация имеет свой таймаут и может быть остановлена независимо
+
+### **Как работает разбивка на итерации:**
+
+```python
+# Пример: тест на 1800 секунд (30 минут) с use_chunks=True
+duration_value = 1800  # 30 минут
+
+# Система автоматически разобьет на итерации:
+# - Минимум 100 секунд на итерацию
+# - Максимум 1 час на итерацию  
+# - Если общее время < 200 сек - одна итерация
+# - Размер итерации = min(max(total_duration // 10, 100), 3600)
+
+# Для 1800 секунд получится:
+# iteration_size = min(max(1800 // 10, 100), 3600) = min(max(180, 100), 3600) = 180 секунд
+# Количество итераций = 1800 / 180 = 10 итераций по 3 минуты каждая
+```
+
+### **Логика создания итераций:**
+
+```python
+def _create_chunks_plan(self, total_duration: float):
+    # Вычисляем размер итерации: минимум 100 сек, максимум 1 час
+    iteration_size = min(max(total_duration // 10, 100), 3600)
+    
+    # Если общее время меньше 200 сек - используем одну итерацию
+    if total_duration < 200:
+        iteration_size = total_duration
+
+    # Создаем итерации
+    iterations = []
+    remaining_time = total_duration
+    iteration_num = 1
+
+    while remaining_time > 0:
+        current_iteration_size = min(iteration_size, remaining_time)
+        iterations.append({
+            'iteration_num': iteration_num,
+            'duration': current_iteration_size,
+            'start_offset': total_duration - remaining_time
+        })
+        remaining_time -= current_iteration_size
+        iteration_num += 1
+
+    return iterations
+```
+
+### **Примеры разбивки:**
+
+| Общее время | Размер итерации | Количество итераций | Примечание |
+|-------------|-----------------|---------------------|------------|
+| 60 сек | 60 сек | 1 | Одна итерация (меньше 200 сек) |
+| 300 сек | 100 сек | 3 | Минимальный размер 100 сек |
+| 1800 сек | 180 сек | 10 | Стандартная разбивка |
+| 7200 сек | 720 сек | 10 | Максимальный размер 1 час |
+| 14400 сек | 3600 сек | 4 | Максимальный размер 1 час |
+
+### **Параллельное выполнение итераций:**
+
+```python
+# Каждая итерация выполняется параллельно на всех нодах кластера
+# Пример: 10 итераций на 8 нодах = 80 параллельных запусков
+
+# Структура выполнения:
+# Итерация 1: [Нода1, Нода2, Нода3, ..., Нода8] - параллельно
+# Итерация 2: [Нода1, Нода2, Нода3, ..., Нода8] - параллельно  
+# ...
+# Итерация 10: [Нода1, Нода2, Нода3, ..., Нода8] - параллельно
+```
+
+### **Анализ результатов итераций:**
+
+```python
+# Система группирует результаты по номеру итерации
+# Успешность итерации = хотя бы один поток в итерации завершился успешно
+
+# Статистика в YDB:
+# - total_iterations: общее количество итераций
+# - successful_iterations: количество успешных итераций  
+# - failed_iterations: количество неуспешных итераций
+# - total_threads: общее количество потоков (нод × итерации)
+# - avg_threads_per_iteration: среднее количество потоков на итерацию
+```
+
+### **Когда использовать chunks:**
+
+```python
+# ✅ Рекомендуется для длительных тестов (> 5 минут)
+use_chunks=True  # Для тестов на 30+ минут
+
+# ✅ Рекомендуется для stress тестов
+use_chunks=True  # Лучшая диагностика при нагрузке
+
+# ✅ Рекомендуется для тестов с nemesis
+use_chunks=True  # Изоляция эффектов chaos testing
+
+# ❌ Не нужно для коротких тестов (< 2 минут)
+use_chunks=False  # Для быстрых smoke тестов
+
+# ❌ Не нужно для простых проверок
+use_chunks=False  # Для простых функциональных тестов
+```
+
+### **Пример использования:**
+
+```python
+def test_long_running_workload(self):
+    """Длительный тест с разбивкой на итерации"""
+    
+    result = self.execute_workload_test(
+        workload_name="LongRunningWorkload",
+        command_args="--database /Root/db1 --path test_table",
+        duration_value=3600,  # 1 час
+        use_chunks=True,  # Разбить на итерации
+        additional_stats={
+            "workload_type": "stress",
+            "expected_iterations": 6,  # 3600 / 600 = 6 итераций
+            "iteration_duration": 600  # 10 минут на итерацию
+        }
+    )
+    
+    # Проверяем результаты итераций
+    stats = result.get_stats("LongRunningWorkload")
+    assert stats["total_iterations"] >= 5, "Недостаточно итераций"
+    assert stats["successful_iterations"] >= 4, "Слишком много неуспешных итераций"
+```
+
+### **Отображение в Allure отчетах:**
+
+```python
+# В Allure отчете каждая итерация отображается отдельно:
+# 
+# Workload Iterations
+# ┌─────┬────────┬───────┬─────────────┬─────────────┬─────────────┐
+# │ Iter│ Status │ Dur(s)│   Нода1     │   Нода2     │   Нода3     │
+# ├─────┼────────┼───────┼─────────────┼─────────────┼─────────────┤
+# │  1  │   ok   │ 180.0 │     ok      │     ok      │     ok      │
+# │  2  │ warning│ 180.0 │     ok      │   timeout   │     ok      │
+# │  3  │   ok   │ 180.0 │     ok      │     ok      │     ok      │
+# └─────┴────────┴───────┴─────────────┴─────────────┴─────────────┘
+#
+# Где:
+# - Iter: номер итерации
+# - Status: статус итерации (ok/warning/error)
+# - Dur(s): продолжительность итерации
+# - НодаX: статус выполнения на конкретной ноде
+```
+
+### **Статистика в YDB:**
+
+```python
+# При загрузке в YDB создается детальная статистика:
+{
+    "total_iterations": 10,           # Общее количество итераций
+    "successful_iterations": 8,       # Успешные итерации
+    "failed_iterations": 2,           # Неуспешные итерации
+    "total_threads": 80,              # Общее количество потоков (8 нод × 10 итераций)
+    "avg_threads_per_iteration": 8.0, # Среднее количество потоков на итерацию
+    "use_iterations": true,           # Флаг использования итераций
+    "actual_duration": 175.5,         # Фактическое время выполнения (среднее)
+    "planned_duration": 180.0         # Плановое время выполнения
+}
+```
+
+---
+
+## Примеры wokrloadов разной сложности
 
 ### 1. Простые workload'ы (без подготовки)
 
@@ -797,65 +1017,85 @@ class TestCustomMetricsWorkload(CustomMetricsWorkloadBase):
 
 ---
 
-## Быстрый старт
+## Структура файлов и ya.make
 
-### Шаблон для нового workload
-
-1. **Скопируйте базовый шаблон:**
-```python
-from .workload_executor import WorkloadTestBase
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.utils import get_external_param
-
-import logging
-LOGGER = logging.getLogger(__name__)
-
-
-class MyWorkloadBase(WorkloadTestBase):
-    workload_binary_name = 'my_workload'
-    workload_env_var = 'MY_WORKLOAD_BINARY'
-
-    def test_workload_my_workload(self):
-        command_args_template = (
-            f"--endpoint {YdbCluster.ydb_endpoint} "
-            f"--database /{YdbCluster.ydb_database} "
-            f"--path my_workload_test"
-        )
-
-        additional_stats = {
-            "workload_type": "my_workload",
-            "path": "my_workload_test"
-        }
-
-        self.execute_workload_test(
-            workload_name="MyWorkload",
-            command_args=command_args_template,
-            duration_value=self.timeout,
-            additional_stats=additional_stats,
-            use_chunks=True,
-            duration_param="--duration"
-        )
-
-
-class TestMyWorkload(MyWorkloadBase):
-    timeout = int(get_external_param('workload_duration', 100))
+### Структура файлов
+```
+ydb/tests/olap/load/
+├── lib/
+│ ├── workload_simple_queue.py # Реализация теста
+│ ├── workload_olap.py # Реализация теста
+│ ├── workload_executor.py # Базовый класс
+│ └── ...
+├── test_workload_simple_queue.py # Wrapper для pytest
+├── test_workload_olap.py # Wrapper для pytest
+├── ya.make # Основной ya.make
+└── README.md # Это руководство
 ```
 
-2. **Добавьте инициализацию если нужно:**
-```python
-@classmethod
-def setup_class(cls):
-    cls._init_tables()  # Ваша инициализация
-    super().setup_class()
-```
+### **Примеры запуска теста**
 
-3. **Настройте параметры:**
-- Измените `workload_binary_name` и `workload_env_var`
-- Настройте `command_args_template`
-- Добавьте нужные поля в `additional_stats`
-
-4. **Запустите тест:**
+#### **Вариант 1: Без выгрузки результатов в YDB**
 ```bash
-pytest ydb/tests/olap/load/lib/test_my_workload.py -v
-``` 
-A: Используйте параметр `nodes_percentage` (от 1 до 100) в `execute_workload_test()`. 
+./ya make -ttt \
+  --test-param workload_duration=500 \
+  --test-param ydb-db=/Root/db1 \
+  --test-param ydb-endpoint=grpc://localhost:2135 \
+  ydb/tests/olap/load \
+  --test-filter test_workload_simple_queue.py::TestSimpleQueue::test_workload_simple_queue[nemesis_true*] \
+  --allure=./allure_tmp \
+  --test-tag ya:manual \
+  --test-param cluster_path=cluster.yaml
+```
+
+#### **Вариант 2: С выгрузкой результатов в YDB**
+```bash
+# Установите переменную окружения для аутентификации
+export RESULT_IAM_FILE_0=iam.json
+
+./ya make -ttt \
+  --test-param workload_duration=500 \
+  --test-param ydb-db=/Root/db1 \
+  --test-param ydb-endpoint=grpc://localhost:2135 \
+  ydb/tests/olap/load \
+  --test-filter test_workload_simple_queue.py::TestSimpleQueue::test_workload_simple_queue[nemesis_true*] \
+  --allure=./allure_tmp \
+  --test-tag ya:manual \
+  --test-param send-results=true \
+  --test-param results-endpoint=grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135 \
+  --test-param results-db=/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8 \
+  --test-param results-table=nemesis/tests_results \
+  --test-param cluster_path=cluster.yaml
+```
+
+**Параметры запуска:**
+- `workload_duration=500` - длительность теста в секундах
+- `ydb-db=/Root/db1` - база данных для тестирования
+- `ydb-endpoint=grpc://localhost:2135` - endpoint YDB кластера
+- `--test-filter` - фильтр для запуска конкретного теста
+- `--allure=./allure_tmp` - директория для Allure отчетов
+- `cluster_path=$CROSS` - **конфигурация кластера для nemesis (требуется для chaos testing)**
+
+**Параметры выгрузки в YDB (только для Варианта 2):**
+- `send-results=true` - включить выгрузку результатов в YDB
+- `results-endpoint=grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135` - endpoint для выгрузки результатов
+- `results-db=/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8` - база данных для результатов
+- `results-table=nemesis/tests_results` - таблица для результатов. Должна быть создана заранее
+
+ 
+    Требуется `export RESULT_IAM_FILE_0=iam.json` - **переменная окружения с IAM файлом для аутентификации**
+
+### **Параметры execute_workload_test()**
+
+| Параметр | Тип | По умолчанию | Описание |
+|----------|-----|--------------|----------|
+| `workload_name` | str | - | Имя workload для отчетов и статистики |
+| `command_args` | str | - | Аргументы командной строки (может быть шаблоном) |
+| `duration_value` | float | `self.timeout` | Время выполнения в секундах |
+| `additional_stats` | dict | `{}` | Дополнительная статистика для выгрузки в YDB |
+| `use_chunks` | bool | `False` | **Использовать ли разбивку на итерации** |
+| `duration_param` | str | `"--duration"` | Параметр для передачи времени выполнения |
+| `nemesis` | bool | `False` | Запускать ли сервис nemesis через 15 секунд |
+| `nodes_percentage` | int | `100` | Процент нод кластера для запуска workload (1-100) |
+
+---

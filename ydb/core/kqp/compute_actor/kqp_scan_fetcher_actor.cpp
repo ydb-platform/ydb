@@ -511,7 +511,7 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     }
     TString strCursor = cursor ? cursor->DebugString() : TString("START");
     while (strCursor.find("\n") != string::npos) {
-        strCursor.erase(str.find("\n"), 1);
+        strCursor.erase(strCursor.find("\n"), 1);
     }
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "start ScanData")("scan_id", scanId)("gen", gen)("cursor", strCursor);
 

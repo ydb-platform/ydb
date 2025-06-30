@@ -19,7 +19,8 @@ ALTER_TABLE_ADD_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.desc
 ALTER_TABLE_DROP_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_ADD_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
-ALTER_TOPIC_ADD_CONSUMER_GRANTS = []
+ALTER_TOPIC_ADD_CONSUMER_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+READ_TOPIC_GRANTS = []
 ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALL_USED_GRANS = set(
     CREATE_TABLE_GRANTS
@@ -28,6 +29,7 @@ ALL_USED_GRANS = set(
     + DROP_TABLE_GRANTS
     + ALTER_TABLE_ADD_CHANGEFEED_GRANTS
     + ALTER_TOPIC_ADD_CONSUMER_GRANTS
+    + READ_TOPIC_GRANTS
     + ALTER_TABLE_DROP_CHANGEFEED_GRANTS
 )
 
@@ -50,7 +52,19 @@ def run_with_assert(config, query, expected_err=None):
         assert expected_err in str(e)
 
 
+def create_user(ydb_cluster, admin_config, user_name):
+    run_with_assert(admin_config, f"CREATE USER {user_name};")
+    return ydb.DriverConfig(
+        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+        database=DATABASE,
+        credentials=ydb.StaticCredentials.from_user_password(user_name, ""),
+    )
+
+
 def revoke_grants(admin_config, user_name, object_name, all_grants):
+    if all_grants is None or len(all_grants) == 0:
+        return
+
     revoke_grants_query = ''
     for grant in all_grants:
         revoke_grants_query += f"REVOKE '{grant}' ON `{object_name}` FROM {user_name};"
@@ -58,6 +72,9 @@ def revoke_grants(admin_config, user_name, object_name, all_grants):
 
 
 def provide_grants(admin_config, user_name, object_name, required_grants):
+    if required_grants is None or len(required_grants) == 0:
+        return
+
     provide_grants_query = ''
     for grant in required_grants:
         assert grant in ALL_USED_GRANS, 'Keep ALL_USED_GRANS updated with all used grants'
@@ -82,20 +99,9 @@ def test_granular_grants_for_tables(ydb_cluster):
         endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
         database=DATABASE,
     )
-    user1_config = ydb.DriverConfig(
-        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
-        database=DATABASE,
-        credentials=ydb.StaticCredentials.from_user_password("user1", ""),
-    )
-    user2_config = ydb.DriverConfig(
-        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
-        database=DATABASE,
-        credentials=ydb.StaticCredentials.from_user_password("user2", ""),
-    )
-
-    run_with_assert(tenant_admin_config, "CREATE USER user1; CREATE USER user2;")
 
     # CREATE TABLE
+    user1_config = create_user(ydb_cluster, tenant_admin_config, "user1")
     create_table_query = f"CREATE TABLE {TABLE_NAME} (a Uint64, b Uint64, PRIMARY KEY (a));"
     _test_grants(
         tenant_admin_config,
@@ -108,6 +114,7 @@ def test_granular_grants_for_tables(ydb_cluster):
     )
 
     # ALTER TABLE ... ADD COLUMN
+    user2_config = create_user(ydb_cluster, tenant_admin_config, "user2")
     add_column_query = f"ALTER TABLE `{TABLE_PATH}` ADD COLUMN `d` Uint64;"
     _test_grants(
         tenant_admin_config,
@@ -156,24 +163,15 @@ def test_cdc_grants(ydb_cluster):
         endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
         database=DATABASE,
     )
-    user1_config = ydb.DriverConfig(
-        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
-        database=DATABASE,
-        credentials=ydb.StaticCredentials.from_user_password("user1", ""),
-    )
-    user2_config = ydb.DriverConfig(
-        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
-        database=DATABASE,
-        credentials=ydb.StaticCredentials.from_user_password("user2", ""),
-    )
 
-    # setup users and a table
-    run_with_assert(tenant_admin_config, "CREATE USER user1; CREATE USER user2;")
+    # setup table
+    user1_config = create_user(ydb_cluster, tenant_admin_config, "user1")
     run_with_assert(tenant_admin_config, f"GRANT CREATE TABLE ON `{DATABASE}` TO user1;")
     run_with_assert(user1_config, f"CREATE TABLE {TABLE_NAME} (a Uint64, b Uint64, PRIMARY KEY (a));")
     run_with_assert(user1_config, f"INSERT INTO `{TABLE_PATH}` (a, b) VALUES (1, 1);")
 
     # ALTER TABLE ... ADD CHANGEFEED
+    user2_config = create_user(ydb_cluster, tenant_admin_config, "user2")
     create_changefeed_query = f"ALTER TABLE `{TABLE_PATH}` ADD CHANGEFEED updates WITH (FORMAT = 'JSON', MODE = 'NEW_AND_OLD_IMAGES', INITIAL_SCAN = TRUE);"
     _test_grants(
         tenant_admin_config,
@@ -186,29 +184,31 @@ def test_cdc_grants(ydb_cluster):
     )
 
     # ALTER TOPIC ... ADD CONSUMER
+    user3_config = create_user(ydb_cluster, tenant_admin_config, "user3")
     add_consumer_query = f"ALTER TOPIC `{TABLE_PATH}/updates` ADD CONSUMER consumer;"
     _test_grants(
         tenant_admin_config,
-        user2_config,
-        'user2',
+        user3_config,
+        'user3',
         add_consumer_query,
         TABLE_PATH,
         ALTER_TOPIC_ADD_CONSUMER_GRANTS,
-        None,
+        "you do not have access rights",
     )
 
-    # reading change feed
-    with ydb.Driver(user2_config) as driver:
+    # READ CHANGEFEED
+    user4_config = create_user(ydb_cluster, tenant_admin_config, "user4")
+    with ydb.Driver(user4_config) as driver:
         with driver.topic_client.reader(f"{TABLE_PATH}/updates", consumer="consumer", buffer_size_bytes=1000) as reader:
-            message = reader.receive_message()
+            message = reader.receive_message(timeout=5)
             assert '"newImage"' in message.data.decode("utf-8")
 
     # ALTER TABLE ... DROP CHANGEFEED
     drop_changefeed_query = f"ALTER TABLE `{TABLE_PATH}` DROP CHANGEFEED updates;"
     _test_grants(
         tenant_admin_config,
-        user2_config,
-        'user2',
+        user4_config,
+        'user4',
         drop_changefeed_query,
         TABLE_PATH,
         ALTER_TABLE_DROP_CHANGEFEED_GRANTS,

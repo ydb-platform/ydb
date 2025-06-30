@@ -37,6 +37,7 @@ target_link_libraries(src-client-import PUBLIC
 target_sources(src-client-import PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/import/import.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/import/out.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/import/proto_accessor.cpp
 )
 
 

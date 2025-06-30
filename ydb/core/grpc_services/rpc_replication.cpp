@@ -18,9 +18,139 @@ namespace NKikimr::NGRpcService {
 using namespace Ydb;
 
 using TEvDescribeReplication = TGrpcRequestOperationCall<Replication::DescribeReplicationRequest, Replication::DescribeReplicationResponse>;
+using TEvDescribeTransfer = TGrpcRequestOperationCall<Replication::DescribeTransferRequest, Replication::DescribeTransferResponse>;
 
-class TDescribeReplicationRPC: public TRpcSchemeRequestActor<TDescribeReplicationRPC, TEvDescribeReplication> {
-    using TBase = TRpcSchemeRequestActor<TDescribeReplicationRPC, TEvDescribeReplication>;
+namespace {
+
+TString BuildConnectionString(const NKikimrReplication::TConnectionParams& params) {
+    return TStringBuilder()
+        << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
+        << params.GetEndpoint()
+        << "/?database=" << params.GetDatabase();
+}
+
+void ConvertStaticCredentials(const NKikimrReplication::TStaticCredentials& from, Ydb::Replication::ConnectionParams::StaticCredentials& to) {
+    to.set_user(from.GetUser());
+    to.set_password_secret_name(from.GetPasswordSecretName());
+}
+
+void ConvertOAuth(const NKikimrReplication::TOAuthToken& from, Ydb::Replication::ConnectionParams::OAuth& to) {
+    to.set_token_secret_name(from.GetTokenSecretName());
+}
+
+void ConvertConnectionParams(const NKikimrReplication::TConnectionParams& from, Ydb::Replication::ConnectionParams& to) {
+    to.set_endpoint(from.GetEndpoint());
+    to.set_database(from.GetDatabase());
+    to.set_enable_ssl(from.GetEnableSsl());
+    to.set_connection_string(BuildConnectionString(from));
+
+    switch (from.GetCredentialsCase()) {
+    case NKikimrReplication::TConnectionParams::kStaticCredentials:
+        return ConvertStaticCredentials(from.GetStaticCredentials(), *to.mutable_static_credentials());
+    case NKikimrReplication::TConnectionParams::kOAuthToken:
+        return ConvertOAuth(from.GetOAuthToken(), *to.mutable_oauth());
+    default:
+        break;
+    }
+}
+
+void ConvertRowConsistencySettings(const NKikimrReplication::TConsistencySettings::TRowConsistency&, Ydb::Replication::ConsistencyLevelRow&) {
+    // nop
+}
+
+void ConvertGlobalConsistencySettings(const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from, Ydb::Replication::ConsistencyLevelGlobal& to) {
+    *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+        from.GetCommitIntervalMilliSeconds());
+}
+
+void ConvertConsistencySettings(const NKikimrReplication::TConsistencySettings& from, Ydb::Replication::DescribeReplicationResult& to) {
+    switch (from.GetLevelCase()) {
+    case NKikimrReplication::TConsistencySettings::kRow:
+        return ConvertRowConsistencySettings(from.GetRow(), *to.mutable_row_consistency());
+    case NKikimrReplication::TConsistencySettings::kGlobal:
+        return ConvertGlobalConsistencySettings(from.GetGlobal(), *to.mutable_global_consistency());
+    default:
+        break;
+    }
+}
+
+static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {
+    to.set_id(from.GetId());
+    to.set_source_path(from.GetSrcPath());
+    to.set_destination_path(from.GetDstPath());
+    if (from.HasSrcStreamName()) {
+        to.set_source_changefeed_name(from.GetSrcStreamName());
+    }
+    if (from.HasLagMilliSeconds()) {
+        *to.mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+            from.GetLagMilliSeconds());
+    }
+    if (from.HasInitialScanProgress()) {
+        to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
+    }
+}
+
+void ConvertState(NKikimrReplication::TReplicationState& from, Ydb::Replication::DescribeReplicationResult& to) {
+    switch (from.GetStateCase()) {
+    case NKikimrReplication::TReplicationState::kStandBy:
+        to.mutable_running();
+        if (from.GetStandBy().HasLagMilliSeconds()) {
+            *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+                from.GetStandBy().GetLagMilliSeconds());
+        }
+        if (from.GetStandBy().HasInitialScanProgress()) {
+            to.mutable_running()->mutable_stats()->set_initial_scan_progress(from.GetStandBy().GetInitialScanProgress());
+        }
+        break;
+    case NKikimrReplication::TReplicationState::kError:
+        *to.mutable_error()->mutable_issues() = std::move(*from.MutableError()->MutableIssues());
+        break;
+    case NKikimrReplication::TReplicationState::kDone:
+        to.mutable_done();
+        break;
+    case NKikimrReplication::TReplicationState::kPaused:
+        to.mutable_paused();
+        break;
+    default:
+        break;
+    }
+}
+
+void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeReplicationResult& result) {
+    ConvertConnectionParams(record.GetConnectionParams(), *result.mutable_connection_params());
+    ConvertConsistencySettings(record.GetConsistencySettings(), result);
+    ConvertState(*record.MutableState(), result);
+
+    for (const auto& target : record.GetTargets()) {
+        ConvertItem(target, *result.add_items());
+    }
+}
+
+void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeTransferResult& result) {
+    ConvertConnectionParams(record.GetConnectionParams(), *result.mutable_connection_params());
+
+    if (record.GetTargets().size()) {
+        const auto& target = record.GetTargets()[0];
+        result.set_source_path(target.GetSrcPath());
+        result.set_destination_path(target.GetSrcPath());
+    }
+
+    const auto& transferSpecific = record.GetTransferSpecific();
+    result.set_consumer_name(transferSpecific.GetConsumerName());
+    result.set_transformation_lambda(transferSpecific.GetTransformationLambda());
+    result.mutable_batch_settings()->set_size_bytes(transferSpecific.GetBatchingSettings().GetBatchSizeBytes());
+    result.mutable_batch_settings()->mutable_flush_interval()->set_seconds(transferSpecific.GetBatchingSettings().GetFlushIntervalMilliSeconds() / 1000);
+}
+
+}
+
+template <typename TReq, typename TResp, typename TResult>
+class TDescribeReplicationRPC: public TRpcSchemeRequestActor<TDescribeReplicationRPC<TReq, TResp, TResult>, TGrpcRequestOperationCall<TReq, TResp>> {
+    using TBase = TRpcSchemeRequestActor<TDescribeReplicationRPC<TReq, TResp, TResult>, TGrpcRequestOperationCall<TReq, TResp>>;
+    using TThis = TDescribeReplicationRPC<TReq, TResp, TResult>;
+
+    static constexpr bool IsReplication = std::is_same<TReq, Replication::DescribeReplicationRequest>();
+    static constexpr bool IsTransfer = !IsReplication;
 
 public:
     using TBase::TBase;
@@ -31,7 +161,7 @@ public:
 
     void PassAway() override {
         if (ControllerPipeClient) {
-            NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeClient);
+            NTabletPipe::CloseAndForgetClient(TBase::SelfId(), ControllerPipeClient);
         }
 
         TBase::PassAway();
@@ -40,12 +170,12 @@ public:
 private:
     void DescribeScheme() {
         auto ev = std::make_unique<TEvTxUserProxy::TEvNavigate>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev.get(), *Request_);
-        ev->Record.MutableDescribePath()->SetPath(GetProtoRequest()->path());
+        SetAuthToken(ev, *TBase::Request_);
+        SetDatabase(ev.get(), *TBase::Request_);
+        ev->Record.MutableDescribePath()->SetPath(TBase::GetProtoRequest()->path());
 
-        Send(MakeTxProxyID(), ev.release());
-        Become(&TDescribeReplicationRPC::StateDescribeScheme);
+        TBase::Send(MakeTxProxyID(), ev.release());
+        TBase::Become(&TThis::StateDescribeScheme);
     }
 
     STATEFN(StateDescribeScheme) {
@@ -62,7 +192,7 @@ private:
 
         if (record.HasReason()) {
             auto issue = NYql::TIssue(record.GetReason());
-            Request_->RaiseIssue(issue);
+            TBase::Request_->RaiseIssue(issue);
         }
 
         switch (record.GetStatus()) {
@@ -73,8 +203,8 @@ private:
                         break;
                     default: {
                         auto issue = NYql::TIssue("Is not a replication");
-                        Request_->RaiseIssue(issue);
-                        return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                        TBase::Request_->RaiseIssue(issue);
+                        return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
                     }
                 }
 
@@ -84,16 +214,16 @@ private:
 
             case NKikimrScheme::StatusPathDoesNotExist:
             case NKikimrScheme::StatusSchemeError:
-                return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
 
             case NKikimrScheme::StatusAccessDenied:
-                return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
+                return TBase::Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
 
             case NKikimrScheme::StatusNotAvailable:
-                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+                return TBase::Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
 
             default: {
-                return Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
+                return TBase::Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
             }
         }
     }
@@ -104,15 +234,17 @@ private:
             config.RetryPolicy = {
                 .RetryLimitCount = 3,
             };
-            ControllerPipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
+            ControllerPipeClient = TBase::Register(NTabletPipe::CreateClient(TBase::SelfId(), tabletId, config));
         }
 
         auto ev = std::make_unique<NReplication::TEvController::TEvDescribeReplication>();
         pathId.ToProto(ev->Record.MutablePathId());
-        ev->Record.SetIncludeStats(GetProtoRequest()->include_stats());
+        if constexpr (IsReplication) {
+            ev->Record.SetIncludeStats(TBase::GetProtoRequest()->include_stats());
+        }
 
-        NTabletPipe::SendData(SelfId(), ControllerPipeClient, ev.release());
-        Become(&TDescribeReplicationRPC::StateDescribeReplication);
+        NTabletPipe::SendData(TBase::SelfId(), ControllerPipeClient, ev.release());
+        TBase::Become(&TThis::StateDescribeReplication);
     }
 
     STATEFN(StateDescribeReplication) {
@@ -130,130 +262,44 @@ private:
         case NKikimrReplication::TEvDescribeReplicationResult::SUCCESS:
             break;
         case NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND:
-            return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+            return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
         default:
-            return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+            return TBase::Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
 
-        ConvertConnectionParams(record.GetConnectionParams(), *Result.mutable_connection_params());
-        ConvertConsistencySettings(record.GetConsistencySettings(), Result);
-        ConvertState(*record.MutableState(), Result);
+        Convert(record, Result);
 
-        for (const auto& target : record.GetTargets()) {
-            ConvertItem(target, *Result.add_items());
-        }
-
-        return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ctx);
-    }
-
-    static TString BuildConnectionString(const NKikimrReplication::TConnectionParams& params) {
-        return TStringBuilder()
-            << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
-            << params.GetEndpoint()
-            << "/?database=" << params.GetDatabase();
-    }
-
-    static void ConvertConnectionParams(const NKikimrReplication::TConnectionParams& from, Ydb::Replication::ConnectionParams& to) {
-        to.set_endpoint(from.GetEndpoint());
-        to.set_database(from.GetDatabase());
-        to.set_enable_ssl(from.GetEnableSsl());
-        to.set_connection_string(BuildConnectionString(from));
-
-        switch (from.GetCredentialsCase()) {
-        case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return ConvertStaticCredentials(from.GetStaticCredentials(), *to.mutable_static_credentials());
-        case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return ConvertOAuth(from.GetOAuthToken(), *to.mutable_oauth());
-        default:
-            break;
-        }
-    }
-
-    static void ConvertStaticCredentials(const NKikimrReplication::TStaticCredentials& from, Ydb::Replication::ConnectionParams::StaticCredentials& to) {
-        to.set_user(from.GetUser());
-        to.set_password_secret_name(from.GetPasswordSecretName());
-    }
-
-    static void ConvertOAuth(const NKikimrReplication::TOAuthToken& from, Ydb::Replication::ConnectionParams::OAuth& to) {
-        to.set_token_secret_name(from.GetTokenSecretName());
-    }
-
-    static void ConvertConsistencySettings(const NKikimrReplication::TConsistencySettings& from, Ydb::Replication::DescribeReplicationResult& to) {
-        switch (from.GetLevelCase()) {
-        case NKikimrReplication::TConsistencySettings::kRow:
-            return ConvertRowConsistencySettings(from.GetRow(), *to.mutable_row_consistency());
-        case NKikimrReplication::TConsistencySettings::kGlobal:
-            return ConvertGlobalConsistencySettings(from.GetGlobal(), *to.mutable_global_consistency());
-        default:
-            break;
-        }
-    }
-
-    static void ConvertRowConsistencySettings(const NKikimrReplication::TConsistencySettings::TRowConsistency&, Ydb::Replication::ConsistencyLevelRow&) {
-        // nop
-    }
-
-    static void ConvertGlobalConsistencySettings(const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from, Ydb::Replication::ConsistencyLevelGlobal& to) {
-        *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
-            from.GetCommitIntervalMilliSeconds());
-    }
-
-    static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {
-        to.set_id(from.GetId());
-        to.set_source_path(from.GetSrcPath());
-        to.set_destination_path(from.GetDstPath());
-        if (from.HasSrcStreamName()) {
-            to.set_source_changefeed_name(from.GetSrcStreamName());
-        }
-        if (from.HasLagMilliSeconds()) {
-            *to.mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
-                from.GetLagMilliSeconds());
-        }
-        if (from.HasInitialScanProgress()) {
-            to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
-        }
-    }
-
-    static void ConvertState(NKikimrReplication::TReplicationState& from, Ydb::Replication::DescribeReplicationResult& to) {
-        switch (from.GetStateCase()) {
-        case NKikimrReplication::TReplicationState::kStandBy:
-            to.mutable_running();
-            if (from.GetStandBy().HasLagMilliSeconds()) {
-                *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
-                    from.GetStandBy().GetLagMilliSeconds());
-            }
-            if (from.GetStandBy().HasInitialScanProgress()) {
-                to.mutable_running()->mutable_stats()->set_initial_scan_progress(from.GetStandBy().GetInitialScanProgress());
-            }
-            break;
-        case NKikimrReplication::TReplicationState::kError:
-            *to.mutable_error()->mutable_issues() = std::move(*from.MutableError()->MutableIssues());
-            break;
-        case NKikimrReplication::TReplicationState::kDone:
-            to.mutable_done();
-            break;
-        case NKikimrReplication::TReplicationState::kPaused:
-            to.mutable_paused();
-            break;
-        default:
-            break;
-        }
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ctx);
     }
 
 private:
-    Ydb::Replication::DescribeReplicationResult Result;
+    TResult Result;
     TActorId ControllerPipeClient;
 };
 
+using TDescribeReplicationActor = TDescribeReplicationRPC<Replication::DescribeReplicationRequest, Replication::DescribeReplicationResponse, Replication::DescribeReplicationResult>;
+using TDescribeTransferActor = TDescribeReplicationRPC<Replication::DescribeTransferRequest, Replication::DescribeTransferResponse, Replication::DescribeTransferResult>;
+
 void DoDescribeReplication(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TDescribeReplicationRPC(p.release()));
+    f.RegisterActor(new TDescribeReplicationActor(p.release()));
+}
+
+void DoDescribeTransfer(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribeTransferActor(p.release()));
 }
 
 using TEvDescribeReplicationRequest = TGrpcRequestOperationCall<Ydb::Replication::DescribeReplicationRequest, Ydb::Replication::DescribeReplicationResponse>;
 
 template<>
 IActor* TEvDescribeReplicationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new TDescribeReplicationRPC(msg);
+    return new TDescribeReplicationActor(msg);
+}
+
+using TEvDescribeTransferRequest = TGrpcRequestOperationCall<Ydb::Replication::DescribeTransferRequest, Ydb::Replication::DescribeTransferResponse>;
+
+template<>
+IActor* TEvDescribeTransferRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TDescribeTransferActor(msg);
 }
 
 }

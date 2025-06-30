@@ -135,6 +135,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
+        writeMeta.OnStage(NEvWrite::EWriteStage::Finished);
     }
     Self->SetupCompaction(pathIds);
 }
@@ -171,6 +172,7 @@ void TTxBlobsWritingFailed::DoComplete(const TActorContext& ctx) {
     }
     for (auto&& wResult : Pack.GetWriteResults()) {
         const auto& writeMeta = wResult.GetWriteMeta();
+        writeMeta.OnStage(NEvWrite::EWriteStage::Aborted);
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         Self->OperationsManager->AbortTransactionOnComplete(*Self, op->GetLockId());
     }

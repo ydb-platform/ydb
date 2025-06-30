@@ -143,9 +143,22 @@ class WorkloadTestBase(LoadSuiteBase):
                 action_name = "Starting"
                 logging.info(f"Starting nemesis on {len(unique_hosts)} hosts in parallel")
                 
+                # Деплоим бинарный файл nemesis на все ноды
+                nemesis_log.append(f"Deploying nemesis binary to {len(unique_hosts)} hosts")
+                
+                # Получаем путь к бинарному файлу nemesis
+                nemesis_binary_path = os.getenv('NEMESIS_BINARY')
+                if nemesis_binary_path:
+                    nemesis_binary = yatest.common.binary_path(nemesis_binary_path)
+                else:
+                    # Используем путь по умолчанию
+                    nemesis_binary = yatest.common.binary_path('ydb/tests/tools/nemesis/driver/nemesis')
+                
+                nemesis_log.append(f"Nemesis binary path: {nemesis_binary}")
+                
                 # Создаем сводный лог для Allure для файловых операций
                 file_ops_log = []
-                file_ops_log.append(f"Preparing nemesis configuration on {len(unique_hosts)} hosts in parallel")
+                file_ops_log.append(f"Preparing nemesis configuration and binary on {len(unique_hosts)} hosts in parallel")
                 
                 # Добавляем информацию о времени операций
                 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -157,7 +170,55 @@ class WorkloadTestBase(LoadSuiteBase):
                     host_log.append(f"\n--- {host} ---")
                     
                     try:
-                        # 1. Удаляем cluster.yaml
+                        # 1. Создаем директорию для nemesis
+                        mkdir_cmd = "sudo mkdir -p /Berkanavt/nemesis/bin/"
+                        mkdir_result = execute_command(
+                            host=host,
+                            cmd=mkdir_cmd,
+                            raise_on_error=False
+                        )
+                        
+                        mkdir_stderr = mkdir_result.stderr if mkdir_result.stderr else ""
+                        if mkdir_stderr and "error" in mkdir_stderr.lower():
+                            error_msg = f"Error creating nemesis directory on {host}: {mkdir_stderr}"
+                            host_log.append(error_msg)
+                            return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                        else:
+                            host_log.append("Created nemesis directory")
+                        
+                        # 2. Копируем бинарный файл nemesis
+                        copy_binary_cmd = f"sudo cp {nemesis_binary} /Berkanavt/nemesis/bin/nemesis"
+                        copy_binary_result = execute_command(
+                            host=host,
+                            cmd=copy_binary_cmd,
+                            raise_on_error=False
+                        )
+                        
+                        copy_binary_stderr = copy_binary_result.stderr if copy_binary_result.stderr else ""
+                        if copy_binary_stderr and "error" in copy_binary_stderr.lower():
+                            error_msg = f"Error copying nemesis binary on {host}: {copy_binary_stderr}"
+                            host_log.append(error_msg)
+                            return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                        else:
+                            host_log.append("Copied nemesis binary")
+                        
+                        # 3. Устанавливаем права на выполнение
+                        chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
+                        chmod_result = execute_command(
+                            host=host,
+                            cmd=chmod_cmd,
+                            raise_on_error=False
+                        )
+                        
+                        chmod_stderr = chmod_result.stderr if chmod_result.stderr else ""
+                        if chmod_stderr and "error" in chmod_stderr.lower():
+                            error_msg = f"Error setting executable permissions on {host}: {chmod_stderr}"
+                            host_log.append(error_msg)
+                            return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                        else:
+                            host_log.append("Set executable permissions")
+                        
+                        # 4. Удаляем cluster.yaml
                         delete_cmd = "sudo rm -f /Berkanavt/kikimr/cfg/cluster.yaml"
                         delete_result = execute_command(
                             host=host,
@@ -173,7 +234,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         else:
                             host_log.append("Deleted cluster.yaml")
                         
-                        # 2. Копируем config.yaml в cluster.yaml
+                        # 5. Копируем config.yaml в cluster.yaml
                         copy_cmd = "sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/cluster.yaml"
                         copy_result = execute_command(
                             host=host,
@@ -238,7 +299,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         file_ops_log.append(f"- {error}")
                 
                 # Добавляем сводный лог файловых операций в Allure
-                allure.attach("\n".join(file_ops_log), 'Nemesis Config Preparation (Parallel)', attachment_type=allure.attachment_type.TEXT)
+                allure.attach("\n".join(file_ops_log), 'Nemesis Config and Binary Preparation (Parallel)', attachment_type=allure.attachment_type.TEXT)
             else:
                 action = "stop"
                 action_name = "Stopping"

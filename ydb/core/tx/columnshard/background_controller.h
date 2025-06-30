@@ -12,8 +12,6 @@ namespace NKikimr::NColumnShard {
 
 class TBackgroundController {
 private:
-    THashMap<TString, TMonotonic> ActiveIndexationTasks;
-
     using TCurrentCompaction = THashMap<TInternalPathId, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
     std::optional<ui64> WaitingCompactionPriority;
@@ -45,20 +43,12 @@ public:
     }
 
     void CheckDeadlines();
-    void CheckDeadlinesIndexation();
 
-    bool StartCompaction(const TInternalPathId pathId);
+    bool StartCompaction(const TInternalPathId pathId, const TString& taskId);
     void FinishCompaction(const TInternalPathId pathId);
 
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();
-    }
-
-    void StartIndexing(const NOlap::TColumnEngineChanges& changes);
-    void FinishIndexing(const NOlap::TColumnEngineChanges& changes);
-    TString DebugStringIndexation() const;
-    i64 GetIndexingActiveCount() const {
-        return ActiveIndexationTasks.size();
     }
 
     void StartCleanupPortions() {

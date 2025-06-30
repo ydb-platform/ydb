@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shared_cache_tiers.h"
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/util/cache_cache.h>
 
@@ -32,6 +33,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr CacheMissBytes;
     const TCounterPtr LoadInFlyPages;
     const TCounterPtr LoadInFlyBytes;
+    const TCounterPtr TryKeepInMemoryBytes;
 
     // page collection counters:
     const TCounterPtr PageCollections;
@@ -47,10 +49,9 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 
     TCounterPtr ReplacementPolicySize(TReplacementPolicy policy);
 
-    TCounterPtr ActivePagesTier(ui32 tier);
-    TCounterPtr ActiveBytesTier(ui32 tier);
-    TCounterPtr DesiredSizeTier(ui32 tier);
-    TCounterPtr LimitBytesTier(ui32 tier);
+    TCounterPtr ActivePagesTier(ECacheTier tier);
+    TCounterPtr ActiveBytesTier(ECacheTier tier);
+    TCounterPtr LimitBytesTier(ECacheTier tier);
 };
 
 } // namespace NKikimr::NSharedCache

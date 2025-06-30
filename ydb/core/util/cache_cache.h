@@ -139,10 +139,6 @@ public:
         Config.SetLimit(limit);
     }
 
-    ui64 GetLimit() const override {
-        return Config.Limit;
-    }
-
     ui64 GetSize() const override {
         return FreshWeight + StagingWeight + WarmWeight;
     }

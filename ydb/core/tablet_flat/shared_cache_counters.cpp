@@ -1,23 +1,6 @@
 #include "shared_cache_counters.h"
-#include "shared_page.h"
-#include "shared_sausagecache.h"
 
 namespace NKikimr::NSharedCache {
-
-namespace {
-
-    TString GetTierName(ui32 tier) {
-        switch (tier) {
-        case RegularCacheTier:
-            return "TierRegularCache";
-        case TryInMemoryCacheTier:
-            return "TierTryKeepInMemory";
-        default:
-            return TStringBuilder() << "Tier" << tier;
-        }
-    }
-
-}
 
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
@@ -41,6 +24,7 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , CacheMissBytes(counters->GetCounter("CacheMissBytes", true))
     , LoadInFlyPages(counters->GetCounter("LoadInFlyPages"))
     , LoadInFlyBytes(counters->GetCounter("LoadInFlyBytes"))
+    , TryKeepInMemoryBytes(counters->GetCounter("TryKeepInMemoryBytes"))
     // page collection counters:
     , PageCollections(counters->GetCounter("PageCollections"))
     , Owners(counters->GetCounter("Owners"))
@@ -55,20 +39,16 @@ TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolic
     return Counters->GetCounter(TStringBuilder() << "ReplacementPolicySize/" << policy);
 }
 
-TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActivePagesTier(ui32 tier) {
-    return Counters->GetCounter(TStringBuilder() << GetTierName(tier) << "ActivePagesA");
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActivePagesTier(ECacheTier tier) {
+    return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "ActivePages");
 }
 
-TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActiveBytesTier(ui32 tier) {
-    return Counters->GetCounter(TStringBuilder() << GetTierName(tier) << "ActiveBytesA");
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActiveBytesTier(ECacheTier tier) {
+    return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "ActiveBytes");
 }
 
-TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::DesiredSizeTier(ui32 tier) {
-    return Counters->GetCounter(TStringBuilder() << GetTierName(tier) << "DesiredSize");
-}
-
-TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::LimitBytesTier(ui32 tier) {
-    return Counters->GetCounter(TStringBuilder() << GetTierName(tier) << "LimitBytes");
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::LimitBytesTier(ECacheTier tier) {
+    return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "LimitBytes");
 }
 
 } // namespace NKikimr::NSharedCache

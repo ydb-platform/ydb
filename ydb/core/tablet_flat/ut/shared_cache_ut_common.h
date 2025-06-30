@@ -1,10 +1,9 @@
 #pragma once
 
+#include "shared_cache_tiers.h"
 #include <ydb/core/util/cache_cache_iface.h>
 
 namespace NKikimr::NSharedCache::NTest {
-
-    static constexpr ui32 MaxCacheTier = 3;
 
     struct TPage : public TIntrusiveListItem<TPage> {
         ui32 Id;
@@ -15,7 +14,7 @@ namespace NKikimr::NSharedCache::NTest {
         {}
 
         ui32 CacheId : 4 = 0;
-        ui32 CacheTier : 2 = MaxCacheTier;
+        ECacheTier CacheTier : CacheTierBits = ECacheTier::None;
     };
 
     struct TPageTraits {
@@ -40,13 +39,12 @@ namespace NKikimr::NSharedCache::NTest {
             page->CacheId = id;
         }
 
-        static ui32 GetTier(TPage* page) {
+        static ECacheTier GetTier(TPage* page) {
             return page->CacheTier;
         }
 
-        static ui32 SetTier(TPage* page, ui32 tier) {
-            Y_ENSURE(tier < (1 << 2));
-            return page->CacheTier = tier;
+        static void SetTier(TPage* page, ECacheTier tier) {
+            page->CacheTier = tier;
         }
     };
 
@@ -93,10 +91,6 @@ namespace NKikimr::NSharedCache::NTest {
 
         void UpdateLimit(ui64 limit) override {
             Limit = limit;
-        }
-
-        ui64 GetLimit() const override {
-            return Limit;
         }
 
         ui64 GetSize() const override {

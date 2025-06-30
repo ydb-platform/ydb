@@ -157,10 +157,6 @@ public:
         Limit = limit;
     }
 
-    ui64 GetLimit() const override {
-        return Limit.TotalLimit;
-    }
-
     ui64 GetSize() const override {
         return SmallQueue.Size + MainQueue.Size;
     }

@@ -165,10 +165,6 @@ public:
         }
     }
 
-    ui64 GetLimit() const override {
-        return Limit;
-    }
-
     ui64 GetSize() const override {
         ui64 result = 0;
         for (const auto& cache : Caches) {

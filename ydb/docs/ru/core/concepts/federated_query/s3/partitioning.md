@@ -134,7 +134,7 @@ CREATE EXTERNAL TABLE `objectstorage_data` (
 );
 ```
 
-Далее вы можете читать из таблицы `objectstorage_data`, с возможностью быстрой фильтрации по колонкам `year` и `month`:
+Далее вы можете читать из таблицы `objectstorage_data` с возможностью быстрой фильтрации по колонкам `year` и `month`:
 
 ```yql
 SELECT

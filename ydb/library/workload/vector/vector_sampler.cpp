@@ -165,7 +165,7 @@ void TVectorSampler::SampleExistingVectors() {
         }
 
         ui64 id = vectorParser.ColumnParser("id").GetUint64();
-        std::string embeddingBytes = vectorParser.ColumnParser(Params.EmbeddingColumn).GetString();
+        std::string embeddingBytes = vectorParser.ColumnParser("embedding").GetString();
 
         // Ensure we got a valid embedding
         Y_ABORT_UNLESS(!embeddingBytes.empty(), "Empty embedding retrieved for id %" PRIu64, id);

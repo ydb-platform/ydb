@@ -164,45 +164,49 @@ class WorkloadTestBase(LoadSuiteBase):
                 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 file_ops_log.append(f"Time: {current_time}")
                 
+                # Деплоим бинарный файл nemesis используя deploy_binaries_to_hosts
+                nemesis_binaries = [nemesis_binary]
+                nemesis_deploy_path = '/Berkanavt/nemesis/bin/'
+                
+                file_ops_log.append(f"Deploying nemesis binary to {len(unique_hosts)} hosts")
+                deploy_results = deploy_binaries_to_hosts(
+                    nemesis_binaries, list(unique_hosts), nemesis_deploy_path
+                )
+                
+                # Анализируем результаты деплоя
+                successful_deploys = 0
+                failed_deploys = 0
+                deploy_errors = []
+                
+                for host in unique_hosts:
+                    binary_result = deploy_results.get(host, {}).get('nemesis', {})
+                    success = binary_result.get('success', False)
+                    
+                    if success:
+                        successful_deploys += 1
+                        file_ops_log.append(f"  {host}: Binary deployed successfully to {binary_result['path']}")
+                    else:
+                        failed_deploys += 1
+                        error = binary_result.get('error', 'Unknown error')
+                        deploy_errors.append(f"{host}: {error}")
+                        file_ops_log.append(f"  {host}: Deployment failed - {error}")
+                
+                file_ops_log.append(f"\n--- Binary Deployment Summary ---")
+                file_ops_log.append(f"Successful deployments: {successful_deploys}/{len(unique_hosts)}")
+                file_ops_log.append(f"Failed deployments: {failed_deploys}/{len(unique_hosts)}")
+                
+                if deploy_errors:
+                    file_ops_log.append("\nDeployment errors:")
+                    for error in deploy_errors:
+                        file_ops_log.append(f"- {error}")
+                
                 # Функция для выполнения файловых операций на одном хосте
                 def prepare_nemesis_config(host):
                     host_log = []
                     host_log.append(f"\n--- {host} ---")
                     
                     try:
-                        # 1. Создаем директорию для nemesis
-                        mkdir_cmd = "sudo mkdir -p /Berkanavt/nemesis/bin/"
-                        mkdir_result = execute_command(
-                            host=host,
-                            cmd=mkdir_cmd,
-                            raise_on_error=False
-                        )
-                        
-                        mkdir_stderr = mkdir_result.stderr if mkdir_result.stderr else ""
-                        if mkdir_stderr and "error" in mkdir_stderr.lower():
-                            error_msg = f"Error creating nemesis directory on {host}: {mkdir_stderr}"
-                            host_log.append(error_msg)
-                            return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
-                        else:
-                            host_log.append("Created nemesis directory")
-                        
-                        # 2. Копируем бинарный файл nemesis
-                        copy_binary_cmd = f"sudo cp {nemesis_binary} /Berkanavt/nemesis/bin/nemesis"
-                        copy_binary_result = execute_command(
-                            host=host,
-                            cmd=copy_binary_cmd,
-                            raise_on_error=False
-                        )
-                        
-                        copy_binary_stderr = copy_binary_result.stderr if copy_binary_result.stderr else ""
-                        if copy_binary_stderr and "error" in copy_binary_stderr.lower():
-                            error_msg = f"Error copying nemesis binary on {host}: {copy_binary_stderr}"
-                            host_log.append(error_msg)
-                            return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
-                        else:
-                            host_log.append("Copied nemesis binary")
-                        
-                        # 3. Устанавливаем права на выполнение
+                        # 1. Устанавливаем права на выполнение для nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
                             host=host,
@@ -216,9 +220,9 @@ class WorkloadTestBase(LoadSuiteBase):
                             host_log.append(error_msg)
                             return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
                         else:
-                            host_log.append("Set executable permissions")
+                            host_log.append("Set executable permissions for nemesis")
                         
-                        # 4. Удаляем cluster.yaml
+                        # 2. Удаляем cluster.yaml
                         delete_cmd = "sudo rm -f /Berkanavt/kikimr/cfg/cluster.yaml"
                         delete_result = execute_command(
                             host=host,
@@ -234,7 +238,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         else:
                             host_log.append("Deleted cluster.yaml")
                         
-                        # 5. Копируем config.yaml в cluster.yaml
+                        # 3. Копируем config.yaml в cluster.yaml
                         copy_cmd = "sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/cluster.yaml"
                         copy_result = execute_command(
                             host=host,

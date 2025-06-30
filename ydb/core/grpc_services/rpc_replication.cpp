@@ -142,15 +142,20 @@ void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replicati
     result.mutable_batch_settings()->mutable_flush_interval()->set_seconds(transferSpecific.GetBatchingSettings().GetFlushIntervalMilliSeconds() / 1000);
 }
 
+void BuildRequest(const Replication::DescribeReplicationRequest* from, NKikimrReplication::TEvDescribeReplication& to) {
+    to.SetIncludeStats(from->include_stats());
+}
+
+void BuildRequest(const Replication::DescribeTransferRequest*, NKikimrReplication::TEvDescribeReplication&) {
+    // nop
+}
+
 }
 
 template <typename TReq, typename TResp, typename TResult>
 class TDescribeReplicationRPC: public TRpcSchemeRequestActor<TDescribeReplicationRPC<TReq, TResp, TResult>, TGrpcRequestOperationCall<TReq, TResp>> {
     using TBase = TRpcSchemeRequestActor<TDescribeReplicationRPC<TReq, TResp, TResult>, TGrpcRequestOperationCall<TReq, TResp>>;
     using TThis = TDescribeReplicationRPC<TReq, TResp, TResult>;
-
-    static constexpr bool IsReplication = std::is_same<TReq, Replication::DescribeReplicationRequest>();
-    static constexpr bool IsTransfer = !IsReplication;
 
 public:
     using TBase::TBase;
@@ -239,9 +244,7 @@ private:
 
         auto ev = std::make_unique<NReplication::TEvController::TEvDescribeReplication>();
         pathId.ToProto(ev->Record.MutablePathId());
-        if constexpr (IsReplication) {
-            ev->Record.SetIncludeStats(TBase::GetProtoRequest()->include_stats());
-        }
+        BuildRequest(TBase::GetProtoRequest(), ev->Record);
 
         NTabletPipe::SendData(TBase::SelfId(), ControllerPipeClient, ev.release());
         TBase::Become(&TThis::StateDescribeReplication);

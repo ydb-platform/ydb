@@ -212,7 +212,7 @@ public:
             if (target->GetStreamName()) {
                 item.SetSrcStreamName(target->GetStreamName());
             }
-            if (target->GetStreamConsumerName()) {
+            if (!ConsumerName && target->GetStreamConsumerName()) {
                 ConsumerName = target->GetStreamConsumerName();
             }
             if (const auto lag = target->GetLag()) {

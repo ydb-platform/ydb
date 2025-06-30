@@ -373,7 +373,7 @@ public:
             Counters->RequestCacheMiss->Inc();
         }
         for (auto&& i : request->GetWaitBySource()) {
-            auto& sourceInfo = UpsertSourceInfo(sourceId);
+            auto& sourceInfo = UpsertSourceInfo(i.first);
             sourceInfo.EnqueueRequest(request);
             sourceInfo.DrainQueue();
         }

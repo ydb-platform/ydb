@@ -396,13 +396,13 @@ public:
     }
 
     void OnRequestResult(
-        const TSourceId sourceId, THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
+        const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "on_result");
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
         AddObjectsToCache(add);
         if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
-            sourceInfo->AddObjects(std::move(objects), false, now);
+            sourceInfo->AddObjects(std::move(add), false, now);
             sourceInfo->RemoveObjects(std::move(removed), false, now);
             sourceInfo->FailObjects(std::move(failed), now);
             const bool inFlightLimitBrokenAfter = !Counters->CheckTotalLimit();

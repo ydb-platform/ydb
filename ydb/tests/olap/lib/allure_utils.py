@@ -119,7 +119,7 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
     # Если запрошен формат с подколонками для нод, используем новую реализацию
     if use_node_subcols:
         return __create_iterations_table_with_node_subcols(result, node_errors, workload_params)
-    
+
     # Оригинальная реализация таблицы
     def __get_node_issue_info(node_error: NodeErrors) -> tuple[str, str, bool]:
         """Возвращает информацию о проблемах ноды: (цвет, значение, критичность)"""
@@ -368,12 +368,12 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
 def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload с подколонками для каждой ноды
-    
+
     Args:
         result: WorkloadRunResult с информацией об итерациях
         node_errors: Список ошибок нод для подсчета cores и OOM
         workload_params: Параметры запуска workload для отображения в заголовке
-        
+
     Returns:
         str: HTML таблица с подколонками для каждой ноды
     """
@@ -501,7 +501,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
             <th rowspan="2">Iter</th>
             <th rowspan="2">Dur(s)</th>
     """
-    
+
     # Добавляем объединенные колонки для каждого хоста
     if unique_nodes:
         for host in unique_nodes:
@@ -509,12 +509,12 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
     else:
         # Если нет нод, добавляем агрегированные колонки
         table_html += '<th colspan="2">Aggregated</th>'
-    
+
     table_html += """
         </tr>
         <tr style='background-color: #f0f0f0;'>
     """
-    
+
     # Добавляем подколонки Workload и Node для каждого хоста
     if unique_nodes:
         for _ in unique_nodes:
@@ -522,7 +522,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
     else:
         # Если нет нод, добавляем агрегированные подколонки
         table_html += '<th>Cores</th><th>OOM</th>'
-    
+
     table_html += """
         </tr>
     """
@@ -535,7 +535,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                 <td>-</td>
                 <td style='background-color: #f0f0f0;'>N/A</td>
         """
-        
+
         # Добавляем пустые ячейки для каждой ноды
         if unique_nodes:
             for host in unique_nodes:
@@ -544,7 +544,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                     node_color, node_value, _ = __get_node_issue_info(node_error)
                 else:
                     node_color, node_value = "#ccffcc", "ok"
-                
+
                 table_html += f"""
                     <td style='background-color: #f0f0f0;'>-</td>
                     <td style='background-color: {node_color};'>{node_value}</td>
@@ -555,22 +555,22 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                 <td style='background-color: #ccffcc;'>0</td>
                 <td style='background-color: #ccffcc;'>0</td>
             """
-        
+
         table_html += """
             </tr>
         </table>
         """
-        
+
         return table_html
 
     # Анализируем итерации и группируем их по iteration_num
     iteration_groups = {}
-    
+
     # Извлекаем информацию о iteration_num из дополнительной статистики итераций
     for iteration_num, iteration in result.iterations.items():
         iter_num = None
         node_host = None
-        
+
         # Проверяем, есть ли у итерации имя с информацией об итерации и ноде
         if hasattr(iteration, 'name') and iteration.name:
             # Извлекаем iteration_num из имени итерации
@@ -583,13 +583,13 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                         break
                     except (ValueError, IndexError):
                         pass
-                
+
             # Извлекаем node_host из имени итерации
             for host in unique_nodes:
                 if host in iteration.name:
                     node_host = host
                     break
-        
+
         # Проверяем, есть ли статистика в итерации
         if hasattr(iteration, 'stats') and iteration.stats:
             # Ищем информацию о iteration_num и node_host в статистике
@@ -614,11 +614,11 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                         iter_num = stat_value['chunk_num']
                     if 'node_host' in stat_value:
                         node_host = stat_value['node_host']
-        
+
         # Если все еще нет iter_num, используем iteration_num
         if iter_num is None:
             iter_num = iteration_num
-        
+
         # Если все еще нет node_host и у нас есть уникальные ноды и их столько же, сколько итераций
         if node_host is None and unique_nodes and len(unique_nodes) == len(result.iterations):
             # Используем ноду по индексу итерации
@@ -627,20 +627,20 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                 node_host = unique_nodes[node_idx]
             except IndexError:
                 pass
-        
+
         # Добавляем информацию в структуру iteration_groups
         if iter_num not in iteration_groups:
             iteration_groups[iter_num] = {
                 'duration': getattr(iteration, 'time', 0),
                 'nodes': {}
             }
-        
+
         if node_host:
             iteration_groups[iter_num]['nodes'][node_host] = {
                 'iteration': iteration,
                 'status': __get_workload_status(iteration)
             }
-    
+
     # Если не удалось извлечь iter_num, создаем искусственную группировку
     if not iteration_groups:
         # Группируем итерации по номеру (предполагая, что это разные ноды одной итерации)
@@ -648,7 +648,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
             'duration': max([getattr(iteration, 'time', 0) for iteration in result.iterations.values()], default=0),
             'nodes': {}
         }
-        
+
         for iteration_num, iteration in result.iterations.items():
             # Если у нас есть столько же итераций, сколько нод, предполагаем что каждая итерация - это отдельная нода
             if len(result.iterations) == len(unique_nodes) and iteration_num <= len(unique_nodes):
@@ -657,14 +657,14 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                     'iteration': iteration,
                     'status': __get_workload_status(iteration)
                 }
-    
+
     # Добавляем строки для каждой итерации
     for iter_num in sorted(iteration_groups.keys()):
         iter_info = iteration_groups[iter_num]
-        
+
         # Получаем продолжительность итерации
         duration = iter_info['duration']
-        
+
         # Проверяем, есть ли фактическое время выполнения в статистике
         actual_duration = None
         for node_info in iter_info['nodes'].values():
@@ -675,7 +675,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                         break
                 if actual_duration is not None:
                     break
-        
+
         # Если нашли фактическое время, используем его вместо planned
         if actual_duration is not None:
             duration_str = f"{actual_duration:.1f}"
@@ -686,14 +686,14 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         else:
             duration_str = "N/A"
             duration_color = "#ffffcc"  # Светло-желтый для неизвестных значений
-        
+
         # Добавляем строку таблицы
         table_html += f"""
             <tr>
                 <td>{iter_num}</td>
                 <td style='background-color: {duration_color};'>{duration_str}</td>
         """
-        
+
         # Добавляем ячейки для каждой ноды
         if unique_nodes:
             for host in unique_nodes:
@@ -703,40 +703,40 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                     workload_color, workload_value = node_info['status']
                 else:
                     workload_color, workload_value = "#f0f0f0", "-"
-                
+
                 # Получаем статус ноды
                 node_error = node_info_map.get(host)
                 if node_error:
                     node_color, node_value, _ = __get_node_issue_info(node_error)
                 else:
                     node_color, node_value = "#ccffcc", "ok"
-                
+
                 table_html += f"""
                     <td style='background-color: {workload_color};'>{workload_value}</td>
                     <td style='background-color: {node_color};'>{node_value}</td>
                 """
-            
+
         else:
             # Если нет нод, добавляем агрегированные ячейки
             cores_count = sum(len(node_error.core_hashes) for node_error in node_errors)
             oom_count = sum(1 for node_error in node_errors if node_error.was_oom)
-            
+
             cores_color = "#ffcccc" if cores_count > 0 else "#ccffcc"
             oom_color = "#ffcccc" if oom_count > 0 else "#ccffcc"
-            
+
             table_html += f"""
                 <td style='background-color: {cores_color};'>{cores_count}</td>
                 <td style='background-color: {oom_color};'>{oom_count}</td>
             """
-        
+
         table_html += """
             </tr>
         """
-    
+
     table_html += """
     </table>
     """
-    
+
     return table_html
 
 

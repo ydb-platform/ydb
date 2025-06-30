@@ -112,7 +112,7 @@ class ResultsProcessor:
             return None
 
         info = {'cluster': YdbCluster.get_cluster_info()}
-        
+
         # Добавляем дополнительную информацию о кластере
         try:
             nodes = YdbCluster.get_cluster_nodes(db_only=True)
@@ -120,7 +120,7 @@ class ResultsProcessor:
             cluster_info['endpoint'] = YdbCluster.ydb_endpoint
             cluster_info['nodes_count'] = len(nodes)
             cluster_info['nodes_info'] = []
-            
+
             # Собираем информацию о нодах
             for node in nodes:
                 node_info = {
@@ -131,7 +131,7 @@ class ResultsProcessor:
                     'disconnected': node.disconnected
                 }
                 cluster_info['nodes_info'].append(node_info)
-                
+
         except Exception as e:
             logging.warning(f"Could not collect detailed cluster info: {e}")
             # Добавляем базовую информацию

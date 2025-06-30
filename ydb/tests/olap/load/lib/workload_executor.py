@@ -7,8 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time
 import time as time_module
 from datetime import datetime, timedelta
-import pytest
-
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import (
     execute_command,
@@ -254,7 +252,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         file_ops_log.append(
                             f"  {host}: Deployment failed - {error}")
 
-                file_ops_log.append(f"\n--- Binary Deployment Summary ---")
+                file_ops_log.append("\n--- Binary Deployment Summary ---")
                 file_ops_log.append(
                     f"Successful deployments: {successful_deploys}/{
                         len(unique_hosts)}"
@@ -482,7 +480,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 file_ops_time = time() - file_ops_start_time
 
                 # Добавляем итоговую статистику файловых операций
-                file_ops_log.append(f"\n--- File Operations Summary ---")
+                file_ops_log.append("\n--- File Operations Summary ---")
                 file_ops_log.append(
                     f"Successful hosts: {success_count}/{len(unique_hosts)}"
                 )
@@ -562,7 +560,7 @@ class WorkloadTestBase(LoadSuiteBase):
                             "log": host_log,
                         }
                     else:
-                        host_log.append(f"Success")
+                        host_log.append("Success")
                         return {"host": host, "success": True, "log": host_log}
 
                 except Exception as e:
@@ -610,7 +608,7 @@ class WorkloadTestBase(LoadSuiteBase):
             service_time = time() - service_start_time
 
             # Добавляем итоговую статистику
-            nemesis_log.append(f"\n--- Summary ---")
+            nemesis_log.append("\n--- Summary ---")
             nemesis_log.append(
                 f"Successful hosts: {success_count}/{len(unique_hosts)}")
             nemesis_log.append(
@@ -1142,7 +1140,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 node_results = []
 
                 # Блокировка для безопасного обновления общих данных из потоков
-                results_lock = threading.Lock()
+                threading.Lock()
 
                 # Функция для выполнения workload на одной ноде
                 def execute_on_node(node_plan):
@@ -1985,7 +1983,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # Получаем номер итерации из статистики или из имени
             real_iter_num = None
             node_host = None
-            actual_time = None
+            # actual_time = None
 
             # Проверяем статистику
             if hasattr(iteration, "stats") and iteration.stats:
@@ -1996,8 +1994,8 @@ class WorkloadTestBase(LoadSuiteBase):
                                 real_iter_num = stat_value["iteration_num"]
                             if "node_host" in stat_value:
                                 node_host = stat_value["node_host"]
-                            if "actual_execution_time" in stat_value:
-                                actual_time = stat_value["actual_execution_time"]
+                            # if "actual_execution_time" in stat_value:
+                                # actual_time = stat_value["actual_execution_time"]
                         elif "iteration_num" in stat_value:
                             real_iter_num = stat_value["iteration_num"]
                         elif "chunk_num" in stat_value:  # Для обратной совместимости

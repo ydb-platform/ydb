@@ -20,9 +20,10 @@ class SimpleQueueBase(WorkloadTestBase):
     workload_env_var = 'SIMPLE_QUEUE_BINARY'
 
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
-    @pytest.mark.parametrize('nemesis_enabled', [True, False], 
-                            ids=['nemesis_true', 'nemesis_false'])
-
+    @pytest.mark.parametrize(
+        'nemesis_enabled', [True, False],
+        ids=['nemesis_true', 'nemesis_false']
+    )
     def test_workload_simple_queue(self, table_type: str, nemesis_enabled: bool):
         # Формируем аргументы команды (без --duration, он будет добавлен в чанках)
         command_args_template = (

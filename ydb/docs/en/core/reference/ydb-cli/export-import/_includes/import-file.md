@@ -12,7 +12,7 @@ The imported file must be in the [UTF-8](https://en.wikipedia.org/wiki/UTF-8) en
 
 {% note info %}
 
-If the table doesn't exist yet, you can use the [{{ ydb-cli }} tools infer csv](../../tools-infer.md) command to generate the `CREATE TABLE` text for it from a CSV file.
+If the table doesn't exist yet, you can use the [{{ ydb-cli }} tools infer csv](../../tools-infer.md) command to generate the `CREATE TABLE` text for it based on an existing CSV file.
 
 You can also try to import to a non-existent table. Then the command will suggest running [{{ ydb-cli }} tools infer csv](../../tools-infer.md) with the correct options.
 

@@ -30,9 +30,12 @@ Option Name | Description
 
 {% note info %}
 
-Use the options `--columns`, `--gen-columns`, or `--header` to explicitly specify the source of column names.
+If none of the options `--columns`, `--gen-columns`, or `--header` are explicitly specified, the following algorithm is used: The first row of the file is taken, and its values are checked for the following conditions:
 
-By default (if none of these options are specified), the command uses the first row of the file as column names if possible (i.e., if the values meet the requirements for column names and do not match data types in the other rows). Otherwise, column names will be generated automatically. See the [example](#example-default) below for more details.
+* The values meet the requirements for column names.
+* The types of these values are different from the data types in the other rows of the file.
+
+If both conditions are met, the values from the first row are used as the table's column names. Otherwise, column names are generated automatically. See the [example](#example-default) below for more details.
 
 {% endnote %}
 

@@ -72,7 +72,8 @@ public:
     void Bootstrap();
 
     STATEFN(StateFunc) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("self_id", SelfId())("scan_id", ScanId);
+        NActors::TLogContextGuard lGuard =
+            NActors::TLogContextBuilder::Build()("self_id", SelfId())("scan_id", ScanId)("tx_id", std::get<ui64>(TxId));
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);

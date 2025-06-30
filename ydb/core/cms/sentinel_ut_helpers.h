@@ -132,6 +132,14 @@ public:
         WaitForSentinelBoot();
     }
 
+    void MockBridgeModePiles(ui32 numPiles) {
+        auto& nodes = State->ClusterInfo->AllNodes();
+        for (auto& [id, info] : nodes) {
+            info->PileId = id % numPiles;
+            State->ClusterInfo->NodeIdToPileId[id] = *info->PileId;
+        }
+    }
+
     TPDiskID RandomPDiskID() const {
         const auto& config = MockConfig.GetResponse().GetStatus(0).GetBaseConfig();
         const auto& pdisk = config.GetPDisk(RandomNumber(config.PDiskSize() - 1));
@@ -153,6 +161,20 @@ public:
                 ? info->Location.GetRackId()
                 : "";
             if (targetRack == foundRack) {
+                std::copy(info->PDisks.begin(), info->PDisks.end(), std::inserter(res, res.begin()));
+            }
+        }
+        return res;
+    }
+
+    TSet<TPDiskID> PDisksForRandomPile() const {
+        auto nodes = State->ClusterInfo->AllNodes();
+        size_t idx = RandomNumber(nodes.size() - 1);
+        auto target = std::next(nodes.begin(), idx)->second;
+
+        TSet<TPDiskID> res;
+        for (const auto& [id, info] : nodes) {
+            if (info->PileId == target->PileId) {
                 std::copy(info->PDisks.begin(), info->PDisks.end(), std::inserter(res, res.begin()));
             }
         }

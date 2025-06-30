@@ -14,6 +14,22 @@ CLUSTER_CONFIG = dict(
 DATABASE = "/Root/test"
 TABLE_NAME = "table"
 TABLE_PATH = f"{DATABASE}/{TABLE_NAME}"
+CREATE_TABLE_GRANTS = ['ydb.granular.create_table']
+ALTER_TABLE_ADD_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+ALTER_TABLE_DROP_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
+ALTER_TABLE_ADD_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+ALTER_TOPIC_ADD_CONSUMER_GRANTS = []
+ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+ALL_USED_GRANS = set(
+    CREATE_TABLE_GRANTS
+    + ALTER_TABLE_ADD_COLUMN_GRANTS
+    + ALTER_TABLE_DROP_COLUMN_GRANTS
+    + DROP_TABLE_GRANTS
+    + ALTER_TABLE_ADD_CHANGEFEED_GRANTS
+    + ALTER_TOPIC_ADD_CONSUMER_GRANTS
+    + ALTER_TABLE_DROP_CHANGEFEED_GRANTS
+)
 
 
 def run_query(config, query):
@@ -29,11 +45,35 @@ def run_with_assert(config, query, expected_err=None):
 
     try:
         run_query(config, query)
+        assert False, 'Error expected'
     except Exception as e:
         assert expected_err in str(e)
 
 
-def test_table_grants(ydb_cluster):
+def revoke_grants(admin_config, user_name, object_name, all_grants):
+    revoke_grants_query = ''
+    for grant in all_grants:
+        revoke_grants_query += f"REVOKE '{grant}' ON `{object_name}` FROM {user_name};"
+    run_with_assert(admin_config, revoke_grants_query)
+
+
+def provide_grants(admin_config, user_name, object_name, required_grants):
+    provide_grants_query = ''
+    for grant in required_grants:
+        assert grant in ALL_USED_GRANS, 'Keep ALL_USED_GRANS updated with all used grants'
+        provide_grants_query += f"GRANT '{grant}' ON `{object_name}` TO {user_name};"
+    run_with_assert(admin_config, provide_grants_query)
+
+
+def _test_grants(admin_config, user_config, user_name, query, object_name, required_grants, expected_err):
+    revoke_grants(admin_config, user_name, object_name, ALL_USED_GRANS)
+    if required_grants is not None and len(required_grants) > 0:  # means the query does not require any grants
+        run_with_assert(user_config, query, expected_err=expected_err)
+        provide_grants(admin_config, user_name, object_name, required_grants)
+    run_with_assert(user_config, query)
+
+
+def test_granular_grants_for_tables(ydb_cluster):
     ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
     database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
     ydb_cluster.wait_tenant_up(DATABASE)
@@ -54,36 +94,54 @@ def test_table_grants(ydb_cluster):
     )
 
     run_with_assert(tenant_admin_config, "CREATE USER user1; CREATE USER user2;")
-    # table creation without grant fails
+
+    # CREATE TABLE
     create_table_query = f"CREATE TABLE {TABLE_NAME} (a Uint64, b Uint64, PRIMARY KEY (a));"
-    run_with_assert(user1_config, create_table_query, expected_err="Access denied for scheme request")
-
-    # table creation with CREATE TABLE grant works
-    run_with_assert(tenant_admin_config, f"GRANT CREATE TABLE ON `{DATABASE}` TO user1;")
-    run_with_assert(user1_config, create_table_query)
-
-    # index creation without INSERT and SELECT grants fails
-    create_index_query = f"ALTER TABLE `{TABLE_PATH}` ADD INDEX `b_column_index` GLOBAL ON (`b`);"
-    run_with_assert(user2_config, create_index_query, expected_err="Cannot find table")
-
-    # index creation without INSERT and SELECT grants works
-    run_with_assert(
+    _test_grants(
         tenant_admin_config,
-        f"GRANT INSERT ON `{TABLE_PATH}` TO user2; GRANT SELECT ON `{TABLE_PATH}` TO user2;",
+        user1_config,
+        'user1',
+        create_table_query,
+        DATABASE,
+        CREATE_TABLE_GRANTS,
+        "Access denied for scheme request",
     )
-    run_with_assert(user2_config, create_index_query)
 
-    # adding a column with grants INSERT and SELECT works
-    run_with_assert(user2_config, f"ALTER TABLE `{TABLE_PATH}` ADD COLUMN `c` Uint64;")
+    # ALTER TABLE ... ADD COLUMN
+    add_column_query = f"ALTER TABLE `{TABLE_PATH}` ADD COLUMN `d` Uint64;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        add_column_query,
+        TABLE_PATH,
+        ALTER_TABLE_ADD_COLUMN_GRANTS,
+        "you do not have access permissions",
+    )
 
-    # removing an index with grants INSERT and SELECT works
-    run_with_assert(user2_config, f"ALTER TABLE `{TABLE_PATH}` DROP INDEX `b_column_index`;")
+    # ALTER TABLE ... DROP COLUMN
+    drop_column_query = f"ALTER TABLE `{TABLE_PATH}` DROP COLUMN `d`;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_column_query,
+        TABLE_PATH,
+        ALTER_TABLE_DROP_COLUMN_GRANTS,
+        "you do not have access permissions",
+    )
 
-    # removing a column with grants INSERT and SELECT works
-    run_with_assert(user2_config, f"ALTER TABLE `{TABLE_PATH}` DROP COLUMN `b`;")
-
-    # dropping a table with grants INSERT and SELECT works
-    run_with_assert(user2_config, "DROP TABLE table;")
+    # DROP TABLE
+    drop_table_query = f"DROP TABLE `{TABLE_PATH}`;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_table_query,
+        TABLE_PATH,
+        DROP_TABLE_GRANTS,
+        "you do not have access permissions",
+    )
 
     ydb_cluster.remove_database(DATABASE)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
@@ -115,29 +173,47 @@ def test_cdc_grants(ydb_cluster):
     run_with_assert(user1_config, f"CREATE TABLE {TABLE_NAME} (a Uint64, b Uint64, PRIMARY KEY (a));")
     run_with_assert(user1_config, f"INSERT INTO `{TABLE_PATH}` (a, b) VALUES (1, 1);")
 
-    # change feed creation without grants fails
+    # ALTER TABLE ... ADD CHANGEFEED
     create_changefeed_query = f"ALTER TABLE `{TABLE_PATH}` ADD CHANGEFEED updates WITH (FORMAT = 'JSON', MODE = 'NEW_AND_OLD_IMAGES', INITIAL_SCAN = TRUE);"
-    run_with_assert(user2_config, create_changefeed_query, expected_err='you do not have access permissions')
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        create_changefeed_query,
+        TABLE_PATH,
+        ALTER_TABLE_ADD_CHANGEFEED_GRANTS,
+        "you do not have access permissions",
+    )
 
-    # provide grants to user2 that is not the owner of a table
-    grants = ['ydb.granular.alter_schema', 'ydb.generic.read']
-    provideGrantsQuery = ''
-    for grant in grants:
-        provideGrantsQuery += f"GRANT '{grant}' ON `{TABLE_PATH}` TO user2;"
-    run_with_assert(tenant_admin_config, provideGrantsQuery)
-    # change feed creation with grants works
-    run_with_assert(user2_config, create_changefeed_query)
-    # consumer registration works
-    run_with_assert(user2_config, f"ALTER TOPIC `{TABLE_PATH}/updates` ADD CONSUMER consumer;")
+    # ALTER TOPIC ... ADD CONSUMER
+    add_consumer_query = f"ALTER TOPIC `{TABLE_PATH}/updates` ADD CONSUMER consumer;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        add_consumer_query,
+        TABLE_PATH,
+        ALTER_TOPIC_ADD_CONSUMER_GRANTS,
+        None,
+    )
 
-    # reading change feed works
+    # reading change feed
     with ydb.Driver(user2_config) as driver:
         with driver.topic_client.reader(f"{TABLE_PATH}/updates", consumer="consumer", buffer_size_bytes=1000) as reader:
             message = reader.receive_message()
             assert '"newImage"' in message.data.decode("utf-8")
 
-    # deleting change feed works
-    run_with_assert(user2_config, f"ALTER TABLE `{TABLE_PATH}` DROP CHANGEFEED updates;")
+    # ALTER TABLE ... DROP CHANGEFEED
+    drop_changefeed_query = f"ALTER TABLE `{TABLE_PATH}` DROP CHANGEFEED updates;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_changefeed_query,
+        TABLE_PATH,
+        ALTER_TABLE_DROP_CHANGEFEED_GRANTS,
+        "you do not have access permissions",
+    )
 
     ydb_cluster.remove_database(DATABASE)
     ydb_cluster.unregister_and_stop_slots(database_nodes)

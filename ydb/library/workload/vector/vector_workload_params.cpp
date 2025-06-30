@@ -46,7 +46,7 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .DefaultValue(100).StoreResult(&Targets);
         opts.AddLongOption( "limit", "Maximum number of vectors to return.")
             .DefaultValue(5).StoreResult(&Limit);
-        opts.AddLongOption( "kmeans-tree-clusters", "Maximux number of clusters to use during search.")
+        opts.AddLongOption( "kmeans-tree-clusters", "Maximum number of clusters to use during search.")
             .DefaultValue(1).StoreResult(&KmeansTreeSearchClusters);
         opts.AddLongOption( "recall-threads", "Number of threads for concurrent queries during recall measurement.")
             .DefaultValue(10).StoreResult(&RecallThreads);

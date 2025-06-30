@@ -423,8 +423,8 @@ public:
             auto itRecords = GetRecordsVerified().begin();
             while (itSchema != schema.GetColumnIds().end() && itRecords != GetRecordsVerified().end()) {
                 if (*itSchema < itRecords->ColumnId) {
-                    TColumnSerializationStat stat(*itSchema, schema.GetFieldByColumnIdVerified(*itSchema)->name());
-                    TSimpleSerializationStat simpleStat(0, GetPortionInfo().GetRecordsCount(), 0);
+                    NArrow::NSplitter::TColumnSerializationStat stat(*itSchema, schema.GetFieldByColumnIdVerified(*itSchema)->name());
+                    NArrow::NSplitter::TSimpleSerializationStat simpleStat(0, GetPortionInfo().GetRecordsCount(), 0);
                     stat.Merge(simpleStat);
                     result.AddStat(stat);
                     ++itSchema;

@@ -1628,6 +1628,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NHttp::THeaders headers(outgoing->Response->Headers);
 
         if (!outgoing->Response->Status.StartsWith("3") && outgoing->Response->Status != "404") {
+            UNIT_ASSERT(headers.Has("Content-Type"));
             UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Content-Type").NextTok(';'), "application/json");
             UNIT_ASSERT(!outgoing->Response->Body.empty());
             UNIT_ASSERT(NJson::ReadJsonTree(outgoing->Response->Body, &json));

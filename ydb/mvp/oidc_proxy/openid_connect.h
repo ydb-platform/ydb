@@ -76,12 +76,6 @@ struct TProxiedRequestParams {
     const TOpenIdConnectSettings Settings;
 };
 
-bool ExtractHttpScheme(const TString& url, TString& outScheme);
-bool IsHostAllowed(const TString& url, const TVector<TString>& allowedHosts);
-
-void SetProxyResponseHeaders(TProxiedResponseParams& params);
-void SetProxyResponseBody(TProxiedResponseParams& params);
-TString GetFixedLocationHeader(const TCrackedPage& page, TStringBuf location);
 NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& param);
 NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage);
 NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage);

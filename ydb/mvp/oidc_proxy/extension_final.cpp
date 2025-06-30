@@ -56,6 +56,11 @@ void TExtensionFinal::SetProxyResponseHeaders() {
 
 void TExtensionFinal::SetProxyResponseBody() {
     auto& params = Context->Params;
+
+    if (!params->HeadersOverride) {
+        return;
+    }
+
     TStringBuf contentType = params->HeadersOverride->Get("Content-Type").NextTok(';');
     if (contentType == "text/html") {
         params->BodyOverride = FixReferenceInHtml(params->BodyOverride, params->ProtectedPage->Host);

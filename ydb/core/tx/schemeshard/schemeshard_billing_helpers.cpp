@@ -97,6 +97,10 @@ ui64 TRUCalculator::CPU(ui64 сpuTimeUs) {
 ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
     // The cost of building an index is the sum of the cost of ReadTable from the source table and BulkUpsert to the index table.
     // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-special#secondary-index
+
+    // To evaluate the YDB API request cost, the CPU cost and the I/O cost are calculated. A maximum from the calculated values is selected.
+    // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-yql
+
     ui64 readTable = TRUCalculator::ReadTable(stats.GetReadBytes());
     ui64 bulkUpsert = TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
     ui64 cpu = TRUCalculator::CPU(stats.GetCpuTimeUs());
@@ -104,7 +108,8 @@ ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
         << "ReadTable: " << readTable
         << ", BulkUpsert: " << bulkUpsert
         << ", CPU: " << cpu;
-    return readTable + bulkUpsert + cpu;
+
+    return Max(readTable + bulkUpsert, cpu);
 }
 
 }

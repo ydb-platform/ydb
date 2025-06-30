@@ -4,6 +4,7 @@ EXCLUDE_TAGS(GO_PROTO)
 
 GRPC()
 SRCS(
+    metadata.proto
     profile_service.proto
     sensitive.proto
     service_account.proto

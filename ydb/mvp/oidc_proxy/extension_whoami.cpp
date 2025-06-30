@@ -132,6 +132,10 @@ void TExtensionWhoami::ApplyExtension() {
             if (!json.Has(USER_SID)) {
                 if (extendedJson.Has("user_profile") && extendedJson["user_profile"].Has("id")) {
                     json[USER_SID] = extendedJson["user_profile"]["id"];
+                } else if (extendedJson.Has("service_account_profile") && extendedJson["service_account_profile"].Has("info") &&
+                           extendedJson["service_account_profile"]["info"].Has("metadata") &&
+                           extendedJson["service_account_profile"]["info"]["metadata"].Has("id")) {
+                    json[USER_SID] = extendedJson["service_account_profile"]["info"]["metadata"]["id"];
                 }
             }
         }

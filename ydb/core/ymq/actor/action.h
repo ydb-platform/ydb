@@ -1,8 +1,8 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include "actor.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "error.h"
 #include "events.h"
 #include "limits.h"

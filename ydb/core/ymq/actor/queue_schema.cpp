@@ -1,4 +1,4 @@
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "executor.h"
 #include "log.h"
 #include "params.h"

@@ -236,7 +236,6 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
 ydb/tests/functional/tpc/large sole chunk chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[59]
 ydb/tests/functional/tpc/medium test_workload_oltp.py.TestWorkloadSimpleQueue.test_workload_oltp
 ydb/tests/functional/tpc/medium test_workload_simple_queue.py.TestWorkloadSimpleQueue.test_workload_simple_queue[row]

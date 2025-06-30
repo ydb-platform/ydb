@@ -125,7 +125,7 @@ NNodes::TExprBase DqBuildOrderedLMapOverMuxStage(NNodes::TExprBase node, TExprCo
 
 NNodes::TExprBase DqBuildLMapOverMuxStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TParentsMap& parentsMap);
 
-NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx);
+NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx, bool enableHashShuffleConnections = false);
 
 NNodes::TExprBase DqBuildPrecompute(NNodes::TExprBase node, TExprContext& ctx);
 

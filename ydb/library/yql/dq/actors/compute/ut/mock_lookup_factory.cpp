@@ -45,15 +45,15 @@ public:
         Y_ENSURE(KeyType->GetMembersCount() == 1);
         auto key1Type = KeyType->GetMemberType(0);
         if (key1Type->IsOptional()) {
-            key1Type = static_cast<NKikimr::NMiniKQL::TOptionalType *>(key1Type)->GetItemType();
+            key1Type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(key1Type)->GetItemType();
         }
         Y_ENSURE(key1Type->IsSameType(*NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<i32>::Id, typeEnv)));
         Y_ENSURE(PayloadType->GetMembersCount() == 1);
         auto payload1Type = PayloadType->GetMemberType(0);
         if (payload1Type->IsOptional()) {
-            payload1Type = static_cast<NKikimr::NMiniKQL::TOptionalType *>(payload1Type)->GetItemType();
+            payload1Type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(payload1Type)->GetItemType();
         }
-        Y_ENSURE(payload1Type->IsSameType(*NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<char *>::Id, typeEnv)));
+        Y_ENSURE(payload1Type->IsSameType(*NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<char*>::Id, typeEnv)));
     }
 
     ~TMockLookupActor() {
@@ -120,7 +120,7 @@ private:
         i32 minValue = LookupSource.GetMinValue();
         i32 maxValue = LookupSource.GetMaxValue();
         auto key1Type = KeyType->GetMemberType(0);
-        for (auto& [key, value]: *Request) {
+        for (auto& [key, value] : *Request) {
             Y_ENSURE(key);
             auto key1 = key.GetElement(0);
             Y_ENSURE(key1);

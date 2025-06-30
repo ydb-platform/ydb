@@ -120,7 +120,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 .Add("id", keyType)
                 .Add("ts", tsType)
                 .Build();
-        TVector<TType *> inputTypes(Reserve(RowType->GetMembersCount()));
+        TVector<TType*> inputTypes(Reserve(RowType->GetMembersCount()));
         for (ui32 i = 0; i < RowType->GetMembersCount(); ++i) {
             inputTypes.emplace_back(RowType->GetMemberType(i));
         }
@@ -129,10 +129,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         RowTransformedType = TStructTypeBuilder(TypeEnv)
                 .Add("e.id", keyType)
                 .Add("e.ts", tsType)
-                .Add("u.data", TOptionalType::Create(TDataType::Create(NUdf::TDataType<char *>::Id, TypeEnv), TypeEnv))
+                .Add("u.data", TOptionalType::Create(TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv), TypeEnv))
                 .Add("u.key", TOptionalType::Create(keyType, TypeEnv))
                 .Build();
-        TVector<TType *> outputTypes(Reserve(RowTransformedType->GetMembersCount()));
+        TVector<TType*> outputTypes(Reserve(RowTransformedType->GetMembersCount()));
         for (ui32 i = 0; i < RowTransformedType->GetMembersCount(); ++i) {
             outputTypes.emplace_back(RowTransformedType->GetMemberType(i));
         }
@@ -301,10 +301,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         auto narrowInputType = RowType;
         auto narrowOutputType = RowTransformedType;
 
-        TType* inputType = IsWide ? static_cast<TType *>(WideRowType) : RowType;
+        TType* inputType = IsWide ? static_cast<TType*>(WideRowType) : RowType;
         transform.SetInputType(SerializeNode(inputType, TypeEnv));
 
-        TType* outputType = IsWide ? static_cast<TType *>(WideRowTransformedType) : RowTransformedType;
+        TType* outputType = IsWide ? static_cast<TType*>(WideRowTransformedType) : RowTransformedType;
         transform.SetOutputType(SerializeNode(outputType, TypeEnv));
 
         NDqProto::TDqInputTransformLookupSettings settings;
@@ -367,7 +367,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
     // Adds dummy output channel with channelId
     // returns IDqInputChannel::TPtr that can be used to simulating reading from this channel
-    auto AddDummyOutputChannel(NDqProto::TDqTask& task, ui64 channelId, TType *type) {
+    auto AddDummyOutputChannel(NDqProto::TDqTask& task, ui64 channelId, TType* type) {
         auto& output = *task.AddOutputs();
         output.MutableBroadcast(); // for side-effect
         auto& channel = *output.AddChannels();
@@ -470,14 +470,14 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             dqInputChannel->Finish();
         }
         TUnboxedValueBatch batch;
-        const auto columns = IsWide ? static_cast<TMultiType *>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType *>(dqInputChannel->GetInputType())->GetMembersCount();
+        const auto columns = IsWide ? static_cast<TMultiType*>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType*>(dqInputChannel->GetInputType())->GetMembersCount();
         while (dqInputChannel->Pop(batch)) {
             if (IsWide) {
                 if (!batch.ForEachRowWide([this, cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
                     LOG_D("WideRow:");
                     if (row) {
                         UNIT_ASSERT_EQUAL(width, columns);
-                        for(ui32 col = 0; col < width; ++col) {
+                        for (ui32 col = 0; col < width; ++col) {
                             const auto& item = row[col];
                             if (!cb(item, col)) {
                                return false;
@@ -495,7 +495,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 if (!batch.ForEachRow([this, cb, columns](const NUdf::TUnboxedValue& row) {
                     LOG_D("Row:");
                     if (row) {
-                        for(ui32 col = 0; col < columns; ++col) {
+                        for (ui32 col = 0; col < columns; ++col) {
                             const auto& item = row.GetElement(col);
                             if (!cb(item, col)) {
                                return false;
@@ -619,8 +619,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
 #if 0 // TODO: switch when inputtransform will be fixed; just log for now
 #define WEAK_UNIT_ASSERT_GT_C UNIT_ASSERT_GT_C
+#define WEAK_UNIT_ASSERT UNIT_ASSERT
 #else
 #define WEAK_UNIT_ASSERT_GT_C(A, B, C) do { if (!((A) > (B))) LOG_E("Assert " #A " > " #B " failed " << C); } while(0)
+#define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
 #endif
     void InputTransformTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
         LogPrefix = TStringBuilder() << "InputTransform Test for:"
@@ -648,7 +650,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowTransformedType) : RowTransformedType));
         SetInputTransform(task,
                 TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv),
-                TDataType::Create(NUdf::TDataType<char *>::Id, TypeEnv)
+                TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv)
                 );
 
         auto asyncCA = CreateTestAsyncCA(task);
@@ -666,8 +668,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             ++expectedData[val];
             // below row may be served from cache
-            PushRow(CreateRow(++val % (MaxTransformedValue*2), packet), dqOutputChannel);
-            ++expectedData[val % (MaxTransformedValue*2)];
+            PushRow(CreateRow(++val % (MaxTransformedValue * 2), packet), dqOutputChannel);
+            ++expectedData[val % (MaxTransformedValue * 2)];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             ++expectedData[val];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
@@ -754,17 +756,17 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     }
                     return true;
                 },
-                [this, &watermark](const auto &receivedWatermark) {
+                [this, &watermark](const auto& receivedWatermark) {
                     watermark = receivedWatermark;
                     LOG_D("Got watermark " << *watermark);
                 },
                 dqInputChannel))
         {}
         UNIT_ASSERT_EQUAL(receivedData.size(), expectedData.size());
-        for (auto [receivedVal, receivedCnt]: receivedData) {
+        for (auto [receivedVal, receivedCnt] : receivedData) {
             UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);
         }
-        //UNIT_ASSERT(!!watermark);
+        WEAK_UNIT_ASSERT(!!watermark);
         if (watermark) {
             LOG_D("Last watermark " << *watermark);
         } else {
@@ -779,9 +781,9 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TAsyncCATestFixture) { }
 
     Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
-        for (bool waitIntermediateAcks: { false, true }) {
-            for (bool doWatermark: { false, true }) {
-                for (ui32 packets: { 1, 2, 3, 4, 5 }) {
+        for (bool waitIntermediateAcks : { false, true }) {
+            for (bool doWatermark : { false, true }) {
+                for (ui32 packets : { 1, 2, 3, 4, 5 }) {
                     BasicTests(packets, doWatermark, waitIntermediateAcks);
                 }
             }
@@ -789,9 +791,9 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     }
 
     Y_UNIT_TEST_F(InputTransform, TAsyncCATestFixture) {
-        for (bool waitIntermediateAcks: { false, true }) {
-            for (bool doWatermark: { false, true }) {
-                for (ui32 packets: { 1, 2, 3, 4, 5, 111 }) {
+        for (bool waitIntermediateAcks : { false, true }) {
+            for (bool doWatermark : { false, true }) {
+                for (ui32 packets : { 1, 2, 3, 4, 5, 111 }) {
                     InputTransformTests(packets, doWatermark, waitIntermediateAcks);
                 }
             }

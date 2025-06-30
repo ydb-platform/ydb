@@ -1,5 +1,5 @@
---- contrib/libs/cctz/test/time_zone_format_test.cc	(index)
-+++ contrib/libs/cctz/test/time_zone_format_test.cc	(working tree)
+--- contrib/libs/cctz/src/time_zone_format_test.cc	(index)
++++ contrib/libs/cctz/src/time_zone_format_test.cc	(working tree)
 @@ -56,10 +56,10 @@ const char RFC1123_no_wday[] =  "%d %b %Y %H:%M:%S %z";
  template <typename D>
  void TestFormatSpecifier(time_point<D> tp, time_zone tz, const std::string& fmt,
@@ -587,8 +587,8 @@
    time_point<cctz::seconds> out;
    EXPECT_TRUE(parse(RFC3339_full, s, utc, &out)) << s;
    EXPECT_EQ(in, out);
---- contrib/libs/cctz/test/time_zone_lookup_test.cc	(index)
-+++ contrib/libs/cctz/test/time_zone_lookup_test.cc	(working tree)
+--- contrib/libs/cctz/src/time_zone_lookup_test.cc	(index)
++++ contrib/libs/cctz/src/time_zone_lookup_test.cc	(working tree)
 @@ -899,19 +899,19 @@ TEST(MakeTime, TimePointResolution) {
    const time_zone utc = utc_time_zone();
    const time_point<chrono::nanoseconds> tp_ns =

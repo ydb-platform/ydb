@@ -1,5 +1,5 @@
---- a/test/time_zone_lookup_test.cc
-+++ b/test/time_zone_lookup_test.cc
+--- a/src/time_zone_lookup_test.cc
++++ b/src/time_zone_lookup_test.cc
 @@ -1024,3 +1024,3 @@ TEST(MakeTime, LocalTimeLibC) {
    //  3) we have some idea about how mktime() behaves during transitions.
 -#if defined(__linux__) && !defined(__ANDROID__)

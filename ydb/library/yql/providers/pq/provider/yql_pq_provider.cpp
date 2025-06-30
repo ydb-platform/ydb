@@ -14,7 +14,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     bool supportRtmrMode,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
     const NPq::NProto::StreamingDisposition& disposition,
-    const std::set<std::pair<TString, TString>>& taskSensorLabels) {
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels) {
     return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels] (
                const TString& userName,
                const TString& sessionId,

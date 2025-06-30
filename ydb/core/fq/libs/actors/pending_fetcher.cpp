@@ -484,7 +484,7 @@ private:
             S3ActorsFactory,
             ComputeConfig.GetWorkloadManagerConfig(task.scope()),
             PqGatewayFactory,
-            sensorLabels
+            std::vector<std::pair<TString, TString>>{sensorLabels.begin(), sensorLabels.end()}
             );
 
         auto runActorId =

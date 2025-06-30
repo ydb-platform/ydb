@@ -34,6 +34,9 @@ target_link_libraries(ydb-core-kqp-runtime-ut PUBLIC
   testlib-basics-pg
   minikql-comp_nodes-llvm16
   udf-service-exception_policy
+  yt-codec-codegen
+  yt-comp_nodes-llvm16
+  comp_nodes-dq-llvm16
 )
 
 target_allocator(ydb-core-kqp-runtime-ut
@@ -54,6 +57,7 @@ target_link_options(ydb-core-kqp-runtime-ut PRIVATE
 
 target_sources(ydb-core-kqp-runtime-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_fetcher_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/runtime/scheduler/old/kqp_compute_scheduler_ut.cpp
 )
 

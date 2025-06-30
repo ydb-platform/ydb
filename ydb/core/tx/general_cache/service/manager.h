@@ -293,20 +293,29 @@ private:
         return it->second;
     }
 
+    TSourceInfo* MutableSourceInfoOptional(const TSourceId sourceId) {
+        auto it = SourcesInfo.find(sourceId);
+        if (it != SourcesInfo.end()) {
+            return &it->second;
+        }
+        return nullptr;
+    }
+
     void AddObjects(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
         for (auto&& i : add) {
             Cache.Insert(i.first, i.second);
         }
         Counters->CacheSizeCount->Set(Cache.Size());
         Counters->CacheSizeBytes->Set(Cache.TotalSize());
-        if (isAdditional && !SourcesInfo.contains(sourceId)) {
-            SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, ObjectsProcessor));
+        TSourceInfo* sourceInfo = MutableSourceInfoOptional(sourceId);
+        if (!sourceInfo) {
+            if (isAdditional) {
+                sourceInfo = &SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, ObjectsProcessor)).first->second;
+            } else {
+                return;
+            }
         }
-        MutableSourceInfo(sourceId).AddObjects(std::move(add), isAdditional, now);
-    }
-
-    void RemoveObjects(const TSourceId sourceId, THashSet<TAddress>&& remove, const bool isAdditional, const TMonotonic now) {
-        MutableSourceInfo(sourceId).RemoveObjects(std::move(remove), isAdditional, now);
+        sourceInfo->AddObjects(std::move(add), isAdditional, now);
     }
 
 public:
@@ -329,8 +338,8 @@ public:
     }
 
     void AbortSource(const TSourceId sourceId) {
-        if (SourcesInfo.contains(sourceId)) {
-            MutableSourceInfo(sourceId).Abort();
+        if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
+            sourceInfo->Abort();
             SourcesInfo.erase(sourceId);
         }
     }
@@ -393,9 +402,14 @@ public:
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "on_result");
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
-        AddObjects(sourceId, std::move(objects), false, now);
-        RemoveObjects(sourceId, std::move(removed), false, now);
-        MutableSourceInfo(sourceId).FailObjects(std::move(failed), now);
+        if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
+            AddObjects(sourceId, std::move(objects), false, now);
+            sourceInfo->RemoveObjects(std::move(removed), false, now);
+            sourceInfo->FailObjects(std::move(failed), now);
+        } else {
+            DrainQueue();
+            return;
+        }
         const bool inFlightLimitBrokenAfter = !Counters->CheckTotalLimit();
         if (inFlightLimitBrokenBefore && !inFlightLimitBrokenAfter) {
             DrainQueue();

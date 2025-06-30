@@ -813,6 +813,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpDropBackupCollection: return TxDropBackupCollection;
             case NKikimrSchemeOp::ESchemeOpCreateSysView: return TxCreateSysView;
             case NKikimrSchemeOp::ESchemeOpDropSysView: return TxDropSysView;
+            case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp: return TxCreateLongIncrementalRestoreOp;
             case NKikimrSchemeOp::ESchemeOpChangePathState: return TxChangePathState;
             default: return TxInvalid;
         }

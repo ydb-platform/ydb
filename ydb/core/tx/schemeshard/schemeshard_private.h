@@ -39,6 +39,7 @@ namespace TEvPrivate {
         EvPersistTableStats,
         EvConsoleConfigsTimeout,
         EvRunCdcStreamScan,
+        EvRunIncrementalRestore,
         EvPersistTopicStats,
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
@@ -257,6 +258,14 @@ namespace TEvPrivate {
 
         TEvRunCdcStreamScan(const TPathId& streamPathId)
             : StreamPathId(streamPathId)
+        {}
+    };
+
+    struct TEvRunIncrementalRestore: public TEventLocal<TEvRunIncrementalRestore, EvRunIncrementalRestore> {
+        const TPathId BackupCollectionPathId;
+
+        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId)
+            : BackupCollectionPathId(backupCollectionPathId)
         {}
     };
 

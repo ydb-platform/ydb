@@ -166,6 +166,10 @@ namespace NActors {
                 : Callback(std::forward<TCallback>(callback))
             {}
 
+            TAsyncContinuationAwaiterWithCallback& CoAwaitByValue() && noexcept {
+                return *this;
+            }
+
             bool await_ready() const noexcept {
                 return false;
             }

@@ -173,6 +173,11 @@ namespace NActors {
         return NDetail::TWithTimeoutAwaiter<TDuration, R>(duration, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
+    template<class R>
+    inline auto WithTimeout(TDuration duration, async<R> wrapped) {
+        return NDetail::TWithTimeoutAwaiter<TDuration, R>(duration, [&wrapped]{ return wrapped.UnsafeMove(); });
+    }
+
     template<class TCallback, class... TArgs>
     inline auto WithDeadline(TMonotonic deadline, TCallback&& callback, TArgs&&... args)
         requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
@@ -182,6 +187,11 @@ namespace NActors {
         return NDetail::TWithTimeoutAwaiter<TMonotonic, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
+    template<class R>
+    inline auto WithDeadline(TMonotonic deadline, async<R> wrapped) {
+        return NDetail::TWithTimeoutAwaiter<TMonotonic, R>(deadline, [&wrapped]{ return wrapped.UnsafeMove(); });
+    }
+
     template<class TCallback, class... TArgs>
     inline auto WithDeadline(TInstant deadline, TCallback&& callback, TArgs&&... args)
         requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
@@ -189,6 +199,11 @@ namespace NActors {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
         using R = typename TCallbackResult::result_type;
         return NDetail::TWithTimeoutAwaiter<TInstant, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
+    }
+
+    template<class R>
+    inline auto WithDeadline(TInstant deadline, async<R> wrapped) {
+        return NDetail::TWithTimeoutAwaiter<TInstant, R>(deadline, [&wrapped]{ return wrapped.UnsafeMove(); });
     }
 
 } // namespace NActors

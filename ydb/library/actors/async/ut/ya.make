@@ -12,6 +12,7 @@ SRCS(
     sleep_ut.cpp
     task_group_ut.cpp
     timeout_ut.cpp
+    wait_for_event_ut.cpp
 )
 
 END()

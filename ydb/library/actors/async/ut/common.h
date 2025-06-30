@@ -126,10 +126,14 @@ namespace NAsyncTest {
 
         TState& State;
         std::function<async<void>(TAsyncTestActor*)> Callback;
+        std::function<bool(TAutoPtr<IEventHandle>& ev)> Handler;
 
-        TAsyncTestActor(TState& state, std::function<async<void>(TAsyncTestActor*)> callback)
+        TAsyncTestActor(TState& state,
+                std::function<async<void>(TAsyncTestActor*)> callback,
+                std::function<bool(TAutoPtr<IEventHandle>& ev)> handler = {})
             : State(state)
             , Callback(std::move(callback))
+            , Handler(std::move(handler))
         {}
 
         ~TAsyncTestActor() {
@@ -155,7 +159,9 @@ namespace NAsyncTest {
                 hFunc(TEvPrivate::TEvRunSync, Handle);
                 hFunc(TEvents::TEvPoison, Handle);
                 default:
-                    Y_ABORT("Unexpected event");
+                    if (!Handler || !Handler(ev)) {
+                        Y_ABORT("Unexpected event");
+                    }
             }
         }
 
@@ -215,20 +221,24 @@ namespace NAsyncTest {
                 Runtime.DispatchEvents(options);
             }
 
+            void Receive(IEventBase* event, ui64 cookie = 0) const {
+                Runtime.Send(new IEventHandle(ActorId, TActorId(), event, 0, cookie));
+            }
+
             void Poison() const {
-                Runtime.Send(ActorId, TActorId(), new TEvents::TEvPoison);
+                Receive(new TEvents::TEvPoison);
             }
 
             void ResumeCoroutine(std::coroutine_handle<> h) const {
-                Runtime.Send(ActorId, TActorId(), new TAsyncTestActor::TEvPrivate::TEvResumeCoroutine(h));
+                Receive(new TAsyncTestActor::TEvPrivate::TEvResumeCoroutine(h));
             }
 
             void RunAsync(std::function<async<void>()> callable) const {
-                Runtime.Send(ActorId, TActorId(), new TAsyncTestActor::TEvPrivate::TEvRunAsync(std::move(callable)));
+                Receive(new TAsyncTestActor::TEvPrivate::TEvRunAsync(std::move(callable)));
             }
 
             void RunSync(std::function<void()> callable) const {
-                Runtime.Send(ActorId, TActorId(), new TAsyncTestActor::TEvPrivate::TEvRunSync(std::move(callable)));
+                Receive(new TAsyncTestActor::TEvPrivate::TEvRunSync(std::move(callable)));
             }
 
         private:
@@ -236,8 +246,9 @@ namespace NAsyncTest {
             const TActorId ActorId;
         };
 
-        TAsyncActorOperations StartAsyncActor(TAsyncTestActor::TState& state, std::function<async<void>(TAsyncTestActor*)> callback) {
-            auto actorId = Register(new TAsyncTestActor(state, std::move(callback)));
+        template<class... TArgs>
+        TAsyncActorOperations StartAsyncActor(TArgs&&... args) {
+            auto actorId = Register(new TAsyncTestActor(std::forward<TArgs>(args)...));
             EnableScheduleForActor(actorId);
             TAsyncActorOperations actor(*this, actorId);
             // Run bootstrap for this actor

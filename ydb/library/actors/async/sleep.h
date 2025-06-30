@@ -25,6 +25,10 @@ namespace NActors::NDetail {
             Detach();
         }
 
+        TAsyncSleepAwaiter& CoAwaitByValue() && noexcept {
+            return *this;
+        }
+
         bool await_ready() const noexcept {
             return false;
         }

@@ -881,6 +881,7 @@ namespace NActors {
                 // Note: may be a reference type, even the same reference
                 using TAwaiter = decltype(std::forward<TAwaitable>(awaitable).CoAwaitByValue());
 
+                static_assert(IsActorAwareAwaiter<TAwaiter>, "CoAwaitByValue must currently return an actor aware awaiter");
                 if constexpr (IsActorAwareAwaiter<TAwaiter>) {
                     if constexpr (HasAwaitCancel<TAwaiter> || HasAwaitCancelled<TAwaiter>) {
                         // Use implicit conversion to support awaiters that cannot be moved
@@ -896,7 +897,6 @@ namespace NActors {
                         return std::forward<TAwaitable>(awaitable).CoAwaitByValue();
                     }
                 } else {
-                    static_assert(IsActorAwareAwaiter<TAwaiter>, "Something is strange");
                     // We use an implicit conversion to support awaiters that cannot be moved
                     struct TImplicitConverter {
                         TAwaitable&& Awaitable;

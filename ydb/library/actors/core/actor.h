@@ -537,6 +537,8 @@ namespace NActors {
 
     namespace NDetail {
         class TActorAsyncHandlerPromise;
+        template<class TEvent>
+        class TActorSpecificEventAwaiter;
     }
 
     class IActor
@@ -569,7 +571,7 @@ namespace NActors {
     private:
         friend class NDetail::TActorAsyncHandlerPromise;
         template<class TEvent>
-        friend class TActorSpecificEventAwaiter;
+        friend class NDetail::TActorSpecificEventAwaiter;
 
         TIntrusiveList<TActorTask> ActorTasks;
         absl::flat_hash_map<ui64, TIntrusiveList<TActorEventAwaiter>> EventAwaiters;

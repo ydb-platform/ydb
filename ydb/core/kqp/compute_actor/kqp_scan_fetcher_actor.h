@@ -184,6 +184,7 @@ private:
 
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;
+    const bool IsOlapTable = false;
     ui32 TotalRetries = 0;
 
     std::set<ui32> TrackingNodes;

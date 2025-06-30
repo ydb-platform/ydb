@@ -44,7 +44,8 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , ShardsScanningPolicy(shardsScanningPolicy)
     , Counters(counters)
     , InFlightShards(ScanId, *this)
-    , InFlightComputes(ComputeActorIds) {
+    , InFlightComputes(ComputeActorIds)
+    , IsOlapTable(Meta.GetTable().GetTableKind() == (ui32)ETableKind::Olap) {
     Y_UNUSED(traceId);
     AFL_ENSURE(!Meta.GetReads().empty());
     AFL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
@@ -301,7 +302,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
     }
 
     const auto& tr = *AppData()->TypeRegistry;
-    if (Meta.HasOlapProgram()) {
+    if (IsOlapTable) {
         bool found = false;
         for (auto&& partition : keyDesc->GetPartitions()) {
             if (partition.ShardId != state.TabletId) {

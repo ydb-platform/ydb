@@ -256,16 +256,13 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
 }
 
 template<typename TResponse>
-void FillScanResponseCommonFields(TResponse* response, ui64 scanId, ui64 tabletId, TScanRecord::TSeqNo seqNo, const std::exception* exc = nullptr) {
-    response->Record.SetId(scanId);
-    response->Record.SetTabletId(tabletId);
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
-    if (exc) {
-        auto issue = response->Record.AddIssues();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message(TStringBuilder() << "Scan failed " << exc->what());
-    }
+void FillScanResponseCommonFields(TResponse& response, ui64 scanId, ui64 tabletId, TScanRecord::TSeqNo seqNo)
+{
+    auto& rec = response.Record;
+    rec.SetId(scanId);
+    rec.SetTabletId(tabletId);
+    rec.SetRequestSeqNoGeneration(seqNo.Generation);
+    rec.SetRequestSeqNoRound(seqNo.Round);
 }
 
 template<typename TResponse>
@@ -278,12 +275,12 @@ inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::T
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
 
     auto response = MakeHolder<TResponse>();
-    FillScanResponseCommonFields(response.Get(), scanId, tabletId, seqNo, &exc);
-    if constexpr (std::is_same_v<TResponse, TEvDataShard::TEvValidateUniqueIndexResponse>) {
-        response->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
-    } else {
-        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-    }
+    FillScanResponseCommonFields(*response, scanId, tabletId, seqNo);
+    response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+
+    auto* issue = response->Record.AddIssues();
+    issue->set_severity(NYql::TSeverityIds::S_ERROR);
+    issue->set_message(TStringBuilder() << "Scan failed " << exc.what());
 
     TlsActivationContext->Send(new IEventHandle(sender, TActorId(), response.Release()));
 }

@@ -492,10 +492,8 @@ Y_UNIT_TEST_SUITE(Scheme) {
         const TCell str1("abc", 3);
         const TCell str2("def", 3);
         const NScheme::TTypeInfo typeInt64(NScheme::NTypeIds::Int64);
-        i64 tmp = 42;
-        const TCell int1((const char*)&tmp, sizeof(tmp));
-        tmp = 100500;
-        const TCell int2((const char*)&tmp, sizeof(tmp));
+        const TCell int1 = TCell::Make<i64>(42);
+        const TCell int2 = TCell::Make<i64>(100500);
 
         UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(str1, str1, typeString), ETriBool::True);
         UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(str1, str2, typeString), ETriBool::False);

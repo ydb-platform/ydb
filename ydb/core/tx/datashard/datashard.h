@@ -355,7 +355,8 @@ namespace TEvDataShard {
         EvRecomputeKMeansRequest,
         EvRecomputeKMeansResponse,
 
-        // Is sent to unique index shards
+        // Request/response that is sent to each shard of unique index impl table during its build process.
+        // Validates uniqueness of data in unique index table.
         EvValidateUniqueIndexRequest,
         EvValidateUniqueIndexResponse,
 

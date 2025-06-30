@@ -238,7 +238,7 @@ public:
         }
 
         TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-        FillScanResponseCommonFields(progress.Get(), BuildIndexId, DataShardId, SeqNo);
+        FillScanResponseCommonFields(*progress, BuildIndexId, DataShardId, SeqNo);
 
         if (status == EStatus::Exception) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
@@ -346,7 +346,7 @@ private:
 
             //send progress
             TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-            FillScanResponseCommonFields(progress.Get(), BuildIndexId, DataShardId, SeqNo);
+            FillScanResponseCommonFields(*progress, BuildIndexId, DataShardId, SeqNo);
 
             // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
             progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
@@ -528,7 +528,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-        FillScanResponseCommonFields(response.Get(), request.GetId(), TabletID(), seqNo);
+        FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
         LOG_N("Starting TBuildIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
@@ -642,12 +642,12 @@ public:
         const TScanRecord::TSeqNo& seqNo,
         ui64 dataShardId,
         NActors::TActorSystem* actorSystem,
-        NActors::TActorId senderActorId)
+        NActors::TActorId responseActorId)
         : BuildIndexId(buildIndexId)
         , SeqNo(seqNo)
         , DataShardId(dataShardId)
         , ActorSystem(actorSystem)
-        , SenderActorId(senderActorId)
+        , ResponseActorId(responseActorId)
         , ScanTags(BuildTags(tableInfo, targetIndexColumns))
         , IndexColumnNames(targetIndexColumns.begin(), targetIndexColumns.end())
     {
@@ -680,7 +680,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         if (row.Size() != ScanTags.size()) {
-            return FinishValidation(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Row size mismatch: expected " << ScanTags.size() << ", got " << row.Size());
+            return FinishValidation(NKikimrIndexBuilder::EBuildStatus::ABORTED, TStringBuilder() << "Row size mismatch: expected " << ScanTags.size() << ", got " << row.Size());
         }
 
         ++ReadRows;
@@ -694,7 +694,7 @@ public:
         }
 
         if (TypedCellVectorsEqualWithNullSemantics(rowCells.data(), LastIndexKey->GetCells().data(), IndexColumnTypeInfos.data(), IndexColumnTypeInfos.size()) == ETriBool::True) {
-            return FinishValidation(Ydb::StatusIds::PRECONDITION_FAILED, DuplicateKeyErrorMessage());
+            return FinishValidation(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR, DuplicateKeyErrorMessage());
         }
         LastIndexKey.emplace(rowCells);
         return EScan::Feed;
@@ -705,9 +705,19 @@ public:
         return Finish(EStatus::Exception);
     }
 
-    void SendResponse() {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        if (StatusCode == NKikimrIndexBuilder::EBuildStatus::INVALID) {
+            if (status == EStatus::Exception) {
+                StatusCode = NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR;
+            } else if (status != EStatus::Done) {
+                StatusCode = NKikimrIndexBuilder::EBuildStatus::ABORTED;
+            } else {
+                StatusCode = NKikimrIndexBuilder::EBuildStatus::DONE;
+            }
+        }
+
         auto response = std::make_unique<TEvDataShard::TEvValidateUniqueIndexResponse>();
-        FillScanResponseCommonFields(response.get(), BuildIndexId, DataShardId, SeqNo);
+        FillScanResponseCommonFields(*response, BuildIndexId, DataShardId, SeqNo);
         auto& rec = response->Record;
         rec.SetStatus(StatusCode);
         rec.MutableMeteringStats()->SetReadRows(ReadRows);
@@ -721,21 +731,7 @@ public:
         if (LastIndexKey) {
             rec.SetLastIndexKey(LastIndexKey->GetBuffer());
         }
-        ActorSystem->Send(SenderActorId, response.release());
-    }
-
-    TAutoPtr<IDestructable> Finish(EStatus status) override {
-        if (StatusCode == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
-            if (status == EStatus::Exception) {
-                StatusCode = Ydb::StatusIds::PRECONDITION_FAILED;
-            } else if (status != EStatus::Done) {
-                StatusCode = Ydb::StatusIds::ABORTED;
-            } else {
-                StatusCode = Ydb::StatusIds::SUCCESS;
-            }
-        }
-
-        SendResponse();
+        ActorSystem->Send(ResponseActorId, response.release());
         return this;
     }
 
@@ -763,7 +759,7 @@ public:
         }
     }
 
-    EScan FinishValidation(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, TString error = {}) {
+    EScan FinishValidation(NKikimrIndexBuilder::EBuildStatus statusCode = NKikimrIndexBuilder::EBuildStatus::DONE, TString error = {}) {
         StatusCode = statusCode;
         Issues.AddIssue(error);
         return EScan::Final;
@@ -771,11 +767,10 @@ public:
 
 private:
     const ui64 BuildIndexId;
-    const TString TargetTable;
     const TScanRecord::TSeqNo SeqNo;
     const ui64 DataShardId;
     NActors::TActorSystem* const ActorSystem = nullptr;
-    const NActors::TActorId SenderActorId;
+    const NActors::TActorId ResponseActorId;
 
     TTags ScanTags;
     std::vector<TString> IndexColumnNames;
@@ -783,7 +778,7 @@ private:
     std::vector<NScheme::TTypeInfoOrder> IndexColumnTypeInfos;
 
     // Results
-    Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    NKikimrIndexBuilder::EBuildStatus StatusCode = NKikimrIndexBuilder::EBuildStatus::INVALID;
     NYql::TIssues Issues;
     std::optional<TSerializedCellVec> FirstIndexKey;
     std::optional<TSerializedCellVec> LastIndexKey;
@@ -835,19 +830,19 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvValidateUniqueIndexResponse>();
-        FillScanResponseCommonFields(response.Get(), request.GetId(), TabletID(), seqNo);
+        FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
         LOG_N("Starting TValidateUniqueIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString());
 
         auto badRequest = [&](const TString& error) {
-            response->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
+            response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
             auto issue = response->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
             issue->set_message(error);
         };
         auto trySendBadRequest = [&] {
-            if (response->Record.GetStatus() == Ydb::StatusIds::BAD_REQUEST) {
+            if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 LOG_E("Rejecting TValidateUniqueIndexScan bad request TabletId: " << TabletID()
                     << " " << request.ShortDebugString()
                     << " with response " << response->Record.ShortDebugString());

@@ -16,7 +16,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxUpdatePiles()::Execute");
         NIceDb::TNiceDb db(txc.DB);
-        bool promotion = true;
+        bool promotion = false;
         Y_ENSURE(Self->BridgeInfo);
         for (const auto& wardenPileInfo : Self->BridgeInfo->Piles) {
             auto pileId = wardenPileInfo.BridgePileId;

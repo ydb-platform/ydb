@@ -8,11 +8,13 @@ namespace NKikimr::NHive {
 
 struct TGetNodes {
 private:
-    THive* Hive;
+    THive* const Hive;
     std::unordered_set<TNodeId> Node;
 
 public:
-    TGetNodes(THive* Hive) : Hive(Hive) {}
+    explicit TGetNodes(THive* Hive) 
+        : Hive(Hive)
+    {}
 
     const std::unordered_set<TNodeId>& operator()(TNodeId nodeId) {
         Node = {nodeId};
@@ -26,8 +28,7 @@ public:
 
 } // namespace NKikimr::NHive
 
-template<>
-inline void Out<NKikimr::NHive::TDrainTarget>(IOutputStream& o, const NKikimr::NHive::TDrainTarget& drainTarget) {
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NHive::TDrainTarget, o, drainTarget) {
     std::visit(TOverloaded{
         [&](NKikimr::NHive::TNodeId nodeId) { o << "node " << nodeId; },
         [&](NKikimr::TBridgePileId pileId) { o << "pile " << pileId; }

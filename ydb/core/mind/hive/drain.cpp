@@ -195,29 +195,29 @@ public:
                 return ReplyAndDie(NKikimrProto::ERROR);
             }
         }
-            NextKick = Tablets.begin();
-            if (Settings.Forward) {
-                Y_ABORT_UNLESS(std::holds_alternative<TNodeId>(Target));
-                TNodeId nodeId = std::get<TNodeId>(Target);
-                TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
-                SeqNo = nodeInfo->DrainSeqNo;
+        NextKick = Tablets.begin();
+        if (Settings.Forward) {
+            Y_ABORT_UNLESS(std::holds_alternative<TNodeId>(Target));
+            TNodeId nodeId = std::get<TNodeId>(Target);
+            TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
+            SeqNo = nodeInfo->DrainSeqNo;
 
-                if (nodeInfo->ServicedDomains.size() == 1) {
-                    TDomainInfo* domainInfo = Hive->FindDomain(nodeInfo->ServicedDomains.front());
-                    if (domainInfo != nullptr) {
-                        if (domainInfo->HiveId != 0 && domainInfo->HiveId != Hive->TabletID()) {
-                            DomainHiveId = domainInfo->HiveId;
-                            RequestDrainFromDomainHive(nodeId);
-                            Become(&THiveDrain::StateWork, TDuration::MilliSeconds(TIMEOUT), new TEvents::TEvWakeup());
-                            return;
-                        }
+            if (nodeInfo->ServicedDomains.size() == 1) {
+                TDomainInfo* domainInfo = Hive->FindDomain(nodeInfo->ServicedDomains.front());
+                if (domainInfo != nullptr) {
+                    if (domainInfo->HiveId != 0 && domainInfo->HiveId != Hive->TabletID()) {
+                        DomainHiveId = domainInfo->HiveId;
+                        RequestDrainFromDomainHive(nodeId);
+                        Become(&THiveDrain::StateWork, TDuration::MilliSeconds(TIMEOUT), new TEvents::TEvWakeup());
+                        return;
                     }
                 }
             }
+        }
 
-            Become(&THiveDrain::StateWork, TDuration::MilliSeconds(TIMEOUT), new TEvents::TEvWakeup());
-            BLOG_I("Drain " << SelfId() << " started for " << Target << " with " << Tablets.size() << " tablets");
-            KickNextTablet();
+        Become(&THiveDrain::StateWork, TDuration::MilliSeconds(TIMEOUT), new TEvents::TEvWakeup());
+        BLOG_I("Drain " << SelfId() << " started for " << Target << " with " << Tablets.size() << " tablets");
+        KickNextTablet();
     }
 
     STATEFN(StateWork) {

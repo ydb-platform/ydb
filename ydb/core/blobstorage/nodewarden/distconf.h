@@ -261,6 +261,13 @@ namespace NKikimr::NStorage {
         bool ScepterlessOperationInProgress = false; // when a leader operation is running while no Scepter is acquired
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
+        bool ConfigsCollected = false;
+
+        // bridge-related logic
+        std::set<std::tuple<ui32, TGroupId, TBridgePileId>> WorkingSyncersByNode;
+        std::set<std::tuple<TGroupId, TBridgePileId, ui32>> WorkingSyncers;
+        bool SyncerArrangeInFlight = false;
+        bool SyncerArrangePending = false;
 
         // subscribed IC sessions
         struct TSessionSubscription {
@@ -369,6 +376,7 @@ namespace NKikimr::NStorage {
         void CheckRootNodeStatus();
         void BecomeRoot();
         void UnbecomeRoot();
+        void CheckIfDone();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
         bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
@@ -408,6 +416,23 @@ namespace NKikimr::NStorage {
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Bridge ops
+
+        // preparation (may be async)
+        void PrepareScatterTask(ui64 cookie, TScatterTask& task, const TEvScatter::TManageSyncers& request);
+        void Handle(TEvNodeWardenManageSyncersResult::TPtr ev);
+
+        // execute per-node action
+        void Perform(TEvGather::TManageSyncers *response, const TEvScatter::TManageSyncers& request, TScatterTask& task);
+
+        // handle gather result (when completed all along the cluster)
+        void ProcessManageSyncers(TEvGather::TManageSyncers *res);
+
+        void RearrangeSyncing();
+        void OnSyncerUnboundNode(ui32 nodeId);
+        void IssueQuerySyncers();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic

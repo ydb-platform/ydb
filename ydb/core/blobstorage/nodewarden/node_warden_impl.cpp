@@ -176,6 +176,8 @@ STATEFN(TNodeWarden::StateOnline) {
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
+        hFunc(TEvNodeWardenManageSyncers, HandleManageSyncers);
+
         default:
             EnqueuePendingMessage(ev);
             break;

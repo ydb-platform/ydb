@@ -421,21 +421,24 @@ public:
         } else {
             auto itSchema = schema.GetColumnIds().begin();
             auto itRecords = GetRecordsVerified().begin();
+            ui32 schemaIdx = 0;
             while (itSchema != schema.GetColumnIds().end() && itRecords != GetRecordsVerified().end()) {
                 if (*itSchema < itRecords->ColumnId) {
-                    NArrow::NSplitter::TColumnSerializationStat stat(*itSchema, schema.GetFieldByColumnIdVerified(*itSchema)->name());
+                    NArrow::NSplitter::TColumnSerializationStat stat(*itSchema, schema.GetFieldByIndexVerified(schemaIdx)->name());
                     NArrow::NSplitter::TSimpleSerializationStat simpleStat(0, GetPortionInfo().GetRecordsCount(), 0);
                     stat.Merge(simpleStat);
                     result.AddStat(stat);
                     ++itSchema;
+                    ++schemaIdx;
                 } else if (itRecords->ColumnId < *itSchema) {
                     ++itRecords;
                 } else {
                     while (itRecords != GetRecordsVerified().end() && itRecords->ColumnId == *itSchema) {
-                        result.AddStat(itRecords->GetSerializationStat(schema.GetFieldByColumnIdVerified(*itSchema)->name()));
+                        result.AddStat(itRecords->GetSerializationStat(schema.GetFieldByIndexVerified(schemaIdx)->name()));
                         ++itRecords;
                     }
                     ++itSchema;
+                    ++schemaIdx;
                 }
             }
         

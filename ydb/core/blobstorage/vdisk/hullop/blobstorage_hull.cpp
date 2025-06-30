@@ -220,6 +220,7 @@ namespace NKikimr {
         ReplayAddHugeLogoBlobCmd(ctx, id, ingress, diskAddr, lsn, THullDbRecovery::NORMAL);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddHugeLogoBlob"));
         CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }
@@ -234,6 +235,7 @@ namespace NKikimr {
         ReplayAddLogoBlobCmd(ctx, id, ingress, seg.Point(), THullDbRecovery::NORMAL);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddLogoBlob with seg"));
         CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }
@@ -280,6 +282,7 @@ namespace NKikimr {
         Fields->DelayedResponses.ConfirmLsn(lsn, replySender);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddBlockCmd"));
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, Fields->BlocksRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }
@@ -474,8 +477,10 @@ namespace NKikimr {
         ReplayAddGCCmd(ctx, record, ingress, seg.Last);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddGCCmd"));
         CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddGCCmd"));
         CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, Fields->BarriersRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }
@@ -615,10 +620,13 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, Fields->BlocksRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, Fields->BarriersRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }

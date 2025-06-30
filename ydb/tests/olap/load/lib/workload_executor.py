@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
+from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts, copy_file
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.allure_utils import NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
@@ -31,6 +31,7 @@ class WorkloadTestBase(LoadSuiteBase):
     binaries_deploy_path: str = '/tmp/stress_binaries/'  # Путь для деплоя бинарных файлов
     timeout: float = 1800.  # Таймаут по умолчанию
     _nemesis_started: bool = False  # Флаг для отслеживания запуска nemesis
+    cluster_path: str = str(get_external_param('cluster_path', ''))  # Путь к кластеру
 
     @classmethod
     def setup_class(cls) -> None:
@@ -242,21 +243,46 @@ class WorkloadTestBase(LoadSuiteBase):
                             host_log.append("Deleted cluster.yaml")
                         
                         # 3. Копируем config.yaml в cluster.yaml
-                        copy_cmd = "sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/cluster.yaml"
-                        copy_result = execute_command(
-                            host=host,
-                            cmd=copy_cmd,
-                            raise_on_error=False
-                        )
-                        
-                        copy_stderr = copy_result.stderr if copy_result.stderr else ""
-                        if copy_stderr and "error" in copy_stderr.lower():
-                            error_msg = f"Error copying config.yaml to cluster.yaml on {host}: {copy_stderr}"
-                            host_log.append(error_msg)
-                            return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                        cluster_path = get_external_param('cluster_path', '')
+                        if cluster_path:
+                            # Если указан cluster_path, копируем файл с локальной машины
+                            local_config_path = os.path.join(cluster_path, 'config.yaml')
+                            host_log.append(f"Copying from {local_config_path}")
+                            
+                            # Используем готовую функцию copy_file
+                            copy_result = copy_file(
+                                local_path=local_config_path,
+                                host=host,
+                                remote_path='/Berkanavt/kikimr/cfg/cluster.yaml',
+                                raise_on_error=False
+                            )
+                            
+                            if copy_result is None:
+                                error_msg = f"Failed to copy config.yaml to cluster.yaml on {host}"
+                                host_log.append(error_msg)
+                                return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                            else:
+                                host_log.append(f"Copied config.yaml to cluster.yaml: {copy_result}")
                         else:
-                            host_log.append("Copied config.yaml to cluster.yaml")
-                            return {'host': host, 'success': True, 'log': host_log}
+                            # Если cluster_path не указан, используем локальное копирование
+                            copy_cmd = "sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/cluster.yaml"
+                            host_log.append("Using local cp command")
+                            
+                            copy_result = execute_command(
+                                host=host,
+                                cmd=copy_cmd,
+                                raise_on_error=False
+                            )
+                            
+                            copy_stderr = copy_result.stderr if copy_result.stderr else ""
+                            if copy_stderr and "error" in copy_stderr.lower():
+                                error_msg = f"Error copying config.yaml to cluster.yaml on {host}: {copy_stderr}"
+                                host_log.append(error_msg)
+                                return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                            else:
+                                host_log.append("Copied config.yaml to cluster.yaml")
+                        
+                        return {'host': host, 'success': True, 'log': host_log}
                             
                     except Exception as e:
                         error_msg = f"Exception on {host}: {e}"

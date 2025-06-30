@@ -633,7 +633,7 @@ int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDes
     Cout << Endl << "Source path: " << desc.GetSrcPath();
     Cout << Endl << "Desctination path: " << desc.GetDstPath();
     Cout << Endl << "Consumer: " << desc.GetConsumerName();
-    Cout << Endl << "Transformation lambda: " << desc.GetConsumerName();
+    Cout << Endl << "Transformation lambda: " << desc.GetTransformationLambda();
 
     Cout << Endl;
     return EXIT_SUCCESS;

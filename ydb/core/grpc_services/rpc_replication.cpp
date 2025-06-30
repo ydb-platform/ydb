@@ -132,7 +132,7 @@ void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replicati
     if (record.GetTargets().size()) {
         const auto& target = record.GetTargets()[0];
         result.set_source_path(target.GetSrcPath());
-        result.set_destination_path(target.GetSrcPath());
+        result.set_destination_path(target.GetDstPath());
     }
 
     const auto& transferSpecific = record.GetTransferSpecific();

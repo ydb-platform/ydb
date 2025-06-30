@@ -197,6 +197,7 @@ public:
             totalScanProgress = std::make_optional<TInitialScanProgress>();
         }
 
+        TString ConsumerName;
         for (ui64 tid = 0; tid < replication->GetNextTargetId(); ++tid) {
             auto* target = replication->FindTarget(tid);
             if (!target) {
@@ -210,6 +211,9 @@ public:
 
             if (target->GetStreamName()) {
                 item.SetSrcStreamName(target->GetStreamName());
+            }
+            if (target->GetStreamConsumerName()) {
+                ConsumerName = target->GetStreamConsumerName();
             }
             if (const auto lag = target->GetLag()) {
                 item.SetLagMilliSeconds(lag->MilliSeconds());
@@ -272,7 +276,7 @@ public:
 
             auto& transferSpecific = *Result->Record.MutableTransferSpecific();
             transferSpecific.SetTransformationLambda(specific.GetTarget().GetTransformLambda());
-            transferSpecific.SetConsumerName(specific.GetTarget().GetConsumerName());
+            transferSpecific.SetConsumerName(ConsumerName ? ConsumerName : specific.GetTarget().GetConsumerName());
             transferSpecific.MutableBatchingSettings()->CopyFrom(specific.GetBatching());
         }
 

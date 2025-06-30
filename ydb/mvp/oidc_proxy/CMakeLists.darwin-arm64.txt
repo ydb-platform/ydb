@@ -26,11 +26,17 @@ target_link_libraries(ydb-mvp-oidc_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-mvp-core
+  client-nc_private-iam
   client-yc_private-oauth
   library-cpp-getopt
 )
 
 target_sources(ydb-mvp-oidc_proxy PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/cracked_page.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/extension.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/extension_final.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/extension_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/extension_whoami.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/mvp.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/context.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/oidc_proxy/oidc_client.cpp

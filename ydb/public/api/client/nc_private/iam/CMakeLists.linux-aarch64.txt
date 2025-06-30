@@ -50,18 +50,39 @@ target_link_libraries(client-nc_private-iam PUBLIC
 )
 
 target_proto_messages(client-nc_private-iam PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/metadata.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/profile_service.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/sensitive.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/service_account.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/tenant_user_account.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/token.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/token_service.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/token_exchange_service.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/user_account.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/nc_private/iam/validate.proto
 )
 
 target_sources(client-nc_private-iam PRIVATE
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/metadata.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/metadata.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/profile_service.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/profile_service.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/sensitive.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/sensitive.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/service_account.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/service_account.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/tenant_user_account.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/tenant_user_account.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/token.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/token.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/token_service.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/token_service.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/token_exchange_service.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/token_exchange_service.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/user_account.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/user_account.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/validate.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/nc_private/iam/validate.grpc.pb.h
 )
 
 

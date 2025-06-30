@@ -56,7 +56,7 @@ public:
     TString TopicName;
     ui32 TopicPartitionCount = 1;
     bool TopicAutoscaling = false;
-    ui32 TopicMaxPartitionCount = 1024;
+    ui32 TopicMaxPartitionCount = 1;
     ui32 StabilizationWindowSeconds = 15;
     ui32 UpUtilizationPercent = 90;
     ui32 DownUtilizationPercent = 30;

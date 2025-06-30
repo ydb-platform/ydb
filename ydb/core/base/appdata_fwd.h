@@ -347,6 +347,10 @@ inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     return x;
 }
 
+inline bool HasAppData(NActors::TActorSystem* actorSystem) {
+    return actorSystem && AppData(actorSystem);
+}
+
 inline bool HasAppData() {
     return !!NActors::TlsActivationContext
         && NActors::TActivationContext::ActorSystem()

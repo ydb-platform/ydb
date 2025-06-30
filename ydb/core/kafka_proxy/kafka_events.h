@@ -348,13 +348,15 @@ struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> 
 Event sent from TIintProducerActor to TKafkaTransactionRouter to notify that producer id will be obtained by client
  */
 struct TEvSaveTxnProducerRequest : public NActors::TEventLocal<TEvSaveTxnProducerRequest, EvSaveTxnProducerRequest> {
-    TEvSaveTxnProducerRequest(const TString& transactionalId, const TProducerInstanceId& producerState) :
+    TEvSaveTxnProducerRequest(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, ui64 txnTimeoutMs) :
         TransactionalId(transactionalId),
-        ProducerState(producerState)
+        ProducerInstanceId(producerInstanceId),
+        TxnTimeoutMs(txnTimeoutMs)
     {}
 
     const TString TransactionalId;
-    const TProducerInstanceId ProducerState;
+    const TProducerInstanceId ProducerInstanceId;
+    const ui64 TxnTimeoutMs;
 };
 
 /*

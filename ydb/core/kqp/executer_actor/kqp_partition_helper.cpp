@@ -946,7 +946,7 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRang
             isFullScan = false;
             auto intersection = IntersectRanges(tableRange, Config.BatchOperationRange->ToTableRange(), keyColumnTypes);
             if (!intersection) {
-                return {};
+                continue;
             }
 
             readPartitions = GetKeyRangePartitions(intersection->ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),

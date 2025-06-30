@@ -213,6 +213,20 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
             WHERE k1 IN [0, 1, 2, 3] AND v2 != "NotNone";
         )");
     }
+    {
+        auto query = Q_(R"(
+            BATCH UPDATE `ReorderOptionalKey`
+            SET v2 = "None"
+            WHERE id = 2 AND (k2 IS NULL OR k2 >= 0);
+        )");
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT COUNT(*) AS cnt FROM `ReorderOptionalKey`
+            WHERE (id = 2 AND (k2 IS NULL OR k2 >= 0)) AND v2 != "None";
+        )");
+    }
 }
 
 void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards, size_t partitionLimit) {

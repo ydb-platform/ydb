@@ -15,6 +15,7 @@ public:
     TVectorSampler(const TVectorWorkloadParams& params);
 
     // Core functionality for vector sampling
+    void SelectPredefinedVectors();
     void SampleExistingVectors();
 
     // Target access methods

@@ -40,6 +40,8 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     };
 
     auto addSelectParam = [&]() {
+        opts.AddLongOption( "query-table", "Name of the table with predefined search vectors.")
+            .DefaultValue("").StoreResult(&QueryTableName);
         opts.AddLongOption( "targets", "Number of vectors to search as targets.")
             .DefaultValue(100).StoreResult(&Targets);
         opts.AddLongOption( "limit", "Maximum number of vectors to return.")
@@ -88,7 +90,7 @@ void TVectorWorkloadParams::Init() {
     bool indexFound = false;
 
     Y_ABORT_UNLESS(tableDescription.GetPrimaryKeyColumns().size() == 1,
-        "Only single key is supported. But table %s has %d keys columns", TableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
+        "Only single key is supported. But table %s has %d key columns", TableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
     KeyColumn = tableDescription.GetPrimaryKeyColumns().at(0);
 
     for (const auto& index : tableDescription.GetIndexDescriptions()) {
@@ -135,6 +137,17 @@ void TVectorWorkloadParams::Init() {
     Y_ABORT_UNLESS(TableRowCount >= Targets, "Requested more targets than row number in the dataset.");
 
     Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableName.c_str());
+
+    if (QueryTableName) {
+        const TString tablePath = GetFullTableName(QueryTableName.c_str());
+        auto describeTableResult = session.DescribeTable(tablePath).GetValueSync();
+        Y_ABORT_UNLESS(describeTableResult.IsSuccess(), "DescribeTable failed: %s", describeTableResult.GetIssues().ToString().c_str());
+
+        const auto& tableDescription = describeTableResult.GetTableDescription();
+        Y_ABORT_UNLESS(tableDescription.GetPrimaryKeyColumns().size() == 1,
+            "Only single key is supported. But table %s has %d key columns", QueryTableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
+        QueryTableKeyColumn = tableDescription.GetPrimaryKeyColumns().at(0);
+    }
 }
 
 void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloadType) {

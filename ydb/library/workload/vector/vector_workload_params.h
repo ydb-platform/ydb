@@ -24,9 +24,11 @@ public:
     void Init() override;
 
     TString TableName;
+    TString QueryTableName;
     TString IndexName;
     std::string KeyColumn;
     std::string EmbeddingColumn;
+    std::string QueryTableKeyColumn;
     std::optional<std::string> PrefixColumn;
     std::optional<std::string> PrefixType;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;

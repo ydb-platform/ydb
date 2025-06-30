@@ -21,7 +21,11 @@ TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* 
 
 void TVectorWorkloadGenerator::Init() {
     VectorSampler = MakeHolder<TVectorSampler>(Params);
-    VectorSampler->SampleExistingVectors();
+    if (Params.QueryTableName.empty()) {
+        VectorSampler->SampleExistingVectors();
+    } else {
+        VectorSampler->SelectPredefinedVectors();
+    }
 
     if (Params.Recall) {
         TVectorRecallEvaluator vectorRecallEvaluator(Params);

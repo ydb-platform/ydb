@@ -42,6 +42,53 @@ ui64 TVectorSampler::SelectOneId(bool min) {
     return rangeParser.ColumnParser("id").GetUint64();
 }
 
+void TVectorSampler::SelectPredefinedVectors() {
+    Cout << "Selecting " << Params.Targets << " vectors from table " << Params.QueryTableName << " ..." << Endl;
+
+    auto vectorQueryBuilder = TStringBuilder() << "--!syntax_v1\n"
+        << "SELECT Unwrap(" << Params.EmbeddingColumn << ") as embedding";
+    if (Params.PrefixColumn) {
+        vectorQueryBuilder << ", Unwrap(" << Params.PrefixColumn << ") as prefix_value";
+    }
+    vectorQueryBuilder << " FROM " << Params.QueryTableName
+        << " ORDER BY " << Params.QueryTableKeyColumn
+        << " LIMIT " << Params.Targets;
+
+    std::string vectorQuery = vectorQueryBuilder;
+    std::optional<NYdb::TResultSet> vectorResultSet;
+    NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&vectorQuery, &vectorResultSet](NYdb::NQuery::TSession session) {
+        auto result = session.ExecuteQuery(
+            vectorQuery,
+            NYdb::NQuery::TTxControl::NoTx())
+            .GetValueSync();
+
+        Y_ABORT_UNLESS(result.IsSuccess(), "Vector query failed: %s", result.GetIssues().ToString().c_str());
+
+        vectorResultSet = result.GetResultSet(0);
+        return result;
+    }));
+
+    // Parse the vector result
+    NYdb::TResultSetParser vectorParser(*vectorResultSet);
+    while (vectorParser.TryNextRow()) {
+        TSelectTarget target;
+        target.EmbeddingBytes = vectorParser.ColumnParser("embedding").GetString();
+        // Get prefix value if column was specified
+        if (Params.PrefixColumn) {
+            target.PrefixValue = vectorParser.GetValue("prefix_value");
+        }
+        SelectTargets.push_back(std::move(target));
+    }
+
+    if (SelectTargets.size() < Params.Targets) {
+        Cerr << "Warning: Only selected " << SelectTargets.size() << " vectors." << Endl;
+    } else {
+        Cout << "Successfully selected " << SelectTargets.size() << " vectors from the query table." << Endl;
+    }
+
+    Y_ABORT_UNLESS(!SelectTargets.empty(), "Query table %s is empty", Params.QueryTableName.c_str());
+}
+
 void TVectorSampler::SampleExistingVectors() {
     Cout << "Sampling " << Params.Targets << " vectors from dataset..." << Endl;
 

@@ -7,11 +7,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time
 import time as time_module
 from datetime import datetime, timedelta
+import pytest
 
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.allure_utils import NodeErrors
+from ydb.tests.olap.lib.results_processor import ResultsProcessor
+from ydb.tests.olap.lib.utils import get_external_param
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -1641,3 +1644,16 @@ class WorkloadTestBase(LoadSuiteBase):
                 workload_params=workload_params,
                 use_node_subcols=use_node_subcols
             )
+            
+            # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
+            stats = result.get_stats(workload_name)
+            if stats is not None:
+                result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
+            
+            # --- Обработка финального статуса (используем методы из базового класса) ---
+            self._update_summary_flags(result, workload_name)
+            self._handle_final_status(result, workload_name, node_errors)
+            
+            # --- Загрузка результатов ---
+            self._upload_results(result, workload_name)
+            self._upload_results_per_workload_run(result, workload_name)

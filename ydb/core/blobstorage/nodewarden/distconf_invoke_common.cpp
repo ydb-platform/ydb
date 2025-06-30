@@ -142,12 +142,12 @@ namespace NKikimr::NStorage {
 
             case TQuery::REQUEST_NOT_SET:
                 return FinishWithError(TResult::ERROR, "Request field not set");
-            
+
             case TQuery::kReconfigStateStorage:
                 return ReconfigStateStorage(record.GetReconfigStateStorage());
 
             case TQuery::kGetStateStorageConfig:
-                return GetStateStorageConfig();
+                return GetStateStorageConfig(record.GetGetStateStorageConfig());
 
             case TQuery::kNotifyBridgeSyncFinished:
                 return NotifyBridgeSyncFinished(record.GetNotifyBridgeSyncFinished());

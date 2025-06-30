@@ -5,16 +5,23 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    void TInvokeRequestHandlerActor::GetStateStorageConfig() {
+    void TInvokeRequestHandlerActor::GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd) {
         if (!RunCommonChecks()) {
             return;
         }
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         auto ev = PrepareResult(TResult::OK, std::nullopt);
         auto* currentConfig = ev->Record.MutableStateStorageConfig();
-        currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
-        currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
-        currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+
+        if (cmd.GetRecommended()) {
+            GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
+            GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
+            GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
+        } else {
+            currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
+            currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
+            currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
+        }
         Finish(Sender, SelfId(), ev.release(), 0, Cookie);
     }
 

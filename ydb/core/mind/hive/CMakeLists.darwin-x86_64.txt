@@ -107,6 +107,7 @@ target_sources(core-mind-hive PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/bridge_pile_info.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/data_center_info.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/domain_info.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/drain.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/hive.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/hive_domains.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/hive_events.h

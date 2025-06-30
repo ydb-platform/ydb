@@ -719,7 +719,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     };
 
     struct TProxyGroup {
-        bool WriteOnly;
         ERingGroupState State;
         TVector<TProxyInfo> Proxies;
     };
@@ -785,7 +784,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     static bool ShouldIgnore(const TProxyGroup& proxyGroup) {
-        return proxyGroup.WriteOnly || proxyGroup.State != ERingGroupState::PRIMARY;
+        return proxyGroup.State != ERingGroupState::PRIMARY;
     }
 
     bool IsMajorityReached() const {
@@ -1064,7 +1063,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 continue;
             }
             auto& proxyGroup = ProxyGroups.emplace_back();
-            proxyGroup.WriteOnly = replicaGroup.WriteOnly;
             proxyGroup.State = replicaGroup.State;
 
             proxyGroup.Proxies.reserve(replicaGroup.Replicas.size());

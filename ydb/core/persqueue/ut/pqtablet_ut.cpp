@@ -253,7 +253,7 @@ protected:
     void SendSaveTxState(TAutoPtr<IEventHandle>& event);
 
     void WaitForTheTransactionToBeDeleted(ui64 txId);
-    
+
     TVector<TString> WaitForExactSupportivePartitionsCount(ui32 expectedCount);
     TVector<TString> GetSupportivePartitionsKeysFromKV();
     NKikimrPQ::TTabletTxInfo WaitForExactTxWritesCount(ui32 expectedCount);
@@ -2331,7 +2331,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Ti
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), true);
 
     // increment time till after kafka txn timeout
-    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
         + KAFKA_TRANSACTION_DELETE_DELAY_MS;
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
     SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
@@ -2365,7 +2365,7 @@ Y_UNIT_TEST_F(Non_Kafka_Transaction_Supportive_Partitions_Should_Not_Be_Deleted_
     UNIT_ASSERT_VALUES_EQUAL(txInfo2.TxWritesSize(), 2);
 
     // increment time till after kafka txn timeout
-    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
         + KAFKA_TRANSACTION_DELETE_DELAY_MS;
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
     SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
@@ -2381,7 +2381,7 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     NKafka::TProducerInstanceId producerInstanceId2 = {2, 0};
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
     EnsurePipeExist();
-    
+
     // create first kafka-transacition and write data to it
     TString ownerCookie1 = CreateSupportivePartitionForKafka(producerInstanceId1);
     SendKafkaTxnWriteRequest(producerInstanceId1, ownerCookie1);
@@ -2391,7 +2391,7 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     // advance time to value strictly less then kafka transaction timeout
     ui64 testTimeAdvanceMs = KAFKA_TRANSACTION_DELETE_DELAY_MS / 2;
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(testTimeAdvanceMs));
-    
+
     // create second kafka-transacition and write data to it
     EnsurePipeExist();
     TString ownerCookie2 = CreateSupportivePartitionForKafka(producerInstanceId2);

@@ -423,12 +423,12 @@ namespace NInterconnect::NRdma {
         using TChunkContainer = std::array<std::atomic<TChunk*>, MaxChunks>; 
 
         static size_t WrapPos(size_t x) noexcept {
-            return (x % MaxChunks + x / MaxChunks) % MaxChunks;
+            return x % MaxChunks;
         }
 
         static size_t GetStartPos() noexcept {
-            size_t id = syscall(SYS_gettid);
-            return (id + ChunkGap) % MaxChunks;
+            static thread_local size_t id = ((size_t)syscall(SYS_gettid)) * ChunkGap % MaxChunks;
+            return id;
         }
 
         static TAuxChunkData* CastToAuxChunkData(TChunk* chunk) noexcept {
@@ -439,7 +439,7 @@ namespace NInterconnect::NRdma {
 #if defined(__clang__)
             #pragma nounroll
 #endif
-            for (size_t i = 0, j = startPos; i < MaxChunks; i++, j += ChunkGap) {
+            for (size_t i = 0, j = startPos; i < MaxChunks; i++, j++) {
                 size_t pos = WrapPos(j);
                 TChunk* p = cont[pos].exchange(nullptr, std::memory_order_seq_cst);
                 if (p) {
@@ -463,7 +463,7 @@ namespace NInterconnect::NRdma {
 #if defined(__clang__)
             #pragma nounroll
 #endif
-            for (size_t i = 0, j = startPos; i < MaxChunks; i++, j += ChunkGap) {
+            for (size_t i = 0, j = startPos; i < MaxChunks; i++, j++) {
                 size_t pos = WrapPos(j);
                 TChunk* p = cont[pos].load(std::memory_order_relaxed);
                 if (p != nullptr) {

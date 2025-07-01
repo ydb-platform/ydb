@@ -430,6 +430,7 @@ bool TKqpScanFetcherActor::SendScanFinished() {
     for (auto&& i : ComputeActorIds) {
         Sender<TEvScanExchange::TEvFetcherFinished>().SendTo(i);
     }
+
     return true;
 }
 

@@ -229,7 +229,7 @@ private:
 };
 
 inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id, 
-    TScanRecord::TSeqNo seqNo, TRowVersion rowVersion, ui32 tableId)
+    TScanRecord::TSeqNo seqNo, std::optional<TRowVersion> rowVersion, ui32 tableId)
 {
     auto& scanManager = dataShard->GetScanManager();
 
@@ -246,13 +246,25 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
     }
 
     TScanOptions scanOpts;
-    scanOpts.SetSnapshotRowVersion(rowVersion);
+    if (rowVersion) {
+        scanOpts.SetSnapshotRowVersion(*rowVersion);
+    }
     scanOpts.SetResourceBroker("build_index", 10);
     const auto scanId = dataShard->QueueScan(tableId, std::move(scan), 0, scanOpts);
     scanManager.Set(id, seqNo).push_back(scanId);
 }
 
 template<typename TResponse> 
+void FillScanResponseCommonFields(TResponse& response, ui64 scanId, ui64 tabletId, TScanRecord::TSeqNo seqNo)
+{
+    auto& rec = response.Record;
+    rec.SetId(scanId);
+    rec.SetTabletId(tabletId);
+    rec.SetRequestSeqNoGeneration(seqNo.Generation);
+    rec.SetRequestSeqNoRound(seqNo.Round);
+}
+
+template<typename TResponse>
 inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc, const TString& logScanType)
 {
     LOG_E("Unhandled exception " << logScanType << " TabletId: " << tabletId 
@@ -262,13 +274,10 @@ inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::T
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
 
     auto response = MakeHolder<TResponse>();
-    response->Record.SetId(scanId);
-    response->Record.SetTabletId(tabletId);
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
+    FillScanResponseCommonFields(*response, scanId, tabletId, seqNo);
     response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
 
-    auto issue = response->Record.AddIssues();
+    auto* issue = response->Record.AddIssues();
     issue->set_severity(NYql::TSeverityIds::S_ERROR);
     issue->set_message(TStringBuilder() << "Scan failed " << exc.what());
 

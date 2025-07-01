@@ -537,10 +537,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
-        response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         LOG_N("Starting TLocalKMeansScan TabletId: " << TabletID() 
             << " " << request.ShortDebugString()

@@ -222,4 +222,12 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record)
     return result;
 }
 
+TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record) {
+    auto copy = record;
+    // keys are not human readable and contain user data
+    copy.ClearFirstIndexKey();
+    copy.ClearLastIndexKey();
+    return copy.ShortDebugString();
+}
+
 }

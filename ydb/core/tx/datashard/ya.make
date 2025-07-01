@@ -222,6 +222,7 @@ SRCS(
     build_index/sample_k.cpp
     build_index/secondary_index.cpp
     build_index/reshuffle_kmeans.cpp
+    build_index/unique_index.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)

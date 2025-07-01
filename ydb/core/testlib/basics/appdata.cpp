@@ -5,6 +5,7 @@
 
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 
 namespace NKikimr {

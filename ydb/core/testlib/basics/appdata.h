@@ -104,6 +104,7 @@ namespace NKikimr {
         NKikimrConfig::THiveConfig HiveConfig;
         NKikimrConfig::TDataShardConfig DataShardConfig;
         NKikimrConfig::TColumnShardConfig ColumnShardConfig;
+        NKikimrConfig::TTableServiceConfig TableServiceConfig;
         NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;
         NKikimrPQ::TPQConfig PQConfig;

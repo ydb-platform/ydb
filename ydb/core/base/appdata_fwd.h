@@ -340,29 +340,15 @@ struct TAppData {
     }
 };
 
+inline bool CheckAppData(const TAppData* appData) {
+    return appData && appData->Magic == TAppData::MagicTag;
+}
+
 inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     Y_DEBUG_ABORT_UNLESS(actorSystem);
     TAppData* const x = actorSystem->AppData<TAppData>();
-    Y_DEBUG_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
+    Y_DEBUG_ABORT_UNLESS(CheckAppData(x));
     return x;
-}
-
-inline bool HasAppData(NActors::TActorSystem* actorSystem) {
-    return actorSystem && AppData(actorSystem);
-}
-
-inline bool HasAppData() {
-    return !!NActors::TlsActivationContext
-        && NActors::TActivationContext::ActorSystem()
-        && NActors::TActivationContext::ActorSystem()->AppData<TAppData>();
-}
-
-inline TAppData& AppDataVerified() {
-    Y_ABORT_UNLESS(HasAppData());
-    NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-    TAppData* const x = actorSystem->AppData<TAppData>();
-    Y_ABORT_UNLESS(x->Magic == TAppData::MagicTag);
-    return *x;
 }
 
 inline TAppData* AppData() {
@@ -371,6 +357,19 @@ inline TAppData* AppData() {
 
 inline TAppData* AppData(const NActors::TActorContext &ctx) {
     return AppData(ctx.ActorSystem());
+}
+
+inline bool HasAppData(NActors::TActorSystem* actorSystem) {
+    return actorSystem && CheckAppData(actorSystem->AppData<TAppData>());
+}
+
+inline bool HasAppData() {
+    return !!NActors::TlsActivationContext && HasAppData(NActors::TActivationContext::ActorSystem());
+}
+
+inline TAppData& AppDataVerified() {
+    Y_ABORT_UNLESS(HasAppData());
+    return *AppData();
 }
 
 } // NKikimr

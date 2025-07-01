@@ -98,3 +98,9 @@ generate_enum_serilization(core-kqp-common
   INCLUDE_HEADERS
   ydb/core/kqp/common/kqp_yql.h
 )
+
+generate_enum_serilization(core-kqp-common
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_resolve.h
+  INCLUDE_HEADERS
+  ydb/core/kqp/common/kqp_resolve.h
+)

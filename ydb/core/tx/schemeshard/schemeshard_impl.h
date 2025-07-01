@@ -1534,7 +1534,11 @@ public:
 
     // Incremental Restore Scan
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreatePipeRetryIncrementalRestore(const TOperationId& operationId, TTabletId tabletId);
+    NTabletFlatExecutor::ITransaction* CreateTxIncrementalRestoreResponse(TEvDataShard::TEvRestoreMultipleIncrementalBackupsResponse::TPtr& ev);
+
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvRestoreMultipleIncrementalBackupsResponse::TPtr& ev, const TActorContext& ctx);
 
     void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);
 

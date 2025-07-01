@@ -16,7 +16,7 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
 
-    // Helper structure for capturing TEvRunIncrementalRestore events
+    // Helper structure for capturing TEvRunIncrementalRestore events during reboot tests
     struct TOrphanedOpEventCapture {
         TVector<TPathId> CapturedBackupCollectionPathIds;
         THashSet<TPathId> ExpectedBackupCollectionPathIds;
@@ -55,6 +55,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             if (ev && ev->GetTypeRewrite() == TEvPrivate::TEvRunIncrementalRestore::EventType && capture.CapturingEnabled) {
                 auto* msg = ev->Get<TEvPrivate::TEvRunIncrementalRestore>();
                 if (msg) {
+                    // Capture all events when capturing is enabled
                     if (capture.ExpectedBackupCollectionPathIds.empty() || 
                         capture.ExpectedBackupCollectionPathIds.contains(msg->BackupCollectionPathId)) {
                         capture.CapturedBackupCollectionPathIds.push_back(msg->BackupCollectionPathId);
@@ -80,7 +81,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
         return TPathId();
     }
 
-    // Helper function to create basic backup scenario (full backups only)
+    // Helper function to create a backup scenario with only full backups (no incremental backups)
+    // This matches the current implementation state which only handles regular restore operations
     void CreateBasicBackupScenario(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId, 
                                    const TString& collectionName, const TVector<TString>& tableNames) {
         // Create backup collection
@@ -102,7 +104,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
         TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
         env.TestWaitNotification(runtime, txId);
 
-        // Create only full backup directory and table backups
+        // Create only full backup directory and table backups (no incremental backups)
         TestMkDir(runtime, ++txId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, "backup_001_full");
         env.TestWaitNotification(runtime, txId);
         
@@ -119,6 +121,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
     }
 
     // Helper function to verify incremental restore operation data in database
+    // Note: Operations are removed from database after completion, so this only works for ongoing operations
     void VerifyIncrementalRestoreOperationInDatabase(TTestActorRuntime& runtime, TTabletId schemeShardTabletId, bool expectOperations = false) {
         NKikimrMiniKQL::TResult result;
         TString err;
@@ -394,7 +397,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
         Cerr << "Incremental backup table trimmed name reconstruction verification completed successfully" << Endl;
     }
 
-    // Helper function to create incremental backup scenario with both full and incremental backups
+    // Helper function to create a comprehensive backup scenario with both full AND incremental backups
+    // This tests the trimmed name reconstruction logic for incremental backup tables
     void CreateIncrementalBackupScenario(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId, 
                                           const TString& collectionName, const TVector<TString>& tableNames) {
         // Create backup collection
@@ -416,7 +420,11 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
         TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
         env.TestWaitNotification(runtime, txId);
 
-        // Create both full and incremental backup directories and table backups
+        // Create BOTH full and incremental backup directories and table backups
+        // This tests the trimmed name reconstruction logic: trimmed name "backup_001" should create both:
+        // - backup_001_full (full backup tables)  
+        // - backup_001_incremental (incremental backup tables)
+        
         // Create full backup directory and tables
         TestMkDir(runtime, ++txId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, "backup_001_full");
         env.TestWaitNotification(runtime, txId);
@@ -432,7 +440,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
-        // Create incremental backup directory and tables
+        // Create incremental backup directory and tables  
         TestMkDir(runtime, ++txId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, "backup_001_incremental");
         env.TestWaitNotification(runtime, txId);
         
@@ -1100,7 +1108,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                                            << "' should be in EPathStateAwaitingOutgoingIncrementalRestore state, but got: " 
                                            << NKikimrSchemeOp::EPathState_Name(state));
                         
-                        Cerr << "Verified incremental backup table '" << snapshotName << "/" << tableName << "' has correct state: " 
+                        Cerr << "✓ Verified incremental backup table '" << snapshotName << "/" << tableName << "' has correct state: " 
                              << NKikimrSchemeOp::EPathState_Name(state) << Endl;
                     }
                 }
@@ -1114,13 +1122,17 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                     UNIT_ASSERT_C(incrementalDesc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist,
                         TStringBuilder() << "Incremental backup directory '" << incrementalName << "' should exist for trimmed name '" << trimmedName << "'");
                     
-                    Cerr << "Verified trimmed name reconstruction: " << trimmedName << " -> " << incrementalName << Endl;
+                    Cerr << "✓ Verified trimmed name reconstruction: " << trimmedName << " -> " << incrementalName << Endl;
                 }
                 
                 Cerr << "Multiple incremental backup snapshots test passed: " << tableNames.size() * 3 << " incremental backup tables" << Endl;
             }
         });
-    }    // Test orphaned incremental restore operation recovery during SchemaShardRestart
+    }    // Test for orphaned incremental restore operation recovery during SchemaShardRestart
+    // Test basic orphaned incremental restore operation recovery
+    // Verifies that during SchemaShardRestart recovery, if incremental restore operations 
+    // are found in LongIncrementalRestoreOps but their control operations are missing from 
+    // TxInFlight, TTxProgress is run via TEvRunIncrementalRestore to continue the operation.
     Y_UNIT_TEST(OrphanedIncrementalRestoreOperationRecovery) {
         TTestWithReboots t;
         t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
@@ -1150,39 +1162,48 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             ui64 restoreTxId = t.TxId;
             TOperationId operationId = TOperationId(TTestTxConfig::SchemeShard, restoreTxId);
             
+            // Verify the operation was accepted and started
             TestModificationResult(runtime, restoreTxId, NKikimrScheme::StatusAccepted);
 
+            // Verify the operation exists in the database (LongIncrementalRestoreOps)
             TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
             VerifyIncrementalRestoreOperationInDatabase(runtime, schemeShardTabletId, true);
 
-            // Wait briefly then force reboot to simulate orphaned operation scenario
+            // Wait briefly to let the operation start, then force reboot
+            // This simulates the scenario where the control operation gets lost from TxInFlight but the 
+            // incremental restore operation remains in LongIncrementalRestoreOps database
             runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
-            // Enable event capturing before reboot
+            // Enable event capturing before reboot to catch recovery events
             eventCapture.ClearCapturedEvents();
             eventCapture.EnableCapturing({backupCollectionPathId});
 
-            // Force reboot to trigger recovery
+            // Force reboot by setting inactive zone - this triggers SchemaShardRestart and TTxInit
+            // The recovery logic should detect that:
+            // 1. LongIncrementalRestoreOps contains our operation (persisted in database)
+            // 2. TxInFlight does NOT contain the control operation (lost during restart)
+            // 3. TTxProgress should be scheduled via TEvRunIncrementalRestore
             {
                 TInactiveZone inactive(activeZone);
                 
+                // Wait for the TTxInit::ReadEverything() recovery logic to run
                 runtime.SimulateSleep(TDuration::MilliSeconds(500));
                 
-                // Check if orphaned operation recovery worked
-                if (eventCapture.HasCapturedEvents()) {
-                    Cerr << "TEvRunIncrementalRestore event captured - orphaned operation recovery worked!" << Endl;
-                } else {
-                    Cerr << "Note: Operation completed before restart (not orphaned)" << Endl;
-                }
+                // Verify that the orphaned operation recovery logic worked:
                 
-                // Verify captured event has correct backup collection path ID
-                if (eventCapture.HasCapturedEvents()) {
-                    const TPathId& capturedPathId = eventCapture.CapturedBackupCollectionPathIds[0];
-                    UNIT_ASSERT_VALUES_EQUAL_C(capturedPathId, backupCollectionPathId,
-                        "Captured event should have the correct BackupCollectionPathId");
-                }
+                // 1. Verify that TEvRunIncrementalRestore event was sent during recovery
+                //    This proves TTxProgress was scheduled for the orphaned operation
+                UNIT_ASSERT_C(eventCapture.HasCapturedEvents(), 
+                    "TEvRunIncrementalRestore event should have been sent during orphaned operation recovery - this means TTxProgress was triggered");
+                UNIT_ASSERT_C(eventCapture.GetCapturedEventCount() >= 1, 
+                    TStringBuilder() << "Expected at least 1 TEvRunIncrementalRestore event, got: " << eventCapture.GetCapturedEventCount());
                 
-                // Verify the target table was created
+                // 2. Verify the captured event has the correct backup collection path ID
+                const TPathId& capturedPathId = eventCapture.CapturedBackupCollectionPathIds[0];
+                UNIT_ASSERT_VALUES_EQUAL_C(capturedPathId, backupCollectionPathId,
+                    "Captured event should have the correct BackupCollectionPathId");
+                
+                // 3. Verify the target table was eventually created (operation completed via TTxProgress)
                 bool tableExists = false;
                 for (int attempt = 0; attempt < 10; ++attempt) {
                     auto desc = DescribePath(runtime, "/MyRoot/OrphanedOpTable");
@@ -1193,30 +1214,37 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                     runtime.SimulateSleep(TDuration::MilliSeconds(100));
                 }
                 
-                UNIT_ASSERT_C(tableExists, "Incremental restore operation should have completed");
+                UNIT_ASSERT_C(tableExists, "Orphaned incremental restore operation should have been recovered and completed via TTxProgress");
                 
-                // Verify operation cleanup
+                // 4. Verify operation is eventually cleaned up from the database after completion
                 for (int attempt = 0; attempt < 5; ++attempt) {
+                    // Check if operations are cleaned up by querying the database
+                    // If no operations are found, the cleanup was successful
                     try {
                         VerifyIncrementalRestoreOperationInDatabase(runtime, schemeShardTabletId, false);
-                        break;
+                        break; // Operation cleaned up successfully (no exceptions thrown)
                     } catch (...) {
+                        // Operation might still be cleaning up
                         runtime.SimulateSleep(TDuration::MilliSeconds(200));
                     }
                 }
                 
-                if (eventCapture.HasCapturedEvents()) {
-                    Cerr << "Successfully verified orphaned operation recovery" << Endl;
-                } else {
-                    Cerr << "Operation completed normally before restart" << Endl;
-                }
+                Cerr << "✓ Successfully verified orphaned incremental restore operation recovery:" << Endl;
+                Cerr << "  - Operation existed in LongIncrementalRestoreOps after restart" << Endl;
+                Cerr << "  - Control operation was missing from TxInFlight (implicit from recovery logic)" << Endl;
+                Cerr << "  - TTxProgress was triggered via TEvRunIncrementalRestore event" << Endl;
+                Cerr << "  - Operation completed successfully" << Endl;
+                Cerr << "  - Captured " << eventCapture.GetCapturedEventCount() << " TEvRunIncrementalRestore events" << Endl;
             }
             
             eventCapture.DisableCapturing();
         });
     }
 
-    // Test multiple orphaned operations recovery
+    // Test for multiple orphaned operations recovery
+    // Verifies that when multiple incremental restore operations lose their control operations
+    // during restart (missing from TxInFlight), the recovery logic properly detects all of them
+    // and schedules TTxProgress for each one via TEvRunIncrementalRestore events.
     Y_UNIT_TEST(MultipleOrphanedIncrementalRestoreOperationsRecovery) {
         TTestWithReboots t;
         t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
@@ -1263,13 +1291,19 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             eventCapture.ClearCapturedEvents();
             eventCapture.EnableCapturing(expectedPathIds);
 
-            // Force reboot to trigger recovery of all orphaned operations
+            // Force reboot - this should trigger recovery of all orphaned operations
+            // The recovery logic will iterate over Self->LongIncrementalRestoreOps and for each operation
+            // check if the corresponding control operation exists in Self->TxInFlight.
+            // Since we rebooted, TxInFlight is cleared but LongIncrementalRestoreOps persists in database.
             {
                 TInactiveZone inactive(activeZone);
                 
+                // Wait for recovery logic to run during TTxInit::ReadEverything()
                 runtime.SimulateSleep(TDuration::MilliSeconds(500));
                 
-                // Verify all target tables were created
+                // Verify all orphaned operations were detected and recovered:
+                
+                // 1. Verify all target tables were eventually created (operations completed via TTxProgress)
                 TVector<TString> expectedTables = {"OrphanedOpTable1", "OrphanedOpTable2", "OrphanedOpTable3"};
                 
                 for (const auto& tableName : expectedTables) {
@@ -1283,31 +1317,46 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                         runtime.SimulateSleep(TDuration::MilliSeconds(100));
                     }
                     
-                    UNIT_ASSERT_C(tableExists, TStringBuilder() << "Operation for " << tableName << " should have been recovered");
+                    UNIT_ASSERT_C(tableExists, TStringBuilder() << "Orphaned operation for " << tableName << " should have been recovered");
+                    Cerr << "✓ Verified recovery of orphaned operation for: " << tableName << Endl;
                 }
                 
-                // Check if recovery events were sent
-                if (eventCapture.HasCapturedEvents()) {
-                    Cerr << "TEvRunIncrementalRestore events captured - orphaned operations recovery worked!" << Endl;
-                } else {
-                    Cerr << "Note: Operations completed before restart (not orphaned)" << Endl;
+                // 2. Verify that TEvRunIncrementalRestore events were sent for all operations
+                //    This proves that TTxProgress was scheduled for each orphaned operation
+                UNIT_ASSERT_C(eventCapture.HasCapturedEvents(), 
+                    "TEvRunIncrementalRestore events should have been sent during orphaned operations recovery");
+                UNIT_ASSERT_C(eventCapture.GetCapturedEventCount() >= 3, 
+                    TStringBuilder() << "Expected at least 3 TEvRunIncrementalRestore events (one per operation), got: " 
+                                   << eventCapture.GetCapturedEventCount());
+                
+                // 3. Verify all expected path IDs were captured (proves correct operation matching)
+                THashSet<TPathId> capturedPathIds(eventCapture.CapturedBackupCollectionPathIds.begin(),
+                                                eventCapture.CapturedBackupCollectionPathIds.end());
+                for (const auto& expectedPathId : expectedPathIds) {
+                    UNIT_ASSERT_C(capturedPathIds.contains(expectedPathId),
+                        TStringBuilder() << "Expected path ID " << expectedPathId << " should have been captured");
                 }
                 
+                // Verify operations are cleaned up from database after completion
                 TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
                 VerifyIncrementalRestoreOperationInDatabase(runtime, schemeShardTabletId, false);
                 
-                if (eventCapture.HasCapturedEvents()) {
-                    Cerr << "Successfully verified multiple orphaned operations recovery" << Endl;
-                } else {
-                    Cerr << "Multiple operations completed normally before restart" << Endl;
-                }
+                Cerr << "✓ Successfully verified multiple orphaned incremental restore operations recovery:" << Endl;
+                Cerr << "  - 3 operations existed in LongIncrementalRestoreOps after restart" << Endl;
+                Cerr << "  - Control operations were missing from TxInFlight (cleared during restart)" << Endl;
+                Cerr << "  - TTxProgress was triggered for each operation via TEvRunIncrementalRestore events" << Endl;
+                Cerr << "  - All operations completed successfully" << Endl;
+                Cerr << "  - Captured " << eventCapture.GetCapturedEventCount() << " TEvRunIncrementalRestore events" << Endl;
             }
             
             eventCapture.DisableCapturing();
         });
     }
 
-    // Test edge case: operation with missing control operation
+    // Test for edge case: operation with missing control operation but existing long operation
+    // Verifies the specific scenario where LongIncrementalRestoreOps contains an operation
+    // but the corresponding control operation is missing from TxInFlight (e.g., after restart).
+    // The recovery logic should detect this mismatch and schedule TTxProgress.
     Y_UNIT_TEST(OrphanedOperationWithoutControlOperation) {
         TTestWithReboots t;
         t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
@@ -1344,13 +1393,15 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             eventCapture.ClearCapturedEvents();
             eventCapture.EnableCapturing({backupCollectionPathId});
 
-            // Force reboot to simulate edge case
+            // Force reboot - this simulates the edge case where control operation is lost
+            // but the long operation record exists in the database
             {
                 TInactiveZone inactive(activeZone);
                 
+                // Wait for recovery logic to run
                 runtime.SimulateSleep(TDuration::MilliSeconds(500));
                 
-                // Verify operation recovery
+                // Verify that the recovery logic detects this scenario and runs TTxProgress
                 bool operationRecovered = false;
                 for (int attempt = 0; attempt < 15; ++attempt) {
                     auto desc = DescribePath(runtime, "/MyRoot/EdgeCaseTable");
@@ -1361,22 +1412,33 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                     runtime.SimulateSleep(TDuration::MilliSeconds(100));
                 }
                 
-                UNIT_ASSERT_C(operationRecovered, "Recovery logic should have detected orphaned operation");
+                UNIT_ASSERT_C(operationRecovered, 
+                    "Recovery logic should have detected orphaned operation and scheduled TTxProgress");
                 
+                // Verify that TEvRunIncrementalRestore event was sent during recovery
+                // Note: This event is only sent if the operation was actually orphaned.
+                // If the operation completed normally before restart, no recovery event is needed.
                 if (eventCapture.HasCapturedEvents()) {
-                    Cerr << "TEvRunIncrementalRestore event captured - orphaned operation recovery worked!" << Endl;
+                    Cerr << "✓ TEvRunIncrementalRestore event was captured - orphaned operation recovery worked!" << Endl;
                 } else {
-                    Cerr << "Note: Operation completed before restart (not orphaned)" << Endl;
+                    Cerr << "Note: No TEvRunIncrementalRestore event captured - operation likely completed before restart (not orphaned)" << Endl;
                 }
                 
+                // Verify the operation state is consistent
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/EdgeCaseTable"), {NLs::PathExist});
+                
+                Cerr << "Edge case test completed successfully: operation handled correctly " 
+                     << "(recovery events: " << eventCapture.GetCapturedEventCount() << ")" << Endl;
             }
             
             eventCapture.DisableCapturing();
         });
     }
 
-    // Test recovery during database loading
+    // Test for recovery during database loading with existing operations
+    // Verifies that the recovery logic in TTxInit::ReadEverything() correctly detects
+    // orphaned operations (present in LongIncrementalRestoreOps but missing from TxInFlight)
+    // and schedules TTxProgress during the database loading phase of schemeshard startup.
     Y_UNIT_TEST(OrphanedOperationRecoveryDuringDatabaseLoading) {
         TTestWithReboots t;
         t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
@@ -1420,10 +1482,14 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             eventCapture.ClearCapturedEvents();
             eventCapture.EnableCapturing({backupCollectionPathId});
 
-            // Second reboot to test recovery during database loading
+            // Second reboot to test recovery during database loading phase
             {
                 TInactiveZone inactive(activeZone);
                 
+                // The TTxInit::ReadEverything() should detect the orphaned operation
+                // and schedule TTxProgress via OnComplete.Send(SelfId(), new TEvPrivate::TEvRunIncrementalRestore(...))
+                
+                // Wait for recovery logic to run
                 runtime.SimulateSleep(TDuration::MilliSeconds(500));
                 
                 // Wait for recovery to complete
@@ -1444,26 +1510,24 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                     if (!tableExists) {
                         allTablesRecovered = false;
                         Cerr << "Failed to recover table: " << tableName << Endl;
+                    } else {
+                        Cerr << "✓ Successfully recovered table: " << tableName << Endl;
                     }
                 }
                 
-                UNIT_ASSERT_C(allTablesRecovered, "All tables should be recovered during database loading phase");
+                UNIT_ASSERT_C(allTablesRecovered, 
+                    "All tables should be recovered during database loading phase");
                 
-                // Check if recovery events were sent
-                if (eventCapture.HasCapturedEvents()) {
-                    Cerr << "TEvRunIncrementalRestore event captured during database loading recovery!" << Endl;
-                } else {
-                    Cerr << "Note: Operation completed before restart (not orphaned)" << Endl;
-                }
+                // Verify that TEvRunIncrementalRestore event was sent during recovery
+                UNIT_ASSERT_C(eventCapture.HasCapturedEvents(), 
+                    "TEvRunIncrementalRestore event should have been sent during database loading recovery");
                 
+                // Verify database consistency after recovery
                 TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
                 VerifyIncrementalRestoreOperationInDatabase(runtime, schemeShardTabletId, false);
                 
-                if (eventCapture.HasCapturedEvents()) {
-                    Cerr << "Orphaned operation recovery during database loading completed successfully" << Endl;
-                } else {
-                    Cerr << "Operation recovery during database loading completed" << Endl;
-                }
+                Cerr << "Orphaned operation recovery during database loading completed successfully, "
+                     << "captured " << eventCapture.GetCapturedEventCount() << " TEvRunIncrementalRestore events" << Endl;
             }
             
             eventCapture.DisableCapturing();

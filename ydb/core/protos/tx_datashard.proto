@@ -2385,3 +2385,38 @@ message TEvForceDataCleanupResult {
     optional uint64 TabletId = 2;
     optional EStatus Status = 3;
 }
+
+message TEvRestoreMultipleIncrementalBackups {
+    optional uint64 TxId = 1;
+    optional NKikimrProto.TPathID PathId = 2;  // Table being restored
+    
+    message TIncrementalBackup {
+        optional string BackupPath = 1;
+        optional uint64 BackupStep = 2;
+        optional uint64 BackupTxId = 3;
+        optional string BackupTrimmedName = 4;
+    }
+    
+    repeated TIncrementalBackup IncrementalBackups = 3;
+}
+
+message TEvRestoreMultipleIncrementalBackupsResponse {
+    optional uint64 TxId = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 TabletId = 3;
+    
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        SCHEME_ERROR = 2;
+        BAD_REQUEST = 3;
+        OVERLOADED = 4;
+        OPERATION_NOT_FOUND = 5;
+        ERROR = 6;
+    }
+    
+    optional EStatus Status = 4;
+    repeated Ydb.Issue.IssueMessage Issues = 5;
+    optional uint64 ProcessedRows = 6;
+    optional uint64 ProcessedBytes = 7;
+}

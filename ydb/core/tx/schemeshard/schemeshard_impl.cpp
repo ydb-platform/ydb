@@ -5204,6 +5204,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //namespace NIncrementalRestore {
         HFuncTraced(TEvPrivate::TEvRunIncrementalRestore, Handle);
+        HFuncTraced(TEvDataShard::TEvRestoreMultipleIncrementalBackupsResponse, Handle);
         // } // NIncrementalRestore
 
         // namespace NLongRunningCommon {

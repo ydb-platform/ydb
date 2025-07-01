@@ -655,4 +655,5 @@ enum ETxTypes {
     TXTYPE_LOGIN_FINALIZE = 100 [(TxTypeOpts) = {Name: "TxLoginFinalize"}];
 
     TXTYPE_PROGRESS_INCREMENTAL_RESTORE = 101 [(TxTypeOpts) = {Name: "TxProgressIncrementalRestore"}];
+    TXTYPE_INCREMENTAL_RESTORE_RESPONSE = 102 [(TxTypeOpts) = {Name: "TxIncrementalRestoreResponse"}];
 }

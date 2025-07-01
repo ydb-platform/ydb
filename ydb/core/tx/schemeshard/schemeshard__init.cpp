@@ -5306,11 +5306,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
             }
 
-            // Check for orphaned incremental restore operations during restart
+            // Check for incremental restore operations that lost their control operations during restart
+            // This can happen if the schemeshard restarts while incremental restore operations are in flight
             for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
+                // Check if the corresponding control operation still exists in TxInFlight
+                // TxInFlight is keyed by TOperationId, so we need to check for operations with the same txId
                 TTxId txId = opId.GetTxId();
                 bool controlOperationExists = false;
                 
+                // Look for any operation in TxInFlight with the same txId
                 for (const auto& [txOpId, txState] : Self->TxInFlight) {
                     if (txOpId.GetTxId() == txId) {
                         controlOperationExists = true;
@@ -5319,6 +5323,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
                 
                 if (!controlOperationExists) {
+                    // Control operation is no longer active, but the long operation was already started
+                    // and hasn't finished yet since it's still present in the local restore database.
+                    // We need to run TTxProgress to continue the restore operation.
+                    
                     TPathId backupCollectionPathId;
                     backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
                     backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
@@ -5331,6 +5339,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             << ", scheduling TTxProgress to continue operation"
                             << ", at schemeshard: " << Self->TabletID());
                     
+                    // Send the event to self to trigger TTxProgress execution
+                    // This will be handled by the Handle method in schemeshard_incremental_restore_scan.cpp
                     OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
                 }
             }

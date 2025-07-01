@@ -41,15 +41,17 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
 
 void TExtensionManager::AddExtensionWhoami() {
     EnrichmentExtension = true;
-    AddExtension(NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoami(Settings, AuthHeader)));
+    auto ext = std::make_unique<TExtensionWhoami>(Settings, AuthHeader);
+    AddExtension(std::move(ext));
 }
 
 void TExtensionManager::AddExtensionFinal() {
-    AddExtension(NActors::TActivationContext::ActorSystem()->Register(new TExtensionFinal(Settings)));
+    auto ext = std::make_unique<TExtensionFinal>(Settings);
+    AddExtension(std::move(ext));
 }
 
-void TExtensionManager::AddExtension(const NActors::TActorId& stage) {
-    ExtensionCtx->Route.push(stage);
+void TExtensionManager::AddExtension(std::unique_ptr<TExtension> ext) {
+    ExtensionCtx->Steps.push(std::move(ext));
 }
 
 bool TExtensionManager::NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const {
@@ -89,8 +91,8 @@ void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr req
     SetRequest(std::move(request));
     SetOverrideResponse(std::move(event));
 
-    const auto route = ExtensionCtx->Route.Next();
-    NActors::TActivationContext::ActorSystem()->Send(route, new TEvPrivate::TEvExtensionRequest(std::move(ExtensionCtx)));
+    const auto step = ExtensionCtx->Steps.Next();
+    step->Execute(std::move(ExtensionCtx));
 }
 
 } // NMVP::NOIDC

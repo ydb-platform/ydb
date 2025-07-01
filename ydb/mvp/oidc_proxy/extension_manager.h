@@ -1,6 +1,6 @@
 #pragma once
 
-#include "extension_context.h"
+#include "extension.h"
 
 namespace NMVP::NOIDC {
 
@@ -26,7 +26,7 @@ private:
     bool NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const;
     void AddExtensionWhoami();
     void AddExtensionFinal();
-    void AddExtension(const NActors::TActorId& stage);
+    void AddExtension(std::unique_ptr<TExtension> ext);
 };
 
 } // NMVP::NOIDC

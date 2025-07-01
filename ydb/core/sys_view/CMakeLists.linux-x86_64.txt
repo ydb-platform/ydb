@@ -13,8 +13,8 @@
 # changes in this file.
 
 add_subdirectory(service)
-add_subdirectory(partition_stats)
 add_subdirectory(common)
+add_subdirectory(partition_stats)
 add_subdirectory(auth)
 add_subdirectory(nodes)
 add_subdirectory(pg_tables)

@@ -127,6 +127,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-core-resource_pools
   ydb-core-scheme
   ydb-core-statistics
+  core-sys_view-common
   core-sys_view-partition_stats
   ydb-core-tablet
   ydb-core-tablet_flat
@@ -339,6 +340,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_shard_deleter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_svp_migration.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_system_names.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_sysviews_update.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_utils.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_validate_ttl.cpp

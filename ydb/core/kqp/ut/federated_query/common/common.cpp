@@ -76,6 +76,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (initializeHttpGateway) {
             httpGateway = MakeHttpGateway(appConfig->GetQueryServiceConfig().GetHttpGateway(), settings.CountersRoot);
         }
+        auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
 
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
@@ -90,7 +91,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             nullptr,
             NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
-            nullptr);
+            nullptr,
+            NYql::TPqGatewayConfig{},
+            NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+            nullptr,
+            driver);
 
         settings
             .SetFeatureFlags(featureFlags)

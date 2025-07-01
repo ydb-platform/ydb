@@ -131,11 +131,11 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                 if (e) {
                     Cerr << ">>>>> Event = " << e->index() << Endl << Flush;
                 }
-                if (e && std::holds_alternative<TReadSessionEvent::TDataReceivedEvent>(e.value())) {
+                if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(e.value())) {
                     // we must recive only one date event with second message
                     break;
-                } else if (e && std::holds_alternative<TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {
-                    std::get<TReadSessionEvent::TStartPartitionSessionEvent>(e.value()).Confirm();
+                } else if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {
+                    std::get<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value()).Confirm();
                 }
                 UNIT_ASSERT_C(endTime > TInstant::Now(), "Unable wait");
             }

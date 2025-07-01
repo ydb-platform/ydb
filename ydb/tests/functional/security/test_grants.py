@@ -22,6 +22,8 @@ ALTER_TABLE_ADD_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.
 ALTER_TOPIC_ADD_CONSUMER_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 READ_TOPIC_GRANTS = []
 ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+CREATE_TOPIC_GRANTS = ['ydb.granular.create_queue']
+DROP_TOPIC_GRANTS = ['ydb.granular.remove_schema']
 ALL_USED_GRANS = set(
     CREATE_TABLE_GRANTS
     + ALTER_TABLE_ADD_COLUMN_GRANTS
@@ -31,6 +33,8 @@ ALL_USED_GRANS = set(
     + ALTER_TOPIC_ADD_CONSUMER_GRANTS
     + READ_TOPIC_GRANTS
     + ALTER_TABLE_DROP_CHANGEFEED_GRANTS
+    + CREATE_TOPIC_GRANTS
+    + DROP_TOPIC_GRANTS
 )
 
 
@@ -213,6 +217,46 @@ def test_cdc_grants(ydb_cluster):
         TABLE_PATH,
         ALTER_TABLE_DROP_CHANGEFEED_GRANTS,
         "you do not have access permissions",
+    )
+
+    ydb_cluster.remove_database(DATABASE)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+
+def test_pq_grants(ydb_cluster):
+    ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
+    database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
+    ydb_cluster.wait_tenant_up(DATABASE)
+
+    tenant_admin_config = ydb.DriverConfig(
+        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+        database=DATABASE,
+    )
+
+    # CREATE TOPIC
+    user1_config = create_user(ydb_cluster, tenant_admin_config, "user1")
+    create_topic_query = f"CREATE TOPIC `{DATABASE}/topic`;"
+    _test_grants(
+        tenant_admin_config,
+        user1_config,
+        'user1',
+        create_topic_query,
+        DATABASE,
+        CREATE_TOPIC_GRANTS,
+        "Access denied",
+    )
+
+    # DROP TOPIC
+    user2_config = create_user(ydb_cluster, tenant_admin_config, "user2")
+    drop_topic_query = f"DROP TOPIC `{DATABASE}/topic`;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_topic_query,
+        DATABASE,
+        DROP_TOPIC_GRANTS,
+        "Access denied",
     )
 
     ydb_cluster.remove_database(DATABASE)

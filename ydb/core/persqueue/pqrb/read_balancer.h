@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_scale_manager.h"
+
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
@@ -7,7 +9,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/partition_scale_manager.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -17,7 +19,6 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <util/system/hp_timer.h>
-#include "utils.h"
 
 #include <unordered_map>
 

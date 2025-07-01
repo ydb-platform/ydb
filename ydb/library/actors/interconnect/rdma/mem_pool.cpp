@@ -435,7 +435,7 @@ namespace NInterconnect::NRdma {
             return reinterpret_cast<TAuxChunkData*>(chunk->GetAuxData());
         }
 
-        [[clang::noinline]] static TChunk* PopChunk(size_t startPos, TChunkContainer& cont) noexcept {
+        static TChunk* PopChunk(size_t startPos, TChunkContainer& cont) noexcept {
 #if defined(__clang__)
             #pragma nounroll
 #endif
@@ -459,7 +459,7 @@ namespace NInterconnect::NRdma {
             return nullptr;
         }
 
-        [[clang::noinline]] static int PushChunk(size_t startPos, TChunkContainer& cont, TChunk* chunk) noexcept {
+        static int PushChunk(size_t startPos, TChunkContainer& cont, TChunk* chunk) noexcept {
 #if defined(__clang__)
             #pragma nounroll
 #endif

@@ -16,23 +16,23 @@ Release date: 2025.
 * The scope of supported objects in backup and restore operations has been expanded:
   * [Support for changefeeds](https://github.com/ydb-platform/ydb/issues/7054) (enabled with the `enable_changefeeds_export` and `enable_changefeeds_import` flags).
   * [Support for views](https://github.com/ydb-platform/ydb/issues/12724) (enabled with the `enable_view_export` flag).
-* [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity check of backups during import, which prevents restoration from corrupted backups and protects against data loss.
-* [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDF](./yql/reference/builtins/basic.md#udf) in queries.
+* [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity checks of backups during import, which prevent restoration from corrupted backups and protect against data loss.
+* [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic.md#udf) in queries.
 * Added system views with information about [access right settings](./dev/system-views.md#auth) and [history of overloaded partitions](./dev/system-views.md#top-overload-partitions).
 * Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md) and [ALTER USER](./yql/reference/syntax/alter-user.md) operators:
-  * `HASH` — set a password in the encrypted form.
-  * `LOGIN` and `NOLOGIN` — unlock and block a user.
+  * `HASH` — sets a password in encrypted form.
+  * `LOGIN` and `NOLOGIN` — unlocks and blocks a user, respectively.
 * Enhanced account security:
   * [Added](https://github.com/ydb-platform/ydb/pull/11963) user password complexity verification.
   * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) automatic user lockout after a specified number of failed attempts to enter the correct password.
   * [Added](https://github.com/ydb-platform/ydb/pull/12983) the ability for users to change their own passwords.
-* [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to the flags, for which the `(RequireRestart) = true` parameter  is not specified in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60), will be applied without a restart.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to the flags for which the `(RequireRestart) = true` parameter is not specified in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) will be applied without a restart.
 * [Changed](https://github.com/ydb-platform/ydb/pull/11329) lock behavior when the number of locks on shards exceeds the limit. Now, once the limit is exceeded, the oldest locks (rather than the newest) are converted into full-shard locks.
-* [Implemented](https://github.com/ydb-platform/ydb/pull/12567) a mechanism to preserve optimistic locks in memory when datashards are gracefully restarted, which should reduce the number of ABORTED errors due to lock loss during table balancing between nodes.
-* [Implemented](https://github.com/ydb-platform/ydb/pull/12689) a mechanism to abort volatile transactions with the ABORTED status when datashards are gracefully restarted.
-* [Added](https://github.com/ydb-platform/ydb/pull/6342) the ability to remove NOT NULL constraints on a column in a table using the `ALTER TABLE _ ALTER COLUMN _ DROP NOT NULL` query.
-* [Added](https://github.com/ydb-platform/ydb/pull/9168) the 100.000 limit on the number of simultaneous requests to create sessions in the coordination service.
-* [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum [number of columns in the primary key](./concepts/limits-ydb.md?#schema-object) from 20 to 30.
+* [Implemented](https://github.com/ydb-platform/ydb/pull/12567) a mechanism to preserve optimistic locks in memory when datashards are gracefully restarted, which should reduce the number of `ABORTED` errors due to lock loss during table balancing between nodes.
+* [Implemented](https://github.com/ydb-platform/ydb/pull/12689) a mechanism to abort volatile transactions with the `ABORTED` status when datashards are gracefully restarted.
+* [Added](https://github.com/ydb-platform/ydb/pull/6342) the ability to remove `NOT NULL` constraints on a column in a table using the `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL` query.
+* [Added](https://github.com/ydb-platform/ydb/pull/9168) the 100,000 limit on the number of concurrent requests to create sessions in the coordination service.
+* [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum [number of columns in the primary key](./concepts/limits-ydb.md#schema-object) from 20 to 30.
 * **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) strict access control checks, which are enabled by setting the `enable_strict_acl_check` flag and the following ones:
   * `enable_strict_user_management` enables strict checks for local users.
   * `enable_database_admin` enables database administrator functions.

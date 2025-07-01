@@ -844,7 +844,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         using SchemaPresetVersionInfo = NColumnShard::Schema::SchemaPresetVersionInfo;
         for (auto&& i : VersionsToClean) {
-            db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetStep(), i.GetSnapshot().GetTxId()).Delete();
+            db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Delete();
         }
     }
     virtual void Complete(const TActorContext& /*ctx*/) override {

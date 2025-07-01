@@ -7,18 +7,25 @@
 
 namespace NKikimr {
 
+using namespace NKikimr::NDataShard::NKqpHelpers;
+using namespace NSchemeShard;
+using namespace Tests;
+
+static const TString kTable = "/Root/TestTable";
+static const TString kTable2 = "/Root/TestTable-2";
+
 static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
     std::function<void(NKikimrTxDataShard::TEvValidateUniqueIndexRequest&)> setupRequest,
     TString expectedError, bool expectedErrorSubstring = false)
 {
-    TVector<ui64> datashards = GetTableShards(server, sender, kMainTable);
-    TTableId tableId = ResolveTableId(server, sender, kMainTable);
+    TVector<ui64> datashards = GetTableShards(server, sender, kTable);
+    TTableId tableId = ResolveTableId(server, sender, kTable);
 
     TStringBuilder data;
     TString err;
     UNIT_ASSERT(datashards.size() == 1);
 
-    auto ev = new TEvDataShard::TEvValidateUniqueIndexRequest;
+    auto ev = std::make_unique<TEvDataShard::TEvValidateUniqueIndexRequest>();
     NKikimrTxDataShard::TEvValidateUniqueIndexRequest& rec = ev->Record;
     rec.SetId(1);
 
@@ -31,7 +38,7 @@ static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
 
     setupRequest(rec);
 
-    TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = DoBadRequest<TEvDataShard::TEvValidateUniqueIndexResponse>(server, sender, ev, datashards[0], expectedError, expectedErrorSubstring);
+    TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = DoBadRequest<TEvDataShard::TEvValidateUniqueIndexResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetTabletId(), datashards[0]);
 
     // Stats
@@ -47,7 +54,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
         Tests::TServer::TPtr server,
         TActorId sender,
         std::pair<ui64, ui64>& seqNo,
-        const TString& tablePath = kMainTable,
+        const TString& tablePath = kTable,
         const std::vector<TString>& columns = {"key", "value"},
         NKikimrIndexBuilder::EBuildStatus expectedStatus = NKikimrIndexBuilder::EBuildStatus::DONE,
         const TString& expectedErrorSubstring = {})
@@ -162,11 +169,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        CreateShardedTable(server, sender, "/Root", "TestTable", 1, false);
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvValidateUniqueIndexRequest& request) {
             request.SetTabletId(0);
-        }, TStringBuilder() << "{ <main>: Error: Wrong shard 0 this is " << GetTableShards(server, sender, kMainTable)[0] << " }");
+        }, TStringBuilder() << "{ <main>: Error: Wrong shard 0 this is " << GetTableShards(server, sender, kTable)[0] << " }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvValidateUniqueIndexRequest& request) {
             request.SetPathId(0);
         }, "{ <main>: Error: Unknown table id: 0 }");
@@ -203,7 +210,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
 
         auto opts = TShardedTableOptions()
             .EnableOutOfOrder(false);
-        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        CreateShardedTable(server, sender, "/Root", "TestTable", opts);
 
         std::pair<ui64, ui64> seqNo = {42, 42};
 
@@ -219,7 +226,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
         // Upsert unique values
         // We perform uniqueness check for usual table, because we don't need anything specific for index
         // Just specify to usual shards what to check
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 300);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/TestTable` (key, value) VALUES (3, 300);");
         {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo);
             AssertFirstIndexKey(reply, "(3, 300)");
@@ -228,7 +235,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
             UNIT_ASSERT_GT(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/TestTable` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
         {
             TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo);
             AssertFirstIndexKey(reply, "(1, 100)");
@@ -245,22 +252,22 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
                 {"key_part2", "String", true, false},
                 {"key_part3", "String", true, false},
             });
-        CreateShardedTable(server, sender, "/Root", "table-2", opts2);
+        CreateShardedTable(server, sender, "/Root", "TestTable-2", opts2);
 
         std::vector<TString> indexColumns2 = {"key_part1", "key_part2"};
         std::vector<NScheme::TTypeInfo> indexTypes2 = { NScheme::NTypeIds::Int64, NScheme::NTypeIds::String };
 
         {
-            TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, "/Root/table-2", indexColumns2);
+            TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, kTable2, indexColumns2);
             AssertFirstIndexKey(reply, std::nullopt, indexTypes2);
             AssertLastIndexKey(reply, std::nullopt, indexTypes2);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 0);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadBytes(), 0);
         }
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key_part1, key_part2, key_part3) VALUES (1, '1', 'one'), (1, '1', 'two');");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/TestTable-2` (key_part1, key_part2, key_part3) VALUES (1, '1', 'one'), (1, '1', 'two');");
         {
-            TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, "/Root/table-2",
+            TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, kTable2,
                 indexColumns2, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR, "Duplicate key found: (key_part1=1, key_part2=1)");
 
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 2);
@@ -268,10 +275,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
         }
 
         // Handle NULLs
-        ExecSQL(server, sender, "DELETE FROM `/Root/table-2`;");
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key_part1, key_part2, key_part3) VALUES (1, '1', 'one'), (1, NULL, NULL);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/TestTable-2`;");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/TestTable-2` (key_part1, key_part2, key_part3) VALUES (1, '1', 'one'), (1, NULL, NULL);");
         {
-            TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, "/Root/table-2", indexColumns2);
+            TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, kTable2, indexColumns2);
             AssertFirstIndexKey(reply, "(1, NULL)", indexTypes2);
             AssertLastIndexKey(reply, "(1, 1)", indexTypes2);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 2);
@@ -280,9 +287,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardValidateUniqueIndexScan) {
 
         // Two NULLs are not equal to each other
         // So unique index with such keys is OK
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key_part1, key_part2, key_part3) VALUES (NULL, '1', 'one'), (NULL, NULL, 'one'), (NULL, NULL, NULL);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/TestTable-2` (key_part1, key_part2, key_part3) VALUES (NULL, '1', 'one'), (NULL, NULL, 'one'), (NULL, NULL, NULL);");
         {
-            TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, "/Root/table-2", indexColumns2);
+            TEvDataShard::TEvValidateUniqueIndexResponse::TPtr reply = MakeScanRequest(server, sender, seqNo, kTable2, indexColumns2);
             AssertFirstIndexKey(reply, "(NULL, NULL)", indexTypes2);
             AssertLastIndexKey(reply, "(1, 1)", indexTypes2);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetReadRows(), 5);

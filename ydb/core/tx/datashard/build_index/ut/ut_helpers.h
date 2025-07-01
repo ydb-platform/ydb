@@ -1,5 +1,4 @@
 #pragma once
-#include "defs.h"
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -13,25 +12,19 @@
 
 namespace NKikimr {
 
-using namespace NKikimr::NDataShard::NKqpHelpers;
-using namespace NSchemeShard;
-using namespace Tests;
-
-static const TString kMainTable = "/Root/table-1";
-static const TString kIndexTable = "/Root/table-2";
-
 template <class TResponse>
 typename TResponse::TPtr DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
-    NActors::IEventBase* ev, ui64 tabletId,
-    TString expectedError, bool expectedErrorSubstring = false)
+    std::unique_ptr<NActors::IEventBase> ev, ui64 tabletId,
+    const TString& expectedError, bool expectedErrorSubstring = false,
+    NKikimrIndexBuilder::EBuildStatus expectedStatus = NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST)
 {
     auto& runtime = *server->GetRuntime();
-    runtime.SendToPipe(tabletId, sender, ev, 0, GetPipeConfigWithRetries());
+    runtime.SendToPipe(tabletId, sender, ev.release(), 0, GetPipeConfigWithRetries());
 
     auto reply = runtime.GrabEdgeEventRethrow<TResponse>(sender);
 
     auto status = reply->Get()->Record.GetStatus();
-    UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, "Expected error: " << expectedError);
+    UNIT_ASSERT_VALUES_EQUAL_C(status, expectedStatus, "Expected error: " << expectedError);
 
     NYql::TIssues issues;
     NYql::IssuesFromMessage(reply->Get()->Record.GetIssues(), issues);

@@ -2,6 +2,7 @@
 #include "../datashard_impl.h"
 #include "../scan_common.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -47,34 +48,27 @@ public:
         , ScanTags(BuildTags(tableInfo, targetIndexColumns))
         , IndexColumnNames(targetIndexColumns.begin(), targetIndexColumns.end())
     {
+        LOG_I("Create " << Debug());
     }
 
     TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme> scheme) override {
         Scheme = std::move(scheme);
         MakeTypeInfos();
+
+        LOG_I("Prepare " << Debug());
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64) override {
+    EScan Seek(TLead& lead, ui64 seq) override {
+        LOG_T("Seek " << seq << " " << Debug());
+
         lead.To(ScanTags, {}, NTable::ESeek::Lower);
         return EScan::Feed;
     }
 
-    TString DuplicateKeyErrorMessage() const {
-        TStringBuilder res;
-        res << "Duplicate key found: (";
-        for (size_t i = 0; i < IndexColumnNames.size(); ++i) {
-            if (i > 0) {
-                res << ", ";
-            }
-            res << IndexColumnNames[i] << "=";
-            DbgPrintValue(res, LastIndexKey->GetCells()[i], IndexColumnTypeInfos[i].ToTypeInfo());
-        }
-        res << ")";
-        return std::move(res);
-    }
-
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
+        // LOG_T("Feed " << Debug());
+
         if (row.Size() != ScanTags.size()) {
             return FinishValidation(NKikimrIndexBuilder::EBuildStatus::ABORTED, TStringBuilder() << "Row size mismatch: expected " << ScanTags.size() << ", got " << row.Size());
         }
@@ -84,15 +78,15 @@ public:
 
         TArrayRef<const TCell> rowCells = *row;
         if (!FirstIndexKey) {
-            FirstIndexKey.emplace(rowCells);
-            LastIndexKey.emplace(rowCells);
+            FirstIndexKey = TSerializedCellVec(rowCells);
+            LastIndexKey = TSerializedCellVec(rowCells);
             return EScan::Feed;
         }
 
-        if (TypedCellVectorsEqualWithNullSemantics(rowCells.data(), LastIndexKey->GetCells().data(), IndexColumnTypeInfos.data(), IndexColumnTypeInfos.size()) == ETriBool::True) {
+        if (TypedCellVectorsEqualWithNullSemantics(rowCells.data(), LastIndexKey.GetCells().data(), IndexColumnTypeInfos.data(), IndexColumnTypeInfos.size()) == ETriBool::True) {
             return FinishValidation(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR, DuplicateKeyErrorMessage());
         }
-        LastIndexKey.emplace(rowCells);
+        LastIndexKey = TSerializedCellVec(rowCells);
         return EScan::Feed;
     }
 
@@ -102,14 +96,12 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
-        if (StatusCode == NKikimrIndexBuilder::EBuildStatus::INVALID) {
-            if (status == EStatus::Exception) {
-                StatusCode = NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR;
-            } else if (status != EStatus::Done) {
-                StatusCode = NKikimrIndexBuilder::EBuildStatus::ABORTED;
-            } else {
-                StatusCode = NKikimrIndexBuilder::EBuildStatus::DONE;
-            }
+        if (status == EStatus::Exception) {
+            StatusCode = NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR;
+        } else if (status != EStatus::Done) {
+            StatusCode = NKikimrIndexBuilder::EBuildStatus::ABORTED;
+        } else if (StatusCode == NKikimrIndexBuilder::EBuildStatus::INVALID) {
+            StatusCode = NKikimrIndexBuilder::EBuildStatus::DONE;
         }
 
         auto response = std::make_unique<TEvDataShard::TEvValidateUniqueIndexResponse>();
@@ -122,22 +114,52 @@ public:
             NYql::IssuesToMessage(Issues, rec.MutableIssues());
         }
         if (FirstIndexKey) {
-            rec.SetFirstIndexKey(FirstIndexKey->GetBuffer());
+            rec.SetFirstIndexKey(FirstIndexKey.GetBuffer());
         }
         if (LastIndexKey) {
-            rec.SetLastIndexKey(LastIndexKey->GetBuffer());
+            rec.SetLastIndexKey(LastIndexKey.GetBuffer());
         }
+
+        if (rec.GetStatus() == NKikimrIndexBuilder::DONE) {
+            LOG_N("Done " << Debug() << " " << ToShortDebugString(rec));
+        } else {
+            LOG_E("Failed " << Debug() << " " << ToShortDebugString(rec));
+        }
+
         TActivationContext::Send(ResponseActorId, std::move(response));
         return this;
     }
 
     EScan Exhausted() override {
+        LOG_T("Exhausted " << Debug());
+
         return EScan::Final;
     }
 
     void Describe(IOutputStream& out) const override {
         out << "TValidateUniqueIndexScan Id: " << BuildIndexId
             << " Status: " << StatusCode << " Issues: " << Issues.ToOneLineString();
+    }
+
+private:
+    TString DuplicateKeyErrorMessage() const {
+        TStringBuilder res;
+        res << "Duplicate key found: (";
+        for (size_t i = 0; i < IndexColumnNames.size(); ++i) {
+            if (i > 0) {
+                res << ", ";
+            }
+            res << IndexColumnNames[i] << "=";
+            DbgPrintValue(res, LastIndexKey.GetCells()[i], IndexColumnTypeInfos[i].ToTypeInfo());
+        }
+        res << ")";
+        return std::move(res);
+    }
+
+    EScan FinishValidation(NKikimrIndexBuilder::EBuildStatus statusCode = NKikimrIndexBuilder::EBuildStatus::DONE, TString error = {}) {
+        StatusCode = statusCode;
+        Issues.AddIssue(error);
+        return EScan::Final;
     }
 
     TString Debug() const {
@@ -155,12 +177,6 @@ public:
         }
     }
 
-    EScan FinishValidation(NKikimrIndexBuilder::EBuildStatus statusCode = NKikimrIndexBuilder::EBuildStatus::DONE, TString error = {}) {
-        StatusCode = statusCode;
-        Issues.AddIssue(error);
-        return EScan::Final;
-    }
-
 private:
     const ui64 BuildIndexId;
     const TScanRecord::TSeqNo SeqNo;
@@ -175,8 +191,8 @@ private:
     // Results
     NKikimrIndexBuilder::EBuildStatus StatusCode = NKikimrIndexBuilder::EBuildStatus::INVALID;
     NYql::TIssues Issues;
-    std::optional<TSerializedCellVec> FirstIndexKey;
-    std::optional<TSerializedCellVec> LastIndexKey;
+    TSerializedCellVec FirstIndexKey;
+    TSerializedCellVec LastIndexKey;
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 };
@@ -239,7 +255,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 LOG_E("Rejecting TValidateUniqueIndexScan bad request TabletId: " << TabletID()
                     << " " << request.ShortDebugString()
-                    << " with response " << response->Record.ShortDebugString());
+                    << " with response " << ToShortDebugString(response->Record));
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {
@@ -285,6 +301,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
             request.GetTabletId(),
             ev->Sender);
 
+        // We don't need a specific row version here, because KQP level forbids table modification during unique index building.
         StartScan(this, std::move(scan), id, seqNo, std::nullopt, userTable.LocalTid);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvValidateUniqueIndexResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TValidateUniqueIndexScan");

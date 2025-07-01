@@ -11,6 +11,13 @@
 
 namespace NKikimr {
 
+using namespace NKikimr::NDataShard::NKqpHelpers;
+using namespace NSchemeShard;
+using namespace Tests;
+
+static const TString kMainTable = "/Root/table-1";
+static const TString kIndexTable = "/Root/table-2";
+
 static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
     std::function<void(NKikimrTxDataShard::TEvBuildIndexCreateRequest&)> setupRequest,
     TString expectedError, bool expectedErrorSubstring = false)
@@ -23,7 +30,7 @@ static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
     TString err;
     UNIT_ASSERT(datashards.size() == 1);
 
-    auto ev = new TEvDataShard::TEvBuildIndexCreateRequest;
+    auto ev = std::make_unique<TEvDataShard::TEvBuildIndexCreateRequest>();
     NKikimrTxDataShard::TEvBuildIndexCreateRequest& rec = ev->Record;
     rec.SetId(1);
 
@@ -40,7 +47,7 @@ static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
 
     setupRequest(rec);
 
-    DoBadRequest<TEvDataShard::TEvBuildIndexProgressResponse>(server, sender, ev, datashards[0], expectedError, expectedErrorSubstring);
+    DoBadRequest<TEvDataShard::TEvBuildIndexProgressResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
 }
 
 Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {

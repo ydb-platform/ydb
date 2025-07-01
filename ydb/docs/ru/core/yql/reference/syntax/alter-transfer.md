@@ -5,7 +5,7 @@
 ## Синтаксис {#syntax}
 
 ```yql
-ALTER TRANSFER <name> [SET USING lambda] [SET (option = value [, ...])]
+ALTER TRANSFER <name> (SET USING lambda | SET (option = value [, ...]))
 ```
 
 где:

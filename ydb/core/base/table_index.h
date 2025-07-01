@@ -15,6 +15,7 @@
 namespace NKikimrTxDataShard {
     class TEvReshuffleKMeansRequest;
     class TEvSampleKResponse;
+    class TEvValidateUniqueIndexResponse;
 }
 
 namespace NKikimr {
@@ -52,6 +53,7 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record);
 
 }
 }

@@ -1,12 +1,13 @@
 #include "defs.h"
+#include "ut_helpers.h"
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/protos/index_builder.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -26,10 +27,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
         std::function<void(NKikimrTxDataShard::TEvSampleKRequest&)> setupRequest,
-        TString expectedError, bool expectedErrorSubstring = false)
+        const TString& expectedError, bool expectedErrorSubstring = false)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
-        auto& runtime = *server->GetRuntime();
         auto snapshot = CreateVolatileSnapshot(server, {kTable});
         auto datashards = GetTableShards(server, sender, kTable);
         TTableId tableId = ResolveTableId(server, sender, kTable);
@@ -61,19 +61,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
         setupRequest(rec);
 
-        runtime.SendToPipe(datashards[0], sender, ev.release(), 0, GetPipeConfigWithRetries());
-
-        TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
-        if (expectedErrorSubstring) {
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToOneLineString(), expectedError);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToOneLineString(), expectedError);
-        }
+        NKikimr::DoBadRequest<TEvDataShard::TEvSampleKResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     }
 
     static TString DoSampleK(Tests::TServer::TPtr server, TActorId sender, const TString& tableFrom, const TRowVersion& snapshot, ui64 seed, ui64 k) {
@@ -173,7 +161,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvSampleKRequest& request) {
             request.SetK(0);
         }, "{ <main>: Error: Should be requested on at least one row }");
-        
+
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvSampleKRequest& request) {
             request.SetMaxProbability(0);
         }, "{ <main>: Error: Max probability should be positive }");

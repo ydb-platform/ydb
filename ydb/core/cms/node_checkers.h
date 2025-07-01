@@ -51,18 +51,20 @@ public:
     using TNodeToPileMap = THashMap<ui32, ui32>;
     using TNodeToPileMapPtr = std::shared_ptr<TNodeToPileMap>;
 
-protected:
+private:
     TNodeToPileMapPtr NodeIdToPileId = std::make_shared<TNodeToPileMap>();
-    THashMap<ui32, ENodeState> NodeToState;
     THashMap<ui32, ui32> LockedNodesCount; // {key: PileId; value: LockedNodesCount}
     THashMap<ui32, ui32> DownNodesCount; // {key: PileId; value: DownNodesCount}
+
+protected:
+    THashMap<ui32, ENodeState> NodeToState;
 
     ui32 GetPileId(ui32 nodeId) const;
     ui32 GetLockedNodesCount(ui32 pileId) const;
     ui32 GetDownNodesCount(ui32 pileId) const;
 
 public:
-    TNodesCounterBase() {}
+    TNodesCounterBase() = default;
 
     explicit TNodesCounterBase(TNodeToPileMapPtr nodeIdToPileId)
         : NodeIdToPileId(nodeIdToPileId) 

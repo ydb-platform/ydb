@@ -304,13 +304,13 @@ namespace NKikimr {
             , LastLsn(lastLsn)
             , It(it)
             , IsFresh(isFresh)
-            , IndexMerger(GType, HullCtx->VCfg->AddHeader)
+            , IndexMerger(GType, HullCtx->AddHeader)
             , ReadBatcher(HullCtx->VCtx->VDiskLogPrefix,
                     PDiskCtx->Dsk->ReadBlockSize,
                     PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
                     HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
-            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->VCfg->AddHeader)
+            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)

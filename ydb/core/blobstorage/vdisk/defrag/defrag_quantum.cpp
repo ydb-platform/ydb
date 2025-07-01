@@ -19,7 +19,6 @@ namespace NKikimr {
         std::shared_ptr<TDefragCtx> DCtx;
         const TVDiskID SelfVDiskId;
         std::optional<TChunksToDefrag> ChunksToDefrag;
-        bool NeedCompaction;
 
         enum {
             EvResume = EventSpaceBegin(TEvents::ES_PRIVATE)
@@ -29,12 +28,11 @@ namespace NKikimr {
 
     public:
         TDefragQuantum(const std::shared_ptr<TDefragCtx>& dctx, const TVDiskID& selfVDiskId,
-                std::optional<TChunksToDefrag> chunksToDefrag, bool needCompaction)
+                std::optional<TChunksToDefrag> chunksToDefrag)
             : TActorCoroImpl(64_KB, true)
             , DCtx(dctx)
             , SelfVDiskId(selfVDiskId)
             , ChunksToDefrag(std::move(chunksToDefrag))
-            , NeedCompaction(needCompaction)
         {}
 
         void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
@@ -179,24 +177,22 @@ namespace NKikimr {
                     }
                 }
 
-                if (NeedCompaction) {
-                    // scan index again to find tables we have to compact
-                    for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
-                    if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
-                        for (const auto& item : records) {
-                            STLOG(PRI_WARN, BS_VDISK_DEFRAG, BSVDD16, DCtx->VCtx->VDiskLogPrefix
-                                << "blob found again after rewriting", (ActorId, SelfActorId), (Id, item.LogoBlobId),
-                                (Location, item.OldDiskPart));
-                        }
+                // scan index again to find tables we have to compact
+                for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
+                if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
+                    for (const auto& item : records) {
+                        STLOG(PRI_WARN, BS_VDISK_DEFRAG, BSVDD16, DCtx->VCtx->VDiskLogPrefix
+                            << "blob found again after rewriting", (ActorId, SelfActorId), (Id, item.LogoBlobId),
+                            (Location, item.OldDiskPart));
                     }
-
-                    auto tablesToCompact = findRecords.GetTablesToCompact();
-                    const bool needsFreshCompaction = findRecords.GetNeedsFreshCompaction();
-                    STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD13, DCtx->VCtx->VDiskLogPrefix << "compacting",
-                        (ActorId, SelfActorId), (TablesToCompact, tablesToCompact),
-                        (NeedsFreshCompaction, needsFreshCompaction));
-                    Compact(std::move(tablesToCompact), needsFreshCompaction);
                 }
+
+                auto tablesToCompact = findRecords.GetTablesToCompact();
+                const bool needsFreshCompaction = findRecords.GetNeedsFreshCompaction();
+                STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD13, DCtx->VCtx->VDiskLogPrefix << "compacting",
+                    (ActorId, SelfActorId), (TablesToCompact, tablesToCompact),
+                    (NeedsFreshCompaction, needsFreshCompaction));
+                Compact(std::move(tablesToCompact), needsFreshCompaction);
             }
 
             STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD15, DCtx->VCtx->VDiskLogPrefix << "quantum finished",
@@ -241,8 +237,8 @@ namespace NKikimr {
     };
 
     IActor *CreateDefragQuantumActor(const std::shared_ptr<TDefragCtx>& dctx, const TVDiskID& selfVDiskId,
-            std::optional<TChunksToDefrag> chunksToDefrag, bool needCompaction) {
-        return new TActorCoro(MakeHolder<TDefragQuantum>(dctx, selfVDiskId, std::move(chunksToDefrag), needCompaction),
+            std::optional<TChunksToDefrag> chunksToDefrag) {
+        return new TActorCoro(MakeHolder<TDefragQuantum>(dctx, selfVDiskId, std::move(chunksToDefrag)),
             NKikimrServices::TActivity::BS_DEFRAG_QUANTUM);
     }
 

@@ -264,7 +264,7 @@ namespace NKikimr {
             ++TotalDefragRuns;
             InProgress = true;
             ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx, GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
-                std::visit(getChunksToDefrag, task.Request), DCtx->VCfg->EnableExplicitCompactionAfterDefrag)), __FILE__, __LINE__, ctx,
+                std::visit(getChunksToDefrag, task.Request))), __FILE__, __LINE__, ctx,
                 NKikimrServices::BLOBSTORAGE);
         }
 

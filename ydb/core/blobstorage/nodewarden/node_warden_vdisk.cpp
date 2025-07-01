@@ -196,7 +196,6 @@ namespace NKikimr::NStorage {
         vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
         vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
         vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
-        vdiskConfig->EnableExplicitCompactionAfterDefrag = EnableExplicitCompactionAfterDefrag;
         vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
         vdiskConfig->FreshCompMaxInFlightReads = FreshCompMaxInFlightReads;
         vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;

@@ -1550,11 +1550,7 @@ message TImmediateControlsConfig {
             MaxValue: 1000,
             DefaultValue: 0 }];
 
-        optional uint64 EnableExplicitCompactionAfterDefrag = 28 [(ControlOptions) = {
-            Description: "Enable explicit compaction call after defragmentation",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 1 }];
+        reserved 28;
 
         optional uint64 FreshCompMaxInFlightWrites = 29 [(ControlOptions) = {
             Description: "Max writes inflight for fresh level compaction",

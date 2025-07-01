@@ -243,7 +243,6 @@ namespace NKikimr {
         TControlWrapper DefaultHugeGarbagePerMille = 300;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
         TControlWrapper MaxChunksToDefragInflight = 10;
-        TControlWrapper EnableExplicitCompactionAfterDefrag = 1;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;

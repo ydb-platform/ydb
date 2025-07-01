@@ -97,7 +97,6 @@ public:
         AFL_VERIFY(WriteResults.size());
         std::optional<TInternalPathId> pathId;
         for (auto&& i : WriteResults) {
-            i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
             if (!pathId) {
                 pathId = i.GetWriteMeta().GetPathId().InternalPathId;

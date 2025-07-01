@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -26,6 +27,12 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
+
+    NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query) {
+        const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+        return session.ExecuteDataQuery(query, txSettings,
+            TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+    }
 
     std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, TTxSettings txSettings, const TString& query, bool covered = false) {
         {
@@ -600,6 +607,59 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 // from followers - should NOT read
                 // CheckTableReads(session, tableName, true, false);
             }
+        }
+    }
+
+    Y_UNIT_TEST(OrderByReject) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+
+        for (const auto & check: TVector<TVector<const char*>>({
+            {"distance=cosine", "Knn::CosineDistance(emb, 'abc') DESC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
+            {"distance=cosine", "Knn::CosineSimilarity(emb, 'abc') ASC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
+            {"similarity=cosine", "Knn::CosineDistance(emb, 'abc') DESC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
+            {"similarity=cosine", "Knn::CosineSimilarity(emb, 'abc') ASC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
+            {"similarity=inner_product", "Knn::InnerProductSimilarity(emb, 'abc') ASC", "Knn::InnerProductSimilarity(emb, ...) DESC"},
+            {"distance=manhattan", "Knn::ManhattanDistance(emb, 'abc') DESC", "Knn::ManhattanDistance(emb, ...) ASC"},
+            {"distance=euclidean", "Knn::EuclideanDistance(emb, 'abc') DESC", "Knn::EuclideanDistance(emb, ...) ASC"},
+        }))
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (%s, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )", check[0])));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const TString selectQuery(Q1_(Sprintf(R"(
+                SELECT * FROM `/Root/TestTable`
+                VIEW index ORDER BY %s
+            )", check[1])));
+            result = ExecuteDataQuery(session, selectQuery);
+            UNIT_ASSERT_C(HasIssue(NYdb::NAdapters::ToYqlIssues(result.GetIssues()), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+                [&](const NYql::TIssue& issue) {
+                    return issue.GetMessage().Contains("sorting must contain distance: " + TString(check[2]));
+                }), result.GetIssues().ToString());
+            UNIT_ASSERT(!result.IsSuccess());
+
+            session = db.CreateSession().GetValueSync().GetSession();
+            const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
+            result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 

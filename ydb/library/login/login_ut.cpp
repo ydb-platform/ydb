@@ -828,4 +828,20 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(!loginResponse.Error);
         }
     }
+
+    Y_UNIT_TEST(NotIgnoreCheckErrors) {
+        TLoginProvider provider(TPasswordComplexity(), TAccountLockout::TInitializer(), [] () {return true;}, {});
+        provider.RotateKeys();
+
+        TLoginProvider::TPasswordCheckResult checkResult;
+        checkResult.FillUnavailableKey();
+        auto response = provider.LoginUser(TLoginProvider::TLoginUserRequest{}, checkResult);
+        UNIT_ASSERT_EQUAL(response.Status, checkResult.Status);
+        UNIT_ASSERT_EQUAL(response.Error, checkResult.Error);
+
+        checkResult.FillInvalidUser("bad user");
+        response = provider.LoginUser(TLoginProvider::TLoginUserRequest{}, checkResult);
+        UNIT_ASSERT_EQUAL(response.Status, checkResult.Status);
+        UNIT_ASSERT_EQUAL(response.Error, checkResult.Error);
+    }
 }

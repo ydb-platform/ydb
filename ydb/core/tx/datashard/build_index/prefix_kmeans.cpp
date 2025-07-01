@@ -134,7 +134,6 @@ public:
         , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
-        Clusters->Init(request.GetK(), request.GetNeedsRounds());
 
         const auto& embedding = request.GetEmbeddingColumn();
         TVector<TString> data{request.GetDataColumns().begin(), request.GetDataColumns().end()};
@@ -204,8 +203,9 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) final
     {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
         Uploader.Finish(record, status);
 
@@ -355,7 +355,7 @@ protected:
     }
 
     void StartNewPrefix() {
-        Parent = Child + Clusters->GetK();
+        Parent = Child + K;
         Child = Parent + 1;
         State = EState::SAMPLE;
         Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
@@ -426,13 +426,12 @@ protected:
             }
             bool ok = Clusters->SetClusters(std::move(rows));
             Y_ENSURE(ok);
-            Clusters->InitAggregatedClusters();
+            Clusters->SetRound(1);
             return false; // do KMEANS
         }
 
         if (State == EState::KMEANS) {
-            if (Clusters->RecomputeClusters()) {
-                Clusters->RemoveEmptyClusters();
+            if (Clusters->NextRound()) {
                 FormLevelRows();
                 State = UploadState;
                 return false; // do UPLOAD_*
@@ -484,7 +483,7 @@ protected:
     void FeedKMeans(TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
+            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
     }
 
@@ -650,7 +649,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
         if (!clusters) {
             badRequest(error);
             auto sent = trySendBadRequest();

@@ -102,6 +102,7 @@ namespace NWilson {
                 return result;
             }
         public:
+            TMutex SpansMutex;
             std::unordered_map<TString, Span> Spans;
 
             Span Root{"Root", "", 0};
@@ -121,6 +122,7 @@ namespace NWilson {
             ui64 startTime = span.start_time_unix_nano();
 
             Trace &trace = Traces[traceId];
+            TGuard lock(trace.SpansMutex);
 
             trace.Spans.try_emplace(spanId, spanName, parentSpanId, startTime);
         }
@@ -129,6 +131,7 @@ namespace NWilson {
             for (auto& tracePair : Traces) {
                 Trace& trace = tracePair.second;
 
+                TGuard lock(trace.SpansMutex);
                 for (auto& spanPair : trace.Spans) {
                     Span& span = spanPair.second;
 

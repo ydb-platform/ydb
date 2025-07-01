@@ -69,6 +69,7 @@ public:
     };
 
     struct TPasswordCheckResult : TBasicResponse {
+    public:
         enum class EStatus {
             UNSPECIFIED,
             SUCCESS,
@@ -78,6 +79,22 @@ public:
         };
 
         EStatus Status = EStatus::UNSPECIFIED;
+
+    public:
+        void FillInvalidPassword() {
+            Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
+            Error = "Invalid password";
+        }
+
+        void FillUnavailableKey() {
+            Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
+            Error = "No key to generate token";
+        }
+
+        void FillInvalidUser(const TString& error) {
+            Status = TLoginUserResponse::EStatus::INVALID_USER;
+            Error = error;
+        }
     };
 
     struct TLoginUserResponse : TPasswordCheckResult {
@@ -255,7 +272,7 @@ private:
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
     bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
     TSidRecord* GetUserSid(const TString& user);
-    bool FillNoKeys(TPasswordCheckResult* checkResult) const;
+    bool FillUnavailableKey(TPasswordCheckResult* checkResult) const;
     bool FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const;
 
 private:

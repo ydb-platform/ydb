@@ -1,3 +1,5 @@
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 package NKikimrBackup;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -19,5 +21,5 @@ message TChecksumState {
 }
 
 message TS3DownloadState {
-    optional bytes EncryptedDeserializerState = 1;
+    optional bytes EncryptedDeserializerState = 1 [(Ydb.sensitive) = true]; // Contains secure key
 }

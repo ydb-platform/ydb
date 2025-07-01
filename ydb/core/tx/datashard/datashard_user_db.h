@@ -40,8 +40,14 @@ public:
     virtual void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const ui32 defaultFilledColumnCount) = 0;
 
+    virtual void UpsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+    
     virtual void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
@@ -116,6 +122,12 @@ public:
             TArrayRef<const NTable::TTag> tags,
             NTable::TRowState& row,
             const TMaybe<TRowVersion>& readVersion = {}) override;
+
+    void UpsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const ui32 defaultFilledColumnCount) override;
 
     void UpsertRow(
             const TTableId& tableId,
@@ -198,6 +210,9 @@ private:
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TStackVec<NTable::TTag>& columns);
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+
+    TArrayRef<const NIceDb::TUpdateOp> RemoveDefaultColumnsIfNeeded(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnCount);
+
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;

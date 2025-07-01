@@ -15,6 +15,7 @@ class ImportFileCsvBase(UploadSuiteBase):
     iterations: int = 1
     cpu_cores: float = 0.0
     cpu_time: float = 0.0
+    send_format: str = ''  # Optional parameter for send format
 
     def init(self):
         # Create tables
@@ -35,7 +36,14 @@ class ImportFileCsvBase(UploadSuiteBase):
         if not csv_files:
             raise RuntimeError(f'No .csv files found in {import_dir}')
         import_path = os.path.join(import_dir, csv_files[0])
-        result = yatest.common.execute(['/usr/bin/time'] + YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header'])
+
+        cmd = ['/usr/bin/time'] + YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header']
+        if self.send_format:
+            cmd.extend(['--send-format', self.send_format])
+
+        result = yatest.common.execute(cmd)
+
+        assert result.returncode == 0, f'Import failed with return code {result.returncode} and stderr: {result.stderr.decode("utf-8")}'
 
         stderr_output = result.stderr.decode('utf-8')
         for line in stderr_output.split('\n'):
@@ -89,3 +97,8 @@ class ImportFileCsvBase(UploadSuiteBase):
 
 class TestImportFileCsv(ImportFileCsvBase):
     external_folder: str = 'ecommerce'
+
+
+class TestImportFileCsvArrow(ImportFileCsvBase):
+    external_folder: str = 'ecommerce'
+    send_format: str = 'arrow'

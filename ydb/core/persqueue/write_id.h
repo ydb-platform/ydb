@@ -32,7 +32,9 @@ struct TWriteId {
 
     size_t GetHash() const
     {
-        return MultiHash(NodeId, KeyId);
+        return KafkaApiTransaction ?
+            MultiHash(KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch)
+            : MultiHash(NodeId, KeyId);
     }
 
     bool IsTopicApiTransaction() const 

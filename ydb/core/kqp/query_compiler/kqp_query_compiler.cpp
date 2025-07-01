@@ -1390,6 +1390,10 @@ private:
                 settingsProto.SetIsBatch(true);
             }
 
+            if (const auto isIndexImplTable = settings.IsIndexImplTable().Cast(); isIndexImplTable.StringValue() == "true") {
+                settingsProto.SetIsIndexImplTable(true);
+            }
+
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);
         } else {
             YQL_ENSURE(false, "Unsupported sink type");

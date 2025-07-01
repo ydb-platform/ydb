@@ -149,6 +149,7 @@ public:
     };
 public:
     virtual ~IWorkloadQueryGenerator() = default;
+    virtual void Init() = 0;
     virtual std::string GetDDLQueries() const = 0;
     virtual TQueryInfoList GetInitialData() = 0;
     virtual TVector<std::string> GetCleanPaths() const = 0;
@@ -185,6 +186,7 @@ public:
     }
 
     virtual void Validate(const ECommandType /*commandType*/, int /*workloadType*/) {};
+    virtual void Init() {};
 
     void SetClients(NYdb::NQuery::TQueryClient* queryClient, NYdb::NScheme::TSchemeClient* schemeClient,
         NYdb::NTable::TTableClient* tableClient, NYdb::NTopic::TTopicClient* topicClient)
@@ -198,8 +200,8 @@ public:
 public:
     ui64 BulkSize = 10000;
     std::string DbPath;
+    bool Verbose = false;
 
-protected:
     NYdb::NQuery::TQueryClient* QueryClient = nullptr;
     NYdb::NScheme::TSchemeClient* SchemeClient = nullptr;
     NYdb::NTable::TTableClient* TableClient = nullptr;
@@ -216,6 +218,9 @@ public:
 
     const TParams& GetParams() const {
         return Params;
+    }
+
+    void Init() override {
     }
 
 protected:

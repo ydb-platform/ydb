@@ -60,7 +60,6 @@ public:
 
 class TCPUUsage {
 private:
-    std::deque<TTaskCPUUsage> Usage;
     YDB_READONLY_DEF(TDuration, Duration);
     YDB_READONLY_DEF(TDuration, PredictedDuration);
     std::shared_ptr<TCPUUsage> Parent;
@@ -72,7 +71,6 @@ public:
     }
 
     void Clear() {
-        Usage.clear();
         Duration = TDuration::Zero();
         PredictedDuration = TDuration::Zero();
         StartInstant = TMonotonic::Zero();
@@ -93,19 +91,14 @@ public:
         }
     }
 
-    void AddUsage(const TTaskCPUUsage& extUsage) {
-        TTaskCPUUsage usage = extUsage;
-        if (usage.Cut(StartInstant)) {
-            Usage.emplace_back(usage);
-            Duration += usage.GetDuration();
-        }
+    void AddUsage(const TTaskCPUUsage& usage) {
+        Duration += usage.GetDuration();
         if (Parent) {
-            Parent->AddUsage(extUsage);
+            Parent->AddUsage(usage);
         }
     }
 
     void Exchange(const TDuration predicted, const TMonotonic start, const TMonotonic finish);
-    void Cut(const TMonotonic start);
 };
 
 class TCPUGroup {

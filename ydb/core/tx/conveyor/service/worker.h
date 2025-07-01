@@ -44,6 +44,7 @@ struct TEvInternal {
     enum EEv {
         EvNewTask = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvTaskProcessedResult,
+        EvChangeCPUSoftLimit,
         EvEnd
     };
 
@@ -84,6 +85,15 @@ struct TEvInternal {
             AFL_VERIFY(Instants.size() == ProcessIds.size() + 1);
         }
     };
+
+    class TEvChangeCPUSoftLimit: public NActors::TEventLocal<TEvChangeCPUSoftLimit, EvChangeCPUSoftLimit> {
+    private:
+        YDB_READONLY(double, CPUSoftLimit, 0.0);
+    public:
+        explicit TEvChangeCPUSoftLimit(const double cpuSoftLimit)
+            : CPUSoftLimit(cpuSoftLimit) {
+        }
+    };
 };
 
 class TWorker: public NActors::TActorBootstrapped<TWorker> {
@@ -104,6 +114,7 @@ private:
     void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void HandleMain(TEvInternal::TEvChangeCPUSoftLimit::TPtr& ev);
     void OnWakeup();
 public:
 
@@ -111,6 +122,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInternal::TEvNewTask, HandleMain);
             hFunc(NActors::TEvents::TEvWakeup, HandleMain);
+            hFunc(TEvInternal::TEvChangeCPUSoftLimit, HandleMain);
             default:
                 ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "unexpected event for task executor: " << ev->GetTypeRewrite();
                 break;
@@ -132,8 +144,6 @@ public:
         AFL_VERIFY(0 < CPUHardLimit);
         AFL_VERIFY(CPUHardLimit <= 1);
     }
-
-    void UpdateCPUSoftLimit(const double cpuSoftLimit);
 };
 
 }

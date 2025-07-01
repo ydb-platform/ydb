@@ -1,13 +1,15 @@
+#include "schemeshard__operation_restore_backup_collection.h"
+
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__op_traits.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard__operation.h"
-#include "schemeshard__operation_states.h"
-#include "schemeshard__operation_restore_backup_collection.h"
-#include "schemeshard__operation_change_path_state.h"
 #include "schemeshard__operation_base.h"
+#include "schemeshard__operation_change_path_state.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_states.h"
 
 #include <ydb/core/base/test_failure_injection.h>
+
 #include <util/generic/guid.h>
 
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -32,6 +34,74 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 }
 
 } // namespace NOperation
+
+// Forward declarations
+bool CreateLongIncrementalRestoreOp(
+    TOperationId opId,
+    const TPath& bcPath,
+    TVector<ISubOperation::TPtr>& result);
+
+class TDoneWithIncrementalRestore: public TDone {
+public:
+    explicit TDoneWithIncrementalRestore(const TOperationId& id)
+        : TDone(id)
+    {
+        auto events = AllIncomingEvents();
+        events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
+        IgnoreMessages(DebugHint(), events);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_I(DebugHint() << "ProgressState");
+
+        context.OnComplete.Barrier(OperationId, "DoneBarrier");
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
+        LOG_I(DebugHint() << "HandleReply TEvCompleteBarrier");
+
+        if (!TDone::Process(context)) {
+            return false;
+        }
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLongIncrementalRestoreOp);
+        const auto& targetPathId = txState->TargetPathId;
+
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(targetPathId));
+        auto path = context.SS->PathsById.at(targetPathId);
+
+        // Find the backup collection path from the long incremental restore operation
+        auto itOp = context.SS->LongIncrementalRestoreOps.find(OperationId);
+        if (itOp == context.SS->LongIncrementalRestoreOps.end()) {
+            LOG_E(DebugHint() << "Failed to find long incremental restore operation");
+            return false;
+        }
+
+        const auto& op = itOp->second;
+        TPathId backupCollectionPathId;
+        backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
+        backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
+
+        if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::DisableIncrementalRestoreAutoSwitchingToReadyStateForTests))) {
+            return true;
+        }
+
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
+
+        return true;
+    }
+
+private:
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TDoneWithIncrementalRestore"
+            << ", operationId: " << OperationId;
+    }
+
+}; // TDoneWithIncrementalRestore
 
 class TPropose: public TSubOperationState {
 private:
@@ -107,29 +177,30 @@ class TCreateRestoreOpControlPlane: public TSubOperationWithContext {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
             return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::CopyTableBarrier:
             return MakeHolder<TWaitCopyTableBarrier>(OperationId, "TCreateRestoreOpControlPlane");
-        case TTxState::Done: {
-            const auto* txState = context.SS->FindTx(OperationId);
-            if (txState && txState->TargetPathTargetState.Defined()) {
-                auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
-                return MakeHolder<TDone>(OperationId, targetState);
-            }
-            return MakeHolder<TDone>(OperationId);
-        }
+        case TTxState::Done:
+            return MakeHolder<TDoneWithIncrementalRestore>(OperationId);
         default:
             return nullptr;
         }
     }
 
 public:
-    using TSubOperationWithContext::TSubOperationWithContext;
-    using TSubOperationWithContext::SelectStateFunc;
+    TCreateRestoreOpControlPlane(TOperationId id, const TTxTransaction& tx)
+        : TSubOperationWithContext(id, tx)
+    {
+    }
+
+    TCreateRestoreOpControlPlane(TOperationId id, TTxState::ETxState state)
+        : TSubOperationWithContext(id, state)
+    {
+    }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound))) {
@@ -241,22 +312,6 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 };
-
-bool CreateLongIncrementalRestoreOp(
-    TOperationId opId,
-    const TPath& bcPath,
-    TVector<ISubOperation::TPtr>& result)
-{
-    TTxTransaction tx;
-    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
-    tx.SetInternal(true);
-    
-    tx.SetWorkingDir(bcPath.PathString());
-    
-    result.push_back(CreateLongIncrementalRestoreOpControlPlane(NextPartId(opId, result), tx));
-    
-    return true;
-}
 
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateRestoreOpControlPlane>(opId, tx);
@@ -379,6 +434,22 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     }
 
     return result;
+}
+
+bool CreateLongIncrementalRestoreOp(
+    TOperationId opId,
+    const TPath& bcPath,
+    TVector<ISubOperation::TPtr>& result)
+{
+    TTxTransaction tx;
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
+    tx.SetInternal(true);
+
+    tx.SetWorkingDir(bcPath.PathString());
+
+    result.push_back(CreateLongIncrementalRestoreOpControlPlane(NextPartId(opId, result), tx));
+
+    return true;
 }
 
 bool CreateIncrementalBackupPathStateOps(

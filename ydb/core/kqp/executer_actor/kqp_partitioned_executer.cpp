@@ -202,13 +202,15 @@ public:
             case Ydb::StatusIds::ABORTED:
             case Ydb::StatusIds::UNAVAILABLE:
             case Ydb::StatusIds::OVERLOADED:
+            case Ydb::StatusIds::UNDETERMINED:
                 return ScheduleRetryWithNewLimit(partInfo);
             default:
-                IssuesFromMessage(response->GetIssues(), ReturnIssues);
+                break;
         }
 
         ForgetPartition(partInfo);
 
+        IssuesFromMessage(response->GetIssues(), ReturnIssues);
         ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
             << "while executing by KqpPartitionedExecuterActor"));
 
@@ -247,6 +249,7 @@ public:
             case NYql::NDqProto::StatusIds::ABORTED:
             case NYql::NDqProto::StatusIds::UNAVAILABLE:
             case NYql::NDqProto::StatusIds::OVERLOADED:
+            case NYql::NDqProto::StatusIds::UNDETERMINED:
                 return ScheduleRetryWithNewLimit(partInfo);
             default:
                 break;
@@ -546,7 +549,7 @@ private:
     }
 
     void OnSuccessResponse(TPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
-        TSerializedCellVec maxKey = GetMaxCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
+        TSerializedCellVec maxKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
         if (maxKey) {
             partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(maxKey, /* IsInclusive */ false, /* IsPoint */ false);
             return RetryPartExecution(partInfo);
@@ -586,6 +589,19 @@ private:
     }
 
     void ScheduleRetryWithNewLimit(TPartitionInfo::TPtr& partInfo) {
+        if (partInfo->RetryDelayMs == Settings.MaxRetryDelayMs) {
+            ForgetPartition(partInfo);
+
+            if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
+                RuntimeError(
+                    Ydb::StatusIds::UNAVAILABLE,
+                    NYql::TIssues({NYql::TIssue(TStringBuilder()
+                        << "cannot retry query execution because the maximum retry delay has been reached")}));
+            }
+
+            return;
+        }
+
         auto newLimit = std::max(partInfo->LimitSize / 2, Settings.MinBatchSize);
         partInfo->LimitSize = newLimit;
 
@@ -603,7 +619,7 @@ private:
         return StartedPartitions.empty();
     }
 
-    TSerializedCellVec GetMaxCellVecKey(TVector<TSerializedCellVec>&& rows, TVector<ui32>&& rowKeyIds) const {
+    TSerializedCellVec GetMinCellVecKey(TVector<TSerializedCellVec>&& rows, TVector<ui32>&& rowKeyIds) const {
         YQL_ENSURE(rowKeyIds.empty() || KeyIds.size() <= rowKeyIds.size());
 
         // Sometimes SchemeCache and KqpReadActor return keys in the different order, so we need to reorder the second ones

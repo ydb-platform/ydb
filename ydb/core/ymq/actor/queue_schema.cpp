@@ -1524,7 +1524,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
     if (isCloudEventsEnabled) {
         result +=
         R"__(
-                    (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate)
+                    (If queueExists (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate) (Void))
         )__";
     }
 

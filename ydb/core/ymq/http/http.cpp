@@ -745,8 +745,6 @@ void THttpRequest::SetupDeleteUser(TDeleteUserRequest* const req) {
     if (QueryParams_.UserName) {
         req->SetUserName(*QueryParams_.UserName);
     }
-
-    // if (QueryParams_.Source)
 }
 
 void THttpRequest::SetupGetQueueAttributes(TGetQueueAttributesRequest* const req) {

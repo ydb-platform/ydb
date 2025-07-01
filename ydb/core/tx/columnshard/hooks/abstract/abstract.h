@@ -372,6 +372,8 @@ class IKqpController {
 public:
     using TPtr = std::shared_ptr<IKqpController>;
 
+    virtual ~IKqpController() = default;
+
     virtual void OnInitTabletScan(const ui64 /*tabletId*/) {
     }
 

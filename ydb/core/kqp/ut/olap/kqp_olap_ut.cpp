@@ -2122,7 +2122,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             Tests::TServer::TPtr server = new Tests::TServer(settings);
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-            auto kqpController = NYDBTest::TControllers::RegisterKqpControllerGuard<NYDBTest::NColumnShard::TTestKqpController>();
+            auto kqpController = NYDBTest::TControllers::RegisterKqpControllerGuard<NYDBTest::TTestKqpController>();
 
             auto runtime = server->GetRuntime();
             auto sender = runtime->AllocateEdgeActor();
@@ -2236,8 +2236,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
             virtual void OnAfterTest() const override {
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::NColumnShard::TTestKqpController>()->GetInitScanCounter().Val());
-                AFL_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::NColumnShard::TTestKqpController>()->GetResolvingCounter().Val());
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                AFL_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
             }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
@@ -2250,8 +2250,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
             virtual void OnAfterTest() const override {
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::NColumnShard::TTestKqpController>()->GetInitScanCounter().Val());
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::NColumnShard::TTestKqpController>()->GetResolvingCounter().Val());
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
             }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root")

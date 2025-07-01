@@ -80,14 +80,9 @@ struct TEvSolomonProvider {
     };
     
     struct TEvNewDataBatch: public NActors::TEventLocal<TEvNewDataBatch, EvNewDataBatch> {
-        NSo::TMetric Metric;
-        TInstant From, To;
         NSo::TGetDataResponse Response;
-        TEvNewDataBatch(NSo::TMetric metric, TInstant from, TInstant to, const NSo::TGetDataResponse& response)
-            : Metric(metric)
-            , From(from)
-            , To(to)
-            , Response(response)
+        TEvNewDataBatch(const NSo::TGetDataResponse& response)
+            : Response(response)
         {}
     };
 };

@@ -229,15 +229,10 @@ public:
     void HandleNewDataBatch(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
         auto& batch = *newDataBatch->Get();
 
-        if (batch.Response.Status == NSo::EStatus::STATUS_FATAL_ERROR) {
+        if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
-            return;
-        }
-        if (batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
-            MetricsWithTimeRange.emplace_back(batch.Metric, batch.From, batch.To);
-            TryRequestData();
             return;
         }
 
@@ -436,8 +431,8 @@ private:
     }
 
     void RequestData() {
-        NThreading::TFuture<NSo::TGetDataResponse> getDataFuture;
         NSo::TMetric metric;
+        TString program;
         TInstant from;
         TInstant to;
 
@@ -448,26 +443,45 @@ private:
             metric = request.Metric;
             from = request.From;
             to = request.To;
-
-            getDataFuture = SolomonClient->GetData(metric.Labels, from, to);
         } else {
-            getDataFuture = SolomonClient->GetData(
-                ReadParams.Source.GetProgram(),
-                TInstant::Seconds(ReadParams.Source.GetFrom()),
-                TInstant::Seconds(ReadParams.Source.GetTo())
-            );
+            program = ReadParams.Source.GetProgram();
+            from = TInstant::Seconds(ReadParams.Source.GetFrom());
+            to = TInstant::Seconds(ReadParams.Source.GetTo());
         }
 
+        auto makeDataRequest = [metric, program, from, to, this] () {
+            if (UseMetricsQueue) {
+                return SolomonClient->GetData(metric.Labels, from, to);
+            }
+            return SolomonClient->GetData(program, from, to);
+        };
+
+        auto getDataFuture = makeDataRequest();
+
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        getDataFuture.Subscribe([actorSystem, metric, from, to, selfId = SelfId()](
+        getDataFuture.Subscribe([actorSystem, makeDataRequest, selfId = SelfId()](
             const NThreading::TFuture<NSo::TGetDataResponse>& response) -> void
         {
-            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
-                metric,
-                from,
-                to,
-                response.GetValue())
-            );
+            auto retryState = IRetryPolicy<NSo::TGetDataResponse>::GetExponentialBackoffPolicy(
+                [](const NSo::TGetDataResponse& response) {
+                    if (response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
+                        return ERetryErrorClass::ShortRetry;
+                    }
+                    return ERetryErrorClass::NoRetry;
+                },
+                TDuration::MilliSeconds(50),
+                TDuration::MilliSeconds(200),
+                TDuration::MilliSeconds(1000),
+                5
+            )->CreateRetryState();
+
+            auto value = response.GetValue();
+            while (auto delay = retryState->GetNextRetryDelay(value)) {
+                Sleep(*delay);
+                value = makeDataRequest().GetValueSync();
+            }
+
+            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(value));
         });
     }
 

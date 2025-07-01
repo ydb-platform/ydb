@@ -75,6 +75,9 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
 }
 
 void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
+    if (ChunksLimiter.HasMore()) {
+        WaitTime = TInstant::Now() - StartWaitTime;
+    }
     auto g = Stats->MakeGuard("task_result");
     auto result = ev->Get()->ExtractResult();
     if (result.IsFail()) {
@@ -91,6 +94,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
 }
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
+    StartWaitTime = TInstant::Now();
     auto g = Stats->MakeGuard("ack");
 
     AFL_VERIFY(!AckReceivedInstant);
@@ -388,6 +392,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
+    Result->WaitTime = WaitTime;
 
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
 

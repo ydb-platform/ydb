@@ -1804,25 +1804,37 @@ class WorkloadTestBase(LoadSuiteBase):
 
     def _check_scheme_state(self):
         """Проверяет состояние схемы базы данных"""
+        logging.info("=== CHECK SCHEME STATE ===")
+        
         with allure.step("Checking scheme state"):
             try:
-
+                logging.info("Getting YDB CLI binary path...")
                 ydb_cli_path = yatest.common.binary_path(
                     os.getenv("YDB_CLI_BINARY"))
+                logging.info(f"  - YDB CLI path: {ydb_cli_path}")
+                
+                endpoint = f"{YdbCluster.ydb_endpoint}"
+                database = f"/{YdbCluster.ydb_database}"
+                logging.info(f"  - Endpoint: {endpoint}")
+                logging.info(f"  - Database: {database}")
+                
+                command = [
+                    ydb_cli_path,
+                    "--endpoint", endpoint,
+                    "--database", database,
+                    "scheme", "ls", "-lR",
+                ]
+                logging.info(f"  - Command: {' '.join(command)}")
+                
+                logging.info("Executing scheme ls command...")
                 execution = yatest.common.execute(
-                    [
-                        ydb_cli_path,
-                        "--endpoint",
-                        f"{YdbCluster.ydb_endpoint}",
-                        "--database",
-                        f"/{YdbCluster.ydb_database}",
-                        "scheme",
-                        "ls",
-                        "-lR",
-                    ],
+                    command,
                     wait=True,
                     check_exit_code=False,
                 )
+                
+                logging.info(f"  - Exit code: {execution.exit_code}")
+                
                 scheme_stdout = (
                     execution.std_out.decode(
                         "utf-8") if execution.std_out else ""
@@ -1831,7 +1843,16 @@ class WorkloadTestBase(LoadSuiteBase):
                     execution.std_err.decode(
                         "utf-8") if execution.std_err else ""
                 )
+                
+                logging.info(f"  - Stdout length: {len(scheme_stdout)} chars")
+                logging.info(f"  - Stderr length: {len(scheme_stderr)} chars")
+                
             except Exception as e:
+                logging.error(f"Error executing scheme check: {e}")
+                import traceback
+                traceback_str = traceback.format_exc()
+                logging.error(f"Traceback: {traceback_str}")
+                
                 scheme_stdout = ""
                 scheme_stderr = str(e)
 
@@ -1842,9 +1863,12 @@ class WorkloadTestBase(LoadSuiteBase):
                 allure.attach(
                     scheme_stderr, "Scheme state stderr", allure.attachment_type.TEXT
                 )
+                
             logging.info(f"scheme stdout: {scheme_stdout}")
             if scheme_stderr:
                 logging.warning(f"scheme stderr: {scheme_stderr}")
+                
+        logging.info("=== CHECK SCHEME STATE COMPLETED ===")
 
     def _process_single_run_result(
         self,
@@ -1925,39 +1949,57 @@ class WorkloadTestBase(LoadSuiteBase):
             total_runs: Общее количество запусков
             use_iterations: Использовались ли итерации
         """
-        # Группируем итерации по их номеру, чтобы определить реальное
-        # количество итераций
+        logging.info("=== ANALYZE EXECUTION RESULTS ===")
+        logging.info(f"Input parameters:")
+        logging.info(f"  - successful_runs: {successful_runs}")
+        logging.info(f"  - total_runs: {total_runs}")
+        logging.info(f"  - use_iterations: {use_iterations}")
+        logging.info(f"  - total iterations in result: {len(overall_result.iterations)}")
+        
+        # Группируем итерации по их номеру, чтобы определить реальное количество итераций
         iterations_by_number = {}
         threads_by_iteration = {}
 
+        logging.info("Analyzing iterations and grouping by iteration number...")
+        
         # Анализируем все итерации и группируем их по номеру итерации
         for iter_num, iteration in overall_result.iterations.items():
+            logging.info(f"  Processing iteration {iter_num}:")
+            
             # Получаем номер итерации из статистики или из имени
             real_iter_num = None
             node_host = None
 
             # Проверяем статистику
             if hasattr(iteration, "stats") and iteration.stats:
+                logging.info(f"    - Has stats: {len(iteration.stats)} items")
                 for stat_key, stat_value in iteration.stats.items():
                     if isinstance(stat_value, dict):
                         if stat_key == "iteration_info":
                             if "iteration_num" in stat_value:
                                 real_iter_num = stat_value["iteration_num"]
+                                logging.info(f"    - Found iteration_num in iteration_info: {real_iter_num}")
                             if "node_host" in stat_value:
                                 node_host = stat_value["node_host"]
+                                logging.info(f"    - Found node_host: {node_host}")
                         elif "iteration_num" in stat_value:
                             real_iter_num = stat_value["iteration_num"]
+                            logging.info(f"    - Found iteration_num in {stat_key}: {real_iter_num}")
                         elif "chunk_num" in stat_value:  # Для обратной совместимости
                             real_iter_num = stat_value["chunk_num"]
+                            logging.info(f"    - Found chunk_num (legacy): {real_iter_num}")
+            else:
+                logging.info(f"    - No stats available")
 
             # Если не нашли в статистике, пробуем извлечь из имени
-            if real_iter_num is None and hasattr(
-                    iteration, "name") and iteration.name:
+            if real_iter_num is None and hasattr(iteration, "name") and iteration.name:
+                logging.info(f"    - Trying to extract from name: {iteration.name}")
                 name_parts = iteration.name.split("_")
                 for i, part in enumerate(name_parts):
                     if part == "iter" and i + 1 < len(name_parts):
                         try:
                             real_iter_num = int(name_parts[i + 1])
+                            logging.info(f"    - Extracted from name: {real_iter_num}")
                             break
                         except (ValueError, IndexError):
                             pass
@@ -1965,32 +2007,60 @@ class WorkloadTestBase(LoadSuiteBase):
             # Если все еще не определили, используем номер итерации
             if real_iter_num is None:
                 real_iter_num = iter_num
+                logging.info(f"    - Using default iter_num: {real_iter_num}")
 
             # Добавляем итерацию в группу по её номеру
             if real_iter_num not in iterations_by_number:
                 iterations_by_number[real_iter_num] = []
                 threads_by_iteration[real_iter_num] = set()
+                logging.info(f"    - Created new group for iteration {real_iter_num}")
 
             iterations_by_number[real_iter_num].append(iteration)
             if node_host:
                 threads_by_iteration[real_iter_num].add(node_host)
+                logging.info(f"    - Added to group {real_iter_num}, thread: {node_host}")
+            else:
+                logging.info(f"    - Added to group {real_iter_num}, no host info")
 
         # Определяем реальное количество итераций и потоков
         real_iteration_count = len(iterations_by_number)
         failed_iterations = 0
 
+        logging.info(f"Analysis summary:")
+        logging.info(f"  - Real iteration count: {real_iteration_count}")
+        logging.info(f"  - Iterations by number: {list(iterations_by_number.keys())}")
+        
         # Проверяем каждую итерацию на наличие ошибок
         for iter_num, iterations in iterations_by_number.items():
-            # Если хотя бы один поток в итерации завершился успешно, считаем
-            # итерацию успешной
-            iteration_success = any(
-                not hasattr(
-                    iter_obj, "error_message") or not iter_obj.error_message
-                for iter_obj in iterations
-            )
+            logging.info(f"  Checking iteration {iter_num} ({len(iterations)} threads):")
+            
+            # Если хотя бы один поток в итерации завершился успешно, считаем итерацию успешной
+            successful_threads = []
+            failed_threads = []
+            
+            for iter_obj in iterations:
+                has_error = hasattr(iter_obj, "error_message") and iter_obj.error_message
+                if has_error:
+                    failed_threads.append(iter_obj.error_message)
+                else:
+                    successful_threads.append("OK")
+            
+            iteration_success = len(successful_threads) > 0
+            
+            logging.info(f"    - Successful threads: {len(successful_threads)}")
+            logging.info(f"    - Failed threads: {len(failed_threads)}")
+            logging.info(f"    - Iteration success: {iteration_success}")
+            
+            if failed_threads:
+                logging.info(f"    - Failed thread errors: {failed_threads[:3]}...")  # Показываем первые 3
 
             if not iteration_success:
                 failed_iterations += 1
+                logging.info(f"    - Iteration {iter_num} marked as FAILED")
+
+        logging.info(f"Final analysis:")
+        logging.info(f"  - Failed iterations: {failed_iterations}")
+        logging.info(f"  - Total iterations: {real_iteration_count}")
 
         # Формируем сообщение об ошибке или предупреждение
         if failed_iterations == real_iteration_count and real_iteration_count > 0:
@@ -2000,21 +2070,25 @@ class WorkloadTestBase(LoadSuiteBase):
                 real_iteration_count == 1
                 and sum(len(threads) for threads in threads_by_iteration.values()) > 1
             ):
-                # Если была только одна итерация с несколькими потоками,
-                # указываем это
+                # Если была только одна итерация с несколькими потоками, указываем это
                 thread_count = sum(
                     len(threads) for threads in threads_by_iteration.values()
                 )
                 threads_info = f" with {thread_count} parallel threads"
 
-            overall_result.add_error(
-                f"All {real_iteration_count} iterations{threads_info} failed to execute successfully"
-            )
+            error_msg = f"All {real_iteration_count} iterations{threads_info} failed to execute successfully"
+            logging.info(f"  - Adding ERROR: {error_msg}")
+            overall_result.add_error(error_msg)
+            
         elif failed_iterations > 0:
             # Некоторые итерации завершились с ошибкой
-            overall_result.add_warning(
-                f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully"
-            )
+            warning_msg = f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully"
+            logging.info(f"  - Adding WARNING: {warning_msg}")
+            overall_result.add_warning(warning_msg)
+        else:
+            logging.info(f"  - All iterations successful, no errors/warnings added")
+
+        logging.info("=== ANALYZE EXECUTION RESULTS COMPLETED ===")
 
     def _add_execution_statistics(
         self,
@@ -2036,15 +2110,26 @@ class WorkloadTestBase(LoadSuiteBase):
             duration_value: Время выполнения в секундах
             use_iterations: Использовались ли итерации
         """
+        logging.info("=== ADD EXECUTION STATISTICS ===")
+        
         successful_runs = execution_result["successful_runs"]
         total_runs = execution_result["total_runs"]
         total_execution_time = execution_result["total_execution_time"]
 
-        # Группируем итерации по их номеру для определения реального количества
-        # итераций и потоков
+        logging.info(f"Input execution data:")
+        logging.info(f"  - successful_runs: {successful_runs}")
+        logging.info(f"  - total_runs: {total_runs}")
+        logging.info(f"  - total_execution_time: {total_execution_time}")
+        logging.info(f"  - duration_value: {duration_value}")
+        logging.info(f"  - use_iterations: {use_iterations}")
+        logging.info(f"  - additional_stats keys: {list(additional_stats.keys()) if additional_stats else 'None'}")
+
+        # Группируем итерации по их номеру для определения реального количества итераций и потоков
         iterations_by_number = {}
         threads_by_iteration = {}
 
+        logging.info("Analyzing iterations for statistics...")
+        
         # Анализируем все итерации и группируем их по номеру итерации
         for iter_num, iteration in overall_result.iterations.items():
             # Получаем номер итерации из статистики или из имени
@@ -2069,8 +2154,7 @@ class WorkloadTestBase(LoadSuiteBase):
                             real_iter_num = stat_value["chunk_num"]
 
             # Если не нашли в статистике, пробуем извлечь из имени
-            if real_iter_num is None and hasattr(
-                    iteration, "name") and iteration.name:
+            if real_iter_num is None and hasattr(iteration, "name") and iteration.name:
                 name_parts = iteration.name.split("_")
                 for i, part in enumerate(name_parts):
                     if part == "iter" and i + 1 < len(name_parts):
@@ -2099,19 +2183,24 @@ class WorkloadTestBase(LoadSuiteBase):
             len(threads) for threads in threads_by_iteration.values()
         )
 
+        logging.info(f"Iteration analysis results:")
+        logging.info(f"  - real_iteration_count: {real_iteration_count}")
+        logging.info(f"  - total_thread_count: {total_thread_count}")
+
         # Считаем успешные итерации
         successful_iterations = 0
         for iter_num, iterations in iterations_by_number.items():
-            # Если хотя бы один поток в итерации завершился успешно, считаем
-            # итерацию успешной
+            # Если хотя бы один поток в итерации завершился успешно, считаем итерацию успешной
             iteration_success = any(
-                not hasattr(
-                    iter_obj, "error_message") or not iter_obj.error_message
+                not hasattr(iter_obj, "error_message") or not iter_obj.error_message
                 for iter_obj in iterations
             )
 
             if iteration_success:
                 successful_iterations += 1
+
+        logging.info(f"  - successful_iterations: {successful_iterations}")
+        logging.info(f"  - failed_iterations: {real_iteration_count - successful_iterations}")
 
         # Вычисляем фактическое время выполнения как среднее по всем итерациям
         actual_execution_times = []
@@ -2136,6 +2225,10 @@ class WorkloadTestBase(LoadSuiteBase):
             else duration_value
         )
 
+        logging.info(f"Timing analysis:")
+        logging.info(f"  - actual_execution_times count: {len(actual_execution_times)}")
+        logging.info(f"  - avg_actual_time: {avg_actual_time}")
+
         # Базовая статистика
         stats = {
             "total_runs": total_runs,
@@ -2157,13 +2250,23 @@ class WorkloadTestBase(LoadSuiteBase):
             ),
         }
 
+        logging.info(f"Base statistics created:")
+        for key, value in stats.items():
+            logging.info(f"  - {key}: {value}")
+
         # Добавляем дополнительную статистику
         if additional_stats:
+            logging.info(f"Adding additional stats ({len(additional_stats)} items):")
+            for key, value in additional_stats.items():
+                logging.info(f"  - {key}: {value}")
             stats.update(additional_stats)
 
         # Добавляем всю статистику в результат
+        logging.info(f"Adding {len(stats)} statistics to result...")
         for key, value in stats.items():
             overall_result.add_stat(workload_name, key, value)
+
+        logging.info("=== ADD EXECUTION STATISTICS COMPLETED ===")
 
     def _finalize_workload_results(
         self,
@@ -2186,43 +2289,220 @@ class WorkloadTestBase(LoadSuiteBase):
         Returns:
             Финальный результат выполнения
         """
-        # Для обратной совместимости переименовываем параметр use_chunks в
-        # use_iterations
+        # Для обратной совместимости переименовываем параметр use_chunks в use_iterations
         use_iterations = use_chunks
 
-        with allure.step("Phase 3: Finalize results and diagnostics"):
+        logging.info(f"=== FINALIZE WORKLOAD RESULTS FOR {workload_name} ===")
+        logging.info(f"Input parameters:")
+        logging.info(f"  - workload_name: {workload_name}")
+        logging.info(f"  - duration_value: {duration_value}")
+        logging.info(f"  - use_iterations: {use_iterations}")
+        logging.info(f"  - additional_stats keys: {list(additional_stats.keys()) if additional_stats else 'None'}")
+        logging.info(f"  - execution_result keys: {list(execution_result.keys())}")
+
+        with allure.step(f"Phase 3: Finalize results and diagnostics for {workload_name}"):
             overall_result = execution_result["overall_result"]
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            # Проверяем состояние схемы
-            self._check_scheme_state()
-
-            # Анализируем результаты и добавляем ошибки/предупреждения
-            self._analyze_execution_results(
-                overall_result, successful_runs, total_runs, use_iterations
+            logging.info(f"Execution summary: {successful_runs}/{total_runs} successful runs")
+            allure.attach(
+                f"Successful runs: {successful_runs}/{total_runs}\n"
+                f"Success rate: {successful_runs/total_runs*100:.1f}%\n"
+                f"Use iterations: {use_iterations}",
+                "Execution Summary",
+                allure.attachment_type.TEXT
             )
 
-            # Собираем и добавляем статистику
-            self._add_execution_statistics(
-                overall_result,
-                workload_name,
-                execution_result,
-                additional_stats,
-                duration_value,
-                use_iterations,
-            )
+            # ===== STEP 1: Проверка схемы =====
+            with allure.step(f"Step 1: Check database scheme state") as step1:
+                step1.name = f"Step 1: Check database scheme state"
+                logging.info("Step 1: Checking database scheme state...")
+                try:
+                    self._check_scheme_state()
+                    logging.info("  ✓ Scheme state check completed successfully")
+                    allure.attach("Scheme state check completed successfully", "Scheme Check Result", allure.attachment_type.TEXT)
+                    step1.name = f"Step 1: ✅ Database scheme checked"
+                except Exception as e:
+                    logging.error(f"  ✗ Scheme state check failed: {e}")
+                    allure.attach(f"Scheme state check failed: {e}", "Scheme Check Error", allure.attachment_type.TEXT)
+                    step1.name = f"Step 1: ❌ Database scheme check failed"
 
-            # Финальная обработка с диагностикой
-            overall_result.workload_start_time = execution_result["workload_start_time"]
-            self.process_workload_result_with_diagnostics(
-                overall_result, workload_name, False, use_node_subcols=True
-            )
+            # ===== STEP 2: Анализ результатов =====
+            with allure.step(f"Step 2: Analyze execution results") as step2:
+                step2.name = f"Step 2: Analyze execution results"
+                logging.info("Step 2: Analyzing execution results...")
+                logging.info(f"  - Before analysis: overall_result.success = {overall_result.success}")
+                logging.info(f"  - Before analysis: overall_result.errors = {len(overall_result.errors) if overall_result.errors else 0}")
+                logging.info(f"  - Before analysis: overall_result.warnings = {len(overall_result.warnings) if overall_result.warnings else 0}")
+                
+                try:
+                    self._analyze_execution_results(
+                        overall_result, successful_runs, total_runs, use_iterations
+                    )
+                    logging.info("  ✓ Execution results analysis completed")
+                    logging.info(f"  - After analysis: overall_result.success = {overall_result.success}")
+                    logging.info(f"  - After analysis: overall_result.errors = {len(overall_result.errors) if overall_result.errors else 0}")
+                    logging.info(f"  - After analysis: overall_result.warnings = {len(overall_result.warnings) if overall_result.warnings else 0}")
+                    
+                    allure.attach(
+                        f"Analysis completed\n"
+                        f"Final success: {overall_result.success}\n"
+                        f"Errors count: {len(overall_result.errors) if overall_result.errors else 0}\n"
+                        f"Warnings count: {len(overall_result.warnings) if overall_result.warnings else 0}",
+                        "Analysis Result",
+                        allure.attachment_type.TEXT
+                    )
+                    step2.name = f"Step 2: ✅ Results analyzed (Success: {overall_result.success})"
+                except Exception as e:
+                    logging.error(f"  ✗ Execution results analysis failed: {e}")
+                    allure.attach(f"Analysis failed: {e}", "Analysis Error", allure.attachment_type.TEXT)
+                    step2.name = f"Step 2: ❌ Results analysis failed"
 
-            logging.info(
-                f"Final result: success={
-                    overall_result.success}, successful_runs={successful_runs}/{total_runs}"
-            )
+            # ===== STEP 3: Сбор статистики =====
+            with allure.step(f"Step 3: Collect execution statistics") as step3:
+                step3.name = f"Step 3: Collect execution statistics"
+                logging.info("Step 3: Collecting execution statistics...")
+                stats_before = overall_result.get_stats(workload_name)
+                stats_count_before = len(stats_before) if stats_before else 0
+                logging.info(f"  - Stats before: {stats_count_before} fields")
+                
+                try:
+                    self._add_execution_statistics(
+                        overall_result,
+                        workload_name,
+                        execution_result,
+                        additional_stats,
+                        duration_value,
+                        use_iterations,
+                    )
+                    
+                    stats_after = overall_result.get_stats(workload_name)
+                    stats_count_after = len(stats_after) if stats_after else 0
+                    logging.info(f"  ✓ Statistics collection completed")
+                    logging.info(f"  - Stats after: {stats_count_after} fields")
+                    logging.info(f"  - Added {stats_count_after - stats_count_before} new fields")
+                    
+                    # Логируем ключевые статистики
+                    if stats_after:
+                        key_stats = {k: v for k, v in stats_after.items() if k in [
+                            'total_runs', 'successful_runs', 'failed_runs', 'success_rate',
+                            'total_iterations', 'total_threads', 'actual_duration', 'planned_duration',
+                            'workload_type', 'nemesis_enabled'
+                        ]}
+                        logging.info(f"  - Key statistics: {key_stats}")
+                        
+                        allure.attach(
+                            f"Statistics collected: {stats_count_after} fields\n"
+                            f"Key stats: {key_stats}",
+                            "Statistics Summary",
+                            allure.attachment_type.TEXT
+                        )
+                        step3.name = f"Step 3: ✅ Statistics collected ({stats_count_after} fields)"
+                    else:
+                        step3.name = f"Step 3: ⚠️ No statistics available"
+                    
+                except Exception as e:
+                    logging.error(f"  ✗ Statistics collection failed: {e}")
+                    allure.attach(f"Statistics collection failed: {e}", "Statistics Error", allure.attachment_type.TEXT)
+                    step3.name = f"Step 3: ❌ Statistics collection failed"
+
+            # ===== STEP 4: Установка времени начала workload =====
+            with allure.step(f"Step 4: Set workload start time") as step4:
+                step4.name = f"Step 4: Set workload start time"
+                logging.info("Step 4: Setting workload start time...")
+                workload_start_time = execution_result.get("workload_start_time")
+                logging.info(f"  - Setting workload_start_time: {workload_start_time}")
+                overall_result.workload_start_time = workload_start_time
+                allure.attach(f"Workload start time set: {workload_start_time}", "Start Time", allure.attachment_type.TEXT)
+                step4.name = f"Step 4: ✅ Start time set ({workload_start_time})"
+
+            # ===== STEP 5: Диагностика и финальная обработка =====
+            with allure.step(f"Step 5: Process workload result with diagnostics") as step5:
+                step5.name = f"Step 5: Process workload result with diagnostics"
+                logging.info("Step 5: Processing workload result with diagnostics...")
+                logging.info(f"  - Calling process_workload_result_with_diagnostics for {workload_name}")
+                logging.info(f"  - check_scheme=False, use_node_subcols=True")
+                
+                # Проверяем наличие метода __attach_logs ПЕРЕД вызовом диагностики
+                attach_logs_method = getattr(self, "__attach_logs", None)
+                logging.info(f"  - __attach_logs method available: {attach_logs_method is not None}")
+                if attach_logs_method:
+                    logging.info(f"  - __attach_logs method type: {type(attach_logs_method)}")
+                else:
+                    logging.warning("  - __attach_logs method NOT FOUND - logs will not be attached!")
+                
+                allure.attach(
+                    f"Diagnostics starting for {workload_name}\n"
+                    f"__attach_logs available: {attach_logs_method is not None}\n"
+                    f"check_scheme: False\n"
+                    f"use_node_subcols: True",
+                    "Diagnostics Setup",
+                    allure.attachment_type.TEXT
+                )
+                
+                try:
+                    self.process_workload_result_with_diagnostics(
+                        overall_result, workload_name, False, use_node_subcols=True
+                    )
+                    logging.info("  ✓ Workload result processing completed successfully")
+                    allure.attach("Workload result processing completed successfully", "Diagnostics Result", allure.attachment_type.TEXT)
+                    step5.name = f"Step 5: ✅ Diagnostics completed"
+                    
+                except Exception as e:
+                    logging.error(f"  ✗ Workload result processing failed: {e}")
+                    import traceback
+                    traceback_str = traceback.format_exc()
+                    logging.error(f"  ✗ Traceback: {traceback_str}")
+                    allure.attach(
+                        f"Workload result processing failed: {e}\n\nTraceback:\n{traceback_str}",
+                        "Diagnostics Error",
+                        allure.attachment_type.TEXT
+                    )
+                    step5.name = f"Step 5: ❌ Diagnostics failed"
+
+            # ===== STEP 6: Финальный отчет =====
+            with allure.step(f"Step 6: Final result summary") as step6:
+                step6.name = f"Step 6: Final result summary"
+                final_stats = overall_result.get_stats(workload_name)
+                final_success = overall_result.success
+                final_errors = len(overall_result.errors) if overall_result.errors else 0
+                final_warnings = len(overall_result.warnings) if overall_result.warnings else 0
+                
+                logging.info("Step 6: Final result summary...")
+                logging.info(f"  ✓ Final result: success={final_success}")
+                logging.info(f"  ✓ Successful runs: {successful_runs}/{total_runs}")
+                logging.info(f"  ✓ Final errors count: {final_errors}")
+                logging.info(f"  ✓ Final warnings count: {final_warnings}")
+                
+                if final_stats:
+                    # Проверяем новые поля статистики
+                    diagnostic_fields = {
+                        'nodes_with_issues': final_stats.get('nodes_with_issues', 'NOT_SET'),
+                        'with_warnings': final_stats.get('with_warnings', 'NOT_SET'),
+                        'with_errors': final_stats.get('with_errors', 'NOT_SET'),
+                    }
+                    logging.info(f"  ✓ Diagnostic fields: {diagnostic_fields}")
+                    
+                    allure.attach(
+                        f"FINAL RESULT SUMMARY\n"
+                        f"Success: {final_success}\n"
+                        f"Successful runs: {successful_runs}/{total_runs}\n"
+                        f"Errors: {final_errors}\n"
+                        f"Warnings: {final_warnings}\n"
+                        f"Diagnostic fields: {diagnostic_fields}\n"
+                        f"Total stats fields: {len(final_stats)}",
+                        "Final Summary",
+                        allure.attachment_type.TEXT
+                    )
+                    
+                    success_emoji = "✅" if final_success else "❌"
+                    step6.name = f"Step 6: {success_emoji} Final summary (Success: {final_success}, Runs: {successful_runs}/{total_runs})"
+                else:
+                    step6.name = f"Step 6: ⚠️ Final summary (No stats available)"
+                
+                logging.info(f"=== FINALIZE COMPLETED FOR {workload_name} ===")
+                
             return overall_result
 
     def process_workload_result_with_diagnostics(

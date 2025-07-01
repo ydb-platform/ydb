@@ -299,6 +299,22 @@ public:
         SpillerFactory = spillerFactory;
     }
 
+    TString DebugString() override {
+        if (!AllocatedHolder->Output) {
+            return "Output == nullptr";
+        } else {
+            TStringBuilder builder;
+            switch (AllocatedHolder->Output->GetFillLevel()) {
+                case NoLimit:   builder << "Output == NoLimit"; break;
+                case SoftLimit: builder << "Output == SoftLimit"; break;
+                case HardLimit: builder << "Output == HardLimit"; break;
+            }
+            builder << Endl;
+            builder << AllocatedHolder->Output->DebugString();
+            return builder;
+        }
+    }
+
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
         return Context.PatternCache &&
             (Settings.OptLLVM == "OFF" || taskSettings.IsLLVMDisabled() || Settings.UseCacheForLLVM);

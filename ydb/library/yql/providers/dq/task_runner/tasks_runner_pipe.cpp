@@ -1682,6 +1682,10 @@ public:
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
     }
 
+    TString DebugString() override {
+        return "";
+    }
+
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx) override
     {

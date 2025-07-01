@@ -54,6 +54,12 @@ protected:
     }
 
     void DoTerminateImpl() override {
+
+        if (TBase::State == NDqProto::COMPUTE_STATE_FAILURE) {
+            CA_LOG_E("******* Task Runner DEBUG: *******" << Endl
+                << TaskRunner->DebugString() << Endl);
+        }
+
         TaskRunner.Reset();
     }
 

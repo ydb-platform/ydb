@@ -71,6 +71,12 @@ struct TDqFillAggregator {
         }
         return Counts[static_cast<ui32>(SoftLimit)].load() ? SoftLimit : NoLimit;
     }
+
+    TString DebugString() {
+        return TStringBuilder() << "AGG: N=" << Counts[static_cast<ui32>(HardLimit)].load()
+            << " S=" << Counts[static_cast<ui32>(SoftLimit)].load()
+            << " H=" << Counts[static_cast<ui32>(HardLimit)].load();
+    }
 };
 
 class IDqOutput : public TSimpleRefCount<IDqOutput> {

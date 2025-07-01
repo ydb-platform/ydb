@@ -36,6 +36,9 @@ public:
     bool IsFinishing() const {
         return IsFinishingFlag;
     }
+    virtual TString DebugString() {
+        return "";
+    }
 protected:
     virtual bool DoTryFinish() {
         return true;

@@ -11,6 +11,8 @@ constexpr bool NotifyWatchtower = true;
 
 constexpr auto Endless = "\0"sv;
 
+constexpr auto DataSizeLimit = 59999999ULL;
+
 struct TSharedStuff {
     using TPtr = std::shared_ptr<TSharedStuff>;
     using TWeakPtr = std::weak_ptr<TSharedStuff>;

@@ -226,8 +226,26 @@ private:
                 changes.emplace_back(std::move(buff.second.top()));
 
         std::sort(changes.begin(), changes.end(), TChange::TOrder());
+        auto total = std::accumulate(changes.cbegin(), changes.cend(), 0ULL,
+            [](size_t size, const TChange& change) { return size + change.Key.size() + change.OldData.Value.size() + change.NewData.Value.size(); });
 
         if (!changes.empty()) {
+            while (total > DataSizeLimit) {
+                size_t size = 0U;
+                auto it = changes.begin();
+                for (; size < DataSizeLimit && changes.end() != it; ++it)
+                    size += it->Key.size() + it->OldData.Value.size() + it->NewData.Value.size();
+
+                if (changes.end() == it)
+                    break;
+
+                std::vector<TChange> part;
+                part.reserve(std::distance(changes.begin(), it));
+                std::move(changes.begin(), it, std::back_inserter(part));
+                changes.erase(changes.begin(), it);
+                total -= size;
+                ctx.Send(Watchman, new TEvChanges(Id, std::move(part)));
+            }
             ctx.Send(Watchman, new TEvChanges(Id, std::move(changes)));
             TimeOfLastSent = TMonotonic::Now();
         }

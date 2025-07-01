@@ -176,7 +176,8 @@ struct TRange : public TOperation {
             if (output.RowsCount() < count)
                 response.set_more(true);
 
-            for (auto parser = NYdb::TResultSetParser(output); parser.TryNextRow();) {
+            size_t size = 0ULL, rows = 0ULL;
+            for (auto parser = NYdb::TResultSetParser(output); size < DataSizeLimit && parser.TryNextRow(); ++rows) {
                 const auto kvs = response.add_kvs();
                 kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
                 kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
@@ -184,7 +185,11 @@ struct TRange : public TOperation {
                 kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
                 kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
                 kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+                size += kvs->key().size() + kvs->value().size();
             }
+
+            if (rows < count)
+                response.set_more(true);
         }
         return response;
     }

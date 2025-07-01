@@ -60,6 +60,7 @@ namespace NKikimr {
         app->HiveConfig = HiveConfig;
         app->DataShardConfig = DataShardConfig;
         app->ColumnShardConfig = ColumnShardConfig;
+        app->TableServiceConfig = TableServiceConfig;
         app->SchemeShardConfig = SchemeShardConfig;
         app->MeteringConfig = MeteringConfig;
         app->AwsCompatibilityConfig = AwsCompatibilityConfig;

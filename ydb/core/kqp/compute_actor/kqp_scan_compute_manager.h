@@ -353,10 +353,10 @@ public:
             return;
         }
 
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "register_scanner_actor")("actor_id", scanActorId)
-            ("state", state->State)("tablet_id", state->TabletId)("generation", state->Generation);
+        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "register_scanner_actor")("actor_id", scanActorId)("state", state->State)(
+            "tablet_id", state->TabletId)("generation", state->Generation)("shard_actor", state->ActorId);
 
-        AFL_ENSURE(state->State == NComputeActor::EShardState::Starting)("state", state->State);
+        AFL_ENSURE(state->State == NComputeActor::EShardState::Starting)("state", state->State)("tablet_id", tabletId);
         AFL_ENSURE(!state->ActorId)("actor_id", state->ActorId);
 
         state->State = NComputeActor::EShardState::Running;
@@ -398,6 +398,8 @@ public:
             AFL_ENSURE(it != ShardScanners.end())("tablet_id", tabletId);
             it->second->Stop(true, "");
             ShardScanners.erase(it);
+        } else {
+            AFL_VERIFY(!state->ActorId);
         }
 
         if (stopShard) {

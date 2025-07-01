@@ -398,4 +398,12 @@ message TTableServiceConfig {
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
     optional bool EnableOlapPushdownProjections = 91  [ default = true ];
+
+    message TScanRetriesConfig {
+        optional uint32 CriticalTotalRetriesCount = 1 [default = 20];
+        optional uint32 ReaskShardRetriesCount = 2 [default = 5];
+    }
+
+    optional TScanRetriesConfig ScanRetriesConfig = 92;
+
 };

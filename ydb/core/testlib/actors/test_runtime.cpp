@@ -203,6 +203,7 @@ namespace NActors {
             nodeAppData->SchemeShardConfig = app0->SchemeShardConfig;
             nodeAppData->DataShardConfig = app0->DataShardConfig;
             nodeAppData->ColumnShardConfig = app0->ColumnShardConfig;
+            nodeAppData->TableServiceConfig = app0->TableServiceConfig;
             nodeAppData->MeteringConfig = app0->MeteringConfig;
             nodeAppData->AwsCompatibilityConfig = app0->AwsCompatibilityConfig;
             nodeAppData->S3ProxyResolverConfig = app0->S3ProxyResolverConfig;

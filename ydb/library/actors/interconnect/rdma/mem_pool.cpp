@@ -15,6 +15,8 @@
 #include <mutex>
 #include <thread>
 
+#include <sys/mman.h>
+
 namespace NInterconnect::NRdma {
 
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
@@ -160,11 +162,21 @@ namespace NInterconnect::NRdma {
         );
     }
 
+    #define HPAGE_SIZE (1 << 21)
+
     void* allocateMemory(size_t size, size_t alignment) {
         if (size % alignment != 0) {
             return nullptr;
         }
-        return std::aligned_alloc(alignment, size);
+        void* buf = std::aligned_alloc(alignment, size);
+        if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
+            fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
+                strerror(errno), errno);
+        }
+        for (size_t i = 0; i < size; i += HPAGE_SIZE) {
+            ((char*)buf)[i] = 0;
+        }
+        return buf;
     }
 
     std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {

@@ -17,6 +17,7 @@ TABLE_PATH = f"{DATABASE}/{TABLE_NAME}"
 CREATE_TABLE_GRANTS = ['ydb.granular.create_table']
 ALTER_TABLE_ADD_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_DROP_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+ERASE_ROW_GRANTS = ['ydb.granular.describe_schema', 'ydb.granular.select_row', 'ydb.granular.erase_row']
 DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_ADD_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TOPIC_ADD_CONSUMER_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
@@ -28,6 +29,7 @@ ALL_USED_GRANS = set(
     CREATE_TABLE_GRANTS
     + ALTER_TABLE_ADD_COLUMN_GRANTS
     + ALTER_TABLE_DROP_COLUMN_GRANTS
+    + ERASE_ROW_GRANTS
     + DROP_TABLE_GRANTS
     + ALTER_TABLE_ADD_CHANGEFEED_GRANTS
     + ALTER_TOPIC_ADD_CONSUMER_GRANTS
@@ -139,6 +141,18 @@ def test_granular_grants_for_tables(ydb_cluster):
         drop_column_query,
         TABLE_PATH,
         ALTER_TABLE_DROP_COLUMN_GRANTS,
+        "you do not have access permissions",
+    )
+
+    # DELETE FROM
+    erase_row_query = f"DELETE FROM `{TABLE_PATH}` WHERE a = 10 AND b = 20;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        erase_row_query,
+        TABLE_PATH,
+        ERASE_ROW_GRANTS,
         "you do not have access permissions",
     )
 

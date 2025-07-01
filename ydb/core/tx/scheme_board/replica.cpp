@@ -7,6 +7,7 @@
 #include "opaque_path_description.h"
 #include "replica.h"
 
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
@@ -67,8 +68,7 @@ class TReplica: public TMonitorableActor<TReplica> {
 
 public:
     explicit TReplica(const TIntrusivePtr<TStateStorageInfo>& info)
-        : ClusterStateGeneration(info->ClusterStateGeneration)
-        , ClusterStateGuid(info->ClusterStateGuid)
+        : Info(info)
     {}
 
     enum ESubscriptionType {
@@ -439,8 +439,8 @@ public:
 
             notify->Record.SetVersion(GetVersion());
             Y_ABORT_UNLESS(Owner);
-            notify->Record.SetClusterStateGeneration(Owner->ClusterStateGeneration);
-            notify->Record.SetClusterStateGuid(Owner->ClusterStateGuid);
+            notify->Record.SetClusterStateGeneration(Owner->Info->ClusterStateGeneration);
+            notify->Record.SetClusterStateGuid(Owner->Info->ClusterStateGuid);
 
             if (!IsEmpty() || IsExplicitlyDeleted() || forceStrong) {
                 notify->Record.SetStrong(true);
@@ -1124,7 +1124,7 @@ private:
         }
 
         if (auto cookie = info.ProcessSyncRequest()) {
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), false, ClusterStateGeneration, ClusterStateGuid), 0, *cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), false, Info->ClusterStateGeneration, Info->ClusterStateGuid), 0, *cookie);
         }
     }
 
@@ -1146,7 +1146,7 @@ private:
                 version = GetVersion(TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
             }
 
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, false, ClusterStateGeneration, ClusterStateGuid), 0, ev->Cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, false, Info->ClusterStateGeneration, Info->ClusterStateGuid), 0, ev->Cookie);
             return;
         }
 
@@ -1168,7 +1168,7 @@ private:
         auto cookie = info.ProcessSyncRequest();
         Y_ABORT_UNLESS(cookie && *cookie == ev->Cookie);
 
-        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), false, ClusterStateGeneration, ClusterStateGuid), 0, *cookie);
+        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), false, Info->ClusterStateGeneration, Info->ClusterStateGuid), 0, *cookie);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
@@ -1235,6 +1235,12 @@ private:
         Send(ev->Sender, new TSchemeBoardMonEvents::TEvDescribeResponse(json), 0, ev->Cookie);
     }
 
+    void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr ev) {
+        Info = ev->Get()->SchemeBoardConfig;
+        Y_ABORT_UNLESS(!ev->Get()->GroupConfig);
+        Y_ABORT_UNLESS(!ev->Get()->BoardConfig);
+    }
+
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 nodeId = ev->Get()->NodeId;
 
@@ -1298,6 +1304,8 @@ public:
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);
 
+            hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
+
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
@@ -1308,8 +1316,7 @@ private:
     TDoubleIndexedMap<TString, TPathId, TDescription, TMerger, THashMap, TMap> Descriptions;
     TMap<TActorId, std::variant<TString, TPathId>, TActorId::TOrderedCmp> Subscribers;
     THashMap<ui64, TSet<TActorId>> WaitStrongNotifications;
-    ui64 ClusterStateGeneration = 0;
-    ui64 ClusterStateGuid = 0;
+    TIntrusivePtr<TStateStorageInfo> Info;
 
 }; // TReplica
 

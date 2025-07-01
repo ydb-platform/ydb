@@ -46,7 +46,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
                                                      const TString& maskedToken,
-                                                     const TString& authType)
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
     : QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
@@ -63,6 +64,7 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , UserSid_(userSid)
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
+    , SourceAddress_(sourceAddress)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -1070,7 +1072,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
             .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
             .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-            .Utf8("CLOUD_EVENT_PEERNAME", "")
+            .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
             .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
     } else {
         TParameters(trans->MutableParams()->MutableProto())
@@ -1232,7 +1234,7 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);
                 Register(new TDeleteQueueSchemaActorV2(QueuePath_, IsFifo_, TablesFormat_, SelfId(), RequestId_, UserCounters_,
                                                            Version_, RequiredShardsCount_, IsFifo_,
-                                                           FolderId_, TagsJson_, UserSid_, MaskedToken_, AuthType_));
+                                                           FolderId_, TagsJson_, UserSid_, MaskedToken_, AuthType_, SourceAddress_));
             }
 
         } else {
@@ -1266,7 +1268,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
                                                      const TString& maskedToken,
-                                                     const TString& authType)
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1279,6 +1282,7 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
     , FolderId_(folderId)
+    , SourceAddress_(sourceAddress)
 {
 }
 
@@ -1295,7 +1299,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
                                                      const TString& maskedToken,
-                                                     const TString& authType)
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1308,6 +1313,7 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
     , FolderId_(folderId)
+    , SourceAddress_(sourceAddress)
 {
     Y_ABORT_UNLESS(advisedQueueVersion > 0);
 
@@ -1579,7 +1585,7 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
                     .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-                    .Utf8("CLOUD_EVENT_PEERNAME", "")
+                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
                     .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
             } else {
                 TParameters(trans->MutableParams()->MutableProto())

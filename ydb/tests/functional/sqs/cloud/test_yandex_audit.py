@@ -91,13 +91,14 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
         return result.split('\n')
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_create_update_delete_one_queue(self, is_fifo):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_update_delete_one_queue(self, is_fifo, tables_format):
         capture_audit = CaptureFileOutput(self.audit_file)
 
         cloud_queue_name = ""
 
         with capture_audit:
-            self._init_with_params(is_fifo)
+            self._init_with_params(is_fifo, tables_format)
 
             self._sqs_api = self._create_api_for_user(
                 self._username, raise_on_error=True, force_private=False,
@@ -167,7 +168,7 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
                 assert log.count(f'"cloud_id":"{self.cloud_id}"') == 1
                 assert log.count('"masked_token":') == 1 and log.count(f'"masked_token":"{none_value}"') == 0
                 assert log.count(f'"auth_type":"{none_value}"') == 1                                                            # there is no auth_type in mock verison of cloud sqs
-                # assert log.count('"remote_address":') == 1 and log.count(f'"remote_address":"{none_value}"') == 0             # todo
+                assert log.count('"remote_address":') == 1 and log.count(f'"remote_address":"{none_value}"') == 0
                 assert log.count(f'"folder_id":"{self.folder_id}"') == 1
                 assert log.count(f'"resource_id":"{cloud_queue_name}"') == 1
                 assert log.count('"created_at":') == 1 and log.count(f'"created_at":"{none_value}"') == 0

@@ -36,6 +36,7 @@ public:
             TagKeys_.push_back(key);
         }
 
+        SourceAddress_ = Request().GetSourceAddress();
         IsCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 
@@ -97,9 +98,8 @@ private:
                     .Utf8("CLOUD_EVENT_USER_SID", UserSID_)
                     .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-                    .Utf8("CLOUD_EVENT_PEERNAME", "")
-                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-                    .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
+                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
+                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
         } else {
             builder
                 .User(UserName_)
@@ -169,6 +169,7 @@ private:
     TVector<TString> TagKeys_;
     bool IsCloudEventsEnabled;
     TString CustomQueueName_ = "";
+    TString SourceAddress_ = "";
 };
 
 IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

@@ -109,6 +109,8 @@ message TCreateQueueRequest {
 
     /// Queue's tags.
     repeated TQueueTag Tags = 12;
+
+    optional string SourceAddress = 13;
 }
 
 message TCreateQueueResponse {
@@ -247,6 +249,7 @@ message TDeleteQueueRequest {
     optional string QueueName = 2;
     /// Batch Id. Available only in case of batch response.
     optional string Id = 3;
+    optional string SourceAddress = 4;
 }
 
 message TDeleteQueueResponse {
@@ -275,6 +278,7 @@ message TDeleteUserRequest {
     optional TAuthentification Auth = 1;
     /// Then user name we want to delete.
     optional string UserName = 2;
+    optional string SourceAddress = 3;
 }
 
 message TDeleteUserResponse {
@@ -587,6 +591,7 @@ message TTagQueueRequest {
     /// The name of the queue.
     optional string QueueName = 2;
     repeated TQueueTag Tags = 3;
+    optional string SourceAddress = 4;
 }
 
 message TTagQueueResponse {
@@ -601,6 +606,7 @@ message TUntagQueueRequest {
     /// The name of the queue.
     optional string QueueName = 2;
     repeated string TagKeys = 3;
+    optional string SourceAddress = 4;
 }
 
 message TUntagQueueResponse {

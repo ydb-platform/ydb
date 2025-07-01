@@ -37,7 +37,8 @@ public:
             map.emplace(t.GetKey(), t.GetValue());
         }
 
-        IsCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
+        SourceAddress_ = Request().GetSourceAddress();
+        IsCloudEventsEnabled_ = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 
 private:
@@ -67,7 +68,7 @@ private:
         Become(&TThis::StateFunc);
         TExecutorBuilder builder(SelfId(), RequestId_);
 
-        if (IsCloudEventsEnabled) {
+        if (IsCloudEventsEnabled_) {
             const auto& cloudEvCfg = Cfg().GetCloudEventsConfig();
             TString database = (cloudEvCfg.HasTenantMode() && cloudEvCfg.GetTenantMode()? Cfg().GetRoot() : "");
 
@@ -95,9 +96,8 @@ private:
                     .Utf8("CLOUD_EVENT_USER_SID", UserSID_)
                     .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-                    .Utf8("CLOUD_EVENT_PEERNAME", "")
-                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-                    .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
+                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
+                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
         } else {
             builder
                 .User(UserName_)
@@ -166,8 +166,9 @@ private:
 private:
     NJson::TJsonMap Tags_;
     TString TagsJson_;
-    bool IsCloudEventsEnabled;
+    bool IsCloudEventsEnabled_;
     TString CustomQueueName_ = "";
+    TString SourceAddress_ = "";
 };
 
 IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

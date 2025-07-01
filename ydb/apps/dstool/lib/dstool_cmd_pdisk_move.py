@@ -11,9 +11,9 @@ def add_options(p):
     common.add_ignore_vslot_quotas_option(p)
     common.add_basic_format_options(p)
     p.add_argument('--source-pdisk', '-s', type=str, required=True,
-                   help='Source PDisk in the format <fqdn>;<path> (e.g. "node1;pdisk1")')
+                   help='Source PDisk in the format nodeId:pdiskId (e.g. "1:1000")')
     p.add_argument('--destination-pdisk', '-d', type=str, required=True,
-                   help='Destination PDisk in the format <fqdn>;<path> (e.g. "node2;pdisk2")')
+                   help='Destination PDisk in the format nodeId:pdiskId (e.g. "2:1000")')
 
 
 def create_request(args, source_pdisk, target_pdisk):

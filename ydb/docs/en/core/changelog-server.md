@@ -11,7 +11,7 @@ Release date: 2025.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
 * Added support for [auto-partitioning topics](./concepts/cdc.md#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
-* [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md#topic-settings) using the `ALTER TOPIC` expression.
+* [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md#topic-settings) using the `ALTER TOPIC` statement.
 * [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md#debezium-json-record-structure) for CDC, which can be enabled by setting the `enable_changefeed_debezium_json_format` flag.
 * The scope of supported objects in backup and restore operations has been expanded:
   * [Support for changefeeds](https://github.com/ydb-platform/ydb/issues/7054) (enabled with the `enable_changefeeds_export` and `enable_changefeeds_import` flags).

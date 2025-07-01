@@ -18,8 +18,6 @@ docs-viewer:
   pdf: true
   metrika: 94806704
 
-  github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
-
   logo-options:
     url:
       en: https://ydb.tech/

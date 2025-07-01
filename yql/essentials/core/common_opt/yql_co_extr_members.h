@@ -1,8 +1,8 @@
 #pragma once
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/common_opt/yql_co.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/strbuf.h>
 
@@ -12,8 +12,8 @@ namespace NYql {
 TExprNode::TPtr ApplyExtractMembersToTake(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToSkip(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToExtend(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
-TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
-TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
+TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx,
+    TOptimizeContext& optCtx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToSortOrPruneKeys(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToAssumeUnique(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToTop(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix);

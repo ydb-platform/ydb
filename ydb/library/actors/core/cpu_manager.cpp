@@ -59,9 +59,10 @@ namespace NActors {
             poolInfos.push_back(TPoolShortInfo{
                 .PoolId = static_cast<i16>(Config.Basic[poolIds[i]].PoolId),
                 .SharedThreadCount = sharedThreadCount,
-                .ForeignSlots = 0,
+                .ForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount,
                 .InPriorityOrder = true,
-                .PoolName = Config.Basic[poolIds[i]].PoolName
+                .PoolName = Config.Basic[poolIds[i]].PoolName,
+                .ForcedForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount > 0,
             });
         }
         for (ui32 i = 0; i < Config.IO.size(); ++i) {

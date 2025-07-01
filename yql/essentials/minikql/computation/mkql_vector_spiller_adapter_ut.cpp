@@ -37,7 +37,7 @@ namespace {
         while (!spiller.IsAcceptingDataRequests()) {
             spiller.Update();
         }
-        
+
         for (const auto& vec : vectors) {
             spiller.RequestNextVector();
 
@@ -48,7 +48,7 @@ namespace {
             auto extractedVector = spiller.ExtractVector();
 
             UNIT_ASSERT_VALUES_EQUAL(vec, extractedVector);
-        }   
+        }
     }
 
     template <typename T>
@@ -100,9 +100,9 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_SingleVector) {
 Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
     template <typename T>
-    void ManyDifferentSizes_TestRunner() {
+    void ManyDifferentSizesTestRunner() {
         std::vector<std::vector<T, TMKQLAllocator<T>>> vectors;
-        
+
         for (int vectorSize = 0; vectorSize <= 100; ++vectorSize) {
             vectors.push_back(CreateSimpleVectorOfSize<T>(vectorSize));
         }
@@ -112,14 +112,14 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
     Y_UNIT_TEST(ManyDifferentSizes) {
         TScopedAlloc Alloc(__LOCATION__);
-        ManyDifferentSizes_TestRunner<int>();
-        ManyDifferentSizes_TestRunner<char>();
+        ManyDifferentSizesTestRunner<int>();
+        ManyDifferentSizesTestRunner<char>();
     }
 
     template <typename T>
-    void ManyDifferentSizesReversed_TestRunner() {
+    void ManyDifferentSizesReversedTestRunner() {
         std::vector<std::vector<T, TMKQLAllocator<T>>> vectors;
-        
+
         for (int vectorSize = 100; vectorSize >= 0; --vectorSize) {
             vectors.push_back(CreateSimpleVectorOfSize<T>(vectorSize));
         }
@@ -129,14 +129,14 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
     Y_UNIT_TEST(ManyDifferentSizesReversed) {
         TScopedAlloc Alloc(__LOCATION__);
-        ManyDifferentSizesReversed_TestRunner<int>();
-        ManyDifferentSizesReversed_TestRunner<char>();
+        ManyDifferentSizesReversedTestRunner<int>();
+        ManyDifferentSizesReversedTestRunner<char>();
     }
 
     template <typename T>
-    void VectorsInOneChunk_TestRunner() {
+    void VectorsInOneChunkTestRunner() {
         std::vector<std::vector<T, TMKQLAllocator<T>>> vectors;
-        
+
         size_t totalSize = 0;
 
         for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
@@ -150,14 +150,14 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
     Y_UNIT_TEST(VectorsInOneChunk) {
         TScopedAlloc Alloc(__LOCATION__);
-        VectorsInOneChunk_TestRunner<int>();
-        VectorsInOneChunk_TestRunner<char>();
+        VectorsInOneChunkTestRunner<int>();
+        VectorsInOneChunkTestRunner<char>();
     }
 
     template <typename T>
-    void EmptyVectorsInTheMiddle_TestRunner() {
+    void EmptyVectorsInTheMiddleTestRunner() {
         std::vector<std::vector<T,TMKQLAllocator<T>>> vectors;
-        
+
         size_t totalSize = 0;
 
         for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
@@ -179,12 +179,12 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
     Y_UNIT_TEST(EmptyVectorsInTheMiddle) {
         TScopedAlloc Alloc(__LOCATION__);
-        EmptyVectorsInTheMiddle_TestRunner<int>();
-        EmptyVectorsInTheMiddle_TestRunner<char>();
+        EmptyVectorsInTheMiddleTestRunner<int>();
+        EmptyVectorsInTheMiddleTestRunner<char>();
     }
 
     template <typename T>
-    void RequestedVectorPartlyInMemory_TestRunner() {
+    void RequestedVectorPartlyInMemoryTestRunner() {
         std::vector<std::vector<T, TMKQLAllocator<T>>> vectors;
         std::vector<T, TMKQLAllocator<T>> small = CreateSimpleVectorOfSize<T>(1);
         std::vector<T, TMKQLAllocator<T>> big = CreateSimpleVectorOfSize<T>(10);
@@ -200,8 +200,8 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
     Y_UNIT_TEST(RequestedVectorPartlyInMemory) {
         TScopedAlloc Alloc(__LOCATION__);
-        RequestedVectorPartlyInMemory_TestRunner<int>();
-        RequestedVectorPartlyInMemory_TestRunner<char>();
+        RequestedVectorPartlyInMemoryTestRunner<int>();
+        RequestedVectorPartlyInMemoryTestRunner<char>();
     }
 
 }

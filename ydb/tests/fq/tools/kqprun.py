@@ -47,7 +47,7 @@ class KqpRun(object):
         self.queries.append(query_path)
 
     def yql_exec(self, verbose: bool = False, check_error: bool = True, var_templates: Optional[List[str]] = None,
-                 yql_program: Optional[str] = None, yql_tables: List[yql_utils.Table] = []) -> yql_utils.YQLExecResult:
+                 yql_program: Optional[str] = None, yql_tables: List[yql_utils.Table] = [], user: Optional[str] = None) -> yql_utils.YQLExecResult:
         udfs_dir = self.udfs_dir
 
         config_file = self.config_file
@@ -75,6 +75,8 @@ class KqpRun(object):
             '--plan-format json '
             '--result-rows-limit 0 '
         )
+        if user is not None:
+            cmd += f'-U {user} '
 
         if var_templates is not None:
             for var_template in var_templates:

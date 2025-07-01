@@ -21,6 +21,9 @@ static constexpr ui64 MAX_SHARD_RETRIES = 5;   // retry after: 0, 250, 500, 1000
 static constexpr ui64 MAX_TOTAL_SHARD_RETRIES = 20;
 static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 
+constexpr TDuration REGISTRATION_TIMEOUT = TDuration::Seconds(60);
+constexpr TDuration PING_PERIOD = TDuration::Seconds(30);
+
 }   // anonymous namespace
 
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TComputeRuntimeSettings& settings,
@@ -41,7 +44,8 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , ShardsScanningPolicy(shardsScanningPolicy)
     , Counters(counters)
     , InFlightShards(ScanId, *this)
-    , InFlightComputes(ComputeActorIds) {
+    , InFlightComputes(ComputeActorIds)
+    , IsOlapTable(Meta.GetTable().GetTableKind() == (ui32)ETableKind::Olap) {
     Y_UNUSED(traceId);
     AFL_ENSURE(!Meta.GetReads().empty());
     AFL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
@@ -79,16 +83,19 @@ void TKqpScanFetcherActor::Bootstrap() {
         auto& state = PendingShards.emplace_back(TShardState(read.GetShardId()));
         state.Ranges = BuildSerializedTableRanges(read);
     }
+    RegistrationStartTime = Now();
     for (auto&& c : ComputeActorIds) {
         Sender<TEvScanExchange::TEvRegisterFetcher>().SendTo(c);
     }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size());
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("self_if", SelfId())("compute", ComputeActorIds.size())(
+        "shards", PendingShards.size());
     StartTableScan();
     Become(&TKqpScanFetcherActor::StateFunc);
-    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
+    Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {
+    RegistrationFinished = true;
     AFL_ENSURE(ev->Get()->GetFreeSpace());
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "AckDataFromCompute")("self_id", SelfId())("scan_id", ScanId)(
         "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(
@@ -296,7 +303,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
     }
 
     const auto& tr = *AppData()->TypeRegistry;
-    if (Meta.HasOlapProgram()) {
+    if (IsOlapTable) {
         bool found = false;
         for (auto&& partition : keyDesc->GetPartitions()) {
             if (partition.ShardId != state.TabletId) {
@@ -529,8 +536,9 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
     state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)(
-        "exceeded", msg.RequestedBytesLimitReached)("scan", ScanId)("packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)(
-        "shards remain", PendingShards.size())("in flight scans", InFlightShards.GetScansCount())(
+        "generation", msg.Generation)("exceeded", msg.RequestedBytesLimitReached)("scan", ScanId)(
+        "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(
+        "in flight scans", InFlightShards.GetScansCount())("cursor", state->CursorDebugString())(
         "in flight shards", InFlightShards.GetShardsCount())("delayed_for_seconds_by_ratelimiter", latency.SecondsFloat())(
         "tablet_id", state->TabletId)("locks", msg.LocksInfo.Locks.size())("broken locks", msg.LocksInfo.BrokenLocks.size());
     auto shardScanner = InFlightShards.GetShardScannerVerified(state->TabletId);
@@ -697,8 +705,18 @@ void TKqpScanFetcherActor::CheckFinish() {
 }
 
 void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr&) {
-    InFlightShards.PingAllScanners();
-    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
+    if (RegistrationFinished) {
+        InFlightShards.PingAllScanners();
+    } else if (Now() - RegistrationStartTime > REGISTRATION_TIMEOUT) {
+        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "TEvWakeup")("info", "Abort fetcher due to Registration timeout");
+        InFlightShards.AbortAllScanners("Abort fetcher due to Registration timeout");
+        TIssues issues;
+        issues.AddIssue(TIssue("Abort fetcher due to Registration timeout"));
+        SendGlobalFail(NDqProto::COMPUTE_STATE_FAILURE, NYql::NDqProto::StatusIds::INTERNAL_ERROR, issues);
+        PassAway();
+        return;
+    }
+    Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());
 }
 
 }   // namespace NKikimr::NKqp::NScanPrivate

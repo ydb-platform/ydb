@@ -179,6 +179,7 @@ public:
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
+        const ui32 defaultFilledColumnCount = validatedOperation.GetDefaultFilledColumnCount();
 
         // Main update cycle
 
@@ -189,7 +190,7 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops);
+                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
@@ -211,6 +212,11 @@ public:
                     userDb.UpdateRow(fullTableId, key, ops);
                     break;
                 }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
+                    userDb.IncrementRow(fullTableId, key, ops);
+                    break;
+                }
                 default:
                     // Checked before in TWriteOperation
                     Y_ENSURE(false, operationType << " operation is not supported now");
@@ -223,7 +229,8 @@ public:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: 
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
                 break;

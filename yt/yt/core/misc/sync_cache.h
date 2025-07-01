@@ -95,7 +95,7 @@ private:
         THashMap<TKey, TItem*, THash> ItemMap;
 
         std::vector<TItem*> TouchBuffer;
-        std::atomic<int> TouchBufferPosition = {0};
+        std::atomic<int> TouchBufferPosition = 0;
     };
 
     std::unique_ptr<TShard[]> Shards_;

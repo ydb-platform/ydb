@@ -7,6 +7,7 @@ SRCS(
     histogram.cpp
     init.cpp
     import.cpp
+    log_backend.cpp
     runner.cpp
     task_queue.cpp
     terminal.cpp
@@ -20,6 +21,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/ftxui
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/driver

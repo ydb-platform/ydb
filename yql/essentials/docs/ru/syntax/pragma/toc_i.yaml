@@ -1,0 +1,7 @@
+items:
+- { name: Обзор,                    href: index.md   }
+- { name: Глобальные,               href: global.md  }
+- { name: Yson,                     href: yson.md    }
+- { name: Работа с файлами,         href: file.md    }
+- { name: Отладочные и служебные,   href: debug.md   }
+

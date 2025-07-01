@@ -283,6 +283,9 @@ public:
         case NKikimrSchemeOp::EPathTypeBackupCollection:
             type = "<backup collection>";
             break;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            type = "<system view>";
+            break;
         default:
             type = "<unknown>";
             break;
@@ -313,7 +316,8 @@ public:
         Cout << id << type << name << owner << acl << Endl;
         if (Details) {
             switch(entry.GetPathType()) {
-            case NKikimrSchemeOp::EPathTypeTable: {
+            case NKikimrSchemeOp::EPathTypeTable:
+            case NKikimrSchemeOp::EPathTypeSysView: {
                 const NKikimrSchemeOp::TTableDescription& table(path.GetTable());
                 size_t szWidth = id.size() + type.size() + entry.GetName().size();
                 size_t szColumns[3] = {0, 0, 0};
@@ -497,6 +501,9 @@ public:
             break;
         case NKikimrSchemeOp::EPathTypeBackupCollection:
             type = "<backup collection>";
+            break;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            type = "<system view>";
             break;
         default:
             type = "<unknown>";

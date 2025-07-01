@@ -15,7 +15,7 @@ namespace {
         public:
             TDummyKqpActor() : TActor<TDummyKqpActor>(&TDummyKqpActor::StateFunc) {}
 
-            void SetValidationResponse(const TString& transactionalId, ui64 producerId, ui64 producerEpoch, const std::unordered_map<TString, i32>& consumerGenerations = {}) {
+            void SetValidationResponse(const TString& transactionalId, i64 producerId, i32 producerEpoch, const std::unordered_map<TString, i32>& consumerGenerations = {}) {
                 TransactionalIdToReturn = transactionalId;
                 ProducerIdToReturn = producerId;
                 ProducerEpochToReturn = producerEpoch;
@@ -157,8 +157,8 @@ namespace {
             }
 
             TString TransactionalIdToReturn = "";
-            ui64 ProducerIdToReturn = 0;
-            ui16 ProducerEpochToReturn = 0;
+            i64 ProducerIdToReturn = 0;
+            i32 ProducerEpochToReturn = 0;
             std::unordered_map<TString, i32> ConsumerGenerationsToReturn = {};
             bool ReturnSuccessOnCommit = true;
         };
@@ -200,8 +200,8 @@ namespace {
             TActorId KqpActorId;
             const TString Database = "/Root/PQ";
             const TString TransactionalId = "123"; // transactional id from kafka SDK
-            const ui64 ProducerId = 1;
-            const ui16 ProducerEpoch = 1;
+            const i64 ProducerId = 1;
+            const i32 ProducerEpoch = 1;
             ui32 QueryRequestsCounter = 0;
             
             void SetUp(NUnitTest::TTestContext&) override {
@@ -217,9 +217,9 @@ namespace {
                 Ctx->Runtime->RegisterService(MakeTransactionsServiceID(Ctx->Runtime->GetNodeId()), Ctx->Edge);
                 ActorId = Ctx->Runtime->Register(new TTransactionActor(
                     TransactionalId,
-                    ProducerId,
-                    ProducerEpoch,
-                    Database                    
+                    {ProducerId, ProducerEpoch},
+                    Database,
+                    5000            
                 ));
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch);
             }

@@ -16,12 +16,12 @@ using namespace NNodes;
 TProviderConfigurationTransformer::TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,
     const TTypeAnnotationContext& types, const TString& provider, const THashSet<TStringBuf>& configureCallables)
     : Dispatcher(dispatcher)
-    , Types(types)
-    , Provider(provider)
-    , ConfigureCallables(configureCallables)
+    , Types_(types)
+    , Provider_(provider)
+    , ConfigureCallables_(configureCallables)
 {
-    if (ConfigureCallables.empty()) {
-        ConfigureCallables.insert(TCoConfigure::CallableName());
+    if (ConfigureCallables_.empty()) {
+        ConfigureCallables_.insert(TCoConfigure::CallableName());
     }
 }
 
@@ -36,7 +36,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
     auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (node->IsCallable(ConfigureCallables)) {
+        if (node->IsCallable(ConfigureCallables_)) {
             if (!EnsureMinArgsCount(*node, 2, ctx)) {
                 return nullptr;
             }
@@ -45,7 +45,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                 return node;
             }
             auto ds = node->Child(TCoConfigure::idx_DataSource);
-            if (ds->Child(TCoDataSource::idx_Category)->Content() != Provider) {
+            if (ds->Child(TCoDataSource::idx_Category)->Content() != Provider_) {
                 return node;
             }
             if (!EnsureMinArgsCount(*ds, 2, ctx)) {
@@ -134,19 +134,23 @@ bool TProviderConfigurationTransformer::HandleAttr(TPositionHandle pos, const TS
     return Dispatcher->Dispatch(cluster, name, value, TSettingDispatcher::EStage::STATIC, TSettingDispatcher::GetErrorCallback(pos, ctx));
 }
 
+TSettingDispatcher::TPtr TProviderConfigurationTransformer::GetDispatcher() const {
+    return Dispatcher;
+}
+
 bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias,
     TExprContext& ctx)
 {
-    auto cred = Types.Credentials->FindCredential(alias);
+    auto cred = Types_.Credentials->FindCredential(alias);
     if (!cred) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown credential: " << alias));
         return false;
     }
 
-    if (cred->Category != Provider) {
+    if (cred->Category != Provider_) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
             << "Mismatch credential category, expected: "
-            << Provider << ", but found: " << cred->Category));
+            << Provider_ << ", but found: " << cred->Category));
         return false;
     }
 

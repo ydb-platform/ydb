@@ -234,6 +234,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir", false, NLs::PathExist);
 
+        const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
             Name: "MyTable"
             ColumnShardCount: 1
@@ -246,13 +247,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLsPathId(runtime, 4, NLs::PathStringEqual("/MyRoot/MyDir/MyTable"));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual("/MyRoot/MyDir/MyTable"));
 
         TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "MyTable");
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/MyTable", false, NLs::PathNotExist);
-        TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
     }
 
     Y_UNIT_TEST(CreateTable) {
@@ -415,11 +416,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         const TString& olapSchema = defaultStoreSchema;
 
+        const auto expectedStorePathId = GetNextLocalPathId(runtime, txId);
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
-        TestLsPathId(runtime, 2, NLs::PathStringEqual("/MyRoot/OlapStore"));
+        TestLsPathId(runtime, expectedStorePathId, NLs::PathStringEqual("/MyRoot/OlapStore"));
 
         TestMkDir(runtime, ++txId, "/MyRoot/OlapStore", "MyDir");
         env.TestWaitNotification(runtime, txId);
@@ -431,16 +433,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
             ColumnShardCount: 1
         )";
 
+        const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLsPathId(runtime, 4, NLs::PathStringEqual("/MyRoot/OlapStore/MyDir/ColumnTable"));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual("/MyRoot/OlapStore/MyDir/ColumnTable"));
 
         TestDropColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore/MyDir/ColumnTable", false, NLs::PathNotExist);
-        TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
 
         TestDropOlapStore(runtime, ++txId, "/MyRoot", "OlapStore", {NKikimrScheme::StatusNameConflict});
         TestRmDir(runtime, ++txId, "/MyRoot/OlapStore", "MyDir");
@@ -450,7 +453,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathNotExist);
-        TestLsPathId(runtime, 2, NLs::PathStringEqual(""));
+        TestLsPathId(runtime, expectedStorePathId, NLs::PathStringEqual(""));
     }
 
     Y_UNIT_TEST(CreateDropStandaloneTable) {
@@ -463,16 +466,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir", false, NLs::PathExist);
 
+        auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLsPathId(runtime, 3, NLs::PathStringEqual("/MyRoot/MyDir/ColumnTable"));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual("/MyRoot/MyDir/ColumnTable"));
 
         TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
-        TestLsPathId(runtime, 3, NLs::PathStringEqual(""));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
 
         // PARTITION BY ()
 
@@ -493,6 +497,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
+        expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", otherSchema);
         env.TestWaitNotification(runtime, txId);
 
@@ -510,13 +515,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
         };
 
-        TestLsPathId(runtime, 4, checkFn);
+        TestLsPathId(runtime, expectedTablePathId, checkFn);
 
         TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
-        TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
     }
 
     Y_UNIT_TEST(CreateDropStandaloneTableDefaultSharding) {
@@ -529,16 +534,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir", false, NLs::PathExist);
 
+        auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLsPathId(runtime, 3, NLs::PathStringEqual("/MyRoot/MyDir/ColumnTable"));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual("/MyRoot/MyDir/ColumnTable"));
 
         TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
-        TestLsPathId(runtime, 3, NLs::PathStringEqual(""));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
 
         TString otherSchema = R"(
             Name: "ColumnTable"
@@ -551,6 +557,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
+        expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", otherSchema);
         env.TestWaitNotification(runtime, txId);
 
@@ -571,13 +578,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
         };
 
-        TestLsPathId(runtime, 4, checkFn);
+        TestLsPathId(runtime, expectedTablePathId, checkFn);
 
         TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
-        TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
+        TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
     }
 
     Y_UNIT_TEST(CreateTableTtl) {
@@ -873,17 +880,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         const TString& olapSchema = defaultStoreSchema;
 
+        const auto expectedStorePathId = GetNextLocalPathId(runtime, txId);
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
-        TestLsPathId(runtime, 2, NLs::PathStringEqual("/MyRoot/OlapStore"));
+        TestLsPathId(runtime, expectedStorePathId, NLs::PathStringEqual("/MyRoot/OlapStore"));
 
         TString tableSchema = R"(
             Name: "ColumnTable"
             ColumnShardCount: 1
         )";
 
+        const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
@@ -901,7 +910,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/OlapStore/ColumnTable");
         };
 
-        TestLsPathId(runtime, 3, checkFn);
+        TestLsPathId(runtime, expectedTablePathId, checkFn);
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
         UNIT_ASSERT(planStep.Val());
@@ -940,7 +949,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
             planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
             NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         }
-        csController->WaitIndexation(TDuration::Seconds(5));
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
             Cerr << description.DebugString() << Endl;
@@ -1023,7 +1031,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
-        csController->SetOverrideAllowMergeFull(true);
 
         // disable stats batching
         auto& appData = runtime.GetAppData();
@@ -1050,17 +1057,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         const TString& olapSchema = defaultStoreSchema;
 
+        const auto expectedStorePathId = GetNextLocalPathId(runtime, txId);
         TestCreateOlapStore(runtime, ++txId, "/MyRoot/SomeDatabase", olapSchema);
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/SomeDatabase/OlapStore", false, NLs::PathExist);
-        TestLsPathId(runtime, 3, NLs::PathStringEqual("/MyRoot/SomeDatabase/OlapStore"));
+        TestLsPathId(runtime, expectedStorePathId, NLs::PathStringEqual("/MyRoot/SomeDatabase/OlapStore"));
 
         TString tableSchema = R"(
             Name: "ColumnTable"
             ColumnShardCount: 1
         )";
 
+        const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase/OlapStore", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
@@ -1078,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/SomeDatabase/OlapStore/ColumnTable");
         };
 
-        TestLsPathId(runtime, 4, checkFn);
+        TestLsPathId(runtime, expectedTablePathId, checkFn);
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
         UNIT_ASSERT(planStep.Val());
@@ -1207,9 +1216,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        
+
         TVector<TString> notAllowedNames = {"mess age", "~!@#$%^&*()+=asdfa"};
-        
+
         for (const auto& colName: notAllowedNames) {
             TString tableSchema = Sprintf(tableSchemaFormat.c_str(), colName.c_str());
 

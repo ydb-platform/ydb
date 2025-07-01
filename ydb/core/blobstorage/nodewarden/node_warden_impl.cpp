@@ -36,16 +36,16 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
     , MaxChunksToDefragInflight(10, 1, 50)
     , ThrottlingDryRun(1, 0, 1)
-    , ThrottlingMinLevel0SstCount(100, 1, 1000)
-    , ThrottlingMaxLevel0SstCount(250, 1, 1000)
-    , ThrottlingMinInplacedSizeHDD(20ull << 30, 1 << 20, 500ull << 30)
-    , ThrottlingMaxInplacedSizeHDD(60ull << 30, 1 << 20, 500ull << 30)
-    , ThrottlingMinInplacedSizeSSD(20ull << 30, 1 << 20, 500ull << 30)
-    , ThrottlingMaxInplacedSizeSSD(60ull << 30, 1 << 20, 500ull << 30)
+    , ThrottlingMinLevel0SstCount(100, 1, 100000)
+    , ThrottlingMaxLevel0SstCount(250, 1, 100000)
+    , ThrottlingMinInplacedSizeHDD(20ull << 30, 1 << 20, 500ull << 40)
+    , ThrottlingMaxInplacedSizeHDD(60ull << 30, 1 << 20, 500ull << 40)
+    , ThrottlingMinInplacedSizeSSD(20ull << 30, 1 << 20, 500ull << 40)
+    , ThrottlingMaxInplacedSizeSSD(60ull << 30, 1 << 20, 500ull << 40)
     , ThrottlingMinOccupancyPerMille(900, 1, 1000)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
-    , ThrottlingMinLogChunkCount(100, 1, 1000)
-    , ThrottlingMaxLogChunkCount(130, 1, 1000)
+    , ThrottlingMinLogChunkCount(100, 1, 100000)
+    , ThrottlingMaxLogChunkCount(130, 1, 100000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
@@ -162,9 +162,11 @@ STATEFN(TNodeWarden::StateOnline) {
         fFunc(TEvBlobStorage::EvNodeWardenUpdateCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenQueryCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenUnsubscribeFromCache, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer, ForwardToDistributedConfigKeeper);
 
         hFunc(TEvNodeWardenQueryBaseConfig, Handle);
         hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
+        hFunc(TEvNodeWardenNotifyConfigMismatch, Handle);
 
         fFunc(TEvents::TSystem::Gone, HandleGone);
 
@@ -662,7 +664,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         return;
     }
 
-    STLOG(PRI_DEBUG, BS_NODE, NW51, "persisting new configurations",
+    STLOG(PRI_DEBUG, BS_NODE, NW63, "persisting new configurations",
         (MainYaml, mainYaml), (MainYamlVersion, mainYamlVersion), (StorageYaml, storageYaml),
         (StorageYamlVersion, storageYamlVersion), (YamlConfig, YamlConfig));
 

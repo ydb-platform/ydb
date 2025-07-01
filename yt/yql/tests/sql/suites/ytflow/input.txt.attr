@@ -4,21 +4,48 @@
             "StructType";
             [
                 [
-                    "value";
+                    "$timestamp";
                     [
-                        "DataType";
-                        "String"
-                    ]
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Uint64"
+                        ]
+                    ];
                 ];
                 [
-                    "codec";
+                    "$cumulative_data_weight";
                     [
-                        "DataType";
-                        "String"
-                    ]
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
+                    "string_field";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ];
+                ];
+                [
+                    "int64_field";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
                 ];
             ]
         ]
     };
-    "dynamic" = %true;
+    "_yql_dynamic" = %true;
+    "_yql_dynamic_native_write" = %true;
 }

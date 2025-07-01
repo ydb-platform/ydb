@@ -80,6 +80,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TLogGenerator::GetSupportedWorkl
     result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk_upsert", "Bulk upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::Select), "select", "Select some agregated queries");
+    result.emplace_back(static_cast<int>(EType::Delete), "delete", "Delete random rows from table near current ts");
     return result;
 }
 
@@ -221,6 +222,81 @@ TQueryInfoList TLogGenerator::Select() const {
         result.emplace_back(SubstGlobalCopy(query, std::string("{table}"), Params.TableName), NYdb::TParamsBuilder().Build());
     }
     return result;
+}
+
+TQueryInfoList TLogGenerator::Delete(TVector<TRow>&& rows) const {
+    std::stringstream ss;
+
+    NYdb::TParamsBuilder paramsBuilder;
+
+    ss << "--!syntax_v1" << std::endl;
+
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        ss << "DECLARE $log_id_" << row << " AS Utf8;" << std::endl;
+        ss << "DECLARE $timestamp_" << row << " AS Timestamp;" << std::endl;
+        ss << "DECLARE $level_" << row << " AS Int32;" << std::endl;
+        ss << "DECLARE $service_name_" << row << " AS Utf8;" << std::endl;
+        ss << "DECLARE $component_" << row << " AS Utf8?;" << std::endl;
+        ss << "DECLARE $message_" << row << " AS Utf8;" << std::endl;
+        ss << "DECLARE $request_id_" << row << " AS Utf8?;" << std::endl;
+        ss << "DECLARE $metadata_" << row << " AS JsonDocument?;" << std::endl;
+        ss << "DECLARE $ingested_at_" << row << " AS Timestamp?;" << std::endl;
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            ss << "DECLARE $c" << i << "_" << row << " AS " << (i < Params.IntColumnsCnt ? "Uint64" : "Utf8");
+            if (i >= Params.KeyColumnsCnt) {
+                ss << "?";
+            }
+            ss << ";" << std::endl;
+        }
+
+        const auto& r = rows[row];
+
+        paramsBuilder.AddParam("$log_id_" + ToString(row)).Utf8(r.LogId).Build();
+        paramsBuilder.AddParam("$timestamp_" + ToString(row)).Timestamp(r.Ts).Build();
+        paramsBuilder.AddParam("$level_" + ToString(row)).Int32(r.Level).Build();
+        paramsBuilder.AddParam("$service_name_" + ToString(row)).Utf8(r.ServiceName).Build();
+        paramsBuilder.AddParam("$component_" + ToString(row)).OptionalUtf8(!r.Component.empty() ? std::optional<std::string>(r.Component) : std::optional<std::string>()).Build();
+        paramsBuilder.AddParam("$message_" + ToString(row)).Utf8(r.Message).Build();
+        paramsBuilder.AddParam("$request_id_" + ToString(row)).OptionalUtf8(!r.RequestId.empty() ? std::optional<std::string>(r.RequestId) : std::optional<std::string>()).Build();
+        paramsBuilder.AddParam("$metadata_" + ToString(row)).OptionalJsonDocument(!r.Metadata.empty() ? std::optional<std::string>(r.Metadata) : std::optional<std::string>()).Build();
+        paramsBuilder.AddParam("$ingested_at_" + ToString(row)).OptionalTimestamp(r.IngestedAt != TInstant::Zero() ? std::optional<TInstant>(r.IngestedAt) : std::optional<TInstant>()).Build();
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            auto& p = paramsBuilder.AddParam(TStringBuilder() << "$c" << i << "_" << row);
+            if (i < Params.IntColumnsCnt) {
+                const auto value = r.Ints[i];
+                if (i < Params.KeyColumnsCnt) {
+                    p.Uint64(value);
+                } else {
+                    p.OptionalUint64(value ? std::optional<ui64>(value) : std::optional<ui64>());
+                }
+            } else {
+                const auto& value = r.Strings[i - Params.IntColumnsCnt];
+                if (i < Params.KeyColumnsCnt) {
+                    p.Utf8(value);
+                } else {
+                    p.OptionalUtf8(value ? std::optional<std::string>(value) : std::optional<std::string>());
+                }
+            }
+            p.Build();
+        }
+    }
+
+    ss << " DELETE FROM `" << Params.TableName << "` WHERE (log_id, timestamp, level, service_name, component, message, request_id, metadata, ingested_at";
+    for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+        ss << ", c" << i;
+    }
+    ss << ") IN " ;
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        ss << "($log_id_" << row << ", $timestamp_" << row << ", $level_" << row << ", $service_name_" << row << ", $component_" << row << ", $message_" << row << ", $request_id_" << row << ", $metadata_" << row << ", $ingested_at_" << row;
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            ss << ", $c" << i << "_" << row;
+        }
+        ss << ")";
+        if (row + 1 < Params.RowsCnt) {
+            ss << ", ";
+        }
+    }
+    return TQueryInfoList(1, TQueryInfo(ss.str(), paramsBuilder.Build()));
 }
 
 TQueryInfoList TLogGenerator::GetInitialData() {
@@ -366,6 +442,8 @@ TQueryInfoList TLogGenerator::GetWorkload(int type) {
             return Upsert(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
         case EType::BulkUpsert:
             return BulkUpsert(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
+        case EType::Delete:
+            return Delete(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
         case EType::Select:
             return Select();
     }
@@ -434,6 +512,7 @@ void TLogWorkloadParams::Validate(const ECommandType commandType, int workloadTy
                     
                     break;
                 case TLogGenerator::EType::Select:
+                case TLogGenerator::EType::Delete:
                     break;
             }
             break;
@@ -488,6 +567,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
         case TLogGenerator::EType::Insert:
         case TLogGenerator::EType::Upsert:
         case TLogGenerator::EType::BulkUpsert:
+        case TLogGenerator::EType::Delete:
             ConfigureOptsFillData(opts);
             break;
         case TLogGenerator::EType::Select:

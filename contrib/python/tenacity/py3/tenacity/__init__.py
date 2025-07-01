@@ -76,7 +76,7 @@ from .before import before_nothing  # noqa
 from .after import after_log  # noqa
 from .after import after_nothing  # noqa
 
-# Import all built-in after strategies for easier usage.
+# Import all built-in before sleep strategies for easier usage.
 from .before_sleep import before_sleep_log  # noqa
 from .before_sleep import before_sleep_nothing  # noqa
 
@@ -87,6 +87,8 @@ except ImportError:
 
 if t.TYPE_CHECKING:
     import types
+
+    from typing_extensions import Self
 
     from . import asyncio as tasyncio
     from .retry import RetryBaseT
@@ -255,7 +257,7 @@ class BaseRetrying(ABC):
         retry_error_callback: t.Union[
             t.Optional[t.Callable[["RetryCallState"], t.Any]], object
         ] = _unset,
-    ) -> "BaseRetrying":
+    ) -> "Self":
         """Copy this object with some parameters changed if needed."""
         return self.__class__(
             sleep=_first_set(sleep, self.sleep),
@@ -329,13 +331,19 @@ class BaseRetrying(ABC):
             f, functools.WRAPPER_ASSIGNMENTS + ("__defaults__", "__kwdefaults__")
         )
         def wrapped_f(*args: t.Any, **kw: t.Any) -> t.Any:
-            return self(f, *args, **kw)
+            # Always create a copy to prevent overwriting the local contexts when
+            # calling the same wrapped functions multiple times in the same stack
+            copy = self.copy()
+            wrapped_f.statistics = copy.statistics  # type: ignore[attr-defined]
+            return copy(f, *args, **kw)
 
         def retry_with(*args: t.Any, **kwargs: t.Any) -> WrappedFn:
             return self.copy(*args, **kwargs).wraps(f)
 
+        # Preserve attributes
         wrapped_f.retry = self  # type: ignore[attr-defined]
         wrapped_f.retry_with = retry_with  # type: ignore[attr-defined]
+        wrapped_f.statistics = {}  # type: ignore[attr-defined]
 
         return wrapped_f  # type: ignore[return-value]
 

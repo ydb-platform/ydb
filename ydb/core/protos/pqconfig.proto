@@ -465,10 +465,13 @@ message TMessageGroupInfo {
     optional uint64 Offset = 2;
     optional uint64 WriteTimestamp = 3; // TInstant::TValue
     optional uint64 CreateTimestamp = 4; // TInstant::TValue
+    optional uint32 ProducerEpoch = 10;  // For idempotent producer in Kafka protocol
+
     optional bool Explicit = 5;
     optional TPartitionKeyRange KeyRange = 6;
     optional EState State = 7;
     optional THeartbeat LastHeartbeat = 8;
+
 }
 
 message TBootstrapConfig {
@@ -920,6 +923,7 @@ message TUserInfo {
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
     optional bool AnyCommits = 8;
+    optional string CommittedMetadata = 9;
 }
 
 message TPartitionClientInfo {
@@ -965,6 +969,11 @@ message TYdsShardIterator {
     optional ETopicKind Kind = 7;
 }
 
+message TKafkaProducerInstanceId {
+    optional int64 Id = 1;
+    optional int32 Epoch = 2;
+};
+
 message TPartitionOperation {
     optional uint32 PartitionId = 1;
     optional uint64 CommitOffsetsBegin = 2;
@@ -976,11 +985,15 @@ message TPartitionOperation {
     optional bool KillReadSession = 8;
     optional bool OnlyCheckCommitedToFinish = 9;
     optional string ReadSessionId = 10;
+    optional bool KafkaTransaction = 11 [default = false];
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
 };
 
 message TWriteId {
     optional uint64 NodeId = 1;
     optional fixed64 KeyId = 2;
+    optional bool KafkaTransaction = 3 [default = false];
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
 };
 
 message TDataTransaction {
@@ -1183,6 +1196,8 @@ message TTabletTxInfo {
         optional TWriteId WriteId = 1;
         optional uint32 OriginalPartitionId = 2;
         optional uint32 InternalPartitionId = 3;
+        optional bool KafkaTransaction = 4 [default = false];
+        optional uint64 CreatedAt = 5;
     };
 
     optional uint64 PlanStep = 2;

@@ -70,9 +70,9 @@ private:
 class TExprLogTransformer {
 public:
     TExprLogTransformer(const TString& description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)
-        : Description(description)
-        , Component(component)
-        , Level(level) {}
+        : Description_(description)
+        , Component_(component)
+        , Level_(level) {}
 
     NYql::IGraphTransformer::TStatus operator()(const NYql::TExprNode::TPtr& input, NYql::TExprNode::TPtr& output,
         NYql::TExprContext& ctx);
@@ -85,9 +85,9 @@ public:
     }
 
 private:
-    TString Description;
-    NYql::NLog::EComponent Component;
-    NYql::NLog::ELevel Level;
+    TString Description_;
+    NYql::NLog::EComponent Component_;
+    NYql::NLog::ELevel Level_;
 };
 
 } // namespace NYql

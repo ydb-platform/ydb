@@ -61,7 +61,6 @@ public:
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, NActors::NLog::PRI_DEBUG);
-        NYdb::NTable::TTableClient tableClient = TestHelper->GetKikimr().GetTableClient();
         Tests::NCommon::TLoggerInit(TestHelper->GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
     }
@@ -164,7 +163,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
         tieringHelper.SetTablePath("/Root/olapTable");
 
-        olapHelper.CreateTestOlapTableWithoutStore();
+        olapHelper.CreateTestOlapStandaloneTable();
         testHelper.CreateTier("tier1");
         testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
         {
@@ -289,7 +288,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 //             auto selectQuery = TString(R"(
 //                 SELECT MAX(timestamp) AS timestamp FROM `/Root/olapStore/olapTable`
 //             )");
-// 
+//
 //             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 //             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
 //             UNIT_ASSERT_GT(GetTimestamp(rows[0].at(DEFAULT_COLUMN_NAME)), TInstant::Now() - TDuration::Days(100));
@@ -330,18 +329,21 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
-        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        const auto& kikimr = testHelper.GetKikimr();
+        NYdb::NTable::TTableClient tableClient = kikimr.GetTableClient();
 
         olapHelper.CreateTestOlapTable();
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "Root/olapStore/olapTable");
+        const auto tablePathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(describeResult.GetPathId());
+
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
-        THashSet<NColumnShard::TInternalPathId> pathsToLock{
-            NColumnShard::TInternalPathId::FromRawValue(0),
-            NColumnShard::TInternalPathId::FromRawValue(1),
-            NColumnShard::TInternalPathId::FromRawValue(2),
-            NColumnShard::TInternalPathId::FromRawValue(3),
-            NColumnShard::TInternalPathId::FromRawValue(4),
-            NColumnShard::TInternalPathId::FromRawValue(5),
+        THashSet<NColumnShard::TInternalPathId> pathsToLock;
+        for (const auto& [_, pathIdTranslator]: csController->GetActiveTablets()) {
+            if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(tablePathId)) {
+                pathsToLock.insert(*internalPathId);
+            }
         };
 
         csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", std::move(pathsToLock), NOlap::NDataLocks::ELockCategory::Compaction));
@@ -413,13 +415,13 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& putController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
-        
-        
+
+
         olapHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");
         tieringHelper.WriteSampleData();
         putController->WaitCompactions(TDuration::Seconds(5));
-    
+
         putController->SetExternalStorageUnavailable(true);
         testHelper.SetTiering(DEFAULT_TABLE_NAME,
                               DEFAULT_TIER_NAME,

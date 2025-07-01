@@ -16,6 +16,10 @@ namespace NSQLComplete {
         return TextInterval(tree).properlyContains(CursorInterval());
     }
 
+    ssize_t TSQLv1NarrowingVisitor::CursorPosition() const {
+        return CursorPosition_;
+    }
+
     antlr4::misc::Interval TSQLv1NarrowingVisitor::TextInterval(antlr4::tree::ParseTree* tree) const {
         auto tokens = tree->getSourceInterval();
         if (tokens.b == -1) {
@@ -27,7 +31,8 @@ namespace NSQLComplete {
     }
 
     antlr4::misc::Interval TSQLv1NarrowingVisitor::CursorInterval() const {
-        return antlr4::misc::Interval(CursorPosition_, CursorPosition_);
+        auto cursor = CursorPosition();
+        return antlr4::misc::Interval(cursor, cursor);
     }
 
 } // namespace NSQLComplete

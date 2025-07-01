@@ -1,10 +1,11 @@
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/data_erasure_helpers.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/data_erasure_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

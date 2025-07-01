@@ -17,8 +17,10 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TCategorySignals>, Counters);
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
-    THashMap<ui64, std::shared_ptr<TProcess>> ProcessesWithTasks;
+    std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
     const NConfig::TCategory Config;
+
+    [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);
 
 public:
     ui32 GetWaitingQueueSize() const {
@@ -39,20 +41,16 @@ public:
     void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task) {
         auto it = Processes.find(internalProcessId);
         AFL_VERIFY(it != Processes.end())("process_id", internalProcessId);
-        it->second->RegisterTask(std::move(task), Category);
-        if (it->second->GetTasksCount() == 1) {
-            AFL_VERIFY(ProcessesWithTasks.emplace(internalProcessId, it->second).second);
+        if (!it->second->GetTasks().size()) {
+            if (!WeightedProcesses.empty() && !it->second->GetInProgressTasksCount()) {
+                it->second->SetBaseWeight(WeightedProcesses.begin()->first);
+            }
+            WeightedProcesses[it->second->GetWeightedUsage()].emplace_back(it->second);
         }
+        it->second->RegisterTask(std::move(task), Category);
     }
 
-    void PutTaskResult(TWorkerTaskResult&& result) {
-        const ui64 internalProcessId = result.GetProcessId(); 
-        auto it = Processes.find(internalProcessId);
-        if (it == Processes.end()) {
-            return;
-        }
-        it->second->PutTaskResult(std::move(result));
-    }
+    void PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds);
 
     void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope) {
         scope->IncProcesses();
@@ -62,7 +60,7 @@ public:
     void UnregisterProcess(const ui64 processId) {
         auto it = Processes.find(processId);
         AFL_VERIFY(it != Processes.end());
-        ProcessesWithTasks.erase(processId);
+        Y_UNUSED(RemoveWeightedProcess(it->second));
         if (it->second->GetScope()->DecProcesses()) {
             AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
         }
@@ -74,8 +72,7 @@ public:
     }
 
     bool HasTasks() const;
-    void DoQuant(const TMonotonic newStart);
-    TWorkerTask ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters);
+    std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds);
     TProcessScope& MutableProcessScope(const TString& scopeName);
     TProcessScope* MutableProcessScopeOptional(const TString& scopeName);
     std::shared_ptr<TProcessScope> GetProcessScopePtrVerified(const TString& scopeName) const;

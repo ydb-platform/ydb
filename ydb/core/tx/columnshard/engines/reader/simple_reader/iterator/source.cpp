@@ -105,14 +105,14 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         if (columnChunks.empty()) {
             continue;
         }
-        auto itFilter = cFilter.GetIterator(false, Portion->GetRecordsCount());
+        auto itFilter = cFilter.GetBegin(false, Portion->GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
+                reading->AddRange(GetStageData().GetPortionAccessor().RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
             } else {
                 defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
@@ -385,7 +385,10 @@ private:
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("facc"));
-        AFL_VERIFY(!result.HasErrors());
+        if (result.HasErrors()) {
+            Source->GetContext()->GetCommonContext()->AbortWithError("has errors on portion accessors restore");
+            return;
+        }
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         Source->InitUsedRawBytes();
@@ -417,7 +420,7 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
     AFL_VERIFY(!GetStageData().HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
-    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("SIMPLE::" + step.GetName());
+    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
     request->AddPortion(Portion);
     request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));

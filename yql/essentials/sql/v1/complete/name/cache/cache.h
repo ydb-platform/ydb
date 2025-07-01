@@ -30,7 +30,7 @@ namespace NSQLComplete {
         using TPtr = TIntrusivePtr<ICache>;
 
         struct TEntry {
-            TValue Value = {};
+            TMaybe<TValue> Value = Nothing();
             bool IsExpired = true;
         };
 

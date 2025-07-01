@@ -22,8 +22,6 @@ namespace {
 
 using namespace NKikimr;
 
-using NKikimr::NMiniKQL::TPagedBuffer;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<bool FastPack>
@@ -36,7 +34,7 @@ public:
         const NMiniKQL::THolderFactory& holderFactory, const TDqOutputChannelSettings& settings, const TLogFunc& logFunc,
         NDqProto::EDataTransportVersion transportVersion)
         : OutputType(outputType)
-        , Packer(OutputType)
+        , Packer(OutputType, settings.BufferPageAllocSize)
         , Width(OutputType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(OutputType)->GetElementsCount() : 1u)
         , Storage(settings.ChannelStorage)
         , HolderFactory(holderFactory)

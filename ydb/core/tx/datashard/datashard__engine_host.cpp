@@ -373,6 +373,10 @@ public:
         UserDb.UpsertRow(tableId, key, ops);
     }
 
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnCount) override {
+        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount);
+    }
+
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
         UserDb.UpsertRow(tableId, key, ops);
     }
@@ -389,6 +393,10 @@ public:
         UserDb.UpdateRow(tableId, key, ops);
     }
 
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.IncrementRow(tableId, key, ops);
+    }
+    
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);

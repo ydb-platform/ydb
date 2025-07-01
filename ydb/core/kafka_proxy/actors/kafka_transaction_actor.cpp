@@ -88,6 +88,9 @@ namespace NKafka {
         } else if (txnAborted) {
             SendOkResponse<TEndTxnResponseData>(ev);
             Die(ctx);
+        } else if (TxnExpired()) {
+            SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::PRODUCER_FENCED, "Transaction exceeded its timeout: " + std::to_string(TxnTimeoutMs));
+            Die(ctx);
         } else {
             CommitStarted = true;
             EndTxnRequestPtr = std::move(ev);
@@ -192,6 +195,10 @@ namespace NKafka {
         }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvTransactionActorDied(TransactionalId, ProducerInstanceId));
         TBase::Die(ctx);
+    }
+
+    bool TTransactionActor::TxnExpired() {
+        return TAppData::TimeProvider->Now().MilliSeconds() - CreatedAt.MilliSeconds() > TxnTimeoutMs;
     }
 
     template<class EventType>
@@ -321,6 +328,7 @@ namespace NKafka {
         KAFKA_LOG_D("Successfully added kafka operations to transaction. Committing transaction.");
         Kqp->SetTxId(kqpTransactionId);
         Kqp->CommitTx(++KqpCookie, ctx);
+        LastSentToKqpRequest = EKafkaTxnKqpRequests::COMMIT;
     }
 
     void TTransactionActor::HandleCommitResponse(const TActorContext& ctx) {

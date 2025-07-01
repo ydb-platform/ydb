@@ -16,7 +16,7 @@ TConclusionStatus TSelectCommand::DoExecute(TKikimrRunner& kikimr) {
     const i64 headerApproveStart = controller->GetHeadersApprovedOnSelect().Val();
     const i64 headerNoDataStart = controller->GetHeadersSkippedNoData().Val();
 
-    const auto command = "PRAGMA OptimizeSimpleILIKE; PRAGMA AnsiLIke;" + Command;
+    const auto command = "PRAGMA OptimizeSimpleILIKE; PRAGMA AnsiLike;" + Command;
     Cerr << "EXECUTE: " << command << Endl;
     auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     auto it = kikimr.GetQueryClient().StreamExecuteQuery(command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();

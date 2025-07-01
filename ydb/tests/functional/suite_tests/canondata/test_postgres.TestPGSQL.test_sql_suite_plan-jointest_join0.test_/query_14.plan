@@ -75,6 +75,7 @@
                                                         "PlanNodeId": 6,
                                                         "Plans": [
                                                             {
+                                                                "HashFunc": "HashV1",
                                                                 "KeyColumns": [
                                                                     "unique1"
                                                                 ],

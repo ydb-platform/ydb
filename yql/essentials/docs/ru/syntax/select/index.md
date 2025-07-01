@@ -31,7 +31,7 @@ SELECT 2 + 2;
 * вычисляются выражения в `SELECT`;
 * выражениям в `SELECT` назначаются имена заданные алиасами;
 * к полученным таким образом колонкам применяется top-level [DISTINCT](distinct.md);
-* таким же образом вычисляются все подзапросы в [UNION ALL](union.md#union-all), выполняется их объединение (см. [PRAGMA AnsiOrderByLimitInUnionAll](../pragma.md#pragmas));
+* таким же образом вычисляются все подзапросы в [UNION ALL](union.md#union-all), выполняется их объединение;
 * выполняется сортировка согласно [ORDER BY](order_by.md);
 * к полученному результату применяются [OFFSET и LIMIT](limit_offset.md).
 

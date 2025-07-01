@@ -1,4 +1,4 @@
-# /* custom error: Failed to convert type: Variant<Int32,Int32,Float> to Variant<Int32,Int32,Int32>*/
+# /* custom error: type diff: Variant<2:Float!=Int32> */
 (
 (let config (DataSource 'config))
 (let res_sink (DataSink 'result))

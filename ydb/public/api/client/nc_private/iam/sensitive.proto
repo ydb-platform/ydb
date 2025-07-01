@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+// Based on:
+// https://bb.yandexcloud.net/projects/CLOUD/repos/cloud-go/browse/private-api/yandex/cloud/priv/sensitive.proto
+
+package nebius;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+    // Sensitive field is masked/removed from the message while logging, storing in DB and
+    // on all others persistent layers (except specialized storage like PDS).
+    bool sensitive = 1192;
+}

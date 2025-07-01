@@ -483,7 +483,8 @@ private:
             std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
             S3ActorsFactory,
             ComputeConfig.GetWorkloadManagerConfig(task.scope()),
-            PqGatewayFactory
+            PqGatewayFactory,
+            std::vector<std::pair<TString, TString>>{sensorLabels.begin(), sensorLabels.end()}
             );
 
         auto runActorId =

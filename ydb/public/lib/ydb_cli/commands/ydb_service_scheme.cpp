@@ -286,6 +286,8 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeExternalDataSource(driver);
     case NScheme::ESchemeEntryType::ExternalTable:
         return DescribeExternalTable(driver);
+    case NScheme::ESchemeEntryType::SysView:
+        return DescribeTable(driver);
     default:
         return DescribeEntryDefault(entry);
     }

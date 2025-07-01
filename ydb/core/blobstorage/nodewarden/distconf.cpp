@@ -21,10 +21,30 @@ namespace NKikimr::NStorage {
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
             nodes->emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
         }
-        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
+
+        std::shared_ptr<TEvInterconnect::TEvNodesInfo::TPileMap> pileMap;
+        if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
+            pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(AppData()->BridgeConfig->PilesSize());
+
+            THashMap<TString, ui32> pileNames;
+            for (size_t i = 0; i < AppData()->BridgeConfig->PilesSize(); ++i) {
+                pileNames.emplace(AppData()->BridgeConfig->GetPiles(i).GetName(), i);
+            }
+
+            for (const auto& item : Cfg->NameserviceConfig.GetNode()) {
+                if (item.HasBridgePileName()) {
+                    if (const auto it = pileNames.find(item.GetBridgePileName()); it != pileNames.end()) {
+                        pileMap->at(it->second).push_back(item.GetNodeId());
+                    }
+                }
+            }
+        }
+
+        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes, std::move(pileMap));
         Send(SelfId(), ev.release());
 
         // and subscribe for the node list too
@@ -100,48 +120,7 @@ namespace NKikimr::NStorage {
                 config.GetGeneration();
 
             if (config.HasClusterState() && Cfg->BridgeConfig) {
-                const auto& state = config.GetClusterState();
-
-                // prepare empty structure
-                auto bridgeInfo = std::make_shared<TBridgeInfo>();
-                bridgeInfo->Piles.resize(Cfg->BridgeConfig->PilesSize());
-
-                for (const auto& node : config.GetAllNodes()) {
-                    if (node.HasBridgePileId()) {
-                        const ui32 nodeId = node.GetNodeId();
-                        const ui32 pileId = node.GetBridgePileId();
-                        Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
-                        auto& pile = bridgeInfo->Piles[pileId];
-                        pile.StaticNodeIds.push_back(node.GetNodeId());
-                        bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
-                        if (nodeId == SelfNode.NodeId()) {
-                            bridgeInfo->SelfNodePile = &pile;
-                        }
-                    }
-                }
-
-                Y_ABORT_UNLESS(state.PerPileStateSize() == Cfg->BridgeConfig->PilesSize());
-                for (size_t i = 0; i < state.PerPileStateSize(); ++i) {
-                    auto& pile = bridgeInfo->Piles[i];
-                    pile.BridgePileId = TBridgePileId::FromValue(i);
-                    pile.State = state.GetPerPileState(i);
-                    std::ranges::sort(pile.StaticNodeIds);
-                }
-
-                const ui32 primary = state.GetPrimaryPile();
-                Y_ABORT_UNLESS(primary < Cfg->BridgeConfig->PilesSize());
-                bridgeInfo->Piles[primary].IsPrimary = true;
-                bridgeInfo->PrimaryPile = &bridgeInfo->Piles[primary];
-
-                if (const ui32 promoted = state.GetPromotedPile(); promoted != primary) {
-                    Y_ABORT_UNLESS(promoted < Cfg->BridgeConfig->PilesSize());
-                    auto& pile = bridgeInfo->Piles[promoted];
-                    Y_ABORT_UNLESS(pile.State == NKikimrBridge::TClusterState::SYNCHRONIZED);
-                    pile.IsBeingPromoted = true;
-                    bridgeInfo->BeingPromotedPile = &pile;
-                }
-
-                BridgeInfo = std::move(bridgeInfo);
+                BridgeInfo = GenerateBridgeInfo(config, Cfg.Get(), SelfNode.NodeId());
             } else {
                 Y_ABORT_UNLESS(!BridgeInfo);
             }
@@ -357,6 +336,10 @@ namespace NKikimr::NStorage {
         Send(wardenId, ev.release(), 0, cookie);
     }
 
+    void TDistributedConfigKeeper::Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev) {
+        ApplyStorageConfig(ev->Get()->StorageConfig);
+    }
+
     STFUNC(TDistributedConfigKeeper::StateFunc) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
             (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
@@ -394,6 +377,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateCache, Handle);
             hFunc(TEvNodeWardenQueryCache, Handle);
             hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
+            hFunc(TEvNodeWardenUpdateConfigFromPeer, Handle);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -454,6 +438,14 @@ namespace NKikimr::NStorage {
 
                 // copy cluster state generation
                 pb->SetClusterStateGeneration(clusterState.GetGeneration());
+                
+                auto &history = config->GetClusterStateHistory();
+                if (history.UnsyncedEntriesSize() > 0) {
+                    auto &entry = history.GetUnsyncedEntries(0);
+                    pb->SetClusterStateGuid(entry.GetOperationGuid());
+                } else {
+                    pb->SetClusterStateGuid(0);
+                }
 
                 if (!pb->RingGroupsSize() || pb->HasRing()) {
                     return "configuration has Ring field set or no RingGroups";
@@ -496,9 +488,6 @@ namespace NKikimr::NStorage {
                             return "can't determine correct pile state for ring group";
                         }
                         group->SetPileState(*state);
-                        if (*state != T::PRIMARY) { // TODO(alexvru): HACK!!!
-                            group->SetWriteOnly(true);
-                        }
                     } else {
                         return "bridge pile id is out of bounds";
                     }
@@ -520,6 +509,62 @@ namespace NKikimr::NStorage {
         }
 
         return std::nullopt;
+    }
+
+    TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config, const TNodeWardenConfig *cfg,
+            ui32 selfNodeId) {
+        const auto& state = config.GetClusterState();
+
+        // prepare empty structure
+        auto bridgeInfo = std::make_shared<TBridgeInfo>();
+        bridgeInfo->Piles.resize(cfg->BridgeConfig->PilesSize());
+
+        for (const auto& node : config.GetAllNodes()) {
+            if (node.HasBridgePileId()) {
+                const ui32 nodeId = node.GetNodeId();
+                const ui32 pileId = node.GetBridgePileId();
+                Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
+                auto& pile = bridgeInfo->Piles[pileId];
+                pile.StaticNodeIds.push_back(node.GetNodeId());
+                bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
+                if (nodeId == selfNodeId) {
+                    bridgeInfo->SelfNodePile = &pile;
+                }
+            }
+        }
+
+        if (cfg->DynamicNodeConfig && cfg->DynamicNodeConfig->HasNodeInfo()) {
+            if (const auto& nodeInfo = cfg->DynamicNodeConfig->GetNodeInfo(); nodeInfo.HasBridgePileId()) {
+                const ui32 pileId = nodeInfo.GetBridgePileId();
+                Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
+                bridgeInfo->SelfNodePile = &bridgeInfo->Piles[pileId];
+            }
+        }
+
+        Y_ABORT_UNLESS(bridgeInfo->SelfNodePile);
+
+        Y_ABORT_UNLESS(state.PerPileStateSize() == cfg->BridgeConfig->PilesSize());
+        for (size_t i = 0; i < state.PerPileStateSize(); ++i) {
+            auto& pile = bridgeInfo->Piles[i];
+            pile.BridgePileId = TBridgePileId::FromValue(i);
+            pile.State = state.GetPerPileState(i);
+            std::ranges::sort(pile.StaticNodeIds);
+        }
+
+        const ui32 primary = state.GetPrimaryPile();
+        Y_ABORT_UNLESS(primary < cfg->BridgeConfig->PilesSize());
+        bridgeInfo->Piles[primary].IsPrimary = true;
+        bridgeInfo->PrimaryPile = &bridgeInfo->Piles[primary];
+
+        if (const ui32 promoted = state.GetPromotedPile(); promoted != primary) {
+            Y_ABORT_UNLESS(promoted < cfg->BridgeConfig->PilesSize());
+            auto& pile = bridgeInfo->Piles[promoted];
+            Y_ABORT_UNLESS(pile.State == NKikimrBridge::TClusterState::SYNCHRONIZED);
+            pile.IsBeingPromoted = true;
+            bridgeInfo->BeingPromotedPile = &pile;
+        }
+
+        return bridgeInfo;
     }
 
 } // NKikimr::NStorage

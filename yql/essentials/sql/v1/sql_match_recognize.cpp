@@ -11,8 +11,8 @@ TSqlMatchRecognizeClause::TSqlMatchRecognizeClause(TContext& ctx, NSQLTranslatio
 
 TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause &matchRecognizeClause) {
     auto pos = GetPos(matchRecognizeClause.GetToken1());
-    if (!Ctx.FeatureR010) {
-        Ctx.Error(pos, TIssuesIds::CORE) << "Unexpected MATCH_RECOGNIZE";
+    if (!Ctx_.FeatureR010) {
+        Ctx_.Error(pos, TIssuesIds::CORE) << "Unexpected MATCH_RECOGNIZE";
         return {};
     }
 
@@ -52,12 +52,12 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
 
     if (commonSyntax.HasBlock2()) {
         const auto& initialOrSeek = commonSyntax.GetBlock2().GetRule_row_pattern_initial_or_seek1();
-        Ctx.Error(GetPos(initialOrSeek.GetToken1())) << "InitialOrSeek subclause is not allowed in FROM clause";
+        Ctx_.Error(GetPos(initialOrSeek.GetToken1())) << "InitialOrSeek subclause is not allowed in FROM clause";
         return {};
     }
 
-    PatternVarNames.clear();
-    PatternVars = BuildList(pos);
+    PatternVarNames_.clear();
+    PatternVars_ = BuildList(pos);
     auto pattern = ParsePattern(pos, commonSyntax.GetRule_row_pattern5(), 0, true);
     if (!pattern) {
         return {};
@@ -85,8 +85,8 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
 
     auto definitions = ParseDefinitions(commonSyntax.GetRule_row_pattern_definition_list9());
     for (const auto& [callable, name]: definitions) {
-        if (!PatternVarNames.contains(name)) {
-            Ctx.Error(callable->GetPos()) << "ROW PATTERN VARIABLE " << name << " is defined, but not mentioned in the PATTERN";
+        if (!PatternVarNames_.contains(name)) {
+            Ctx_.Error(callable->GetPos()) << "ROW PATTERN VARIABLE " << name << " is defined, but not mentioned in the PATTERN";
             return {};
         }
     }
@@ -100,7 +100,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         std::move(rowsPerMatch),
         std::move(skipTo),
         std::move(pattern),
-        std::move(PatternVars),
+        std::move(PatternVars_),
         std::move(*subset),
         std::move(definitions)
     );
@@ -113,7 +113,7 @@ std::tuple<TNodePtr, TNodePtr> TSqlMatchRecognizeClause::ParsePartitionBy(TPosit
         if (!node) {
             return {partitionKeySelector, partitionColumns};
         }
-        TColumnRefScope scope(Ctx, EColumnRefState::Allow);
+        TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         TVector<TNodePtr> partitionExprs;
         if (!NamedExprList(node->GetRule_named_expr_list4(), partitionExprs)) {
             return {partitionKeySelector, partitionColumns};
@@ -146,8 +146,8 @@ TMaybe<TVector<TSortSpecificationPtr>> TSqlMatchRecognizeClause::ParseOrderBy(co
 }
 
 TNamedFunction TSqlMatchRecognizeClause::ParseOneMeasure(const TRule_row_pattern_measure_definition& node) {
-    TColumnRefScope scope(Ctx, EColumnRefState::MatchRecognizeMeasures);
-    auto callable = TSqlExpression(Ctx, Mode).Build(node.GetRule_expr1());
+    TColumnRefScope scope(Ctx_, EColumnRefState::MatchRecognizeMeasures);
+    auto callable = TSqlExpression(Ctx_, Mode_).Build(node.GetRule_expr1());
     auto measureName = Id(node.GetRule_an_id3(), *this);
     // Each measure must be a lambda, that accepts 2 args:
     // - List<InputTableColumns + _yql_Classifier, _yql_MatchNumber>
@@ -213,8 +213,8 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
             const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1();
             auto var = identifier.GetToken1().GetValue();
             varPos = GetPos(identifier.GetToken1());
-            if (!PatternVarNames.contains(var)) {
-                Ctx.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO FIRST";
+            if (!PatternVarNames_.contains(var)) {
+                Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO FIRST";
                 return {};
             }
             return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::ToFirst, std::move(var)};
@@ -225,8 +225,8 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
             const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1();
             auto var = identifier.GetToken1().GetValue();
             varPos = GetPos(identifier.GetToken1());
-            if (!PatternVarNames.contains(var)) {
-                Ctx.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO LAST";
+            if (!PatternVarNames_.contains(var)) {
+                Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO LAST";
                 return {};
             }
             return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::ToLast, std::move(var)};
@@ -237,8 +237,8 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
             const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name3().GetRule_row_pattern_variable_name1().GetRule_identifier1();
             auto var = identifier.GetToken1().GetValue();
             varPos = GetPos(identifier.GetToken1());
-            if (!PatternVarNames.contains(var)) {
-                Ctx.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO";
+            if (!PatternVarNames_.contains(var)) {
+                Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO";
                 return {};
             }
             return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::To, std::move(var)};
@@ -264,7 +264,7 @@ TNodePtr TSqlMatchRecognizeClause::BuildPatternFactor(TPosition pos, TNodePtr pr
 
 TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule_row_pattern_factor& node, size_t nestingLevel, bool output) {
     if (nestingLevel > MaxPatternNesting) {
-        Ctx.Error(pos) << "To big nesting level in the pattern";
+        Ctx_.Error(pos) << "To big nesting level in the pattern";
         return {};
     }
     auto primary = [&]() -> TNodePtr {
@@ -275,8 +275,8 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
             const auto& identifier = primary.GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1().GetRule_identifier1();
             const auto varName = Id(identifier, *this);
             const auto var = BuildQuotedAtom(GetPos(identifier.GetToken1()), varName);
-            if (PatternVarNames.insert(varName).second) {
-                PatternVars->Add(var);
+            if (PatternVarNames_.insert(varName).second) {
+                PatternVars_->Add(var);
             }
             return var;
         }
@@ -285,8 +285,8 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
             const auto& token = primary.GetToken1();
             const auto varName = token.GetValue();
             const auto var = BuildQuotedAtom(GetPos(token), varName);
-            if (PatternVarNames.insert(varName).second) {
-                PatternVars->Add(var);
+            if (PatternVarNames_.insert(varName).second) {
+                PatternVars_->Add(var);
             }
             return var;
         }
@@ -295,8 +295,8 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
             const auto& token = primary.GetToken1();
             const auto varName = token.GetValue();
             const auto var = BuildQuotedAtom(GetPos(token), varName);
-            if (PatternVarNames.insert(varName).second) {
-                PatternVars->Add(var);
+            if (PatternVarNames_.insert(varName).second) {
+                PatternVars_->Add(var);
             }
             return var;
         }
@@ -318,7 +318,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
                 items.push_back(ParsePattern(pos, p.GetRule_row_pattern2(), nestingLevel + 1, output));
             }
             if (items.size() > MaxPermutedItems) {
-                Ctx.Error(GetPos(primary.GetRule_row_pattern_permute1().GetToken1())) << "Too many items in permute";
+                Ctx_.Error(GetPos(primary.GetRule_row_pattern_permute1().GetToken1())) << "Too many items in permute";
                 return {};
             }
             std::vector<size_t> indexes(items.size());
@@ -439,16 +439,16 @@ TMaybe<TNodePtr> TSqlMatchRecognizeClause::ParseSubset(TPosition pos, const TRul
     }
     pos = GetPos(node->GetToken1());
     // TODO https://st.yandex-team.ru/YQL-16225
-    Ctx.Error(pos) << "SUBSET is not implemented yet";
+    Ctx_.Error(pos) << "SUBSET is not implemented yet";
     return {};
 }
 
 TNamedFunction TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_pattern_definition& node) {
     const auto& identifier = node.GetRule_row_pattern_definition_variable_name1().GetRule_row_pattern_variable_name1().GetRule_identifier1();
     auto defineName = Id(identifier, *this);
-    TColumnRefScope scope(Ctx, EColumnRefState::MatchRecognizeDefine, true, defineName);
+    TColumnRefScope scope(Ctx_, EColumnRefState::MatchRecognizeDefine, true, defineName);
     const auto& searchCondition = node.GetRule_row_pattern_definition_search_condition3().GetRule_search_condition1().GetRule_expr1();
-    auto callable = TSqlExpression(Ctx, Mode).Build(searchCondition);
+    auto callable = TSqlExpression(Ctx_, Mode_).Build(searchCondition);
     // Each define must be a predicate lambda, that accepts 3 args:
     // - List<input table rows>
     // - A struct that maps row pattern variables to ranges in the queue

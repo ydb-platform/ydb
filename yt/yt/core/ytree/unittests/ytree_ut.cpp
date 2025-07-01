@@ -5,10 +5,14 @@
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_proxy.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 namespace NYT::NYTree {
 namespace {
 
 using namespace NYson;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -21,7 +25,7 @@ void SyncYPathMultisetAttributes(
     for (const auto& request : requests) {
         auto req = multisetAttributesRequest->add_subrequests();
         req->set_attribute(request.first);
-        req->set_value(request.second.ToString());
+        req->set_value(ToProto(request.second));
     }
     ExecuteVerb(service, multisetAttributesRequest)
         .Get()

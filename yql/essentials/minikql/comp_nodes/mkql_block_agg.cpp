@@ -1198,7 +1198,7 @@ public:
         , Builders_(keys.size())
         , Arena_(TlsAllocState)
     {
-        Pointer_ = Values_.data();
+        Pointer = Values_.data();
         for (size_t i = 0; i < Keys_.size(); ++i) {
             auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
             Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);

@@ -19,10 +19,11 @@ class TUsersScan : public TScanActorBase<TUsersScan> {
 public:
     using TBase = TScanActorBase<TUsersScan>;
 
-    TUsersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TUsersScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
     {
     }
@@ -174,11 +175,12 @@ private:
     bool IsAdmin = false;
 };
 
-THolder<NActors::IActor> CreateUsersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+THolder<NActors::IActor> CreateUsersScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TUsersScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+    return MakeHolder<TUsersScan>(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 }

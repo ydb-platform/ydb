@@ -1,6 +1,8 @@
 #include "datashard_user_db.h"
 
 #include "datashard_impl.h"
+#include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
 
 namespace NKikimr::NDataShard {
 
@@ -62,10 +64,46 @@ ui64 CalculateValueBytes(const TArrayRef<const NIceDb::TUpdateOp> ops) {
     return bytes;
 };
 
+TArrayRef<const NIceDb::TUpdateOp> TDataShardUserDb::RemoveDefaultColumnsIfNeeded(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    const ui32 DefaultFilledColumnCount
+)
+{
+    if (DefaultFilledColumnCount == 0 || !RowExists(tableId, key)) {
+        // no default columns - no changes need
+        // row not exist - no changes need
+        return ops;
+    }
+    
+    //newOps is ops without last DefaultFilledColumnCount values
+    auto newOps = TArrayRef<const NIceDb::TUpdateOp> (ops.begin(), ops.end() - DefaultFilledColumnCount);
+    
+    return newOps;  
+}
+
+
 void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    const ui32 DefaultFilledColumnCount
+)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+
+    auto opsWithoutNoNeedDefault = RemoveDefaultColumnsIfNeeded(tableId, key, ops, DefaultFilledColumnCount);
+
+    UpsertRow(tableId, key, opsWithoutNoNeedDefault);
+}
+
+void TDataShardUserDb::UpsertRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops
+)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -109,11 +147,9 @@ void TDataShardUserDb::UpsertRow(
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
         UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps);
-
         IncreaseUpdateCounters(key, extendedOps);
     } else {
         UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
-
         IncreaseUpdateCounters(key, ops);
     }
 }
@@ -159,6 +195,50 @@ void TDataShardUserDb::UpdateRow(
         return;
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+
+    IncreaseUpdateCounters(key, ops);
+}
+
+void TDataShardUserDb::IncrementRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ENSURE(localTableId != 0, "Unexpected incrementRow for an unknown table");
+
+    TStackVec<NTable::TTag> columns(ops.size());
+    for (size_t i = 0; i < ops.size(); i++) {
+        columns[i] = ops[i].Tag;
+    }
+
+    auto currentRow = GetRowState(tableId, key, columns);
+    
+    if (currentRow.Size() == 0) {
+        return;
+    }
+    
+    TStackVec<NIceDb::TUpdateOp> newOps(ops.size());
+
+    Y_ENSURE(currentRow.Size() == ops.size());
+    const NTable::TScheme& scheme = Db.GetScheme();
+    const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
+
+    TStackVec<TCell> incrementResults(ops.size());
+
+    for (size_t i = 0; i < ops.size(); i++) {
+        auto vtype = scheme.GetColumnInfo(tableInfo, ops[i].Tag)->PType.GetTypeId();
+       
+        auto current = currentRow.Get(i);
+        auto delta = ops[i].AsCell();
+        
+        NFormats::AddTwoCells(incrementResults[i], current, delta, vtype);
+            
+        TRawTypeValue rawTypeValue(incrementResults[i].Data(), incrementResults[i].Size(), vtype);
+        newOps[i] = NIceDb::TUpdateOp(ops[i].Tag, ops[i].Op, rawTypeValue);
+    }
+
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -243,9 +323,9 @@ void TDataShardUserDb::UpsertRowInt(
     Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
 }
 
-bool TDataShardUserDb::RowExists (
+bool TDataShardUserDb::RowExists(
     const TTableId& tableId,
-    const TArrayRef<const TRawTypeValue> key) 
+    const TArrayRef<const TRawTypeValue> key)
 {
     NTable::TRowState rowState;
     const auto ready = SelectRow(tableId, key, {}, rowState);
@@ -258,6 +338,27 @@ bool TDataShardUserDb::RowExists (
         }
         case NTable::EReady::Gone: {
             return false;
+        }
+    }
+}
+
+NTable::TRowState TDataShardUserDb::GetRowState(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TStackVec<NTable::TTag>& columns)
+{
+    NTable::TRowState rowState;
+
+    const auto ready = SelectRow(tableId, key, columns, rowState);
+    switch (ready) {
+        case NTable::EReady::Page: {
+            throw TNotReadyTabletException();
+        }
+        case NTable::EReady::Data: {
+            return std::move(rowState);
+        }
+        case NTable::EReady::Gone: {
+            return NTable::TRowState();
         }
     }
 }

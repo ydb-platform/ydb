@@ -2236,6 +2236,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 settings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
             }
         };
+        TTestExecutor().Execute();
     }
 
     Y_UNIT_TEST(ManyColumnShardsWithRestartsWithResolving) {
@@ -2249,6 +2250,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     .SetScanReaskToResolve(1);
             }
         };
+        TTestExecutor().Execute();
     }
 
     Y_UNIT_TEST(PredicatePushdownWithParametersILike) {

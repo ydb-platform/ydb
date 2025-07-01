@@ -136,7 +136,7 @@ public:
         auto& nodes = State->ClusterInfo->AllNodes();
         for (auto& [id, info] : nodes) {
             info->PileId = id % numPiles;
-            State->ClusterInfo->NodeIdToPileId[id] = *info->PileId;
+            State->ClusterInfo->NodeIdToPileId->operator[](id) = *info->PileId;
         }
     }
 

@@ -86,6 +86,7 @@ public:
         NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
         TDqSolomonReadParams&& readParams,
         ui64 computeActorBatchSize,
+        ui64 truePointsFindRange,
         ui64 metricsQueueConsumersCountDelta,
         NActors::TActorId metricsQueueActor,
         const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -99,6 +100,7 @@ public:
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", TDqSolomonReadActor: ")
         , ReadParams(std::move(readParams))
         , ComputeActorBatchSize(computeActorBatchSize)
+        , TruePointsFindRange(truePointsFindRange)
         , MetricsQueueConsumersCountDelta(metricsQueueConsumersCountDelta)
         , MetricsQueueActor(metricsQueueActor)
         , CredentialsProvider(credentialsProvider)
@@ -298,6 +300,9 @@ public:
         YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
         SOURCE_LOG_D("GetAsyncInputData sending " << MetricsData.size() << " metrics, finished = " << LastMetricProcessed());
 
+        TInstant from = TInstant::Seconds(ReadParams.Source.GetFrom());
+        TInstant to = TInstant::Seconds(ReadParams.Source.GetTo());
+
         for (const auto& data : MetricsData) {
             auto& labels = data.Metric.Labels;
 
@@ -312,6 +317,11 @@ public:
             auto& type = data.Metric.Type;
 
             for (size_t i = 0; i < timestamps.size(); ++i){
+                TInstant timestamp = TInstant::MilliSeconds(timestamps[i]);
+                if (timestamp < from || timestamp > to) {
+                    continue;
+                }
+
                 NUdf::TUnboxedValue* items = nullptr;
                 auto value = HolderFactory.CreateDirectArrayHolder(ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
 
@@ -472,10 +482,7 @@ private:
     }
 
     void ParsePointsCount(const NSo::TMetric& metric, ui64 pointsCount) {
-        TInstant from = TInstant::Seconds(ReadParams.Source.GetFrom());
-        TInstant to = TInstant::Seconds(ReadParams.Source.GetTo());
-
-        auto ranges = SplitTimeIntervalIntoRanges(from, to, pointsCount);
+        auto ranges = SplitTimeIntervalIntoRanges(pointsCount);
 
         if (ranges.empty()) {
             CompletedMetricsCount++;
@@ -487,7 +494,10 @@ private:
         }
     }
 
-    std::vector<std::pair<TInstant, TInstant>> SplitTimeIntervalIntoRanges(TInstant from, TInstant to, ui64 pointsCount) const {
+    std::vector<std::pair<TInstant, TInstant>> SplitTimeIntervalIntoRanges(ui64 pointsCount) const {
+        TInstant from = TInstant::Seconds(ReadParams.Source.GetFrom() - TruePointsFindRange);
+        TInstant to = TInstant::Seconds(ReadParams.Source.GetTo() + TruePointsFindRange);
+
         std::vector<std::pair<TInstant, TInstant>> result;
         if (pointsCount == 0) {
             return result;
@@ -517,6 +527,7 @@ private:
     const TString LogPrefix;
     const TDqSolomonReadParams ReadParams;
     const ui64 ComputeActorBatchSize;
+    const ui64 TruePointsFindRange;
     const ui64 MetricsQueueConsumersCountDelta;
 
     bool UseMetricsQueue;
@@ -579,6 +590,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         computeActorBatchSize = FromString<ui64>(it->second);
     }
 
+     ui64 truePointsFindRange = 1;
+    if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
+        truePointsFindRange = FromString<ui64>(it->second);
+    }
+
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
@@ -591,6 +607,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         programBuilder,
         std::move(params),
         computeActorBatchSize,
+        truePointsFindRange,
         metricsQueueConsumersCountDelta,
         metricsQueueActor,
         counters,

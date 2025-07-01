@@ -27,7 +27,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
     Y_ABORT_UNLESS(itSnap.second);
     LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
-    return itVersion.first->second->GetIndexInfo();
+    return &itVersion.first->second->GetIndexInfo();
 }
 
 bool TVersionedIndex::LoadShardingInfo(IDbWrapper& db) {

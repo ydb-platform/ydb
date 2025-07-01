@@ -1437,6 +1437,54 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
+     Y_UNIT_TEST(OlapTemporary) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetEnableTempTables(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+        auto session1 = client.GetSession().GetValueSync().GetSession();
+        {
+            auto result = session1.ExecuteQuery(R"(
+                CREATE TEMP TABLE `/Root/test/TestTable` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32,
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = COLUMN);)",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+        {
+            // Session2 can't use tmp table
+            auto result = session2.ExecuteQuery(R"(
+                SELECT * FROM `/Root/test/TestTable`;
+                )",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("does not exist or you do not have access permissions."),
+                result.GetIssues().ToString());
+        }
+
+        {
+            // Session1 can use tmp table
+            auto result = session1.ExecuteQuery(R"(
+                SELECT * FROM `/Root/test/TestTable`;
+                )",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(OlapCreateAsSelect_Simple) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -1460,11 +1508,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
         )";
 
-        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
-
         auto client = kikimr.GetQueryClient();
-        auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        {
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         {
             auto prepareResult = client.ExecuteQuery(R"(

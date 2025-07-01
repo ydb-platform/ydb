@@ -238,7 +238,7 @@ namespace Tests {
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
         TServerSettings& SetScanReaskToResolve(const ui32 count) {
-            AppConfig->MutableTableServiceConfig()->MutableScanRetriesConfig()->SetReaskShardRetriesCount(count);
+            AppConfig->MutableTableServiceConfig()->MutableScanTabletsConfig()->SetReaskShardRetriesCount(count);
             return *this;
         }
         TServerSettings& SetColumnShardReaderClassName(const TString& className) {

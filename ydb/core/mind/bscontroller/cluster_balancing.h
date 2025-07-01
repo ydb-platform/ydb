@@ -17,7 +17,7 @@ struct TClusterBalancingSettings {
     ui32 IterationIntervalMs = 5000;
 };
 
-TClusterBalancingSettings ParseClusterBalancingSettings(const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> storageConfig);
+TClusterBalancingSettings ParseClusterBalancingSettings(const NKikimrBlobStorage::TStorageConfig& storageConfig);
 
 IActor* CreateClusterBalancingActor(const TActorId& controllerId, const TClusterBalancingSettings& settings);
 

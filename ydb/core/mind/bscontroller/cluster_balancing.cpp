@@ -343,14 +343,14 @@ namespace NKikimr::NBsController {
         }
     };
 
-    TClusterBalancingSettings ParseClusterBalancingSettings(const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> storageConfig) {
+    TClusterBalancingSettings ParseClusterBalancingSettings(const NKikimrBlobStorage::TStorageConfig& storageConfig) {
         TClusterBalancingSettings settings;
 
-        if (!storageConfig->HasBlobStorageConfig()) {
+        if (!storageConfig.HasBlobStorageConfig()) {
             return settings;
         }
 
-        const auto& bsConfig = storageConfig->GetBlobStorageConfig();
+        const auto& bsConfig = storageConfig.GetBlobStorageConfig();
 
         if (!bsConfig.HasBscSettings()) {
             return settings;

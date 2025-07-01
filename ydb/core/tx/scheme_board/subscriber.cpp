@@ -529,12 +529,12 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             CurrentSyncRequest = ev->Cookie;
             this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
         } else {
-            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, ev->Cookie);
         }
     }
 
     void HandleSleep(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
-        this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
+        this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, ev->Cookie);
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
@@ -569,7 +569,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
 
     void OnReplicaFailure() {
         if (CurrentSyncRequest) {
-            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest);
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
             CurrentSyncRequest = 0;
         }
 
@@ -951,12 +951,14 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         const auto& record = ev->Get()->Record;
         if (ClusterState && record.HasClusterState()) {
             const TClusterState received(record.GetClusterState());
-            SBS_LOG_D("Cluster State mismatch in sync version response"
-                << ": sender# " << ev->Sender
-                << ", cookie# " << ev->Cookie
-                << ", subscriber cluster state# " << ClusterState
-                << ", replica cluster state# " << received);
-            return;
+            if (ClusterState != received) {
+                SBS_LOG_D("Cluster State mismatch in sync version response"
+                    << ": sender# " << ev->Sender
+                    << ", cookie# " << ev->Cookie
+                    << ", subscriber cluster state# " << ClusterState
+                    << ", replica cluster state# " << received);
+                return;
+            }
         }
 
         if (!ProxyToGroupMap.contains(ev->Sender)) {

@@ -72,9 +72,10 @@ struct TClusterState {
     TClusterState() = default;
     explicit TClusterState(const TStateStorageInfo* info);
     explicit TClusterState(const NKikimrSchemeBoard::TClusterState& proto);
-    NKikimrSchemeBoard::TClusterState ToProto() const;
+    void ToProto(NKikimrSchemeBoard::TClusterState& proto) const;
 
-    operator bool() const;
+    explicit operator bool() const;
+    bool operator==(const TClusterState& other) const;
     void Out(IOutputStream& out) const;
 };
 

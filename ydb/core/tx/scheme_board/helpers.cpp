@@ -190,11 +190,9 @@ TClusterState::TClusterState(const TStateStorageInfo* info)
     , Guid(info ? info->ClusterStateGuid : 0)
 {}
 
-NKikimrSchemeBoard::TClusterState TClusterState::ToProto() const {
-    NKikimrSchemeBoard::TClusterState proto;
+void TClusterState::ToProto(NKikimrSchemeBoard::TClusterState& proto) const {
     proto.SetGeneration(Generation);
     proto.SetGuid(Guid);
-    return proto;
 }
 
 TClusterState::operator bool() const {
@@ -202,7 +200,12 @@ TClusterState::operator bool() const {
 }
 
 void TClusterState::Out(IOutputStream& out) const {
-    out << std::format("(Generation: {}, GUID: {})", Generation, Guid);
+    out << std::format("{{Generation: {}, GUID: {}}}", Generation, Guid);
+}
+
+bool TClusterState::operator==(const TClusterState& other) const {
+    return Generation == other.Generation
+        && Guid == other.Guid;
 }
 
 } // NSchemeBoard

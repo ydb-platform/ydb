@@ -440,7 +440,7 @@ public:
             notify->Record.SetVersion(GetVersion());
             Y_ABORT_UNLESS(Owner);
             if (Owner->Info) {
-                *notify->Record.MutableClusterState() = TClusterState(Owner->Info.Get()).ToProto();
+                TClusterState(Owner->Info.Get()).ToProto(*notify->Record.MutableClusterState());
             }
 
             if (!IsEmpty() || IsExplicitlyDeleted() || forceStrong) {
@@ -1125,7 +1125,7 @@ private:
         }
 
         if (auto cookie = info.ProcessSyncRequest()) {
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), false, TClusterState(Info.Get())), 0, *cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie);
         }
     }
 
@@ -1147,7 +1147,7 @@ private:
                 version = GetVersion(TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
             }
 
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, false, TClusterState(Info.Get())), 0, ev->Cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, TClusterState(Info.Get())), 0, ev->Cookie);
             return;
         }
 
@@ -1169,7 +1169,7 @@ private:
         auto cookie = info.ProcessSyncRequest();
         Y_ABORT_UNLESS(cookie && *cookie == ev->Cookie);
 
-        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), false, TClusterState(Info.Get())), 0, *cookie);
+        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {

@@ -16,13 +16,11 @@ public:
     TDqDataSourceConstraintTransformer()
         : TVisitorTransformerBase(true)
     {
-        AddHandler({
-            TDqReadWrap::CallableName(),
-            TDqReadWideWrap::CallableName(),
-            TDqReadBlockWideWrap::CallableName()
-        }, Hndl(&TDqDataSourceConstraintTransformer::CopyFromFirst));
+        AddHandler({TDqReadWrap::CallableName()}, Hndl(&TDqDataSourceConstraintTransformer::CopyFromFirst));
         AddHandler({
             TCoConfigure::CallableName(),
+            TDqReadWideWrap::CallableName(),
+            TDqReadBlockWideWrap::CallableName(),
             TDqSource::CallableName(),
             TDqSourceWrap::CallableName(),
             TDqSourceWideWrap::CallableName(),

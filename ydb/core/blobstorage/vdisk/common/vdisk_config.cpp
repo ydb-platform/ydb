@@ -85,7 +85,7 @@ namespace NKikimr {
         RunRepl = !baseInfo.ReadOnly;
 
         if (const auto& perf = VDiskPerformance.find(baseInfo.DeviceType); perf != VDiskPerformance.end()) {
-            ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
+            ReplMaxTimeToMakeProgress = perf->second.ReplMaxTimeToMakeProgress;
         } else {
             ReplMaxTimeToMakeProgress = TDuration::Minutes(180);
         }

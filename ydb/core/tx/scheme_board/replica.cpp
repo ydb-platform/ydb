@@ -66,7 +66,7 @@ class TReplica: public TMonitorableActor<TReplica> {
     };
 
 public:
-    TReplica(const TIntrusivePtr<TStateStorageInfo>& info)
+    explicit TReplica(const TIntrusivePtr<TStateStorageInfo>& info)
         : ClusterStateGeneration(info->ClusterStateGeneration)
         , ClusterStateGuid(info->ClusterStateGuid)
     {}

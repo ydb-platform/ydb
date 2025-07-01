@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             Env.Sim(TDuration::Seconds(10));
         }
 
-        
+
         void ReplicaCleanup(const TActorId &replica, ui64 gen, ui64 guid) {
             const TActorId edge = Runtime.AllocateEdgeActor(1);
             Runtime.WrapInActorContext(edge, [&] {
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             , {1, 0, NKikimrProto::EReplyStatus::ERROR}
         }) {
             test.ChangeReplicaConfig(replicas[1], gen, guid);
-            UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, res); 
+            UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, res);
         }
     }
 
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return true;
         };
         UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, NKikimrProto::EReplyStatus::OK);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 0);
     }
 
     Y_UNIT_TEST(TestProxyConfigMismatch) {
@@ -180,13 +180,13 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return true;
         };
         UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, NKikimrProto::EReplyStatus::ERROR);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 0);
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         UNIT_ASSERT_EQUAL(test.ReplicaLookup(replicas[1], 3, 4)->Get()->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 1);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 1);
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         test.ReplicaDelete(replicas[1], 3, 4);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 2);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 2);
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         test.ReplicaCleanup(replicas[1], 3, 4);
         UNIT_ASSERT_EQUAL(nw1Cnt, 3);
@@ -205,15 +205,16 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return true;
         };
         test.BoardLookup(replicas[1], 0, 0);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 0);
         test.BoardLookup(replicas[1], 1, 0);
         UNIT_ASSERT_EQUAL(nw1Cnt, 1);
         test.BoardLookup(replicas[1], 0, 1);
         UNIT_ASSERT_EQUAL(nw1Cnt, 2);
-        test.ChangeReplicaConfig(replicas[1], 3, 4, true);
+        ui64 guid = Max<ui64>();
+        test.ChangeReplicaConfig(replicas[1], 3, guid, true);
         auto result = test.BoardLookup(replicas[1], 0, 0);
         UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGeneration(), 3);
-        UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGuid(), 4);
+        UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGuid(), guid);
         UNIT_ASSERT_EQUAL(nw1Cnt, 2);
         test.BoardCleanup(replicas[1], 5, 6);
         UNIT_ASSERT_EQUAL(nw1Cnt, 3);

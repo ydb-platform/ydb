@@ -2315,22 +2315,18 @@ class WorkloadTestBase(LoadSuiteBase):
             )
 
             # ===== STEP 1: Проверка схемы =====
-            with allure.step(f"Step 1: Check database scheme state") as step1:
-                step1.name = f"Step 1: Check database scheme state"
+            with allure.step(f"Step 1: Check database scheme state"):
                 logging.info("Step 1: Checking database scheme state...")
                 try:
                     self._check_scheme_state()
                     logging.info("  ✓ Scheme state check completed successfully")
                     allure.attach("Scheme state check completed successfully", "Scheme Check Result", allure.attachment_type.TEXT)
-                    step1.name = f"Step 1: ✅ Database scheme checked"
                 except Exception as e:
                     logging.error(f"  ✗ Scheme state check failed: {e}")
                     allure.attach(f"Scheme state check failed: {e}", "Scheme Check Error", allure.attachment_type.TEXT)
-                    step1.name = f"Step 1: ❌ Database scheme check failed"
 
             # ===== STEP 2: Анализ результатов =====
-            with allure.step(f"Step 2: Analyze execution results") as step2:
-                step2.name = f"Step 2: Analyze execution results"
+            with allure.step(f"Step 2: Analyze execution results"):
                 logging.info("Step 2: Analyzing execution results...")
                 logging.info(f"  - Before analysis: overall_result.success = {overall_result.success}")
                 logging.info(f"  - Before analysis: overall_result.errors = {len(overall_result.errors) if overall_result.errors else 0}")
@@ -2353,15 +2349,12 @@ class WorkloadTestBase(LoadSuiteBase):
                         "Analysis Result",
                         allure.attachment_type.TEXT
                     )
-                    step2.name = f"Step 2: ✅ Results analyzed (Success: {overall_result.success})"
                 except Exception as e:
                     logging.error(f"  ✗ Execution results analysis failed: {e}")
                     allure.attach(f"Analysis failed: {e}", "Analysis Error", allure.attachment_type.TEXT)
-                    step2.name = f"Step 2: ❌ Results analysis failed"
 
             # ===== STEP 3: Сбор статистики =====
-            with allure.step(f"Step 3: Collect execution statistics") as step3:
-                step3.name = f"Step 3: Collect execution statistics"
+            with allure.step(f"Step 3: Collect execution statistics"):
                 logging.info("Step 3: Collecting execution statistics...")
                 stats_before = overall_result.get_stats(workload_name)
                 stats_count_before = len(stats_before) if stats_before else 0
@@ -2398,28 +2391,21 @@ class WorkloadTestBase(LoadSuiteBase):
                             "Statistics Summary",
                             allure.attachment_type.TEXT
                         )
-                        step3.name = f"Step 3: ✅ Statistics collected ({stats_count_after} fields)"
-                    else:
-                        step3.name = f"Step 3: ⚠️ No statistics available"
                     
                 except Exception as e:
                     logging.error(f"  ✗ Statistics collection failed: {e}")
                     allure.attach(f"Statistics collection failed: {e}", "Statistics Error", allure.attachment_type.TEXT)
-                    step3.name = f"Step 3: ❌ Statistics collection failed"
 
             # ===== STEP 4: Установка времени начала workload =====
-            with allure.step(f"Step 4: Set workload start time") as step4:
-                step4.name = f"Step 4: Set workload start time"
+            with allure.step(f"Step 4: Set workload start time"):
                 logging.info("Step 4: Setting workload start time...")
                 workload_start_time = execution_result.get("workload_start_time")
                 logging.info(f"  - Setting workload_start_time: {workload_start_time}")
                 overall_result.workload_start_time = workload_start_time
                 allure.attach(f"Workload start time set: {workload_start_time}", "Start Time", allure.attachment_type.TEXT)
-                step4.name = f"Step 4: ✅ Start time set ({workload_start_time})"
 
             # ===== STEP 5: Диагностика и финальная обработка =====
-            with allure.step(f"Step 5: Process workload result with diagnostics") as step5:
-                step5.name = f"Step 5: Process workload result with diagnostics"
+            with allure.step(f"Step 5: Process workload result with diagnostics"):
                 logging.info("Step 5: Processing workload result with diagnostics...")
                 logging.info(f"  - Calling process_workload_result_with_diagnostics for {workload_name}")
                 logging.info(f"  - check_scheme=False, use_node_subcols=True")
@@ -2447,7 +2433,6 @@ class WorkloadTestBase(LoadSuiteBase):
                     )
                     logging.info("  ✓ Workload result processing completed successfully")
                     allure.attach("Workload result processing completed successfully", "Diagnostics Result", allure.attachment_type.TEXT)
-                    step5.name = f"Step 5: ✅ Diagnostics completed"
                     
                 except Exception as e:
                     logging.error(f"  ✗ Workload result processing failed: {e}")
@@ -2459,11 +2444,9 @@ class WorkloadTestBase(LoadSuiteBase):
                         "Diagnostics Error",
                         allure.attachment_type.TEXT
                     )
-                    step5.name = f"Step 5: ❌ Diagnostics failed"
 
             # ===== STEP 6: Финальный отчет =====
-            with allure.step(f"Step 6: Final result summary") as step6:
-                step6.name = f"Step 6: Final result summary"
+            with allure.step(f"Step 6: Final result summary"):
                 final_stats = overall_result.get_stats(workload_name)
                 final_success = overall_result.success
                 final_errors = len(overall_result.errors) if overall_result.errors else 0
@@ -2495,11 +2478,6 @@ class WorkloadTestBase(LoadSuiteBase):
                         "Final Summary",
                         allure.attachment_type.TEXT
                     )
-                    
-                    success_emoji = "✅" if final_success else "❌"
-                    step6.name = f"Step 6: {success_emoji} Final summary (Success: {final_success}, Runs: {successful_runs}/{total_runs})"
-                else:
-                    step6.name = f"Step 6: ⚠️ Final summary (No stats available)"
                 
                 logging.info(f"=== FINALIZE COMPLETED FOR {workload_name} ===")
                 

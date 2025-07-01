@@ -636,8 +636,7 @@ class LoadSuiteBase:
         """Проводит диагностику нод (cores/oom) и возвращает список ошибок"""
         logging.info("=== DIAGNOSE NODES ===")
         
-        with allure.step("Diagnose cluster nodes") as main_step:
-            main_step.name = "Diagnose cluster nodes"
+        with allure.step("Diagnose cluster nodes"):
             
             try:
                 end_time = time()
@@ -648,8 +647,7 @@ class LoadSuiteBase:
                 logging.info(f"  - end_time: {end_time}")
                 logging.info(f"  - workload_name: {workload_name}")
                 
-                with allure.step("Check nodes for cores/OOM") as check_step:
-                    check_step.name = "Check nodes for cores/OOM"
+                with allure.step("Check nodes for cores/OOM"):
                     
                     logging.info("Calling check_nodes_diagnostics_with_timing...")
                     node_errors = type(self).check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
@@ -663,15 +661,12 @@ class LoadSuiteBase:
                             error_summary.append(f"  - {error.host}: {error.error_type}")
                             logging.info(f"  - {error.host}: {error.error_type}")
                         
-                        check_step.name = f"❌ Found issues on {len(node_errors)} nodes"
-                        
                         allure.attach(
                             f"Nodes with issues: {len(node_errors)}\n" + "\n".join(error_summary),
                             "Node Issues Found",
                             allure.attachment_type.TEXT
                         )
                     else:
-                        check_step.name = f"✅ No node issues found"
                         logging.info("  ✓ No node issues found")
                         
                         allure.attach(
@@ -681,21 +676,16 @@ class LoadSuiteBase:
                         )
 
                 # Обновляем статистику
-                with allure.step("Update node statistics") as stats_step:
-                    stats_step.name = "Update node statistics"
+                with allure.step("Update node statistics"):
                     
                     result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
                     logging.info(f"  - Updated nodes_with_issues = {len(node_errors)}")
-                    
-                    stats_step.name = f"✅ Statistics updated (nodes_with_issues: {len(node_errors)})"
                     
                     allure.attach(
                         f"nodes_with_issues statistic set to: {len(node_errors)}",
                         "Statistics Update",
                         allure.attachment_type.TEXT
                     )
-
-                main_step.name = f"{'❌' if node_errors else '✅'} Node diagnostics: {len(node_errors)} issues found"
                 
                 logging.info("=== DIAGNOSE NODES COMPLETED ===")
                 return node_errors
@@ -705,8 +695,6 @@ class LoadSuiteBase:
                 import traceback
                 traceback_str = traceback.format_exc()
                 logging.error(f"Traceback: {traceback_str}")
-                
-                main_step.name = f"❌ Node diagnostics failed"
                 
                 allure.attach(
                     f"Node diagnostics failed: {e}\n\nTraceback:\n{traceback_str}",
@@ -720,8 +708,7 @@ class LoadSuiteBase:
         """Обновляет флаги summary (with_warnings, with_errors)"""
         logging.info("=== UPDATE SUMMARY FLAGS ===")
         
-        with allure.step("Update summary flags") as main_step:
-            main_step.name = "Update summary flags"
+        with allure.step("Update summary flags"):
             
             has_warnings = bool(result.warnings)
             has_errors = bool(result.errors)
@@ -730,7 +717,7 @@ class LoadSuiteBase:
             logging.info(f"  - has_warnings: {has_warnings} (count: {len(result.warnings) if result.warnings else 0})")
             logging.info(f"  - has_errors: {has_errors} (count: {len(result.errors) if result.errors else 0})")
             
-            with allure.step("Set warning flags") as warn_step:
+            with allure.step("Set warning flags"):
                 # Устанавливаем флаги предупреждений (оба варианта для совместимости)
                 result.add_stat(workload_name, "with_warnings", has_warnings)
                 result.add_stat(workload_name, "with_warrnings", has_warnings)  # Для обратной совместимости
@@ -739,18 +726,14 @@ class LoadSuiteBase:
                 logging.info(f"  - Set with_warnings = {has_warnings}")
                 logging.info(f"  - Set with_warrnings = {has_warnings} (legacy)")
                 logging.info(f"  - Set workload_warnings = {has_warnings}")
-                
-                warn_step.name = f"{'⚠️' if has_warnings else '✅'} Warnings: {has_warnings}"
 
-            with allure.step("Set error flags") as error_step:
+            with allure.step("Set error flags"):
                 # Устанавливаем флаги ошибок
                 result.add_stat(workload_name, "with_errors", has_errors)
                 result.add_stat(workload_name, "workload_errors", has_errors)
                 
                 logging.info(f"  - Set with_errors = {has_errors}")
                 logging.info(f"  - Set workload_errors = {has_errors}")
-                
-                error_step.name = f"{'❌' if has_errors else '✅'} Errors: {has_errors}"
 
             allure.attach(
                 f"Summary flags updated:\n"
@@ -762,16 +745,13 @@ class LoadSuiteBase:
                 allure.attachment_type.TEXT
             )
             
-            main_step.name = f"✅ Summary flags updated (W:{has_warnings}, E:{has_errors})"
-            
         logging.info("=== UPDATE SUMMARY FLAGS COMPLETED ===")
 
     def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
         """Формирует allure-отчёт по результатам workload"""
         logging.info("=== CREATE ALLURE REPORT ===")
         
-        with allure.step("Create Allure report") as main_step:
-            main_step.name = "Create Allure report"
+        with allure.step("Create Allure report"):
             
             end_time = time()
             start_time = result.start_time if result.start_time else end_time - 1
@@ -784,8 +764,7 @@ class LoadSuiteBase:
             logging.info(f"  - use_node_subcols: {use_node_subcols}")
             logging.info(f"  - workload_params keys: {list(workload_params.keys()) if workload_params else 'None'}")
             
-            with allure.step("Prepare report data") as prep_step:
-                prep_step.name = "Prepare report data"
+            with allure.step("Prepare report data"):
                 
                 # Добавляем информацию о времени выполнения
                 additional_table_strings = {}
@@ -821,10 +800,7 @@ class LoadSuiteBase:
                     
                     logging.info(f"  - Execution mode: {additional_table_strings.get('execution_mode', 'Standard')}")
 
-                prep_step.name = f"✅ Report data prepared ({len(additional_table_strings)} extra fields)"
-
-            with allure.step("Generate Allure description") as gen_step:
-                gen_step.name = "Generate Allure description"
+            with allure.step("Generate Allure description"):
                 
                 try:
                     from ydb.tests.olap.lib.allure_utils import allure_test_description
@@ -843,7 +819,6 @@ class LoadSuiteBase:
                     )
                     
                     logging.info("  ✓ Allure description generated successfully")
-                    gen_step.name = f"✅ Allure description generated"
                     
                     allure.attach(
                         f"Allure description generated successfully\n"
@@ -861,15 +836,11 @@ class LoadSuiteBase:
                     traceback_str = traceback.format_exc()
                     logging.error(f"  ✗ Traceback: {traceback_str}")
                     
-                    gen_step.name = f"❌ Allure description failed"
-                    
                     allure.attach(
                         f"Allure description generation failed: {e}\n\nTraceback:\n{traceback_str}",
                         "Allure Generation Error",
                         allure.attachment_type.TEXT
                     )
-
-            main_step.name = f"✅ Allure report created for {workload_name}"
             
         logging.info("=== CREATE ALLURE REPORT COMPLETED ===")
 
@@ -879,8 +850,7 @@ class LoadSuiteBase:
         
         logging.info(f"=== HANDLE FINAL STATUS FOR {workload_name} ===")
         
-        with allure.step(f"Handle final status for {workload_name}") as main_step:
-            main_step.name = f"Handle final status for {workload_name}"
+        with allure.step(f"Handle final status for {workload_name}"):
             
             stats = result.get_stats(workload_name)
             node_issues = stats.get("nodes_with_issues", 0) if stats else 0
@@ -900,27 +870,22 @@ class LoadSuiteBase:
             test_status = "PASS"
             test_reason = "No issues detected"
 
-            with allure.step("Determine test status") as status_step:
-                status_step.name = "Determine test status"
+            with allure.step("Determine test status"):
                 
                 if node_issues > 0:
                     test_status = "FAIL"
                     test_reason = f"Cores/OOM detected on {node_issues} nodes"
                     logging.info(f"  → FAIL: {test_reason}")
-                    status_step.name = f"❌ FAIL: {test_reason}"
                 elif workload_errors:
                     test_status = "BROKEN"
                     test_reason = f"{len(workload_errors)} workload errors detected"
                     logging.info(f"  → BROKEN: {test_reason}")
-                    status_step.name = f"🔴 BROKEN: {test_reason}"
                 elif result.warnings:
                     test_status = "WARNING"
                     test_reason = f"{len(result.warnings)} warnings detected"
                     logging.info(f"  → WARNING: {test_reason}")
-                    status_step.name = f"⚠️ WARNING: {test_reason}"
                 else:
                     logging.info(f"  → PASS: {test_reason}")
-                    status_step.name = f"✅ PASS: {test_reason}"
 
                 allure.attach(
                     f"Test Status: {test_status}\n"
@@ -933,8 +898,7 @@ class LoadSuiteBase:
                 )
 
             # Логика attach_logs
-            with allure.step("Decide on log attachment") as attach_step:
-                attach_step.name = "Decide on log attachment"
+            with allure.step("Decide on log attachment"):
                 
                 cluster_log = get_external_param("cluster_log", "")
                 should_attach = False
@@ -943,29 +907,25 @@ class LoadSuiteBase:
                 logging.info(f"Attach logs decision:")
                 logging.info(f"  - cluster_log parameter: '{cluster_log}'")
                 
-                with allure.step("Check cluster_log parameter") as param_step:
+                with allure.step("Check cluster_log parameter"):
                     if cluster_log == "all":
                         should_attach = True
                         attach_reason = "cluster_log=all (always attach)"
                         logging.info(f"  → {attach_reason}")
-                        param_step.name = f"✅ cluster_log=all → Always attach"
                     elif cluster_log == "never":
                         should_attach = False
                         attach_reason = "cluster_log=never (never attach)"
                         logging.info(f"  → {attach_reason}")
-                        param_step.name = f"❌ cluster_log=never → Never attach"
                     else:
                         # Автоматическое решение на основе проблем
                         if node_issues > 0 or workload_errors or result.warnings:
                             should_attach = True
                             attach_reason = f"Problems detected: nodes={node_issues}, errors={len(workload_errors)}, warnings={len(result.warnings) if result.warnings else 0}"
                             logging.info(f"  → {attach_reason}")
-                            param_step.name = f"🔍 Auto-detect → Problems found → Attach"
                         else:
                             should_attach = False
                             attach_reason = "No problems detected (clean run)"
                             logging.info(f"  → {attach_reason}")
-                            param_step.name = f"✅ Auto-detect → Clean run → No attach"
 
                 allure.attach(
                     f"Should attach logs: {should_attach}\n"
@@ -977,8 +937,7 @@ class LoadSuiteBase:
 
                 # Выполняем attach_logs если нужно
                 if should_attach:
-                    with allure.step("Attach cluster logs") as logs_step:
-                        logs_step.name = "Attach cluster logs"
+                    with allure.step("Attach cluster logs"):
                         
                         logging.info(f"Attaching logs: {attach_reason}")
                         
@@ -1004,7 +963,6 @@ class LoadSuiteBase:
                                 )
                                 
                                 logging.info("  ✓ Logs attached successfully")
-                                logs_step.name = f"✅ Logs attached ({attach_reason})"
                                 
                                 allure.attach(
                                     f"Logs attached successfully\n"
@@ -1021,8 +979,6 @@ class LoadSuiteBase:
                                 traceback_str = traceback.format_exc()
                                 logging.error(f"  ✗ Traceback: {traceback_str}")
                                 
-                                logs_step.name = f"❌ Log attachment failed"
-                                
                                 allure.attach(
                                     f"Log attachment failed: {e}\n\nTraceback:\n{traceback_str}",
                                     "Logs Attachment Error",
@@ -1030,7 +986,6 @@ class LoadSuiteBase:
                                 )
                         else:
                             logging.warning("  ⚠️ __attach_logs method not available")
-                            logs_step.name = f"⚠️ __attach_logs method not available"
                             
                             allure.attach(
                                 "__attach_logs method not available - logs cannot be attached",
@@ -1038,8 +993,7 @@ class LoadSuiteBase:
                                 allure.attachment_type.TEXT
                             )
                 else:
-                    with allure.step("Skip log attachment") as skip_step:
-                        skip_step.name = f"Skip log attachment ({attach_reason})"
+                    with allure.step("Skip log attachment"):
                         logging.info(f"Skipping log attachment: {attach_reason}")
                         
                         allure.attach(
@@ -1049,11 +1003,8 @@ class LoadSuiteBase:
                             allure.attachment_type.TEXT
                         )
 
-                attach_step.name = f"{'✅' if should_attach else '❌'} Logs: {attach_reason}"
-
             # Применяем финальный статус
-            with allure.step("Apply final test status") as final_step:
-                final_step.name = "Apply final test status"
+            with allure.step("Apply final test status"):
                 
                 if test_status == "FAIL":
                     result.success = False
@@ -1061,7 +1012,6 @@ class LoadSuiteBase:
                         for error in workload_errors:
                             result.add_error(error)
                     logging.info(f"  → Test marked as FAILED")
-                    final_step.name = f"❌ Test marked as FAILED"
                     
                     # Вызываем pytest.fail для немедленного завершения
                     import pytest
@@ -1072,7 +1022,6 @@ class LoadSuiteBase:
                     for error in workload_errors:
                         result.add_error(error)
                     logging.info(f"  → Test marked as BROKEN")
-                    final_step.name = f"🔴 Test marked as BROKEN"
                     
                     # Вызываем pytest.fail для немедленного завершения
                     import pytest
@@ -1081,10 +1030,8 @@ class LoadSuiteBase:
                 elif test_status == "WARNING":
                     # WARNING не делает тест неуспешным, но добавляет предупреждения
                     logging.info(f"  → Test has warnings but continues")
-                    final_step.name = f"⚠️ Test has warnings but continues"
                 else:
                     logging.info(f"  → Test passed successfully")
-                    final_step.name = f"✅ Test passed successfully"
 
                 allure.attach(
                     f"Final test status applied: {test_status}\n"
@@ -1093,8 +1040,6 @@ class LoadSuiteBase:
                     "Final Status Applied",
                     allure.attachment_type.TEXT
                 )
-
-            main_step.name = f"{'✅' if test_status == 'PASS' else '❌' if test_status in ['FAIL', 'BROKEN'] else '⚠️'} {test_status}: {test_reason}"
 
         logging.info(f"=== HANDLE FINAL STATUS COMPLETED ===")
         logging.info(f"Final result: {test_status} - {test_reason}")

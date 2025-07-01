@@ -10,6 +10,10 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TGroupedMemoryLimiterCon
     if (config.HasHardMemoryLimit()) {
         HardMemoryLimit = config.GetHardMemoryLimit();
     }
+
+    CountBuckets = config.GetCountBuckets() ? config.GetCountBuckets() : 1;
+    MemoryLimit /= CountBuckets;
+    HardMemoryLimit /= CountBuckets;
     Enabled = config.GetEnabled();
     return true;
 }

@@ -3,6 +3,7 @@
 
 #include <library/cpp/protobuf/util/pb_io.h>
 
+#include <library/cpp/retry/retry.h>
 #include <util/string/join.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
@@ -456,29 +457,33 @@ private:
             return SolomonClient->GetData(program, from, to);
         };
 
+        auto retryPolicy= IRetryPolicy<NSo::TGetDataResponse>::GetExponentialBackoffPolicy(
+            [](const NSo::TGetDataResponse& response) {
+                if (response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
+                    return ERetryErrorClass::ShortRetry;
+                }
+                return ERetryErrorClass::NoRetry;
+            },
+            TDuration::MilliSeconds(50),
+            TDuration::MilliSeconds(200),
+            TDuration::MilliSeconds(1000),
+            5
+        );
+
         auto getDataFuture = makeDataRequest();
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        getDataFuture.Subscribe([actorSystem, makeDataRequest, selfId = SelfId()](
+        getDataFuture.Subscribe([actorSystem, makeDataRequest, retryPolicy, selfId = SelfId()](
             const NThreading::TFuture<NSo::TGetDataResponse>& response) -> void
         {
-            auto retryState = IRetryPolicy<NSo::TGetDataResponse>::GetExponentialBackoffPolicy(
-                [](const NSo::TGetDataResponse& response) {
-                    if (response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
-                        return ERetryErrorClass::ShortRetry;
-                    }
-                    return ERetryErrorClass::NoRetry;
-                },
-                TDuration::MilliSeconds(50),
-                TDuration::MilliSeconds(200),
-                TDuration::MilliSeconds(1000),
-                5
-            )->CreateRetryState();
-
             auto value = response.GetValue();
-            while (auto delay = retryState->GetNextRetryDelay(value)) {
-                Sleep(*delay);
-                value = makeDataRequest().GetValueSync();
+            if (value.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
+                value = DoWithRetryOnRetCode<NSo::TGetDataResponse>(
+                    [makeDataRequest] () {
+                        return makeDataRequest().GetValueSync();
+                    },
+                    retryPolicy
+                );
             }
 
             actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(value));

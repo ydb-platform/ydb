@@ -27,6 +27,14 @@ public:
     {
     }
 
+    ui32 GetCriticalTotalRetriesCount() const {
+        return ProtoConfig.GetCriticalTotalRetriesCount();
+    }
+
+    ui32 GetReaskShardRetriesCount() const {
+        return ProtoConfig.GetReaskShardRetriesCount();
+    }
+
     bool IsParallelScanningAvailable() const {
         return ProtoConfig.GetParallelScanningAvailable();
     }

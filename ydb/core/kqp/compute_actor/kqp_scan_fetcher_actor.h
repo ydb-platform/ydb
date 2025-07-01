@@ -55,7 +55,6 @@ private:
     const ui32 LockNodeId;
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const TCPULimits CPULimits;
-    const NKikimrConfig::TTableServiceConfig::TScanTabletsConfig ScanTabletsConfig;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

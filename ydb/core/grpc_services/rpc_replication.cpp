@@ -90,17 +90,26 @@ static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpe
     }
 }
 
-void ConvertState(NKikimrReplication::TReplicationState& from, Ydb::Replication::DescribeReplicationResult& to) {
+void ConvertStats(NKikimrReplication::TReplicationState& from, Ydb::Replication::DescribeReplicationResult& to) {
+    if (from.GetStandBy().HasLagMilliSeconds()) {
+        *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+            from.GetStandBy().GetLagMilliSeconds());
+    }
+    if (from.GetStandBy().HasInitialScanProgress()) {
+        to.mutable_running()->mutable_stats()->set_initial_scan_progress(from.GetStandBy().GetInitialScanProgress());
+    }
+}
+
+void ConvertStats(NKikimrReplication::TReplicationState&, Ydb::Replication::DescribeTransferResult&) {
+    // nop
+}
+
+template<typename T>
+void ConvertState(NKikimrReplication::TReplicationState& from, T& to) {
     switch (from.GetStateCase()) {
     case NKikimrReplication::TReplicationState::kStandBy:
         to.mutable_running();
-        if (from.GetStandBy().HasLagMilliSeconds()) {
-            *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
-                from.GetStandBy().GetLagMilliSeconds());
-        }
-        if (from.GetStandBy().HasInitialScanProgress()) {
-            to.mutable_running()->mutable_stats()->set_initial_scan_progress(from.GetStandBy().GetInitialScanProgress());
-        }
+        ConvertStats(from, to);
         break;
     case NKikimrReplication::TReplicationState::kError:
         *to.mutable_error()->mutable_issues() = std::move(*from.MutableError()->MutableIssues());
@@ -128,6 +137,7 @@ void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replicati
 
 void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeTransferResult& result) {
     ConvertConnectionParams(record.GetConnectionParams(), *result.mutable_connection_params());
+    ConvertState(*record.MutableState(), result);
 
     if (record.GetTargets().size()) {
         const auto& target = record.GetTargets()[0];

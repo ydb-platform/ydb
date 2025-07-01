@@ -9,6 +9,8 @@
 #include <util/generic/map.h>
 #include <util/stream/walk.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include "interconnect_common.h"
 #include "interconnect_counters.h"
@@ -51,6 +53,7 @@ namespace NActors {
         DECLARE_SECTION = 1,
         PUSH_DATA,
         DECLARE_SECTION_INLINE,
+        RDMA_READ,
     };
 
     struct TExSerializedEventTooLarge : std::exception {
@@ -64,13 +67,15 @@ namespace NActors {
     class TEventOutputChannel : public TInterconnectLoggingBase {
     public:
         TEventOutputChannel(ui16 id, ui32 peerNodeId, ui32 maxSerializedEventSize,
-                std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params)
+                std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params,
+                std::shared_ptr<NInterconnect::NRdma::IMemPool> rdmaMemPool = nullptr)
             : TInterconnectLoggingBase(Sprintf("OutputChannel %" PRIu16 " [node %" PRIu32 "]", id, peerNodeId))
             , PeerNodeId(peerNodeId)
             , ChannelId(id)
             , Metrics(std::move(metrics))
             , Params(std::move(params))
             , MaxSerializedEventSize(maxSerializedEventSize)
+            , RdmaMemPool(std::move(rdmaMemPool))
         {}
 
         ~TEventOutputChannel() {
@@ -140,13 +145,16 @@ namespace NActors {
         size_t PartLenRemain = 0;
         size_t SectionIndex = 0;
         std::vector<char> XdcData;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
+        std::optional<NActorsInterconnect::TRdmaCreds> SerializeEventRdma(TEventHolder& event);
 
         bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event);
         std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event);
         std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event);
+        std::optional<bool> FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event);
 
         bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event);
 

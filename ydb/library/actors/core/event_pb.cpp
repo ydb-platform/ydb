@@ -264,26 +264,8 @@ namespace NActors {
         return res;
     }
 
-    bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload) {
-        // serialize payload first
+    bool SerializeHeaderCommon(const TVector<TRope> &payload, std::function<bool(const char *p, size_t len)> append) {
         if (payload) {
-            void *data;
-            int size = 0;
-            auto append = [&](const char *p, size_t len) {
-                while (len) {
-                    if (size) {
-                        const size_t numBytesToCopy = std::min<size_t>(size, len);
-                        memcpy(data, p, numBytesToCopy);
-                        data = static_cast<char*>(data) + numBytesToCopy;
-                        size -= numBytesToCopy;
-                        p += numBytesToCopy;
-                        len -= numBytesToCopy;
-                    } else if (!chunker->Next(&data, &size)) {
-                        return false;
-                    }
-                }
-                return true;
-            };
             auto appendNumber = [&](size_t number) {
                 char buf[MaxNumberBytes];
                 return append(buf, SerializeNumber(number, buf));
@@ -299,19 +281,81 @@ namespace NActors {
                     return false;
                 }
             }
-            if (size) {
-                chunker->BackUp(std::exchange(size, 0));
-            }
-            for (const TRope& rope : payload) {
-                if (!chunker->WriteRope(&rope)) {
-                    return false;
-                }
-            }
         }
 
         return true;
     }
 
+    bool SerializePayloadCommon(const TVector<TRope> &payload, std::function<bool(TRope)> append) {
+        for (const TRope& rope : payload) {
+            if (!append(rope)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload) {
+        // serialize payload first
+        void *data;
+        int size = 0;
+        auto append = [&](const char *p, size_t len) {
+            while (len) {
+                if (size) {
+                    const size_t numBytesToCopy = std::min<size_t>(size, len);
+                    memcpy(data, p, numBytesToCopy);
+                    data = static_cast<char*>(data) + numBytesToCopy;
+                    size -= numBytesToCopy;
+                    p += numBytesToCopy;
+                    len -= numBytesToCopy;
+                } else if (!chunker->Next(&data, &size)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        if (!SerializeHeaderCommon(payload, append)) {
+            return false;
+        }
+        if (size) {
+            chunker->BackUp(std::exchange(size, 0));
+        }
+
+        auto appendRope = [&](TRope rope) {
+            if (!chunker->WriteRope(&rope)) {
+                return false;
+            }
+            return true;
+        };
+        if (!SerializePayloadCommon(payload, appendRope)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    TRope SerializeToRopeImpl(std::function<TRcBuf(ui32 size)> alloc, const TVector<TRope> &payload) {
+        TRope result;
+        Cerr << "Header size: " << CalculateSerilizedHeaderSizeImpl(payload) << Endl;
+        TRcBuf headerBuf = alloc(CalculateSerilizedHeaderSizeImpl(payload));
+        char* data = headerBuf.GetDataMut();
+        auto append = [&](const char *p, size_t len) {
+            Cerr << "Appending " << len << " bytes to header" << Endl;
+            std::memcpy(data, p, len);
+            data += len;
+            return true;
+        };
+        SerializeHeaderCommon(payload, append);
+        result.Insert(result.End(), headerBuf);
+
+        auto appendRope = [&](TRope rope) {
+            result.Insert(result.End(), std::move(rope));
+            return true;
+        };
+        SerializePayloadCommon(payload, appendRope);
+
+        return result;
+    }
 
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize)
     {
@@ -361,26 +405,44 @@ namespace NActors {
         }
     }
 
-    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize) {
-        ssize_t result = recordSize;
-        if (result >= 0 && payload) {
+    ui32 CalculateSerilizedHeaderSizeImpl(const TVector<TRope> &payload) {
+        ui32 result = 0;
+        if (payload) {
             ++result; // marker
             char buf[MaxNumberBytes];
             result += SerializeNumber(payload.size(), buf);
-            size_t totalPayloadSize = 0;
             for (const TRope& rope : payload) {
                 size_t ropeSize = rope.GetSize();
-                totalPayloadSize += ropeSize;
                 result += SerializeNumber(ropeSize, buf);
+            }
+        }
+        return result;
+    }
+
+    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize) {
+        ssize_t result = recordSize;
+        if (result >= 0 && payload) {
+            result += CalculateSerilizedHeaderSizeImpl(payload);
+            size_t totalPayloadSize = 0;
+            for (const TRope& rope : payload) {
+                totalPayloadSize += rope.GetSize();
             }
             result += totalPayloadSize;
         }
         return result;
     }
 
+    bool IsRdma(const TVector<TRope> &payload) {
+        for (const TRope& rope : payload) {
+            Y_UNUSED(rope);
+        }
+        return true;;
+    }
+
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize) {
             TEventSerializationInfo info;
             info.IsExtendedFormat = static_cast<bool>(payload);
+            info.IsRdma = IsRdma(payload);
 
             if (allowExternalDataChannel) {
                 if (payload) {

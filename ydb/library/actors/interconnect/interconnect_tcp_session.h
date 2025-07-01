@@ -137,6 +137,7 @@ namespace NActors {
 
                 // number of bytes remaining through XDC channel
                 size_t XdcSizeLeft = 0;
+                std::shared_ptr<std::atomic<size_t>> RdmaItemsLeft = nullptr;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -319,6 +320,7 @@ namespace NActors {
         void ApplyXdcCatchStream();
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
+        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom);
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 

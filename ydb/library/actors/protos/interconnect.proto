@@ -59,6 +59,10 @@ message TRdmaHandshake {
     }
 }
 
+message TRdmaCreds {
+    repeated TRdmaCred Creds = 1;
+}
+
 message TRdmaHandshakeReadAck {
     oneof Status {
         fixed32 Digest = 1; // set in case of OK

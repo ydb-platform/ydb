@@ -1,10 +1,12 @@
 #include "interconnect_channel.h"
 #include "interconnect_zc_processor.h"
+#include "rdma/mem_pool.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/probes.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
@@ -182,8 +184,10 @@ namespace NActors {
         auto addChunk = [&](const void *data, size_t len, bool allowCopy) {
             event.UpdateChecksum(data, len);
             if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
+                Cerr << "task.Write " << External << " " << len << Endl;
                 task.Write<External>(data, len);
             } else {
+                Cerr << "task.Append " << External << " " << len << Endl;
                 task.Append<External>(data, len, &event.ZcTransferId);
             }
             *bytesSerialized += len;
@@ -198,6 +202,7 @@ namespace NActors {
 
         bool complete = false;
         if (event.Event) {
+            Cerr << "event.Event" << Endl;
             while (!complete) {
                 TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
                 if (!out.size()) {
@@ -212,6 +217,7 @@ namespace NActors {
                 }
             }
         } else if (event.Buffer) {
+            Cerr << "event.Buffer" << Endl;
             while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize(), PartLenRemain)) {
                 const char *obuf = Iter.ContiguousData();
@@ -253,9 +259,16 @@ namespace NActors {
             }
 
             // serialize bytes
-            const auto complete = IsPartInline
-                ? FeedInlinePayload(task, event)
-                : FeedExternalPayload(task, event);
+            std::optional<bool> complete = false;
+            if (IsPartInline) {
+                Cerr << "FeedInlinePayload" << Endl;
+                complete = FeedInlinePayload(task, event);
+            } else if (Params.UseRdma && RdmaMemPool) {
+                complete = FeedRdmaPayload(task, event);
+            } else {
+                Cerr << "FeedExternalPayload" << Endl;
+                complete = FeedExternalPayload(task, event);
+            }
             if (!complete) { // no space to serialize
                 return false;
             } else if (*complete) { // event serialized
@@ -286,6 +299,71 @@ namespace NActors {
         OutputQueueSize -= part.Size;
 
         return complete;
+    }
+
+    std::optional<NActorsInterconnect::TRdmaCreds> TEventOutputChannel::SerializeEventRdma(TEventHolder& event) {
+        NActorsInterconnect::TRdmaCreds result;
+
+        if (!event.Buffer && event.Event) {
+            std::optional<TRope> rope = event.Event->SerializeToRope(
+                [&](ui32 size) -> TRcBuf {
+                    return RdmaMemPool->AllocRcBuf(size);
+                }
+            );
+            if (!rope) {
+                return std::nullopt; // serialization failed
+            }
+            event.Buffer = MakeIntrusive<TEventSerializedData>(
+                std::move(*rope), event.Event->CreateSerializationInfo()
+            );
+        }
+
+        if (event.Buffer) {
+            for (; Iter.Valid(); ++Iter) {
+                TRcBuf buf = Iter.GetChunk();
+                auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
+                if (memReg.Empty()) {
+                    // TODO: may be copy to RDMA buffer ?????
+                    return std::nullopt;
+                }
+                auto cred = result.AddCreds();
+                cred->SetAddress(reinterpret_cast<ui64>(memReg.GetAddr()));
+                cred->SetSize(memReg.GetSize());
+                cred->SetRkey(memReg.GetRKey(0)); // TODO: RdmaCtx device index
+            }
+        } 
+        return result;
+    }
+
+    std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event) {
+        auto rdmaCreds = SerializeEventRdma(event);
+
+        if (!rdmaCreds) {
+            return std::nullopt; // no RDMA creds, cannot serialize
+        }
+
+        // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds |
+        size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + rdmaCreds->ByteSizeLong();
+
+        if (partSize > Max<ui16>() || partSize > task.GetInternalFreeAmount()) {
+            return std::nullopt; // not enough space to serialize RDMA payload
+        }
+
+        char buffer[partSize];
+        TChannelPart *part = reinterpret_cast<TChannelPart*>(buffer);
+        *part = {
+            .ChannelFlags = static_cast<ui16>(ChannelId | TChannelPart::XdcFlag),
+            .Size = static_cast<ui16>(partSize - sizeof(TChannelPart))
+        };
+        char *ptr = reinterpret_cast<char*>(part + 1);
+        *ptr++ = static_cast<ui8>(EXdcCommand::RDMA_READ);
+        ui16 credsSerializedSize = rdmaCreds->ByteSizeLong();
+        WriteUnaligned<ui16>(ptr, credsSerializedSize);
+        Y_ABORT_UNLESS(rdmaCreds->SerializePartialToArray(ptr, credsSerializedSize));
+
+        task.Write<false>(buffer, partSize);
+
+        return true;
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {

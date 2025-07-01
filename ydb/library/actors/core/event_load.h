@@ -30,6 +30,7 @@ namespace NActors {
     struct TEventSerializationInfo {
         bool IsExtendedFormat = {};
         std::vector<TEventSectionInfo> Sections;
+        bool IsRdma = false;
         // total sum of Size for every section must match actual serialized size of the event
     };
 

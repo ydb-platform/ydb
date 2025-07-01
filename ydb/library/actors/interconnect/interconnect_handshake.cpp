@@ -378,6 +378,8 @@ namespace NActors {
                                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                                         "RDMA memory read failed, disable rdma on the initiator");
                                     RdmaQp.reset();
+                                } else {
+                                    Params.UseRdma = true;
                                 }
                             }
                         }

@@ -60,6 +60,7 @@ namespace NActors {
         bool UseXdcShuffle = {};
         TString AuthCN;
         NActors::TScopeId PeerScopeId;
+        bool UseRdma = {};
     };
 
 } // NActors

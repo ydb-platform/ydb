@@ -17,6 +17,7 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/printf.h>
+#include <util/generic/scope.h>
 
 
 namespace NKikimr::NKqp {
@@ -78,6 +79,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             });
 
             auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER {
+                runtime.SetObserverFunc(saveObserver);
+            }
 
             auto future = kikimr.RunInThreadPool([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
@@ -125,7 +129,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            runtime.SetObserverFunc(saveObserver);
         }
     }
 
@@ -183,6 +186,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             };
 
             auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER {
+                runtime.SetObserverFunc(saveObserver);
+            }
 
             std::optional<TTransaction> tx;
 
@@ -246,7 +252,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             auto resultSecond = runtime.WaitFuture(future);
             // select must be successful. no transaction locks invalidated issues.
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            runtime.SetObserverFunc(saveObserver);
         }
     }
 
@@ -298,6 +303,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             });
 
             auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER {
+                runtime.SetObserverFunc(saveObserver);
+            }
 
             auto future = kikimr.RunInThreadPool([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
@@ -326,7 +334,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
             auto result = runtime.WaitFuture(future);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());        
-            runtime.SetObserverFunc(saveObserver);
         }
     }
 }

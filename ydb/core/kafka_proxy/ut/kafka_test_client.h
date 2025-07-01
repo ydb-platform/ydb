@@ -9,6 +9,7 @@
 
 using namespace NKafka;
 
+static constexpr ui32 EXPECTED_API_KEYS_COUNT = 24u;
 struct TTopicConfig {
     inline static const std::map<TString, TString> DummyMap;
 
@@ -64,7 +65,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TSaslAuthenticateResponseData> SaslAuthenticate(const TString& user, const TString& password);
 
-        TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = std::nullopt);
+        TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = {}, ui64 txnTimeoutMs = 1000);
 
         TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets);
 
@@ -110,6 +111,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TKafkaUuid, std::vector<i32>>>& topics, i64 offset = 0);
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
+        void ValidateNoDataInTopics(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
 
         TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);
 

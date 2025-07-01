@@ -236,7 +236,7 @@ private:
                 share = 1.0;
             }
             std::optional<double> resourceWeight;
-            if (msg.GetResourceWeight() >= 0) {
+            if (msg.HasResourceWeight() && msg.GetResourceWeight() >= 0) {
                 resourceWeight = msg.GetResourceWeight();
             }
 

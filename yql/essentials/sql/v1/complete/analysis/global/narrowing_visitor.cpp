@@ -12,13 +12,6 @@ namespace NSQLComplete {
         return TextInterval(node).a < static_cast<ssize_t>(CursorPosition_);
     }
 
-    std::any TSQLv1NarrowingVisitor::aggregateResult(std::any aggregate, std::any nextResult) {
-        if (nextResult.has_value()) {
-            return nextResult;
-        }
-        return aggregate;
-    }
-
     bool TSQLv1NarrowingVisitor::IsEnclosing(antlr4::tree::ParseTree* tree) const {
         return TextInterval(tree).properlyContains(CursorInterval());
     }

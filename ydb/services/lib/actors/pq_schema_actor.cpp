@@ -4,6 +4,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/user_info.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 
@@ -96,6 +97,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (migrationError) {
                 return TMsgPqCodes(migrationError, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
+        }
+        if (consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER && !config->GetEnableCompactification()) {
+            return TMsgPqCodes(TStringBuilder() << "cannot add service consumer '" << consumerName << " to a topic without compactification enabled", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
         auto* consumer = config->AddConsumers();
@@ -849,13 +853,26 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(pqConfig);
+        bool haveCompConsumer = false;
         for (const auto& rr : settings.read_rules()) {
             auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, pqConfig);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
+            if (rr.consumer_name() == NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                haveCompConsumer = true;
+            }
         }
+
+        if(pqTabletConfig->GetEnableCompactification() && !haveCompConsumer) {
+            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
+            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.set_starting_message_timestamp_ms(0);
+            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, pqConfig);
+        }
+
         if (settings.has_remote_mirror_rule()) {
             auto mirrorFrom = partConfig->MutableMirrorFrom();
             if (!local) {
@@ -1139,6 +1156,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(pqConfig);
 
 
+        bool hasCompConsumer = false;
         for (const auto& rr : request.consumers()) {
             auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, true, pqConfig,
                                                       appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
@@ -1146,6 +1164,17 @@ namespace NKikimr::NGRpcProxy::V1 {
                 error = messageAndCode.Message;
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
+            if (rr.name() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                hasCompConsumer = true;
+            }
+        }
+        if (!hasCompConsumer && pqTabletConfig->GetEnableCompactification()) {
+            Ydb::Topic::Consumer compConsumer;
+            compConsumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.mutable_read_from()->set_seconds(0);
+            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, false, pqConfig,
+                                appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
         }
 
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
@@ -1321,7 +1350,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
 
         i32 dropped = 0;
-
+        bool hasCompConsumer = false;
         for (const auto& c : pqTabletConfig->GetConsumers()) {
             auto& oldName = c.GetName();
             auto name = NPersQueue::ConvertOldConsumerName(oldName, pqConfig);
@@ -1333,8 +1362,14 @@ namespace NKikimr::NGRpcProxy::V1 {
                     ++dropped;
                     break;
                 }
+                if (pqTabletConfig->GetEnableCompactification() && consumer == NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                    error = TStringBuilder() << "Cannot drop service consumer '" << consumer << "'from topic with compactification enabled";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
             }
             if (erase) continue;
+            if (!pqTabletConfig->GetEnableCompactification() && (oldName == NPQ::CLIENTID_COMPACTION_CONSUMER || name == NPQ::CLIENTID_COMPACTION_CONSUMER))
+                continue;
 
             consumers.push_back({false, Ydb::Topic::Consumer{}}); // do not check service type for presented consumers
             auto& consumer = consumers.back().second;
@@ -1348,6 +1383,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+
         for (auto& cons : request.add_consumers()) {
             consumers.push_back({true, cons}); // check service type for added consumers is true
         }
@@ -1360,6 +1396,10 @@ namespace NKikimr::NGRpcProxy::V1 {
         for (const auto& alter : request.alter_consumers()) {
             auto name = alter.name();
             auto oldName = NPersQueue::ConvertOldConsumerName(name, pqConfig);
+            if (name == NPQ::CLIENTID_COMPACTION_CONSUMER || oldName == NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                error = TStringBuilder() << "Cannot alter service consumer '" << name;
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
             bool found = false;
             for (auto& consumer : consumers) {
                 if (consumer.second.name() == name || consumer.second.name() == oldName) {
@@ -1392,8 +1432,18 @@ namespace NKikimr::NGRpcProxy::V1 {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
+            if (rr.second.name() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                hasCompConsumer = true;
+            }
         }
+        if (!hasCompConsumer && pqTabletConfig->GetEnableCompactification()) {
+            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
+            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.set_starting_message_timestamp_ms(0);
+            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, pqConfig);
 
+        }
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
     }
 }

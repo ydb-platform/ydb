@@ -156,8 +156,9 @@ void TKafkaDescribeGroupsActor::ParseGroupDescriptionMetadata(const NKqp::TEvKqp
     KAFKA_LOG_D("Parsing KQP response");
 
     NYdb::TResultSetParser parser_group(response.Record.GetResponse().GetYdbResults(0));
+    TString groupId;
     while (parser_group.TryNextRow()) {
-        TString groupId = parser_group.ColumnParser("consumer_group").GetUtf8().c_str();
+        groupId = parser_group.ColumnParser("consumer_group").GetUtf8().c_str();
         ui64 state = parser_group.ColumnParser("state").GetUint64();
         TString protocolType = parser_group.ColumnParser("protocol_type").GetUtf8().c_str();
         TString protocolData = parser_group.ColumnParser("protocol").GetOptionalUtf8().value_or("").c_str();
@@ -170,16 +171,18 @@ void TKafkaDescribeGroupsActor::ParseGroupDescriptionMetadata(const NKqp::TEvKqp
     NYdb::TResultSetParser parser_members(response.Record.GetResponse().GetYdbResults(1));
     while (parser_members.TryNextRow()) {
         TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember groupMember;
-        TString groupId = parser_members.ColumnParser("consumer_group").GetUtf8().c_str();
+        groupId = parser_members.ColumnParser("consumer_group").GetUtf8().c_str();
         TString memberId = parser_members.ColumnParser("member_id").GetUtf8().c_str();
         TString groupInstanceId = parser_members.ColumnParser("instance_id").GetOptionalUtf8().value_or("").c_str();
-        TString assignment = parser_members.ColumnParser("assignment").GetOptionalString().value_or("");
+
         TString protoStr = parser_members.ColumnParser("worker_state_proto").GetOptionalString().value_or("");
         groupMember.GroupInstanceId = groupInstanceId;
         groupMember.MemberId = memberId;
-        groupMember.MemberAssignment = assignment;
+        groupMember.MemberAssignmentStr = parser_members.ColumnParser("assignment").GetOptionalString().value_or("");
+        groupMember.MemberAssignment = TString(groupMember.MemberAssignmentStr);
         NKafka::TWorkerState workerState;
         groupMember.MemberMetadata = "";
+
         if (protoStr.empty() || workerState.ParseFromString(protoStr)) {
             const auto& protocols = workerState.protocols();
             TString protocol = *GroupIdToDescription[groupId].ProtocolData;

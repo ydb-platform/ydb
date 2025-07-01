@@ -630,14 +630,29 @@ namespace NKikimr::NStorage {
             std::vector<ui32> nodes;
             const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
             for (auto& [_, v] : nodesByDataCenter) {
-                auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
+                size_t countToSelect = Min<size_t>(v.size(), maxNodesPerDataCenter);
+                if (v.size() < maxNodesPerDataCenter && nodesByDataCenter.size() > 1) {
+                    countToSelect = 1;
+                }
+                auto r = pickNodes(v, countToSelect);
                 nodes.insert(nodes.end(), r.begin(), r.end());
             }
             auto *rg = ss->AddRingGroups();
             if (pileId) {
                 pileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
             }
-            rg->SetNToSelect(nodes.size() / 2 + 1);
+            ui32 nodesCnt = nodes.size();
+            ui32 nToSelect = 1;
+            if (nodesCnt <= 2) {
+                nToSelect = 1;
+            } else if (nodesCnt < 8) {
+                nToSelect = 3;
+            } else if (nodesCnt == 8) {
+                nToSelect = 5;
+            } else if (nodesCnt > 8) {
+                nToSelect = 9;
+            }
+            rg->SetNToSelect(nToSelect);
             for (ui32 nodeId : nodes) {
                 rg->AddRing()->AddNode(nodeId);
             }

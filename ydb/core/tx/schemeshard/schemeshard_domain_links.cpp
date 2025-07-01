@@ -1,4 +1,5 @@
 #include "schemeshard_domain_links.h"
+
 #include "schemeshard_impl.h"
 
 namespace NKikimr {

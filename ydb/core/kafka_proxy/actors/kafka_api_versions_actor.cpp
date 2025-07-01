@@ -34,6 +34,10 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TApiVersionsRequestData>(response->ApiKeys, API_VERSIONS, {.MaxVersion=2});
     AddApiKey<TMetadataRequestData>(response->ApiKeys, METADATA, {.MaxVersion=9});
     AddApiKey<TInitProducerIdRequestData>(response->ApiKeys, INIT_PRODUCER_ID, {.MaxVersion=4});
+    AddApiKey<TAddPartitionsToTxnRequestData>(response->ApiKeys, ADD_PARTITIONS_TO_TXN, {.MaxVersion=3});
+    AddApiKey<TAddOffsetsToTxnRequestData>(response->ApiKeys, ADD_OFFSETS_TO_TXN, {.MaxVersion=3});
+    AddApiKey<TTxnOffsetCommitRequestData>(response->ApiKeys, TXN_OFFSET_COMMIT, {.MaxVersion=3});
+    AddApiKey<TEndTxnRequestData>(response->ApiKeys, END_TXN, {.MaxVersion=3});
     AddApiKey<TSaslHandshakeRequestData>(response->ApiKeys, SASL_HANDSHAKE, {.MaxVersion=1});
     AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE, {.MaxVersion=2});
     AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MinVersion=1, .MaxVersion=1});

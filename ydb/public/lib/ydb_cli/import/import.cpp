@@ -20,6 +20,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/progress_bar.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
@@ -161,14 +162,6 @@ void InitCsvParser(TCsvParser& parser,
     if (columnTypes) {
         parser.BuildLineType();
     }
-}
-
-FHANDLE GetStdinFileno() {
-#if defined(_win32_)
-    return GetStdHandle(STD_INPUT_HANDLE);
-#elif defined(_unix_)
-    return STDIN_FILENO;
-#endif
 }
 
 class TMaxInflightGetter {

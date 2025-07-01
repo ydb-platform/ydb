@@ -408,6 +408,12 @@ protected:
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
             Context->KafkaClient = Request->Header.ClientId.value();
         }
+        
+        if (IsTransactionalApiKey(Request->Header.RequestApiKey) && !TransactionsEnabled()) {
+            KAFKA_LOG_ERROR("Transactional API keys are not enabled. To enable them set \"EnableKafkaTransactions\" feature flag to true in cluster configuration.");
+            PassAway();
+            return false;
+        }
 
         switch (Request->Header.RequestApiKey) {
             case PRODUCE:

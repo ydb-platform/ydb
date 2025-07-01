@@ -1,10 +1,9 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/base/test_failure_injection.h>
-
 #include <ydb/core/protos/blockstore_config.pb.h>
-#include <ydb/core/protos/table_stats.pb.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -469,6 +469,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
+            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();

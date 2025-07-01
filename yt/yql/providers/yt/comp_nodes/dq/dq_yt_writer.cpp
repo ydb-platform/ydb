@@ -49,6 +49,7 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
             switch(Flow_->FetchValues(ctx, Fields_.data())) {
             case EFetchResult::One:
                 Writer_->AddFlatRow(Values_.data());
+                return EFetchResult::One;
             case EFetchResult::Yield:
                 return EFetchResult::Yield;
             case EFetchResult::Finish:

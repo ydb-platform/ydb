@@ -71,6 +71,9 @@ private:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
+            // Bridge
+            hFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
+
         default:
             LOG_E("Unexpected event"
                 << ": type# " << ev->GetTypeRewrite()
@@ -112,6 +115,10 @@ private:
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev);
     void Handle(TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+
+    // Bridge
+    void RequestBridgeInfo();
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev);
 
 private:
     const TActorId Client;
@@ -197,11 +204,31 @@ void TInfoCollector::Bootstrap() {
     Become(&TThis::StateWork);
 }
 
+using TPileMap = TEvInterconnect::TEvNodesInfo::TPileMap;
+
+THashMap<ui32, ui32> FlipPileMap(const std::shared_ptr<const TPileMap> pileMap) {
+    THashMap<ui32, ui32> result;
+
+    if (!pileMap)
+        return result;
+
+    for (ui32 i = 0; i < pileMap->size(); ++i) {
+        for (ui32 j : pileMap->at(i)) {
+            result.emplace(j, i);
+        }
+    }
+    return result;
+}
+
 void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
     RequestBaseConfig();
     RequestBootstrapConfig();
     RequestStateStorageConfig();
+    RequestBridgeInfo();
 
+    const auto& pileMap = ev->Get()->PileMap;
+    Info->IsBridgeMode = static_cast<bool>(pileMap);
+    Info->NodeIdToPileId = FlipPileMap(pileMap);
     for (const auto& node : ev->Get()->Nodes) {
         Info->AddNode(node, &TlsActivationContext->AsActorContext());
         SendNodeRequests(node.NodeId);
@@ -292,7 +319,9 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
         }
 
         for (const auto& group : record.GetStatus(0).GetBaseConfig().GetGroup()) {
-            Info->AddBSGroup(group);
+            if (!group.GetIsProxyGroup()) {
+                Info->AddBSGroup(group);
+            }
         }
 
         MaybeReplyAndDie();
@@ -509,6 +538,16 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     Info->ClearNode(nodeId);
     NodeEvents[nodeId].clear();
     MaybeReplyAndDie();
+}
+
+void TInfoCollector::RequestBridgeInfo() {
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::TEvNodeWardenQueryStorageConfig(false));
+}
+
+void TInfoCollector::Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev) {
+    const auto& bridgeInfo = ev->Get()->BridgeInfo;
+    if (bridgeInfo)
+        Info->Piles = bridgeInfo->Piles;
 }
 
 IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout) {

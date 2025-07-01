@@ -67,6 +67,9 @@ std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NKikimr::NMiniKQL::T
 std::shared_ptr<arrow::Array> MakeArray(NKikimr::NMiniKQL::TUnboxedValueVector& values,
     const NKikimr::NMiniKQL::TType* itemType);
 
+NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& array,
+    ui64 row, const NKikimr::NMiniKQL::TType* itemType, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+
 NKikimr::NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array>& array,
     const NKikimr::NMiniKQL::TType* itemType, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 

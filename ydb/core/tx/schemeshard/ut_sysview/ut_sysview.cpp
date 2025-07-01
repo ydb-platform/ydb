@@ -1,9 +1,6 @@
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-namespace NKikimr::NSchemeShard {
-    extern bool isSysDirCreateAllowed;
-}
 namespace {
 
     using namespace NSchemeShardUT_Private;
@@ -21,27 +18,26 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(sysViewDescription.GetSourceObject()), sourceObjectPathId);
     }
 
-    class TSysDirCreateGuard : public TNonCopyable {
-    public:
-        TSysDirCreateGuard() {
-            NKikimr::NSchemeShard::isSysDirCreateAllowed = true;
-        }
+    ui64 TestCreateSysView(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &scheme,
+        const TString &userToken, const TString &owner,
+        const TVector<TExpectedResult> &expectedResults = {{NKikimrScheme::StatusAccepted}},
+        const TApplyIf &applyIf = {})
+    {
+        THolder<TEvTx> request(CreateSysViewRequest(txId, parentPath, scheme, applyIf));
+        auto& record = request->Record;
+        record.SetUserToken(userToken);
+        record.SetOwner(owner);
 
-        ~TSysDirCreateGuard() {
-            NKikimr::NSchemeShard::isSysDirCreateAllowed = false;
-        }
-    };
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request.Release());
+        return TestModificationResults(runtime, txId, expectedResults);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
     Y_UNIT_TEST(CreateSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
-
-        TSysDirCreateGuard sysDirCreateGuard;
-        TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
-        env.TestWaitNotification(runtime, txId);
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                           R"(
@@ -72,12 +68,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(DropSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
-        TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
-        env.TestWaitNotification(runtime, txId);
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                           R"(
                              Name: "new_sys_view"
@@ -97,12 +90,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(CreateExistingSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
-
-        TSysDirCreateGuard sysDirCreateGuard;
-        TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
-        env.TestWaitNotification(runtime, txId);
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                           R"(
@@ -128,12 +117,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateDifferentSysViews) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
-
-        TSysDirCreateGuard sysDirCreateGuard;
-        TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
-        env.TestWaitNotification(runtime, txId);
 
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                            R"(
@@ -168,10 +153,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateDirWithSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true)
+                                               .EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         AsyncMkDir(runtime, ++txId, "/MyRoot", ".sys");
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                            R"(
@@ -194,12 +179,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateSameSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
-
-        TSysDirCreateGuard sysDirCreateGuard;
-        TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
-        env.TestWaitNotification(runtime, txId);
 
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                            R"(
@@ -227,12 +208,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncDropSameSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
-        TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
-        env.TestWaitNotification(runtime, txId);
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                           R"(
                              Name: "new_sys_view"
@@ -255,12 +233,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(ReadOnlyMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
-        TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
-        env.TestWaitNotification(runtime, txId);
         SetSchemeshardReadOnlyMode(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
@@ -289,12 +264,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(EmptyName) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
-
-        TSysDirCreateGuard sysDirCreateGuard;
-        TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
-        env.TestWaitNotification(runtime, txId);
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                           R"(
@@ -303,5 +274,157 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
                             )",
                           {{EStatus::StatusSchemeError, "error: path part shouldn't be empty"}});
         env.TestWaitNotification(runtime, txId);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
+    Y_UNIT_TEST(CreateDirWithDomainSysViews) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.sys"), {NLs::Finished, NLs::HasOwner("metadata@system")});
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+            ExpectEqualSysViewDescription(describeResult, "partition_stats", ESysViewType::EPartitionStats,
+                                          describedPathId);
+        }
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/ds_pdisks");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+            ExpectEqualSysViewDescription(describeResult, "ds_pdisks", ESysViewType::EPDisks, describedPathId);
+        }
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/query_metrics_one_minute");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+            ExpectEqualSysViewDescription(describeResult, "query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute,
+                                          describedPathId);
+        }
+    }
+
+    Y_UNIT_TEST(RestoreAbsentSysViews) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        ui64 txId = 100;
+
+        TestLs(runtime, "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/.sys/ds_pdisks", false, NLs::PathExist);
+
+        TestDropSysView(runtime, ++txId, "/MyRoot/.sys", "ds_pdisks");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/.sys/ds_pdisks", false, NLs::PathNotExist);
+
+        env.AddSysViewsRosterUpdateObserver(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        env.WaitForSysViewsRosterUpdate(runtime);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+            ExpectEqualSysViewDescription(describeResult, "partition_stats", ESysViewType::EPartitionStats,
+                                          describedPathId);
+        }
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/ds_pdisks");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+            ExpectEqualSysViewDescription(describeResult, "ds_pdisks", ESysViewType::EPDisks, describedPathId);
+        }
+    }
+
+    Y_UNIT_TEST(DeleteObsoleteSysViews) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        ui64 txId = 100;
+
+        TestLs(runtime, "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
+        TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
+                          R"(
+                             Name: "new_sys_view"
+                             Type: EShowCreate
+                            )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("root@builtin")});
+            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EShowCreate, describedPathId);
+        }
+
+        TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
+                          R"(
+                             Name: "new_ds_pdisks"
+                             Type: EPDisks
+                            )",
+                          NACLib::TSystemUsers::Metadata().SerializeAsString(),
+                          "metadata@system");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_ds_pdisks");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+            ExpectEqualSysViewDescription(describeResult, "new_ds_pdisks", ESysViewType::EPDisks, describedPathId);
+        }
+
+        TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
+                          R"(
+                             Name: "new_partition_stats"
+                             Type: EPartitionStats
+                            )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_partition_stats");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("root@builtin")});
+            ExpectEqualSysViewDescription(describeResult, "new_partition_stats", ESysViewType::EPartitionStats,
+                                          describedPathId);
+        }
+
+        env.AddSysViewsRosterUpdateObserver(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        env.WaitForSysViewsRosterUpdate(runtime);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+            ExpectEqualSysViewDescription(describeResult, "partition_stats", ESysViewType::EPartitionStats,
+                                          describedPathId);
+        }
+
+        // removed because had unsupported type for domain system view dir
+        TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::PathNotExist);
+
+        // removed because owner was 'metadata@system' and had name not from domain system view reserved names
+        TestLs(runtime, "/MyRoot/.sys/new_ds_pdisks", false, NLs::PathNotExist);
+
+        // didn't touch user's system views with supported types
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_partition_stats");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("root@builtin")});
+            ExpectEqualSysViewDescription(describeResult, "new_partition_stats", ESysViewType::EPartitionStats,
+                                          describedPathId);
+        }
     }
 }

@@ -1,5 +1,5 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/mind/hive/hive.h>
@@ -458,7 +458,7 @@ public:
             if (checks) {
                 checks
                     .DepthLimit()
-                    .IsValidLeafName();
+                    .IsValidLeafName(context.UserToken.Get());
             }
 
             if (!checks) {

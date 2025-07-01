@@ -50,10 +50,6 @@ namespace {
 
 } // anonymous
 
-bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
-    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
-}
-
 bool IsMajorityReached(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
     return ringGroupAcks > ringGroup.NToSelect / 2;
 }
@@ -706,7 +702,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
 
         it->second.AckTo = ev->Sender;
-        it->second.PathAcks.emplace(std::make_pair(pathId, version), TVector<ui32>(GroupInfo->RingGroups.size()));
+        it->second.PathAcks.emplace(std::make_pair(pathId, version), TVector<ui32>(GroupInfo->RingGroups.size(), 0));
 
         Update(pathId, isDeletion, ev->Cookie);
 

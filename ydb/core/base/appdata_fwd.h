@@ -26,6 +26,9 @@ namespace NKikimr {
     namespace NJaegerTracing {
         class TSamplingThrottlingConfigurator;
     }
+    namespace NKqp::NScheduler {
+        class TComputeScheduler;
+    }
 }
 
 namespace NKikimrCms {
@@ -55,6 +58,7 @@ namespace NKikimrConfig {
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
+    class TKafkaProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
@@ -226,6 +230,7 @@ struct TAppData {
     NKikimrStream::TStreamingConfig& StreamingConfig;
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
+    NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;
@@ -307,6 +312,8 @@ struct TAppData {
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
 
+    std::shared_ptr<NKqp::NScheduler::TComputeScheduler> ComputeScheduler;
+
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
             TMap<TString, ui32> servicePools,
@@ -343,6 +350,10 @@ inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     TAppData* const x = actorSystem->AppData<TAppData>();
     Y_DEBUG_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
     return x;
+}
+
+inline bool HasAppData(NActors::TActorSystem* actorSystem) {
+    return actorSystem && AppData(actorSystem);
 }
 
 inline bool HasAppData() {

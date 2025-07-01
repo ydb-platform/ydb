@@ -1,9 +1,8 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/persqueue/events/internal.h>
-
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -287,7 +286,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateAndWait) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
         AsyncMkDir(runtime, txId++, "MyRoot", "dir");
         TestCreateSubDomain(runtime, txId++,  "/MyRoot/dir",
@@ -318,7 +317,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(LS) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -343,7 +342,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(ConcurrentCreateSubDomainAndDescribe) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         AsyncCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -583,7 +582,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateSubDomainWithoutTablets) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -601,7 +600,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateSubDomainWithoutSomeTablets) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -628,7 +627,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenMkDir) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -652,7 +651,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -677,7 +676,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenForceDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -702,7 +701,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateSubDomainsInSeparateDir) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestMkDir(runtime, txId++, "/MyRoot", "SubDomains");
@@ -741,7 +740,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousCreateDelete) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         AsyncCreateSubDomain(runtime, ++txId,  "/MyRoot",
@@ -772,7 +771,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousCreateForceDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -801,7 +800,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(ForceDropTwice) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, ++txId,  "/MyRoot",
@@ -833,7 +832,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousCreateForceDropTwice) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         AsyncCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -923,7 +922,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(ConsistentCopyRejects) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1036,7 +1035,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousCreateTableForceDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1074,7 +1073,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousCreateTenantTableForceDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1109,7 +1108,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousCreateTenantTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         AsyncCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1167,7 +1166,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousDefineAndCreateTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1203,7 +1202,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousCreateTenantDirTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         AsyncCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1274,7 +1273,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateDropSolomon) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot", "PlanResolution: 50 "
@@ -1316,7 +1315,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateDropNbs) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1502,7 +1501,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(Restart) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1540,7 +1539,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(RestartAtInFly) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1568,7 +1567,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(Delete) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1603,7 +1602,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(DeleteAdd) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1641,7 +1640,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(DeleteAndRestart) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -1696,8 +1695,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "TimeCastBucketsPerMediator: 2 "
                             "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 100);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/USER_0");
+        const auto subDomainPathId = describeResult.GetPathId();
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsInCommonCase("USER_0"),
+                           {LsCheckSubDomainParamsInCommonCase("USER_0", subDomainPathId),
                             NLs::PathVersionEqual(3)});
 
         TestAlterSubDomain(runtime, txId++, "/MyRoot",
@@ -1717,7 +1719,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, 102);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsAfterAlter("USER_0", 2),
+                           {LsCheckSubDomainParamsAfterAlter("USER_0", 2, subDomainPathId),
                             NLs::PathVersionEqual(4)});
 
         TestAlterSubDomain(runtime, txId++, "/MyRoot",
@@ -1948,8 +1950,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 100);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {NLs::IsSubDomain("USER_0")});
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/USER_0");
+        const auto subDomainPathId = describeResult.GetPathId();
+        TestDescribeResult(describeResult, {NLs::IsSubDomain("USER_0")});
         TestLs(runtime, "/MyRoot", false);
 
         TestAlterSubDomain(runtime, txId++,  "/MyRoot",
@@ -1960,7 +1964,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 101);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsAfterAlter("USER_0")});
+                           {LsCheckSubDomainParamsAfterAlter("USER_0", 2, subDomainPathId)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist});
 
@@ -1972,7 +1976,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(Redefine) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -2076,7 +2080,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SetSchemeLimits) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -2119,7 +2123,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SchemeLimitsRejects) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -2591,7 +2595,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(ColumnSchemeLimitsRejects) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -2736,7 +2740,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SchemeLimitsRejectsWithIndexedTables) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -2933,7 +2937,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SchemeLimitsCreatePq) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -3298,7 +3302,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SchemeDatabaseQuotaRejects) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),

@@ -764,7 +764,10 @@ class YMake(object):
         else:
             print('@import "${CONF_ROOT}/conf/export_gradle.no.conf"')
 
-        if presets.get('CLANG_COVERAGE', None) is None:
+        if (preset('CLANG_COVERAGE') is None and
+                (preset('PYTHON_COVERAGE') is None or
+                 preset('COVERAGE_FILTER_PROGRAMS') is None or
+                 preset('CYTHON_COVERAGE') is not None)):
             print('@import "${CONF_ROOT}/conf/coverage_full_instrumentation.conf"')
         else:
             print('@import "${CONF_ROOT}/conf/coverage_selective_instrumentation.conf"')

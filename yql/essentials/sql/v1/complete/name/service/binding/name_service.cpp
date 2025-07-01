@@ -44,7 +44,6 @@ namespace NSQLComplete {
             }
 
             TNameIndex Index_;
-            IRanking::TPtr Ranking_;
         };
 
     } // namespace

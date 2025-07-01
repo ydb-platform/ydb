@@ -123,8 +123,14 @@ class LoadSuiteBase:
         return text.replace(query_text, '<Query text hided by sequrity reasons>')
 
     @classmethod
-    def __attach_logs(cls, start_time, attach_name, query_text):
-        hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+    def __attach_logs(cls, start_time, attach_name, query_text, ignore_roles=False):
+        if ignore_roles:
+            # Получаем уникальные хосты кластера без фильтрации по роли
+            hosts = sorted(set(node.host for node in YdbCluster.get_cluster_nodes()))
+        else:
+            # Оригинальная логика - только STORAGE ноды
+            hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}}{{container}}"
@@ -148,6 +154,14 @@ class LoadSuiteBase:
                         container=f' -m k8s_container:{c}' if c else ''))
                 except BaseException as e:
                     logging.error(e)
+
+        if not hosts:
+            allure.attach(
+                "No cluster hosts found, no kikimr logs collected.",
+                f"{attach_name} logs info",
+                allure.attachment_type.TEXT
+            )
+            return
 
         error_log = ''
         for c, execs in exec_start.items():
@@ -500,18 +514,25 @@ class LoadSuiteBase:
         return node_errors
 
     def _collect_workload_params(self, result, workload_name):
-        """Собирает параметры workload для отчёта"""
+        """
+        Собирает параметры workload для отчёта.
+        1. Сначала добавляет ключевые параметры из params_to_include (гарантированно попадут в отчёт).
+        2. Затем добавляет все остальные параметры из статистики workload, кроме исключённых (служебных), чтобы не потерять новые или специфичные метрики.
+        """
         workload_params = {}
         workload_stats = result.get_stats(workload_name)
         if workload_stats:
-            important_params = ['total_runs', 'planned_duration', 'actual_duration', 'use_iterations', 'workload_type', 'table_type']
-            for param in important_params:
+            # 1. Добавляем только самые важные параметры (гарантированно попадут в отчёт)
+            params_to_include = [
+                'total_runs', 'planned_duration', 'actual_duration',
+                'use_iterations', 'workload_type', 'table_type',
+                'total_iterations', 'total_threads'
+            ]
+            for param in params_to_include:
                 if param in workload_stats:
                     workload_params[param] = workload_stats[param]
-            if 'total_iterations' in workload_stats:
-                workload_params['total_iterations'] = workload_stats['total_iterations']
-            if 'total_threads' in workload_stats:
-                workload_params['total_threads'] = workload_stats['total_threads']
+            # 2. Добавляем все остальные параметры, кроме исключённых служебных
+            # Это позволяет автоматически включать новые/дополнительные метрики
             for key, value in workload_stats.items():
                 if key not in workload_params and key not in ['success_rate', 'successful_runs', 'failed_runs']:
                     workload_params[key] = value
@@ -560,7 +581,6 @@ class LoadSuiteBase:
 
     def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
         """Формирует allure-отчёт по результатам workload"""
-        from ydb.tests.olap.lib.allure_utils import allure_test_description
         end_time = time()
         start_time = result.start_time if result.start_time else end_time - 1
         additional_table_strings = {}
@@ -594,21 +614,38 @@ class LoadSuiteBase:
 
     def _handle_final_status(self, result, workload_name, node_errors):
         """Обрабатывает финальный статус теста: fail, broken, etc."""
-        # --- FAIL TEST IF CORES OR OOM FOUND ---
         stats = result.get_stats(workload_name)
         node_issues = stats.get("nodes_with_issues", 0) if stats else 0
-        if node_issues > 0:
-            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
-            pytest.fail(error_msg)
-        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
         workload_errors = []
         if result.errors:
             for err in result.errors:
                 if "coredump" not in err.lower() and "oom" not in err.lower():
                     workload_errors.append(err)
+
+        # --- Прикладываем логи, если есть проблемы с нодами или ошибки workload ---
+        if node_issues > 0 or workload_errors:
+            # Используем универсальный подход с getattr для вызова приватного метода
+            attach_logs = getattr(self, "__attach_logs", None)
+            if attach_logs:
+                try:
+                    attach_logs(
+                        start_time=getattr(result, "start_time", None),
+                        attach_name="kikimr",
+                        query_text="",
+                        ignore_roles=True  # Собираем логи со всех уникальных хостов
+                    )
+                except Exception as e:
+                    logging.warning(f"Failed to attach kikimr logs: {e}")
+
+        # --- FAIL TEST IF CORES OR OOM FOUND ---
+        if node_issues > 0:
+            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+            pytest.fail(error_msg)
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
         if workload_errors:
             allure.dynamic.label("severity", "critical")
             raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
+
         # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
         if not result.success and result.error_message:
             # Создаем детальное сообщение об ошибке с контекстом

@@ -1,4 +1,4 @@
-# YDB OLAP Workload Tests - Руководство разработчика
+# YDB Workload Tests - Руководство разработчика
 
 ## Содержание
 

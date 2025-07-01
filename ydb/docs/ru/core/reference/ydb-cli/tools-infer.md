@@ -109,7 +109,7 @@ WITH (
 );
 ```
 
-### Явное указание списка колонок {#example-columns}
+### Явное указание списка имен колонок {#example-columns}
 
 ```bash
 cat ~/data_no_header.csv

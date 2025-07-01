@@ -34,12 +34,4 @@ std::unique_ptr<TimeZoneIf> TimeZoneIf::Load(const std::string& name) {
 // Defined out-of-line to avoid emitting a weak vtable in all TUs.
 TimeZoneIf::~TimeZoneIf() {}
 
-time_point<seconds> UnixSecondsToTimePoint(std::int_fast64_t seconds) {
-  return FromUnixSeconds(seconds);
-}
-
-std::int_fast64_t TimePointToUnixSeconds(const time_point<seconds>& tp) {
-  return ToUnixSeconds(tp);
-}
-
 }  // namespace cctz

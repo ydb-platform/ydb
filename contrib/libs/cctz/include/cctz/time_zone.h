@@ -373,10 +373,6 @@ inline bool parse(const std::string& fmt, const std::string& input,
   return b;
 }
 
-// Access to convert functions which are placed in time_zone_if.h
-time_point<seconds> UnixSecondsToTimePoint(std::int_fast64_t);
-std::int_fast64_t TimePointToUnixSeconds(const time_point<seconds>& tp);
-
 }  // namespace cctz
 
 #endif  // CCTZ_TIME_ZONE_H_

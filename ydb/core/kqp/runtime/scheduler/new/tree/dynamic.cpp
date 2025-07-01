@@ -76,6 +76,9 @@ TPool::TPool(const TString& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters.Throttle  = group->GetCounter("Throttle",  true);
     Counters.FairShare = group->GetCounter("FairShare", true);  // snapshot
 
+    Counters.InFlightExtra = group->GetCounter("InFlightExtra",  false);
+    Counters.UsageExtra    = group->GetCounter("UsageExtra",     true);
+
     Counters.Delay     = group->GetHistogram("Delay",
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
 }
@@ -89,6 +92,9 @@ NSnapshot::TPool* TPool::TakeSnapshot() const {
     Counters.Waiting->Set(Throttle * 1'000'000);
     Counters.Usage->Set(BurstUsage);
     Counters.Throttle->Set(BurstThrottle);
+
+    Counters.InFlightExtra->Set(UsageExtra * 1'000'000);
+    Counters.UsageExtra->Set(BurstUsageExtra);
 
     for (const auto& child : Children) {
         newPool->AddQuery(std::shared_ptr<NSnapshot::TQuery>(std::dynamic_pointer_cast<TQuery>(child)->TakeSnapshot()));

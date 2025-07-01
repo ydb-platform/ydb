@@ -628,20 +628,20 @@ class LoadSuiteBase:
                 if "coredump" not in err.lower() and "oom" not in err.lower():
                     workload_errors.append(err)
 
-        # --- Прикладываем логи, если есть проблемы с нодами или ошибки workload ---
-        if node_issues > 0 or workload_errors:
-            # Используем универсальный подход с getattr для вызова приватного метода
-            attach_logs = getattr(self, "__attach_logs", None)
-            if attach_logs:
-                try:
+        # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
+        cluster_log_mode = get_external_param('cluster_log', 'default')
+        attach_logs = getattr(self, "__attach_logs", None)
+        if attach_logs:
+            try:
+                if cluster_log_mode == 'all' or node_issues > 0 or workload_errors:
                     attach_logs(
                         start_time=getattr(result, "start_time", None),
                         attach_name="kikimr",
                         query_text="",
                         ignore_roles=True  # Собираем логи со всех уникальных хостов
                     )
-                except Exception as e:
-                    logging.warning(f"Failed to attach kikimr logs: {e}")
+            except Exception as e:
+                logging.warning(f"Failed to attach kikimr logs: {e}")
 
         # --- FAIL TEST IF CORES OR OOM FOUND ---
         if node_issues > 0:

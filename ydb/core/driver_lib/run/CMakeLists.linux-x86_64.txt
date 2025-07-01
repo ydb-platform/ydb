@@ -145,7 +145,6 @@ target_link_libraries(run PUBLIC
   grpc-server-actors
   ydb-library-pdisk_io
   ydb-library-security
-  ydb-library-signal_backtrace
   providers-pq-cm_client
   library-slide_limiter-service
   providers-s3-actors
@@ -183,6 +182,7 @@ target_link_libraries(run PUBLIC
   yt-codec-codegen
   comp_nodes-dq-llvm16
   yt-comp_nodes-llvm16
+  ydb-library-signal_backtrace
 )
 
 target_sources(run PRIVATE

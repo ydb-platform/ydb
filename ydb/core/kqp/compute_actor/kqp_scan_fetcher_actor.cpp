@@ -26,7 +26,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
     const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
     const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
-    const TCPULimits& cpuLimits, const NKikimrConfig::TTableServiceConfig::TScanTabletsConfig& scanTabletsConfig)
+    const TCPULimits& cpuLimits)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
@@ -41,8 +41,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , Counters(counters)
     , InFlightShards(ScanId, *this)
     , InFlightComputes(ComputeActorIds)
-    , TableKind(Meta.GetTable().HasTableKind() ? (NKqp::ETableKind)Meta.GetTable().GetTableKind() : NKqp::ETableKind::Unknown)
-    , ScanTabletsConfig(scanTabletsConfig) {
+    , TableKind(Meta.GetTable().HasTableKind() ? (NKqp::ETableKind)Meta.GetTable().GetTableKind() : NKqp::ETableKind::Unknown) {
     Y_UNUSED(traceId);
     AFL_ENSURE(!Meta.GetReads().empty());
     AFL_ENSURE(TableKind != NKqp::ETableKind::SysView);

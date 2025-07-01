@@ -71,7 +71,6 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : Config(config.GetResourceManager())
-        , ScanTabletsConfig(config.GetScanTabletsConfig())
         , Counters(counters)
         , ResourceManager_(std::move(resourceManager))
         , CaFactory_(std::move(caFactory))
@@ -362,7 +361,7 @@ private:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
-                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), cpuLimits, ScanTabletsConfig));
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), cpuLimits));
             }
         }
 
@@ -576,7 +575,6 @@ private:
 
 private:
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
-    NKikimrConfig::TTableServiceConfig::TScanTabletsConfig ScanTabletsConfig;
     TIntrusivePtr<TKqpCounters> Counters;
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;

@@ -65,5 +65,22 @@ TString JsonFromDescribeSchemeResult(const TString& serialized);
 
 bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup);
 
+struct TClusterState {
+    ui64 Generation = 0;
+    ui64 Guid = 0;
+
+    TClusterState() = default;
+    explicit TClusterState(const TStateStorageInfo* info);
+    explicit TClusterState(const NKikimrSchemeBoard::TClusterState& proto);
+    NKikimrSchemeBoard::TClusterState ToProto() const;
+
+    operator bool() const;
+    void Out(IOutputStream& out) const;
+};
+
 } // NSchemeBoard
 } // NKikimr
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeBoard::TClusterState, o, x) {
+    return x.Out(o);
+}

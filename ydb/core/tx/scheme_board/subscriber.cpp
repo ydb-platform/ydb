@@ -52,7 +52,7 @@ namespace {
     }
 
     template <typename TPath>
-    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record, ui64 clusterStateGeneration = 0, ui64 clusterStateGuid = 0) {
+    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record, const TClusterState& clusterState = {}) {
         bool valid = false;
 
         if (record.HasPath()) {
@@ -63,11 +63,8 @@ namespace {
             valid = IsSame(path, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
         }
 
-        if (valid && clusterStateGeneration && record.HasClusterStateGeneration()) {
-            valid = (clusterStateGeneration == record.GetClusterStateGeneration());
-        }
-        if (valid && clusterStateGuid && record.HasClusterStateGuid()) {
-            valid = (clusterStateGuid == record.GetClusterStateGuid());
+        if (valid && clusterState && record.HasClusterState()) {
+            valid = (clusterState == TClusterState(record.GetClusterState()));
         }
 
         return valid;
@@ -839,7 +836,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
-        if (!IsValidNotification(Path, ev->Get()->GetRecord(), ClusterStateGeneration, ClusterStateGuid)) {
+        if (!IsValidNotification(Path, ev->Get()->GetRecord(), ClusterState)) {
             SBS_LOG_E("Suspicious " << ev->Get()->ToString()
                 << ": sender# " << ev->Sender);
             return;
@@ -952,22 +949,13 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
 
         const auto& record = ev->Get()->Record;
-        if (ClusterStateGeneration && record.HasClusterStateGeneration()
-            && ClusterStateGeneration != record.GetClusterStateGeneration()) {
-            SBS_LOG_D("Cluster State Generation mismatch in sync version response"
+        if (ClusterState && record.HasClusterState()) {
+            const TClusterState received(record.GetClusterState());
+            SBS_LOG_D("Cluster State mismatch in sync version response"
                 << ": sender# " << ev->Sender
                 << ", cookie# " << ev->Cookie
-                << ", subscriber generation# " << ClusterStateGeneration
-                << ", replica generation# " << record.GetClusterStateGeneration());
-            return;
-        }
-        if (ClusterStateGuid && record.HasClusterStateGuid()
-            && ClusterStateGuid != record.GetClusterStateGuid()) {
-            SBS_LOG_D("Cluster State Guid mismatch in sync version response"
-                << ": sender# " << ev->Sender
-                << ", cookie# " << ev->Cookie
-                << ", subscriber GUID# " << ClusterStateGuid
-                << ", replica GUID# " << record.GetClusterStateGuid());
+                << ", subscriber cluster state# " << ClusterState
+                << ", replica cluster state# " << received);
             return;
         }
 
@@ -1092,8 +1080,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             }
         }
 
-        ClusterStateGeneration = ev->Get()->ClusterStateGeneration;
-        ClusterStateGuid = ev->Get()->ClusterStateGuid;
+        ClusterState.Generation = ev->Get()->ClusterStateGeneration;
+        ClusterState.Guid = ev->Get()->ClusterStateGuid;
 
         this->Become(&TDerived::StateWork);
     }
@@ -1251,8 +1239,7 @@ private:
     TSet<TActorId> PendingSync;
     TMap<TActorId, bool> ReceivedSync;
 
-    ui64 ClusterStateGeneration = 0;
-    ui64 ClusterStateGuid = 0;
+    TClusterState ClusterState;
 
 }; // TSubscriber
 

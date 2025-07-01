@@ -310,9 +310,10 @@ TString PrintPath(const IEventBase* ev, const NKikimrSchemeBoard::TEvNotify& rec
 
 struct TEvNotify: public TEventPreSerializedPB<TEvNotify, NKikimrSchemeBoard::TEvNotify, TSchemeBoardEvents::EvNotify> {
     TEvNotify() = default;
-    TEvNotify(ui64 clusterStateGeneration, ui64 clusterStateGuid) {
-        Record.SetClusterStateGeneration(clusterStateGeneration);
-        Record.SetClusterStateGuid(clusterStateGuid);
+    explicit TEvNotify(const TClusterState& clusterState) {
+        if (clusterState) {
+            *Record.MutableClusterState() = clusterState.ToProto();
+        }
     }
 
     TString ToString() const override {
@@ -366,14 +367,11 @@ struct TEvSyncVersionRequest: public TEventPB<TEvSyncVersionRequest, NKikimrSche
 struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSchemeBoard::TEvSyncVersionResponse, TSchemeBoardEvents::EvSyncVersionResponse> {
     TEvSyncVersionResponse() = default;
 
-    explicit TEvSyncVersionResponse(const ui64 version, const bool partial = false, TMaybe<ui64> clusterStateGeneration = Nothing(), TMaybe<ui64> clusterStateGuid = Nothing()) {
+    explicit TEvSyncVersionResponse(const ui64 version, const bool partial = false, const TClusterState& clusterState = {}) {
         Record.SetVersion(version);
         Record.SetPartial(partial);
-        if (clusterStateGeneration) {
-            Record.SetClusterStateGeneration(*clusterStateGeneration);
-        }
-        if (clusterStateGuid) {
-            Record.SetClusterStateGuid(*clusterStateGuid);
+        if (clusterState) {
+            *Record.MutableClusterState() = clusterState.ToProto();
         }
     }
 
@@ -381,8 +379,7 @@ struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSc
         return TStringBuilder() << ToStringHeader() << " {"
             << " Version: " << Record.GetVersion()
             << " Partial: " << Record.GetPartial()
-            << " Cluster State Generation: " << Record.GetClusterStateGeneration()
-            << " Cluster State GUID: " << Record.GetClusterStateGuid()
+            << " Cluster State: " << Record.GetClusterState().ShortDebugString()
         << " }";
     }
 };

@@ -180,5 +180,30 @@ bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
     return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
 }
 
+TClusterState::TClusterState(const NKikimrSchemeBoard::TClusterState& proto)
+    : Generation(proto.GetGeneration())
+    , Guid(proto.GetGuid())
+{}
+
+TClusterState::TClusterState(const TStateStorageInfo* info)
+    : Generation(info ? info->ClusterStateGeneration : 0)
+    , Guid(info ? info->ClusterStateGuid : 0)
+{}
+
+NKikimrSchemeBoard::TClusterState TClusterState::ToProto() const {
+    NKikimrSchemeBoard::TClusterState proto;
+    proto.SetGeneration(Generation);
+    proto.SetGuid(Guid);
+    return proto;
+}
+
+TClusterState::operator bool() const {
+    return Generation || Guid;
+}
+
+void TClusterState::Out(IOutputStream& out) const {
+    out << std::format("(Generation: {}, GUID: {})", Generation, Guid);
+}
+
 } // NSchemeBoard
 } // NKikimr

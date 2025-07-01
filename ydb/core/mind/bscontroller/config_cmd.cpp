@@ -16,6 +16,7 @@ namespace NKikimr::NBsController {
             NKikimrBlobStorage::TConfigResponse *Response;
             std::optional<TConfigState> State;
             bool Success = true;
+            bool RollbackSuccess = false;
             TString Error;
 
         public:
@@ -52,6 +53,7 @@ namespace NKikimr::NBsController {
 
             void Finish() {
                 Response->SetSuccess(Success);
+                Response->SetRollbackSuccess(RollbackSuccess);
                 if (!Success) {
                     Response->SetErrorDescription(Error);
                 }
@@ -180,7 +182,14 @@ namespace NKikimr::NBsController {
                     Response->MutableStatus()->RemoveLast();
                 }
 
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+                THostRecordMap hostRecords;
+                if (Cmd.GetEnforceHostRecords().HostRecordSize() > 0) {
+                    hostRecords = std::make_shared<THostRecordMap::element_type>(Cmd.GetEnforceHostRecords());
+                } else {
+                    hostRecords = Self->HostRecords;
+                }
+
+                State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 State->CheckConsistency();
 
                 TString m;
@@ -256,6 +265,7 @@ namespace NKikimr::NBsController {
 
                 if (Success && Cmd.GetRollback()) {
                     Success = false;
+                    RollbackSuccess = true;
                     Error = "transaction rollback";
                 }
 

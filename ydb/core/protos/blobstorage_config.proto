@@ -77,6 +77,17 @@ message THost {
     uint32 EnforcedNodeId = 3; // if non-zero, then enforce specific NodeId for this FQDN to prevent resolving
 }
 
+// Host record containing its key and location
+message THostRecord {
+    THostKey HostKey = 1; // unique host key defining its location
+    NActorsInterconnect.TNodeLocation Location = 2; // location of the host
+}
+
+// Set of host records to be used during transaction execution instead of BSC's own records
+message THostRecordSet {
+    repeated THostRecord HostRecord = 1; 
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // BOXES
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -645,6 +656,10 @@ message TConfigRequest {
 
     // requesting user identifier
     string UserSID = 13;
+
+    // contains a set of host records to be used during transaction execution instead of BSC's own records
+    // useful for dry-run requests
+    THostRecordSet EnforceHostRecords = 14;
 }
 
 enum ETriStateBool {
@@ -847,4 +862,5 @@ message TConfigResponse {
     repeated uint32 GroupsGetDegraded = 5;
     repeated uint32 GroupsGetDisintegrated = 6;
     repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
+    bool RollbackSuccess = 8;
 }

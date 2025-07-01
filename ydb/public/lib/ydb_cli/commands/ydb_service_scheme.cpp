@@ -520,6 +520,24 @@ static TStringBuf SkipDatabasePrefix(TStringBuf value, TStringBuf prefix) {
     return value;
 }
 
+void PrintConnectionParams(const NReplication::TConnectionParams& connParams) {
+    bool isLocal = connParams.GetDiscoveryEndpoint().empty();
+    if (!isLocal) {
+        Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
+        Cout << Endl << "Database: " << connParams.GetDatabase();
+
+        switch (connParams.GetCredentials()) {
+        case NReplication::TConnectionParams::ECredentials::Static:
+            Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
+            Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
+            break;
+        case NReplication::TConnectionParams::ECredentials::OAuth:
+            Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
+            break;
+        }
+    }
+}
+
 int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
     const auto& desc = result.GetReplicationDescription();
 
@@ -549,18 +567,7 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     const auto& srcDatabase = connParams.GetDatabase();
     const auto& dstDatabase = Database;
 
-    Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
-    Cout << Endl << "Database: " << connParams.GetDatabase();
-
-    switch (connParams.GetCredentials()) {
-    case NReplication::TConnectionParams::ECredentials::Static:
-        Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
-        Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
-        break;
-    case NReplication::TConnectionParams::ECredentials::OAuth:
-        Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
-        break;
-    }
+    PrintConnectionParams(connParams);
 
     Cout << Endl << "Consistency level: " << desc.GetConsistencyLevel();
     switch (desc.GetConsistencyLevel()) {
@@ -614,21 +621,7 @@ int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDes
     }
 
     const auto& connParams = desc.GetConnectionParams();
-    bool isLocal = connParams.GetDiscoveryEndpoint().empty();
-    if (!isLocal) {
-        Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
-        Cout << Endl << "Database: " << connParams.GetDatabase();
-
-        switch (connParams.GetCredentials()) {
-        case NReplication::TConnectionParams::ECredentials::Static:
-            Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
-            Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
-            break;
-        case NReplication::TConnectionParams::ECredentials::OAuth:
-            Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
-            break;
-        }
-    }
+    PrintConnectionParams(connParams);
 
     Cout << Endl << "Source path: " << desc.GetSrcPath();
     Cout << Endl << "Destination path: " << desc.GetDstPath();

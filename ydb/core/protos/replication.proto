@@ -225,13 +225,7 @@ message TEvDescribeReplicationResult {
     repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
     optional TReplicationState State = 4;
 
-    message TTransferSpecific {
-        optional string TransformationLambda = 1;
-        optional string ConsumerName = 2;
-        optional TBatchingSettings BatchingSettings = 3;
-    }
-
-    optional TTransferSpecific TransferSpecific = 6;
+    optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
 }
 
 message TControllerIdentity {

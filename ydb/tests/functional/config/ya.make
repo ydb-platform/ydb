@@ -34,6 +34,7 @@ PEERDIR(
     contrib/python/requests
     ydb/tests/library
     ydb/tests/library/clients
+    contrib/python/requests
 )
 
 FORK_SUBTESTS()

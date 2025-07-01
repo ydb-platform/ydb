@@ -272,6 +272,7 @@ SRCS(
     schemeshard_svp_migration.h
     schemeshard_system_names.cpp
     schemeshard_system_names.h
+    schemeshard_sysviews_update.cpp
     schemeshard_tx_infly.h
     schemeshard_types.cpp
     schemeshard_types.h
@@ -317,6 +318,7 @@ PEERDIR(
     ydb/core/resource_pools
     ydb/core/scheme
     ydb/core/statistics
+    ydb/core/sys_view/common
     ydb/core/sys_view/partition_stats
     ydb/core/tablet
     ydb/core/tablet_flat

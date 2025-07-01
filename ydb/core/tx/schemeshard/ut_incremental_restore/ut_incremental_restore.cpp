@@ -808,9 +808,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(TTxProgressDataShardCommunication) {
         TLongOpTestSetup setup;
         
-        // Create test table and backup collection
+        // Create test backup collection (don't create target table - restore will create it)
         TString testTableName = "TestTable";
-        setup.CreateStandardTable(testTableName);
         setup.CreateBackupCollection("test_collection", {"/MyRoot/" + testTableName});
         setup.CreateFullBackup("test_collection", {testTableName});
         setup.CreateIncrementalBackups("test_collection", {testTableName}, 2);
@@ -857,9 +856,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(DataShardResponseHandling) {
         TLongOpTestSetup setup;
         
-        // Create test table and backup collection
+        // Create test backup collection (don't create target table - restore will create it)
         TString testTableName = "TestTable";
-        setup.CreateStandardTable(testTableName);
         setup.CreateBackupCollection("test_collection", {"/MyRoot/" + testTableName});
         setup.CreateFullBackup("test_collection", {testTableName});
         setup.CreateIncrementalBackups("test_collection", {testTableName}, 2);
@@ -930,9 +928,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(TTxProgressPipeRetryLogic) {
         TLongOpTestSetup setup;
         
-        // Create test table and backup collection
+        // Create test backup collection (don't create target table - restore will create it)
         TString testTableName = "TestTable";
-        setup.CreateStandardTable(testTableName);
         setup.CreateBackupCollection("test_collection", {"/MyRoot/" + testTableName});
         setup.CreateFullBackup("test_collection", {testTableName});
         setup.CreateIncrementalBackups("test_collection", {testTableName}, 2);
@@ -975,10 +972,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         TLongOpTestSetup setup;
         
         // Create multiple test tables for more complex scenario
+        // Note: Don't create the target tables since restore will create them
         TVector<TString> testTableNames = {"Table1", "Table2", "Table3"};
-        for (const auto& tableName : testTableNames) {
-            setup.CreateStandardTable(tableName);
-        }
         TVector<TString> tablePaths;
         for (const auto& tableName : testTableNames) {
             tablePaths.push_back("/MyRoot/" + tableName);
@@ -1026,9 +1021,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(IncrementalRestoreRecoveryAfterReboot) {
         TLongOpTestSetup setup;
         
-        // Create test table and backup collection
+        // Create test backup collection (don't create target table - restore will create it)
         TString testTableName = "TestTable";
-        setup.CreateStandardTable(testTableName);
         setup.CreateBackupCollection("recovery_test_collection", {"/MyRoot/" + testTableName});
         setup.CreateFullBackup("recovery_test_collection", {testTableName});
         setup.CreateIncrementalBackups("recovery_test_collection", {testTableName}, 2);
@@ -1085,9 +1079,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(TTxProgressErrorHandlingAndLogging) {
         TLongOpTestSetup setup;
         
-        // Create test table and backup collection
+        // Create test backup collection (don't create target table - restore will create it)
         TString testTableName = "TestTable";
-        setup.CreateStandardTable(testTableName);
         setup.CreateBackupCollection("error_test_collection", {"/MyRoot/" + testTableName});
         setup.CreateFullBackup("error_test_collection", {testTableName});
         setup.CreateIncrementalBackups("error_test_collection", {testTableName}, 2);
@@ -1126,9 +1119,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(DataShardEventStructureValidation) {
         TLongOpTestSetup setup;
         
-        // Create test table and backup collection
+        // Create test backup collection (don't create target table - restore will create it)
         TString testTableName = "TestTable";
-        setup.CreateStandardTable(testTableName);
         setup.CreateBackupCollection("validation_test_collection", {"/MyRoot/" + testTableName});
         setup.CreateFullBackup("validation_test_collection", {testTableName});
         setup.CreateIncrementalBackups("validation_test_collection", {testTableName}, 3);

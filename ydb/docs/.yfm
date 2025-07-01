@@ -23,13 +23,7 @@ docs-viewer:
   # no-index: true # Remove this after the public release
   langs: ['en','ru']
   themes: ['light', 'dark']
-<<<<<<< HEAD
-  favicon-src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/favicon-202305/favicon.ico
-  gtm:
-    id: GTM-W7ZBL4X
-=======
   favicon-src: https://storage.yandexcloud.net/ydb-site-assets/favicon-202305/favicon.ico
->>>>>>> e9dbbe4294a ([docs] disable GTM (#20409))
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   unrestrict-revision-access: true
 

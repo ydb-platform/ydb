@@ -619,6 +619,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
+    app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -681,12 +682,23 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         runtime.GetAppData().YdbDriver = YdbDriver.Get();
     }
 
+    // Create Observer to catch an event of system views update finished.
+    // For more info, see comments in ydb/core/testlib/test_client.cpp
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        AddSysViewsRosterUpdateObserver(runtime);
+    }
+
     TActorId sender = runtime.AllocateEdgeActor();
     //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::BSController), &CreateFlatBsController);
     BootSchemeShard(runtime, schemeRoot);
     BootTxAllocator(runtime, txAllocator);
     BootFakeCoordinator(runtime, coordinator, CoordinatorState);
     BootFakeHive(runtime, hive, HiveState, &GetTabletCreationFunc);
+
+    // Wait until schemeshard completes creating system view paths
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        WaitForSysViewsRosterUpdate(runtime);
+    }
 
     InitRootStoragePools(runtime, schemeRoot, sender, TTestTxConfig::DomainUid);
 
@@ -924,6 +936,24 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> localIds) {
     TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
+}
+
+void NSchemeShardUT_Private::TTestEnv::AddSysViewsRosterUpdateObserver(NActors::TTestActorRuntime& runtime) {
+    if (!runtime.IsRealThreads()) {
+        SysViewsRosterUpdateFinished = false;
+        SysViewsRosterUpdateObserver = runtime.AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
+            SysViewsRosterUpdateFinished = true;
+        });
+    }
+}
+
+void NSchemeShardUT_Private::TTestEnv::WaitForSysViewsRosterUpdate(NActors::TTestActorRuntime& runtime) {
+    if (!runtime.IsRealThreads()) {
+        runtime.WaitFor("SysViewsRoster update finished", [this] {
+            return SysViewsRosterUpdateFinished;
+        });
+        SysViewsRosterUpdateObserver.Remove();
+    }
 }
 
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {

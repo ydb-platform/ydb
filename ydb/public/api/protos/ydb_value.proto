@@ -3,6 +3,8 @@ option cc_enable_arenas = true;
 
 import "google/protobuf/struct.proto";
 
+import "ydb/public/api/protos/ydb_formats.proto";
+
 package Ydb;
 option java_package = "com.yandex.ydb";
 option java_outer_classname = "ValueProtos";
@@ -177,10 +179,24 @@ message Column {
 
 // Represents table-like structure with ordered set of rows and columns
 message ResultSet {
+    enum Type {
+        UNSPECIFIED = 0;
+        MESSAGE = 10;
+        ARROW = 20;
+    }
+
     // Metadata of columns
     repeated Column columns = 1;
     // Rows of table
     repeated Value rows = 2;
     // Flag indicates the result was truncated
     bool truncated = 3;
+    // Type of result set data
+    Type type = 4;
+
+    // Settings for an arrow type of result
+    Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 5;
+
+    // Data for byte formats of result data
+    bytes data = 1000;
 }

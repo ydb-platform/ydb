@@ -7,8 +7,11 @@ from ydb.tests.olap.lib.utils import get_external_param
 import logging
 LOGGER = logging.getLogger(__name__)
 
-@pytest.mark.parametrize('nemesis_enabled', [True, False], 
-                        ids=['nemesis_true', 'nemesis_false'])
+
+@pytest.mark.parametrize(
+    'nemesis_enabled', [True, False],
+    ids=['nemesis_true', 'nemesis_false']
+)
 class OltpWorkloadBase(WorkloadTestBase):
     # Настройки для базового класса
     workload_binary_name = 'oltp_workload'

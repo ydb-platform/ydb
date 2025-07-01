@@ -1014,17 +1014,17 @@ class WorkloadTestBase(LoadSuiteBase):
             # Останавливаем nemesis перед каждым запуском workload для чистого старта
             try:
                 logging.info("Stopping nemesis service before workload execution for clean start")
-                
+
                 # Создаем сводный лог для Allure
                 prep_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 nemesis_log = [f"Workload preparation started at {prep_time}"]
-                
+
                 # Останавливаем nemesis через общий метод
                 self.__class__._manage_nemesis(
                     False, "Stopping nemesis before workload execution", nemesis_log)
-                
+
                 logging.info("Nemesis stopped successfully before workload execution")
-                
+
             except Exception as e:
                 error_msg = f"Error stopping nemesis before workload execution: {e}"
                 logging.error(error_msg)
@@ -1124,7 +1124,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     # Устанавливаем флаг сразу при запуске nemesis потока
                     self.__class__._nemesis_started = True
                     logging.info("Nemesis flag set to True - will start in 15 seconds")
-                    
+
                     nemesis_thread = threading.Thread(
                         target=self._delayed_nemesis_start,
                         args=(15,),  # 15 секунд задержки
@@ -1369,7 +1369,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     "Nemesis Delayed Start Info",
                     attachment_type=allure.attachment_type.TEXT,
                 )
-                logging.info(f"Calling _manage_nemesis(True) to start nemesis service")
+                logging.info("Calling _manage_nemesis(True) to start nemesis service")
                 self.__class__._manage_nemesis(
                     True, f"Delayed start after {delay_seconds}s", nemesis_log
                 )

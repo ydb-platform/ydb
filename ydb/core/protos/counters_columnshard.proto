@@ -139,6 +139,8 @@ enum ECumulativeCounters {
     COUNTER_IMMEDIATE_TX_COMPLETED = 83                     [(CounterOpts) = {Name: "ImmediateTxCompleted"}];
     COUNTER_ROWS_ERASED = 84                                [(CounterOpts) = {Name: "RowsErased"}];
     COUNTER_OPERATIONS_ROWS_WRITTEN = 85                    [(CounterOpts) = {Name: "OperationsRowsWritten"}];
+    COUNTER_OPERATIONS_BULK_ROWS_WRITTEN = 86               [(CounterOpts) = {Name: "OperationsBulkRowsWritten"}];
+    COUNTER_OPERATIONS_BULK_BYTES_WRITTEN = 87              [(CounterOpts) = {Name: "OperationsBulkBytesWritten"}];
 }
 
 enum EPercentileCounters {

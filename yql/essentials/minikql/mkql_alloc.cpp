@@ -124,7 +124,7 @@ void TAllocState::InvalidateMemInfo() {
 Y_NO_SANITIZE("address") Y_NO_SANITIZE("memory")
 size_t TAllocState::GetDeallocatedInPages() const {
     size_t deallocated = 0;
-    for (auto x : AllPages) {
+    for (auto x : AllPages_) {
         auto currPage = (TAllocPageHeader*)x;
         if (currPage->UseCount) {
             deallocated += currPage->Deallocated;

@@ -182,7 +182,6 @@ def ugly_conftest_exception(path):
     exceptions = [
         'taxi/uservices/userver-arc-utils/functional_tests/basic/conftest.py',
         'taxi/uservices/userver-arc-utils/functional_tests/basic_chaos/conftest.py',
-        'taxi/uservices/userver-arc-utils/functional_tests/json2yaml/conftest.py',
     ]
 
     if not path.endswith('conftest.py'):

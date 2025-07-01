@@ -1496,32 +1496,32 @@ message TImmediateControlsConfig {
         optional uint64 ThrottlingMinLevel0SstCount = 15 [(ControlOptions) = {
             Description: "Minimum level 0 SST count - throttling is turned on",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 100 }];
         optional uint64 ThrottlingMaxLevel0SstCount = 16 [(ControlOptions) = {
             Description: "Maximum level 0 SST count - throttling speed is zero",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 250 }];
         optional uint64 ThrottlingMinInplacedSizeHDD = 17 [(ControlOptions) = {
             Description: "Minimum size of all inplaced blobs (HDD) - throttling is turned on",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 21474836480 }];
         optional uint64 ThrottlingMaxInplacedSizeHDD = 18 [(ControlOptions) = {
             Description: "Maximum size of all inplaced blobs (HDD) - throttling speed is zero",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 64424509440 }];
         optional uint64 ThrottlingMinInplacedSizeSSD = 24 [(ControlOptions) = {
             Description: "Minimum size of all inplaced blobs (SSD) - throttling is turned on",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 21474836480 }];
         optional uint64 ThrottlingMaxInplacedSizeSSD = 25 [(ControlOptions) = {
             Description: "Maximum size of all inplaced blobs (SSD) - throttling speed is zero",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 64424509440 }];
         optional uint64 ThrottlingMinOccupancyPerMille = 19 [(ControlOptions) = {
             Description: "Minimum occupancy of disk per mille - throttling is turned on",
@@ -1536,12 +1536,12 @@ message TImmediateControlsConfig {
         optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
             Description: "Minimum pdisk log chunk count - throttling is turned on",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 100 }];
         optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
             Description: "Maximum pdisk log chunk count - throttling speed is zero",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 130 }];
 
         optional uint64 MaxInProgressSyncCount = 27 [(ControlOptions) = {
@@ -2310,6 +2310,7 @@ message TKafkaProxyConfig {
     optional TProxy Proxy = 7;
     optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
+    optional uint32 TransactionTimeoutMs = 12 [default = 300000]; // 5 minutes (same as in kafka)
 }
 
 message TAwsCompatibilityConfig {
@@ -2335,6 +2336,12 @@ message TBridgeConfig {
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
+}
+
+message TGeneralCacheConfig {
+    optional uint64 MemoryLimit = 1;
+    optional uint64 DirectInflightSourceLimit = 2;
+    optional uint64 DirectInflightGlobalLimit = 3;
 }
 
 message TAppConfig {
@@ -2437,6 +2444,7 @@ message TAppConfig {
     optional string StartupConfigYaml = 107;
     optional string StartupStorageYaml = 108;
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
+    optional TGeneralCacheConfig PortionsMetadataCache = 110;
 }
 
 message TYdbVersion {

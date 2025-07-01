@@ -69,6 +69,7 @@ public:
             if (Record.HasBridgePileId()) {
                 ui32 pileId = Record.GetBridgePileId();
                 node.BridgePileId = TBridgePileId::FromValue(pileId);
+                Self->GetPile(node.BridgePileId).Nodes.insert(nodeId);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(pileId);
             } else {
                 Y_ENSURE(!Self->BridgeInfo, "Running in bridge mode, but node " << nodeId << " has no pile");

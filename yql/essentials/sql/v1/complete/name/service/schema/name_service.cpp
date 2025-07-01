@@ -1,5 +1,8 @@
 #include "name_service.h"
 
+#include <library/cpp/threading/future/wait/wait.h>
+#include <library/cpp/iterator/iterate_values.h>
+
 namespace NSQLComplete {
 
     namespace {
@@ -19,24 +22,61 @@ namespace NSQLComplete {
                 }
 
                 if (request.Constraints.Column && !request.Constraints.Column->Tables.empty()) {
-                    Y_ENSURE(request.Constraints.Column->Tables.size() == 1, "Not Implemented");
-                    TTableId table = request.Constraints.Column->Tables[0];
-                    return Schema_
-                        ->Describe({
-                            .TableCluster = table.Cluster,
-                            .TablePath = table.Path,
-                            .ColumnPrefix = request.Prefix,
-                            .ColumnsLimit = request.Limit,
-                        })
-                        .Apply([table = std::move(table)](auto f) {
-                            return ToDescribeNameResponse(std::move(f), std::move(table));
-                        });
+                    return BatchDescribe(
+                        std::move(request.Constraints.Column->Tables),
+                        request.Prefix,
+                        request.Limit);
                 }
 
                 return NThreading::MakeFuture<TNameResponse>({});
             }
 
         private:
+            NThreading::TFuture<TNameResponse> BatchDescribe(
+                TVector<TAliased<TTableId>> tables, TString prefix, ui64 limit) const {
+                THashMap<TTableId, TVector<TString>> aliasesByTable;
+                for (TAliased<TTableId> table : std::move(tables)) {
+                    aliasesByTable[std::move(static_cast<TTableId&>(table))]
+                        .emplace_back(std::move(table.Alias));
+                }
+
+                THashMap<TTableId, NThreading::TFuture<TDescribeTableResponse>> futuresByTable;
+                for (const auto& [table, _] : aliasesByTable) {
+                    TDescribeTableRequest request = {
+                        .TableCluster = table.Cluster,
+                        .TablePath = table.Path,
+                        .ColumnPrefix = prefix,
+                        .ColumnsLimit = limit,
+                    };
+
+                    futuresByTable.emplace(table, Schema_->Describe(request));
+                }
+
+                auto futuresIt = IterateValues(futuresByTable);
+                TVector<NThreading::TFuture<TDescribeTableResponse>> futures(begin(futuresIt), end(futuresIt));
+
+                return NThreading::WaitAll(std::move(futures))
+                    .Apply([aliasesByTable = std::move(aliasesByTable),
+                            futuresByTable = std::move(futuresByTable)](auto) mutable {
+                        TNameResponse response;
+
+                        for (auto [table, f] : futuresByTable) {
+                            TDescribeTableResponse description = f.ExtractValue();
+                            for (const TString& column : description.Columns) {
+                                for (const TString& alias : aliasesByTable[table]) {
+                                    TColumnName name;
+                                    name.Indentifier = column;
+                                    name.TableAlias = alias;
+
+                                    response.RankedNames.emplace_back(std::move(name));
+                                }
+                            }
+                        }
+
+                        return response;
+                    });
+            }
+
             static TListRequest ToListRequest(TNameRequest request) {
                 return {
                     .Cluster = ClusterName(*request.Constraints.Object),
@@ -96,21 +136,6 @@ namespace NSQLComplete {
                     name = std::move(local);
                 }
                 return name;
-            }
-
-            static TNameResponse ToDescribeNameResponse(
-                NThreading::TFuture<TDescribeTableResponse> f,
-                TTableId table) {
-                TDescribeTableResponse info = f.ExtractValue();
-
-                TNameResponse response;
-                for (TString& column : info.Columns) {
-                    TColumnName name;
-                    name.Indentifier = std::move(column);
-                    name.Table = table;
-                    response.RankedNames.emplace_back(std::move(name));
-                }
-                return response;
             }
 
             ISchema::TPtr Schema_;

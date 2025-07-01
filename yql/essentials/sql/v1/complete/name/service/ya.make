@@ -14,6 +14,8 @@ END()
 RECURSE(
     binding
     cluster
+    column
+    impatient
     ranking
     schema
     static

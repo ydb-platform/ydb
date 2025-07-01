@@ -1,1 +1,922 @@
-[{"name":"Bool","kind":"Data"},{"name":"Date","kind":"Data"},{"name":"Date32","kind":"Data"},{"name":"Datetime","kind":"Data"},{"name":"Datetime64","kind":"Data"},{"name":"Double","kind":"Data"},{"name":"DyNumber","kind":"Data"},{"name":"EmptyDict","kind":"EmptyDict"},{"name":"EmptyList","kind":"EmptyList"},{"name":"Float","kind":"Data"},{"name":"Generic","kind":"Generic"},{"name":"Int16","kind":"Data"},{"name":"Int32","kind":"Data"},{"name":"Int64","kind":"Data"},{"name":"Int8","kind":"Data"},{"name":"Interval","kind":"Data"},{"name":"Interval64","kind":"Data"},{"name":"Json","kind":"Data"},{"name":"JsonDocument","kind":"Data"},{"name":"String","kind":"Data"},{"name":"Timestamp","kind":"Data"},{"name":"Timestamp64","kind":"Data"},{"name":"TzDate","kind":"Data"},{"name":"TzDate32","kind":"Data"},{"name":"TzDatetime","kind":"Data"},{"name":"TzDatetime64","kind":"Data"},{"name":"TzTimestamp","kind":"Data"},{"name":"TzTimestamp64","kind":"Data"},{"name":"Uint16","kind":"Data"},{"name":"Uint32","kind":"Data"},{"name":"Uint64","kind":"Data"},{"name":"Uint8","kind":"Data"},{"name":"Unit","kind":"Unit"},{"name":"Utf8","kind":"Data"},{"name":"Uuid","kind":"Data"},{"name":"Void","kind":"Void"},{"name":"Yson","kind":"Data"},{"name":"_pgaclitem","kind":"Pg"},{"name":"_pgbit","kind":"Pg"},{"name":"_pgbool","kind":"Pg"},{"name":"_pgbox","kind":"Pg"},{"name":"_pgbpchar","kind":"Pg"},{"name":"_pgbytea","kind":"Pg"},{"name":"_pgchar","kind":"Pg"},{"name":"_pgcid","kind":"Pg"},{"name":"_pgcidr","kind":"Pg"},{"name":"_pgcircle","kind":"Pg"},{"name":"_pgcstring","kind":"Pg"},{"name":"_pgdate","kind":"Pg"},{"name":"_pgdatemultirange","kind":"Pg"},{"name":"_pgdaterange","kind":"Pg"},{"name":"_pgfloat4","kind":"Pg"},{"name":"_pgfloat8","kind":"Pg"},{"name":"_pggtsvector","kind":"Pg"},{"name":"_pginet","kind":"Pg"},{"name":"_pgint2","kind":"Pg"},{"name":"_pgint2vector","kind":"Pg"},{"name":"_pgint4","kind":"Pg"},{"name":"_pgint4multirange","kind":"Pg"},{"name":"_pgint4range","kind":"Pg"},{"name":"_pgint8","kind":"Pg"},{"name":"_pgint8multirange","kind":"Pg"},{"name":"_pgint8range","kind":"Pg"},{"name":"_pginterval","kind":"Pg"},{"name":"_pgjson","kind":"Pg"},{"name":"_pgjsonb","kind":"Pg"},{"name":"_pgjsonpath","kind":"Pg"},{"name":"_pgline","kind":"Pg"},{"name":"_pglseg","kind":"Pg"},{"name":"_pgmacaddr","kind":"Pg"},{"name":"_pgmacaddr8","kind":"Pg"},{"name":"_pgmoney","kind":"Pg"},{"name":"_pgname","kind":"Pg"},{"name":"_pgnumeric","kind":"Pg"},{"name":"_pgnummultirange","kind":"Pg"},{"name":"_pgnumrange","kind":"Pg"},{"name":"_pgoid","kind":"Pg"},{"name":"_pgoidvector","kind":"Pg"},{"name":"_pgpath","kind":"Pg"},{"name":"_pgpg_attribute","kind":"Pg"},{"name":"_pgpg_class","kind":"Pg"},{"name":"_pgpg_lsn","kind":"Pg"},{"name":"_pgpg_proc","kind":"Pg"},{"name":"_pgpg_snapshot","kind":"Pg"},{"name":"_pgpg_type","kind":"Pg"},{"name":"_pgpoint","kind":"Pg"},{"name":"_pgpolygon","kind":"Pg"},{"name":"_pgrecord","kind":"Pg"},{"name":"_pgrefcursor","kind":"Pg"},{"name":"_pgregclass","kind":"Pg"},{"name":"_pgregcollation","kind":"Pg"},{"name":"_pgregconfig","kind":"Pg"},{"name":"_pgregdictionary","kind":"Pg"},{"name":"_pgregnamespace","kind":"Pg"},{"name":"_pgregoper","kind":"Pg"},{"name":"_pgregoperator","kind":"Pg"},{"name":"_pgregproc","kind":"Pg"},{"name":"_pgregprocedure","kind":"Pg"},{"name":"_pgregrole","kind":"Pg"},{"name":"_pgregtype","kind":"Pg"},{"name":"_pgtext","kind":"Pg"},{"name":"_pgtid","kind":"Pg"},{"name":"_pgtime","kind":"Pg"},{"name":"_pgtimestamp","kind":"Pg"},{"name":"_pgtimestamptz","kind":"Pg"},{"name":"_pgtimetz","kind":"Pg"},{"name":"_pgtsmultirange","kind":"Pg"},{"name":"_pgtsquery","kind":"Pg"},{"name":"_pgtsrange","kind":"Pg"},{"name":"_pgtstzmultirange","kind":"Pg"},{"name":"_pgtstzrange","kind":"Pg"},{"name":"_pgtsvector","kind":"Pg"},{"name":"_pgtxid_snapshot","kind":"Pg"},{"name":"_pguuid","kind":"Pg"},{"name":"_pgvarbit","kind":"Pg"},{"name":"_pgvarchar","kind":"Pg"},{"name":"_pgxid","kind":"Pg"},{"name":"_pgxid8","kind":"Pg"},{"name":"_pgxml","kind":"Pg"},{"name":"pgaclitem","kind":"Pg"},{"name":"pgany","kind":"Pg"},{"name":"pganyarray","kind":"Pg"},{"name":"pganycompatible","kind":"Pg"},{"name":"pganycompatiblearray","kind":"Pg"},{"name":"pganycompatiblemultirange","kind":"Pg"},{"name":"pganycompatiblenonarray","kind":"Pg"},{"name":"pganycompatiblerange","kind":"Pg"},{"name":"pganyelement","kind":"Pg"},{"name":"pganyenum","kind":"Pg"},{"name":"pganymultirange","kind":"Pg"},{"name":"pganynonarray","kind":"Pg"},{"name":"pganyrange","kind":"Pg"},{"name":"pgbit","kind":"Pg"},{"name":"pgbool","kind":"Pg"},{"name":"pgbox","kind":"Pg"},{"name":"pgbpchar","kind":"Pg"},{"name":"pgbytea","kind":"Pg"},{"name":"pgchar","kind":"Pg"},{"name":"pgcid","kind":"Pg"},{"name":"pgcidr","kind":"Pg"},{"name":"pgcircle","kind":"Pg"},{"name":"pgcstring","kind":"Pg"},{"name":"pgdate","kind":"Pg"},{"name":"pgdatemultirange","kind":"Pg"},{"name":"pgdaterange","kind":"Pg"},{"name":"pgevent_trigger","kind":"Pg"},{"name":"pgfdw_handler","kind":"Pg"},{"name":"pgfloat4","kind":"Pg"},{"name":"pgfloat8","kind":"Pg"},{"name":"pggtsvector","kind":"Pg"},{"name":"pgindex_am_handler","kind":"Pg"},{"name":"pginet","kind":"Pg"},{"name":"pgint2","kind":"Pg"},{"name":"pgint2vector","kind":"Pg"},{"name":"pgint4","kind":"Pg"},{"name":"pgint4multirange","kind":"Pg"},{"name":"pgint4range","kind":"Pg"},{"name":"pgint8","kind":"Pg"},{"name":"pgint8multirange","kind":"Pg"},{"name":"pgint8range","kind":"Pg"},{"name":"pginternal","kind":"Pg"},{"name":"pginterval","kind":"Pg"},{"name":"pgjson","kind":"Pg"},{"name":"pgjsonb","kind":"Pg"},{"name":"pgjsonpath","kind":"Pg"},{"name":"pglanguage_handler","kind":"Pg"},{"name":"pgline","kind":"Pg"},{"name":"pglseg","kind":"Pg"},{"name":"pgmacaddr","kind":"Pg"},{"name":"pgmacaddr8","kind":"Pg"},{"name":"pgmoney","kind":"Pg"},{"name":"pgname","kind":"Pg"},{"name":"pgnumeric","kind":"Pg"},{"name":"pgnummultirange","kind":"Pg"},{"name":"pgnumrange","kind":"Pg"},{"name":"pgoid","kind":"Pg"},{"name":"pgoidvector","kind":"Pg"},{"name":"pgpath","kind":"Pg"},{"name":"pgpg_attribute","kind":"Pg"},{"name":"pgpg_brin_bloom_summary","kind":"Pg"},{"name":"pgpg_brin_minmax_multi_summary","kind":"Pg"},{"name":"pgpg_class","kind":"Pg"},{"name":"pgpg_ddl_command","kind":"Pg"},{"name":"pgpg_dependencies","kind":"Pg"},{"name":"pgpg_lsn","kind":"Pg"},{"name":"pgpg_mcv_list","kind":"Pg"},{"name":"pgpg_ndistinct","kind":"Pg"},{"name":"pgpg_node_tree","kind":"Pg"},{"name":"pgpg_proc","kind":"Pg"},{"name":"pgpg_snapshot","kind":"Pg"},{"name":"pgpg_type","kind":"Pg"},{"name":"pgpoint","kind":"Pg"},{"name":"pgpolygon","kind":"Pg"},{"name":"pgrecord","kind":"Pg"},{"name":"pgrefcursor","kind":"Pg"},{"name":"pgregclass","kind":"Pg"},{"name":"pgregcollation","kind":"Pg"},{"name":"pgregconfig","kind":"Pg"},{"name":"pgregdictionary","kind":"Pg"},{"name":"pgregnamespace","kind":"Pg"},{"name":"pgregoper","kind":"Pg"},{"name":"pgregoperator","kind":"Pg"},{"name":"pgregproc","kind":"Pg"},{"name":"pgregprocedure","kind":"Pg"},{"name":"pgregrole","kind":"Pg"},{"name":"pgregtype","kind":"Pg"},{"name":"pgtable_am_handler","kind":"Pg"},{"name":"pgtext","kind":"Pg"},{"name":"pgtid","kind":"Pg"},{"name":"pgtime","kind":"Pg"},{"name":"pgtimestamp","kind":"Pg"},{"name":"pgtimestamptz","kind":"Pg"},{"name":"pgtimetz","kind":"Pg"},{"name":"pgtrigger","kind":"Pg"},{"name":"pgtsm_handler","kind":"Pg"},{"name":"pgtsmultirange","kind":"Pg"},{"name":"pgtsquery","kind":"Pg"},{"name":"pgtsrange","kind":"Pg"},{"name":"pgtstzmultirange","kind":"Pg"},{"name":"pgtstzrange","kind":"Pg"},{"name":"pgtsvector","kind":"Pg"},{"name":"pgtxid_snapshot","kind":"Pg"},{"name":"pgunknown","kind":"Pg"},{"name":"pguuid","kind":"Pg"},{"name":"pgvarbit","kind":"Pg"},{"name":"pgvarchar","kind":"Pg"},{"name":"pgvoid","kind":"Pg"},{"name":"pgxid","kind":"Pg"},{"name":"pgxid8","kind":"Pg"},{"name":"pgxml","kind":"Pg"}]
+[
+  {
+    "name": "Bool",
+    "kind": "Data"
+  },
+  {
+    "name": "Date",
+    "kind": "Data"
+  },
+  {
+    "name": "Date32",
+    "kind": "Data"
+  },
+  {
+    "name": "Datetime",
+    "kind": "Data"
+  },
+  {
+    "name": "Datetime64",
+    "kind": "Data"
+  },
+  {
+    "name": "Double",
+    "kind": "Data"
+  },
+  {
+    "name": "DyNumber",
+    "kind": "Data"
+  },
+  {
+    "name": "EmptyDict",
+    "kind": "EmptyDict"
+  },
+  {
+    "name": "EmptyList",
+    "kind": "EmptyList"
+  },
+  {
+    "name": "Float",
+    "kind": "Data"
+  },
+  {
+    "name": "Generic",
+    "kind": "Generic"
+  },
+  {
+    "name": "Int16",
+    "kind": "Data"
+  },
+  {
+    "name": "Int32",
+    "kind": "Data"
+  },
+  {
+    "name": "Int64",
+    "kind": "Data"
+  },
+  {
+    "name": "Int8",
+    "kind": "Data"
+  },
+  {
+    "name": "Interval",
+    "kind": "Data"
+  },
+  {
+    "name": "Interval64",
+    "kind": "Data"
+  },
+  {
+    "name": "Json",
+    "kind": "Data"
+  },
+  {
+    "name": "JsonDocument",
+    "kind": "Data"
+  },
+  {
+    "name": "String",
+    "kind": "Data"
+  },
+  {
+    "name": "Timestamp",
+    "kind": "Data"
+  },
+  {
+    "name": "Timestamp64",
+    "kind": "Data"
+  },
+  {
+    "name": "TzDate",
+    "kind": "Data"
+  },
+  {
+    "name": "TzDate32",
+    "kind": "Data"
+  },
+  {
+    "name": "TzDatetime",
+    "kind": "Data"
+  },
+  {
+    "name": "TzDatetime64",
+    "kind": "Data"
+  },
+  {
+    "name": "TzTimestamp",
+    "kind": "Data"
+  },
+  {
+    "name": "TzTimestamp64",
+    "kind": "Data"
+  },
+  {
+    "name": "Uint16",
+    "kind": "Data"
+  },
+  {
+    "name": "Uint32",
+    "kind": "Data"
+  },
+  {
+    "name": "Uint64",
+    "kind": "Data"
+  },
+  {
+    "name": "Uint8",
+    "kind": "Data"
+  },
+  {
+    "name": "Unit",
+    "kind": "Unit"
+  },
+  {
+    "name": "Utf8",
+    "kind": "Data"
+  },
+  {
+    "name": "Uuid",
+    "kind": "Data"
+  },
+  {
+    "name": "Void",
+    "kind": "Void"
+  },
+  {
+    "name": "Yson",
+    "kind": "Data"
+  },
+  {
+    "name": "_pgaclitem",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgbit",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgbool",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgbox",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgbpchar",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgbytea",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgchar",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgcid",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgcidr",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgcircle",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgcstring",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgdate",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgdatemultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgdaterange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgfloat4",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgfloat8",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pggtsvector",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pginet",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgint2",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgint2vector",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgint4",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgint4multirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgint4range",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgint8",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgint8multirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgint8range",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pginterval",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgjson",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgjsonb",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgjsonpath",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgline",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pglseg",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgmacaddr",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgmacaddr8",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgmoney",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgname",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgnumeric",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgnummultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgnumrange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgoid",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgoidvector",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpath",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpg_attribute",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpg_class",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpg_lsn",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpg_proc",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpg_snapshot",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpg_type",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpoint",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgpolygon",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgrecord",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgrefcursor",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregclass",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregcollation",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregconfig",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregdictionary",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregnamespace",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregoper",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregoperator",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregproc",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregprocedure",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregrole",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgregtype",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtext",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtid",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtime",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtimestamp",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtimestamptz",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtimetz",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtsmultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtsquery",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtsrange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtstzmultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtstzrange",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtsvector",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgtxid_snapshot",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pguuid",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgvarbit",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgvarchar",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgxid",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgxid8",
+    "kind": "Pg"
+  },
+  {
+    "name": "_pgxml",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgaclitem",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgany",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganyarray",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganycompatible",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganycompatiblearray",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganycompatiblemultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganycompatiblenonarray",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganycompatiblerange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganyelement",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganyenum",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganymultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganynonarray",
+    "kind": "Pg"
+  },
+  {
+    "name": "pganyrange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgbit",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgbool",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgbox",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgbpchar",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgbytea",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgchar",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgcid",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgcidr",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgcircle",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgcstring",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgdate",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgdatemultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgdaterange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgevent_trigger",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgfdw_handler",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgfloat4",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgfloat8",
+    "kind": "Pg"
+  },
+  {
+    "name": "pggtsvector",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgindex_am_handler",
+    "kind": "Pg"
+  },
+  {
+    "name": "pginet",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgint2",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgint2vector",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgint4",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgint4multirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgint4range",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgint8",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgint8multirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgint8range",
+    "kind": "Pg"
+  },
+  {
+    "name": "pginternal",
+    "kind": "Pg"
+  },
+  {
+    "name": "pginterval",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgjson",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgjsonb",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgjsonpath",
+    "kind": "Pg"
+  },
+  {
+    "name": "pglanguage_handler",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgline",
+    "kind": "Pg"
+  },
+  {
+    "name": "pglseg",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgmacaddr",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgmacaddr8",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgmoney",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgname",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgnumeric",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgnummultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgnumrange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgoid",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgoidvector",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpath",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_attribute",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_brin_bloom_summary",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_brin_minmax_multi_summary",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_class",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_ddl_command",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_dependencies",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_lsn",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_mcv_list",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_ndistinct",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_node_tree",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_proc",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_snapshot",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpg_type",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpoint",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgpolygon",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgrecord",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgrefcursor",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregclass",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregcollation",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregconfig",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregdictionary",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregnamespace",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregoper",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregoperator",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregproc",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregprocedure",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregrole",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgregtype",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtable_am_handler",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtext",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtid",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtime",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtimestamp",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtimestamptz",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtimetz",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtrigger",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtsm_handler",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtsmultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtsquery",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtsrange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtstzmultirange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtstzrange",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtsvector",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgtxid_snapshot",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgunknown",
+    "kind": "Pg"
+  },
+  {
+    "name": "pguuid",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgvarbit",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgvarchar",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgvoid",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgxid",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgxid8",
+    "kind": "Pg"
+  },
+  {
+    "name": "pgxml",
+    "kind": "Pg"
+  }
+]

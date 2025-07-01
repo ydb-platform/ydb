@@ -1,7 +1,7 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
@@ -105,6 +105,7 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
+        const auto acceptExisting = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& sysViewDescription = Transaction.GetCreateSysView();
 
@@ -150,7 +151,7 @@ public:
             if (dstPath.IsResolved()) {
                 checks
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeSysView, /* acceptAlreadyExist */ false);
+                    .FailOnExist(TPathElement::EPathType::EPathTypeSysView, acceptExisting);
             } else {
                 checks
                     .NotEmpty();
@@ -158,7 +159,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()

@@ -19,14 +19,13 @@ class ReconfigStateStorageWorkloadTest(object):
                 "version": 0,
                 "cluster": "",
             },
-            column_shard_config={
-                "allow_nullable_columns_in_pk": True,
-            },
             additional_log_configs={
                 'BS_NODE': LogLevels.DEBUG,
                 'BOARD_LOOKUP': LogLevels.DEBUG,
                 'DISCOVERY': LogLevels.DEBUG,
                 'INTERCONNECT': LogLevels.INFO,
+                'SCHEME_BOARD_SUBSCRIBER': LogLevels.DEBUG,
+                'SCHEME_BOARD_POPULATOR': LogLevels.DEBUG,
                 # 'STATESTORAGE': LogLevels.DEBUG,
             }
         ))

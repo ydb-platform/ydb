@@ -72,26 +72,26 @@ namespace {
         }
 
         THashMap<TInternName, ui32>& GetNames() {
-            return Names;
+            return Names_;
         }
 
         TVector<TInternName>& GetNameOrder() {
-            return NameOrder;
+            return NameOrder_;
         }
 
 
     private:
         void AddName(const TInternName& name) {
-            auto iter = Names.emplace(name, 0);
+            auto iter = Names_.emplace(name, 0);
             if (iter.second) {
-                NameOrder.emplace_back(name);
+                NameOrder_.emplace_back(name);
             }
             ++iter.first->second;
         }
 
     private:
-        THashMap<TInternName, ui32> Names;
-        TVector<TInternName> NameOrder;
+        THashMap<TInternName, ui32> Names_;
+        TVector<TInternName> NameOrder_;
     };
 
     class TWriter {
@@ -102,350 +102,350 @@ namespace {
         class TPreVisitor : public INodeVisitor {
         public:
             TPreVisitor(TWriter& owner)
-                : Owner(owner)
-                , IsProcessed0(false)
+                : Owner_(owner)
+                , IsProcessed0_(false)
             {
             }
 
             void Visit(TTypeType& node) override {
                 Y_UNUSED(node);
-                Owner.Write(TypeMarker | (char)TType::EKind::Type);
-                IsProcessed0 = true;
+                Owner_.Write(TypeMarker | (char)TType::EKind::Type);
+                IsProcessed0_ = true;
             }
 
             void Visit(TVoidType& node) override {
                 Y_UNUSED(node);
-                Owner.Write(TypeMarker | (char)TType::EKind::Void);
-                IsProcessed0 = true;
+                Owner_.Write(TypeMarker | (char)TType::EKind::Void);
+                IsProcessed0_ = true;
             }
 
             void Visit(TNullType& node) override {
                 Y_UNUSED(node);
-                Owner.Write(TypeMarker | (char)TType::EKind::Null);
-                IsProcessed0 = true;
+                Owner_.Write(TypeMarker | (char)TType::EKind::Null);
+                IsProcessed0_ = true;
             }
 
             void Visit(TEmptyListType& node) override {
                 Y_UNUSED(node);
-                Owner.Write(TypeMarker | (char)TType::EKind::EmptyList);
-                IsProcessed0 = true;
+                Owner_.Write(TypeMarker | (char)TType::EKind::EmptyList);
+                IsProcessed0_ = true;
             }
 
             void Visit(TEmptyDictType& node) override {
                 Y_UNUSED(node);
-                Owner.Write(TypeMarker | (char)TType::EKind::EmptyDict);
-                IsProcessed0 = true;
+                Owner_.Write(TypeMarker | (char)TType::EKind::EmptyDict);
+                IsProcessed0_ = true;
             }
 
             void Visit(TDataType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Data);
-                Owner.WriteVar32(node.GetSchemeType());
+                Owner_.Write(TypeMarker | (char)TType::EKind::Data);
+                Owner_.WriteVar32(node.GetSchemeType());
                 if (NUdf::TDataType<NUdf::TDecimal>::Id == node.GetSchemeType()) {
                     const auto& params = static_cast<TDataDecimalType&>(node).GetParams();
-                    Owner.Write(params.first);
-                    Owner.Write(params.second);
+                    Owner_.Write(params.first);
+                    Owner_.Write(params.second);
                 }
-                IsProcessed0 = false;
+                IsProcessed0_ = false;
             }
 
             void Visit(TPgType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Pg);
-                Owner.WriteVar32(node.GetTypeId());
-                IsProcessed0 = false;
+                Owner_.Write(TypeMarker | (char)TType::EKind::Pg);
+                Owner_.WriteVar32(node.GetTypeId());
+                IsProcessed0_ = false;
             }
 
             void Visit(TStructType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Struct);
-                Owner.WriteVar32(node.GetMembersCount());
+                Owner_.Write(TypeMarker | (char)TType::EKind::Struct);
+                Owner_.WriteVar32(node.GetMembersCount());
                 for (ui32 i = node.GetMembersCount(); i-- > 0;) {
                     auto memberType = node.GetMemberType(i);
-                    Owner.AddChildNode(*memberType);
+                    Owner_.AddChildNode(*memberType);
                 }
 
-                IsProcessed0 = false;
+                IsProcessed0_ = false;
             }
 
             void Visit(TListType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::List);
+                Owner_.Write(TypeMarker | (char)TType::EKind::List);
                 auto itemType = node.GetItemType();
-                Owner.AddChildNode(*itemType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*itemType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TStreamType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Stream);
+                Owner_.Write(TypeMarker | (char)TType::EKind::Stream);
                 auto itemType = node.GetItemType();
-                Owner.AddChildNode(*itemType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*itemType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TFlowType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Flow);
+                Owner_.Write(TypeMarker | (char)TType::EKind::Flow);
                 auto itemType = node.GetItemType();
-                Owner.AddChildNode(*itemType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*itemType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TBlockType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Block);
+                Owner_.Write(TypeMarker | (char)TType::EKind::Block);
                 auto itemType = node.GetItemType();
-                Owner.AddChildNode(*itemType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*itemType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TMultiType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Multi);
-                Owner.WriteVar32(node.GetElementsCount());
+                Owner_.Write(TypeMarker | (char)TType::EKind::Multi);
+                Owner_.WriteVar32(node.GetElementsCount());
                 for (ui32 i = node.GetElementsCount(); i-- > 0;) {
                     auto elementType = node.GetElementType(i);
-                    Owner.AddChildNode(*elementType);
+                    Owner_.AddChildNode(*elementType);
                 }
 
-                IsProcessed0 = false;
+                IsProcessed0_ = false;
             }
 
             void Visit(TTaggedType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Tagged);
+                Owner_.Write(TypeMarker | (char)TType::EKind::Tagged);
                 auto baseType = node.GetBaseType();
-                Owner.AddChildNode(*baseType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*baseType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TOptionalType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Optional);
+                Owner_.Write(TypeMarker | (char)TType::EKind::Optional);
                 auto itemType = node.GetItemType();
-                Owner.AddChildNode(*itemType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*itemType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TDictType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Dict);
+                Owner_.Write(TypeMarker | (char)TType::EKind::Dict);
                 auto keyType = node.GetKeyType();
                 auto payloadType = node.GetPayloadType();
-                Owner.AddChildNode(*payloadType);
-                Owner.AddChildNode(*keyType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*payloadType);
+                Owner_.AddChildNode(*keyType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TCallableType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Callable
+                Owner_.Write(TypeMarker | (char)TType::EKind::Callable
                     | (node.IsMergeDisabled() ? UserMarker2 : 0) | (node.GetPayload() ? UserMarker3 : 0));
-                Owner.WriteVar32(node.GetArgumentsCount());
+                Owner_.WriteVar32(node.GetArgumentsCount());
                 auto returnType = node.GetReturnType();
                 if (node.GetPayload()) {
-                    Owner.AddChildNode(*node.GetPayload());
+                    Owner_.AddChildNode(*node.GetPayload());
                 }
 
                 for (ui32 i = node.GetArgumentsCount(); i-- > 0;) {
                     auto argumentType = node.GetArgumentType(i);
-                    Owner.AddChildNode(*argumentType);
+                    Owner_.AddChildNode(*argumentType);
                 }
 
-                Owner.AddChildNode(*returnType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*returnType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TAnyType& node) override {
                 Y_UNUSED(node);
-                Owner.Write(TypeMarker | (char)TType::EKind::Any);
-                IsProcessed0 = true;
+                Owner_.Write(TypeMarker | (char)TType::EKind::Any);
+                IsProcessed0_ = true;
             }
 
             void Visit(TTupleType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Tuple);
-                Owner.WriteVar32(node.GetElementsCount());
+                Owner_.Write(TypeMarker | (char)TType::EKind::Tuple);
+                Owner_.WriteVar32(node.GetElementsCount());
                 for (ui32 i = node.GetElementsCount(); i-- > 0;) {
                     auto elementType = node.GetElementType(i);
-                    Owner.AddChildNode(*elementType);
+                    Owner_.AddChildNode(*elementType);
                 }
 
-                IsProcessed0 = false;
+                IsProcessed0_ = false;
             }
 
             void Visit(TResourceType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Resource);
+                Owner_.Write(TypeMarker | (char)TType::EKind::Resource);
                 auto tag = node.GetTagStr();
-                Owner.WriteName(tag);
-                IsProcessed0 = false;
+                Owner_.WriteName(tag);
+                IsProcessed0_ = false;
             }
 
             void Visit(TVariantType& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Variant);
+                Owner_.Write(TypeMarker | (char)TType::EKind::Variant);
                 auto underlyingType = node.GetUnderlyingType();
-                Owner.AddChildNode(*underlyingType);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*underlyingType);
+                IsProcessed0_ = false;
             }
 
             void Visit(TVoid& node) override {
                 Y_UNUSED(node);
-                Owner.Write((char)TType::EKind::Void);
-                IsProcessed0 = true;
+                Owner_.Write((char)TType::EKind::Void);
+                IsProcessed0_ = true;
             }
 
             void Visit(TNull& node) override {
                 Y_UNUSED(node);
-                Owner.Write((char)TType::EKind::Null);
-                IsProcessed0 = true;
+                Owner_.Write((char)TType::EKind::Null);
+                IsProcessed0_ = true;
             }
 
             void Visit(TEmptyList& node) override {
                 Y_UNUSED(node);
-                Owner.Write((char)TType::EKind::EmptyList);
-                IsProcessed0 = true;
+                Owner_.Write((char)TType::EKind::EmptyList);
+                IsProcessed0_ = true;
             }
 
             void Visit(TEmptyDict& node) override {
                 Y_UNUSED(node);
-                Owner.Write((char)TType::EKind::EmptyDict);
-                IsProcessed0 = true;
+                Owner_.Write((char)TType::EKind::EmptyDict);
+                IsProcessed0_ = true;
             }
 
             void Visit(TDataLiteral& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write((char)TType::EKind::Data);
+                Owner_.Write((char)TType::EKind::Data);
                 auto type = node.GetType();
-                Owner.AddChildNode(*type);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*type);
+                IsProcessed0_ = false;
             }
 
             void Visit(TStructLiteral& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write((char)TType::EKind::Struct);
+                Owner_.Write((char)TType::EKind::Struct);
                 auto type = node.GetType();
                 Y_DEBUG_ABORT_UNLESS(node.GetValuesCount() == type->GetMembersCount());
                 for (ui32 i = node.GetValuesCount(); i-- > 0; ) {
                     auto value = node.GetValue(i);
-                    Owner.AddChildNode(*value.GetNode());
+                    Owner_.AddChildNode(*value.GetNode());
                 }
 
-                Owner.AddChildNode(*type);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*type);
+                IsProcessed0_ = false;
             }
 
             void Visit(TListLiteral& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write((char)TType::EKind::List);
+                Owner_.Write((char)TType::EKind::List);
                 auto type = node.GetType();
-                Owner.WriteVar32(node.GetItemsCount());
+                Owner_.WriteVar32(node.GetItemsCount());
 
                 for (ui32 i = node.GetItemsCount(); i > 0; --i) {
                     auto item = node.GetItems()[i - 1];
-                    Owner.AddChildNode(*item.GetNode());
+                    Owner_.AddChildNode(*item.GetNode());
                 }
 
-                Owner.AddChildNode(*type);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*type);
+                IsProcessed0_ = false;
             }
 
             void Visit(TOptionalLiteral& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
@@ -453,66 +453,66 @@ namespace {
                 if (node.HasItem())
                     item = node.GetItem();
 
-                Owner.Write((char)TType::EKind::Optional | (item.GetNode() ? UserMarker1 : 0) | (item.IsImmediate() ? UserMarker2 : 0));
+                Owner_.Write((char)TType::EKind::Optional | (item.GetNode() ? UserMarker1 : 0) | (item.IsImmediate() ? UserMarker2 : 0));
                 auto type = node.GetType();
                 if (item.GetNode()) {
-                    Owner.AddChildNode(*item.GetNode());
+                    Owner_.AddChildNode(*item.GetNode());
                 }
 
-                Owner.AddChildNode(*type);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*type);
+                IsProcessed0_ = false;
             }
 
             void Visit(TDictLiteral& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write((char)TType::EKind::Dict);
+                Owner_.Write((char)TType::EKind::Dict);
                 auto type = node.GetType();
-                Owner.WriteVar32(node.GetItemsCount());
+                Owner_.WriteVar32(node.GetItemsCount());
                 for (ui32 i = node.GetItemsCount(); i-- > 0;) {
                     auto item = node.GetItem(i);
-                    Owner.AddChildNode(*item.second.GetNode());
-                    Owner.AddChildNode(*item.first.GetNode());
+                    Owner_.AddChildNode(*item.second.GetNode());
+                    Owner_.AddChildNode(*item.first.GetNode());
                 }
 
-                Owner.AddChildNode(*type);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*type);
+                IsProcessed0_ = false;
             }
 
             void Visit(TCallable& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write((char)TType::EKind::Callable | (node.HasResult() ? UserMarker1 : 0) |
+                Owner_.Write((char)TType::EKind::Callable | (node.HasResult() ? UserMarker1 : 0) |
                     ((node.GetUniqueId() != 0) ? UserMarker2 : 0));
 
                 auto type = node.GetType();
                 if (node.HasResult()) {
                     auto result = node.GetResult();
-                    Owner.AddChildNode(*result.GetNode());
+                    Owner_.AddChildNode(*result.GetNode());
                 } else {
                     Y_DEBUG_ABORT_UNLESS(node.GetInputsCount() == type->GetArgumentsCount());
                     for (ui32 i = node.GetInputsCount(); i-- > 0;) {
                         auto input = node.GetInput(i);
-                        Owner.AddChildNode(*input.GetNode());
+                        Owner_.AddChildNode(*input.GetNode());
                     }
                 }
 
-                Owner.AddChildNode(*type);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*type);
+                IsProcessed0_ = false;
             }
 
             void Visit(TAny& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
@@ -520,63 +520,63 @@ namespace {
                 if (node.HasItem())
                     item = node.GetItem();
 
-                Owner.Write((char)TType::EKind::Any | (item.GetNode() ? UserMarker1 : 0) | (item.IsImmediate() ? UserMarker2 : 0));
+                Owner_.Write((char)TType::EKind::Any | (item.GetNode() ? UserMarker1 : 0) | (item.IsImmediate() ? UserMarker2 : 0));
                 if (item.GetNode()) {
-                    Owner.AddChildNode(*item.GetNode());
+                    Owner_.AddChildNode(*item.GetNode());
                 }
 
-                IsProcessed0 = false;
+                IsProcessed0_ = false;
             }
 
             void Visit(TTupleLiteral& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
-                Owner.Write((char)TType::EKind::Tuple);
+                Owner_.Write((char)TType::EKind::Tuple);
                 auto type = node.GetType();
                 Y_DEBUG_ABORT_UNLESS(node.GetValuesCount() == type->GetElementsCount());
                 for (ui32 i = node.GetValuesCount(); i-- > 0;) {
                     auto value = node.GetValue(i);
-                    Owner.AddChildNode(*value.GetNode());
+                    Owner_.AddChildNode(*value.GetNode());
                 }
 
-                Owner.AddChildNode(*type);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*type);
+                IsProcessed0_ = false;
             }
 
             void Visit(TVariantLiteral& node) override {
                 if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
                     return;
                 }
 
                 TRuntimeNode item = node.GetItem();
 
-                Owner.Write((char)TType::EKind::Variant | (item.IsImmediate() ? UserMarker1 : 0));
+                Owner_.Write((char)TType::EKind::Variant | (item.IsImmediate() ? UserMarker1 : 0));
                 auto type = node.GetType();
-                Owner.AddChildNode(*item.GetNode());
+                Owner_.AddChildNode(*item.GetNode());
 
-                Owner.AddChildNode(*type);
-                IsProcessed0 = false;
+                Owner_.AddChildNode(*type);
+                IsProcessed0_ = false;
             }
 
             bool IsProcessed() const {
-                return IsProcessed0;
+                return IsProcessed0_;
             }
 
         private:
-            TWriter& Owner;
-            bool IsProcessed0;
+            TWriter& Owner_;
+            bool IsProcessed0_;
         };
 
         class TPostVisitor : public INodeVisitor {
         public:
             TPostVisitor(TWriter& owner)
-                : Owner(owner)
+                : Owner_(owner)
             {
             }
 
@@ -601,62 +601,62 @@ namespace {
             }
 
             void Visit(TDataType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TPgType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TStructType& node) override {
                 for (ui32 i = 0, e = node.GetMembersCount(); i < e; ++i) {
                     auto memberName = node.GetMemberNameStr(i);
-                    Owner.WriteName(memberName);
+                    Owner_.WriteName(memberName);
                 }
 
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TListType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TStreamType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TFlowType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TBlockType& node) override {
-                Owner.Write(static_cast<ui8>(node.GetShape()));
-                Owner.RegisterReference(node);
+                Owner_.Write(static_cast<ui8>(node.GetShape()));
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TMultiType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TTaggedType& node) override {
                 auto tag = node.GetTagStr();
-                Owner.WriteName(tag);
-                Owner.RegisterReference(node);
+                Owner_.WriteName(tag);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TOptionalType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TDictType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TCallableType& node) override {
                 auto name = node.GetNameStr();
-                Owner.WriteName(name);
-                Owner.WriteVar32(node.GetOptionalArgumentsCount());
-                Owner.RegisterReference(node);
+                Owner_.WriteName(name);
+                Owner_.WriteVar32(node.GetOptionalArgumentsCount());
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TAnyType& node) override {
@@ -664,15 +664,15 @@ namespace {
             }
 
             void Visit(TTupleType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TResourceType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TVariantType& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TVoid& node) override {
@@ -697,113 +697,113 @@ namespace {
                     const auto& value = node.AsValue();
                     switch (type->GetSchemeType()) {
                     case NUdf::TDataType<bool>::Id:
-                        Owner.Write(value.Get<bool>());
+                        Owner_.Write(value.Get<bool>());
                         break;
                     case NUdf::TDataType<ui8>::Id:
-                        Owner.Write(value.Get<ui8>());
+                        Owner_.Write(value.Get<ui8>());
                         break;
                     case NUdf::TDataType<i8>::Id:
-                        Owner.Write((ui8)value.Get<i8>());
+                        Owner_.Write((ui8)value.Get<i8>());
                         break;
                     case NUdf::TDataType<i16>::Id:
-                        Owner.WriteVar32(ZigZagEncode(value.Get<i16>()));
+                        Owner_.WriteVar32(ZigZagEncode(value.Get<i16>()));
                         break;
                     case NUdf::TDataType<ui16>::Id:
-                        Owner.WriteVar32(value.Get<ui16>());
+                        Owner_.WriteVar32(value.Get<ui16>());
                         break;
                     case NUdf::TDataType<i32>::Id:
-                        Owner.WriteVar32(ZigZagEncode(value.Get<i32>()));
+                        Owner_.WriteVar32(ZigZagEncode(value.Get<i32>()));
                         break;
                     case NUdf::TDataType<ui32>::Id:
-                        Owner.WriteVar32(value.Get<ui32>());
+                        Owner_.WriteVar32(value.Get<ui32>());
                         break;
                     case NUdf::TDataType<float>::Id: {
                             const auto v = value.Get<float>();
-                            Owner.WriteMany(&v, sizeof(v));
+                            Owner_.WriteMany(&v, sizeof(v));
                             break;
                         }
                     case NUdf::TDataType<i64>::Id:
-                        Owner.WriteVar64(ZigZagEncode(value.Get<i64>()));
+                        Owner_.WriteVar64(ZigZagEncode(value.Get<i64>()));
                         break;
                     case NUdf::TDataType<ui64>::Id:
-                        Owner.WriteVar64(value.Get<ui64>());
+                        Owner_.WriteVar64(value.Get<ui64>());
                         break;
                     case NUdf::TDataType<double>::Id: {
                             const auto v = value.Get<double>();
-                            Owner.WriteMany(&v, sizeof(v));
+                            Owner_.WriteMany(&v, sizeof(v));
                             break;
                         }
                     case NUdf::TDataType<NUdf::TDate>::Id:
-                        Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDate>::TLayout>());
+                        Owner_.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDate>::TLayout>());
                         break;
                     case NUdf::TDataType<NUdf::TDatetime>::Id:
-                        Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDatetime>::TLayout>());
+                        Owner_.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDatetime>::TLayout>());
                         break;
                     case NUdf::TDataType<NUdf::TTimestamp>::Id:
-                        Owner.WriteVar64(value.Get<NUdf::TDataType<NUdf::TTimestamp>::TLayout>());
+                        Owner_.WriteVar64(value.Get<NUdf::TDataType<NUdf::TTimestamp>::TLayout>());
                         break;
                     case NUdf::TDataType<NUdf::TTzDate>::Id: {
-                        Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TTzDate>::TLayout>());
-                        Owner.WriteVar32(value.GetTimezoneId());
+                        Owner_.WriteVar32(value.Get<NUdf::TDataType<NUdf::TTzDate>::TLayout>());
+                        Owner_.WriteVar32(value.GetTimezoneId());
                         break;
                     }
                     case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-                        Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TTzDatetime>::TLayout>());
-                        Owner.WriteVar32(value.GetTimezoneId());
+                        Owner_.WriteVar32(value.Get<NUdf::TDataType<NUdf::TTzDatetime>::TLayout>());
+                        Owner_.WriteVar32(value.GetTimezoneId());
                         break;
                     }
                     case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-                        Owner.WriteVar64(value.Get<NUdf::TDataType<NUdf::TTzTimestamp>::TLayout>());
-                        Owner.WriteVar32(value.GetTimezoneId());
+                        Owner_.WriteVar64(value.Get<NUdf::TDataType<NUdf::TTzTimestamp>::TLayout>());
+                        Owner_.WriteVar32(value.GetTimezoneId());
                         break;
                     }
                     case NUdf::TDataType<NUdf::TInterval>::Id:
-                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TInterval>::TLayout>()));
+                        Owner_.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TInterval>::TLayout>()));
                         break;
                     case NUdf::TDataType<NUdf::TDate32>::Id:
-                        Owner.WriteVar32(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TDate32>::TLayout>()));
+                        Owner_.WriteVar32(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TDate32>::TLayout>()));
                         break;
                     case NUdf::TDataType<NUdf::TDatetime64>::Id:
-                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TDatetime64>::TLayout>()));
+                        Owner_.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TDatetime64>::TLayout>()));
                         break;
                     case NUdf::TDataType<NUdf::TTimestamp64>::Id:
-                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTimestamp64>::TLayout>()));
+                        Owner_.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTimestamp64>::TLayout>()));
                         break;
                     case NUdf::TDataType<NUdf::TInterval64>::Id:
-                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TInterval64>::TLayout>()));
+                        Owner_.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TInterval64>::TLayout>()));
                         break;
                     case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-                        Owner.WriteVar32(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTzDate32>::TLayout>()));
-                        Owner.WriteVar32(value.GetTimezoneId());
+                        Owner_.WriteVar32(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTzDate32>::TLayout>()));
+                        Owner_.WriteVar32(value.GetTimezoneId());
                         break;
                     }
                     case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTzDatetime64>::TLayout>()));
-                        Owner.WriteVar32(value.GetTimezoneId());
+                        Owner_.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTzDatetime64>::TLayout>()));
+                        Owner_.WriteVar32(value.GetTimezoneId());
                         break;
                     }
                     case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout>()));
-                        Owner.WriteVar32(value.GetTimezoneId());
+                        Owner_.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout>()));
+                        Owner_.WriteVar32(value.GetTimezoneId());
                         break;
                     }
                     case NUdf::TDataType<NUdf::TUuid>::Id: {
                         const auto v = value.AsStringRef();
-                        Owner.WriteMany(v.Data(), v.Size());
+                        Owner_.WriteMany(v.Data(), v.Size());
                         break;
                     }
                     case NUdf::TDataType<NUdf::TDecimal>::Id:
-                        Owner.WriteMany(static_cast<const char*>(value.GetRawPtr()), sizeof(NYql::NDecimal::TInt128) - 1U);
+                        Owner_.WriteMany(static_cast<const char*>(value.GetRawPtr()), sizeof(NYql::NDecimal::TInt128) - 1U);
                         break;
                     default: {
                             const auto& buffer = value.AsStringRef();
-                            Owner.WriteVar32(buffer.Size());
-                            Owner.WriteMany(buffer.Data(), buffer.Size());
+                            Owner_.WriteVar32(buffer.Size());
+                            Owner_.WriteMany(buffer.Data(), buffer.Size());
                         }
                     }
                 }
 
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TStructLiteral& node) override {
@@ -817,8 +817,8 @@ namespace {
                     }
                 }
 
-                Owner.WriteMany(immediateFlags.data(), immediateFlags.size());
-                Owner.RegisterReference(node);
+                Owner_.WriteMany(immediateFlags.data(), immediateFlags.size());
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TListLiteral& node) override {
@@ -830,12 +830,12 @@ namespace {
                     }
                 }
 
-                Owner.WriteMany(immediateFlags.data(), immediateFlags.size());
-                Owner.RegisterReference(node);
+                Owner_.WriteMany(immediateFlags.data(), immediateFlags.size());
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TOptionalLiteral& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TDictLiteral& node) override {
@@ -851,13 +851,13 @@ namespace {
                     }
                 }
 
-                Owner.WriteMany(immediateFlags.data(), immediateFlags.size());
-                Owner.RegisterReference(node);
+                Owner_.WriteMany(immediateFlags.data(), immediateFlags.size());
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TCallable& node) override {
                 if (node.HasResult()) {
-                    Owner.Write(node.GetResult().IsImmediate() ? 1 : 0);
+                    Owner_.Write(node.GetResult().IsImmediate() ? 1 : 0);
                 } else {
                     auto type = node.GetType();
                     Y_DEBUG_ABORT_UNLESS(node.GetInputsCount() == type->GetArgumentsCount());
@@ -869,17 +869,17 @@ namespace {
                         }
                     }
 
-                    Owner.WriteMany(immediateFlags.data(), immediateFlags.size());
+                    Owner_.WriteMany(immediateFlags.data(), immediateFlags.size());
                 }
 
                 if (node.GetUniqueId() != 0)
-                    Owner.WriteVar32(node.GetUniqueId());
+                    Owner_.WriteVar32(node.GetUniqueId());
 
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TAny& node) override {
-                Owner.RegisterReference(node);
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TTupleLiteral& node) override {
@@ -893,48 +893,48 @@ namespace {
                     }
                 }
 
-                Owner.WriteMany(immediateFlags.data(), immediateFlags.size());
-                Owner.RegisterReference(node);
+                Owner_.WriteMany(immediateFlags.data(), immediateFlags.size());
+                Owner_.RegisterReference(node);
             }
 
             void Visit(TVariantLiteral& node) override {
-                Owner.WriteVar32(node.GetIndex());
-                Owner.RegisterReference(node);
+                Owner_.WriteVar32(node.GetIndex());
+                Owner_.RegisterReference(node);
             }
 
         private:
-            TWriter& Owner;
+            TWriter& Owner_;
         };
 
         TWriter(THashMap<TInternName, ui32>& names, TVector<TInternName>& nameOrder)
         {
-            Names.swap(names);
-            NameOrder.swap(nameOrder);
+            Names_.swap(names);
+            NameOrder_.swap(nameOrder);
         }
 
         void Write(TRuntimeNode node) {
             Begin(node.IsImmediate());
             TPreVisitor preVisitor(*this);
             TPostVisitor postVisitor(*this);
-            Stack.push_back(std::make_pair(node.GetNode(), false));
-            while (!Stack.empty()) {
-                auto& nodeAndFlag = Stack.back();
+            Stack_.push_back(std::make_pair(node.GetNode(), false));
+            while (!Stack_.empty()) {
+                auto& nodeAndFlag = Stack_.back();
                 if (!nodeAndFlag.second) {
                     nodeAndFlag.second = true;
-                    auto prevSize = Stack.size();
+                    auto prevSize = Stack_.size();
                     nodeAndFlag.first->Accept(preVisitor);
                     if (preVisitor.IsProcessed()) { // ref or small node, some nodes have been added
-                        Y_DEBUG_ABORT_UNLESS(prevSize == Stack.size());
-                        Stack.pop_back();
+                        Y_DEBUG_ABORT_UNLESS(prevSize == Stack_.size());
+                        Stack_.pop_back();
                         continue;
                     }
 
-                    Y_DEBUG_ABORT_UNLESS(prevSize <= Stack.size());
+                    Y_DEBUG_ABORT_UNLESS(prevSize <= Stack_.size());
                 } else {
-                    auto prevSize = Stack.size();
+                    auto prevSize = Stack_.size();
                     nodeAndFlag.first->Accept(postVisitor);
-                    Y_DEBUG_ABORT_UNLESS(prevSize == Stack.size());
-                    Stack.pop_back();
+                    Y_DEBUG_ABORT_UNLESS(prevSize == Stack_.size());
+                    Stack_.pop_back();
                 }
             }
 
@@ -942,25 +942,25 @@ namespace {
         }
 
         TString GetOutput() const {
-            return Out;
+            return Out_;
         }
 
     private:
         void Begin(bool isImmediate) {
             Write(SystemMask | (isImmediate ? (char)ESystemCommand::Begin : (char)ESystemCommand::BeginNotImmediate));
-            for (auto it = Names.begin(); it != Names.end();) {
+            for (auto it = Names_.begin(); it != Names_.end();) {
                 if (it->second <= 1) {
-                    Names.erase(it++);
+                    Names_.erase(it++);
                 } else {
                     ++it;
                 }
             }
 
-            WriteVar32(Names.size());
+            WriteVar32(Names_.size());
             ui32 nameIndex = 0;
-            for (const auto& orderedName: NameOrder) {
-                auto it = Names.find(orderedName);
-                if (it == Names.end()) {
+            for (const auto& orderedName: NameOrder_) {
+                auto it = Names_.find(orderedName);
+                if (it == Names_.end()) {
                     continue;
                 }
                 const auto& name = it->first;
@@ -969,7 +969,7 @@ namespace {
                 it->second = nameIndex++;
             }
 
-            Y_DEBUG_ABORT_UNLESS(nameIndex == Names.size());
+            Y_DEBUG_ABORT_UNLESS(nameIndex == Names_.size());
         }
 
         void End() {
@@ -977,24 +977,24 @@ namespace {
         }
 
         void AddChildNode(TNode& node) {
-            Stack.push_back(std::make_pair(&node, false));
+            Stack_.push_back(std::make_pair(&node, false));
         }
 
         void RegisterReference(TNode& node) {
             Y_DEBUG_ABORT_UNLESS(node.GetCookie() == 0);
-            node.SetCookie(++ReferenceCount);
+            node.SetCookie(++ReferenceCount_);
         }
 
         void WriteReference(TNode& node) {
             Write(SystemMask | (char)ESystemCommand::Ref);
             Y_DEBUG_ABORT_UNLESS(node.GetCookie() != 0);
-            Y_DEBUG_ABORT_UNLESS(node.GetCookie() <= ReferenceCount);
+            Y_DEBUG_ABORT_UNLESS(node.GetCookie() <= ReferenceCount_);
             WriteVar32(node.GetCookie() - 1);
         }
 
         void WriteName(TInternName name) {
-            auto it = Names.find(name);
-            if (it == Names.end()) {
+            auto it = Names_.find(name);
+            if (it == Names_.end()) {
                 WriteVar32(name.Str().size() << 1);
                 WriteMany(name.Str().data(), name.Str().size());
             } else {
@@ -1003,37 +1003,37 @@ namespace {
         }
 
         Y_FORCE_INLINE void Write(char c) {
-            Out.append(c);
+            Out_.append(c);
         }
 
         Y_FORCE_INLINE void WriteMany(const void* buf, size_t len) {
-            Out.AppendNoAlias((const char*)buf, len);
+            Out_.AppendNoAlias((const char*)buf, len);
         }
 
         Y_FORCE_INLINE void WriteVar32(ui32 value) {
             char buf[MAX_PACKED32_SIZE];
-            Out.AppendNoAlias(buf, Pack32(value, buf));
+            Out_.AppendNoAlias(buf, Pack32(value, buf));
         }
 
         Y_FORCE_INLINE void WriteVar64(ui64 value) {
             char buf[MAX_PACKED64_SIZE];
-            Out.AppendNoAlias(buf, Pack64(value, buf));
+            Out_.AppendNoAlias(buf, Pack64(value, buf));
         }
 
     private:
-        TString Out;
-        ui32 ReferenceCount = 0;
-        THashMap<TInternName, ui32> Names;
-        TVector<TInternName> NameOrder;
-        TVector<std::pair<TNode*, bool>> Stack;
+        TString Out_;
+        ui32 ReferenceCount_ = 0;
+        THashMap<TInternName, ui32> Names_;
+        TVector<TInternName> NameOrder_;
+        TVector<std::pair<TNode*, bool>> Stack_;
     };
 
     class TReader {
     public:
         TReader(const TStringBuf& buffer, const TTypeEnvironment& env)
-            : Current(buffer.data())
-            , End(buffer.data() + buffer.size())
-            , Env(env)
+            : Current_(buffer.data())
+            , End_(buffer.data() + buffer.size())
+            , Env_(env)
         {
         }
 
@@ -1052,26 +1052,26 @@ namespace {
                 LoadName();
             }
 
-            const char* lastPos = Current;
-            CtxStack.push_back(TNodeContext());
-            while (!CtxStack.empty()) {
-                auto& last = CtxStack.back();
+            const char* lastPos = Current_;
+            CtxStack_.push_back(TNodeContext());
+            while (!CtxStack_.empty()) {
+                auto& last = CtxStack_.back();
                 if (!last.Start) {
-                    last.Start = Current;
+                    last.Start = Current_;
                 } else {
-                    Current = last.Start;
+                    Current_ = last.Start;
                 }
 
                 if (last.NextPass == AllPassesDone) {
-                    Y_DEBUG_ABORT_UNLESS(last.ChildCount <= NodeStack.size());
-                    Reverse(NodeStack.end() - last.ChildCount, NodeStack.end());
+                    Y_DEBUG_ABORT_UNLESS(last.ChildCount <= NodeStack_.size());
+                    Reverse(NodeStack_.end() - last.ChildCount, NodeStack_.end());
                     auto newNode = ReadNode();
-                    if (Current > lastPos) {
-                        lastPos = Current;
+                    if (Current_ > lastPos) {
+                        lastPos = Current_;
                     }
 
-                    NodeStack.push_back(std::make_pair(newNode, Current));
-                    CtxStack.pop_back();
+                    NodeStack_.push_back(std::make_pair(newNode, Current_));
+                    CtxStack_.pop_back();
                     continue;
                 }
 
@@ -1085,14 +1085,14 @@ namespace {
                 const ui32 childCount = res & ~RequiresNextPass;
                 last.ChildCount += childCount;
                 if (childCount != 0) {
-                    CtxStack.insert(CtxStack.end(), childCount, TNodeContext());
+                    CtxStack_.insert(CtxStack_.end(), childCount, TNodeContext());
                 } else {
                     Y_DEBUG_ABORT_UNLESS(res == 0);
                 }
             }
 
-            Current = lastPos;
-            if (NodeStack.size() != 1)
+            Current_ = lastPos;
+            if (NodeStack_.size() != 1)
                 ThrowCorrupted();
 
             TNode* node = PopNode();
@@ -1101,7 +1101,7 @@ namespace {
             if (footer != (SystemMask | (char)ESystemCommand::End))
                 ThrowCorrupted();
 
-            if (Current != End)
+            if (Current_ != End_)
                 ThrowCorrupted();
 
             return TRuntimeNode(node, !notImmediate);
@@ -1117,38 +1117,38 @@ namespace {
         }
 
         Y_FORCE_INLINE char Read() {
-            if (Current == End)
+            if (Current_ == End_)
                 ThrowNoData();
 
-            return *Current++;
+            return *Current_++;
         }
 
         Y_FORCE_INLINE const char* ReadMany(ui32 count) {
-            if (Current + count > End)
+            if (Current_ + count > End_)
                 ThrowNoData();
 
-            const char* result = Current;
-            Current += count;
+            const char* result = Current_;
+            Current_ += count;
             return result;
         }
 
         Y_FORCE_INLINE ui32 ReadVar32() {
             ui32 result = 0;
-            size_t count = Unpack32(Current, End - Current, result);
+            size_t count = Unpack32(Current_, End_ - Current_, result);
             if (!count) {
                 ThrowCorrupted();
             }
-            Current += count;
+            Current_ += count;
             return result;
         }
 
         Y_FORCE_INLINE ui64 ReadVar64() {
             ui64 result = 0;
-            size_t count = Unpack64(Current, End - Current, result);
+            size_t count = Unpack64(Current_, End_ - Current_, result);
             if (!count) {
                 ThrowCorrupted();
             }
-            Current += count;
+            Current_ += count;
             return result;
         }
 
@@ -1165,21 +1165,21 @@ namespace {
         }
 
         TNode* PopNode() {
-            if (NodeStack.empty())
+            if (NodeStack_.empty())
                 ThrowCorrupted();
 
-            auto nodeAndFinish = NodeStack.back();
-            NodeStack.pop_back();
-            Current = nodeAndFinish.second;
+            auto nodeAndFinish = NodeStack_.back();
+            NodeStack_.pop_back();
+            Current_ = nodeAndFinish.second;
             return nodeAndFinish.first;
         }
 
         TNode* PeekNode(ui32 index) {
-            if (index >= NodeStack.size())
+            if (index >= NodeStack_.size())
                 ThrowCorrupted();
 
-            auto nodeAndFinish = NodeStack[NodeStack.size() - 1 - index];
-            Current = nodeAndFinish.second;
+            auto nodeAndFinish = NodeStack_[NodeStack_.size() - 1 - index];
+            Current_ = nodeAndFinish.second;
             return nodeAndFinish.first;
         }
 
@@ -1269,22 +1269,22 @@ namespace {
         }
 
         TNode* ReadTypeType() {
-            auto node = Env.GetTypeOfTypeLazy();
+            auto node = Env_.GetTypeOfTypeLazy();
             return node;
         }
 
         TNode* ReadVoidOrEmptyListOrEmptyDictType(char code) {
             switch ((TType::EKind)(code & TypeMask)) {
-            case TType::EKind::Void: return Env.GetTypeOfVoidLazy();
-            case TType::EKind::EmptyList: return Env.GetTypeOfEmptyListLazy();
-            case TType::EKind::EmptyDict: return Env.GetTypeOfEmptyDictLazy();
+            case TType::EKind::Void: return Env_.GetTypeOfVoidLazy();
+            case TType::EKind::EmptyList: return Env_.GetTypeOfEmptyListLazy();
+            case TType::EKind::EmptyDict: return Env_.GetTypeOfEmptyDictLazy();
             default:
                 ThrowCorrupted();
             }
         }
 
         TNode* ReadNullType() {
-            auto node = Env.GetTypeOfNullLazy();
+            auto node = Env_.GetTypeOfNullLazy();
             return node;
         }
 
@@ -1293,17 +1293,17 @@ namespace {
             if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
                 const ui8 precision = Read();
                 const ui8 scale = Read();
-                Nodes.emplace_back(TDataDecimalType::Create(precision, scale, Env));
+                Nodes_.emplace_back(TDataDecimalType::Create(precision, scale, Env_));
             } else {
-                Nodes.emplace_back(TDataType::Create(static_cast<NUdf::TDataTypeId>(schemeType), Env));
+                Nodes_.emplace_back(TDataType::Create(static_cast<NUdf::TDataTypeId>(schemeType), Env_));
             }
-            return Nodes.back();
+            return Nodes_.back();
         }
 
         TNode* ReadPgType() {
             const auto typeId = ReadVar32();
-            Nodes.emplace_back(TPgType::Create(typeId, Env));
-            return Nodes.back();
+            Nodes_.emplace_back(TPgType::Create(typeId, Env_));
+            return Nodes_.back();
         }
 
         ui32 TryReadKeyType(char code) {
@@ -1340,8 +1340,8 @@ namespace {
                 members[i].Name = ReadName();
             }
 
-            auto node = TStructType::Create(membersCount, members.data(), Env);
-            Nodes.push_back(node);
+            auto node = TStructType::Create(membersCount, members.data(), Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1359,16 +1359,16 @@ namespace {
             TNode* node = nullptr;
             switch ((TType::EKind)(code & TypeMask)) {
                 case TType::EKind::Tuple:
-                    node = TTupleType::Create(elementsCount, elements.data(), Env);
+                    node = TTupleType::Create(elementsCount, elements.data(), Env_);
                     break;
                 case TType::EKind::Multi:
-                    node = TMultiType::Create(elementsCount, elements.data(), Env);
+                    node = TMultiType::Create(elementsCount, elements.data(), Env_);
                     break;
                 default:
                     ThrowCorrupted();
             }
 
-            Nodes.push_back(node);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1378,8 +1378,8 @@ namespace {
                 ThrowCorrupted();
 
             auto itemType = static_cast<TType*>(itemTypeNode);
-            auto node = TListType::Create(itemType, Env);
-            Nodes.push_back(node);
+            auto node = TListType::Create(itemType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1389,8 +1389,8 @@ namespace {
                 ThrowCorrupted();
 
             auto itemType = static_cast<TType*>(itemTypeNode);
-            auto node = TStreamType::Create(itemType, Env);
-            Nodes.push_back(node);
+            auto node = TStreamType::Create(itemType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1409,8 +1409,8 @@ namespace {
                 ThrowCorrupted();
 
             auto itemType = static_cast<TType*>(itemTypeNode);
-            auto node = TFlowType::Create(itemType, Env);
-            Nodes.push_back(node);
+            auto node = TFlowType::Create(itemType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1429,8 +1429,8 @@ namespace {
             const auto shape = static_cast<TBlockType::EShape>(shapeChar);
 
             auto itemType = static_cast<TType*>(itemTypeNode);
-            auto node = TBlockType::Create(itemType, shape, Env);
-            Nodes.push_back(node);
+            auto node = TBlockType::Create(itemType, shape, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1441,8 +1441,8 @@ namespace {
 
             auto tag = ReadName();
             auto baseType = static_cast<TType*>(baseTypeNode);
-            auto node = TTaggedType::Create(baseType, tag, Env);
-            Nodes.push_back(node);
+            auto node = TTaggedType::Create(baseType, tag, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1452,8 +1452,8 @@ namespace {
                 ThrowCorrupted();
 
             auto itemType = static_cast<TType*>(itemTypeNode);
-            auto node = TOptionalType::Create(itemType, Env);
-            Nodes.push_back(node);
+            auto node = TOptionalType::Create(itemType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1486,8 +1486,8 @@ namespace {
                 ThrowCorrupted();
 
             auto payloadType = static_cast<TType*>(payloadTypeNode);
-            auto node = TDictType::Create(keyType, payloadType, Env);
-            Nodes.push_back(node);
+            auto node = TDictType::Create(keyType, payloadType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1524,24 +1524,24 @@ namespace {
 
             auto name = ReadName();
             const ui32 optArgsCount = ReadVar32();
-            auto node = TCallableType::Create(returnType, name, argumentsCount, arguments.data(), payload, Env);
+            auto node = TCallableType::Create(returnType, name, argumentsCount, arguments.data(), payload, Env_);
             if (isMergeDisabled)
                 node->DisableMerge();
             node->SetOptionalArgumentsCount(optArgsCount);
 
-            Nodes.push_back(node);
+            Nodes_.push_back(node);
             return node;
         }
 
         TNode* ReadAnyType() {
-            auto node = Env.GetAnyTypeLazy();
+            auto node = Env_.GetAnyTypeLazy();
             return node;
         }
 
         TNode* ReadResourceType() {
             auto tag = ReadName();
-            auto node = TResourceType::Create(tag, Env);
-            Nodes.push_back(node);
+            auto node = TResourceType::Create(tag, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1551,8 +1551,8 @@ namespace {
                 ThrowCorrupted();
 
             auto underlyingType = static_cast<TType*>(underlyingTypeNode);
-            auto node = TVariantType::Create(underlyingType, Env);
-            Nodes.push_back(node);
+            auto node = TVariantType::Create(underlyingType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1622,16 +1622,16 @@ namespace {
 
         TNode* ReadVoid(char code) {
             switch ((TType::EKind)(code & TypeMask)) {
-            case TType::EKind::Void: return Env.GetVoidLazy();
-            case TType::EKind::EmptyList: return Env.GetEmptyListLazy();
-            case TType::EKind::EmptyDict: return Env.GetEmptyDictLazy();
+            case TType::EKind::Void: return Env_.GetVoidLazy();
+            case TType::EKind::EmptyList: return Env_.GetEmptyListLazy();
+            case TType::EKind::EmptyDict: return Env_.GetEmptyDictLazy();
             default:
                 ThrowCorrupted();
             }
         }
 
         TNode* ReadNull() {
-            auto node = Env.GetNullLazy();
+            auto node = Env_.GetNullLazy();
             return node;
         }
 
@@ -1792,7 +1792,7 @@ namespace {
             case NUdf::TDataType<NUdf::TUuid>::Id:
             {
                 const char* buffer = ReadMany(16);
-                value = Env.NewStringValue(NUdf::TStringRef(buffer, 16));
+                value = Env_.NewStringValue(NUdf::TStringRef(buffer, 16));
                 break;
             }
             case NUdf::TDataType<NUdf::TDecimal>::Id:
@@ -1805,12 +1805,12 @@ namespace {
             default:
                 const ui32 size = ReadVar32();
                 const char* buffer = ReadMany(size);
-                value = Env.NewStringValue(NUdf::TStringRef(buffer, size));
+                value = Env_.NewStringValue(NUdf::TStringRef(buffer, size));
                 break;
             }
 
-            const auto node = TDataLiteral::Create(value, dataType, Env);
-            Nodes.emplace_back(node);
+            const auto node = TDataLiteral::Create(value, dataType, Env_);
+            Nodes_.emplace_back(node);
             return node;
         }
 
@@ -1863,8 +1863,8 @@ namespace {
                 values[i] = TRuntimeNode(values[i].GetNode(), GetBitmapBit(immediateFlags, i));
             }
 
-            auto node = TStructLiteral::Create(valuesCount, values.data(), structType, Env);
-            Nodes.push_back(node);
+            auto node = TStructLiteral::Create(valuesCount, values.data(), structType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1906,8 +1906,8 @@ namespace {
                 values[i] = TRuntimeNode(values[i].GetNode(), GetBitmapBit(immediateFlags, i));
             }
 
-            auto node = TTupleLiteral::Create(valuesCount, values.data(), tupleType, Env);
-            Nodes.push_back(node);
+            auto node = TTupleLiteral::Create(valuesCount, values.data(), tupleType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1939,8 +1939,8 @@ namespace {
                 x = TRuntimeNode(x.GetNode(), GetBitmapBit(immediateFlags, i));
             }
 
-            auto node = TListLiteral::Create(items.data(), items.size(), listType, Env);
-            Nodes.push_back(node);
+            auto node = TListLiteral::Create(items.data(), items.size(), listType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -1963,12 +1963,12 @@ namespace {
             TNode* node;
             if (hasItem) {
                 auto item = PopNode();
-                node = TOptionalLiteral::Create(TRuntimeNode(item, isItemImmediate), optionalType, Env);
+                node = TOptionalLiteral::Create(TRuntimeNode(item, isItemImmediate), optionalType, Env_);
             } else {
-                node = TOptionalLiteral::Create(optionalType, Env);
+                node = TOptionalLiteral::Create(optionalType, Env_);
             }
 
-            Nodes.push_back(node);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -2001,8 +2001,8 @@ namespace {
                 items[i].second = TRuntimeNode(items[i].second.GetNode(), GetBitmapBit(immediateFlags, 2 * i + 1));
             }
 
-            auto node = TDictLiteral::Create(itemsCount, items.data(), dictType, Env);
-            Nodes.push_back(node);
+            auto node = TDictLiteral::Create(itemsCount, items.data(), dictType, Env_);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -2044,7 +2044,7 @@ namespace {
                 auto resultNode = PopNode();
 
                 const bool isResultImmediate = (Read() != 0);
-                node = TCallable::Create(TRuntimeNode(resultNode, isResultImmediate), callableType, Env);
+                node = TCallable::Create(TRuntimeNode(resultNode, isResultImmediate), callableType, Env_);
             } else {
                 const ui32 inputsCount = callableType->GetArgumentsCount();
                 TStackVec<TRuntimeNode> inputs(inputsCount);
@@ -2058,14 +2058,14 @@ namespace {
                     inputs[i] = TRuntimeNode(inputs[i].GetNode(), GetBitmapBit(immediateFlags, i));
                 }
 
-                node = TCallable::Create(inputsCount, inputs.data(), callableType, Env);
+                node = TCallable::Create(inputsCount, inputs.data(), callableType, Env_);
             }
 
             if (hasUniqueId) {
                 node->SetUniqueId(ReadVar32());
             }
 
-            Nodes.push_back(node);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -2077,13 +2077,13 @@ namespace {
         TNode* ReadAny(char code) {
             const bool hasItem = (code & UserMarker1) != 0;
             const bool isItemImmediate = (code & UserMarker2) != 0;
-            TAny* node = TAny::Create(Env);
+            TAny* node = TAny::Create(Env_);
             if (hasItem) {
                 auto item = PopNode();
                 node->SetItem(TRuntimeNode(item, isItemImmediate));
             }
 
-            Nodes.push_back(node);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -2099,9 +2099,9 @@ namespace {
             auto variantType = static_cast<TVariantType*>(type);
             auto item = PopNode();
             ui32 index = ReadVar32();
-            TNode* node = TVariantLiteral::Create(TRuntimeNode(item, isItemImmediate), index, variantType, Env);
+            TNode* node = TVariantLiteral::Create(TRuntimeNode(item, isItemImmediate), index, variantType, Env_);
 
-            Nodes.push_back(node);
+            Nodes_.push_back(node);
             return node;
         }
 
@@ -2125,26 +2125,26 @@ namespace {
 
         TNode* ReadReference() {
             const ui32 index = ReadVar32();
-            if (index >= Nodes.size())
+            if (index >= Nodes_.size())
                 ThrowCorrupted();
 
-            return Nodes[index];
+            return Nodes_[index];
         }
 
         void LoadName() {
             const ui32 length = ReadVar32();
             const char* buffer = ReadMany(length);
             TStringBuf name(buffer, buffer + length);
-            Names.push_back(name);
+            Names_.push_back(name);
         }
 
         TStringBuf ReadName() {
             const ui32 nameDescriptor = ReadVar32();
             if (nameDescriptor & NameRefMark) {
                 const ui32 nameIndex = nameDescriptor >> 1;
-                if (nameIndex >= Names.size())
+                if (nameIndex >= Names_.size())
                     ThrowCorrupted();
-                return Names[nameIndex];
+                return Names_[nameIndex];
             } else {
                 const ui32 length = nameDescriptor >> 1;
                 const char* buffer = ReadMany(length);
@@ -2166,13 +2166,13 @@ namespace {
             }
         };
 
-        const char* Current;
-        const char* const End;
-        const TTypeEnvironment& Env;
-        TVector<TNode*> Nodes;
-        TVector<TStringBuf> Names;
-        TVector<TNodeContext> CtxStack;
-        TVector<std::pair<TNode*, const char*>> NodeStack;
+        const char* Current_;
+        const char* const End_;
+        const TTypeEnvironment& Env_;
+        TVector<TNode*> Nodes_;
+        TVector<TStringBuf> Names_;
+        TVector<TNodeContext> CtxStack_;
+        TVector<std::pair<TNode*, const char*>> NodeStack_;
     };
 }
 

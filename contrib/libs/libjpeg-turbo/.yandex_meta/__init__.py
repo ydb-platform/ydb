@@ -56,9 +56,8 @@ def post_install(self):
 
         amd64 = {s for s in m.SRCS if s.startswith("simd/")}
         i386 = list_simd_sources("i386")
-        arm32 = list_simd_sources("arm/aarch32")
-        arm32_neon = list_simd_sources("arm")
-        arm64 = list_simd_sources("arm/aarch64")
+        arm32 = list_simd_sources("arm/aarch32") + list_simd_sources("arm")
+        arm64 = list_simd_sources("arm/aarch64") + list_simd_sources("arm")
 
         # This file contains the older GNU Assembler implementation of the Neon SIMD
         # extensions for certain algorithms.
@@ -73,23 +72,16 @@ def post_install(self):
                     ("ARCH_I386 AND NOT OS_ANDROID", Linkable(SRCS=i386)),
                     ("ARCH_X86_64", Linkable(SRCS=amd64)),
                     (
-                        "ARCH_ARM7_NEON AND NOT MSVC",
+                        "ARCH_ARM7",
                         Linkable(
-                            SRCS=arm32 + arm32_neon,
+                            SRCS=arm32,
                             ADDINCL=[f"{self.arcdir}/simd/arm"],
                         ),
                     ),
                     (
-                        "ARCH_ARM7 AND NOT MSVC",
+                        "ARCH_ARM64",
                         Linkable(
-                            SRCS=arm32 + arm32_neon,
-                            ADDINCL=[f"{self.arcdir}/simd/arm"],
-                        ),
-                    ),
-                    (
-                        "ARCH_ARM64 AND NOT MSVC",
-                        Linkable(
-                            SRCS=arm32_neon + arm64,
+                            SRCS=arm64,
                             ADDINCL=[f"{self.arcdir}/simd/arm"],
                         ),
                     ),

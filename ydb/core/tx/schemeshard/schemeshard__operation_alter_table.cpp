@@ -1,13 +1,11 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
-#include <ydb/core/base/auth.h>
-
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/subdomain.h>
 
 namespace {
 

@@ -15,9 +15,7 @@ class TCsvToYdbConverter {
 public:
     explicit TCsvToYdbConverter(TTypeParser& parser, const std::optional<TString>& nullValue)
         : Parser(parser)
-        , NullValue(nullValue)
-    {
-    }
+        , NullValue(nullValue) {}
 
     template <class T, std::enable_if_t<std::is_integral_v<T> && std::is_signed_v<T>, std::nullptr_t> = nullptr>
     static i64 StringToArithmetic(const TString& token, size_t& cnt) {
@@ -165,7 +163,7 @@ public:
         }
         case EPrimitiveType::Interval64:
             Builder.Interval64(GetArithmetic<i64>(token));
-            break;            
+            break;
         case EPrimitiveType::TzDate:
             Builder.TzDate(token);
             break;
@@ -441,7 +439,7 @@ TStringBuf Consume(NCsvFormat::CsvSplitter& splitter,
 
 TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const std::optional<TString>& nullValue,
                        const std::map<std::string, TType>* destinationTypes,
-                       const std::map<TString, TString>* paramSources) 
+                       const std::map<TString, TString>* paramSources)
     : HeaderRow(std::move(headerRow))
     , Delimeter(delimeter)
     , NullValue(nullValue)
@@ -454,7 +452,7 @@ TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const std::opt
 
 TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const std::optional<TString>& nullValue,
                        const std::map<std::string, TType>* destinationTypes,
-                       const std::map<TString, TString>* paramSources) 
+                       const std::map<TString, TString>* paramSources)
     : Header(std::move(header))
     , Delimeter(delimeter)
     , NullValue(nullValue)
@@ -529,41 +527,91 @@ void TCsvParser::BuildValue(TString& data, TValueBuilder& builder, const TType& 
     builder.EndStruct();
 }
 
-TValue TCsvParser::BuildList(std::vector<TString>& lines, const TString& filename, std::optional<ui64> row) const {
+TValue TCsvParser::BuildList(const std::vector<TString>& lines, const TString& filename, std::optional<ui64> row) const {
     std::vector<std::unique_ptr<TTypeParser>> columnTypeParsers;
     columnTypeParsers.reserve(ResultColumnCount);
     for (const TType* type : ResultLineTypesSorted) {
         columnTypeParsers.push_back(std::make_unique<TTypeParser>(*type));
     }
-    
-    Ydb::Value listValue;
-    auto* listItems = listValue.mutable_items();
+
+    // Original path with local value object
+    Ydb::Value listProtoValue;
+    auto* listItems = listProtoValue.mutable_items();
     listItems->Reserve(lines.size());
-    for (auto& line : lines) {
-        NCsvFormat::CsvSplitter splitter(line, Delimeter);
-        TParseMetadata meta {row, filename};
-        auto* structItems = listItems->Add()->mutable_items();
-        structItems->Reserve(ResultColumnCount);
-        auto headerIt = Header.cbegin();
-        auto skipIt = SkipBitMap.begin();
-        auto typeParserIt = columnTypeParsers.begin();
-        do {
-            if (headerIt == Header.cend()) { // SkipBitMap has same size as Header
-                throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << line << "\"", meta);
-            }
-            TStringBuf nextField = Consume(splitter, meta, *headerIt);
-            if (!*skipIt) {
-                *structItems->Add() = FieldToValue(*typeParserIt->get(), nextField, NullValue, meta, *headerIt).GetProto();
-                ++typeParserIt;
-            }
-            ++headerIt;
-            ++skipIt;
-        } while (splitter.Step());
+
+    for (const auto& line : lines) {
+        ProcessCsvLine(line, listItems, columnTypeParsers, row, filename);
         if (row.has_value()) {
             ++row.value();
         }
     }
-    return TValue(ResultListType.value(), std::move(listValue));
+
+    // Return a TValue that takes ownership via move
+    return TValue(ResultListType.value(), std::move(listProtoValue));
+}
+
+TValue TCsvParser::BuildListOnArena(
+    const std::vector<TString>& lines,
+    const TString& filename,
+    google::protobuf::Arena* arena,
+    std::optional<ui64> row
+) const {
+    Y_ASSERT(arena != nullptr);
+
+    std::vector<std::unique_ptr<TTypeParser>> columnTypeParsers;
+    columnTypeParsers.reserve(ResultColumnCount);
+    for (const TType* type : ResultLineTypesSorted) {
+        columnTypeParsers.push_back(std::make_unique<TTypeParser>(*type));
+    }
+
+    // allocate Ydb::Value on arena
+    Ydb::Value* listProtoValue = google::protobuf::Arena::CreateMessage<Ydb::Value>(arena);
+    auto* listItems = listProtoValue->mutable_items();
+    listItems->Reserve(lines.size());
+
+    for (const auto& line : lines) {
+        ProcessCsvLine(line, listItems, columnTypeParsers, row, filename);
+        if (row.has_value()) {
+            ++row.value();
+        }
+    }
+
+    // Return a TValue that references the arena-allocated message
+    return TValue(ResultListType.value(), listProtoValue);
+}
+
+// Helper method to process a single CSV line
+void TCsvParser::ProcessCsvLine(
+    const TString& line,
+    google::protobuf::RepeatedPtrField<Ydb::Value>* listItems,
+    const std::vector<std::unique_ptr<TTypeParser>>& columnTypeParsers,
+    std::optional<ui64> currentRow,
+    const TString& filename
+) const {
+    NCsvFormat::CsvSplitter splitter(line, Delimeter);
+    auto* structItems = listItems->Add()->mutable_items();
+    structItems->Reserve(ResultColumnCount);
+
+    const TParseMetadata meta {currentRow, filename};
+
+    auto headerIt = Header.cbegin();
+    auto skipIt = SkipBitMap.begin();
+    auto typeParserIt = columnTypeParsers.begin();
+
+    do {
+        if (headerIt == Header.cend()) { // SkipBitMap has same size as Header
+            throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << line << "\"", meta);
+        }
+        TStringBuf nextField = Consume(splitter, meta, *headerIt);
+        if (!*skipIt) {
+            TValue builtValue = FieldToValue(*typeParserIt->get(), nextField, NullValue, meta, *headerIt);
+            *structItems->Add() = std::move(builtValue.GetProto());
+
+            ++typeParserIt;
+        }
+        ++headerIt;
+        ++skipIt;
+    } while (splitter.Step());
 }
 
 void TCsvParser::BuildLineType() {
@@ -607,5 +655,20 @@ const TVector<TString>& TCsvParser::GetHeader() {
     return Header;
 }
 
+const TString& TCsvParser::GetHeaderRow() const {
+    return HeaderRow;
+}
+
+bool IsConvertibleToYdbValue(const TString& value, const Ydb::Type& type) {
+    try {
+        TTypeParser parser(type);
+        FieldToValue(parser, value, std::nullopt, {}, "columnName");
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 }
 }
+

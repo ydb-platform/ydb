@@ -160,7 +160,7 @@ public:
 
     template <typename T, typename = std::enable_if_t<NUdf::TKnownDataType<T>::Result>>
     TRuntimeNode NewDataLiteral(T data) const {
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env), true);
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env_), true);
     }
 
 
@@ -168,7 +168,7 @@ public:
     TRuntimeNode NewTzDataLiteral(typename NUdf::TDataType<T>::TLayout value, ui16 tzId) const {
         auto data = NUdf::TUnboxedValuePod(value);
         data.SetTimezoneId(tzId);
-        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env), true);
+        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env_), true);
     }
 
     template <NUdf::EDataSlot Type>
@@ -868,10 +868,10 @@ private:
 
     bool IsNull(TRuntimeNode arg);
 protected:
-    const IFunctionRegistry& FunctionRegistry;
-    const bool VoidWithEffects;
-    const NYql::TLangVersion LangVer;
-    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
+    const IFunctionRegistry& FunctionRegistry_;
+    const bool VoidWithEffects_;
+    const NYql::TLangVersion LangVer_;
+    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
 };
 
 bool CanExportType(TType* type, const TTypeEnvironment& env);

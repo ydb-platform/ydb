@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST(CreateAndWait) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
         AsyncMkDir(runtime, ++txId, "MyRoot", "dir");
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot/dir",
@@ -121,7 +121,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(CreateAndAlterWithoutEnablingTx, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "dir");
@@ -607,30 +611,40 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         env.TestWaitNotification(runtime, firstAlterTxId);
     }
 
-    Y_UNIT_TEST(CreateWithOnlyDotsNotAllowed) {
+    Y_UNIT_TEST_FLAG(CreateWithOnlyDotsNotAllowed, SystemNamesProtection) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(SystemNamesProtection));
         ui64 txId = 100;
 
-        TestMkDir(runtime, ++txId, "/MyRoot", ".", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "..", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "...", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "................", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA");
-        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirB.");
-        TestMkDir(runtime, ++txId, "/MyRoot", "a.............");
-        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......");
-        TestMkDir(runtime, ++txId, "/MyRoot", ".............a");
+        TVector<TExpectedResult> expectedSuccess = {{NKikimrScheme::StatusAccepted}};
+        TVector<TExpectedResult> expectedDotPrefixError = {{NKikimrScheme::StatusSchemeError, "prefix is reserved by the system: '.'"}};
+        TVector<TExpectedResult> expectedAllDotsError = {{NKikimrScheme::StatusSchemeError, "is not allowed path part contains only dots"}};
+        auto expectedA = (SystemNamesProtection ? expectedDotPrefixError : expectedAllDotsError);
+        auto expectedB = (SystemNamesProtection ? expectedDotPrefixError : expectedSuccess);
 
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: ".")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "..")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "...")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "................")", {NKikimrScheme::StatusSchemeError});
+        TestMkDir(runtime, ++txId, "/MyRoot", ".", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "..", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "...", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "................", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA", expectedB);
+        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirB.", expectedSuccess);
+        TestMkDir(runtime, ++txId, "/MyRoot", "a.............", expectedSuccess);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......", expectedB);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".............a", expectedB);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: ".")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "..")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "...")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "................")", expectedA);
     }
 
     Y_UNIT_TEST_FLAG(CreateWithExtraPathSymbolsAllowed, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -1369,7 +1383,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(Drop, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
 
@@ -1462,7 +1480,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAG(CreateThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -1502,7 +1524,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(CreateAndAlterThenDropChangesParent, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",

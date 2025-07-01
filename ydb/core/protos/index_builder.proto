@@ -28,6 +28,14 @@ message TIndexBuildScanSettings {
     optional uint32 MaxBatchRetries = 3 [ default = 50 ];
 }
 
+message TMeteringStats {
+    optional uint64 UploadRows = 1;
+    optional uint64 UploadBytes = 2;
+    optional uint64 ReadRows = 3;
+    optional uint64 ReadBytes = 4;
+    optional uint64 CpuTimeUs = 5;
+}
+
 message TIndexBuildSettings {
     optional string source_path = 1;
     optional Ydb.Table.TableIndex index = 2;
@@ -140,6 +148,6 @@ message TEvUploadSampleKResponse {
     optional Ydb.StatusIds.StatusCode UploadStatus = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
 
-    optional uint64 UploadRows = 4;
-    optional uint64 UploadBytes = 5;
+    reserved 4 to 5;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 6;
 }

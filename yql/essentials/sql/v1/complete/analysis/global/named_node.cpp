@@ -84,6 +84,10 @@ namespace NSQLComplete {
             }
 
             std::any visitBind_parameter(SQLv1::Bind_parameterContext* ctx) override {
+                if (IsEnclosing(ctx)) {
+                    return {};
+                }
+
                 TMaybe<std::string> id = GetId(ctx);
                 if (id.Empty() || id == "_") {
                     return {};

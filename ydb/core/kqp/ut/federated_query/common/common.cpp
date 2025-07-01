@@ -63,7 +63,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         if (!appConfig) {
             appConfig.emplace();
-            appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
         appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");

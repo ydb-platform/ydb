@@ -16,6 +16,7 @@ ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_V
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/blobstorage/pdisk/ut TPDiskTest.FailedToFormatDiskInfoUpdate
 ydb/core/blobstorage/pdisk/ut TPDiskTest.PDiskSlotSizeInUnits
+ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration [*/*] chunk chunk
@@ -62,12 +63,9 @@ ydb/core/tx/conveyor_composite/ut CompositeConveyorTests.TestUniformDistribution
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.E2EBackupCollection
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.MultiRestore
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.SimpleBackupBackupCollection+WithIncremental
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.SimpleRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.test_scheme_directory
 ydb/core/viewer/tests test.py.test_topic_data
@@ -99,6 +97,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut [*/*] chunk chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
+ydb/public/sdk/cpp/tests/integration/topic TxUsageQuery.WriteToTopic_Demo_26
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read DirectReadWithClient.ManyMessages
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read TxUsageQuery.WriteToTopic_Demo_26
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read [*/*] chunk chunk
@@ -109,6 +108,7 @@ ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/backup_ut CommonEncryptionRequirementsTest.CommonEncryptionRequirements
 ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
 ydb/services/ydb/table_split_ut [*/*] chunk chunk
+ydb/services/ydb/ut TGRpcAuthentication.NoDescribeRights
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility [test_compatibility.py */*] chunk chunk
 ydb/tests/compatibility [test_example.py */*] chunk chunk
@@ -222,10 +222,14 @@ ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStor
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageToTheSameConfig.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig2Nodes.test
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig3Nodes.test
+ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig6Nodes.test
+ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig8Nodes.test
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig9Nodes.test
+ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorage.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageBadCases.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageMultipleRingGroup.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageNoChanges.test_cluster_change_state_storage
+ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageToTheSameConfig.test_cluster_change_state_storage
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
 ydb/tests/functional/serializable sole chunk chunk

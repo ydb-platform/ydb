@@ -1894,7 +1894,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetNodeCount(2);
+            .SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
 
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
@@ -1979,8 +1979,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetNodeCount(2);
+            .SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
@@ -2046,8 +2045,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetNodeCount(2);
+            .SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName(
+                "SIMPLE");
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
@@ -2108,8 +2107,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetNodeCount(2);
+            .SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName(
+                "SIMPLE");
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

@@ -6,9 +6,18 @@ docs-viewer:
   project-name: ydb
   # no-index: true # Remove this after the public release
   langs: ['en','ru']
+<<<<<<< HEAD
   themes: ['light']
   metrika: 88962303
   favicon-src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/favicon/favicon.ico
+=======
+  themes: ['light', 'dark']
+  favicon-src: https://storage.yandexcloud.net/ydb-site-assets/favicon-202305/favicon.ico
+  github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
+  unrestrict-revision-access: true
+  need_pdf: true
+  pdf: true
+>>>>>>> e9dbbe4294a ([docs] disable GTM (#20409))
 
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   

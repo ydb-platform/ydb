@@ -60,7 +60,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& e
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev) {
     auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    int index = 0;
+    ui64 index = 0;
     if (it == ProcessMapping.end()) {
         index = LoadQueue.Top();
         LoadQueue.ChangeLoad(index, +1);

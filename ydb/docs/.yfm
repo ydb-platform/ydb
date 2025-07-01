@@ -2,9 +2,6 @@ allowHTML: true
 langs: ['en','ru']
 apply-presets: true
 allowCustomResources: true
-resources:
-  script:
-    - _assets/gtm.js
 
 docs-viewer:
   project-name: ydb
@@ -14,8 +11,6 @@ docs-viewer:
   favicon-src: https://storage.yandexcloud.net/ydb-site-assets/favicon-202305/favicon.ico
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   unrestrict-revision-access: true
-  need_pdf: true
-  pdf: true
   metrika: 94806704
 
   logo-options:

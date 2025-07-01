@@ -358,6 +358,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
         Message->Groups.push_back(group);
     }
+
     bool groupsWithEmptyTopics = false;
     for (size_t i = 0; i < Message->Groups.size(); i++) {
         const auto& group = Message->Groups[i];
@@ -373,6 +374,8 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
     }
     if (groupsWithEmptyTopics) {
+        // if no topics were specified for a particular group,
+        // these topics are retrieved from the table
         Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
         Kqp->SendCreateSessionRequest(ctx);
         KAFKA_LOG_D("Creating KQP Session");

@@ -5,7 +5,7 @@ You can use the `{{ ydb-cli }} tools infer csv` command to generate a `CREATE TA
 Command syntax:
 
 ```bash
-{{ ydb-cli }} [global options...] tools infer csv [options...]
+{{ ydb-cli }} [global options...] tools infer csv [options...] <input files...>
 ```
 
 - `global options` – [global options](commands/global-options.md).

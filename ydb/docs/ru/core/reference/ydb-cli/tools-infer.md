@@ -5,7 +5,7 @@
 Общий вид команды:
 
 ```bash
-{{ ydb-cli }} [global options...] tools infer csv [options...]
+{{ ydb-cli }} [global options...] tools infer csv [options...] <input files...>
 ```
 
 * `global options` — [глобальные параметры](commands/global-options.md).

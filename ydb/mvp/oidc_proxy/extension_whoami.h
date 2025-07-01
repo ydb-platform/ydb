@@ -6,7 +6,7 @@
 
 namespace NMVP::NOIDC {
 
-class TExtensionWhoami : public TExtension {
+class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoamiWorker>, public TExtensionWorker {
 private:
     using TBase = TExtension;
     using TProfileService = nebius::iam::v1::ProfileService;
@@ -19,12 +19,12 @@ protected:
     std::optional<TEvPrivate::TEvErrorResponse::TPtr> IamError;
 
 public:
-    TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader)
-        : TBase(settings)
+    TExtensionWhoamiWorker(const TOpenIdConnectSettings& settings, const TString& authHeader)
+        : TExtensionWorker(settings)
         , AuthHeader(authHeader)
     {}
-    void Bootstrap() override;
-    void Handle(TEvPrivate::TEvExtensionRequest::TPtr event) override;
+    void Bootstrap();
+    void Handle(TEvPrivate::TEvExtensionRequest::TPtr event);
     void Handle(TEvPrivate::TEvGetProfileResponse::TPtr event);
     void Handle(TEvPrivate::TEvErrorResponse::TPtr event);
 
@@ -32,9 +32,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvGetProfileResponse, Handle);
             hFunc(TEvPrivate::TEvErrorResponse, Handle);
-            default:
-                TBase::StateWork(ev);
-                break;
+            hFunc(TEvPrivate::TEvExtensionRequest, Handle);
         }
     }
 
@@ -43,6 +41,16 @@ private:
     void ApplyIfReady();
     void ApplyExtension();
     void SetExtendedError(NJson::TJsonValue& root, const TStringBuf section, const TStringBuf key, const TStringBuf value);
+    void ContinueAndPassAway();
+};
+
+class TExtensionWhoami : public TExtension {
+private:
+    TActorId WhoamiHandlerId;
+
+public:
+    TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader);
+    void Execute(TIntrusivePtr<TExtensionContext> ctx) override;
 };
 
 } // NMVP::NOIDC

@@ -5,7 +5,7 @@
 
 namespace NMVP::NOIDC {
 
-void TExtensionWhoami::Bootstrap() {
+void TExtensionWhoamiWorker::Bootstrap() {
     auto connection = CreateGRpcServiceConnection<TProfileService>(Settings.WhoamiExtendedInfoEndpoint);
 
     nebius::iam::v1::GetProfileRequest request;
@@ -25,22 +25,22 @@ void TExtensionWhoami::Bootstrap() {
     meta.Timeout = TDuration::MilliSeconds(Settings.EnrichmentProcessTimeoutMs);
 
     connection->DoRequest(request, std::move(responseCb), &nebius::iam::v1::ProfileService::Stub::AsyncGet, meta);
-    Become(&TExtensionWhoami::StateWork);
+    Become(&TExtensionWhoamiWorker::StateWork);
 }
 
-void TExtensionWhoami::Handle(TEvPrivate::TEvGetProfileResponse::TPtr event) {
+void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvGetProfileResponse::TPtr event) {
     BLOG_D("Whoami Extention Info: OK");
     IamResponse = std::move(event);
     ApplyIfReady();
 }
 
-void TExtensionWhoami::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
+void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
     BLOG_D("Whoami Extention Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
     IamError = std::move(event);
     ApplyIfReady();
 }
 
-void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue& errorJson) {
+void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue& errorJson) {
     TString statusOverride;
     TString messageOverride;
     NJson::TJsonValue* outJson = nullptr;
@@ -76,7 +76,7 @@ void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue&
     params->BodyOverride = content.Str();
 }
 
-void TExtensionWhoami::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
+void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
     Context = std::move(ev->Get()->Context);
     if (Context->Params->StatusOverride.StartsWith("3") || Context->Params->StatusOverride == "404") {
         ContinueAndPassAway();
@@ -84,13 +84,13 @@ void TExtensionWhoami::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
     ApplyIfReady();
 }
 
-void TExtensionWhoami::SetExtendedError(NJson::TJsonValue& root, const TStringBuf section, const TStringBuf key, const TStringBuf value) {
+void TExtensionWhoamiWorker::SetExtendedError(NJson::TJsonValue& root, const TStringBuf section, const TStringBuf key, const TStringBuf value) {
     if (!value.empty()) {
         root[EXTENDED_ERRORS][section][key] = value;
     }
 }
 
-void TExtensionWhoami::ApplyIfReady() {
+void TExtensionWhoamiWorker::ApplyIfReady() {
     if (!Context) {
         return;
     }
@@ -99,7 +99,7 @@ void TExtensionWhoami::ApplyIfReady() {
     }
 }
 
-void TExtensionWhoami::ApplyExtension() {
+void TExtensionWhoamiWorker::ApplyExtension() {
     NJson::TJsonValue json;
     NJson::TJsonValue errorJson;
     NHttp::THttpIncomingResponsePtr response;
@@ -153,6 +153,20 @@ void TExtensionWhoami::ApplyExtension() {
 
     PatchResponse(json, errorJson);
     ContinueAndPassAway();
+}
+
+void TExtensionWhoamiWorker::ContinueAndPassAway() {
+    Continue();
+    PassAway();
+}
+
+TExtensionWhoami::TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader)
+{
+    WhoamiHandlerId = NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoamiWorker(settings, authHeader));
+}
+
+void TExtensionWhoami::Execute(TIntrusivePtr<TExtensionContext> ctx) {
+    NActors::TActivationContext::ActorSystem()->Send(WhoamiHandlerId, new TEvPrivate::TEvExtensionRequest(std::move(ctx)));
 }
 
 } // NMVP::NOIDC

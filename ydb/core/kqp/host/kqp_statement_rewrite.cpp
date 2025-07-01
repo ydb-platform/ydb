@@ -20,21 +20,6 @@ namespace {
         NYql::TExprNode::TPtr MoveTable = nullptr;
     };
 
-    bool IsOlap(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
-        if (!tableSettings) {
-            return false;
-        }
-        for (const auto& field : tableSettings.Cast()) {
-            if (field.Name().Value() == "storeType") {
-                YQL_ENSURE(field.Value().Maybe<NYql::NNodes::TCoAtom>());
-                if (field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue() == "COLUMN") {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     bool IsCreateTableAs(
             NYql::TExprNode::TPtr root,
             NYql::TExprContext& exprCtx) {
@@ -187,8 +172,6 @@ namespace {
         const auto& insertData = writeArgs.Get(3);
         YQL_ENSURE(insertData.Ptr()->Content() != "Void");
 
-        const bool isOlap = IsOlap(settings.TableSettings);
-
         const auto pos = insertData.Ref().Pos();
 
         auto type = insertDataPtr->GetTypeAnn();
@@ -256,16 +239,12 @@ namespace {
             return std::nullopt;
         }
 
-        const bool isAtomicOperation = !isOlap;
-
         const TString tmpTableName = TStringBuilder()
             << tableName
             << "_cas_"
             << TAppData::RandomProvider->GenRand();
 
-        const TString createTableName = !isAtomicOperation
-            ? tableName
-            : (TStringBuilder()
+        const TString createTableName = (TStringBuilder()
                 << CanonizePath(AppData()->TenantName)
                 << "/.tmp/sessions/"
                 << sessionCtx->GetSessionId()
@@ -273,16 +252,14 @@ namespace {
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
 
-        if (isAtomicOperation) {
-            std::vector<NYql::TExprNodePtr> settingsNodes;
-            for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
-                settingsNodes.push_back(create->Child(4)->ChildPtr(index));
-            }
-            settingsNodes.push_back(
-                exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
-            create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
-            create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
+        std::vector<NYql::TExprNodePtr> settingsNodes;
+        for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
+            settingsNodes.push_back(create->Child(4)->ChildPtr(index));
         }
+        settingsNodes.push_back(
+            exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
+        create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
+        create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
 
         NYql::TNodeOnNodeOwnedMap deepClones;
         auto insertDataCopy = exprCtx.DeepCopy(insertData.Ref(), exprCtx, deepClones, false, false);
@@ -338,39 +315,37 @@ namespace {
             }),
         });
 
-        if (isAtomicOperation) {
-            result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
-                exprCtx.NewWorld(pos),
-                exprCtx.NewCallable(pos, "DataSink", {
-                    exprCtx.NewAtom(pos, "kikimr"),
-                    exprCtx.NewAtom(pos, "db"),
-                }),
-                exprCtx.NewCallable(pos, "Key", {
-                    exprCtx.NewList(pos, {
-                        exprCtx.NewAtom(pos, "tablescheme"),
-                        exprCtx.NewCallable(pos, "String", {
-                            exprCtx.NewAtom(pos, createTableName),
-                        }),
-                    }),
-                }),
-                exprCtx.NewCallable(pos, "Void", {}),
+        result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
+            exprCtx.NewWorld(pos),
+            exprCtx.NewCallable(pos, "DataSink", {
+                exprCtx.NewAtom(pos, "kikimr"),
+                exprCtx.NewAtom(pos, "db"),
+            }),
+            exprCtx.NewCallable(pos, "Key", {
                 exprCtx.NewList(pos, {
-                    exprCtx.NewList(pos, {
-                        exprCtx.NewAtom(pos, "mode"),
-                        exprCtx.NewAtom(pos, "alter"),
+                    exprCtx.NewAtom(pos, "tablescheme"),
+                    exprCtx.NewCallable(pos, "String", {
+                        exprCtx.NewAtom(pos, createTableName),
                     }),
+                }),
+            }),
+            exprCtx.NewCallable(pos, "Void", {}),
+            exprCtx.NewList(pos, {
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "mode"),
+                    exprCtx.NewAtom(pos, "alter"),
+                }),
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "actions"),
                     exprCtx.NewList(pos, {
-                        exprCtx.NewAtom(pos, "actions"),
                         exprCtx.NewList(pos, {
-                            exprCtx.NewList(pos, {
-                                exprCtx.NewAtom(pos, "renameTo"),
-                                exprCtx.NewAtom(pos, tableName),
-                            }),
+                            exprCtx.NewAtom(pos, "renameTo"),
+                            exprCtx.NewAtom(pos, tableName),
                         }),
                     }),
                 }),
-            });
-        }
+            }),
+        });
 
         return result;
     }

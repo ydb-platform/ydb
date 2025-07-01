@@ -18,6 +18,8 @@ CREATE_TABLE_GRANTS = ['ydb.granular.create_table']
 ALTER_TABLE_ADD_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_DROP_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ERASE_ROW_GRANTS = ['ydb.granular.describe_schema', 'ydb.granular.select_row', 'ydb.granular.erase_row']
+ALTER_TABLE_ALTER_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+ALTER_TABLE_DROP_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_ADD_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TOPIC_ADD_CONSUMER_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
@@ -30,6 +32,8 @@ ALL_USED_GRANS = set(
     + ALTER_TABLE_ADD_COLUMN_GRANTS
     + ALTER_TABLE_DROP_COLUMN_GRANTS
     + ERASE_ROW_GRANTS
+    + ALTER_TABLE_ALTER_INDEX_GRANTS
+    + ALTER_TABLE_DROP_INDEX_GRANTS
     + DROP_TABLE_GRANTS
     + ALTER_TABLE_ADD_CHANGEFEED_GRANTS
     + ALTER_TOPIC_ADD_CONSUMER_GRANTS
@@ -153,6 +157,44 @@ def test_granular_grants_for_tables(ydb_cluster):
         erase_row_query,
         TABLE_PATH,
         ERASE_ROW_GRANTS,
+        "you do not have access permissions",
+    )
+
+    # ALTER TABLE ... ADD INDEX
+    create_index_query = f"ALTER TABLE `{TABLE_PATH}` ADD INDEX `b_column_index` GLOBAL ON (`b`);"
+    _test_grants(
+        tenant_admin_config,
+        user1_config,
+        'user1',
+        create_index_query,
+        TABLE_PATH,
+        [],  # user1 is the owner of a table
+        "",
+    )
+
+    # ALTER TABLE ... ALTER INDEX
+    alter_index_query = (
+        f"ALTER TABLE `{TABLE_PATH}` ALTER INDEX `b_column_index` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED);"
+    )
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        alter_index_query,
+        TABLE_PATH,
+        ALTER_TABLE_ALTER_INDEX_GRANTS,
+        "you do not have access permissions",
+    )
+
+    # ALTER TABLE ... DROP INDEX
+    drop_index_query = f"ALTER TABLE `{TABLE_PATH}` DROP INDEX `b_column_index`;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_index_query,
+        TABLE_PATH,
+        ALTER_TABLE_DROP_INDEX_GRANTS,
         "you do not have access permissions",
     )
 

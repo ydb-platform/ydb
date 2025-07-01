@@ -6,6 +6,7 @@
 #include "partition.h"
 #include "read.h"
 #include "utils.h"
+#include "ydb/core/protos/config.pb.h"
 
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/feature_flags.h>
@@ -924,6 +925,13 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
 
         if (writeId.IsTopicApiTransaction()) {
             SubscribeWriteId(writeId, ctx);
+        }
+
+        // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause 
+        // sending transactional requests through Kafka API is restricted by feature flag here: ydb/core/kafka_proxy/kafka_connection.cpp
+        if (txWrite.GetKafkaTransaction() && txWrite.HasCreatedAt()) {
+            writeInfo.KafkaTransaction = true;
+            writeInfo.CreatedAt = TInstant::MilliSeconds(txWrite.GetCreatedAt());
         }
     }
 
@@ -2735,6 +2743,11 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             SubscribeWriteId(writeId, ctx);
         }
 
+        if (writeId.KafkaApiTransaction) {
+            writeInfo.KafkaTransaction = true;
+            writeInfo.CreatedAt = TAppData::TimeProvider->Now();
+        }
+
         TryWriteTxs(ctx);
     }
 }
@@ -3151,6 +3164,8 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
 
 void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
 {
+    ScheduleDeleteExpiredKafkaTransactions();
+
     if (!MediatorTimeCastEntry) {
         return;
     }
@@ -3164,6 +3179,21 @@ void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
     }
 
     TryWriteTxs(ctx);
+}
+
+void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
+    TDuration kafkaTxnTimeout = TDuration::MilliSeconds(
+        AppData()->KafkaProxyConfig.GetTransactionTimeoutMs() + KAFKA_TRANSACTION_DELETE_DELAY_MS);
+    
+    auto txnExpired = [kafkaTxnTimeout](const TTxWriteInfo& txWriteInfo) {
+        return txWriteInfo.KafkaTransaction && txWriteInfo.CreatedAt + kafkaTxnTimeout < TAppData::TimeProvider->Now();
+    };
+
+    for (auto& pair : TxWrites) {
+        if (txnExpired(pair.second)) {
+            BeginDeletePartitions(pair.second);
+        }
+    }
 }
 
 void TPersQueue::SetTxCounters()
@@ -3918,14 +3948,23 @@ void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 
 void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 {
+    auto setKafkaTxnTimeout = [](const TTxWriteInfo& txWriteInfo, NKikimrPQ::TTabletTxInfo::TTxWriteInfo& infoToPersist) {
+        if (txWriteInfo.KafkaTransaction) {
+            infoToPersist.SetKafkaTransaction(true);
+            infoToPersist.SetCreatedAt(txWriteInfo.CreatedAt.MilliSeconds());
+        }
+    };
+
     for (auto& [writeId, write] : TxWrites) {
         if (write.Partitions.empty()) {
             auto* txWrite = info.MutableTxWrites()->Add();
             SetWriteId(*txWrite, writeId);
+            setKafkaTxnTimeout(write, *txWrite);
         } else {
             for (auto [partitionId, shadowPartitionId] : write.Partitions) {
                 auto* txWrite = info.MutableTxWrites()->Add();
                 SetWriteId(*txWrite, writeId);
+                setKafkaTxnTimeout(write, *txWrite);
                 txWrite->SetOriginalPartitionId(partitionId);
                 txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
             }
@@ -5173,13 +5212,17 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
 
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
     if (writeInfo.Partitions.empty()) {
-        UnsubscribeWriteId(writeId, ctx);
+        if (!writeInfo.KafkaTransaction) {
+            UnsubscribeWriteId(writeId, ctx);
+        }
         if (writeInfo.TxId.Defined()) {
             if (auto tx = GetTransaction(ctx, *writeInfo.TxId); tx) {
                 if (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS) {
                     TryExecuteTxs(ctx, *tx);
                 }
             }
+        } else if (writeInfo.KafkaTransaction) {
+            DeleteWriteId(writeId);
         }
     }
     TxWritesChanged = true;

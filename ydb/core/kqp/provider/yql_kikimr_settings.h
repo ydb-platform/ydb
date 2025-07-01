@@ -198,12 +198,14 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapScalarApply = false;
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
+    bool EnableOlapPushdownProjections = false;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
+    bool GetEnableOlapPushdownProjections() const;
 };
 
 }

@@ -1,71 +1,68 @@
 #pragma once
 
 #include "dedicated_pipe_pool.h"
+#include "olap/manager/manager.h"
 #include "operation_queue_timer.h"
 #include "schemeshard.h"
-#include "schemeshard_export.h"
-#include "schemeshard_import.h"
-#include "schemeshard_backup.h"
-#include "schemeshard_build_index.h"
-#include "schemeshard_private.h"
-#include "schemeshard_types.h"
-#include "schemeshard_path_element.h"
-#include "schemeshard_path.h"
-#include "schemeshard_domain_links.h"
-#include "schemeshard_info_types.h"
-#include "schemeshard_tx_infly.h"
-#include "schemeshard_self_pinger.h"
-#include "schemeshard_shard_deleter.h"
-#include "schemeshard_schema.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
+#include "schemeshard_backup.h"
+#include "schemeshard_build_index.h"
+#include "schemeshard_domain_links.h"
+#include "schemeshard_export.h"
+#include "schemeshard_import.h"
+#include "schemeshard_info_types.h"
+#include "schemeshard_login_helper.h"
+#include "schemeshard_path.h"
+#include "schemeshard_path_element.h"
+#include "schemeshard_private.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_self_pinger.h"
+#include "schemeshard_shard_deleter.h"
+#include "schemeshard_tx_infly.h"
+#include "schemeshard_types.h"
 
-#include "olap/manager/manager.h"
-
+#include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/statistics/events.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/message_seqno.h>
-#include <ydb/core/tx/scheme_board/events_schemeshard.h>
-#include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
-#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
+#include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/core/util/token_bucket.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
-
-#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
-
-#include <ydb/core/blockstore/core/blockstore.h>
-#include <ydb/core/filestore/core/filestore.h>
-
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/blob_depot/events.h>
 
 #include <ydb/library/login/login.h>
 
@@ -380,6 +377,8 @@ public:
     bool TopicStatsBatchScheduled = false;
     bool TopicPersistStatsPending = false;
     TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
+
+    bool SysViewsRosterUpdateStarted = false;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
@@ -925,6 +924,8 @@ public:
 
     void SubscribeToTempTableOwners();
 
+    void CollectSysViewUpdates(const TActorContext& ctx);
+
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 
     struct TTxInitPopulator;
@@ -1056,6 +1057,8 @@ public:
 
     struct TTxLogin;
     NTabletFlatExecutor::ITransaction* CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev);
+    struct TTxLoginFinalize;
+    NTabletFlatExecutor::ITransaction* CreateTxLoginFinalize(TEvPrivate::TEvLoginFinalize::TPtr &ev);
     struct TTxListUsers;
     NTabletFlatExecutor::ITransaction* CreateTxListUsers(TEvSchemeShard::TEvListUsers::TPtr &ev);
 
@@ -1248,6 +1251,7 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvLoginFinalize::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvListUsers::TPtr& ev, const TActorContext& ctx);
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
@@ -1438,6 +1442,10 @@ public:
     void PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     struct TIndexBuilder {
@@ -1461,6 +1469,7 @@ public:
         struct TTxReplyRetry;
         struct TTxReplySampleK;
         struct TTxReplyReshuffleKMeans;
+        struct TTxReplyRecomputeKMeans;
         struct TTxReplyLocalKMeans;
         struct TTxReplyPrefixKMeans;
         struct TTxReplyUploadSample;
@@ -1481,6 +1490,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& recompute);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
@@ -1496,6 +1506,7 @@ public:
     void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
@@ -1520,6 +1531,10 @@ public:
 
     void Handle(TEvPrivate::TEvRunCdcStreamScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev, const TActorContext& ctx);
+
+    // Incremental Restore Scan
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev);
+    void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
 
     void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);
 
@@ -1568,6 +1583,8 @@ public:
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;
+    TActorId LoginHelper;
+
     THolder<TDataErasureManager> DataErasureManager = nullptr;
 
 private:

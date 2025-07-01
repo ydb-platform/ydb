@@ -19,6 +19,7 @@ DEPENDS(
 PEERDIR(
     ydb/tests/library
     ydb/tests/stress/common
+    ydb/tests/library/stress
     ydb/tests/stress/s3_backups/workload
 )
 

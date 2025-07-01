@@ -146,7 +146,6 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/data_accessor/shared_metadata_accessor_cache_actor.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/replication/service/service.h>
@@ -193,6 +192,8 @@
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/priorities/usage/config.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 
@@ -1146,18 +1147,6 @@ void TSharedCacheInitializer::InitializeServices(
         TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId));
 }
 
-TSharedMetadataAccessorCacheInitializer::TSharedMetadataAccessorCacheInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{}
-
-void TSharedMetadataAccessorCacheInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const TAppData *appData) {
-    if (appData->FeatureFlags.GetEnableSharedMetadataAccessorCache()) {
-        auto* actor = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor();
-        setup->LocalServices.emplace_back(NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(NodeId),
-            TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
-    }
-}
-
 // TBlobCacheInitializer
 
 TBlobCacheInitializer::TBlobCacheInitializer(const TKikimrRunConfig& runConfig)
@@ -1656,11 +1645,10 @@ TGRpcServicesInitializer::TGRpcServicesInitializer(
 void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData)
 {
-    auto& systemConfig = Config.GetActorSystemConfig();
     bool hasASCfg = Config.HasActorSystemConfig();
+    bool useAutoConfig = !hasASCfg || NeedToUseAutoConfig(Config.GetActorSystemConfig());
 
-    if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
-
+    if (useAutoConfig) {
         NAutoConfigInitializer::ApplyAutoConfig(Config.MutableGRpcConfig(), Config.GetActorSystemConfig());
     }
 
@@ -2278,6 +2266,29 @@ void TCompPrioritiesInitializer::InitializeServices(NActors::TActorSystemSetup* 
             NPrioritiesQueue::TCompServiceOperator::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
+}
+
+TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetPortionsMetadataCache());
+    if (serviceConfig.IsFail()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse portions metadata cache config")("action", "default_usage")(
+            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
+    }
+    AFL_VERIFY(!serviceConfig.IsFail());
+
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
+
+    auto service = NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::CreateService(*serviceConfig, conveyorGroup);
+
+    setup->LocalServices.push_back(
+        std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
 TCompositeConveyorInitializer::TCompositeConveyorInitializer(const TKikimrRunConfig& runConfig)

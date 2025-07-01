@@ -548,7 +548,7 @@ TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
     if (BlobEncoder.DataKeysBody.empty()) {
         return ctx.Now();
     }
-    if (BlobEncoder.DataKeysBody.size() < GetBodyKeysCountLimit()) {
+    if (BlobEncoder.DataKeysBody.size() <= GetBodyKeysCountLimit()) {
         return BlobEncoder.DataKeysBody.front().Timestamp;
     }
 

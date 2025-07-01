@@ -75,6 +75,10 @@ class ClusterDetails(ClusterDetailsProvider):
     def hosts_names(self):
         return sorted(list(set(node.hostname for node in self.hosts)))
 
+    @property
+    def hosts_datacenters(self):
+        return {host.get('host'): host.get('location', {}).get('data_center') for host in self.hosts}
+
     @staticmethod
     def __is_oneof_in(oneof, container):
         facts = [x in container for x in oneof]
@@ -163,6 +167,28 @@ class Configurator(object):
     @property
     def hosts_names(self):
         return self.detail.hosts_names
+
+    @property
+    def group_hosts_by_datacenter(self):
+        """
+        Groups hosts by datacenter.
+        Stub implementation - returns empty dict.
+
+        Returns:
+            dict: Empty dictionary (stub)
+        """
+        return {}
+
+    @property
+    def group_hosts_by_bridge_pile(self):
+        """
+        Groups hosts by bridge pile name.
+        Stub implementation - returns empty dict.
+
+        Returns:
+            dict: Empty dictionary (stub)
+        """
+        return {}
 
     @staticmethod
     def _generate_fake_keys():

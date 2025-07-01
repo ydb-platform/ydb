@@ -142,8 +142,9 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) final
     {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
         Uploader.Finish(record, status);
 
@@ -462,7 +463,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
         if (!clusters) {
             badRequest(error);
         } else if (request.ClustersSize() < 1) {

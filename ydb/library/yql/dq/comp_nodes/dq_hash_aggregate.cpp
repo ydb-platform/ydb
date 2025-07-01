@@ -81,10 +81,14 @@ IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNod
     const auto inputType = AS_TYPE(TFlowType, callable.GetInput(NDqHashOperatorParams::Flow).GetStaticType());
     const auto inputItemTypes = GetWideComponents(inputType);
 
+    std::vector<TType*> keyAndStateTypes;
+    keyAndStateTypes.insert(keyAndStateTypes.end(), params.KeyItemTypes.begin(), params.KeyItemTypes.end());
+    keyAndStateTypes.insert(keyAndStateTypes.end(), params.StateItemTypes.begin(), params.StateItemTypes.end());
+
     return new TDqHashAggregate(ctx.Mutables, wideFlow, std::move(params.Nodes),
         TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.Env),
         std::move(params.KeyTypes),
-        TMultiType::Create(params.KeyAndStateItemTypes.size(),params.KeyAndStateItemTypes.data(), ctx.Env),
+        TMultiType::Create(keyAndStateTypes.size(),keyAndStateTypes.data(), ctx.Env),
         allowSpilling
     );
 }

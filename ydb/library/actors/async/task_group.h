@@ -2,6 +2,7 @@
 #include "async.h"
 #include "decorator.h"
 #include "symmetric_proxy.h"
+#include <tuple>
 
 namespace NActors {
 
@@ -51,9 +52,11 @@ namespace NActors {
          *
          * The returned task index may be used to match results of the added task
          */
-        template<IsSpecificAsyncCoroutineCallable<T> TCallback>
-        size_t Add(TCallback&& callback) {
-            return Sink.Add(std::forward<TCallback>(callback));
+        template<class TCallback, class... TArgs>
+        size_t Add(TCallback&& callback, TArgs&&... args)
+            requires IsSpecificAsyncCoroutineCallable<TCallback, T, TArgs...>
+        {
+            return Sink.Add(std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
         }
 
         bool Ready() const {
@@ -96,7 +99,7 @@ namespace NActors {
             virtual void Cancel() noexcept = 0;
         };
 
-        template<class T, class TCallback>
+        template<class T, class TCallback, class... TArgs>
         class TTaskGroupTaskImpl
             : public TTaskGroupTask<T>
             , private TAwaitCancelSource
@@ -107,10 +110,11 @@ namespace NActors {
             friend TSymmetricTransferCallback<TTaskGroupTaskImpl<T, TCallback>>;
 
         public:
-            TTaskGroupTaskImpl(TTaskGroupSink<T>& sink, size_t index, TCallback&& callback)
+            TTaskGroupTaskImpl(TTaskGroupSink<T>& sink, size_t index, TCallback&& callback, TArgs&&... args)
                 : Sink(sink)
                 , Index(index)
                 , Callback(std::forward<TCallback>(callback))
+                , CallbackArgs(std::forward<TArgs>(args)...)
             {}
 
             virtual T ExtractValue() override {
@@ -189,7 +193,7 @@ namespace NActors {
                 // Callback might throw an exception and we need to handle it
                 try {
                     // Callback outlives the resulting coroutine
-                    Coroutine.UnsafeMoveFrom(Callback());
+                    Coroutine.UnsafeMoveFrom(std::apply(std::move(Callback), std::move(CallbackArgs)));
                 } catch (...) {
                     // Capture the callback exception
                     CallbackException = std::current_exception();
@@ -251,6 +255,7 @@ namespace NActors {
             TTaskGroupSink<T>& Sink;
             const size_t Index;
             [[no_unique_address]] std::decay_t<TCallback> Callback;
+            [[no_unique_address]] std::tuple<std::decay_t<TArgs>...> CallbackArgs;
             std::exception_ptr CallbackException;
             async<T> Coroutine = async<T>::UnsafeEmpty();
             std::coroutine_handle<> Pending;
@@ -288,12 +293,14 @@ namespace NActors {
                 Actor = &actor;
             }
 
-            template<IsSpecificAsyncCoroutineCallable<T> TCallback>
-            size_t Add(TCallback&& callback) {
+            template<class TCallback, class... TArgs>
+            size_t Add(TCallback&& callback, TArgs&&... args)
+                requires IsSpecificAsyncCoroutineCallable<TCallback, T, TArgs...>
+            {
                 size_t index = NextIndex++;
                 Y_ABORT_UNLESS(!Cancellation, "Cannot add more tasks after task group coroutine returns");
-                TTaskGroupTask<T>* task = new TTaskGroupTaskImpl<T, TCallback>(
-                    *this, index, std::forward<TCallback>(callback));
+                TTaskGroupTask<T>* task = new TTaskGroupTaskImpl<T, TCallback, TArgs...>(
+                    *this, index, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
                 Running.PushBack(task);
                 ++RunningCount;
                 task->Start();

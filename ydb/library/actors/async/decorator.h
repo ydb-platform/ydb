@@ -13,7 +13,7 @@ namespace NActors::NDetail {
 
         template<class TCallback, class... TArgs>
         TAsyncDecoratorAwaiter(TCallback&& callback, TArgs&&... args)
-            : Coroutine(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...))
+            : Coroutine(std::invoke(std::forward<TCallback>(callback), std::forward<TArgs>(args)...))
         {}
 
     private:

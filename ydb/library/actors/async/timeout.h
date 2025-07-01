@@ -166,9 +166,9 @@ namespace NActors {
 
     template<class TCallback, class... TArgs>
     inline auto WithTimeout(TDuration duration, TCallback&& callback, TArgs&&... args)
-        requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
+        requires (IsAsyncCoroutineCallable<TCallback, TArgs...>)
     {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
+        using TCallbackResult = std::invoke_result_t<TCallback, TArgs...>;
         using R = typename TCallbackResult::result_type;
         return NDetail::TWithTimeoutAwaiter<TDuration, R>(duration, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
@@ -180,9 +180,9 @@ namespace NActors {
 
     template<class TCallback, class... TArgs>
     inline auto WithDeadline(TMonotonic deadline, TCallback&& callback, TArgs&&... args)
-        requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
+        requires (IsAsyncCoroutineCallable<TCallback, TArgs...>)
     {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
+        using TCallbackResult = std::invoke_result_t<TCallback, TArgs...>;
         using R = typename TCallbackResult::result_type;
         return NDetail::TWithTimeoutAwaiter<TMonotonic, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
@@ -194,9 +194,9 @@ namespace NActors {
 
     template<class TCallback, class... TArgs>
     inline auto WithDeadline(TInstant deadline, TCallback&& callback, TArgs&&... args)
-        requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
+        requires (IsAsyncCoroutineCallable<TCallback, TArgs...>)
     {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
+        using TCallbackResult = std::invoke_result_t<TCallback, TArgs...>;
         using R = typename TCallbackResult::result_type;
         return NDetail::TWithTimeoutAwaiter<TInstant, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }

@@ -4,6 +4,7 @@
 #include "callback_coroutine.h"
 #include <ydb/library/actors/core/actor.h>
 #include <coroutine>
+#include <functional>
 #include <utility>
 
 namespace NActors {
@@ -128,16 +129,16 @@ namespace NActors {
      * Concept matches all callables returning any async<T>
      */
     template<class TCallback, class... TArgs>
-    concept IsAsyncCoroutineCallable = requires (TCallback&& callback) {
-        { std::forward<TCallback>(callback)(std::declval<TArgs>()...) } -> IsAsyncCoroutine;
+    concept IsAsyncCoroutineCallable = requires (TCallback&& callback, TArgs&&... args) {
+        { std::invoke(std::forward<TCallback>(callback), std::forward<TArgs>(args)...) } -> IsAsyncCoroutine;
     };
 
     /**
      * Concept matches all callables returning a specific async<R>
      */
     template<class TCallback, class R, class... TArgs>
-    concept IsSpecificAsyncCoroutineCallable = requires (TCallback&& callback) {
-        { std::forward<TCallback>(callback)(std::declval<TArgs>()...) } -> std::same_as<async<R>>;
+    concept IsSpecificAsyncCoroutineCallable = requires (TCallback&& callback, TArgs&&... args) {
+        { std::invoke(std::forward<TCallback>(callback), std::forward<TArgs>(args)...) } -> std::same_as<async<R>>;
     };
 
     /**
@@ -235,8 +236,9 @@ namespace NActors {
          *
          * Defined in cancellation.h
          */
-        template<IsAsyncCoroutineCallable TCallback>
-        auto WithCancellation(TCallback&& callback);
+        template<class TCallback, class... TArgs>
+        auto WithCancellation(TCallback&& callback, TArgs&&... args)
+            requires IsAsyncCoroutineCallable<TCallback, TArgs...>;
 
     private:
         void CancelSinks() noexcept {

@@ -26,9 +26,9 @@ namespace NActors {
             using TBase = TAsyncDecoratorAwaiter<T, TWithCancellationSourceAwaiter<T>>;
 
         public:
-            template<class TCallback>
-            TWithCancellationSourceAwaiter(TAsyncCancellationSource& source, TCallback&& callback)
-                : TBase(std::forward<TCallback>(callback))
+            template<class TCallback, class... TArgs>
+            TWithCancellationSourceAwaiter(TAsyncCancellationSource& source, TCallback&& callback, TArgs&&... args)
+                : TBase(std::forward<TCallback>(callback), std::forward<TArgs>(args)...)
             {
                 Cancelled = source.IsCancelled();
                 if (!Cancelled) {
@@ -157,11 +157,13 @@ namespace NActors {
      * awaited. This allows cancelling this coroutine independently from
      * caller cancellation.
      */
-    template<IsAsyncCoroutineCallable TCallback>
-    inline auto TAsyncCancellationSource::WithCancellation(TCallback&& callback) {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+    template<class TCallback, class... TArgs>
+    inline auto TAsyncCancellationSource::WithCancellation(TCallback&& callback, TArgs&&... args)
+        requires IsAsyncCoroutineCallable<TCallback, TArgs...>
+    {
+        using TCallbackResult = std::invoke_result_t<TCallback, TArgs...>;
         using T = typename TCallbackResult::result_type;
-        return NDetail::TWithCancellationSourceAwaiter<T>(*this, std::forward<TCallback>(callback));
+        return NDetail::TWithCancellationSourceAwaiter<T>(*this, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
     namespace NDetail {
@@ -171,9 +173,9 @@ namespace NActors {
         public:
             static constexpr bool IsActorAwareAwaiter = true;
 
-            template<class TCallback>
-            TWithoutCancellationAwaiter(TCallback&& callback)
-                : Coroutine(std::forward<TCallback>(callback)())
+            template<class TCallback, class... TArgs>
+            TWithoutCancellationAwaiter(TCallback&& callback, TArgs&&... args)
+                : Coroutine(std::invoke(std::forward<TCallback>(callback), std::forward<TArgs>(args)...))
             {}
 
             TWithoutCancellationAwaiter& CoAwaitByValue() && noexcept {
@@ -214,11 +216,13 @@ namespace NActors {
     /**
      * Runs the wrapped coroutine when awaited, ignoring caller cancellation attempts.
      */
-    template<IsAsyncCoroutineCallable TCallback>
-    inline auto WithoutCancellation(TCallback&& callback) {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+    template<class TCallback, class... TArgs>
+    inline auto WithoutCancellation(TCallback&& callback, TArgs&&... args)
+        requires IsAsyncCoroutineCallable<TCallback, TArgs...>
+    {
+        using TCallbackResult = std::invoke_result_t<TCallback, TArgs...>;
         using T = typename TCallbackResult::result_type;
-        return NDetail::TWithoutCancellationAwaiter<T>(std::forward<TCallback>(callback));
+        return NDetail::TWithoutCancellationAwaiter<T>(std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
     namespace NDetail {
@@ -519,7 +523,7 @@ namespace NActors {
      */
     template<IsAsyncCoroutineCallable TCallback, NDetail::IsOnCancelCallback TOnCancelCallback>
     inline auto InterceptCancellation(TCallback&& callback, TOnCancelCallback&& onCancelCallback) {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+        using TCallbackResult = std::invoke_result_t<TCallback>;
         using T = typename TCallbackResult::result_type;
         return NDetail::TInterceptCancellationAwaiter<T, TOnCancelCallback>(
             std::forward<TCallback>(callback),

@@ -57,6 +57,10 @@ protected:
     THashMap<ui32, ui32> LockedNodesCount; // {key: PileId; value: LockedNodesCount}
     THashMap<ui32, ui32> DownNodesCount; // {key: PileId; value: DownNodesCount}
 
+    ui32 GetPileId(ui32 nodeId) const;
+    ui32 GetLockedNodesCount(ui32 pileId) const;
+    ui32 GetDownNodesCount(ui32 pileId) const;
+
 public:
     TNodesCounterBase() {}
 

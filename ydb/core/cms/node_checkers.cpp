@@ -30,7 +30,7 @@ void TNodesCounterBase::AddNode(ui32 nodeId) {
 }
 
 void TNodesCounterBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
-    const ui32 pileId = (*NodeIdToPileId)[nodeId];
+    const ui32 pileId = GetPileId(nodeId);
     if (!NodeToState.contains(nodeId)) {
         AddNode(nodeId);
     }
@@ -62,7 +62,7 @@ bool TNodesCounterBase::IsNodeLocked(ui32 nodeId) const {
 
 void TNodesCounterBase::LockNode(ui32 nodeId) {
     Y_ABORT_UNLESS(!IsNodeLocked(nodeId));
-    const ui32 pileId = (*NodeIdToPileId)[nodeId];
+    const ui32 pileId = GetPileId(nodeId);
     ENodeState& state = NodeToState[nodeId];
 
     ++LockedNodesCount[pileId];
@@ -76,7 +76,7 @@ void TNodesCounterBase::LockNode(ui32 nodeId) {
 
 void TNodesCounterBase::UnlockNode(ui32 nodeId) {
     Y_ABORT_UNLESS(IsNodeLocked(nodeId));
-    const ui32 pileId = (*NodeIdToPileId)[nodeId];
+    const ui32 pileId = GetPileId(nodeId);
     ENodeState& state = NodeToState[nodeId];
    
     --LockedNodesCount[pileId];
@@ -92,15 +92,28 @@ const THashMap<ui32, INodesChecker::ENodeState>& TNodesCounterBase::GetNodeToSta
     return NodeToState;
 }
 
+ui32 TNodesCounterBase::GetPileId(ui32 nodeId) const {
+    return NodeIdToPileId->contains(nodeId) ? NodeIdToPileId->at(nodeId) : 0;
+}
+
+ui32 GetCount(const THashMap<ui32, ui32>& counter, ui32 pileId) {
+    auto it = counter.find(pileId);
+    return (it != counter.end()) ? it->second : 0;
+}
+
+ui32 TNodesCounterBase::GetLockedNodesCount(ui32 pileId) const {
+    return GetCount(LockedNodesCount, pileId);
+}
+
+ui32 TNodesCounterBase::GetDownNodesCount(ui32 pileId) const {
+    return GetCount(DownNodesCount, pileId);
+}
+
 bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const {
     Y_ABORT_UNLESS(NodeToState.contains(nodeId));
-    const ui32 pileId = (*NodeIdToPileId)[nodeId];
-
-    auto it = LockedNodesCount.find(pileId);
-    const ui32 lockedNodesCount = (it != LockedNodesCount.end()) ? it->second : 0;
-
-    it = DownNodesCount.find(pileId);
-    const ui32 downNodesCount = (it != DownNodesCount.end()) ? it->second : 0;
+    const ui32 pileId = GetPileId(nodeId);
+    const ui32 lockedNodesCount = GetLockedNodesCount(pileId);
+    const ui32 downNodesCount = GetDownNodesCount(pileId);
     
     auto nodeState = NodeToState.at(nodeId);
 
@@ -166,13 +179,9 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
 
 bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const {
     Y_ABORT_UNLESS(NodeToState.contains(nodeId));
-    const ui32 pileId = (*NodeIdToPileId)[nodeId];
-
-    auto it = LockedNodesCount.find(pileId);
-    const ui32 lockedNodesCount = (it != LockedNodesCount.end()) ? it->second : 0;
-
-    it = DownNodesCount.find(pileId);
-    const ui32 downNodesCount = (it != DownNodesCount.end()) ? it->second : 0;
+    const ui32 pileId = GetPileId(nodeId);
+    const ui32 lockedNodesCount = GetLockedNodesCount(pileId);
+    const ui32 downNodesCount = GetDownNodesCount(pileId);
 
     auto nodeState = NodeToState.at(nodeId);
 

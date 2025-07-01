@@ -2172,10 +2172,9 @@ void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount)
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
-    , Index(shardsCount)
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
@@ -2216,13 +2215,12 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
 }
 
 void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
-    if (KMeans.Parent == 0) {
-        // For Parent == 0 only single kmeans needed, so there is only two options:
-        // 1. It fits entirely in the single shard => local kmeans for single shard
-        // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
-        return;
-    }
-    const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
+    // For Parent == 0 only single kmeans needed, so there are two options:
+    // 1. It fits entirely in the single shard => local kmeans for single shard
+    // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
+    const auto [parentFrom, parentTo] = KMeans.Parent == 0
+        ? std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId>{0, 0}
+        : KMeans.RangeToBorders(range);
     // TODO(mbkkt) We can make it more granular
 
     // the new range does not intersect with other ranges, just add it with 1 shard
@@ -2424,39 +2422,6 @@ bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
 
     TString unused;
     return FillKeySchema(proto, unused);
-}
-
-TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
-    : UploadRows{uploadRows}
-    , UploadBytes{uploadBytes}
-    , ReadRows{readRows}
-    , ReadBytes{readBytes}
-{
-}
-
-TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ENSURE(UploadRows >= other.UploadRows);
-    Y_ENSURE(UploadBytes >= other.UploadBytes);
-    Y_ENSURE(ReadRows >= other.ReadRows);
-    Y_ENSURE(ReadBytes >= other.ReadBytes);
-
-    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
-            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
-}
-
-TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
-            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
-}
-
-TString TBillingStats::ToString() const {
-    return TStringBuilder()
-            << "{"
-            << " upload rows: " << UploadRows
-            << ", upload bytes: " << UploadBytes
-            << ", read rows: " << ReadRows
-            << ", read bytes: " << ReadBytes
-            << " }";
 }
 
 TSequenceInfo::TSequenceInfo(

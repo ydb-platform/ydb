@@ -1215,7 +1215,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
     Y_UNIT_TEST(CreateColumnTableExtraSymbolsOk) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetAllowExtraSymbolsForColumnTableColumns(true);
+        runtime.GetAppData().ColumnShardConfig.SetAllowExtraSymbolsForColumnTableColumns(true);
         ui64 txId = 100;
 
         TString allowedChars = "@_-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";

@@ -20,7 +20,7 @@ bool IsValidColumnNameForColumnTable(const TString& name) {
         return true;
     }
 
-    if (!HasAppData() || !AppDataVerified().FeatureFlags.GetAllowExtraSymbolsForColumnTableColumns()) {
+    if (!AppDataVerified().ColumnShardConfig.GetAllowExtraSymbolsForColumnTableColumns()) {
         return false;
     }
 

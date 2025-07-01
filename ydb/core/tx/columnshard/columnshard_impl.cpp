@@ -844,11 +844,11 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         using SchemaPresetVersionInfo = NColumnShard::Schema::SchemaPresetVersionInfo;
         for (auto&& i : VersionsToClean) {
-            db.Table<IndexColumnsV1>().Key(i.GetPresetId(), i.GetSnapshot().GetStep(), i.GetSnapshot().GetTxId()).Delete();
+            db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetStep(), i.GetSnapshot().GetTxId()).Delete();
         }
     }
     virtual void Complete(const TActorContext& /*ctx*/) override {
-        BackgroundController.OnCleanupSchemasFinished();
+        Self->BackgroundController.OnCleanupSchemasFinished();
     }
     TTxType GetTxType() const override {
         return TXTYPE_CLEANUP_SCHEMAS;
@@ -862,7 +862,7 @@ void TColumnShard::SetupCleanupSchemas() {
         return;
     }
 
-    const THashSet<TTablesManager::TSchemaAddress> schemasToClean = TablesManager.MutablePrimaryIndex().GetSchemasToClean();
+    const THashSet<TTablesManager::TSchemaAddress> schemasToClean = TablesManager.GetSchemasToClean();
     if (schemasToClean.empty()) {
         ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "no_changes");
         return;

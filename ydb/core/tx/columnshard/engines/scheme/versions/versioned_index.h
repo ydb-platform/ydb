@@ -31,6 +31,7 @@ public:
 class TVersionedIndex {
 private:
     THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
+    std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
     std::shared_ptr<arrow::Schema> PrimaryKey;
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
@@ -81,7 +82,7 @@ public:
 
     TString DebugString() const {
         TStringBuilder sb;
-        for (auto&& i : Snapshots) {
+        for (auto&& i : SnapshotByVersion) {
             sb << i.first << ":" << i.second->DebugString() << ";";
         }
         return sb;
@@ -96,6 +97,16 @@ public:
         auto it = SnapshotByVersion.find(version);
         Y_ABORT_UNLESS(it != SnapshotByVersion.end(), "no schema for version %lu", version);
         return it->second;
+    }
+
+    ISnapshotSchema::TPtr GetSchemaVerified(const TSnapshot& version) const {
+        for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
+            if (it->first <= version) {
+                return it->second;
+            }
+        }
+        Y_ABORT_UNLESS(!Snapshots.empty());
+        return Snapshots.begin()->second;
     }
 
     ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {

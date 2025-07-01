@@ -475,4 +475,18 @@ void TTablesManager::MoveTableProgress(NIceDb::TNiceDb& db, const TSchemeShardLo
     NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, table->GetPathId());
 }
 
+THashSet<TTablesManager::TSchemaAddress> TTablesManager::GetSchemasToClean() const {
+    THashSet<TSchemaAddress> result;
+    const ui64 lastSchemaVersion = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion();
+    for (auto&& i : PrimaryIndex->GetVersionedIndex().GetSnapshotByVersions()) {
+        if (i.first == lastSchemaVersion) {
+            continue;
+        }
+        if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first)) {
+            AFL_VERIFY(result.emplace(TSchemaAddress(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot())).second);
+        }
+    }
+    return result;
+}
+
 }   // namespace NKikimr::NColumnShard

@@ -204,12 +204,12 @@ message AcquireLockResult {
     uint64 node_id = 3;
 }
 
-message CleanUpDataRequest {
+message VacuumRequest {
     uint64 generation = 1;
     bool reset_actual_generation = 2;
 }
 
-message CleanUpDataResponse {
+message VacuumResponse {
     enum Status {
         STATUS_UNSPECIFIED = 0;
         STATUS_SUCCESS = 1;

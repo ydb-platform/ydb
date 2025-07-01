@@ -16,7 +16,7 @@ ALTER TRANSFER <name> [SET USING lambda] [SET (option = value [, ...])]
 
 ### Параметры {#params}
 
-* `STATE` — состояние трансфера. Возможные значения:
+* `STATE` — [состояние](../../../concepts/transfer.md#pause-and-resume) трансфера. Возможные значения:
   * `PAUSED` — остановка трансфера.
   * `STANDBY` — возобновление работы трансфера после приостановки.
 

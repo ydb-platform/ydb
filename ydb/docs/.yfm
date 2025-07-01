@@ -16,6 +16,7 @@ docs-viewer:
   unrestrict-revision-access: true
   need_pdf: true
   pdf: true
+  metrika: 94806704
 
   logo-options:
     url:

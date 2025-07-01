@@ -452,6 +452,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SharingSessionsManager->Start(*this);
 
     SetupCompaction({});
+    SetupCleanupSchemas();
     SetupCleanupPortions();
     SetupCleanupTables();
     SetupMetadata();

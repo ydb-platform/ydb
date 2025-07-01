@@ -128,6 +128,7 @@ target_sources(ydb-core-tablet_flat PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_committed.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/probes.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_counters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executed.cpp
@@ -214,4 +215,16 @@ generate_enum_serilization(ydb-core-tablet_flat
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_scan_iface.h
   INCLUDE_HEADERS
   ydb/core/tablet_flat/flat_scan_iface.h
+)
+
+generate_enum_serilization(ydb-core-tablet_flat
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_events.h
+  INCLUDE_HEADERS
+  ydb/core/tablet_flat/shared_cache_events.h
+)
+
+generate_enum_serilization(ydb-core-tablet_flat
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_tiers.h
+  INCLUDE_HEADERS
+  ydb/core/tablet_flat/shared_cache_tiers.h
 )

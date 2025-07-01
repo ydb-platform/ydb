@@ -625,7 +625,6 @@ TString GenerateTagQueueQuery() {
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8)))
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8)))
-                (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8)))
                 (let cloudEventsQueueTags               (Parameter 'TAGS (DataType 'Utf8)))
         )__";
 
@@ -647,7 +646,6 @@ TString GenerateTagQueueQuery() {
                     '('AuthType cloudEventsAuthType)
                     '('PeerName cloudEventsPeerName)
                     '('RequestId cloudEventsRequestId)
-                    '('IdempotencyId cloudEventsIdempotencyId)
                     '('Labels cloudEventsQueueTags)))
         )__";
     }

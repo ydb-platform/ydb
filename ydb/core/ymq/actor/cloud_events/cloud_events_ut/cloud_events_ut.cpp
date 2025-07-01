@@ -91,7 +91,6 @@ private:
                 .AddNullableColumn("AuthType", EPrimitiveType::Utf8)
                 .AddNullableColumn("PeerName", EPrimitiveType::Utf8)
                 .AddNullableColumn("RequestId", EPrimitiveType::Utf8)
-                .AddNullableColumn("IdempotencyId", EPrimitiveType::Utf8)
                 .AddNullableColumn("Labels", EPrimitiveType::Utf8)
                 .SetPrimaryKeyColumns({"CreatedAt", "Id"})
             .Build();
@@ -135,7 +134,6 @@ private:
             const TString& authType,
             const TString& peerName,
             const TString& requestId,
-            const TString& idempotencyId,
             const TString& labels
         )
         {
@@ -159,7 +157,6 @@ private:
                     << "AuthType,"
                     << "PeerName,"
                     << "RequestId,"
-                    << "IdempotencyId,"
                     << "Labels"
                 << ")"
                 << "VALUES"
@@ -176,7 +173,6 @@ private:
                     << "'" << authType << "'" << ","
                     << "'" << peerName << "'" << ","
                     << "'" << requestId << "'" << ","
-                    << "'" << idempotencyId << "'" << ","
                     << "'" << labels << "'" 
                 << ");";
 
@@ -214,7 +210,6 @@ private:
         TString authType = "authtype";
         TString peerName = "localhost:8000";
         TString requestId = "req1";
-        TString idempotencyKey = "idemp1";
         TString labels = "{\"k1\" : \"v1\"}";
 
         Sleep(TDuration::Seconds(1));
@@ -230,7 +225,6 @@ private:
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 
@@ -245,7 +239,6 @@ private:
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 
@@ -260,7 +253,6 @@ private:
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 

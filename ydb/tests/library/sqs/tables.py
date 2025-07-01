@@ -116,7 +116,6 @@ def create_cloud_events_table(root, session):
         ('AuthType', ydb.PrimitiveType.Utf8),
         ('PeerName', ydb.PrimitiveType.Utf8),
         ('RequestId', ydb.PrimitiveType.Utf8),
-        ('IdempotencyId', ydb.PrimitiveType.Utf8),
         ('Labels', ydb.PrimitiveType.Utf8),
     ]
     _create_table(root, session, '.CloudEventsYmq', columns, keys_count=2)

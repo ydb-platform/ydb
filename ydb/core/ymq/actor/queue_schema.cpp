@@ -763,7 +763,6 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
-                (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
                 (let cloudEventsQueueTags               (Parameter 'TAGS (DataType 'Utf8String)))
         )__";
 
@@ -785,7 +784,6 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                     '('AuthType cloudEventsAuthType)
                     '('PeerName cloudEventsPeerName)
                     '('RequestId cloudEventsRequestId)
-                    '('IdempotencyId cloudEventsIdempotencyId)
                     '('Labels cloudEventsQueueTags)))
         )__";
     }
@@ -1073,8 +1071,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
             .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
             .Utf8("CLOUD_EVENT_PEERNAME", "")
-            .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-            .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
+            .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
     } else {
         TParameters(trans->MutableParams()->MutableProto())
             .Utf8("NAME", QueuePath_.QueueName)
@@ -1438,7 +1435,6 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
-                (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
                 (let cloudEventsQueueTags               (Parameter 'CLOUD_EVENT_LABELS (DataType 'Utf8String)))
         )__";
 
@@ -1460,7 +1456,6 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
                     '('AuthType cloudEventsAuthType)
                     '('PeerName cloudEventsPeerName)
                     '('RequestId cloudEventsRequestId)
-                    '('IdempotencyId cloudEventsIdempotencyId)
                     '('Labels cloudEventsQueueTags)))
         )__";
     }
@@ -1585,8 +1580,7 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
                     .Utf8("CLOUD_EVENT_PEERNAME", "")
-                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-                    .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
+                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
             } else {
                 TParameters(trans->MutableParams()->MutableProto())
                     .Utf8("NAME", QueuePath_.QueueName)

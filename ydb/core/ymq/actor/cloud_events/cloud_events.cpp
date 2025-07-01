@@ -67,7 +67,6 @@ namespace NCloudEvents {
             << "AuthType,"
             << "PeerName,"
             << "RequestId,"
-            << "IdempotencyId,"
             << "Labels" << "\n"
             << "FROM `" << GetFullTablePath() << "`;\n";
     }
@@ -212,7 +211,8 @@ namespace NCloudEvents {
                 cloudEvent.Permission = "ymq.queues.delete";
             }
 
-            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
+            cloudEvent.IdempotencyId = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
+            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, TInstant::Now().MilliSeconds());
 
             cloudEvent.CloudId = *parser.ColumnParser(4).GetOptionalUtf8();
             cloudEvent.FolderId = *parser.ColumnParser(5).GetOptionalUtf8();
@@ -222,8 +222,7 @@ namespace NCloudEvents {
             cloudEvent.AuthType = *parser.ColumnParser(9).GetOptionalUtf8();
             cloudEvent.RemoteAddress = *parser.ColumnParser(10).GetOptionalUtf8();
             cloudEvent.RequestId = *parser.ColumnParser(11).GetOptionalUtf8();
-            cloudEvent.IdempotencyId = *parser.ColumnParser(12).GetOptionalUtf8();
-            cloudEvent.Labels = *parser.ColumnParser(13).GetOptionalUtf8();
+            cloudEvent.Labels = *parser.ColumnParser(12).GetOptionalUtf8();
         }
 
         return result;

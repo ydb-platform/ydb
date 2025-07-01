@@ -2105,6 +2105,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     class TManyColumnShardsWithRestartsExecutor {
     private:
         virtual void FillSettings(Tests::TServerSettings& settings) const = 0;
+        virtual void OnAfterTest() const = 0;
 
         Tests::TServerSettings BuildSettings() {
             Tests::TServerSettings settings(PortsManager.GetPort(2134));
@@ -2121,6 +2122,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             Tests::TServer::TPtr server = new Tests::TServer(settings);
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+            auto kqpController = NYDBTest::TControllers::RegisterKqpControllerGuard<NYDBTest::NColumnShard::TTestKqpController>();
 
             auto runtime = server->GetRuntime();
             auto sender = runtime->AllocateEdgeActor();
@@ -2226,12 +2228,17 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
                 UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
             }
+            OnAfterTest();
         }
     };
 
     Y_UNIT_TEST(ManyColumnShardsWithRestartsSimple) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
+            virtual void OnAfterTest() const override {
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::NColumnShard::TTestKqpController>()->GetInitScanCounter().Val());
+                AFL_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::NColumnShard::TTestKqpController>()->GetResolvingCounter().Val());
+            }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
             }
@@ -2242,6 +2249,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(ManyColumnShardsWithRestartsWithResolving) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
+            virtual void OnAfterTest() const override {
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::NColumnShard::TTestKqpController>()->GetInitScanCounter().Val());
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::NColumnShard::TTestKqpController>()->GetResolvingCounter().Val());
+            }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root")
                     .SetUseRealThreads(false)

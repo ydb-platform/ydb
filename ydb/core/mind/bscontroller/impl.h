@@ -1486,6 +1486,11 @@ public:
             : NodeId(node.GetNodeId())
             , Location(node.GetLocation())
         {}
+
+        THostRecord(const NKikimrBlobStorage::THostRecord& hostRecord)
+            : NodeId(hostRecord.GetHostKey().GetNodeId())
+            , Location(hostRecord.GetLocation())
+        {}
     };
 
     class THostRecordMapImpl {
@@ -1512,6 +1517,17 @@ public:
                 NodeIdToHostId.emplace(nodeId, hostId);
                 HostIdToRecord.emplace(hostId, item);
                 FqdnToNodeId.emplace(item.GetHost(), nodeId);
+            }
+        }
+
+        THostRecordMapImpl(const NKikimrBlobStorage::THostRecordSet& hostRecordSet) {
+            for (const auto& hostRecord : hostRecordSet.GetHostRecord()) {
+                const auto hostKey = hostRecord.GetHostKey();
+                const TNodeId nodeId = hostKey.GetNodeId();
+                const THostId hostId(hostKey.GetFqdn(), hostKey.GetIcPort());
+                NodeIdToHostId.emplace(nodeId, hostId);
+                HostIdToRecord.emplace(hostId, hostRecord);
+                FqdnToNodeId.emplace(hostKey.GetFqdn(), nodeId);
             }
         }
 
@@ -1559,6 +1575,18 @@ public:
 
     using THostRecordMap = std::shared_ptr<THostRecordMapImpl>;
 
+    struct TConfigValidationInfo {
+        enum class ESource {
+            Distconf,
+            ConsoleInteraction
+        };
+
+        TActorId Sender;
+        ui64 Cookie;
+        TActorId InterconnectSession;
+        ESource Source;
+    };
+
 private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
@@ -1605,6 +1633,9 @@ private:
     ui64 StorageYamlConfigHash = 0;
     ui64 ExpectedStorageYamlConfigVersion = 0;
     TBackoffTimer GetBlockBackoff{1, 1000};
+
+    ui64 NextValidationCookie = 1;
+    THashMap<ui64, TConfigValidationInfo> PendingValidationRequests;
 
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
@@ -1856,6 +1887,9 @@ private:
     void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
     void ApplyStorageConfig(bool ignoreDistconf = false);
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> BuildConfigRequestFromStorageConfig(
+        const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap::element_type& hostRecords, bool validationMode=false);
+
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
 

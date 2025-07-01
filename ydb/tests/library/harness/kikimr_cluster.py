@@ -40,7 +40,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         with open(config_path, 'r') as r:
             self.__yaml_config = yaml.safe_load(r.read())
         self.__kikimr_configure_binary_path = kikimr_configure_binary_path
-        self.__hosts = [host.get('name', host['host']) for host in self.__yaml_config.get('hosts', [])]
+        self.__hosts = [host.get('name', host.get('host')) for host in self.__yaml_config.get('hosts', [])]
         self._slots = None
         self.__kikimr_path = kikimr_path
         self.__kikimr_next_path = kikimr_next_path

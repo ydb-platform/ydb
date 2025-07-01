@@ -370,6 +370,8 @@ public:
 
 class IKqpController {
 public:
+    using TPtr = std::shared_ptr<IKqpController>;
+
     virtual void OnInitTabletScan(const ui64 /*tabletId*/) {
     }
 
@@ -452,7 +454,7 @@ public:
         return result;
     }
 
-    static IKqpController::TPtr GetColumnShardController() {
+    static IKqpController::TPtr GetKqpController() {
         return Singleton<TControllers>()->KqpController;
     }
 

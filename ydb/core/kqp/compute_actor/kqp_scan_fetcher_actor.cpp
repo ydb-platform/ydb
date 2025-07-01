@@ -655,6 +655,7 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
 void TKqpScanFetcherActor::EnqueueResolveShard(const std::shared_ptr<TShardState>& state) {
     CA_LOG_D("Enqueue for resolve " << state->TabletId);
     InFlightShards.StopScanner(state->TabletId);
+    NYDBTest::TControllers::GetKqpController()->OnInitTabletResolving(state->TabletId);
     PendingResolveShards.emplace_back(*state);
     if (PendingResolveShards.size() == 1) {
         ResolveNextShard();

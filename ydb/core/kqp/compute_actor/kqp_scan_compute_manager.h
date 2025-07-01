@@ -368,6 +368,7 @@ public:
     }
 
     void StartScanner(TShardState& state) {
+        NYDBTest::TControllers::GetKqpController()->OnInitTabletScan(state->TabletId);
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")
             ("state", state.State)("tablet_id", state.TabletId)("generation", state.Generation);
 

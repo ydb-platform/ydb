@@ -70,7 +70,7 @@ class Workload:
             )
 
     def write_to_topic(self):
-        finished_at = time.time() + 15
+        finished_at = time.time() + 5
 
         with self.driver.topic_client.writer(self.topic_name, producer_id="producer-id") as writer:
             while time.time() < finished_at:
@@ -103,11 +103,6 @@ class Workload:
 def skip_if_unsupported(versions):
     if min(versions) < (25, 1, 2):
         pytest.skip("Only available since 25-1-2")
-
-    # TODO remove it after current >= 25-1-2
-    for v in versions:
-        if math.isnan(v[0]):
-            pytest.skip("Only available since 25-1-2")
 
 
 class TestTransferMixedClusterFixture(MixedClusterFixture):

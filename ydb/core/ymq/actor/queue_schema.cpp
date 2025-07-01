@@ -947,7 +947,7 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
     if (isCloudEventsEnabled) {
         result +=
         R"__(
-                    (ListIf willCommit (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate))
+                (ListIf willCommit (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate))
         )__";
     }
 
@@ -1523,7 +1523,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
     if (isCloudEventsEnabled) {
         result +=
         R"__(
-                        (If queueExists (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate) (Void))
+                    (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate)
         )__";
     }
 

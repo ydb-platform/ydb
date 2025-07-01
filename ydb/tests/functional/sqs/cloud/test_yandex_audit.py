@@ -8,11 +8,11 @@ import uuid
 import sys
 import os
 
-# import pytest
+import pytest
 import yatest
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_tenant_installation
-# from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
+from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 import random
 import string
@@ -90,20 +90,21 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
         result = audit_data.replace('\r\n', '\n')
         return result.split('\n')
 
-    def test_create_update_delete_one_queue(self):
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    def test_create_update_delete_one_queue(self, is_fifo):
         capture_audit = CaptureFileOutput(self.audit_file)
 
         cloud_queue_name = ""
 
         with capture_audit:
-            self._init_with_params()
+            self._init_with_params(is_fifo)
 
             self._sqs_api = self._create_api_for_user(
                 self._username, raise_on_error=True, force_private=False,
                 iam_token=self.iam_token, folder_id=self.folder_id
             )
 
-            queue_url1 = self._sqs_api.create_queue(self.queue_name, is_fifo=False)
+            queue_url1 = self._sqs_api.create_queue(self.queue_name, is_fifo=is_fifo)
             time.sleep(1)
 
             cloud_queue_name = queue_url1.split('/')[-2]

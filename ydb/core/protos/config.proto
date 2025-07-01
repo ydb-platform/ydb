@@ -712,6 +712,7 @@ message TGroupedMemoryLimiterConfig {
     optional bool Enabled = 1 [default = true];
     optional uint64 MemoryLimit = 2;
     optional uint64 HardMemoryLimit = 3;
+    optional uint64 CountBuckets = 4;
 }
 
 message TExternalIndexConfig {

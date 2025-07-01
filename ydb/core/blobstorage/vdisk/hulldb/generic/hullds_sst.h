@@ -298,7 +298,7 @@ namespace NKikimr {
             }
 
             TString ToString() const {
-                return Sprintf("[%u %p %s]", Level, SstPtr.Get(), SstPtr->FirstKey().ToString().data());
+                return Sprintf("[%u %u (%s-%s)]", Level, SstPtr->GetFirstLsn(), SstPtr->FirstKey().ToString().data(), SstPtr->LastKey().ToString().data());
             }
 
         private:

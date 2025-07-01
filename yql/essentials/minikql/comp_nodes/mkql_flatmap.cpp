@@ -1484,7 +1484,7 @@ public:
                 block = smsk;
 
                 const auto arrayType = ArrayType::get(list->getType(), UseOnStack);
-                const auto array = *this->Stateless || ctx.AlwaysInline ?
+                const auto array = *this->Stateless_ || ctx.AlwaysInline ?
                     new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()):
                     new AllocaInst(arrayType, 0U, "array", block);
                 const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {zeroSize, zeroSize}, "ptr", block);
@@ -1556,7 +1556,7 @@ public:
             Value* res;
             if constexpr (!IsMultiRowPerItem) {
                 const auto newType = PointerType::getUnqual(list->getType());
-                const auto newPtr = *this->Stateless || ctx.AlwaysInline ?
+                const auto newPtr = *this->Stateless_ || ctx.AlwaysInline ?
                     new AllocaInst(newType, 0U, "new_ptr", &ctx.Func->getEntryBlock().back()):
                     new AllocaInst(newType, 0U, "new_ptr", block);
                 res = GenNewArray(ctx, idx, newPtr, block);

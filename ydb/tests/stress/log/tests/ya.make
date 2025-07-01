@@ -15,6 +15,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/stress
 )
 
 

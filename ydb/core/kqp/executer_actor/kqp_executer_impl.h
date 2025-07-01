@@ -1727,7 +1727,8 @@ protected:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
-        if (enableShuffleElimination && stage.GetIsShuffleEliminated() && stageInfo.Meta.ColumnTableInfoPtr) {
+        bool shuffleEliminated = enableShuffleElimination && stage.GetIsShuffleEliminated();
+        if (shuffleEliminated && stageInfo.Meta.ColumnTableInfoPtr) {
             const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
             columnShardHashV1Params.SourceShardCount = tableDesc.GetColumnShardCount();
             columnShardHashV1Params.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
@@ -1773,7 +1774,7 @@ protected:
                 }
             }
 
-            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() || (!isOlapScan && readSettings.IsSorted())) {
+            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() && !shuffleEliminated || (!isOlapScan && readSettings.IsSorted())) {
                 for (auto&& pair : nodeShards) {
                     auto& shardsInfo = pair.second;
                     for (auto&& shardInfo : shardsInfo) {
@@ -1792,7 +1793,7 @@ protected:
                     }
                 }
 
-            } else if (enableShuffleElimination && stage.GetIsShuffleEliminated() /* save partitioning for shuffle elimination */) {
+            } else if (shuffleEliminated /* save partitioning for shuffle elimination */) {
                 std::size_t stageInternalTaskId = 0;
                 columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
                 columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
@@ -2318,7 +2319,7 @@ protected:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const bool VerboseMemoryLimitException;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
-    TMaybe<ui8> BufferPageAllocSize;
+    TMaybe<size_t> BufferPageAllocSize;
 
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;

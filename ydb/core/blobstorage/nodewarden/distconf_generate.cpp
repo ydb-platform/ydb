@@ -258,7 +258,7 @@ namespace NKikimr::NStorage {
                         pdiskInfo.Usable = false;
                         pdiskInfo.WhyUnusable += 'S';
                     }
-                    const bool usableInTermsOfDecommission = 
+                    const bool usableInTermsOfDecommission =
                         pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE ||
                         pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
                     if (!usableInTermsOfDecommission) {
@@ -295,7 +295,7 @@ namespace NKikimr::NStorage {
                 const TPDiskId pdiskId(vslotId.GetNodeId(), vslotId.GetPDiskId());
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
                     TPDiskInfo& pdiskInfo = it->second;
-                    ++pdiskInfo.UsedSlots;
+                    ++pdiskInfo.UsedSlots; // TODO(ydynnikov): account GroupSizeInUnits
                     if (pdiskInfo.AdjustSpaceAvailable && vslot.GetStatus() != "READY" && vslot.HasVDiskMetrics()) {
                         if (const auto& m = vslot.GetVDiskMetrics(); m.HasAllocatedSize()) {
                             pdiskInfo.SpaceAvailable += m.GetAllocatedSize() - maxGroupSlotSize[vslot.GetGroupId()];
@@ -381,7 +381,7 @@ namespace NKikimr::NStorage {
 
             for (const auto& [pdiskId, incr] : usageIncr) {
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
-                    it->second.UsedSlots += incr;
+                    it->second.UsedSlots += incr; // TODO(ydynnikov): account GroupSizeInUnits
                 } else {
                     Y_ABORT("missing PDiskId from group");
                 }
@@ -391,7 +391,7 @@ namespace NKikimr::NStorage {
                 const auto& loc = vdisk.GetVDiskLocation();
                 const TPDiskId pdiskId(loc.GetNodeID(), loc.GetPDiskID());
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
-                    ++it->second.UsedSlots;
+                    ++it->second.UsedSlots; // TODO(ydynnikov): account GroupSizeInUnits
                 }
 
                 auto& m = maxVSlotId[pdiskId];
@@ -486,8 +486,9 @@ namespace NKikimr::NStorage {
         };
 
         TString error;
-        if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid, requiredSpace, false, {},
-                error)) {
+        const ui32 groupSizeInUnits = 1; // static groups are always single-unit
+        if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid,
+                groupSizeInUnits, requiredSpace, false, {}, error)) {
             throw TExConfigError() << "group allocation failed Error# " << error
                 << " groupDefinition# " << dumpGroupDefinition();
         }
@@ -629,14 +630,29 @@ namespace NKikimr::NStorage {
             std::vector<ui32> nodes;
             const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
             for (auto& [_, v] : nodesByDataCenter) {
-                auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
+                size_t countToSelect = Min<size_t>(v.size(), maxNodesPerDataCenter);
+                if (v.size() < maxNodesPerDataCenter && nodesByDataCenter.size() > 1) {
+                    countToSelect = 1;
+                }
+                auto r = pickNodes(v, countToSelect);
                 nodes.insert(nodes.end(), r.begin(), r.end());
             }
             auto *rg = ss->AddRingGroups();
             if (pileId) {
                 pileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
             }
-            rg->SetNToSelect(nodes.size() / 2 + 1);
+            ui32 nodesCnt = nodes.size();
+            ui32 nToSelect = 1;
+            if (nodesCnt <= 2) {
+                nToSelect = 1;
+            } else if (nodesCnt < 8) {
+                nToSelect = 3;
+            } else if (nodesCnt == 8) {
+                nToSelect = 5;
+            } else if (nodesCnt > 8) {
+                nToSelect = 9;
+            }
+            rg->SetNToSelect(nToSelect);
             for (ui32 nodeId : nodes) {
                 rg->AddRing()->AddNode(nodeId);
             }

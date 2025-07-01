@@ -18,6 +18,7 @@ TEST_SRCS(
     test_data_type.py
     test_vector_index.py
     test_batch_operations.py
+    test_transfer.py
     udf/test_datetime2.py
     udf/test_digest.py
     udf/test_digest_regression.py
@@ -29,9 +30,10 @@ REQUIREMENTS(ram:all)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
+
 DEPENDS(
-    ydb/apps/ydb
     ydb/tests/library/compatibility/binaries
+    ydb/apps/ydb
 )
 
 PEERDIR(

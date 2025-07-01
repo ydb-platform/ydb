@@ -60,7 +60,7 @@ public:
     TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider)
         : ScanId(scanId)
         , TabletId(state.TabletId)
-        , Generation(++state.Generation)
+        , Generation(state.Generation)
     {
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
@@ -69,8 +69,8 @@ public:
         auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges, state.LastCursorProto);
 
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("tablet_id", TabletId)("generation", Generation)
-            ("info", state.ToString(keyColumnTypes))("range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry))
-            ("subscribed", subscribed);
+            ("info", state.ToString(keyColumnTypes))("range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry))(
+            "subscribed", subscribed)("cursor", state.CursorDebugString());
 
         NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
@@ -392,6 +392,7 @@ public:
             state->ActorId = {};
             state->State = NComputeActor::EShardState::Initial;
             state->SubscribedOnTablet = false;
+            state->Generation++;
 
             auto it = ShardScanners.find(tabletId);
             AFL_ENSURE(it != ShardScanners.end())("tablet_id", tabletId);

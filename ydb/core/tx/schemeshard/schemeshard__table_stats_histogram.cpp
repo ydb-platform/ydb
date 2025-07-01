@@ -1,7 +1,8 @@
 #include "schemeshard_impl.h"
+
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

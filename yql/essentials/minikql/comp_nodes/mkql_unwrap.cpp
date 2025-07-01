@@ -69,11 +69,11 @@ private:
     }
 
     IComputationNode* Optional() const {
-        return Left;
+        return Left_;
     };
 
     IComputationNode* Message() const {
-        return Right;
+        return Right_;
     };
 
     const NUdf::TSourcePosition Pos;

@@ -5,9 +5,9 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
-#include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/cast.h>
 
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
@@ -850,26 +850,28 @@ private:
 
                     << "LockTxId: " << info.LockTxId << Endl
                     << "LockTxStatus: " << NKikimrScheme::EStatus_Name(info.LockTxStatus) << Endl
-                    << "LockTxDone                     " << (info.LockTxDone ? "DONE" : "not done") << Endl
+                    << "LockTxDone: " << (info.LockTxDone ? "DONE" : "not done") << Endl
 
                     << "InitiateTxId: " << info.InitiateTxId << Endl
                     << "InitiateTxStatus: " << NKikimrScheme::EStatus_Name(info.InitiateTxStatus) << Endl
-                    << "InitiateTxDone                 " << (info.InitiateTxDone ? "DONE" : "not done") << Endl
+                    << "InitiateTxDone: " << (info.InitiateTxDone ? "DONE" : "not done") << Endl
 
                     << "ApplyTxId: " << info.ApplyTxId << Endl
                     << "ApplyTxStatus: " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus) << Endl
-                    << "ApplyTxDone                    " << (info.ApplyTxDone ? "DONE" : "not done") << Endl
+                    << "ApplyTxDone: " << (info.ApplyTxDone ? "DONE" : "not done") << Endl
 
                     << "UnlockTxId: " << info.UnlockTxId << Endl
                     << "UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus) << Endl
-                    << "UnlockTxDone                   " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
+                    << "UnlockTxDone: " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
 
                     << "SnapshotStep: " << info.SnapshotStep << Endl
-                    << "SnapshotTxId: " << info.SnapshotTxId << Endl
+                    << "SnapshotTxId: " << info.SnapshotTxId << Endl;
 
-                    << "Processed: " << info.Processed << Endl
-                    << "Billed: " << info.Billed << Endl;
-
+                TString requestUnitsExplain;
+                ui64 requestUnits = TRUCalculator::Calculate(info.Processed, requestUnitsExplain);
+                str << "Processed: " << info.Processed.ShortDebugString() << Endl
+                    << "Request Units: " << requestUnits << " (" << requestUnitsExplain << ")" << Endl
+                    << "Billed: " << info.Billed.ShortDebugString() << Endl;
             }
 
             auto getKeyTypes = [&](TPathId pathId) {
@@ -954,7 +956,7 @@ private:
                                 str << Self->Generation() << ":" << status.SeqNoRound;
                             }
                             TABLED() {
-                                str << status.Processed;
+                                str << status.Processed.ShortDebugString();
                             }
                         }
                         str << "\n";

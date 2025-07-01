@@ -24,6 +24,8 @@ class ReconfigStateStorageWorkloadTest(object):
                 'BOARD_LOOKUP': LogLevels.DEBUG,
                 'DISCOVERY': LogLevels.DEBUG,
                 'INTERCONNECT': LogLevels.INFO,
+                'SCHEME_BOARD_SUBSCRIBER': LogLevels.DEBUG,
+                'SCHEME_BOARD_POPULATOR': LogLevels.DEBUG,
                 # 'STATESTORAGE': LogLevels.DEBUG,
             }
         ))

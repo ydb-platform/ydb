@@ -47,8 +47,6 @@ struct TEvPrivate {
         EvStartResourceUsageTask,
         EvNormalizerResult,
 
-        EvWritingAddDataToBuffer,
-        EvWritingFlushBuffer,
         EvWritingPortionsAddDataToBuffer,
         EvWritingPortionsFlushBuffer,
 
@@ -68,6 +66,7 @@ struct TEvPrivate {
         EvAskServiceDataAccessors,
         EvAddPortionDataAccessor,
         EvRemovePortionDataAccessor,
+        EvClearCacheDataAccessor,
         EvMetadataAccessorsInfo,
 
         EvRequestFilter,
@@ -103,6 +102,20 @@ struct TEvPrivate {
             : Processor(processor)
             , Generation(gen)
             , Result(std::move(result)) {
+        }
+    };
+
+    class TEvAskTabletDataAccessors
+        : public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
+    private:
+        using TPortions = THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>;
+        YDB_ACCESSOR_DEF(TPortions, Portions);
+        YDB_READONLY_DEF(std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>, Callback);
+
+    public:
+        explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback)
+            : Portions(std::move(portions))
+            , Callback(callback) {
         }
     };
 

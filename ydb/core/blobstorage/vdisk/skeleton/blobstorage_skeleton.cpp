@@ -87,6 +87,7 @@ namespace NKikimr {
             // out of space
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(&satisfactionRank);
+            ev->Record.SetGroupSizeInUnits(Config->GroupSizeInUnits);
             const TInstant now = ctx.Now();
             const TInstant prev = std::exchange(WhiteboardUpdateTimestamp, now);
             const ui64 bytesRead = QueryCtx ? QueryCtx->PDiskReadBytes.exchange(0) : 0;
@@ -1571,13 +1572,6 @@ namespace NKikimr {
         }
 
         void Handle(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
-            const bool postpone = OverloadHandler->PostponeEvent(ev);
-            if (!postpone) {
-                PrivateHandle(ev, ctx);
-            }
-        }
-
-        void PrivateHandle(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
             TInstant now = TAppData::TimeProvider->Now();
             SyncLogIFaceGroup.LocalSyncMsgs()++;
 
@@ -1627,22 +1621,6 @@ namespace NKikimr {
         }
 
         void Handle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
-            const bool postpone = OverloadHandler->PostponeEvent(ev);
-            if (!postpone) {
-                PrivateHandle(ev, ctx);
-            }
-        }
-
-        void ReplyError(const NKikimrProto::EReplyStatus status,
-                        const TString& /*errorReason*/,
-                        TEvAnubisOsirisPut::TPtr &ev,
-                        const TActorContext &ctx,
-                        const TInstant &now) {
-            std::unique_ptr<IEventBase> res(new TEvAnubisOsirisPutResult(status, now, IFaceMonGroup->PutResMsgsPtr(), nullptr));
-            SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
-        }
-
-        void PrivateHandle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
             const auto *msg = ev->Get();
 
             // update basic counters
@@ -1678,6 +1656,14 @@ namespace NKikimr {
             ctx.Send(Db->LoggerID, logMsg.release());
         }
 
+        void ReplyError(const NKikimrProto::EReplyStatus status,
+                const TString& /*errorReason*/,
+                TEvAnubisOsirisPut::TPtr &ev,
+                const TActorContext &ctx,
+                const TInstant &now) {
+            std::unique_ptr<IEventBase> res(new TEvAnubisOsirisPutResult(status, now, IFaceMonGroup->PutResMsgsPtr(), nullptr));
+            SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
+        }
 
         ////////////////////////////////////////////////////////////////////////
         // TAKE SNAPSHOT SECTOR
@@ -2027,16 +2013,10 @@ namespace NKikimr {
                 auto vMultiPutHandler = [this] (const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr ev) {
                     this->PrivateHandle(ev, ctx);
                 };
-                auto loc = [this] (const TActorContext &ctx, TEvLocalSyncData::TPtr ev) {
-                    this->PrivateHandle(ev, ctx);
-                };
-                auto aoput = [this] (const TActorContext &ctx, TEvAnubisOsirisPut::TPtr ev) {
-                    this->PrivateHandle(ev, ctx);
-                };
                 NMonGroup::TSkeletonOverloadGroup overloadMonGroup(VCtx->VDiskCounters, "subsystem", "emergency");
                 OverloadHandler = std::make_unique<TOverloadHandler>(Config, VCtx, PDiskCtx, Hull,
                     std::move(overloadMonGroup), std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
-                    std::move(vMultiPutHandler), std::move(loc), std::move(aoput));
+                    std::move(vMultiPutHandler));
                 ScheduleWakeupEmergencyPutQueue(ctx);
 
                 // actualize weights before we start

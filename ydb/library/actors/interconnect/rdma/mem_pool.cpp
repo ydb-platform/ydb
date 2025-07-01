@@ -304,6 +304,9 @@ namespace NInterconnect::NRdma {
 
         ~TIncrementalMemPool()
         {
+#if defined(__clang__)
+            #pragma nounroll
+#endif
             for (size_t i = 0; i < MaxChunks; i++) {
                 {
                     TChunk* p = ActiveAndFree[i].exchange(nullptr);

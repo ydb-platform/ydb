@@ -305,6 +305,16 @@ public:
         return Aggregator->GetFillLevel();
     }
 
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << Aggregator->DebugString();
+        ui32 i = 0;
+        for (auto output : Outputs) {
+            builder << " HASH C-" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+        }
+        return builder;
+    }
+
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
         ui32 partitionIndex = GetHashPartitionIndex(value);
@@ -433,6 +443,16 @@ private:
         return Aggregator->GetFillLevel();
     }
 
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << Aggregator->DebugString();
+        ui32 i = 0;
+        for (auto output : Outputs_) {
+            builder << " HASH C-" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+        }
+        return builder;
+    }
+
     void Consume(TUnboxedValue&& value) final {
         Y_UNUSED(value);
         YQL_ENSURE(false, "Consume() called on wide block stream");
@@ -553,6 +573,16 @@ public:
 private:
     EDqFillLevel GetFillLevel() const override {
         return Aggregator->GetFillLevel();
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << Aggregator->DebugString();
+        ui32 i = 0;
+        for (auto output : Outputs_) {
+            builder << " HASH C-" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+        }
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -751,6 +781,16 @@ public:
 
     EDqFillLevel GetFillLevel() const override {
         return Aggregator->GetFillLevel();
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << Aggregator->DebugString();
+        ui32 i = 0;
+        for (auto output : Outputs) {
+            builder << " BROADCAST C-" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+        }
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {

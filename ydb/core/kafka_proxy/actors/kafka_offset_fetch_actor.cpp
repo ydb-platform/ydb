@@ -250,7 +250,6 @@ void TKafkaOffsetFetchActor::ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TP
     }
 
     NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
-    // assignments.clear();
 
     while (parser.TryNextRow()) {
         TString assignmentStr = parser.ColumnParser("assignment").GetOptionalString().value_or("");
@@ -271,7 +270,7 @@ void TKafkaOffsetFetchActor::ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TP
 void TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_D("Got KQP CreateSession response");
     if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
-        // SendResponseFail(ctx, EKafkaErrors::UNKNOWN_SERVER_ERROR, "Failed to create KQP session");
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, std::make_shared<TOffsetFetchResponseData>(), EKafkaErrors::UNKNOWN_SERVER_ERROR));
         KAFKA_LOG_D("KQP Session Error");
         return;
     }
@@ -297,23 +296,21 @@ void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
     KAFKA_LOG_D("Recieved KQP response");
     ui32 cookieFromEvent = ev->Cookie;
     ParseAssignments(ev, assignments);
-    KAFKA_LOG_D("Parsed assignments");
-    std::vector<NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics> assignedTopics;
+    TString groupId = CookieToGroupId[cookieFromEvent];
+    ui32 groupIndex = GroupIdToIndex[groupId];
     for (const auto& consumerAssignment : assignments) {
         for (auto& partitionAssignment : consumerAssignment.AssignedPartitions) {
             NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topic;
             topic.Name = partitionAssignment.Topic;
             topic.PartitionIndexes = partitionAssignment.Partitions;
-            assignedTopics.push_back(topic);
+            Message->Groups[groupIndex].Topics.push_back(topic);
         }
     }
-    KAFKA_LOG_D("Collected assignments");
-    for (const auto& topic: assignedTopics) {
-        ExtractPartitions(CookieToGroupId[cookieFromEvent], topic);
+    for (const auto& topic: Message->Groups[groupIndex].Topics) {
+        ExtractPartitions(Message->Groups[groupIndex].GroupId.value(), topic);
     }
     KAFKA_LOG_D("Extracted partitions" << WaitingGroupTopicsInfo);
     if (WaitingGroupTopicsInfo == 0) {
-
         for (const auto& topicToEntities : TopicToEntities) {
             NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
                 NormalizePath(Context->DatabasePath, topicToEntities.first),
@@ -353,8 +350,6 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
         group.GroupId = Message->GroupId.value();
 
-        // вот тут если пустые топики, то нужно их достать из assignments
-
         for (const auto& sourceTopic: Message->Topics) {
             TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topic;
             topic.Name = sourceTopic.Name;
@@ -364,10 +359,12 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         Message->Groups.push_back(group);
     }
     bool groupsWithEmptyTopics = false;
-    for (const auto& group : Message->Groups) {
+    for (size_t i = 0; i < Message->Groups.size(); i++) {
+        const auto& group = Message->Groups[i];
         if (group.Topics.empty()) {
             groupsWithEmptyTopics = true;
             GroupsToFetch.push(group.GroupId);
+            GroupIdToIndex[group.GroupId.value()] = ui32(i);
             WaitingGroupTopicsInfo++;
         } else {
             for (const auto& topic: group.Topics) {
@@ -376,8 +373,6 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
     }
     if (groupsWithEmptyTopics) {
-        // вот это нужно делать, если не отправлены запросы к kqp.
-        // Иначе дожидаемся, пока приходят ответы по группам и делаем этот цикл и активизацию актора через Become в другом методе
         Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
         Kqp->SendCreateSessionRequest(ctx);
         KAFKA_LOG_D("Creating KQP Session");

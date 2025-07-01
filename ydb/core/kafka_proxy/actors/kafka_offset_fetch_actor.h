@@ -61,6 +61,7 @@ private:
     const TMessagePtr<TOffsetFetchRequestData> Message;
     std::unordered_map<TString, TopicEntities> TopicToEntities;
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCommitedOffsetsResponse>> TopicsToResponses;
+    std::unordered_map<TString, ui32> GroupIdToIndex;
     std::unordered_map<ui32, TString> CookieToGroupId;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 

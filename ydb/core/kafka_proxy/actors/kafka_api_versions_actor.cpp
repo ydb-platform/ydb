@@ -50,6 +50,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TCreateTopicsRequestData>(response->ApiKeys, CREATE_TOPICS, {.MaxVersion=7});
     AddApiKey<TAlterConfigsRequestData>(response->ApiKeys, ALTER_CONFIGS, {.MaxVersion=2});
     AddApiKey<TCreatePartitionsRequestData>(response->ApiKeys, CREATE_PARTITIONS, {.MaxVersion=3});
+    AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MaxVersion=7});
 
     return response;
 }

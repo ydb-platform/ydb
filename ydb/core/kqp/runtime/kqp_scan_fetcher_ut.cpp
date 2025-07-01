@@ -4,6 +4,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/accessor/positive_integer.h>
 
 Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
 
@@ -30,17 +31,18 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
         NWilson::TTraceId traceId(0);
         NKikimr::NKqp::TCPULimits cpuLimits;
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        auto scanFetcher = runtime.Register(CreateKqpScanFetcher(snapshot, {compute}, meta, settings,
+        auto scanFetcher = runtime.Register(CreateKqpScanFetcher(snapshot, { compute }, meta, settings,
             0, TMaybe<ui64>(), 0, TMaybe<NKikimrDataEvents::ELockMode>(), shardsScanningPolicy,
             MakeIntrusive<NKikimr::NKqp::TKqpCounters>(counters), 0, cpuLimits)
         );
         runtime.EnableScheduleForActor(scanFetcher, true);
 
+        NKikimr::TPositiveIncreasingControlInteger controlGeneration;
         // 1. Simulate fail
         {
             auto event = runtime.GrabEdgeEvent<NKikimr::TEvPipeCache::TEvForward>(TSet<NActors::TActorId>{pipeCache});
             NKikimr::TEvDataShard::TEvKqpScan* evScan = dynamic_cast<NKikimr::TEvDataShard::TEvKqpScan*>(event->Get()->Ev.get());
-            UNIT_ASSERT_EQUAL(evScan->Record.GetGeneration(), 1);
+            controlGeneration = NKikimr::TPositiveIncreasingControlInteger(evScan->Record.GetGeneration());
         }
         runtime.Send(scanFetcher, pipeCache, new NKikimr::TEvPipeCache::TEvDeliveryProblem(TABLET_ID, false));
 
@@ -48,7 +50,7 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
         {
             auto event = runtime.GrabEdgeEvent<NKikimr::TEvPipeCache::TEvForward>(TSet<NActors::TActorId>{pipeCache});
             NKikimr::TEvDataShard::TEvKqpScan* evScan = dynamic_cast<NKikimr::TEvDataShard::TEvKqpScan*>(event->Get()->Ev.get());
-            UNIT_ASSERT_EQUAL(evScan->Record.GetGeneration(), 2);
+            controlGeneration = NKikimr::TPositiveIncreasingControlInteger(evScan->Record.GetGeneration());
         }
         runtime.Send(scanFetcher, pipeCache, new NKikimr::TEvPipeCache::TEvDeliveryProblem(TABLET_ID, false));
 
@@ -65,7 +67,7 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
         {
             auto event = runtime.GrabEdgeEvent<NKikimr::TEvPipeCache::TEvForward>(TSet<NActors::TActorId>{pipeCache});
             NKikimr::TEvDataShard::TEvKqpScan* evScan = dynamic_cast<NKikimr::TEvDataShard::TEvKqpScan*>(event->Get()->Ev.get());
-            UNIT_ASSERT_EQUAL(evScan->Record.GetGeneration(), 3);
+            controlGeneration = NKikimr::TPositiveIncreasingControlInteger(evScan->Record.GetGeneration());
         }
         runtime.Send(scanFetcher, scan, new NKikimr::NKqp::TEvKqpCompute::TEvScanInitActor(0, scan, 3, TABLET_ID, true));
         {

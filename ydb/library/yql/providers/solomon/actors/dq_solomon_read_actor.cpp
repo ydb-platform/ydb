@@ -1,9 +1,10 @@
 #include "dq_solomon_read_actor.h"
 #include "dq_solomon_actors_util.h"
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/util/pb_io.h>
-
 #include <library/cpp/retry/retry.h>
+
 #include <util/string/join.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
@@ -35,7 +36,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <library/cpp/json/json_reader.h>
 
 
 #include <util/generic/algorithm.h>

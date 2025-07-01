@@ -229,6 +229,8 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
     const auto& pileMap = ev->Get()->PileMap;
     Info->IsBridgeMode = static_cast<bool>(pileMap);
     Info->NodeIdToPileId = FlipPileMap(pileMap);
+    if (!Info->ClusterNodes)
+        Info->ClusterNodes = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u, Info->NodeIdToPileId);
     for (const auto& node : ev->Get()->Nodes) {
         Info->AddNode(node, &TlsActivationContext->AsActorContext());
         SendNodeRequests(node.NodeId);

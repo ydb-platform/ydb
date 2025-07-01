@@ -661,7 +661,7 @@ public:
     friend TOperationLogManager;
 
     TenantNodesCheckers TenantNodesChecker;
-    TSimpleSharedPtr<TClusterLimitsCounter> ClusterNodes = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u, NodeIdToPileId);
+    TSimpleSharedPtr<TClusterLimitsCounter> ClusterNodes;
 
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
@@ -1046,7 +1046,7 @@ public:
     TVector<TVector<TStateStorageRingInfoPtr>> StateStorageRings;
 
     std::vector<NKikimr::TBridgeInfo::TPile> Piles;
-    std::shared_ptr<THashMap<ui32, ui32>> NodeIdToPileId;
+    std::shared_ptr<THashMap<ui32, ui32>> NodeIdToPileId = std::make_shared<THashMap<ui32, ui32>>();
     bool IsBridgeMode = false;
 };
 

@@ -382,6 +382,9 @@ void TClusterInfo::AddNode(const TEvInterconnect::TNodeInfo &info, const TActorC
         }
     }
 
+    Y_ABORT_UNLESS(!IsBridgeMode || ClusterNodes);
+    if (!ClusterNodes)
+        ClusterNodes = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u);
     node->AddNodeGroup(ClusterNodes);
 
     HostNameToNodeId.emplace(node->Host, node->NodeId);

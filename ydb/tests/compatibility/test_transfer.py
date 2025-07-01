@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import math
 import pytest
 import time
 import uuid

@@ -6,13 +6,18 @@
 
 namespace NACLib {
 
-#define BUILTIN_ACL_DOMAIN "builtin"
-#define BUILTIN_ACL_ROOT "root@" BUILTIN_ACL_DOMAIN
-#define BUILTIN_ERROR_DOMAIN "error"
-#define BUILTIN_SYSTEM_DOMAIN "system"
+#define AUTH_DOMAIN_BUILTIN "builtin"
+#define AUTH_DOMAIN_ERROR "error"
+#define AUTH_DOMAIN_SYSTEM "system"
 
-#define BUILTIN_ACL_METADATA "metadata@" BUILTIN_SYSTEM_DOMAIN
-#define BUILTIN_ACL_TMP "tmp@" BUILTIN_SYSTEM_DOMAIN
+#define BUILTIN_SID_ROOT "root@" AUTH_DOMAIN_BUILTIN
+
+#define SYSTEM_SID_METADATA "metadata@" AUTH_DOMAIN_SYSTEM
+#define SYSTEM_SID_TMP "tmp@" AUTH_DOMAIN_SYSTEM
+
+// for backward compatibility
+#define BUILTIN_ACL_DOMAIN AUTH_DOMAIN_BUILTIN
+#define BUILTIN_ACL_ROOT BUILTIN_SID_ROOT
 
 class TUserToken;
 class TSystemUsers {
@@ -173,10 +178,5 @@ public:
 protected:
     bool IsContainer;
 };
-
-
-
-
-
 
 }

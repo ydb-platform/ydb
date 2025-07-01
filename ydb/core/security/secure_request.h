@@ -132,7 +132,7 @@ public:
         if (!defaultUserSIDs.empty()) {
             return defaultUserSIDs.front();
         }
-        return BUILTIN_ACL_ROOT;
+        return BUILTIN_SID_ROOT;
     }
 
     TString GetSanitizedToken() const {

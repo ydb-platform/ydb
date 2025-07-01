@@ -60,8 +60,8 @@ private:
     NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort) const {
         auto fqConfig = Settings.AppConfig.GetFederatedQueryConfig();
 
-        fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
-        fqConfig.MutablePrivateProxy()->AddGrantedUsers(BUILTIN_ACL_ROOT);
+        fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_SID_ROOT);
+        fqConfig.MutablePrivateProxy()->AddGrantedUsers(BUILTIN_SID_ROOT);
 
         const TString endpoint = TStringBuilder() << "localhost:" << grpcPort;
         const TString database = NKikimr::CanonizePath(Settings.DomainName);
@@ -297,7 +297,7 @@ private:
 
     template <typename TRequest, typename TProto>
     std::unique_ptr<TRequest> GetControlPlaneRequest(const TProto& request, const TFqOptions& options) const {
-        return std::make_unique<TRequest>(TStringBuilder() << "yandexcloud://" << options.Scope, request, BUILTIN_ACL_ROOT, Settings.YqlToken ? Settings.YqlToken : "fqrun", TVector<TString>{});
+        return std::make_unique<TRequest>(TStringBuilder() << "yandexcloud://" << options.Scope, request, BUILTIN_SID_ROOT, Settings.YqlToken ? Settings.YqlToken : "fqrun", TVector<TString>{});
     }
 
     template <typename TRequest, typename TResponse, typename TProto>

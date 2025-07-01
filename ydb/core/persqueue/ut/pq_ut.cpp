@@ -611,7 +611,7 @@ Y_UNIT_TEST(TestCheckACL) {
 
         TAutoPtr<IEventHandle> handle;
         THolder<TEvPersQueue::TEvCheckACL> request(new TEvPersQueue::TEvCheckACL());
-        request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
+        request->Record.SetToken(NACLib::TUserToken("client@" AUTH_DOMAIN_BUILTIN, {}).SerializeAsString());
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
         request->Record.SetUser("client");
 
@@ -632,7 +632,7 @@ Y_UNIT_TEST(TestCheckACL) {
         UNIT_ASSERT(rec.GetAccess() == NKikimrPQ::EAccess::DENIED);
         UNIT_ASSERT_VALUES_EQUAL(rec.GetTopic(), TOPIC_NAME);
 
-        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "client@" BUILTIN_ACL_DOMAIN);
+        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "client@" AUTH_DOMAIN_BUILTIN);
 
         {
             TDispatchOptions options;
@@ -641,7 +641,7 @@ Y_UNIT_TEST(TestCheckACL) {
         }
 
         request.Reset(new TEvPersQueue::TEvCheckACL());
-        request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
+        request->Record.SetToken(NACLib::TUserToken("client@" AUTH_DOMAIN_BUILTIN, {}).SerializeAsString());
         request->Record.SetUser("client");
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
 
@@ -650,7 +650,7 @@ Y_UNIT_TEST(TestCheckACL) {
         auto& rec2 = result->Record;
         UNIT_ASSERT_C(rec2.GetAccess() == NKikimrPQ::EAccess::ALLOWED, rec2);
 
-        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "client@" BUILTIN_ACL_DOMAIN);
+        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "client@" AUTH_DOMAIN_BUILTIN);
 
         {
             TDispatchOptions options;
@@ -659,7 +659,7 @@ Y_UNIT_TEST(TestCheckACL) {
         }
 
         request.Reset(new TEvPersQueue::TEvCheckACL());
-        request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
+        request->Record.SetToken(NACLib::TUserToken("client@" AUTH_DOMAIN_BUILTIN, {}).SerializeAsString());
         request->Record.SetUser("client");
         request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
 
@@ -669,7 +669,7 @@ Y_UNIT_TEST(TestCheckACL) {
         UNIT_ASSERT(rec3.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
 
         request.Reset(new TEvPersQueue::TEvCheckACL());
-        request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
+        request->Record.SetToken(NACLib::TUserToken("client@" AUTH_DOMAIN_BUILTIN, {}).SerializeAsString());
         request->Record.SetUser("client2");
         request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
 

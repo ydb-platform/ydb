@@ -22,7 +22,7 @@ TExternalDatabase TExternalDatabase::Parse(const TString& optionValue, const TSt
     if (!result.Token) {
         result.Token = GetEnv(YQL_TOKEN_VARIABLE);
         if (!result.Token) {
-            result.Token = BUILTIN_ACL_ROOT;
+            result.Token = BUILTIN_SID_ROOT;
         }
     }
 

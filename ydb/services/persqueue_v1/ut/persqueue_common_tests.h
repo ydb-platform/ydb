@@ -59,7 +59,7 @@ public:
     }
 
     TString GenerateValidToken(int i = 0) {
-        return "test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN;
+        return "test_user_" + ToString(i) + "@" + AUTH_DOMAIN_BUILTIN;
     }
 
     // Auth* tests are for both authentication and authorization
@@ -220,8 +220,8 @@ public:
         TPersQueueV1TestServer server = CreateServer();
         SET_LOCALS;
         runtime->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
-        const TString validToken = "test_user@" BUILTIN_ACL_DOMAIN;
-        // TODO: Why test fails with 'BUILTIN_ACL_DOMAIN' as domain in invalid token?
+        const TString validToken = "test_user@" AUTH_DOMAIN_BUILTIN;
+        // TODO: Why test fails with 'AUTH_DOMAIN_BUILTIN' as domain in invalid token?
         TVector<TString> invalidTokens = {TString(), "test_user", "test_user@invalid_domain"};
         server.ModifyTopicACLAndWait(server.GetFullTopicPath(), {{validToken, {"ydb.generic.write"}}});
 
@@ -253,9 +253,9 @@ public:
         TPersQueueV1TestServer server = CreateServer();
 
         const TString validToken = "test_user@"
-                                   BUILTIN_ACL_DOMAIN;
+                                   AUTH_DOMAIN_BUILTIN;
         const TString invalidToken = "test_user_2@"
-                                     BUILTIN_ACL_DOMAIN;
+                                     AUTH_DOMAIN_BUILTIN;
 
         server.ModifyTopicACL(server.GetFullTopicPath(), {{validToken, {"ydb.generic.write"}}});
 

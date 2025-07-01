@@ -12,7 +12,7 @@ namespace {
 using namespace NWorkload;
 
 
-TEvPrivate::TEvFetchPoolResponse::TPtr FetchPool(TIntrusivePtr<IYdbSetup> ydb, const TString& poolId = "", const TString& userSID = "user@" BUILTIN_SYSTEM_DOMAIN) {
+TEvPrivate::TEvFetchPoolResponse::TPtr FetchPool(TIntrusivePtr<IYdbSetup> ydb, const TString& poolId = "", const TString& userSID = "user@" AUTH_DOMAIN_SYSTEM) {
     const auto& settings = ydb->GetSettings();
     auto runtime = ydb->GetRuntime();
     const auto& edgeActor = runtime->AllocateEdgeActor();
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         // Check default pool access
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings.UserSID(userSID)));
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings.UserSID(ydb->GetRuntime()->GetAppData().AllAuthenticatedUsers)));
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings.UserSID(BUILTIN_ACL_ROOT)));
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings.UserSID(BUILTIN_SID_ROOT)));
     }
 
     Y_UNIT_TEST(TestDefaultPoolAdminPermissions) {
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceSubscriptions) {
 
         const auto& securityObject = response->Get()->SecurityObject;
         UNIT_ASSERT_C(securityObject, "Security object not found");
-        UNIT_ASSERT_VALUES_EQUAL_C(securityObject->GetOwnerSID(), BUILTIN_ACL_ROOT, "Unexpected owner user SID");
+        UNIT_ASSERT_VALUES_EQUAL_C(securityObject->GetOwnerSID(), BUILTIN_SID_ROOT, "Unexpected owner user SID");
 
         return edgeActor;
     }

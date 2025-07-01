@@ -43,7 +43,7 @@ public:
         hFunc(NKikimr::NKqp::TEvKqp::TEvQueryResponse, Handle);
         hFunc(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
     )
-    
+
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(ResultSizeLimit_);
@@ -133,7 +133,7 @@ public:
     TResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings)
         : Settings_(settings)
         , RetryPolicy_(IRetryPolicy::GetExponentialBackoffPolicy(
-            &TResourcesWaiterActor::Retryable, REFRESH_PERIOD, 
+            &TResourcesWaiterActor::Retryable, REFRESH_PERIOD,
             TDuration::MilliSeconds(100), TDuration::Seconds(1),
             std::numeric_limits<size_t>::max(), std::max(2 * REFRESH_PERIOD, Settings_.HealthCheckTimeout)
         ))
@@ -234,7 +234,7 @@ private:
 
     void StartScriptQuery() {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
-        event->Record.SetUserToken(NACLib::TUserToken("", BUILTIN_ACL_ROOT, {}).SerializeAsString());
+        event->Record.SetUserToken(NACLib::TUserToken("", BUILTIN_SID_ROOT, {}).SerializeAsString());
 
         auto request = event->Record.MutableRequest();
         request->SetQuery("SELECT 42");
@@ -385,7 +385,7 @@ public:
 
 private:
     void FailAndPassAway(const TString& error) {
-        if (!OpenPromise_.HasValue()) {  
+        if (!OpenPromise_.HasValue()) {
             OpenPromise_.SetException(error);
         }
         ClosePromise_.SetException(error);

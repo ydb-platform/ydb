@@ -71,7 +71,7 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : Config(config.GetResourceManager())
-        , ScanTabletsConfig(config.GetScanTabletsConfig()
+        , ScanTabletsConfig(config.GetScanTabletsConfig())
         , Counters(counters)
         , ResourceManager_(std::move(resourceManager))
         , CaFactory_(std::move(caFactory))

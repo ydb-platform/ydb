@@ -18,6 +18,7 @@
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>

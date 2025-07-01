@@ -61,6 +61,7 @@ namespace NKikimrConfig {
     class THiveConfig;
     class TDataShardConfig;
     class TColumnShardConfig;
+    class TTableServiceConfig;
     class TSchemeShardConfig;
     class TMeteringConfig;
     class TAuditConfig;

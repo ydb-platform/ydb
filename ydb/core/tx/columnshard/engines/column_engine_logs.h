@@ -196,6 +196,10 @@ public:
         return *GetGranulePtrVerified(pathId);
     }
 
+    bool HasDataWithSchemaVersion(const ui64 version) const {
+        return GranulesStorage->GetStats()->HasSchemaVersion(version);
+    }
+
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const TInternalPathId pathId) const {
         auto result = GetGranuleOptional(pathId);
         AFL_VERIFY(result)("path_id", pathId);

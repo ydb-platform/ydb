@@ -570,6 +570,7 @@ private:
     bool SetupTtl();
     void SetupCleanupPortions();
     void SetupCleanupTables();
+    void SetupCleanupSchemas();
     void SetupGC();
 
     void UpdateIndexCounters();

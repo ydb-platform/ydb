@@ -230,6 +230,42 @@ public:
         const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
         const ui64 tabletId);
 
+    class TSchemaAddress {
+    private:
+        YDB_READONLY(ui32, PresetId, 0);
+        YDB_READONLY_DEF(TSnapshot, Snapshot);
+
+    public:
+        TSchemaAddress(const ui32 presetId, const TSnapshot& snapshot)
+            : PresetId(presetId)
+            , Snapshot(snapshot)
+        {
+
+        }
+
+        explicit size_t operator() const {
+            return CombineHashes(PresetId, (size_t)Snapshot);
+        }
+
+        bool operator==(const TSchemaAddress& item) const {
+            return std::tie(PresetId, Snapshot) == std::tie(item.PresetId, item.Snapshot);
+        }
+    };
+
+    THashSet<TSchemaAddress> GetSchemasToClean() const {
+        THashSet<TSchemaAddress> result;
+        const ui64 lastSchemaVersion = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion();
+        for (auto&& i : PrimaryIndex->GetVersionedIndex().GetSnapshotByVersions()) {
+            if (i.first == lastSchemaVersion) {
+                continue;
+            }
+            if (!GetPrimaryIndexAsVerified<TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first)) {
+                AFL_VERIFY(result.emplace(TSchemaAddress(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot())).second);
+            }
+        }
+        return result;
+    }
+
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;
     }

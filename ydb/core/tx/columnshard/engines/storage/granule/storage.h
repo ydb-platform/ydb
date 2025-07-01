@@ -15,6 +15,7 @@ private:
     const NColumnShard::TEngineLogsCounters Counters;
     bool PackModificationFlag = false;
     THashMap<TInternalPathId, const TGranuleMeta*> PackModifiedGranules;
+    THashMap<ui64, TPositiveControlInteger> SchemaVersionsControl;
 
     static inline TAtomicCounter SumMetadataMemoryPortionsSize = 0;
 
@@ -35,6 +36,10 @@ private:
 public:
     TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
         : Counters(counters) {
+    }
+
+    bool HasSchemaVersion(const ui64 version) const {
+        return SchemaVersionsControl.contains(version);
     }
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
@@ -80,6 +85,11 @@ public:
     }
 
     void OnRemovePortion(const TPortionInfo& portion) {
+        auto it = SchemaVersionsControl.find(portion.GetSchemaVersionVerified());
+        AFL_VERIFY(it != SchemaVersionsControl.end());
+        if (it->second.Dec() == 0) {
+            SchemaVersionsControl.erase(it);
+        }
         MetadataMemoryPortionsSize -= portion.GetMetadataMemorySize();
         AFL_VERIFY(MetadataMemoryPortionsSize >= 0);
         const i64 value = SumMetadataMemoryPortionsSize.Sub(portion.GetMetadataMemorySize());
@@ -87,6 +97,7 @@ public:
     }
 
     void OnAddPortion(const TPortionInfo& portion) {
+        SchemaVersionsControl[portion.GetSchemaVersionVerified()].Inc();
         MetadataMemoryPortionsSize += portion.GetMetadataMemorySize();
         const i64 value = SumMetadataMemoryPortionsSize.Add(portion.GetMetadataMemorySize());
         Counters.OnIndexMetadataUsageBytes(value);

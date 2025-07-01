@@ -778,7 +778,7 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
     if (BackgroundController.IsCleanupPortionsActive()) {
-        ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
+        ACFL_DEBUG("background", "cleanup_portions")("skip_reason", "in_progress");
         return;
     }
 
@@ -805,7 +805,7 @@ void TColumnShard::SetupCleanupPortions() {
 void TColumnShard::SetupCleanupTables() {
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupTablesActive()) {
-        ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
+        ACFL_DEBUG("background", "cleanup_tables")("skip_reason", "in_progress");
         return;
     }
 
@@ -828,6 +828,49 @@ void TColumnShard::SetupCleanupTables() {
     changes->Start(*this);
 
     Send(SelfId(), ev.release());
+}
+
+class TTxCleanupSchemasWithnoData: public TTransactionBase<TColumnShard> {
+private:
+    THashSet<TTablesManager::TSchemaAddress> VersionsToClean;
+
+public:
+    TTxCleanupSchemasWithnoData(TColumnShard* self, const THashSet<TTablesManager::TSchemaAddress>& versionsToClean)
+        : TBase(self)
+        , VersionsToClean(versionsToClean) {
+    }
+
+    virtual bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        NIceDb::TNiceDb db(txc.DB);
+        using SchemaPresetVersionInfo = NColumnShard::Schema::SchemaPresetVersionInfo;
+        for (auto&& i : VersionsToClean) {
+            db.Table<IndexColumnsV1>().Key(i.GetPresetId(), i.GetSnapshot().GetStep(), i.GetSnapshot().GetTxId()).Delete();
+        }
+    }
+    virtual void Complete(const TActorContext& /*ctx*/) override {
+        BackgroundController.OnCleanupSchemasFinished();
+    }
+    TTxType GetTxType() const override {
+        return TXTYPE_CLEANUP_SCHEMAS;
+    }
+};
+
+void TColumnShard::SetupCleanupSchemas() {
+    Counters.GetCSCounters().OnSetupCleanup();
+    if (BackgroundController.IsCleanupSchemasActive()) {
+        ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "in_progress");
+        return;
+    }
+
+    const THashSet<TTablesManager::TSchemaAddress> schemasToClean = TablesManager.MutablePrimaryIndex().GetSchemasToClean();
+    if (schemasToClean.empty()) {
+        ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "no_changes");
+        return;
+    }
+
+    BackgroundController.OnCleanupSchemasStarted();
+    Execute(
+        new TTxCleanupSchemasWithnoData(this, TablesManager.GetPrimaryIndex()., schemasToClean), NActors::TActivationContext::AsActorContext());
 }
 
 void TColumnShard::SetupGC() {

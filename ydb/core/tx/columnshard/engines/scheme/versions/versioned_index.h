@@ -31,7 +31,6 @@ public:
 class TVersionedIndex {
 private:
     THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
-    std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
     std::shared_ptr<arrow::Schema> PrimaryKey;
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
@@ -39,6 +38,10 @@ private:
     ISnapshotSchema::TPtr SchemeForActualization;
 
 public:
+    const std::map<ui64, ISnapshotSchema::TPtr>& GetSnapshotByVersions() const {
+        return SnapshotByVersion;
+    }
+
     bool IsEqualTo(const TVersionedIndex& vIndex) {
         return LastSchemaVersion == vIndex.LastSchemaVersion && SnapshotByVersion.size() == vIndex.SnapshotByVersion.size() &&
                ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeVersionForActualization == vIndex.SchemeVersionForActualization;
@@ -95,16 +98,6 @@ public:
         return it->second;
     }
 
-    ISnapshotSchema::TPtr GetSchemaVerified(const TSnapshot& version) const {
-        for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
-            if (it->first <= version) {
-                return it->second;
-            }
-        }
-        Y_ABORT_UNLESS(!Snapshots.empty());
-        return Snapshots.begin()->second;
-    }
-
     ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
         if (SnapshotByVersion.empty()) {
             return nullptr;
@@ -117,12 +110,12 @@ public:
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {
-        Y_ABORT_UNLESS(!Snapshots.empty());
-        return Snapshots.rbegin()->second;
+        Y_ABORT_UNLESS(!SnapshotByVersion.empty());
+        return SnapshotByVersion.rbegin()->second;
     }
 
     bool IsEmpty() const {
-        return Snapshots.empty();
+        return SnapshotByVersion.empty();
     }
 
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const noexcept {

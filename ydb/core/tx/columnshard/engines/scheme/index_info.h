@@ -73,6 +73,7 @@ private:
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
 
+    ui64 PresetId;
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
@@ -158,6 +159,10 @@ public:
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
+    }
+
+    ui64 GetPresetId() const {
+        return PresetId;
     }
 
     static std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(

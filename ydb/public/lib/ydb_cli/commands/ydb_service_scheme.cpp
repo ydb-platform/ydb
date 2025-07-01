@@ -522,19 +522,21 @@ static TStringBuf SkipDatabasePrefix(TStringBuf value, TStringBuf prefix) {
 
 void PrintConnectionParams(const NReplication::TConnectionParams& connParams) {
     bool isLocal = connParams.GetDiscoveryEndpoint().empty();
-    if (!isLocal) {
-        Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
-        Cout << Endl << "Database: " << connParams.GetDatabase();
+    if (isLocal) {
+        return;
+    }
 
-        switch (connParams.GetCredentials()) {
-        case NReplication::TConnectionParams::ECredentials::Static:
-            Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
-            Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
-            break;
-        case NReplication::TConnectionParams::ECredentials::OAuth:
-            Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
-            break;
-        }
+    Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
+    Cout << Endl << "Database: " << connParams.GetDatabase();
+
+    switch (connParams.GetCredentials()) {
+    case NReplication::TConnectionParams::ECredentials::Static:
+        Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
+        Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
+        break;
+    case NReplication::TConnectionParams::ECredentials::OAuth:
+        Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
+        break;
     }
 }
 

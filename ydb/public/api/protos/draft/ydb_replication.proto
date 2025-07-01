@@ -145,5 +145,4 @@ message DescribeTransferResult {
     }
 
     optional BatchSettings batch_settings = 11;
-
 }

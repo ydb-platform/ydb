@@ -247,7 +247,7 @@ void TTestActorSystem::SetupTabletRuntime(const std::function<TNodeLocation(ui32
 
 void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
     if (const auto& domain = GetDomainsInfo()->Domain) {
-        ui32 numReplicas = 3;
+        ui32 numReplicas = 5;
 
         auto process = [&](auto&& generateId, auto&& createReplica) {
             auto info = MakeIntrusive<TStateStorageInfo>();

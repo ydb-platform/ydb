@@ -90,8 +90,10 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TChangePathStateOp");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TChangePathStateOp AbortPropose"
+            << ", opId: " << OperationId);
+        // Nothing to cleanup since Propose hasn't committed anything yet
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

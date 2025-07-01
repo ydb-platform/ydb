@@ -3071,6 +3071,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                                 FillAggrStat(node, externalInfo.GetLastMessageMs(), "LastMessageMs");
                             }
                             SetNonZero(node, "PartitionCount", externalInfo.GetPartitionCount());
+                            SetNonZero(node, "FinishedPartitionCount", externalInfo.GetFinishedPartitionCount());
                         }
                         if (ingress.second.HasIngress()) {
                             FillAsyncAggrStat(ingressInfo.InsertValue("Ingress", NJson::JSON_MAP), ingress.second.GetIngress());

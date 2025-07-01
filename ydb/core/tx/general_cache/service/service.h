@@ -32,11 +32,19 @@ private:
     }
 
     void HandleMain(NSource::TEvents<TPolicy>::TEvObjectsInfo::TPtr& ev) {
-        Manager->OnRequestResult(ev->Get()->ExtractObjects(), ev->Get()->ExtractRemoved(), ev->Get()->ExtractErrors());
+        Manager->OnRequestResult(ev->Get()->GetSourceId(), ev->Get()->ExtractObjects(), ev->Get()->ExtractRemoved(), ev->Get()->ExtractErrors());
     }
 
     void HandleMain(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo::TPtr& ev) {
-        Manager->OnAdditionalObjectsInfo(ev->Get()->ExtractAddObjects(), ev->Get()->ExtractRemoveObjects());
+        Manager->OnAdditionalObjectsInfo(ev->Get()->GetSourceId(), ev->Get()->ExtractAddObjects(), ev->Get()->ExtractRemoveObjects());
+    }
+
+    void HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        Manager->AbortSource(Manager->GetSourceByCookie(ev->Cookie));
+    }
+
+    void HandleMain(NPublic::TEvents<TPolicy>::TEvKillSource::TPtr& ev) {
+        Manager->AbortSource(ev->Get()->GetSourceId());
     }
 
 public:
@@ -45,9 +53,11 @@ public:
         //            ("workers", Workers.size())("waiting", Waiting.size())("actor_id", SelfId());
         switch (ev->GetTypeRewrite()) {
             hFunc(NPublic::TEvents<TPolicy>::TEvAskData, HandleMain);
+            hFunc(NPublic::TEvents<TPolicy>::TEvKillSource, HandleMain);
             hFunc(NPublic::TEvents<TPolicy>::TEvUpdateMaxCacheSize, HandleMain);
             hFunc(NSource::TEvents<TPolicy>::TEvObjectsInfo, HandleMain);
             hFunc(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo, HandleMain);
+            hFunc(NActors::TEvents::TEvUndelivered, HandleMain);
             default:
                 AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for general cache")("ev_type", ev->GetTypeName());
                 break;
@@ -56,14 +66,14 @@ public:
 
     TDistributor(const NPublic::TConfig& config, const TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
         : Config(config)
-        , Counters(TPolicy::GetCacheName(), conveyorSignals) {
+        , Counters(TPolicy::GetCacheName(), conveyorSignals, config) {
     }
 
     ~TDistributor() {
     }
 
     void Bootstrap() {
-        Manager = std::make_unique<TManager>(Config, TBase::SelfId(), Counters.GetManager());
+        Manager = std::make_unique<TManager>(TBase::SelfId(), Counters.GetManager());
         TBase::Become(&TDistributor::StateMain);
     }
 };

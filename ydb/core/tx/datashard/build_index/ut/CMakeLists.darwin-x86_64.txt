@@ -60,6 +60,7 @@ target_sources(ydb-core-tx-datashard-build_index-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/ut/ut_reshuffle_kmeans.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/ut/ut_sample_k.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/ut/ut_secondary_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/ut/ut_unique_index.cpp
 )
 
 

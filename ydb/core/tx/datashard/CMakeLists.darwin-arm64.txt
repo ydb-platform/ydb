@@ -316,6 +316,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/secondary_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/recompute_kmeans.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/reshuffle_kmeans.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/unique_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_uploader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/extstorage_usage_config.cpp

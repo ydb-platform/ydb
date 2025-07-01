@@ -21,6 +21,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>

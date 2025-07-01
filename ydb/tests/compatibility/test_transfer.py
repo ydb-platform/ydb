@@ -101,7 +101,7 @@ class Workload:
 
 
 def skip_if_unsupported(versions):
-    if min(versions) < (25, 1, 2):
+    if min(versions) < (25, 1):
         pytest.skip("Only available since 25-1-2")
 
 

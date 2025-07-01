@@ -846,6 +846,7 @@ public:
         for (auto&& i : VersionsToClean) {
             db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Delete();
         }
+        return true;
     }
     virtual void Complete(const TActorContext& /*ctx*/) override {
         Self->BackgroundController.OnCleanupSchemasFinished();
@@ -870,7 +871,7 @@ void TColumnShard::SetupCleanupSchemas() {
 
     BackgroundController.OnCleanupSchemasStarted();
     Execute(
-        new TTxCleanupSchemasWithnoData(this, TablesManager.GetPrimaryIndex()., schemasToClean), NActors::TActivationContext::AsActorContext());
+        new TTxCleanupSchemasWithnoData(this, schemasToClean), NActors::TActivationContext::AsActorContext());
 }
 
 void TColumnShard::SetupGC() {

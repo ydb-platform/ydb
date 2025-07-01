@@ -169,6 +169,14 @@ public:
         return GetIndexVersions().GetSchemaVerified(version)->GetIndexInfo().ArrowSchema();
     }
 
+    const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
+        AFL_VERIFY(ResultIndexSchema);
+        if (version && version < RequestSnapshot) {
+            return GetIndexVersions().GetSchemaVerified(*version)->GetIndexInfo();
+        }
+        return ResultIndexSchema->GetIndexInfo();
+    }
+
     void InitShardingInfo(const TInternalPathId pathId) {
         AFL_VERIFY(!RequestShardingInfo);
         RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);

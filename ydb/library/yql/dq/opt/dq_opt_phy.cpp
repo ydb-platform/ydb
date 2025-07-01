@@ -2184,6 +2184,25 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
+TExprBase DqBuildStageForDqPureExpr(TExprBase node, TExprContext& ctx) {
+    auto stage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body(node)
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
 /*
  * Move (Extend ...) into a separate stage.
  *
@@ -2203,8 +2222,6 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
     TVector<TExprBase> inputConns;
     TVector<TExprBase> extendArgs;
     TNodeOnNodeOwnedMap replaces;
-    ui32 dqConnectionCount = 0;
-    bool hasPureExpression = false;
 
     for (const auto& arg: extend) {
         if (arg.Maybe<TDqConnection>()) {
@@ -2248,13 +2265,20 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
             inputConns.push_back(connection);
             inputArgs.push_back(programArg);
             extendArgs.push_back(programArg);
-            ++dqConnectionCount;
         } else if (IsDqCompletePureExpr(arg)) {
-            hasPureExpression = true;
-            // arg is deemed to be a pure expression so leave it inside (Extend ...)
-            extendArgs.push_back(Build<TCoToFlow>(ctx, arg.Pos())
+            auto newArg = Build<TCoToFlow>(ctx, arg.Pos())
                 .Input(arg)
-                .Done());
+                .Done();
+
+            auto newConnection = DqBuildStageForDqPureExpr(newArg, ctx);
+            inputConns.push_back(newConnection);
+            TCoArgument programArg = Build<TCoArgument>(ctx, newConnection.Pos())
+                .Name("arg")
+                .Done();
+
+            extendArgs.push_back(programArg);
+            inputArgs.push_back(programArg);
+
         } else {
             return node;
         }
@@ -2277,7 +2301,7 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
         .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
         .Done();
 
-    const bool replaceWithShuffle = (!hasPureExpression && (dqConnectionCount == replaces.size() && dqConnectionCount == 2));
+    const bool replaceWithShuffle = false;
     auto newStage = replaceWithShuffle ? ctx.ReplaceNodes(stage.Ptr(), replaces) : stage.Ptr();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())

@@ -1,13 +1,11 @@
 import allure
 import logging
 import os
-import time
+import time as time_module
 import uuid
 import yatest.common
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from time import time
-import time as time_module
 from datetime import datetime, timedelta
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import (
@@ -48,7 +46,7 @@ class WorkloadTestBase(LoadSuiteBase):
         Останавливает nemesis сервис на всех нодах кластера для чистого старта.
         """
         with allure.step("Workload test setup: initialize and stop nemesis"):
-            cls._setup_start_time = time()
+            cls._setup_start_time = time_module.time()
 
             # Останавливаем nemesis сервис на всех нодах кластера
             try:
@@ -446,7 +444,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         }
 
                 # Выполняем файловые операции параллельно
-                file_ops_start_time = time()
+                file_ops_start_time = time_module.time()
                 success_count = 0
                 error_count = 0
                 errors = []
@@ -479,7 +477,7 @@ class WorkloadTestBase(LoadSuiteBase):
                             errors.append(error_msg)
                             error_count += 1
 
-                file_ops_time = time() - file_ops_start_time
+                file_ops_time = time_module.time() - file_ops_start_time
 
                 # Добавляем итоговую статистику файловых операций
                 file_ops_log.append("\n--- File Operations Summary ---")
@@ -576,7 +574,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     }
 
             # Выполняем команды сервиса параллельно
-            service_start_time = time()
+            service_start_time = time_module.time()
             success_count = 0
             error_count = 0
             errors = []
@@ -607,7 +605,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         errors.append(error_msg)
                         error_count += 1
 
-            service_time = time() - service_start_time
+            service_time = time_module.time() - service_start_time
 
             # Добавляем итоговую статистику
             nemesis_log.append("\n--- Summary ---")
@@ -1051,7 +1049,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Инициализируем результат
             overall_result = YdbCliHelper.WorkloadRunResult()
-            overall_result.start_time = time()
+            overall_result.start_time = time_module.time()
 
             logging.info(
                 f"Preparation completed: {
@@ -1063,7 +1061,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 "deployed_nodes": deployed_nodes,
                 "execution_plan": execution_plan,
                 "overall_result": overall_result,
-                "workload_start_time": time(),
+                "workload_start_time": time_module.time(),
             }
 
     def _execute_workload_runs(
@@ -1105,7 +1103,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     "successful_runs": 0,
                     "total_runs": 0,
                     "total_execution_time": 0,
-                    "workload_start_time": time(),
+                    "workload_start_time": time_module.time(),
                     "deployed_nodes": [],
                 }
 
@@ -1113,7 +1111,7 @@ class WorkloadTestBase(LoadSuiteBase):
             with allure.step(
                 f"Execute workload in parallel on {len(deployed_nodes)} nodes"
             ):
-                workload_start_time = time()
+                workload_start_time = time_module.time()
 
                 # Запускаем nemesis через 15 секунд после начала выполнения
                 # workload
@@ -1645,7 +1643,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # Используем формат iter_N
             run_name = f"{run_name}_iter_{run_config['iteration_num']}"
 
-        run_start_time = time()
+        run_start_time = time_module.time()
 
         try:
             with allure.step(f"Execute {run_name}"):
@@ -1726,7 +1724,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     # warnings) И нет timeout
                     success = not bool(stderr.strip()) and not is_timeout
 
-                    execution_time = time() - run_start_time
+                    execution_time = time_module.time() - run_start_time
 
                     logging.info(
                         f"{run_name} completed in {
@@ -1736,7 +1734,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     return success, execution_time, stdout, stderr, is_timeout
 
         except Exception as e:
-            execution_time = time() - run_start_time
+            execution_time = time_module.time() - run_start_time
             error_msg = f"Exception in {run_name}: {e}"
             logging.error(error_msg)
             return False, execution_time, "", error_msg, False
@@ -1771,7 +1769,7 @@ class WorkloadTestBase(LoadSuiteBase):
         node_host = target_node.host
         iteration_num = run_config.get("iteration_num", 1)
         thread_id = run_config.get("thread_id", node_host)
-        timestamp = int(time.time())
+        timestamp = int(time_module.time())
         short_uuid = uuid.uuid4().hex[:8]
 
         # Создаем уникальный run_id
@@ -2276,7 +2274,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # Проверяем состояние нод и собираем ошибки
             try:
                 # Используем метод родительского класса для диагностики нод
-                end_time = time()
+                end_time = time_module.time()
                 diagnostics_start_time = getattr(
                     result, "workload_start_time", result.start_time
                 )
@@ -2290,7 +2288,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 result.add_warning(f"Error getting nodes state: {e}")
 
             # Вычисляем время выполнения
-            end_time = time()
+            end_time = time_module.time()
             start_time = result.start_time if result.start_time else end_time - 1
 
             # Добавляем информацию о workload в отчет
@@ -2371,7 +2369,7 @@ class WorkloadTestBase(LoadSuiteBase):
         if stats is not None:
             stats["aggregation_level"] = "aggregate"
             stats["run_id"] = ResultsProcessor.get_run_id()
-        end_time = time()
+        end_time = time_module.time()
         ResultsProcessor.upload_results(
             kind="Stability",
             suite=type(self).suite(),
@@ -2415,7 +2413,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     kind="Stability",
                     suite=suite,
                     test=f"{workload_name}__iter_{iter_num}__run_{run_idx}",
-                    timestamp=time(),
+                    timestamp=time_module.time(),
                     is_successful=(resolution == "ok"),
                     duration=stats["duration"],
                     statistics=stats,

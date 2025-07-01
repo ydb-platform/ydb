@@ -399,11 +399,11 @@ message TTableServiceConfig {
 
     optional bool EnableOlapPushdownProjections = 91  [ default = true ];
 
-    message TScanRetriesConfig {
+    message TScanTabletsConfig {
         optional uint32 CriticalTotalRetriesCount = 1 [default = 20];
         optional uint32 ReaskShardRetriesCount = 2 [default = 5];
     }
 
-    optional TScanRetriesConfig ScanRetriesConfig = 92;
+    optional TScanTabletsConfig ScanTabletsConfig = 92;
 
 };

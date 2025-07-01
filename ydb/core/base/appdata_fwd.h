@@ -61,7 +61,6 @@ namespace NKikimrConfig {
     class THiveConfig;
     class TDataShardConfig;
     class TColumnShardConfig;
-    class TTableServiceConfig;
     class TSchemeShardConfig;
     class TMeteringConfig;
     class TAuditConfig;
@@ -239,7 +238,6 @@ struct TAppData {
     NKikimrConfig::THiveConfig& HiveConfig;
     NKikimrConfig::TDataShardConfig& DataShardConfig;
     NKikimrConfig::TColumnShardConfig& ColumnShardConfig;
-    NKikimrConfig::TTableServiceConfig& TableServiceConfig;
     NKikimrConfig::TSchemeShardConfig& SchemeShardConfig;
     NKikimrConfig::TMeteringConfig& MeteringConfig;
     NKikimrConfig::TAuditConfig& AuditConfig;

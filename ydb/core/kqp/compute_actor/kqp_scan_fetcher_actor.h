@@ -55,6 +55,7 @@ private:
     const ui32 LockNodeId;
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const TCPULimits CPULimits;
+    const NKikimrConfig::TTableServiceConfig::TScanTabletsConfig ScanTabletsConfig;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -65,7 +66,7 @@ public:
         std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
         const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
         const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
-        const TCPULimits& cpuLimits);
+        const TCPULimits& cpuLimits, const NKikimrConfig::TTableServiceConfig::TScanTabletsConfig& scanTabletsConfig);
 
     static TVector<TSerializedTableRange> BuildSerializedTableRanges(
         const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData);

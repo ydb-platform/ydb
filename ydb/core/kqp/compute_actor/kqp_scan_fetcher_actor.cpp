@@ -26,7 +26,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
     const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
     const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
-    const TCPULimits& cpuLimits)
+    const TCPULimits& cpuLimits, const NKikimrConfig::TTableServiceConfig::TScanTabletsConfig& scanTabletsConfig)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
@@ -41,7 +41,8 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , Counters(counters)
     , InFlightShards(ScanId, *this)
     , InFlightComputes(ComputeActorIds)
-    , TableKind(Meta.GetTable().HasTableKind() ? (NKqp::ETableKind)Meta.GetTable().GetTableKind() : NKqp::ETableKind::Unknown) {
+    , TableKind(Meta.GetTable().HasTableKind() ? (NKqp::ETableKind)Meta.GetTable().GetTableKind() : NKqp::ETableKind::Unknown)
+    , ScanTabletsConfig(scanTabletsConfig) {
     Y_UNUSED(traceId);
     AFL_ENSURE(!Meta.GetReads().empty());
     AFL_ENSURE(TableKind != NKqp::ETableKind::SysView);
@@ -83,7 +84,8 @@ void TKqpScanFetcherActor::Bootstrap() {
     for (auto&& c : ComputeActorIds) {
         Sender<TEvScanExchange::TEvRegisterFetcher>().SendTo(c);
     }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size())("self_id", SelfId());
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size())(
+        "self_id", SelfId());
     StartTableScan();
     Become(&TKqpScanFetcherActor::StateFunc);
     Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());
@@ -595,7 +597,7 @@ void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
     InFlightShards.StopScanner(state->TabletId, false);
     Counters->ScanQueryShardDisconnect->Inc();
 
-    if (state->TotalRetries >= AppDataVerified().TableServiceConfig.GetScanRetriesConfig().GetCriticalTotalRetriesCount()) {
+    if (state->TotalRetries >= ScanTabletsConfig.GetCriticalTotalRetriesCount()) {
         CA_LOG_E(
             "TKqpScanFetcherActor: broken pipe with tablet " << state->TabletId << ", retries limit exceeded (" << state->TotalRetries << ")");
         SendGlobalFail(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -603,7 +605,7 @@ void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
         return;
     }
 
-    if (state->RetryAttempt >= AppDataVerified().TableServiceConfig.GetScanRetriesConfig().GetReaskShardRetriesCount()) {
+    if (state->RetryAttempt >= ScanTabletsConfig.GetReaskShardRetriesCount()) {
         state->ResetRetry();
         Send(state->ActorId, new NActors::TEvents::TEvPoisonPill());
         return EnqueueResolveShard(state);

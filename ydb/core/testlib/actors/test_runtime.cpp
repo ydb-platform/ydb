@@ -18,7 +18,6 @@
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -204,7 +203,6 @@ namespace NActors {
             nodeAppData->SchemeShardConfig = app0->SchemeShardConfig;
             nodeAppData->DataShardConfig = app0->DataShardConfig;
             nodeAppData->ColumnShardConfig = app0->ColumnShardConfig;
-            nodeAppData->TableServiceConfig = app0->TableServiceConfig;
             nodeAppData->MeteringConfig = app0->MeteringConfig;
             nodeAppData->AwsCompatibilityConfig = app0->AwsCompatibilityConfig;
             nodeAppData->S3ProxyResolverConfig = app0->S3ProxyResolverConfig;

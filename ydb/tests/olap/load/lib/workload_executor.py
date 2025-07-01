@@ -1,6 +1,8 @@
 import allure
 import logging
 import os
+import time
+import uuid
 import yatest.common
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1619,15 +1621,19 @@ class WorkloadTestBase(LoadSuiteBase):
         Returns:
             Кортеж (успех, время выполнения, stdout, stderr, флаг таймаута)
         """
+        # Подставляем переменные в command_args_template для уникальности путей
+        command_args = self._substitute_variables_in_template(
+            command_args_template, target_node, run_config
+        )
+
         # Формируем команду
         if duration_param is None:
-            # Используем command_args_template как есть (для обратной
-            # совместимости)
-            command_args = command_args_template
+            # Используем command_args как есть (для обратной совместимости)
+            pass
         else:
             # Добавляем duration параметр
             command_args = (
-                f"{command_args_template} {duration_param} {
+                f"{command_args} {duration_param} {
                     run_config['duration']}"
             )
 
@@ -1734,6 +1740,59 @@ class WorkloadTestBase(LoadSuiteBase):
             error_msg = f"Exception in {run_name}: {e}"
             logging.error(error_msg)
             return False, execution_time, "", error_msg, False
+
+    def _substitute_variables_in_template(
+        self,
+        command_args_template: str,
+        target_node,
+        run_config: dict
+    ) -> str:
+        """
+        Подставляет переменные в шаблон command_args
+
+        Поддерживаемые переменные:
+        - {node_host} - хост ноды
+        - {iteration_num} - номер итерации
+        - {thread_id} - ID потока (обычно хост ноды)
+        - {run_id} - уникальный ID запуска
+        - {timestamp} - timestamp запуска
+        - {uuid} - короткий UUID
+
+        Args:
+            command_args_template: Шаблон аргументов командной строки
+            target_node: Нода для выполнения
+            run_config: Конфигурация запуска
+
+        Returns:
+            Строка с подставленными переменными
+        """
+
+        # Получаем значения переменных
+        node_host = target_node.host
+        iteration_num = run_config.get("iteration_num", 1)
+        thread_id = run_config.get("thread_id", node_host)
+        timestamp = int(time.time())
+        short_uuid = uuid.uuid4().hex[:8]
+
+        # Создаем уникальный run_id
+        run_id = f"{node_host}_{iteration_num}_{timestamp}"
+
+        # Словарь подстановок
+        substitutions = {
+            "{node_host}": node_host,
+            "{iteration_num}": str(iteration_num),
+            "{thread_id}": str(thread_id),
+            "{run_id}": run_id,
+            "{timestamp}": str(timestamp),
+            "{uuid}": short_uuid,
+        }
+
+        # Выполняем подстановки
+        result = command_args_template
+        for placeholder, value in substitutions.items():
+            result = result.replace(placeholder, value)
+
+        return result
 
     def _check_scheme_state(self):
         """Проверяет состояние схемы базы данных"""

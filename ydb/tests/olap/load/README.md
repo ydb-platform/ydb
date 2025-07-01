@@ -3,16 +3,17 @@
 ## Содержание
 
 1. [Добавление нового workload теста](#добавление-нового-workload-теста)
-2. [Настройка полей для выгрузки в YDB](#настройка-полей-для-выгрузки-в-ydb)
-3. [Определение статуса теста](#определение-статуса-теста)
-4. [Добавление функций, выполняемых перед workload](#добавление-функций-выполняемых-перед-workload)
-5. [Setup и Teardown](#setup-и-teardown)
-6. [Nemesis (Chaos Testing)](#nemesis-chaos-testing)
-7. [Механика работы Chunks (Итераций)](#механика-работы-chunks-итераций)
-8. [Стадии подготовки workload'ов](#Примеры-wokrloadов-разной-сложности)
-9. [Примеры использования](#примеры-использования)
-10. [Структура файлов и ya.make](#структура-файлов-и-yamake)
-11. [Запуск тестов](#Пример-запуска-теста)
+2. [Setup и Teardown](#setup-и-teardown)
+3. [Генерация уникальных путей и нодо-специфичные endpoint'ы](#генерация-уникальных-путей-и-нодо-специфичные-endpointы)
+4. [Механика работы Chunks (Итераций)](#механика-работы-chunks-итераций)
+5. [Nemesis (Chaos Testing)](#nemesis-chaos-testing)
+6. [Настройка полей для выгрузки в YDB](#настройка-полей-для-выгрузки-в-ydb)
+7. [Определение статуса теста](#определение-статуса-теста)
+8. [Добавление функций, выполняемых перед workload](#добавление-функций-выполняемых-перед-workload)
+9. [Примеры workload'ов разной сложности](#примеры-wokrloadов-разной-сложности)
+10. [Примеры использования](#примеры-использования)
+11. [Структура файлов и ya.make](#структура-файлов-и-yamake)
+12. [Запуск тестов](#запуск-тестов)
 
 ---
 
@@ -95,164 +96,19 @@ from .lib.workload_my_workload import TestMyWorkload
 
 ---
 
-## Настройка полей для выгрузки в YDB
-
-### Базовые поля в `additional_stats`
-
-```python
-additional_stats = {
-    # Обязательные поля
-    "workload_type": "my_workload",  # Тип workload
-    "path": "my_workload_test",      # Путь к данным
-    
-    # Опциональные поля
-    "table_type": "column_store",    # Тип таблицы
-    "operation": "bulk_upsert",      # Тип операции
-    "threads": 10,                   # Количество потоков
-    "rows_per_batch": 2000,          # Размер батча
-    "nemesis_enabled": True,         # Включен ли nemesis
-    "nodes_percentage": 100,         # Процент нод
-    "scenario": "stability_test"     # Сценарий теста
-}
-```
-
-### Автоматически собираемые поля
-
-Система автоматически добавляет:
-- `total_runs` - общее количество запусков
-- `successful_runs` - успешные запуски
-- `failed_runs` - неуспешные запуски
-- `success_rate` - процент успешности
-- `total_execution_time` - общее время выполнения
-- `planned_duration` - плановая длительность
-- `actual_duration` - фактическая длительность
-- `total_iterations` - количество итераций
-- `total_threads` - общее количество потоков
-- `nodes_with_issues` - количество нод с проблемами
-
----
-
-## Определение статуса теста
-
-### Логика определения статуса
-
-Статус определяется в порядке приоритета:
-
-1. **FAIL** - если есть cores/OOM на нодах
-2. **BROKEN** - если есть ошибки workload
-3. **WARNING** - если есть предупреждения
-4. **PASS** - успешное выполнение
-
-### Кастомизация логики статуса
-
-```python
-def _handle_final_status(self, result, workload_name, node_errors):
-    """Кастомная логика определения статуса"""
-    
-    stats = result.get_stats(workload_name)
-    
-    # Проверяем кастомные метрики
-    success_rate = stats.get("success_rate", 0)
-    if success_rate < 0.8:
-        result.success = False
-        result.add_error(f"Success rate too low: {success_rate:.2f}")
-        pytest.fail(f"Success rate critically low: {success_rate:.2f}")
-    elif success_rate < 0.9:
-        result.add_warning(f"Success rate below optimal: {success_rate:.2f}")
-    
-    # Вызываем родительский метод для стандартных проверок
-    super()._handle_final_status(result, workload_name, node_errors)
-```
-
----
-
-## Добавление функций, выполняемых перед workload
-
-### Переопределение `setup_class`
-
-```python
-@classmethod
-def setup_class(cls) -> None:
-    """Инициализация перед всеми тестами класса"""
-    
-    # Выполняем подготовку workload
-    cls._prepare_workload_environment()
-    
-    # Создаем необходимые таблицы
-    cls._create_workload_tables()
-    
-    # Загружаем тестовые данные
-    cls._load_test_data()
-    
-    # ОБЯЗАТЕЛЬНО вызываем родительский метод
-    super().setup_class()
-
-@classmethod
-def _prepare_workload_environment(cls):
-    """Подготовка окружения для workload"""
-    # Ваш код подготовки
-    pass
-
-@classmethod
-def _create_workload_tables(cls):
-    """Создание таблиц для workload"""
-    from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-    
-    first_node = list(YdbCluster.get_cluster_nodes(db_only=True))[0]
-    
-    # Пример создания таблиц через ydb_cli
-    init_cmd = [
-        cls.workload_binary_name,
-        '--endpoint', f'grpc://{first_node.host}:{first_node.ic_port}',
-        '--database', '/Root/db1',
-        'workload', 'my_workload', 'init',
-        '--param1', 'value1',
-        '--param2', 'value2'
-    ]
-    
-    import yatest.common
-    yatest.common.execute(init_cmd, wait=True, check_exit_code=True)
-
-@classmethod
-def _load_test_data(cls):
-    """Загрузка тестовых данных"""
-    # Ваш код загрузки данных
-    pass
-```
-
-### Переопределение `teardown_class`
-
-```python
-@classmethod
-def teardown_class(cls):
-    """Очистка после всех тестов класса"""
-    
-    # Очищаем созданные данные
-    cls._cleanup_workload_data()
-    
-    # Вызываем родительский метод
-    super().teardown_class()
-
-@classmethod
-def _cleanup_workload_data(cls):
-    """Очистка данных workload"""
-    # Ваш код очистки
-    pass
-```
-
----
-
 ## Setup и Teardown
 
 ### Автоматические действия
 
 **Setup (setup_class):**
+- **Остановка nemesis** - останавливает nemesis сервис на всех нодах для чистого старта
 - Подготовка workload бинарных файлов
 - Копирование файлов на ноды кластера
 - Инициализация окружения
 
 **Teardown (teardown_class):**
 - Остановка nemesis (если был запущен)
+- Остановка процессов workload на всех нодах
 - Очистка временных файлов
 - Сбор диагностики
 
@@ -272,90 +128,148 @@ Nemesis автоматически включается при:
 # - duration_param = "--duration"
 
 # Автоматические действия:
-# - В setup: подготовка файлов, копирование на ноды
-# - В teardown: остановка nemesis, очистка, сбор диагностики
+# - В setup: остановка nemesis, подготовка файлов, копирование на ноды
+# - В teardown: остановка nemesis, остановка workload процессов, очистка, сбор диагностики
 ```
 
 ---
 
-## Nemesis (Chaos Testing)
+## Генерация уникальных путей и нодо-специфичные endpoint'ы
 
-### Включение nemesis
+### **Проблема: Конфликты при параллельном выполнении**
 
-Для включения chaos testing с nemesis используйте параметр `nemesis=True`:
+При параллельном выполнении workload на разных нодах и итерациях может возникнуть конфликт, если все запуски используют одинаковый путь. Это приводит к:
+
+- **Конфликтам данных** - разные workload'ы записывают в одну таблицу
+- **Ошибкам блокировок** - одновременный доступ к одним ресурсам
+- **Непредсказуемым результатам** - данные смешиваются между запусками
+
+### **Решение: Подстановка переменных в command_args_template**
+
+Система поддерживает подстановку переменных в `command_args_template`, что позволяет:
+- Генерировать уникальные пути для каждого инстанса workload
+- Использовать нодо-специфичные endpoint'ы вместо глобального
+- Создавать изолированные соединения для каждого потока
+
+#### **Поддерживаемые переменные:**
+
+| Переменная | Описание | Пример значения |
+|------------|----------|-----------------|
+| `{node_host}` | Хост ноды | `ydb-sas-testing-0000.search.yandex.net` |
+| `{iteration_num}` | Номер итерации | `1`, `2`, `3`, ... |
+| `{thread_id}` | ID потока (обычно хост ноды) | `ydb-sas-testing-0000.search.yandex.net` |
+| `{run_id}` | Уникальный ID запуска | `ydb-sas-testing-0000_1_1703123456` |
+| `{timestamp}` | Timestamp запуска | `1703123456` |
+| `{uuid}` | Короткий UUID (8 символов) | `abc12345` |
+
+#### **Примеры использования:**
 
 ```python
-def test_workload_with_nemesis(self):
-    """Тест с включенным nemesis"""
+def test_workload_with_variables(self, nemesis_enabled: bool):
+    """Тест с подстановкой переменных для уникальных путей и endpoint'ов"""
     
-    result = self.execute_workload_test(
-        workload_name="workload_with_nemesis",
-        command_args="--database /Root/db1 --path test_table",
-        duration_value=300,  # 5 минут
-        nemesis=True,  # Включаем nemesis
-        additional_stats={
-            "workload_type": "stress",
-            "chaos_testing": True
-        }
+    # 1. Глобальный endpoint + уникальные пути
+    command_args_template = (
+        f"--endpoint {YdbCluster.ydb_endpoint} "  # Глобальный endpoint
+        f"--database /{YdbCluster.ydb_database} "
+        "--path workload_{node_host}_iter_{iteration_num}_{uuid}"  # Уникальный путь
     )
-```
-
-### Таймлайн работы с nemesis
-
-```
-Время    | Действие                                    | Описание
----------|---------------------------------------------|----------------------------------------
-T+0s     | Запуск workload теста                      | Начинается выполнение workload
-T+0s     | ФАЗА 1: Подготовка                         | Деплой workload бинарных файлов на ноды
-T+0s     | ФАЗА 2: Выполнение workload                | Workload начинает выполняться на нодах
-T+15s    | Запуск nemesis                             | Nemesis стартует через 15 секунд после начала workload
-T+15s    | Подготовка конфигурации кластера           | Удаление старого cluster.yaml, копирование нового
-T+15s    | Деплой конфигурации кластера               | Файл конфигурации кластера копируется на все ноды
-T+15s    | Начало chaos testing                       | Nemesis начинает выполнять операции согласно конфигурации
-T+15s    | Workload продолжает работу                 | Основной workload работает параллельно с nemesis
-T+15s    | Nemesis выполняет операции                 | Случайные операции: паузы, перезапуски, сетевые проблемы и т.д.
-...      | Параллельная работа                        | Workload и nemesis работают одновременно
-T+N-15s  | Завершение workload                        | Workload завершает выполнение
-T+N-15s  | Остановка nemesis                          | Nemesis автоматически останавливается на всех нодах
-T+N-15s  | Сбор результатов workload                  | Собираются результаты и логи workload
-T+N-15s  | Сбор диагностики nemesis                   | Логи и диагностика nemesis с каждой ноды
-T+N-15s  | Анализ результатов                         | Определение статуса теста на основе всех данных
-T+N      | Завершение теста                           | Тест завершен, результаты готовы
-```
-
-### Как работает nemesis
-
-1. **Setup** - в setup_class останавливается nemesis для чистого старта
-2. **Деплой workload** - в ФАЗЕ 1 происходит деплой workload бинарных файлов на ноды
-3. **Запуск nemesis** - через 15 секунд после начала выполнения workload
-4. **Деплой конфигурации** - при запуске nemesis копируется конфигурация кластера на все ноды
-5. **Параллельность** - операции выполняются параллельно на всех нодах
-6. **Автоочистка** - nemesis автоматически останавливается в teardown_class
-
-### Параметры nemesis
-
-- `nemesis=True` - включает chaos testing
-- `cluster_path` - путь к файлу конфигурации кластера (копируется как есть, без изменений)
-
-### Пример с параметризацией
-
-```python
-@pytest.mark.parametrize('nemesis_enabled', [True, False], 
-                        ids=['nemesis_true', 'nemesis_false'])
-def test_workload_with_nemesis_param(self, nemesis_enabled: bool):
-    """Тест с параметризованным nemesis"""
+    
+    # 2. Нодо-специфичные endpoint'ы + уникальные пути
+    command_args_template = (
+        "--endpoint grpc://{node_host}:2135 "  # Подключаемся к конкретной ноде
+        f"--database /{YdbCluster.ydb_database} "
+        "--path workload_node_{node_host}_iter_{iteration_num}_{uuid}"  # Уникальный путь
+    )
+    
+    # 3. Комбинированный подход
+    command_args_template = (
+        "--endpoint grpc://{node_host}:2135 "  # Нодо-специфичный endpoint
+        f"--database /{YdbCluster.ydb_database} "
+        "--path workload_{node_host}_iter_{iteration_num}_{uuid} "
+        "--thread-id {thread_id} "  # Идентификация потока
+        "--run-id {run_id}"  # Уникальность запуска
+    )
+    
+    additional_stats = {
+        "workload_type": "my_workload",
+        "path_template": "workload_{node_host}_iter_{iteration_num}_{uuid}",
+        "endpoint_method": "node_specific",  # или "global"
+        "nemesis": nemesis_enabled,
+        "path_generation_method": "variable_substitution",
+    }
     
     self.execute_workload_test(
-        workload_name=f"workload_nemesis_{nemesis_enabled}",
-        command_args="--database /Root/db1 --path test_table",
-        duration_value=300,
-        nemesis=nemesis_enabled,
-        additional_stats={
-            "workload_type": "stress",
-            "nemesis_enabled": nemesis_enabled
-        }
+        workload_name="MyWorkloadWithVariables",
+        command_args=command_args_template,
+        duration_value=self.timeout,
+        additional_stats=additional_stats,
+        use_chunks=True,
+        nemesis=nemesis_enabled
     )
 ```
+
+#### **Результат выполнения:**
+
+```
+# Глобальный endpoint:
+Нода 1: --endpoint grpc://lb.ydb-cluster.yandex.net:2135 --path workload_ydb-sas-testing-0000.search.yandex.net_iter_1_abc12345
+Нода 2: --endpoint grpc://lb.ydb-cluster.yandex.net:2135 --path workload_ydb-sas-testing-0001.search.yandex.net_iter_1_def67890
+
+# Нодо-специфичные endpoint'ы:
+Нода 1: --endpoint grpc://ydb-sas-testing-0000.search.yandex.net:2135 --path workload_node_ydb-sas-testing-0000.search.yandex.net_iter_1_abc12345
+Нода 2: --endpoint grpc://ydb-sas-testing-0001.search.yandex.net:2135 --path workload_node_ydb-sas-testing-0001.search.yandex.net_iter_1_def67890
+```
+
+#### **Преимущества подстановки переменных:**
+
+- ✅ **Полная уникальность** - каждый инстанс имеет уникальный путь
+- ✅ **Локальные соединения** - можно подключаться к конкретным нодам
+- ✅ **Изоляция нагрузки** - равномерное распределение по нодам
+- ✅ **Лучшая диагностика** - проще отследить проблемы конкретной ноды
+- ✅ **Гибкость** - можно комбинировать глобальные и нодо-специфичные параметры
+
+#### **Сценарии использования:**
+
+| Сценарий | Endpoint | Путь | Применение |
+|----------|----------|------|------------|
+| **Стандартное тестирование** | `{YdbCluster.ydb_endpoint}` | `workload_{node_host}_iter_{iteration_num}_{uuid}` | Обычные тесты |
+| **Локальные соединения** | `grpc://{node_host}:2135` | `workload_{node_host}_iter_{iteration_num}_{uuid}` | Нагрузочное тестирование |
+| **Тестирование балансировщика** | `{YdbCluster.ydb_endpoint}` | `workload_{node_host}_iter_{iteration_num}_{uuid}` | Тестирование балансировки |
+| **Сетевая диагностика** | `grpc://{node_host}:2135` | `workload_{node_host}_iter_{iteration_num}_{uuid}` | Диагностика сетевых проблем |
+
+#### **Что НЕ нужно делать:**
+
+```python
+# ❌ НЕПРАВИЛЬНО: Статический путь
+command_args_template = (
+    f"--endpoint {YdbCluster.ydb_endpoint} "
+    f"--database /{YdbCluster.ydb_database} "
+    "--path my_workload_test"  # Конфликт при параллельном выполнении!
+)
+
+# ❌ НЕПРАВИЛЬНО: Неопределенная переменная в f-string
+command_args_template = (
+    f"--endpoint grpc://{node_host}:2135 "  # node_host не определен в f-string!
+    f"--database /{YdbCluster.ydb_database} "
+    "--path workload_test"
+)
+
+# ✅ ПРАВИЛЬНО: Использование плейсхолдеров
+command_args_template = (
+    "--endpoint grpc://{node_host}:2135 "  # Плейсхолдер подставляется позже
+    f"--database /{YdbCluster.ydb_database} "
+    "--path workload_{node_host}_iter_{iteration_num}_{uuid}"
+)
+```
+
+#### **Рекомендации:**
+
+1. **Для production тестов**: Используйте `{node_host}_iter_{iteration_num}_{uuid}` в путях
+2. **Для нагрузочного тестирования**: Используйте нодо-специфичные endpoint'ы `grpc://{node_host}:2135`
+3. **Для диагностики**: Добавьте `{timestamp}` для временной привязки
+4. **Для изоляции**: Всегда используйте `{uuid}` для гарантированной уникальности
+5. **Документируйте метод**: Указывайте `path_generation_method` и `endpoint_method` в `additional_stats`
 
 ---
 
@@ -531,6 +445,236 @@ def test_long_running_workload(self):
     "actual_duration": 175.5,         # Фактическое время выполнения (среднее)
     "planned_duration": 180.0         # Плановое время выполнения
 }
+```
+
+---
+
+## Nemesis (Chaos Testing)
+
+### Включение nemesis
+
+Для включения chaos testing с nemesis используйте параметр `nemesis=True`:
+
+```python
+def test_workload_with_nemesis(self):
+    """Тест с включенным nemesis"""
+    
+    result = self.execute_workload_test(
+        workload_name="workload_with_nemesis",
+        command_args="--database /Root/db1 --path test_table",
+        duration_value=300,  # 5 минут
+        nemesis=True,  # Включаем nemesis
+        additional_stats={
+            "workload_type": "stress",
+            "chaos_testing": True
+        }
+    )
+```
+
+### Таймлайн работы с nemesis
+
+```
+Время    | Действие                                    | Описание
+---------|---------------------------------------------|----------------------------------------
+T-0s     | Setup class                                | Инициализация теста
+T-0s     | Остановка nemesis в setup                  | Nemesis останавливается на всех нодах для чистого старта
+T+0s     | Запуск workload теста                      | Начинается выполнение workload
+T+0s     | ФАЗА 1: Подготовка                         | Деплой workload бинарных файлов на ноды
+T+0s     | ФАЗА 2: Выполнение workload                | Workload начинает выполняться на нодах
+T+15s    | Запуск nemesis                             | Nemesis стартует через 15 секунд после начала workload
+T+15s    | Подготовка конфигурации кластера           | Удаление старого cluster.yaml, копирование нового
+T+15s    | Деплой конфигурации кластера               | Файл конфигурации кластера копируется на все ноды
+T+15s    | Начало chaos testing                       | Nemesis начинает выполнять операции согласно конфигурации
+T+15s    | Workload продолжает работу                 | Основной workload работает параллельно с nemesis
+T+15s    | Nemesis выполняет операции                 | Случайные операции: паузы, перезапуски, сетевые проблемы и т.д.
+...      | Параллельная работа                        | Workload и nemesis работают одновременно
+T+N-15s  | Завершение workload                        | Workload завершает выполнение
+T+N-15s  | Остановка nemesis                          | Nemesis автоматически останавливается на всех нодах
+T+N-15s  | Сбор результатов workload                  | Собираются результаты и логи workload
+T+N-15s  | Сбор диагностики nemesis                   | Логи и диагностика nemesis с каждой ноды
+T+N-15s  | Анализ результатов                         | Определение статуса теста на основе всех данных
+T+N      | Завершение теста                           | Тест завершен, результаты готовы
+```
+
+### Как работает nemesis
+
+1. **Setup** - в setup_class останавливается nemesis на всех нодах для чистого старта
+2. **Деплой workload** - в ФАЗЕ 1 происходит деплой workload бинарных файлов на ноды
+3. **Запуск nemesis** - через 15 секунд после начала выполнения workload
+4. **Деплой конфигурации** - при запуске nemesis копируется конфигурация кластера на все ноды
+5. **Параллельность** - операции выполняются параллельно на всех нодах
+6. **Автоочистка** - nemesis автоматически останавливается в teardown_class
+
+### Параметры nemesis
+
+- `nemesis=True` - включает chaos testing
+- `cluster_path` - путь к файлу конфигурации кластера (копируется как есть, без изменений)
+
+### Пример с параметризацией
+
+```python
+@pytest.mark.parametrize('nemesis_enabled', [True, False], 
+                        ids=['nemesis_true', 'nemesis_false'])
+def test_workload_with_nemesis_param(self, nemesis_enabled: bool):
+    """Тест с параметризованным nemesis"""
+    
+    self.execute_workload_test(
+        workload_name=f"workload_nemesis_{nemesis_enabled}",
+        command_args="--database /Root/db1 --path test_table",
+        duration_value=300,
+        nemesis=nemesis_enabled,
+        additional_stats={
+            "workload_type": "stress",
+            "nemesis_enabled": nemesis_enabled
+        }
+    )
+```
+
+---
+
+## Настройка полей для выгрузки в YDB
+
+### Базовые поля в `additional_stats`
+
+```python
+additional_stats = {
+    # Обязательные поля
+    "workload_type": "my_workload",  # Тип workload
+    "path": "my_workload_test",      # Путь к данным
+    
+    # Опциональные поля
+    "table_type": "column_store",    # Тип таблицы
+    "operation": "bulk_upsert",      # Тип операции
+    "threads": 10,                   # Количество потоков
+    "rows_per_batch": 2000,          # Размер батча
+    "nemesis_enabled": True,         # Включен ли nemesis
+    "nodes_percentage": 100,         # Процент нод
+    "scenario": "stability_test"     # Сценарий теста
+}
+```
+
+### Автоматически собираемые поля
+
+Система автоматически добавляет:
+- `total_runs` - общее количество запусков
+- `successful_runs` - успешные запуски
+- `failed_runs` - неуспешные запуски
+- `success_rate` - процент успешности
+- `total_execution_time` - общее время выполнения
+- `planned_duration` - плановая длительность
+- `actual_duration` - фактическая длительность
+- `total_iterations` - количество итераций
+- `total_threads` - общее количество потоков
+- `nodes_with_issues` - количество нод с проблемами
+
+---
+
+## Определение статуса теста
+
+### Логика определения статуса
+
+Статус определяется в порядке приоритета:
+
+1. **FAIL** - если есть cores/OOM на нодах
+2. **BROKEN** - если есть ошибки workload
+3. **WARNING** - если есть предупреждения
+4. **PASS** - успешное выполнение
+
+### Кастомизация логики статуса
+
+```python
+def _handle_final_status(self, result, workload_name, node_errors):
+    """Кастомная логика определения статуса"""
+    
+    stats = result.get_stats(workload_name)
+    
+    # Проверяем кастомные метрики
+    success_rate = stats.get("success_rate", 0)
+    if success_rate < 0.8:
+        result.success = False
+        result.add_error(f"Success rate too low: {success_rate:.2f}")
+        pytest.fail(f"Success rate critically low: {success_rate:.2f}")
+    elif success_rate < 0.9:
+        result.add_warning(f"Success rate below optimal: {success_rate:.2f}")
+    
+    # Вызываем родительский метод для стандартных проверок
+    super()._handle_final_status(result, workload_name, node_errors)
+```
+
+---
+
+## Добавление функций, выполняемых перед workload
+
+### Переопределение `setup_class`
+
+```python
+@classmethod
+def setup_class(cls) -> None:
+    """Инициализация перед всеми тестами класса"""
+    
+    # Выполняем подготовку workload
+    cls._prepare_workload_environment()
+    
+    # Создаем необходимые таблицы
+    cls._create_workload_tables()
+    
+    # Загружаем тестовые данные
+    cls._load_test_data()
+    
+    # ОБЯЗАТЕЛЬНО вызываем родительский метод
+    super().setup_class()
+
+@classmethod
+def _prepare_workload_environment(cls):
+    """Подготовка окружения для workload"""
+    # Ваш код подготовки
+    pass
+
+@classmethod
+def _create_workload_tables(cls):
+    """Создание таблиц для workload"""
+    from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+    
+    first_node = list(YdbCluster.get_cluster_nodes(db_only=True))[0]
+    
+    # Пример создания таблиц через ydb_cli
+    init_cmd = [
+        cls.workload_binary_name,
+        '--endpoint', f'grpc://{first_node.host}:{first_node.ic_port}',
+        '--database', '/Root/db1',
+        'workload', 'my_workload', 'init',
+        '--param1', 'value1',
+        '--param2', 'value2'
+    ]
+    
+    import yatest.common
+    yatest.common.execute(init_cmd, wait=True, check_exit_code=True)
+
+@classmethod
+def _load_test_data(cls):
+    """Загрузка тестовых данных"""
+    # Ваш код загрузки данных
+    pass
+```
+
+### Переопределение `teardown_class`
+
+```python
+@classmethod
+def teardown_class(cls):
+    """Очистка после всех тестов класса"""
+    
+    # Очищаем созданные данные
+    cls._cleanup_workload_data()
+    
+    # Вызываем родительский метод
+    super().teardown_class()
+
+@classmethod
+def _cleanup_workload_data(cls):
+    """Очистка данных workload"""
+    # Ваш код очистки
+    pass
 ```
 
 ---
@@ -1042,7 +1186,7 @@ class TestCustomMetricsWorkload(CustomMetricsWorkloadBase):
 
 ---
 
-## Структура файлов и ya.make
+## Запуск тестов
 
 ### Структура файлов
 ```

@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             auto saveObserver = runtime.SetObserverFunc(grab);
             Y_DEFER {
                 runtime.SetObserverFunc(saveObserver);
-            }
+            };
 
             auto future = kikimr.RunInThreadPool([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             auto saveObserver = runtime.SetObserverFunc(grab);
             Y_DEFER {
                 runtime.SetObserverFunc(saveObserver);
-            }
+            };
 
             std::optional<TTransaction> tx;
 
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             auto saveObserver = runtime.SetObserverFunc(grab);
             Y_DEFER {
                 runtime.SetObserverFunc(saveObserver);
-            }
+            };
 
             auto future = kikimr.RunInThreadPool([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();

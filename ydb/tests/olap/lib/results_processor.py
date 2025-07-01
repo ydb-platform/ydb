@@ -20,7 +20,7 @@ class ResultsProcessor:
         def send_data(self, data):
             try:
                 logging.info(f"[ResultsProcessor] Sending data to YDB endpoint: {self._endpoint}, db: {self._db}, table: {self._table}")
-                logging.info(f"[ResultsProcessor] Data: {json.dumps(data)[:1000]}" + ("..." if len(json.dumps(data)) > 1000 else ""))
+                logging.debug(f"[ResultsProcessor] Data: {json.dumps(data)[:1000]}" + ("..." if len(json.dumps(data)) > 1000 else ""))
                 logging.info(f"[ResultsProcessor] Columns types: {ResultsProcessor._columns_types}")
                 ydb.retry_operation_sync(
                     lambda: self._driver.table_client.bulk_upsert(

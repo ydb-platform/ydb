@@ -30,6 +30,21 @@ namespace NKikimr::NStorage {
         ParentId = parentId;
         Become(&TThis::StateFunc);
 
+        if (const auto& record = Event->Get()->Record; record.HasSwitchBridgeClusterState() && Self->Cfg->BridgeConfig) {
+            const auto& cmd = record.GetSwitchBridgeClusterState();
+            const auto& newClusterState = cmd.GetNewClusterState();
+
+            for (ui32 bridgePileId : cmd.GetSpecificBridgePileIds()) {
+                SpecificBridgePileIds.insert(TBridgePileId::FromValue(bridgePileId));
+            }
+
+            if (const auto& error = ValidateSwitchBridgeClusterState(newClusterState)) {
+                return FinishWithError(TResult::ERROR, *error);
+            }
+
+            SwitchBridgeNewConfig.emplace(GetSwitchBridgeNewConfig(newClusterState));
+        }
+
         if (Self->ScepterlessOperationInProgress) {
             FinishWithError(TResult::RACE, "an operation is already in progress");
         } else if (Self->Binding) {
@@ -42,7 +57,8 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(inserted);
                 WaitingReplyFromNode = root;
             }
-        } else if (!Scepter.expired() || CheckSwitchBridgeCommand()) {
+        } else if (!Scepter.expired() || // we have either scepter, or quorum for reduced set of nodes to execute this command
+                (SwitchBridgeNewConfig && Self->HasConnectedNodeQuorum(*SwitchBridgeNewConfig, SpecificBridgePileIds))) {
             if (Scepter.expired()) {
                 Self->ScepterlessOperationInProgress = IsScepterlessOperation = true;
             }
@@ -138,7 +154,7 @@ namespace NKikimr::NStorage {
                 return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
 
             case TQuery::kSwitchBridgeClusterState:
-                return SwitchBridgeClusterState(record.GetSwitchBridgeClusterState().GetNewClusterState());
+                return SwitchBridgeClusterState();
 
             case TQuery::REQUEST_NOT_SET:
                 return FinishWithError(TResult::ERROR, "Request field not set");
@@ -270,7 +286,7 @@ namespace NKikimr::NStorage {
                 : ERootState::INITIAL);
             Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
 
-            if (auto error = Self->ProcessProposeStorageConfig(res->MutableProposeStorageConfig())) {
+            if (auto error = Self->ProcessProposeStorageConfig(res->MutableProposeStorageConfig(), SpecificBridgePileIds)) {
                 return error;
             }
             if (CheckSyncersAfterCommit) {

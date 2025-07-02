@@ -29,6 +29,9 @@ namespace NKikimr::NStorage {
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
 
+        THashSet<TBridgePileId> SpecificBridgePileIds;
+        std::optional<NKikimrBlobStorage::TStorageConfig> SwitchBridgeNewConfig;
+
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
 
@@ -126,9 +129,9 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge mode
 
-        void SwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        std::optional<TString> ValidateSwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        void SwitchBridgeClusterState();
         NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
-        bool CheckSwitchBridgeCommand();
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
 

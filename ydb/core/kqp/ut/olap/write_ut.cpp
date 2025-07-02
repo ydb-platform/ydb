@@ -100,111 +100,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         csController->WaitCompactions(TDuration::Seconds(5));
     }
 
-    Y_UNIT_TEST(SchemasSimplification) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        const TString tableName = "/Root/TableWithDefaultFamily";
-
-        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(`(
-                Key Uint64 NOT NULL,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                STORE = COLUMN,
-                PARTITION_COUNT = 1
-                )
-            ;)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value1 Uint32
-            ;)";
-            auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-        }
-        {
-            auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value2 Uint32
-            ;)";
-            auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-        }
-        {
-            auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value3 Uint32
-            ;)";
-            auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-        }
-        {
-            auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value4 Uint32 NOT NULL DEFAULT 0
-            ;)";
-            auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-        }
-        {
-            auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value5 Uint32
-            ;)";
-            auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-        }
-        {
-            auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                DROP COLUMN Value3
-            ;)";
-            auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-        }
-        {
-            auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value6 Uint32
-            ;)";
-            auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-        }
-        {
-            auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value7 Uint32
-            ;)";
-            auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-        }
-        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
-        AFL_VERIFY(csController->WaitCleaningSchemas(TDuration::Seconds(5)));
-        for (auto&& i : csController->GetShardActualIds()) {
-            kikimr.GetTestServer().GetRuntime()->Send(
-                MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), i, false));
-        }
-        AFL_VERIFY(!csController->WaitCleaningSchemas(TDuration::Seconds(5)));
-    }
-
     TString scriptSimplificationWithWrite = R"(
         STOP_SCHEMAS_CLEANUP
         ------
@@ -263,6 +158,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5, Col7, Col8) VALUES (8u, 8u, 8u, 8u, 8u, 8u)
         ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col2
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col4, Col5, Col7, Col8) VALUES (9u, 9u, 9u, 9u, 9u)
+        ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: true
         ------
@@ -272,6 +173,52 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         EXPECTED: false
     )";
     Y_UNIT_TEST_STRING_VARIATOR(SimplificationWithWrite, scriptSimplificationWithWrite) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
+    TString scriptSimplificationEmptyTable = R"(
+        STOP_SCHEMAS_CLEANUP
+        ------
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1$$);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col2 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col3 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col5 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col3
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col7 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col8 Uint32
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: true
+        ------
+        RESTART_TABLETS
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: false
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(SimplificationEmptyTable, scriptSimplificationEmptyTable) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 

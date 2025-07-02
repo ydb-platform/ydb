@@ -103,6 +103,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     TString scriptSimplificationWithWrite = R"(
         STOP_SCHEMAS_CLEANUP
         ------
+        FAST_PORTIONS_CLEANUP
+        ------
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -115,7 +117,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20, "portions_size_limit" : 40000000, "portions_count_available" : 1},
+                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20, "portions_live_duration" : "1s", "portions_size_limit" : 40000000, "portions_count_available" : 1},
                              {"class_name" : "Zero", "expected_blobs_size" : 4000000}]}`)
         ------
         DATA:
@@ -180,7 +182,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: false
         ------
-        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        READ: SELECT Col1, Col4, Col5, Col7, Col8 FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;#;#;#;#];[2u;#;#;#;#];[3u;#;#;#;#];[4u;[4u];#;#;#];[5u;[5u];[5u];#;#];[6u;[6u];[6u];#;#];[7u;[7u];[7u];[7u];#];[8u;[8u];[8u];[8u];[8u]];[9u;[9u];[9u];[9u];[9u]]]
         ------
         DATA:
         DELETE FROM `/Root/ColumnTable`

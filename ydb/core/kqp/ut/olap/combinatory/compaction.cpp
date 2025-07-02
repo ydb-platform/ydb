@@ -26,12 +26,12 @@ TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas));
-    const i64 compactions = controller->GetCleanupSchemasFinishedCounter().Val();
+    const i64 cleanups = controller->GetCleanupSchemasFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
     const TInstant start = TInstant::Now();
     while (TInstant::Now() - start < TDuration::Seconds(10)) {
-        if (compactions < controller->GetCleanupSchemasFinishedCounter().Val()) {
-            Cerr << "SCHEMAS_CLEANUP_HAPPENED: " << compactions << " -> " << controller->GetCleanupSchemasFinishedCounter().Val() << Endl;
+        if (cleanups < controller->GetCleanupSchemasFinishedCounter().Val()) {
+            Cerr << "SCHEMAS_CLEANUP_HAPPENED: " << cleanups << " -> " << controller->GetCleanupSchemasFinishedCounter().Val() << Endl;
             break;
         }
 
@@ -40,10 +40,18 @@ TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/
     }
 
     if (Expected) {
-        AFL_VERIFY((compactions < controller->GetCleanupSchemasFinishedCounter().Val()) == *Expected);
+        AFL_VERIFY((cleanups < controller->GetCleanupSchemasFinishedCounter().Val()) == *Expected);
     }
 
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TFastPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+    auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    AFL_VERIFY(controller);
+    controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    controller->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
     return TConclusionStatus::Success();
 }
 

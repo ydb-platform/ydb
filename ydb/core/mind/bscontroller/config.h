@@ -12,6 +12,7 @@ namespace NKikimr {
         struct TConfigFitAction {
             std::set<TBoxId> Boxes;
             std::multiset<std::tuple<TBoxStoragePoolId, std::optional<TGroupId>>> PoolsAndGroups; // nullopt goes first and means 'cover all groups in the pool'
+            bool OnlyToLessOccupiedPDisk = false;
 
             operator bool() const {
                 return !Boxes.empty() || !PoolsAndGroups.empty();

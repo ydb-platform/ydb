@@ -71,4 +71,5 @@ RECURSE_FOR_TESTS(
     ut_restart_pdisk
     ut_read_only_pdisk
     ut_stop_pdisk
+    ut_cluster_balancing
 )

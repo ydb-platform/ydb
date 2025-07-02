@@ -378,6 +378,10 @@ namespace NKikimr::NBsController {
             SuppressDonorMode.insert(vslotId);
         }
 
+        if (cmd.GetOnlyToLessOccupiedPDisk()) {
+            Fit.OnlyToLessOccupiedPDisk = true;
+        }
+
         Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
     }
 

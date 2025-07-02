@@ -12,6 +12,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
 #include <ydb/apps/etcd_proxy/service/etcd_gate.h>
+#include <ydb/apps/etcd_proxy/service/etcd_lease.h>
 #include <ydb/apps/etcd_proxy/service/etcd_watch.h>
 #include <ydb/apps/etcd_proxy/service/etcd_grpc.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -76,12 +77,13 @@ int TProxy::StartServer() {
     }
 
     const auto watchtower = ActorSystem->Register(NEtcd::BuildWatchtower(Counters, Stuff));
+    const auto holderhouse = ActorSystem->Register(NEtcd::BuildHolderHouse(Counters, Stuff));
     ActorSystem->Register(NEtcd::BuildMainGate(Counters, Stuff));
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
-    GRpcServer->AddService(new NEtcd::TEtcdKVService(ActorSystem.get(), Counters, watchtower, Stuff));
+    GRpcServer->AddService(new NEtcd::TEtcdKVService(ActorSystem.get(), Counters, {}, Stuff));
     GRpcServer->AddService(new NEtcd::TEtcdWatchService(ActorSystem.get(), Counters, watchtower, Stuff));
-    GRpcServer->AddService(new NEtcd::TEtcdLeaseService(ActorSystem.get(), Counters, watchtower, Stuff));
+    GRpcServer->AddService(new NEtcd::TEtcdLeaseService(ActorSystem.get(), Counters, holderhouse, Stuff));
     GRpcServer->Start();
     std::cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << std::endl;
     return 0;

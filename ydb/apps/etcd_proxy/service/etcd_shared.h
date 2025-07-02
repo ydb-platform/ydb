@@ -20,7 +20,7 @@ struct TSharedStuff {
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
     std::atomic<i64> Revision = 0LL;
     NActors::TActorSystem* ActorSystem = nullptr;
-    NActors::TActorId Watchtower, MainGate;
+    NActors::TActorId Watchtower, MainGate, HolderHouse;
     std::string TablePrefix;
 
     void UpdateRevision(i64 revision);

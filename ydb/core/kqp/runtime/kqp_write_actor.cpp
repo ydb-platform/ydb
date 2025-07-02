@@ -996,12 +996,20 @@ public:
         } else if (isPrepare) {
             YQL_ENSURE(TxId);
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
+            // Note: we may need to send MvccSnapshot for certain operations
+            // like INSERT to not produce phantom unique constraint errors.
+            // Older datashards would hard error when MvccSnapshot is specified
+            // without locks however, and INSERT is currently flushed before
+            // commit anyway. For compatibility don't send it yet.
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
             evWrite->Record.SetLockMode(LockMode);
 
             if (LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
                 YQL_ENSURE(MvccSnapshot);
+            }
+
+            if (MvccSnapshot) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
         }

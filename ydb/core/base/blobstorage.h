@@ -928,6 +928,8 @@ struct TEvBlobStorage {
         EvNodeWardenUnsubscribeFromCache,
         EvNodeWardenNotifyConfigMismatch,
         EvNodeWardenUpdateConfigFromPeer,
+        EvNodeWardenManageSyncers,
+        EvNodeWardenManageSyncersResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -2570,6 +2572,10 @@ struct TEvBlobStorage {
             void Output(IOutputStream& s) const {
                 s << "{" << TabletId << "=>" << BlockedGeneration << "}";
             }
+
+            auto GetKey() const {
+                return std::tie(TabletId);
+            }
         };
 
         struct TBarrier {
@@ -2605,6 +2611,10 @@ struct TEvBlobStorage {
                 Hard.Output(s);
                 s << "}";
             }
+
+            auto GetKey() const {
+                return std::tie(TabletId, Channel);
+            }
         };
 
         struct TBlob {
@@ -2626,6 +2636,10 @@ struct TEvBlobStorage {
                 if (DoNotKeep) {
                     s << "d";
                 }
+            }
+
+            auto GetKey() const {
+                return std::tie(Id);
             }
         };
 

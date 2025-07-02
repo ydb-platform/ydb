@@ -15,6 +15,7 @@ namespace NKikimr::NStorage {
         const TActorId RequestSessionId;
 
         bool IsScepterlessOperation = false;
+        bool CheckSyncersAfterCommit = false;
 
         TActorId ParentId;
         ui32 WaitingReplyFromNode = 0;
@@ -128,6 +129,8 @@ namespace NKikimr::NStorage {
         void SwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
         NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
         bool CheckSwitchBridgeCommand();
+
+        void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition

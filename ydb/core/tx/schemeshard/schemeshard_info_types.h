@@ -3676,7 +3676,7 @@ public:
                     indexInfo->KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
                     TString createError;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
-                    Y_ENSURE(indexInfo->Clusters && createError == "");
+                    Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                 } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:

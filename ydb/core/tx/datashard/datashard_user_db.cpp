@@ -38,10 +38,19 @@ NTable::EReady TDataShardUserDb::SelectRow(
 
     SetPerformedUserReads(true);
 
-    return Db.Select(tid, key, tags, row, stats, /* readFlags */ 0,
+    NTable::EReady ready = Db.Select(tid, key, tags, row, stats, /* readFlags */ 0,
         MvccVersion,
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
+
+    if (stats.InvisibleRowSkips > 0) {
+        if (LockTxId) {
+            Self.SysLocksTable().BreakSetLocks();
+        }
+        MvccReadConflict = true;
+    }
+
+    return ready;
 }
 
 NTable::EReady TDataShardUserDb::SelectRow(
@@ -540,11 +549,12 @@ public:
         // We already use InvisibleRowSkips for these
     }
 
-    void OnApplyCommitted(const TRowVersion&) override {
-        // Not needed
+    void OnApplyCommitted(const TRowVersion& rowVersion) override {
+        ConflictChecker.CheckReadConflict(rowVersion);
     }
 
-    void OnApplyCommitted(const TRowVersion&, ui64 txId) override {
+    void OnApplyCommitted(const TRowVersion& rowVersion, ui64 txId) override {
+        ConflictChecker.CheckReadConflict(rowVersion);
         ConflictChecker.CheckReadDependency(txId);
     }
 
@@ -849,6 +859,7 @@ NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTable
     Y_ENSURE(localTableId != 0, "Unexpected GetReadTxObserver for an unknown table");
 
     bool needObserver = (
+        SnapshotVersion < MvccVersion ||
         // We need observer when there are waiting changes in the tx map
         Self.GetVolatileTxManager().GetTxMap() ||
         // We need observer for locked reads when there are active write locks
@@ -882,8 +893,6 @@ void TDataShardUserDb::AddReadConflict(ui64 txId) {
 }
 
 void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
-    Y_ENSURE(LockTxId);
-
     if (rowVersion > MvccVersion) {
         // We are reading from snapshot at MvccVersion and should not normally
         // observe changes with a version above that. However, if we have an
@@ -891,7 +900,16 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
         // visibility, we might shadow some change that happened after a
         // snapshot. This is a clear indication of a conflict between read
         // and that future conflict, hence we must break locks and abort.
-        Self.SysLocksTable().BreakSetLocks();
+        if (LockTxId) {
+            Self.SysLocksTable().BreakSetLocks();
+        }
+        MvccReadConflict = true;
+    } else if (rowVersion > SnapshotVersion) {
+        // During commit we read at the current mvcc version, however we may
+        // notice there have been changes between the snapshot and current
+        // commit version. This is not necessarily an error, but indicates
+        // if this read was performed under a lock it would have been broken.
+        SnapshotReadConflict = true;
     }
 }
 

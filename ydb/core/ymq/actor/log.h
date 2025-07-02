@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/stream/output.h>

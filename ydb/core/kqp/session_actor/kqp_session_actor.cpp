@@ -1772,6 +1772,8 @@ public:
             return;
         }
         if (QueryState->IsCreateTableAs()) {
+            TempTablesState.HasCreateTableAs = true;
+            QueryState->UpdateTempTablesState(TempTablesState);
             return;
         }
 

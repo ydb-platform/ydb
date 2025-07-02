@@ -474,6 +474,8 @@ private:
             // Clear finished actors ids
             ExecuterId = {};
             ControlId = {};
+            // kill CHeckpointCoordinator
+            // todo: check TaskCOntroller /TEvPoison
         }
     }
 
@@ -1531,7 +1533,7 @@ private:
             info.ResultId = info.ExecuterId;
         }
 
-        info.ControlId = Register(NYql::MakeTaskController(SessionId, info.ExecuterId, info.ResultId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
+        info.ControlId = Register(NYql::MakeTaskController(SessionId, info.ExecuterId, info.ResultId, CheckpointCoordinatorId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
 
         Yql::DqsProto::ExecuteGraphRequest request;
         request.SetSourceId(dqGraphParams.GetSourceId());
@@ -1599,7 +1601,7 @@ private:
         }
 
         if (enableCheckpointCoordinator) {
-            ControlId = Register(MakeCheckpointCoordinator(
+            CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
@@ -1617,17 +1619,18 @@ private:
                 pingPeriod,
                 aggrPeriod
                 ).Release());
-        } else {
-            ControlId = Register(NYql::MakeTaskController(
+        }
+
+        ControlId = Register(NYql::MakeTaskController(
                 SessionId,
                 ExecuterId,
                 resultId,
+                CheckpointCoordinatorId,
                 dqConfiguration,
                 QueryCounters,
                 pingPeriod,
                 aggrPeriod
             ).Release());
-        }
 
         Yql::DqsProto::ExecuteGraphRequest request;
         request.SetSourceId(dqGraphParams.GetSourceId());
@@ -2328,6 +2331,7 @@ private:
     ui32 DqEvalIndex = 0;
     NActors::TActorId ExecuterId;
     NActors::TActorId ControlId;
+    NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
     ::NYql::NCommon::TServiceCounters QueryCounters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;

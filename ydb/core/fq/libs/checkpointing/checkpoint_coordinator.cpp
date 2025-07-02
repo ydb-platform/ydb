@@ -36,22 +36,24 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const FederatedQuery::StateLoadMode& stateLoadMode,
                                                const FederatedQuery::StreamingDisposition& streamingDisposition,
                                                // vvv TaskController temporary params vvv
-                                               const TString& traceId,
+                                               const TString& /*traceId*/,
                                                const NActors::TActorId& executerId,
-                                               const NActors::TActorId& resultId,
-                                               const NYql::TDqConfiguration::TPtr& tcSettings,
-                                               const NYql::NCommon::TServiceCounters& serviceCounters,
-                                               const TDuration& pingPeriod,
-                                               const TDuration& aggrPeriod)
-    : NYql::TTaskControllerImpl<TCheckpointCoordinator>(
-            traceId,
-            executerId,
-            resultId,
-            tcSettings,
-            serviceCounters,
-            pingPeriod,
-            aggrPeriod,
-            &TCheckpointCoordinator::DispatchEvent)
+                                               const NActors::TActorId& /*resultId*/,
+                                               const NYql::TDqConfiguration::TPtr& /*tcSettings*/,
+                                               const NYql::NCommon::TServiceCounters& /*serviceCounters*/,
+                                               const TDuration& /*pingPeriod*/,
+                                               const TDuration& /*aggrPeriod*/)
+    // : NYql::TTaskControllerImpl<TCheckpointCoordinator>(
+    //         traceId,
+    //         executerId,
+    //         resultId,
+    //         tcSettings,
+    //         serviceCounters,
+    //         pingPeriod,
+    //         aggrPeriod,
+    //         &TCheckpointCoordinator::DispatchEvent)
+    : TDqErrorSender(executerId)
+    , ExecuterId(executerId)
     , CoordinatorId(std::move(coordinatorId))
     , StorageProxy(storageProxy)
     , RunActorId(runActorId)
@@ -66,41 +68,36 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 {
 }
 
-void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
-    NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnReadyState(ev);
+void TCheckpointCoordinator::Bootstrap() {
+    Become(&TCheckpointCoordinator::DispatchEvent);
+    CC_LOG_D("Successfully bootstrapped checkpoint coordinator, id " << SelfId());
+}
 
+void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
 
-    int tasksSize = GetTasksSize();
-    const auto& actorIds = ev->Get()->Record.GetActorId();
-    if (tasksSize != actorIds.size()) {
-        OnInternalError(TStringBuilder() << "tasksSize != actorIds.size(),  tasksSize " << tasksSize << ", actorIds size " << actorIds.size() <<  ", graph id " << CoordinatorId.GraphId);
-        return;
-    }
-
-    for (int i = 0; i < tasksSize; ++i) {
-        const auto& task = GetTask(i);
-        auto& actorId = TaskIdToActor[task.GetId()];
+    for (const auto& task: ev->Get()->Tasks) {
+        auto& actorId = TaskIdToActor[task.Id];
         if (actorId) {
             OnInternalError(TStringBuilder() << "Duplicate task id: " << task.GetId());
             return;
         }
-        actorId = ActorIdFromProto(actorIds[i]);
+        actorId = task.ActorId;
 
         TComputeActorTransportStuff::TPtr transport = AllActors[actorId] = MakeIntrusive<TComputeActorTransportStuff>();
         transport->EventsQueue.Init(CoordinatorId.ToString(), SelfId(), SelfId(), task.GetId());
         transport->EventsQueue.OnNewRecipientId(actorId);
-        if (NYql::NDq::GetTaskCheckpointingMode(task) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) {
-            if (IsIngress(task)) {
+        if (!task.CheckpointingDisabled) {
+            if (task.IsIngress) {
                 ActorsToTrigger[actorId] = transport;
                 ActorsToNotify[actorId] = transport;
                 ActorsToNotifySet.insert(actorId);
             }
-            if (IsEgress(task)) {
+            if (task.IsEgress) {
                 ActorsToNotify[actorId] = transport;
                 ActorsToNotifySet.insert(actorId);
             }
-            if (HasState(task)) {
+            if (task.HasState) {
                 ActorsToWaitFor[actorId] = transport;
                 ActorsToWaitForSet.insert(actorId);
             }
@@ -249,7 +246,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     }
 
     if (!result) {
-        NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnError(NYql::NDqProto::StatusIds::BAD_REQUEST, "Can't restore from plan given", issues);
+        OnError(NYql::NDqProto::StatusIds::BAD_REQUEST, "Can't restore from plan given", issues);
         return;
     } else { // Report as transient issues
         Send(RunActorId, new TEvents::TEvRaiseTransientIssues(std::move(issues)));
@@ -308,7 +305,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
         auto msg = TStringBuilder() << "Can't restore: " << statusName << ", " << NYql::IssuesFromMessageAsString(record.GetIssues());
         CC_LOG_E("[" << checkpoint << "] " << msg);
         ++*Metrics.RestoringError;
-        NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnError(NYql::NDqProto::StatusIds::ABORTED, msg, {});
+        OnError(NYql::NDqProto::StatusIds::ABORTED, msg, {});
         return;
     }
 
@@ -618,7 +615,7 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) 
         actorIt->second->EventsQueue.HandleUndelivered(ev);
     }
 
-    NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnUndelivered(ev);
+    OnUndelivered(ev);
 }
 
 void TCheckpointCoordinator::Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
@@ -638,7 +635,7 @@ void TCheckpointCoordinator::PassAway() {
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }
-    NYql::TTaskControllerImpl<TCheckpointCoordinator>::PassAway();
+    //NYql::TTaskControllerImpl<TCheckpointCoordinator>::PassAway();
 }
 
 void TCheckpointCoordinator::HandleException(const std::exception& err) {

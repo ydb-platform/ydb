@@ -20,6 +20,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/state
     ydb/library/yql/providers/dq/api/protos
+    ydb/core/fq/libs/protos
 )
 
 YQL_LAST_ABI_VERSION()

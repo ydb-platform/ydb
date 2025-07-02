@@ -30,7 +30,9 @@
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
 #include <util/system/types.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
+#include <ydb/core/fq/libs/checkpointing/utils.h>
 namespace NYql {
 
 using namespace NActors;
@@ -53,6 +55,7 @@ public:
         const TString& traceId,
         const NActors::TActorId& executerId,
         const NActors::TActorId& resultId,
+        const NActors::TActorId& checkpointCoordinatorId,
         const TDqConfiguration::TPtr& settings,
         const NYql::NCommon::TServiceCounters& serviceCounters,
         const TDuration& pingPeriod,
@@ -62,6 +65,7 @@ public:
         : NActors::TActor<TDerived>(func)
         , ExecuterId(executerId)
         , ResultId(resultId)
+        , CheckpointCoordinatorId(checkpointCoordinatorId)
         , TraceId(traceId)
         , Settings(settings)
         , ServiceCounters(serviceCounters, "task_controller")
@@ -532,15 +536,32 @@ public:
         if (AggrPeriod) {
             Schedule(AggrPeriod, new TEvents::TEvWakeup(AGGR_TIMER_TAG));
         }
+        if (CheckpointCoordinatorId) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Forward: " << SelfId() << " to " << CheckpointCoordinatorId;
+
+            auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+            for (const auto& [settings, actorId] : Tasks) {
+                auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+                    settings.GetId(),
+                    false, // todo
+                    NFq::IsIngress(settings),
+                    NFq::IsEgress(settings),
+                    NFq::HasState(settings),
+                    actorId
+                };
+                event->Tasks.emplace_back(std::move(task));
+            }                
+            Send(CheckpointCoordinatorId, event.release());
+        }
     }
 
-    const NDq::TDqTaskSettings GetTask(size_t idx) const {
-        return Tasks.at(idx).first;
-    }
+    // const NDq::TDqTaskSettings GetTask(size_t idx) const {
+    //     return Tasks.at(idx).first;
+    // }
 
-    int GetTasksSize() const {
-        return Tasks.size();
-    }
+    // int GetTasksSize() const {
+    //     return Tasks.size();
+    // }
 
 private:
     void MaybeUpdateChannels() {
@@ -655,6 +676,7 @@ private:
     THashMap<ui64, ui64> Stages;
     const NActors::TActorId ExecuterId;
     const NActors::TActorId ResultId;
+    const NActors::TActorId CheckpointCoordinatorId;
     const TString TraceId;
     TDqConfiguration::TPtr Settings;
     bool Finished = false;

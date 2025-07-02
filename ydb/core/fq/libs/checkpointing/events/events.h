@@ -15,7 +15,7 @@ struct TEvCheckpointCoordinator {
         EvCoordinatorRegistered,
         EvZeroCheckpointDone,
         EvRunGraph,
-
+        EvReadyState,
         EvEnd,
     };
 
@@ -36,6 +36,18 @@ struct TEvCheckpointCoordinator {
 
     // When run actor saved restore info after zero checkpoint, it sends this event to checkpoint coordinator.
     struct TEvRunGraph : public NActors::TEventLocal<TEvRunGraph, EvRunGraph> {
+    };
+
+    struct TEvReadyState : public NActors::TEventLocal<TEvReadyState, EvReadyState> {
+        struct TTask {
+            ui64 TaskId = 0;
+            bool CheckpointingDisabled = false;
+            bool IsIngress = false;
+            bool IsEgress = false;
+            bool HasState = false;
+            NActors::TActorId ActorId;
+        };
+        std::vector<TTask> Tasks;
     };
 };
 

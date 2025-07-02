@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -94,6 +95,13 @@ struct TWriteRequestParams {
     TMaybe<ui64> Cookie;
 };
 
+struct TManualSendReadSetParams {
+  ui64 Step;
+  ui64 TxId;
+  ui64 SenderId;
+  bool Predicate;
+};
+
 using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
 using TPQTabletMock = NKikimr::NPQ::NHelpers::TPQTabletMock;
 
@@ -169,6 +177,10 @@ protected:
         TMaybe<ui64> Cookie;
     };
 
+    struct TManualSendRsMatcher {
+        TMaybe<bool> Status;
+    };
+
     using TProposeTransactionParams = NHelpers::TProposeTransactionParams;
     using TPlanStepParams = NHelpers::TPlanStepParams;
     using TReadSetParams = NHelpers::TReadSetParams;
@@ -176,6 +188,7 @@ protected:
     using TCancelTransactionProposalParams = NHelpers::TCancelTransactionProposalParams;
     using TGetOwnershipRequestParams = NHelpers::TGetOwnershipRequestParams;
     using TWriteRequestParams = NHelpers::TWriteRequestParams;
+    using TManualSendReadSetParams = NHelpers::TManualSendReadSetParams;
 
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
@@ -258,6 +271,9 @@ protected:
     TVector<TString> GetSupportivePartitionsKeysFromKV();
     NKikimrPQ::TTabletTxInfo WaitForExactTxWritesCount(ui32 expectedCount);
     NKikimrPQ::TTabletTxInfo GetTxWritesFromKV();
+
+    void SendManualSendRsRequest(const TManualSendReadSetParams& params);
+    void WaitForManualSendRsResponse(const TManualSendRsMatcher& matcher);
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -1280,6 +1296,34 @@ NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
     } else {
         UNIT_FAIL("Unexpected status from KV tablet" << result.GetStatus());
         return {};
+    }
+}
+
+
+void TPQTabletFixture::SendManualSendRsRequest(const TManualSendReadSetParams& params) {
+    auto makeEv = [this, &params]() {
+        const TCgiParameters cgi{
+            {"TabletID", ToString(Ctx->TabletId)},
+            {"SendReadSet", "1"},
+            {"decision", params.Predicate ? "commit" : "abort"},
+            {"step", ToString(params.Step)},
+            {"txId", ToString(params.TxId)},
+            {"senderTablet", ToString(params.SenderId)},
+        };
+        return std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(TStringBuilder() << "/app?" << cgi.Print());
+    };
+    Ctx->Runtime->SendToPipe(Ctx->TabletId, Ctx->Edge, makeEv().release(), 0, GetPipeConfigWithRetries());
+}
+
+void TPQTabletFixture::WaitForManualSendRsResponse(const TManualSendRsMatcher& matcher) {
+    THolder<NMon::TEvRemoteJsonInfoRes> handle = Ctx->Runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>();
+    UNIT_ASSERT(handle != nullptr);
+    const TString& response = handle->Json;
+    NJson::TJsonValue value;
+    UNIT_ASSERT(ReadJsonTree(response, &value, false));
+    if (matcher.Status.Defined()) {
+        const bool resultOk = value["result"].GetStringSafe() == "OK"sv;
+        UNIT_ASSERT_VALUES_EQUAL(resultOk, *matcher.Status);
     }
 }
 
@@ -2411,6 +2455,183 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId2.Id);
 }
+
+Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Commit, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForManualSendRsResponse({.Status = true,});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
+Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Abort, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
+    WaitForManualSendRsResponse({.Status = true,});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Commit_After_Abort, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
+
+    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForManualSendRsResponse({.Status = true,});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+
+Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Abort_After_Commit, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
+    WaitForManualSendRsResponse({.Status = true,});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED}); // RS=commit + ручной abort -> abort
+}
+
+Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_Invalid_Tx, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    SendManualSendRsRequest({.Step=100, .TxId=txId+1, .SenderId=22222, .Predicate=true,});
+    WaitForManualSendRsResponse({.Status = false,});
+}
+
+Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_Invalid_Step, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
+
+    SendManualSendRsRequest({.Step=101, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForManualSendRsResponse({.Status = false,});
+}
+
 
 }
 

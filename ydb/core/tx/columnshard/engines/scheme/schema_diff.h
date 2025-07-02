@@ -11,6 +11,7 @@ struct TIndexInfo;
 class TSchemaDiffView {
 private:
     ui64 Version = 0;
+    const NKikimrSchemeOp::TColumnTableSchemaDiff* OriginalProto = nullptr;
     const NKikimrSchemeOp::TColumnTableSchemeOptions* SchemaOptions = nullptr;
     const NKikimrSchemeOp::TCompressionOptions* CompressionOptions = nullptr;
     std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*> ModifiedColumns;
@@ -25,6 +26,11 @@ private:
 
 public:
     TSchemaDiffView() = default;
+
+    TString DebugString() const {
+        AFL_VERIFY(OriginalProto);
+        return OriginalProto->DebugString();
+    }
 
     bool IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) const;
 

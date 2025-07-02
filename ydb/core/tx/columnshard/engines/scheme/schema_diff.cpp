@@ -59,6 +59,7 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::MakeSchemasDiff(
 }
 
 TConclusionStatus TSchemaDiffView::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& proto) {
+    OriginalProto = &proto;
     SchemaOptions = &proto.GetOptions();
     Version = proto.GetVersion();
     if (proto.HasDefaultCompression()) {

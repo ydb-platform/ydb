@@ -586,6 +586,11 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     Version = diff.GetVersion();
     if (diff.IsCorrectToIgnorePreviouse(original)) {
         original.IgnoreToVersion = Version;
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_will_be_ignored")("version", original.Version)("to_version", Version)(
+            "diff", diff.DebugString());
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_will_not_be_ignored")("version", original.Version)("to_version", Version)(
+            "diff", diff.DebugString());
     }
     PrimaryKey = original.PrimaryKey;
     if (diff.GetCompressionOptions()) {

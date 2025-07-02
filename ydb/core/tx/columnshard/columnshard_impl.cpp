@@ -889,7 +889,8 @@ public:
                     .Key(del.GetPresetId(), del.GetSnapshot().GetPlanStep(), del.GetSnapshot().GetTxId())
                     .Delete();
             }
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_updated")("address", i.GetFinish().DebugString());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_updated")("address", i.GetFinish().DebugString())(
+                "new_schema", finalProto.DebugString());
             db.Table<SchemaPresetVersionInfo>()
                 .Key(i.GetFinish().GetPresetId(), i.GetFinish().GetSnapshot().GetPlanStep(), i.GetFinish().GetSnapshot().GetTxId())
                 .Update(NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(finalProto.SerializeAsString()));

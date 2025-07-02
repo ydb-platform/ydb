@@ -45,8 +45,8 @@ public:
 
     void Clear();
 
-    void SetReadVersion(TRowVersion readVersion);
-    TRowVersion GetReadVersion() const;
+    void SetMvccVersion(TRowVersion readVersion);
+    TRowVersion GetMvccVersion() const;
 
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
     TEngineHostCounters& GetDatashardCounters();

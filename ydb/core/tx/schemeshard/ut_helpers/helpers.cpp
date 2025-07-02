@@ -2553,16 +2553,6 @@ namespace NSchemeShardUT_Private {
         return ev->Get()->Record;
     }
 
-    NKikimrPQ::TDescribeResponse GetDescribeFromPQBalancer(TTestActorRuntime& runtime, ui64 balancerId) {
-        TActorId edge = runtime.AllocateEdgeActor();
-       TAutoPtr<IEventHandle> handle;
-       runtime.SendToPipe(balancerId, edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-       TEvPersQueue::TEvDescribeResponse* result = runtime.GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
-       UNIT_ASSERT(result);
-       auto& rec = result->Record;
-       return rec;
-   }
-
     void SendTEvPeriodicTopicStats(TTestActorRuntime& runtime, ui64 topicId, ui64 generation, ui64 round, ui64 dataSize, ui64 usedReserveSize) {
         TActorId sender = runtime.AllocateEdgeActor();
 

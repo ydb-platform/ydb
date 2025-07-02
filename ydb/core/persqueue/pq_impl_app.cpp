@@ -212,18 +212,22 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const T
                 PRE() {
                     str << SecureDebugStringMultiline(tx->Serialize());
                 }
-                TAG(TH2) {str << "Tablets";}
+                TAG(TH2) {str << "Predicates";}
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
-                            TABLEH() {str << "Idx";}
-                            TABLEH() {str << "Predicate";}
+                            TABLEH() {str << "Tablet ID";}
+                            TABLEH() {str << "Predicate value";}
                         }
                     }
                     TABLEBODY() {
-                        for (const auto& [idx, predicate] : tx->PredicatesReceived) {
+                        for (const auto& [tabletID, predicate] : tx->PredicatesReceived) {
                             TABLER() {
-                                TABLED() {str << idx;}
+                                TABLED() {
+                                    HREF(TStringBuilder() << "?TabletID=" << tabletID << "&TxId=" << txId) {
+                                        str << tabletID;
+                                    }
+                                }
                                 const TStringBuf cls = predicate.HasPredicate() ? (predicate.GetPredicate() ? "success"sv : "danger"sv) : ""sv;
                                 TABLED_CLASS(cls) {
                                     if (predicate.HasPredicate()) {

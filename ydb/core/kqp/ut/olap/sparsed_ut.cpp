@@ -9,7 +9,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
-
+#include <ydb/core/kqp/ut/common/columnshard.h>
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
@@ -370,6 +370,83 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             Cerr << StreamResultToYson(it) << Endl;
         }
+    }
+
+    void TestInsert(bool isSparsed) {
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NYdb::NStatusHelpers::ThrowOnError(result);
+        auto querySession = result.GetSession();
+
+        {
+            auto result = tableSession.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/test_table` (
+                    id Int32 NOT NULL,
+                    value0 Utf8,
+                    value1 Utf8,
+                    value2 Utf8,
+                    value3 Utf8,
+                    value4 Utf8,
+                    value5 Utf8,
+                    value6 Utf8,
+                    value7 Utf8,
+                    value8 Utf8,
+                    value9 Utf8,
+                    PRIMARY KEY (id)
+                )
+                WITH (STORE = COLUMN))").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        if (isSparsed) {
+            auto result = tableSession.ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value1, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value4, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value5, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value6, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value7, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+                ALTER OBJECT `/Root/test_table` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=value9, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=SPARSED, DEFAULT_VALUE=null);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = querySession.ExecuteQuery(R"(
+                INSERT INTO `/Root/test_table` (id, value0, value2, value6, value7)
+                VALUES (10, null, "abcd", null, null)
+            )",  NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto it = querySession.ExecuteQuery("SELECT * FROM `/Root/test_table`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            TString result = FormatResultSetYson(it.GetResultSet(0));
+            Cout << result << Endl;
+            CompareYson(result, R"([[10;#;#;["abcd"];#;#;#;#;#;#;#]])");
+            //NOW -> CompareYson(result, R"([[10;[""];["null"];["abcd"];["null"];["null"];["null"];[""];[""];["null"];["null"]]])");
+        }
+    }
+
+    Y_UNIT_TEST(NotSparsedInsert) {
+        TestInsert(false);
+    }
+
+    Y_UNIT_TEST(SparsedInsert) {
+        TestInsert(true);
     }
 
 }

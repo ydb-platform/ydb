@@ -785,6 +785,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysNames) {
         auto opts = TTestEnvOptions()
             .EnableSystemNamesProtection(EnableSystemNamesProtection)
             .EnableDatabaseAdmin(EnableDatabaseAdmin)
+            .EnableRealSystemViewPaths(false)
         ;
         if (op.SetupFlags) {
             op.SetupFlags(opts);

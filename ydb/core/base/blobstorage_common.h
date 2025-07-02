@@ -10,6 +10,9 @@ namespace NKikimr{
     struct TBridgePileTag;
     using TBridgePileId = TIdWrapper<ui32, TBridgePileTag>;
     
+    inline bool IsDynamicGroup(TGroupId groupId) {
+        return groupId.GetRawId() & 0x80000000;
+    }
 }
 
 

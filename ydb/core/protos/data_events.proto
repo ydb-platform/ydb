@@ -104,6 +104,7 @@ message TEvWrite {
         optional EDataFormat PayloadFormat = 5;
         optional string PayloadSchema = 6;
         optional uint32 DefaultFilledColumnCount = 7;
+        optional bool IsBulk = 8;
     }
 
     // Transaction operations

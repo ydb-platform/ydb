@@ -234,12 +234,10 @@ void TCms::GenerateNodeState(IOutputStream& out)
                             }
                         }
                         if (ClusterInfo->IsBridgeMode) {
-                            if (node.second->PileId) {
-                                TABLED() {
-                                    out << node.second->PileId.GetRef();
-                                }
-                            } else {
-                                TABLED() {
+                            TABLED() {
+                                if (node.second->PileId) {
+                                    out << *node.second->PileId;
+                                } else {
                                     out << "-";
                                 }
                             }

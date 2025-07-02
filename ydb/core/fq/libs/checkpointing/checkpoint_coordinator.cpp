@@ -43,15 +43,6 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const NYql::NCommon::TServiceCounters& /*serviceCounters*/,
                                                const TDuration& /*pingPeriod*/,
                                                const TDuration& /*aggrPeriod*/)
-    // : NYql::TTaskControllerImpl<TCheckpointCoordinator>(
-    //         traceId,
-    //         executerId,
-    //         resultId,
-    //         tcSettings,
-    //         serviceCounters,
-    //         pingPeriod,
-    //         aggrPeriod,
-    //         &TCheckpointCoordinator::DispatchEvent)
     : TDqErrorSender(executerId)
     , ExecuterId(executerId)
     , CoordinatorId(std::move(coordinatorId))
@@ -79,13 +70,13 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
     for (const auto& task: ev->Get()->Tasks) {
         auto& actorId = TaskIdToActor[task.Id];
         if (actorId) {
-            OnInternalError(TStringBuilder() << "Duplicate task id: " << task.GetId());
+            OnInternalError(TStringBuilder() << "Duplicate task id: " << task.Id);
             return;
         }
         actorId = task.ActorId;
 
         TComputeActorTransportStuff::TPtr transport = AllActors[actorId] = MakeIntrusive<TComputeActorTransportStuff>();
-        transport->EventsQueue.Init(CoordinatorId.ToString(), SelfId(), SelfId(), task.GetId());
+        transport->EventsQueue.Init(CoordinatorId.ToString(), SelfId(), SelfId(), task.Id);
         transport->EventsQueue.OnNewRecipientId(actorId);
         if (!task.CheckpointingDisabled) {
             if (task.IsIngress) {
@@ -129,7 +120,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
     if (issues) {
         CC_LOG_E("StorageError: can't register in storage: " + issues.ToOneLineString());
         ++*Metrics.StorageError;
-        OnInternalError("Can't register in storage", issues);
+        OnInternalError("Can't register in storage " + issues.ToOneLineString());
         return;
     }
 
@@ -185,7 +176,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
     if (event->Issues) {
         ++*Metrics.StorageError;
         CC_LOG_E("StorageError: can't get checkpoints to restore: " + event->Issues.ToOneLineString());
-        OnInternalError("Can't get checkpoints to restore", event->Issues);
+        OnInternalError("Can't get checkpoints to restore" + event->Issues.ToOneLineString());
         return;
     }
 
@@ -246,7 +237,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     }
 
     if (!result) {
-        OnError(NYql::NDqProto::StatusIds::BAD_REQUEST, "Can't restore from plan given", issues);
+        OnError(NYql::NDqProto::StatusIds::BAD_REQUEST, "Can't restore from plan given: " + issues.ToOneLineString());
         return;
     } else { // Report as transient issues
         Send(RunActorId, new TEvents::TEvRaiseTransientIssues(std::move(issues)));
@@ -305,7 +296,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
         auto msg = TStringBuilder() << "Can't restore: " << statusName << ", " << NYql::IssuesFromMessageAsString(record.GetIssues());
         CC_LOG_E("[" << checkpoint << "] " << msg);
         ++*Metrics.RestoringError;
-        OnError(NYql::NDqProto::StatusIds::ABORTED, msg, {});
+        OnError(msg);
         return;
     }
 
@@ -599,7 +590,7 @@ void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeDisconnecte
         transport->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
 }
-
+ 
 void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     CC_LOG_D("Handle connected node " << ev->Get()->NodeId);
 
@@ -618,13 +609,8 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) 
     OnUndelivered(ev);
 }
 
-void TCheckpointCoordinator::Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
-    CC_LOG_D("Got TEvPoison");
-    Send(ev->Sender, new NActors::TEvents::TEvPoisonTaken(), 0, ev->Cookie);
-    PassAway();
-}
-
 void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&) {
+    CC_LOG_D("Got TEvRunGraph");
     Y_DEBUG_ABORT_UNLESS(InitingZeroCheckpoint);
     Y_DEBUG_ABORT_UNLESS(!FailedZeroCheckpoint);
     InitingZeroCheckpoint = false;
@@ -632,16 +618,14 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph:
 }
 
 void TCheckpointCoordinator::PassAway() {
+     CC_LOG_D("PassAway");
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }
-    //NYql::TTaskControllerImpl<TCheckpointCoordinator>::PassAway();
 }
 
 void TCheckpointCoordinator::HandleException(const std::exception& err) {
-    NYql::TIssues issues;
-    issues.AddIssue(err.what());
-    OnInternalError("Internal error in checkpoint coordinator", issues);
+    OnInternalError(TStringBuilder() << "Internal error in checkpoint coordinator: " << err.what());
 }
 
 THolder<NActors::IActor> MakeCheckpointCoordinator(

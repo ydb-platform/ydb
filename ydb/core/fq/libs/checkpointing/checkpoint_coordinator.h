@@ -27,14 +27,25 @@ struct TDqErrorSender {
     : ExecuterId(executerId) {
     }
 
-    void OnInternalError(const TString& /*message*/, const NYql::TIssues& /*subIssues*/ = {}) {
-        //OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message, subIssues);
+    void OnInternalError(const TString& message) {
+        OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message);
     }
 
-    void OnError(NYql::NDqProto::StatusIds::StatusCode /*statusCode*/, const TString& /*message*/, const NYql::TIssues& /*subIssues*/) {
+    void OnError(const TString& message) {
+        OnError(NYql::NDqProto::StatusIds::ABORTED, message);
     }
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& /*ev*/) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        TStringBuilder message;
+        message << "Undelivered Event " << ev->Get()->SourceType
+            << " to " << ev->Sender << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
+        OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message);
+    }
+
+    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message) {
+        NYql::TIssues issues({NYql::TIssue(message).SetCode(NYql::TIssuesIds::DQ_GATEWAY_ERROR, NYql::TSeverityIds::S_ERROR)});
+        auto event = std::make_unique<NYql::TEvDqFailure>(statusCode, issues);
+        TActivationContext::Send(new IEventHandle(ExecuterId, NActors::TActorId(), event.release()));
     }
 
     NActors::TActorId ExecuterId;
@@ -62,8 +73,6 @@ public:
 
     void Bootstrap();
 
-   // using NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnInternalError;
-
     void Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvRegisterCoordinatorResponse::TPtr&);
     void Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck::TPtr&);
@@ -86,10 +95,7 @@ public:
 
 
     STRICT_STFUNC_EXC(DispatchEvent,
-        hFunc(NFq::TEvCheckpointCoordinator::TEvReadyState, Handle)
-     //   hFunc(NYql::NDqs::TEvQueryResponse, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnQueryResult)
-     //   hFunc(NYql::NDqs::TEvDqFailure, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnResultFailure)
-
+        hFunc(TEvCheckpointCoordinator::TEvReadyState, Handle)
         hFunc(TEvCheckpointCoordinator::TEvScheduleCheckpointing, Handle)
         hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle)
 
@@ -104,13 +110,10 @@ public:
         hFunc(NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult, Handle)
         hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult, Handle)
         hFunc(NYql::NDq::TEvDqCompute::TEvStateCommitted, Handle)
-     //   hFunc(NYql::NDq::TEvDqCompute::TEvState, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnComputeActorState)
-      //  hFunc(NYql::NDq::TEvDq::TEvAbortExecution, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnAbortExecution)
 
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle)
 
-        hFunc(NActors::TEvents::TEvPoison, Handle)
-    //    hFunc(NActors::TEvents::TEvWakeup, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnWakeup)
+        sFunc(NActors::TEvents::TEvPoison, PassAway)
 
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle)
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle)

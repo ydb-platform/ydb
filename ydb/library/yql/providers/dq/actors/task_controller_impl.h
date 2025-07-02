@@ -97,6 +97,23 @@ public:
     }
 
 public:
+
+    // STATEFN(Handler) {
+    //     switch (ev->GetTypeRewrite()) {
+    //         hFunc(TEvReadyState, OnReadyState);
+    //         hFunc(TEvQueryResponse, OnQueryResult);
+    //         hFunc(TEvDqFailure, OnResultFailure);
+    //         hFunc(NDq::TEvDqCompute::TEvState, OnComputeActorState);
+    //         hFunc(NDq::TEvDq::TEvAbortExecution, OnAbortExecution);
+    //         cFunc(TEvents::TEvPoison::EventType, PassAway);
+    //         hFunc(TEvents::TEvUndelivered, OnUndelivered);
+    //         hFunc(TEvents::TEvWakeup, OnWakeup);
+    //     default:
+    //         YQL_CLOG(ERROR, ProviderDq) << "Unknown type of event came to task controller: " << ev->Type << " (" << ev->GetTypeName() << "), sender: " << ev->Sender;
+    //         Y_ABORT("Watermarks are not supported");
+    //     }
+    // }
+
     STRICT_STFUNC(Handler, {
         hFunc(TEvReadyState, OnReadyState);
         hFunc(TEvQueryResponse, OnQueryResult);
@@ -554,14 +571,6 @@ public:
             Send(CheckpointCoordinatorId, event.release());
         }
     }
-
-    // const NDq::TDqTaskSettings GetTask(size_t idx) const {
-    //     return Tasks.at(idx).first;
-    // }
-
-    // int GetTasksSize() const {
-    //     return Tasks.size();
-    // }
 
 private:
     void MaybeUpdateChannels() {

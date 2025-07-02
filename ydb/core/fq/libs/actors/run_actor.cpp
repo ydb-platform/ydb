@@ -474,8 +474,10 @@ private:
             // Clear finished actors ids
             ExecuterId = {};
             ControlId = {};
-            // kill CHeckpointCoordinator
-            // todo: check TaskCOntroller /TEvPoison
+        }
+        if (CheckpointCoordinatorId) {
+            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoison());
+            CheckpointCoordinatorId = {};
         }
     }
 
@@ -858,7 +860,7 @@ private:
                 QueryStateUpdateRequest.resources().topic_consumers().size() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
             ProcessQuery();
         } else if (ev->Cookie == SetLoadFromCheckpointModeCookie) {
-            Send(ControlId, new TEvCheckpointCoordinator::TEvRunGraph());
+            Send(CheckpointCoordinatorId, new TEvCheckpointCoordinator::TEvRunGraph());
         } else if (ev->Cookie == UpdateStatisticsCookie) {
             PendingUpdateStatisticsPing = false;
         }

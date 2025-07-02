@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 )
             );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
             auto queryAlter1 = TStringBuilder() << R"(
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 ADD COLUMN Value1 Uint32
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
         }
         {
             auto queryAlter1 = TStringBuilder() << R"(
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 ADD COLUMN Value2 Uint32
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
         }
         {
             auto queryAlter1 = TStringBuilder() << R"(
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 ADD COLUMN Value3 Uint32
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
         }
         {
             auto queryAlter1 = TStringBuilder() << R"(
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 ADD COLUMN Value4 NOT NULL
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
         }
         {
             auto queryAlter1 = TStringBuilder() << R"(
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 ADD COLUMN Value5 Uint32
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
         }
         {
             auto queryAlter1 = TStringBuilder() << R"(
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 ADD COLUMN Value6 Uint32
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
         }
         {
             auto queryAlter1 = TStringBuilder() << R"(
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 DROP COLUMN Value3 Uint32
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
         }
         {
             auto queryAlter1 = TStringBuilder() << R"(
@@ -194,15 +194,15 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 ADD COLUMN Value7 Uint32
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
         }
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
-        AFL_VERIFY(csController->WaitCleanupSchemas(TDuration::Seconds(5)));
+        AFL_VERIFY(csController->WaitCleaningSchemas(TDuration::Seconds(5)));
         for (auto&& i : csController->GetShardActualIds()) {
             kikimr.GetTestServer().GetRuntime()->Send(
                 MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), i, false));
         }
-        AFL_VERIFY(csController->WaitCleanupSchemas(TDuration::Seconds(5)));
+        AFL_VERIFY(csController->WaitCleaningSchemas(TDuration::Seconds(5)));
     }
 
     Y_UNIT_TEST(TierDraftsGCWithRestart) {

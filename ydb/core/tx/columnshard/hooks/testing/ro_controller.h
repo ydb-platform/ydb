@@ -179,7 +179,7 @@ public:
         AFL_VERIFY(!NeedActualizationCount.Val());
     }
 
-    virtual void OnCleanupSchemasFinished() {
+    virtual void OnCleanupSchemasFinished() override {
         CleanupSchemasFinishedCounter.Inc();
     }
 

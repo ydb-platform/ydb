@@ -52,7 +52,7 @@ namespace {
     }
 
     template <typename TPath>
-    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record, const TClusterState& clusterState = {}) {
+    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record, const TClusterState* clusterState = nullptr) {
         bool valid = false;
 
         if (record.HasPath()) {
@@ -64,7 +64,7 @@ namespace {
         }
 
         if (valid && clusterState && record.HasClusterState()) {
-            valid = (clusterState == TClusterState(record.GetClusterState()));
+            valid = (*clusterState == TClusterState(record.GetClusterState()));
         }
 
         return valid;
@@ -827,7 +827,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
-        if (!IsValidNotification(Path, ev->Get()->GetRecord(), ClusterState)) {
+        if (!IsValidNotification(Path, ev->Get()->GetRecord(), &ClusterState)) {
             SBS_LOG_E("Suspicious " << ev->Get()->ToString()
                 << ": sender# " << ev->Sender);
             return;
@@ -940,7 +940,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
 
         const auto& record = ev->Get()->Record;
-        if (ClusterState && record.HasClusterState()) {
+        if (record.HasClusterState()) {
             const TClusterState received(record.GetClusterState());
             if (ClusterState != received) {
                 SBS_LOG_D("Cluster State mismatch in sync version response"

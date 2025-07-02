@@ -107,7 +107,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
     if (issues) {
         CC_LOG_E("StorageError: can't register in storage: " + issues.ToOneLineString());
         ++*Metrics.StorageError;
-        OnInternalError("Can't register in storage " + issues.ToOneLineString());
+        OnInternalError("Can't register in storage", issues);
         return;
     }
 
@@ -163,7 +163,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
     if (event->Issues) {
         ++*Metrics.StorageError;
         CC_LOG_E("StorageError: can't get checkpoints to restore: " + event->Issues.ToOneLineString());
-        OnInternalError("Can't get checkpoints to restore" + event->Issues.ToOneLineString());
+        OnInternalError("Can't get checkpoints to restore", event->Issues);
         return;
     }
 
@@ -595,8 +595,9 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) 
 
     TStringBuilder message;
     message << "Undelivered Event " << ev->Get()->SourceType
-        << " to " << ev->Sender << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
-    OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message);
+        << " from " << SelfId() << " (Self) to " << ev->Sender
+        << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
+    OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, {});
 }
 
 void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&) {
@@ -627,22 +628,8 @@ void TCheckpointCoordinator::OnError(NYql::NDqProto::StatusIds::StatusCode statu
     }
     NYql::TIssues issues;
     issues.AddIssue(std::move(issue));
-    OnError(statusCode, issues);
-}
-
-void TCheckpointCoordinator::OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) {
-    if (!ExecuterId) {
-        return;
-    }
     auto event = std::make_unique<NYql::NDq::TEvDq::TEvAbortExecution>(statusCode, issues);
     TActivationContext::Send(new IEventHandle(ExecuterId, NActors::TActorId(), event.release()));
-}
-
-void TCheckpointCoordinator::OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message) {
-    auto issueCode = NYql::NCommon::NeedFallback(statusCode)
-        ? NYql::TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
-        : NYql::TIssuesIds::DQ_GATEWAY_ERROR;
-    OnError(statusCode, NYql::TIssues({NYql::TIssue(message).SetCode(issueCode, NYql::TSeverityIds::S_ERROR)}));
 }
 
 void TCheckpointCoordinator::OnInternalError(const TString& message, const NYql::TIssues& subIssues) {

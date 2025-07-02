@@ -95,8 +95,6 @@ private:
     void TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint);
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const NYql::TIssues& subIssues);
-    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message);
-    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
     void OnInternalError(const TString& message, const NYql::TIssues& subIssues = {});
 
     template <class TEvPtr>

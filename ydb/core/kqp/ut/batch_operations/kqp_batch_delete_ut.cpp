@@ -30,49 +30,49 @@ void TestSimpleOnePartition(size_t maxBatchSize) {
 
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `KeyValue`;
-    )");
+            BATCH DELETE FROM KeyValue;
+        )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `KeyValue`;
+            SELECT count(*) FROM KeyValue;
         )");
     }
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `KeyValueLargePartition`;
-    )");
+            BATCH DELETE FROM KeyValueLargePartition;
+        )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `KeyValueLargePartition`;
+            SELECT count(*) FROM KeyValueLargePartition;
         )");
     }
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `Test`
-            WHERE Amount >= 5000ul;
+            BATCH DELETE FROM Test
+                WHERE Amount >= 5000ul;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `Test`
-            WHERE Amount >= 5000ul;
+            SELECT count(*) FROM Test
+                WHERE Amount >= 5000ul;
         )");
     }
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `Test`
-            WHERE Amount < 5000ul AND Group < 2;
+            BATCH DELETE FROM Test
+                WHERE Amount < 5000ul AND Group < 2;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `Test`
+            SELECT count(*) FROM Test
                 WHERE Amount < 5000ul AND Group < 2;
         )");
     }
@@ -85,94 +85,94 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
 
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `TwoShard`
-            WHERE Key >= 2;
+            BATCH DELETE FROM TwoShard
+                WHERE Key >= 2;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `TwoShard`
-            WHERE Key >= 2;
+            SELECT count(*) FROM TwoShard
+                WHERE Key >= 2;
         )");
     }
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `EightShard`
-            WHERE Key > 300 AND Data = 2;
+            BATCH DELETE FROM EightShard
+                WHERE Key > 300 AND Data = 2;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `EightShard`
-            WHERE Key > 300 AND Data = 2;
+            SELECT count(*) FROM EightShard
+                WHERE Key > 300 AND Data = 2;
         )");
     }
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `Logs`
-            WHERE App = "kikimr-db";
+            BATCH DELETE FROM Logs
+                WHERE App = "kikimr-db";
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `Logs`
-            WHERE App = "kikimr-db";
+            SELECT count(*) FROM Logs
+                WHERE App = "kikimr-db";
         )");
     }
     {
         auto query = Q_(R"(
-            DELETE FROM `Join2`
-            WHERE Key1 = 102 AND Key2 = "One";
+            DELETE FROM Join2
+                WHERE Key1 = 102 AND Key2 = "One";
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `Join2`
-            WHERE Key1 = 102 AND Key2 = "One";
+            SELECT count(*) FROM Join2
+                WHERE Key1 = 102 AND Key2 = "One";
         )");
     }
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `ReorderKey`
-            WHERE Col3 = 0;
+            BATCH DELETE FROM ReorderKey
+                WHERE Col3 = 0;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `ReorderKey`
-            WHERE Col3 = 0;
+            SELECT count(*) FROM ReorderKey
+                WHERE Col3 = 0;
         )");
     }
     {
         // With literal tx
         auto query = Q_(R"(
-            BATCH DELETE FROM `ReorderOptionalKey`
-            WHERE k1 IN [0, 1, 2, 3];
+            BATCH DELETE FROM ReorderOptionalKey
+                WHERE k1 IN [0, 1, 2, 3];
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `ReorderOptionalKey`
-            WHERE k1 IN [0, 1, 2, 3];
+            SELECT count(*) FROM ReorderOptionalKey
+                WHERE k1 IN [0, 1, 2, 3];
         )");
     }
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `ReorderOptionalKey`
-            WHERE id = 2 AND (k2 IS NULL OR k2 >= 0);
+            BATCH DELETE FROM ReorderOptionalKey
+                WHERE id = 2 AND (k2 IS NULL OR k2 >= 0);
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT COUNT(*) AS cnt FROM `ReorderOptionalKey`
-            WHERE id = 2 AND (k2 IS NULL OR k2 >= 0);
+            SELECT count(*) FROM ReorderOptionalKey
+                WHERE id = 2 AND (k2 IS NULL OR k2 >= 0);
         )");
     }
 }
@@ -186,15 +186,15 @@ void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards, si
 
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `ManyShardsTable`
-            WHERE Data >= 200;
+            BATCH DELETE FROM ManyShardsTable
+                WHERE Data >= 200;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `ManyShardsTable`
-            WHERE Data >= 200;
+            SELECT count(*) FROM ManyShardsTable
+                WHERE Data >= 200;
         )");
     }
 }
@@ -208,15 +208,15 @@ void TestLarge(size_t maxBatchSize, size_t rowsPerShard) {
 
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM `LargeTable`
-            WHERE Key >= 2000;
+            BATCH DELETE FROM LargeTable
+                WHERE Key >= 2000;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM `LargeTable`
-            WHERE Key >= 2000;
+            SELECT count(*) FROM LargeTable
+                WHERE Key >= 2000;
         )");
     }
 }
@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         {
             session.ExecuteQuery(R"(
                 --!syntax_v1
-                CREATE TABLE `TimestampTable` (
+                CREATE TABLE `/Root/TimestampTable` (
                     key Uint64 NOT NULL,
                     `timestamp` Uint64 NOT NULL,
                     value Utf8 FAMILY lz4_family NOT NULL,
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             )", TTxControl::NoTx()).ExtractValueSync();
 
             auto result = session.ExecuteQuery(R"(
-                REPLACE INTO `TimestampTable` (key, `timestamp`, value) VALUES
+                REPLACE INTO `/Root/TimestampTable` (key, `timestamp`, value) VALUES
                     (1, 1, "1"),
                     (2, 2, "2"),
                     (3, 3, "3"),
@@ -339,44 +339,44 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `SecondaryKeys`
-                WHERE Fk IS NULL;
+                BATCH DELETE FROM `/Root/SecondaryKeys`
+                    WHERE Fk IS NULL;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             ExecQueryAndTestEmpty(session, R"(
-                SELECT count(*) FROM `SecondaryKeys`
-                WHERE Fk IS NULL;
+                SELECT count(*) FROM `/Root/SecondaryKeys`
+                    WHERE Fk IS NULL;
             )");
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `SecondaryComplexKeys`
-                WHERE Fk1 IS NOT NULL AND Fk2 >= "Fk2";
+                BATCH DELETE FROM `/Root/SecondaryComplexKeys`
+                    WHERE Fk1 IS NOT NULL AND Fk2 >= "Fk2";
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             ExecQueryAndTestEmpty(session, R"(
-                SELECT count(*) FROM `SecondaryComplexKeys`
-                WHERE Fk1 IS NOT NULL AND Fk2 >= "Fk2";
+                SELECT count(*) FROM `/Root/SecondaryComplexKeys`
+                    WHERE Fk1 IS NOT NULL AND Fk2 >= "Fk2";
             )");
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `TimestampTable`
-                WHERE `timestamp` > 0;
+                BATCH DELETE FROM `/Root/TimestampTable`
+                    WHERE `timestamp` > 0;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             ExecQueryAndTestEmpty(session, R"(
-                SELECT count(*) FROM `TimestampTable`
-                WHERE `timestamp` > 0;
+                SELECT count(*) FROM `/Root/TimestampTable`
+                    WHERE `timestamp` > 0;
             )");
         }
     }
@@ -388,10 +388,10 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `Test`
-                WHERE Amount IN (
-                    SELECT Amount FROM `Test`
-                );
+                BATCH DELETE FROM Test
+                    WHERE Amount IN (
+                        SELECT Amount FROM Test
+                    );
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -400,9 +400,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `Test`
-                WHERE Amount > 100;
-
+                BATCH DELETE FROM Test
+                    WHERE Amount > 100;
                 SELECT 42;
             )");
 
@@ -412,10 +411,9 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `Test`
-                WHERE Amount > 100;
-
-                SELECT * FROM `Test`;
+                BATCH DELETE FROM Test
+                    WHERE Amount > 100;
+                SELECT * FROM Test;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -424,11 +422,10 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `KeyValue`
-                WHERE Key >= 3;
-
-                UPSERT INTO `KeyValue` (Key, Value)
-                VALUES (10, "Value10");
+                BATCH DELETE FROM KeyValue
+                    WHERE Key >= 3;
+                UPSERT INTO KeyValue (Key, Value)
+                    VALUES (10, "Value10");
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -437,10 +434,9 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `KeyValue`;
-
-                UPSERT INTO `KeyValue2` (Key, Value)
-                VALUES ("Key10", "Value10");
+                BATCH DELETE FROM KeyValue;
+                UPSERT INTO KeyValue2 (Key, Value)
+                    VALUES ("Key10", "Value10");
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -456,9 +452,9 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `KeyValue`
-                WHERE Key >= 3
-                RETURNING *;
+                BATCH DELETE FROM KeyValue
+                    WHERE Key >= 3
+                    RETURNING *;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -474,8 +470,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `Test` ON (Group, Name)
-                VALUES (1u, "Anna");
+                BATCH DELETE FROM Test ON (Group, Name)
+                    VALUES (1u, "Anna");
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -493,7 +489,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                CREATE TABLE `TestOlap` (
+                CREATE TABLE TestOlap (
                     Key Int32 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
@@ -508,7 +504,10 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                INSERT INTO `TestOlap` (Key, Value) VALUES (1, "1"), (2, "2"), (3, "3");
+                INSERT INTO TestOlap (Key, Value) VALUES
+                    (1, "1"),
+                    (2, "2"),
+                    (3, "3");
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -517,8 +516,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `TestOlap`
-                WHERE Key < 3;
+                BATCH DELETE FROM TestOlap
+                    WHERE Key < 3;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -537,7 +536,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `TestBatchNotExists`;
+                BATCH DELETE FROM TestBatchNotExists;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -546,8 +545,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `TestBatchNotExists`
-                WHERE Key IN [1, 3, 5];
+                BATCH DELETE FROM TestBatchNotExists
+                    WHERE Key IN [1, 3, 5];
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -562,8 +561,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         auto session = db.GetSession().GetValueSync().GetSession();
 
         auto query = Q_(R"(
-            BATCH DELETE FROM `Test`
-            WHERE UnknownColumn = 123;
+            BATCH DELETE FROM Test
+                WHERE UnknownColumn = 123;
         )");
 
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
@@ -578,8 +577,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM `KeyValue`
-                WHERE Key >= 3;
+                BATCH DELETE FROM KeyValue
+                    WHERE Key >= 3;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();

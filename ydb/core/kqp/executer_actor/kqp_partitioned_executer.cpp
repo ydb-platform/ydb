@@ -40,10 +40,10 @@ namespace {
 class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecuter> {
     using TPartitionIndex = size_t;
 
-    struct TPartitionInfo {
+    struct TBatchPartitionInfo {
         TMaybe<TKeyDesc::TPartitionRangeInfo> BeginRange;
         TMaybe<TKeyDesc::TPartitionRangeInfo> EndRange;
-        TPartitionIndex Index;
+        TPartitionIndex PartitionIndex;
 
         TActorId ExecuterId;
         TActorId BufferId;
@@ -51,7 +51,7 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
         ui64 LimitSize;
         ui64 RetryDelayMs;
 
-        using TPtr = std::shared_ptr<TPartitionInfo>;
+        using TPtr = std::shared_ptr<TBatchPartitionInfo>;
     };
 
 public:
@@ -437,10 +437,10 @@ private:
         }
     }
 
-    TPartitionInfo::TPtr CreatePartition(TPartitionIndex idx) {
+    TBatchPartitionInfo::TPtr CreatePartition(TPartitionIndex idx) {
         YQL_ENSURE(idx < TablePartitioning->size());
 
-        auto partition = std::make_shared<TPartitionInfo>();
+        auto partition = std::make_shared<TBatchPartitionInfo>();
         StartedPartitions[idx] = partition;
 
         partition->EndRange = TablePartitioning->at(idx).Range;
@@ -449,7 +449,7 @@ private:
             partition->BeginRange->IsInclusive = !partition->BeginRange->IsInclusive;
         }
 
-        partition->Index = idx;
+        partition->PartitionIndex = idx;
         partition->LimitSize = Settings.MaxBatchSize;
         partition->RetryDelayMs = Settings.StartRetryDelayMs;
 
@@ -504,7 +504,7 @@ private:
         ExecuterToPartition[exId] = BufferToPartition[bufferActorId] = partInfo;
 
         PE_LOG_I("Create new KQP executer by KqpPartitionedExecuterActor: ExecuterId = " << partInfo->ExecuterId
-            << ", Index = " << partitionIndex << ", LimitSize = " << partInfo->LimitSize
+            << ", PartitionIndex = " << partitionIndex << ", LimitSize = " << partInfo->LimitSize
             << ", RetryDelayMs = " << partInfo->RetryDelayMs);
 
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
@@ -539,16 +539,16 @@ private:
         Send(id, new TEvKqpBuffer::TEvTerminate{});
     }
 
-    void ForgetExecuterAndBuffer(const TPartitionInfo::TPtr& partInfo) {
+    void ForgetExecuterAndBuffer(const TBatchPartitionInfo::TPtr& partInfo) {
         YQL_ENSURE(ExecuterToPartition.erase(partInfo->ExecuterId) == 1);
         YQL_ENSURE(BufferToPartition.erase(partInfo->BufferId) == 1);
     }
 
-    void ForgetPartition(const TPartitionInfo::TPtr& partInfo) {
-        YQL_ENSURE(StartedPartitions.erase(partInfo->Index) == 1);
+    void ForgetPartition(const TBatchPartitionInfo::TPtr& partInfo) {
+        YQL_ENSURE(StartedPartitions.erase(partInfo->PartitionIndex) == 1);
     }
 
-    void OnSuccessResponse(TPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
+    void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
         TSerializedCellVec maxKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
         if (maxKey) {
             partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(maxKey, /* IsInclusive */ false, /* IsPoint */ false);
@@ -572,12 +572,12 @@ private:
         }
     }
 
-    void RetryPartExecution(const TPartitionInfo::TPtr& partInfo) {
-        PE_LOG_D("Retry query execution for Index = " << partInfo->Index
+    void RetryPartExecution(const TBatchPartitionInfo::TPtr& partInfo) {
+        PE_LOG_D("Retry query execution for PartitionIndex = " << partInfo->PartitionIndex
             << ", RetryDelayMs = " << partInfo->RetryDelayMs);
 
         if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
-            return CreateExecuterWithBuffer(partInfo->Index, /* isRetry */ true);
+            return CreateExecuterWithBuffer(partInfo->PartitionIndex, /* isRetry */ true);
         }
 
         ForgetPartition(partInfo);
@@ -588,7 +588,7 @@ private:
         }
     }
 
-    void ScheduleRetryWithNewLimit(TPartitionInfo::TPtr& partInfo) {
+    void ScheduleRetryWithNewLimit(TBatchPartitionInfo::TPtr& partInfo) {
         if (partInfo->RetryDelayMs == Settings.MaxRetryDelayMs) {
             ForgetPartition(partInfo);
 
@@ -605,7 +605,7 @@ private:
         auto newLimit = std::max(partInfo->LimitSize / 2, Settings.MinBatchSize);
         partInfo->LimitSize = newLimit;
 
-        auto ev = std::make_unique<TEvKqpExecuter::TEvTxDelayedExecution>(partInfo->Index);
+        auto ev = std::make_unique<TEvKqpExecuter::TEvTxDelayedExecution>(partInfo->PartitionIndex);
         Schedule(TDuration::MilliSeconds(partInfo->RetryDelayMs), ev.release());
 
         // We use the init delay value first and change it for the next attempt
@@ -708,11 +708,11 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> TablePartitioning;
-    THashMap<TPartitionIndex, TPartitionInfo::TPtr> StartedPartitions;
+    THashMap<TPartitionIndex, TBatchPartitionInfo::TPtr> StartedPartitions;
     TPartitionIndex NextPartitionIndex = 0;
 
-    THashMap<TActorId, TPartitionInfo::TPtr> ExecuterToPartition;
-    THashMap<TActorId, TPartitionInfo::TPtr> BufferToPartition;
+    THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterToPartition;
+    THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferToPartition;
 
     TKeyDesc::ERowOperation OperationType;
     TTableId TableId;

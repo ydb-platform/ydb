@@ -361,9 +361,16 @@ private:
                         << "INSERT OR IGNORE is not yet supported for Kikimr."));
                     return TStatus::Error;
                 } else if (mode == "update") {
-                    if (settings.IsBatch && HasUpdateIntersection(settings)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch update is only supported for idempotent updates."));
-                        return TStatus::Error;
+                    if (settings.IsBatch) {
+                        if (SessionCtx->Tables().GetTables().size() != 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch update is not supported for multiple tables."));
+                            return TStatus::Error;
+                        }
+
+                        if (HasUpdateIntersection(settings)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch update is only supported for idempotent updates."));
+                            return TStatus::Error;
+                        }
                     }
 
                     if (!settings.PgFilter) {
@@ -379,6 +386,13 @@ private:
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "delete") {
+                    if (settings.IsBatch) {
+                        if (SessionCtx->Tables().GetTables().size() != 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch delete is not supported for multiple tables."));
+                            return TStatus::Error;
+                        }
+                    }
+
                     if (!settings.Filter && !settings.PgFilter) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;

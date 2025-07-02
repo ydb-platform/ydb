@@ -26,6 +26,7 @@ namespace NKikimr {
         DEFINE_TRACING_LEVELS(TDistributedTransactions, 2, 7, 11, 14, 15)
         DEFINE_TRACING_LEVELS(TTablet, 3, 8, 12, 14, 15)
         DEFINE_TRACING_LEVELS(TDistributedStorage, 4, 9, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TTopic, 4, 9, 13, 14, 15)
 
 #undef DEFINE_TRACING_LEVELS
 
@@ -102,4 +103,9 @@ namespace NKikimr {
         };
     };
 
+    struct TWilsonTopic {
+        enum {
+            ExecuteTransaction = TComponentTracingLevels::TTopic::TopLevel,
+        };
+    };
 } // NKikimr

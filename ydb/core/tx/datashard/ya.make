@@ -116,6 +116,7 @@ SRCS(
     datashard_repl_offsets.cpp
     datashard_repl_offsets_client.cpp
     datashard_repl_offsets_server.cpp
+    datashard_s3_download.cpp
     datashard_s3_downloads.cpp
     datashard_s3_upload_rows.cpp
     datashard_s3_uploads.cpp
@@ -219,7 +220,9 @@ SRCS(
     build_index/local_kmeans.cpp
     build_index/sample_k.cpp
     build_index/secondary_index.cpp
+    build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
+    build_index/unique_index.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)
@@ -238,8 +241,6 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/zstd
-    ydb/library/actors/core
-    ydb/library/actors/http
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/stack_vector
     library/cpp/digest/md5
@@ -251,9 +252,6 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/dot_product
-    library/cpp/l1_distance
-    library/cpp/l2_distance
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
@@ -265,6 +263,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
@@ -273,16 +272,20 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/actors/http
+    ydb/library/chunks_limiter
+    ydb/library/protobuf_printer
+    ydb/library/yql/dq/actors/compute
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/core/minsketch
     yql/essentials/parser/pg_wrapper/interface
     ydb/public/api/protos
-    ydb/library/yql/dq/actors/compute
     yql/essentials/parser/pg_wrapper/interface
     ydb/services/lib/sharding
-    ydb/library/chunks_limiter
     yql/essentials/types/uuid
+    ydb/core/io_formats/cell_maker
 )
 
 YQL_LAST_ABI_VERSION()

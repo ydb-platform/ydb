@@ -195,7 +195,7 @@ public:
                                 TPlanVisualizer pv;
                                 TFileOutput out(currentPlanWithStatsFileName);
                                 try {
-                                    pv.LoadPlans(*execStats->GetPlan());
+                                    pv.LoadPlans(TString(*execStats->GetPlan()));
                                     out << pv.PrintSvg();
                                 } catch (std::exception& e) {
                                     out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";

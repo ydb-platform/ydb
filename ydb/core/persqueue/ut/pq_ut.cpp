@@ -564,162 +564,6 @@ Y_UNIT_TEST(TestReadRuleVersions) {
     });
 }
 
-Y_UNIT_TEST(TestDescribeBalancer) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
-        activeZone = false;
-        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
-        ui64 ssId = 9876;
-        BootFakeSchemeShard(*tc.Runtime, ssId, state);
-
-        tc.Runtime->SetScheduledLimit(50);
-        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
-        TAutoPtr<IEventHandle> handle;
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-        TEvPersQueue::TEvDescribeResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
-        UNIT_ASSERT(result);
-        auto& rec = result->Record;
-        UNIT_ASSERT(rec.HasSchemeShardId() && rec.GetSchemeShardId() == ssId);
-        PQTabletRestart(tc);
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
-        UNIT_ASSERT(result);
-        auto& rec2 = result->Record;
-        UNIT_ASSERT(rec2.HasSchemeShardId() && rec2.GetSchemeShardId() == ssId);
-    });
-}
-
-Y_UNIT_TEST(TestCheckACL) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
-        activeZone = false;
-        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
-        ui64 ssId = 9876;
-        BootFakeSchemeShard(*tc.Runtime, ssId, state);
-        IActor* ticketParser = NKikimr::CreateTicketParser({.AuthConfig = tc.Runtime->GetAppData().AuthConfig, .CertificateAuthValues = {}});
-        TActorId ticketParserId = tc.Runtime->Register(ticketParser);
-        tc.Runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserId);
-
-        TAutoPtr<IEventHandle> handle;
-        THolder<TEvPersQueue::TEvCheckACL> request(new TEvPersQueue::TEvCheckACL());
-        request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
-        request->Record.SetUser("client");
-
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-
-        tc.Runtime->SetScheduledLimit(600);
-        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        TEvPersQueue::TEvCheckACLResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
-        auto& rec = result->Record;
-        UNIT_ASSERT(rec.GetAccess() == NKikimrPQ::EAccess::DENIED);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetTopic(), TOPIC_NAME);
-
-        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "client@" BUILTIN_ACL_DOMAIN);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        request.Reset(new TEvPersQueue::TEvCheckACL());
-        request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
-        request->Record.SetUser("client");
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
-
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
-        auto& rec2 = result->Record;
-        UNIT_ASSERT_C(rec2.GetAccess() == NKikimrPQ::EAccess::ALLOWED, rec2);
-
-        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "client@" BUILTIN_ACL_DOMAIN);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        request.Reset(new TEvPersQueue::TEvCheckACL());
-        request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
-        request->Record.SetUser("client");
-        request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
-
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
-        auto& rec3 = result->Record;
-        UNIT_ASSERT(rec3.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
-
-        request.Reset(new TEvPersQueue::TEvCheckACL());
-        request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
-        request->Record.SetUser("client2");
-        request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
-
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
-        auto& rec9 = result->Record;
-        UNIT_ASSERT(rec9.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
-
-        request.Reset(new TEvPersQueue::TEvCheckACL());
-        // No auth provided and auth for topic not required
-        request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
-
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
-        auto& rec5 = result->Record;
-        UNIT_ASSERT(rec5.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
-
-        request.Reset(new TEvPersQueue::TEvCheckACL());
-        // No auth provided and auth for topic not required
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
-
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
-        auto& rec6 = result->Record;
-        UNIT_ASSERT(rec6.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
-
-        request.Reset(new TEvPersQueue::TEvCheckACL());
-        // No auth provided and auth for topic is required
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
-        request->Record.SetToken("");
-
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc, true);
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
-        auto& rec7 = result->Record;
-        UNIT_ASSERT(rec7.GetAccess() == NKikimrPQ::EAccess::DENIED);
-
-        request.Reset(new TEvPersQueue::TEvCheckACL());
-        // No auth provided and auth for topic is required
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
-        request->Record.SetToken("");
-
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
-        auto& rec8 = result->Record;
-        UNIT_ASSERT(rec8.GetAccess() == NKikimrPQ::EAccess::DENIED);
-    });
-}
-
-
 Y_UNIT_TEST(TestSeveralOwners) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -2651,6 +2495,92 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
     keys = GetTabletKeys(tc);
     UNIT_ASSERT_C(!keys.contains(firstMessageKey),
                   "the PQ tablet did not delete the '" << firstMessageKey << "' key during startup");
+}
+
+Y_UNIT_TEST(The_Value_Of_CreationUnixTime_Must_Not_Decrease)
+{
+    auto simulateSleep = [](TDuration d, TTestContext& tc) {
+        tc.Runtime->AdvanceCurrentTime(d);
+        tc.Runtime->SimulateSleep(TDuration::MilliSeconds(1));
+    };
+
+    auto writeMessages = [&](ui64 begin, ui64 end, size_t size, TTestContext& tc) {
+        for (ui64 offset = begin; offset < end; ++offset) {
+            TVector<std::pair<ui64, TString>> data;
+            data.emplace_back(offset, TString(size, 'x'));
+
+            CmdWrite(0, "sourceId", data, tc, false, {}, true, "", -1, offset);
+
+            simulateSleep(TDuration::MilliSeconds(1234), tc);
+        }
+    };
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    // Turn off the asynchronous compactor
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(50_MB);
+
+    // Create a topic with a single batch. Blobs will not be deleted by retention
+    PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {}, tc);
+
+    // Write multiple messages so that three zones appear
+    writeMessages(1, 20, 1_MB, tc);
+    writeMessages(20, 25, 40_KB, tc);
+
+    // The asynchronous compactor will start working after restarting the tablet
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
+
+    PQTabletRestart(tc);
+
+    // Let the asynchronous compactor work
+    Sleep(TDuration::Seconds(5));
+
+    // We can read any of the written messages
+    for (i32 i = 1; i < 25; ++i) {
+        CmdRead(0, i, 1, Max<i32>(), 1, false, tc, {i});
+    }
+
+    // The list of keys in the PQ tablet
+    TVector<TString> keys;
+
+    for (auto& key : GetTabletKeys(tc)) {
+        keys.push_back(std::move(key));
+    }
+    std::sort(keys.begin(), keys.end());
+
+    // The value of `CreationUnixTime` must not decrease
+    ui64 currentCreationUnixTime = 0;
+    for (const auto& key : keys) {
+        Y_ABORT_UNLESS(!key.empty());
+        if (key.front() != TKeyPrefix::TypeData) {
+            continue;
+        }
+
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto read = request->Record.AddCmdReadRange();
+        auto range = read->MutableRange();
+        range->SetFrom(key);
+        range->SetIncludeFrom(true);
+        range->SetTo(key);
+        range->SetIncludeTo(true);
+
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.ReadRangeResultSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReadRangeResult(0).PairSize(), 1);
+        UNIT_ASSERT_LE_C(currentCreationUnixTime, result->Record.GetReadRangeResult(0).GetPair(0).GetCreationUnixTime(),
+                       "key=" << key <<
+                       ", currentCreationUnixTime=" << currentCreationUnixTime <<
+                       ", result.CreationUnixTime=" << result->Record.GetReadRangeResult(0).GetPair(0).GetCreationUnixTime());
+
+        currentCreationUnixTime = result->Record.GetReadRangeResult(0).GetPair(0).GetCreationUnixTime();
+    }
 }
 
 Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)

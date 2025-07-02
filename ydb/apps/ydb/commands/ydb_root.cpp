@@ -40,18 +40,18 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
         if (config.UseIamAuth) {
             if (config.YCToken) {
                 return CreateIamOAuthCredentialsProviderFactory(
-                    { {.Endpoint = config.IamEndpoint}, config.YCToken });
+                    { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.YCToken });
             }
             if (config.UseMetadataCredentials) {
                 return CreateIamCredentialsProviderFactory();
             }
             if (config.SaKeyParams) {
                 return CreateIamJwtParamsCredentialsProviderFactory(
-                    { {.Endpoint = config.IamEndpoint}, config.SaKeyParams });
+                    { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.SaKeyParams });
             }
             if (config.SaKeyFile) {
                 return CreateIamJwtFileCredentialsProviderFactory(
-                    { {.Endpoint = config.IamEndpoint}, config.SaKeyFile });
+                    { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.SaKeyFile });
             }
         }
         return CreateInsecureCredentialsProviderFactory();

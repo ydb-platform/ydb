@@ -21,9 +21,8 @@ class TLockSharingInfo: TMoveOnly {
 private:
     const ui64 LockId;
     const ui64 Generation;
-    TAtomicCounter InternalGenerationCounter = 0;
     std::atomic<bool> Broken = false;
-    TAtomicCounter WritesCounter = 0;
+    std::atomic<bool> Writes = false;
     friend class TLockFeatures;
 
 public:
@@ -40,24 +39,22 @@ public:
     }
 
     bool HasWrites() const {
-        return WritesCounter.Val();
+        return Writes;
     }
 
     bool IsBroken() const {
         return Broken;
     }
 
-    ui64 GetCounter() const {
-        return InternalGenerationCounter.Val();
+    ui64 GetInternalGenerationCounter() const {
+        return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
     }
 };
 
 class TLockFeatures: TMoveOnly {
 private:
-    YDB_ACCESSOR_DEF(std::vector<TWriteOperation::TPtr>, WriteOperations);
-    YDB_ACCESSOR_DEF(std::vector<NOlap::NTxInteractions::TTxEventContainer>, Events);
-    YDB_ACCESSOR(ui64, LockId, 0);
-    YDB_ACCESSOR(ui64, Generation, 0);
+    YDB_READONLY_DEF(std::vector<TWriteOperation::TPtr>, WriteOperations);
+    YDB_READONLY_DEF(std::vector<NOlap::NTxInteractions::TTxEventContainer>, Events);
     std::shared_ptr<TLockSharingInfo> SharingInfo;
 
     YDB_READONLY_DEF(THashSet<ui64>, BrokeOnCommit);
@@ -65,21 +62,34 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
 
 public:
+    ui64 GetLockId() const {
+        return SharingInfo->GetLockId();
+    }
+
+    ui64 GetGeneration() const {
+        return SharingInfo->GetGeneration();
+    }
+
     const std::shared_ptr<TLockSharingInfo>& GetSharingInfo() const {
         return SharingInfo;
     }
 
     ui64 GetInternalGenerationCounter() const {
-        return SharingInfo->GetCounter();
+        return SharingInfo->GetInternalGenerationCounter();
     }
 
-    void AddWrite() {
-        SharingInfo->WritesCounter.Inc();
+
+    void AddWriteOperation(const TWriteOperation::TPtr op) {
+        WriteOperations.push_back(op);
+        SharingInfo->Writes = true;
+    }
+
+    void AddTxEvent(NOlap::NTxInteractions::TTxEventContainer&& container) {
+        Events.emplace_back(std::move(container));
     }
 
     void SetBroken() {
-        SharingInfo->Broken = 1;
-        SharingInfo->InternalGenerationCounter = (i64)TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken;
+        SharingInfo->Broken = true;
     }
 
     bool IsBroken() const {
@@ -109,9 +119,7 @@ public:
         }
     }
 
-    TLockFeatures(const ui64 lockId, const ui64 gen)
-        : LockId(lockId)
-        , Generation(gen) {
+    TLockFeatures(const ui64 lockId, const ui64 gen) {
         SharingInfo = std::make_shared<TLockSharingInfo>(lockId, gen);
     }
 };
@@ -199,8 +207,8 @@ public:
         return *result;
     }
 
-    TWriteOperation::TPtr RegisterOperation(const TInternalPathId pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
-        const NEvWrite::EModificationType mType, const bool portionsWriting);
+    TWriteOperation::TPtr CreateWriteOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
+        const NEvWrite::EModificationType mType, const bool isBulk);
     bool RegisterLock(const ui64 lockId, const ui64 generationId) {
         if (LockFeatures.contains(lockId)) {
             return false;

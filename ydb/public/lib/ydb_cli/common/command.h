@@ -24,6 +24,8 @@ struct TCommandFlags {
 };
 
 class TClientCommand {
+protected:
+    TClientCommand() = default;
 public:
     static bool TIME_REQUESTS; // measure time of requests
     static bool PROGRESS_REQUESTS; // display progress of long requests
@@ -171,8 +173,6 @@ public:
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
-        bool ThrowOnOptsParseError = false;
-
         TConfig(int argc, char** argv)
             : ArgC(argc)
             , ArgV(argv)
@@ -268,7 +268,7 @@ public:
         void PrintHelpAndExit() {
             NLastGetopt::TOptsParser parser(&Opts->GetOpts(), ArgC, ArgV);
             parser.PrintUsage(Cerr);
-            throw TMisuseWithHelpException();
+            throw TNeedToExitWithCode(EXIT_FAILURE);
         }
 
     private:

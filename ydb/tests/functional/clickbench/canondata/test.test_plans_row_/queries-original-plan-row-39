@@ -89,6 +89,7 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
+                                                                        "HashFunc": "HashV1",
                                                                         "KeyColumns": [
                                                                             "AdvEngineID",
                                                                             "Dst",

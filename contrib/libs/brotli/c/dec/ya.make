@@ -6,7 +6,7 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.0.7)
+VERSION(1.1.0)
 
 PEERDIR(
     contrib/libs/brotli/c/common
@@ -21,7 +21,7 @@ NO_COMPILER_WARNINGS()
 NO_RUNTIME()
 
 CFLAGS(
-    -DBROTLI_BUILD_PORTABLE
+    -DBROTLI_HAVE_LOG2=1
 )
 
 SRCS(

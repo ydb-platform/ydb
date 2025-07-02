@@ -26,7 +26,6 @@ private:
     TMonotonic LastAddProcessInstant = TMonotonic::Now();
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
-    void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
     void HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
@@ -47,7 +46,6 @@ public:
         //            ("workers", Workers.size())("waiting", Waiting.size())("actor_id", SelfId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExecution::TEvNewTask, HandleMain);
-            hFunc(NActors::TEvents::TEvWakeup, HandleMain);
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
             hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
             hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);

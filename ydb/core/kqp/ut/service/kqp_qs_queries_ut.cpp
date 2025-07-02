@@ -939,6 +939,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 [[1u];[-1]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] == 0);
+
             // using followers resolver.
             UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
         }
@@ -1907,6 +1908,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
         auto client = kikimr.GetQueryClient();
+
+        TString SessionId;
         {
             auto session = client.GetSession().GetValueSync().GetSession();
             auto id = session.GetId();
@@ -1932,13 +1935,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
             const TVector<TString> sessionIdSplitted = StringSplitter(id).SplitByString("&id=");
+            SessionId = sessionIdSplitted.back();
+
             const auto queryCreateRestricted = Q_(fmt::format(R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/.tmp/sessions/{}/Test` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
-                );)", sessionIdSplitted.back()));
+                );)", SessionId));
 
             auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultCreateRestricted.IsSuccess());
@@ -1965,9 +1970,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto schemeClient = kikimr.GetSchemeClient();
-            auto listResult = schemeClient.ListDirectory("/Root/.tmp/sessions").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 0);
+            auto listResult = schemeClient.ListDirectory(
+                fmt::format("/Root/.tmp/sessions/{}", SessionId)
+                ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, listResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(listResult.GetIssues().ToString(), "Path not found",listResult.GetIssues().ToString());
         }
     }
 
@@ -3621,7 +3628,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[1u;"1";"1"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -3665,8 +3672,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
-            CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([[[2u];["2"];["2"]]])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([[1u;"1";"1"]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[2u;"2";"2"]])", FormatResultSetYson(result.GetResultSet(1)));
             // Also empty now(
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(2)));
         }
@@ -4715,7 +4722,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
             csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
             csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
             const TString query = Sprintf(R"(
                 CREATE TABLE `/Root/DataShard` (
@@ -4732,8 +4738,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             DoExecute();
-            csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-            csController->WaitIndexation(TDuration::Seconds(5));
         }
 
     };

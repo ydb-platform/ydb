@@ -1,4 +1,5 @@
 RECURSE(
+    cdc
     kv
     log
     mixedpy

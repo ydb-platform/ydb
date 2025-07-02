@@ -580,6 +580,35 @@ class StepTickTimeFactory:
 
 
 class _freeze_time:
+    """
+    A class to freeze time for testing purposes.
+
+    This class can be used as a context manager or a decorator to freeze time
+    during the execution of a block of code or a function. It provides various
+    options to customize the behavior of the frozen time.
+
+    Attributes:
+        time_to_freeze (datetime.datetime): The datetime to freeze time at.
+        tz_offset (datetime.timedelta): The timezone offset to apply to the frozen time.
+        ignore (List[str]): A list of module names to ignore when freezing time.
+        tick (bool): Whether to allow time to tick forward.
+        auto_tick_seconds (float): The number of seconds to auto-tick the frozen time.
+        undo_changes (List[Tuple[types.ModuleType, str, Any]]): A list of changes to undo when stopping the frozen time.
+        modules_at_start (Set[str]): A set of module names that were loaded at the start of freezing time.
+        as_arg (bool): Whether to pass the frozen time as an argument to the decorated function.
+        as_kwarg (str): The name of the keyword argument to pass the frozen time to the decorated function.
+        real_asyncio (Optional[bool]): Whether to allow asyncio event loops to see real monotonic time.
+
+    Methods:
+        __call__(func): Decorates a function or class to freeze time during its execution.
+        decorate_class(klass): Decorates a class to freeze time during its execution.
+        __enter__(): Starts freezing time and returns the time factory.
+        __exit__(*args): Stops freezing time.
+        start(): Starts freezing time and returns the time factory.
+        stop(): Stops freezing time and restores the original time functions.
+        decorate_coroutine(coroutine): Decorates a coroutine to freeze time during its execution.
+        decorate_callable(func): Decorates a callable to freeze time during its execution.
+    """
 
     def __init__(
         self,
@@ -602,10 +631,6 @@ class _freeze_time:
         self.as_arg = as_arg
         self.as_kwarg = as_kwarg
         self.real_asyncio = real_asyncio
-
-    @overload
-    def __call__(self, func: Type[T2]) -> Type[T2]:
-        ...
 
     @overload
     def __call__(self, func: "Callable[P, Awaitable[Any]]") -> "Callable[P, Awaitable[Any]]":
@@ -890,6 +915,26 @@ class _freeze_time:
 
 def freeze_time(time_to_freeze: Optional[_Freezable]=None, tz_offset: Union[int, datetime.timedelta]=0, ignore: Optional[List[str]]=None, tick: bool=False, as_arg: bool=False, as_kwarg: str='',
                 auto_tick_seconds: float=0, real_asyncio: bool=False) -> _freeze_time:
+    """
+    Freezes time for testing purposes.
+
+    This function can be used as a decorator or a context manager to freeze time
+    during the execution of a block of code or a function. It provides various
+    options to customize the behavior of the frozen time.
+
+    Args:
+        time_to_freeze (Optional[_Freezable]): The datetime to freeze time at.
+        tz_offset (Union[int, datetime.timedelta]): The timezone offset to apply to the frozen time.
+        ignore (Optional[List[str]]): A list of module names to ignore when freezing time.
+        tick (bool): Whether to allow time to tick forward.
+        as_arg (bool): Whether to pass the frozen time as an argument to the decorated function.
+        as_kwarg (str): The name of the keyword argument to pass the frozen time to the decorated function.
+        auto_tick_seconds (float): The number of seconds to auto-tick the frozen time.
+        real_asyncio (bool): Whether to allow asyncio event loops to see real monotonic time.
+
+    Returns:
+        _freeze_time: An instance of the _freeze_time class.
+    """
     acceptable_times: Any = (type(None), str, datetime.date, datetime.timedelta,
              types.FunctionType, types.GeneratorType)
 

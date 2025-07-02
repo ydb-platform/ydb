@@ -1,6 +1,7 @@
 #pragma once
 
 #include "constants.h"
+#include "runner.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
@@ -60,12 +61,8 @@ inline bool ShouldExit(const TStatus& status) {
            status.GetStatus() == EStatus::UNAUTHORIZED;
 }
 
-inline void QuickExit(int status) {
-#if !defined(__APPLE__)
-    std::quick_exit(status);
-#else
-    _exit(status);
-#endif
+inline void RequestStop() {
+    GetGlobalInterruptSource().request_stop();
 }
 
 } // namespace NYdb::NTPCC

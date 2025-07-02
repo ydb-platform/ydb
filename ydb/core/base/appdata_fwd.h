@@ -2,6 +2,7 @@
 
 // todo(gvit): remove
 #include <ydb/core/base/event_filter.h>
+#include <util/generic/hash_set.h>
 
 class TProgramShouldContinue;
 class IRandomProvider;
@@ -24,6 +25,9 @@ namespace NKikimr {
     }
     namespace NJaegerTracing {
         class TSamplingThrottlingConfigurator;
+    }
+    namespace NKqp::NScheduler {
+        class TComputeScheduler;
     }
 }
 
@@ -54,6 +58,7 @@ namespace NKikimrConfig {
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
+    class TKafkaProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
@@ -225,6 +230,7 @@ struct TAppData {
     NKikimrStream::TStreamingConfig& StreamingConfig;
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
+    NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;
@@ -300,8 +306,13 @@ struct TAppData {
 
     bool YamlConfigEnabled = false;
 
+    // Test failure injection system
+    THashSet<ui64> InjectedFailures;
+
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
+
+    std::shared_ptr<NKqp::NScheduler::TComputeScheduler> ComputeScheduler;
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
@@ -315,27 +326,34 @@ struct TAppData {
 
     void InitFeatureFlags(const NKikimrConfig::TFeatureFlags& flags);
     void UpdateRuntimeFlags(const NKikimrConfig::TFeatureFlags& flags);
+
+    // Test failure injection methods
+    void InjectFailure(ui64 failureType) {
+        InjectedFailures.insert(failureType);
+    }
+
+    void RemoveFailure(ui64 failureType) {
+        InjectedFailures.erase(failureType);
+    }
+
+    void ClearAllFailures() {
+        InjectedFailures.clear();
+    }
+
+    bool HasInjectedFailure(ui64 failureType) const {
+        return InjectedFailures.contains(failureType);
+    }
 };
+
+inline bool CheckAppData(const TAppData* appData) {
+    return appData && appData->Magic == TAppData::MagicTag;
+}
 
 inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     Y_DEBUG_ABORT_UNLESS(actorSystem);
     TAppData* const x = actorSystem->AppData<TAppData>();
-    Y_DEBUG_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
+    Y_DEBUG_ABORT_UNLESS(CheckAppData(x));
     return x;
-}
-
-inline bool HasAppData() {
-    return !!NActors::TlsActivationContext
-        && NActors::TActivationContext::ActorSystem()
-        && NActors::TActivationContext::ActorSystem()->AppData<TAppData>();
-}
-
-inline TAppData& AppDataVerified() {
-    Y_ABORT_UNLESS(HasAppData());
-    NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-    TAppData* const x = actorSystem->AppData<TAppData>();
-    Y_ABORT_UNLESS(x->Magic == TAppData::MagicTag);
-    return *x;
 }
 
 inline TAppData* AppData() {
@@ -344,6 +362,19 @@ inline TAppData* AppData() {
 
 inline TAppData* AppData(const NActors::TActorContext &ctx) {
     return AppData(ctx.ActorSystem());
+}
+
+inline bool HasAppData(NActors::TActorSystem* actorSystem) {
+    return actorSystem && CheckAppData(actorSystem->AppData<TAppData>());
+}
+
+inline bool HasAppData() {
+    return !!NActors::TlsActivationContext && HasAppData(NActors::TActivationContext::ActorSystem());
+}
+
+inline TAppData& AppDataVerified() {
+    Y_ABORT_UNLESS(HasAppData());
+    return *AppData();
 }
 
 } // NKikimr

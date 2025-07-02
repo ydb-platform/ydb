@@ -20,7 +20,6 @@ public:
         : Data(data)
         , Batch(batch) {
         Data->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::WaitFlush);
-        AFL_VERIFY(Data->GetWritePortions());
         AFL_VERIFY(Batch.HasContainer());
     }
 };
@@ -51,7 +50,7 @@ public:
         , Context(context) {
         AFL_VERIFY(WriteUnits.size());
         for (auto&& i : WriteUnits) {
-            i.GetData()->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlicesPack);
+            i.GetData()->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::PackSlicesConstruction);
         }
     }
 };

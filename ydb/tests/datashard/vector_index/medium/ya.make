@@ -1,8 +1,8 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(38)
+SPLIT_FACTOR(39)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -13,6 +13,7 @@ ENDIF()
 
 TEST_SRCS(
     test_vector_index.py
+    test_vector_index_negative.py
 )
 
 PEERDIR(
@@ -21,7 +22,6 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
 )
 
 END()

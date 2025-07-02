@@ -179,6 +179,7 @@ public:
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
+        const ui32 defaultFilledColumnCount = validatedOperation.GetDefaultFilledColumnCount();
 
         // Main update cycle
 
@@ -189,7 +190,7 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops);
+                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
@@ -211,6 +212,11 @@ public:
                     userDb.UpdateRow(fullTableId, key, ops);
                     break;
                 }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
+                    userDb.IncrementRow(fullTableId, key, ops);
+                    break;
+                }
                 default:
                     // Checked before in TWriteOperation
                     Y_ENSURE(false, operationType << " operation is not supported now");
@@ -223,7 +229,8 @@ public:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: 
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
                 break;
@@ -254,7 +261,7 @@ public:
 
         if (op->IsImmediate()) {
             // Every time we execute immediate transaction we may choose a new mvcc version
-            op->MvccReadWriteVersion.reset();
+            op->CachedMvccVersion.reset();
         }
 
         const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
@@ -302,9 +309,9 @@ public:
 
         NMiniKQL::TEngineHostCounters engineHostCounters;
         const ui64 txId = writeTx->GetTxId();
-        const auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(writeOp);
+        const auto mvccVersion = DataShard.GetMvccVersion(writeOp);
         
-        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
         userDb.SetIsWriteTx(true);
         userDb.SetIsImmediateTx(op->IsImmediate());
         userDb.SetLockTxId(writeTx->GetLockTxId());
@@ -401,7 +408,7 @@ public:
 
             const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
 
-            KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, userDb);
+            KqpCommitLocks(tabletId, kqpLocks, sysLocks, userDb);
 
             if (writeTx->HasOperations()) {
                 for (validatedOperationIndex = 0; validatedOperationIndex < writeTx->GetOperations().size(); ++validatedOperationIndex) {
@@ -440,7 +447,7 @@ public:
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                     userDb.GetVolatileTxId(),
-                    writeVersion,
+                    mvccVersion,
                     commitTxIds,
                     userDb.GetVolatileDependencies(),
                     participants,
@@ -474,7 +481,7 @@ public:
             AddLocksToResult(writeOp, ctx);
 
             if (!guardLocks.LockTxId) {
-                writeVersion.ToProto(writeResult->Record.MutableCommitVersion());
+                mvccVersion.ToProto(writeResult->Record.MutableCommitVersion());
             }
 
             if (auto changes = std::move(userDb.GetCollectedChanges())) {

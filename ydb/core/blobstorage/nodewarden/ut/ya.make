@@ -16,6 +16,7 @@ PEERDIR(
 SRCS(
     blobstorage_node_warden_ut.cpp
     bind_queue_ut.cpp
+    distconf_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

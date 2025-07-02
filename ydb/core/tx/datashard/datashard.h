@@ -352,6 +352,14 @@ namespace TEvDataShard {
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
 
+        EvRecomputeKMeansRequest,
+        EvRecomputeKMeansResponse,
+
+        // Request/response that is sent to each shard of unique index impl table during its build process.
+        // Validates uniqueness of data in unique index table.
+        EvValidateUniqueIndexRequest,
+        EvValidateUniqueIndexResponse,
+
         EvEnd
     };
 
@@ -1509,6 +1517,18 @@ namespace TEvDataShard {
                           TEvDataShard::EvReshuffleKMeansResponse> {
     };
 
+    struct TEvRecomputeKMeansRequest
+        : public TEventPB<TEvRecomputeKMeansRequest,
+                          NKikimrTxDataShard::TEvRecomputeKMeansRequest,
+                          TEvDataShard::EvRecomputeKMeansRequest> {
+    };
+
+    struct TEvRecomputeKMeansResponse
+        : public TEventPB<TEvRecomputeKMeansResponse,
+                          NKikimrTxDataShard::TEvRecomputeKMeansResponse,
+                          TEvDataShard::EvRecomputeKMeansResponse> {
+    };
+
     struct TEvLocalKMeansRequest
         : public TEventPB<TEvLocalKMeansRequest,
                           NKikimrTxDataShard::TEvLocalKMeansRequest,
@@ -1837,6 +1857,20 @@ namespace TEvDataShard {
                           EvInMemoryStateResponse>
     {
         TEvInMemoryStateResponse() = default;
+    };
+
+    struct TEvValidateUniqueIndexRequest
+        : public TEventPB<TEvValidateUniqueIndexRequest,
+                          NKikimrTxDataShard::TEvValidateUniqueIndexRequest,
+                          TEvDataShard::EvValidateUniqueIndexRequest>
+    {
+    };
+
+    struct TEvValidateUniqueIndexResponse
+        : public TEventPB<TEvValidateUniqueIndexResponse,
+                          NKikimrTxDataShard::TEvValidateUniqueIndexResponse,
+                          TEvDataShard::EvValidateUniqueIndexResponse>
+    {
     };
 };
 

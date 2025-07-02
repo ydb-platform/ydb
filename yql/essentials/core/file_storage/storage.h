@@ -16,17 +16,17 @@ public:
     TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy = true);
     ~TFileLink();
 
-    const TString& GetStorageFileName() const { return StorageFileName; }
-    const TFsPath& GetPath() const { return Path; }
-    ui64 GetSize() const { return Size; }
-    const TString& GetMd5() const { return Md5; }
+    const TString& GetStorageFileName() const { return StorageFileName_; }
+    const TFsPath& GetPath() const { return Path_; }
+    ui64 GetSize() const { return Size_; }
+    const TString& GetMd5() const { return Md5_; }
 
 private:
-    const TFsPath Path;
-    const TString StorageFileName;
-    const ui64 Size;
-    const TString Md5;
-    const bool DeleteOnDestroy;
+    const TFsPath Path_;
+    const TString StorageFileName_;
+    const ui64 Size_;
+    const TString Md5_;
+    const bool DeleteOnDestroy_;
 };
 
 using TFileLinkPtr = TIntrusivePtr<TFileLink>;
@@ -67,7 +67,7 @@ public:
 
 private:
     class TImpl;
-    THolder<TImpl> Impl;
+    THolder<TImpl> Impl_;
 };
 
 constexpr int MODE0711 = S_IRWXU | S_IXGRP | S_IXOTH;

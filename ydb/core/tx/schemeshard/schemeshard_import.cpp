@@ -1,7 +1,8 @@
 #include "schemeshard_import.h"
-#include "schemeshard_import_helpers.h"
+
 #include "schemeshard_impl.h"
 #include "schemeshard_import_getters.h"
+#include "schemeshard_import_helpers.h"
 
 #include <util/generic/xrange.h>
 
@@ -172,7 +173,8 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& im
         NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo.State)),
         NIceDb::TUpdate<Schema::Imports::Issue>(importInfo.Issue),
         NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo.StartTime.Seconds()),
-        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds())
+        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds()),
+        NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size())
     );
 }
 

@@ -35,7 +35,8 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
         TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+        NKqp::NScheduler::TSchedulableTaskPtr schedulableTask);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -115,6 +116,7 @@ private:
     TMonotonic GetScanDeadline() const;
 
     TMonotonic GetComputeDeadline() const;
+    std::optional<TMonotonic> GetComputeDeadlineOptional() const;
 
 private:
     const TActorId ColumnShardActorId;
@@ -130,6 +132,7 @@ private:
     const NKikimrDataEvents::EDataFormat DataFormat;
     const ui64 TabletId;
     const NConveyorComposite::TCPULimitsConfig CPULimits;
+    NKqp::NScheduler::TSchedulableTaskPtr SchedulableTask;
 
     TReadMetadataBase::TConstPtr ReadMetadataRange;
     std::unique_ptr<TScanIteratorBase> ScanIterator;
@@ -192,6 +195,8 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
+    TInstant StartWaitTime;
+    TDuration WaitTime;
 };
 
 }   // namespace NKikimr::NOlap::NReader

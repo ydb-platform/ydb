@@ -46,6 +46,8 @@ namespace NYql {
                     return "PrometheusGeneric";
                 case NYql::EGenericDataSourceKind::MONGO_DB:
                     return "MongoDBGeneric";
+                case NYql::EGenericDataSourceKind::OPENSEARCH:
+                    return "OpenSearchGeneric";  
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -297,6 +299,9 @@ namespace NYql {
                         case NYql::EGenericDataSourceKind::PROMETHEUS:
                             properties["SourceType"] = "Prometheus";
                             break;
+                        case NYql::EGenericDataSourceKind::OPENSEARCH:
+                            properties["SourceType"] = "OpenSearch";
+                            break;    
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:

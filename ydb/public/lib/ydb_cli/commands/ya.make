@@ -12,6 +12,7 @@ SRCS(
     topic_readwrite_scenario.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
+    ydb_bridge.cpp
     ydb_cluster.cpp
     ydb_debug.cpp
     ydb_dynamic_config.cpp
@@ -31,6 +32,7 @@ SRCS(
     ydb_service_table.cpp
     ydb_sql.cpp
     ydb_storage_config.cpp
+    ydb_tools_infer.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
@@ -44,6 +46,7 @@ PEERDIR(
     library/cpp/protobuf/json
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
+    ydb/library/arrow_inference
     ydb/library/backup
     ydb/library/formats/arrow/csv/table
     ydb/library/workload

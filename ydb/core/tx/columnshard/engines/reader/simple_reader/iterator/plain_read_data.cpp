@@ -12,11 +12,14 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     const auto& portions = GetReadMetadata()->SelectInfo->Portions;
     ui64 compactedPortionsBytes = 0;
     ui64 insertedPortionsBytes = 0;
+    ui64 committedPortionsBytes = 0;
     for (auto&& i : portions) {
         if (i->GetPortionType() == EPortionType::Compacted) {
             compactedPortionsBytes += i->GetTotalBlobBytes();
-        } else {
+        } else if (i->GetProduced() == NPortion::EProduced::INSERTED) {
             insertedPortionsBytes += i->GetTotalBlobBytes();
+        } else {
+            committedPortionsBytes += i->GetTotalBlobBytes();
         }
 
         sources.emplace_back(TSourceConstructor(sourceIdx++, i, context));
@@ -29,6 +32,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
     stats->InsertedPortionsBytes = insertedPortionsBytes;
     stats->CompactedPortionsBytes = compactedPortionsBytes;
+    stats->CommittedPortionsBytes = committedPortionsBytes;
 }
 
 std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {

@@ -6,7 +6,6 @@
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
 #include "changes/general_compaction.h"
-#include "changes/indexation.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
 
@@ -169,27 +168,6 @@ bool TColumnEngineForLogs::FinishLoading() {
     return true;
 }
 
-std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept {
-    Y_ABORT_UNLESS(dataToIndex.size());
-
-    TSaverContext saverContext(StoragesManager);
-    auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), saverContext);
-    auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
-
-    for (const auto& data : changes->GetDataToIndex()) {
-        const TInternalPathId pathId = data.GetPathId();
-
-        if (changes->PathToGranule.contains(pathId)) {
-            continue;
-        }
-        if (!data.GetRemove()) {
-            AFL_VERIFY(changes->PathToGranule.emplace(pathId, GetGranulePtrVerified(pathId)->GetBucketPositions()).second);
-        }
-    }
-
-    return changes;
-}
-
 ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
     const std::optional<ui64> waitingPriority) const noexcept {
     auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);
@@ -319,10 +297,10 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         }
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())(
-        "portions_prepared", changes->GetPortionsToDrop().size())("drop", portionsFromDrop)("skip", skipLocked)("portions_counter", portionsCount)(
+        "portions_prepared", changes->GetPortionsToAccess().size())("drop", portionsFromDrop)("skip", skipLocked)("portions_counter", portionsCount)(
         "chunks", chunksCount)("limit", limitExceeded)("max_portions", maxPortionsCount)("max_chunks", maxChunksCount);
 
-    if (changes->GetPortionsToDrop().empty()) {
+    if (changes->GetPortionsToAccess().empty()) {
         return nullptr;
     }
 

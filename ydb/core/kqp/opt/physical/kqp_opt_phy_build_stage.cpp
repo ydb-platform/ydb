@@ -14,6 +14,9 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+#include <library/cpp/iterator/zip.h>
+
+#include <util/generic/hash_set.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -664,8 +667,12 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
         .Build().Done();
 }
 
-NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    TTypeAnnotationContext& typeCtx, bool ruleEnabled)
+NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(
+    NYql::NNodes::TExprBase node,
+    NYql::TExprContext& ctx,
+    TTypeAnnotationContext& typeCtx,
+    bool ruleEnabled
+)
 {
     if (!ruleEnabled) {
         return node;
@@ -683,7 +690,9 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
 
     auto unionAll = idxLookupJoin.Input().Cast<TDqCnUnionAll>();
     auto inputStats = typeCtx.GetStats(unionAll.Output().Raw());
-    if (!inputStats || !inputStats->SortColumns) {
+    auto sortedByOrderingIdx = inputStats->SortingOrderings.GetInitOrderingIdx();
+
+    if (!inputStats || !typeCtx.SortingsFSM || sortedByOrderingIdx == -1) {
         return node;
     }
 
@@ -710,8 +719,10 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
 
     auto rightStruct = tupleType.Arg(1).Cast<TCoStructType>();
 
-    for (auto structContent : rightStruct ) {
+    THashSet<TString> passthroughColumns;
+    for (const auto& structContent : rightStruct ) {
         auto attrName = structContent.Ptr()->Child(0);
+        passthroughColumns.insert(TString(attrName->Content()));
         auto field = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name(attrName)
                 .Value<TCoMember>()
@@ -745,14 +756,43 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
         .Done();
 
     auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
-    for (size_t i = 0; i < inputStats->SortColumns->Columns.size(); i++) {
-        auto columnName = inputStats->SortColumns->Columns[i];
-        if (inputStats->SortColumns->Aliases[i] != "") {
-            columnName = inputStats->SortColumns->Aliases[i] + "." + columnName;
+
+    auto& fdStorage = typeCtx.SortingsFSM->FDStorage;
+    Y_ENSURE(sortedByOrderingIdx >= 0);
+    auto sortedBy = fdStorage.GetInterestingSortingByOrderingIdx(sortedByOrderingIdx);
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    bool nextMustBeSkipped = false;
+    // ^ we must save merge connection only for prefixies of the sorted columns - if it is not prefix, we will skip the rule
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    for (const auto& [column, dir]: Zip(sortedBy.Ordering, sortedBy.Directions)) {
+        TString columnName = column.AttributeName;
+        bool hasColumn = passthroughColumns.contains(columnName);
+        if (!hasColumn && column.RelName) {
+            columnName = column.RelName + "." + columnName;
         }
-        builder.Add<TDqSortColumn>()
-            .Column<TCoAtom>().Build(columnName)
-            .SortDirection().Build(TTopSortSettings::AscendingSort)
+        bool hasColumnWithAlias = passthroughColumns.contains(columnName);
+
+        if (!hasColumn && !hasColumnWithAlias) {
+            nextMustBeSkipped = true;
+            continue;
+        } else if (nextMustBeSkipped) {
+            return node;
+        }
+
+        TString columnDir;
+        switch (dir) {
+            using enum TOrdering::TItem::EDirection;
+            case EAscending: { columnDir = TTopSortSettings::AscendingSort; break; }
+            case EDescending: { columnDir = TTopSortSettings::DescendingSort; break; }
+            case ENone: { return node; }
+        }
+
+        builder
+            .Add<TDqSortColumn>()
+                    .Column<TCoAtom>()
+                .Build(std::move(columnName))
+                    .SortDirection()
+                .Build(std::move(columnDir))
             .Build();
     }
 

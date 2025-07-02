@@ -30,14 +30,15 @@ DEFINE_ENUM(EPipelineState,
 YT_DEFINE_ERROR_ENUM(
     ((SpecVersionMismatch)             (3300))
     ((PipelineStateVersionMismatch)    (3301))
+    ((FlowViewKeeperIsNotInitialized)  (3302))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const TString PipelineFormatVersionAttribute("pipeline_format_version");
-inline const TString LeaderControllerAddressAttribute("leader_controller_address");
+inline const std::string PipelineFormatVersionAttribute("pipeline_format_version");
+inline const std::string LeaderControllerAddressAttribute("leader_controller_address");
 
 constexpr int CurrentPipelineFormatVersion = 1;
 

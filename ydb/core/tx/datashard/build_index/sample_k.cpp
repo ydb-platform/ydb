@@ -10,7 +10,6 @@
 #include <ydb/core/tablet_flat/flat_row_state.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -114,7 +113,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) final {
-        LOG_D("Seek " << seq << " " << Debug());
+        LOG_T("Seek " << seq << " " << Debug());
 
         lead = Lead;
 
@@ -122,10 +121,10 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
-        LOG_T("Feed " << Debug());
+        // LOG_T("Feed " << Debug());
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         Sampler.Add([&row](){
             return TSerializedCellVec::Serialize(*row);
@@ -140,7 +139,7 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_D("Exhausted " << Debug());
+        LOG_T("Exhausted " << Debug());
 
         return EScan::Final;
     }
@@ -154,8 +153,9 @@ public:
 
     TAutoPtr<IDestructable> Finish(EStatus status) final {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
         if (status == EStatus::Exception) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
@@ -202,7 +202,7 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
@@ -254,10 +254,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
-        response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         LOG_N("Starting TSampleKScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()

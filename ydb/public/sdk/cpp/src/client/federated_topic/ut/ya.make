@@ -25,6 +25,8 @@ PEERDIR(
 
     ydb/public/sdk/cpp/src/client/federated_topic
     ydb/public/sdk/cpp/src/client/federated_topic/impl
+
+    ydb/public/sdk/cpp/tests/integration/topic/utils
 )
 
 YQL_LAST_ABI_VERSION()

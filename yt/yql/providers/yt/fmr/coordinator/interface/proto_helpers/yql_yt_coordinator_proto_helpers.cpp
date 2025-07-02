@@ -41,6 +41,7 @@ NProto::THeartbeatResponse HeartbeatResponseToProto(const THeartbeatResponse& he
     for (auto& id: heartbeatResponse.TaskToDeleteIds) {
         protoHeartbeatResponse.AddTaskToDeleteIds(id);
     }
+    protoHeartbeatResponse.SetNeedToRestart(heartbeatResponse.NeedToRestart);
     return protoHeartbeatResponse;
 }
 
@@ -58,6 +59,7 @@ THeartbeatResponse HeartbeatResponseFromProto(const NProto::THeartbeatResponse& 
 
     heartbeatResponse.TasksToRun = tasksToRun;
     heartbeatResponse.TaskToDeleteIds = taskToDeleteIds;
+    heartbeatResponse.NeedToRestart = protoHeartbeatResponse.GetNeedToRestart();
     return heartbeatResponse;
 }
 
@@ -192,6 +194,16 @@ TGetFmrTableInfoResponse GetFmrTableInfoResponseFromProto(const NProto::TGetFmrT
     }
     getFmrTableInfoResponse.ErrorMessages = errorMessages;
     return getFmrTableInfoResponse;
+}
+
+NProto::TClearSessionRequest ClearSessionRequestToProto(const TClearSessionRequest& request) {
+    NProto::TClearSessionRequest protoRequest;
+    protoRequest.SetSessionId(request.SessionId);
+    return protoRequest;
+}
+
+TClearSessionRequest ClearSessionRequestFromProto(const NProto::TClearSessionRequest& protoRequest) {
+    return TClearSessionRequest{.SessionId = protoRequest.GetSessionId()};
 }
 
 } // namespace NYql::NFmr

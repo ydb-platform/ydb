@@ -47,4 +47,8 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcessScope::TPt
     Manager->RegisterProcessScope(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId());
 }
 
+void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvUpdateMemoryLimits::TPtr& ev) {
+    Manager->UpdateMemoryLimits(ev->Get()->GetSoftMemoryLimit(), ev->Get()->GetHardMemoryLimit());
+}
+
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

@@ -73,6 +73,7 @@ SRCS(
     flat_update_op.h
     probes.cpp
     shared_handle.cpp
+    shared_cache_counters.cpp
     shared_sausagecache.cpp
     shared_sausagecache.h
     tablet_flat_executor.h
@@ -88,6 +89,8 @@ GENERATE_ENUM_SERIALIZATION(flat_page_iface.h)
 GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
 GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)
 GENERATE_ENUM_SERIALIZATION(flat_scan_iface.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache_events.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache_tiers.h)
 
 IF (KIKIMR_TABLET_BORROW_WITHOUT_META)
     CFLAGS(

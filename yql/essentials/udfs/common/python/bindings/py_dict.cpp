@@ -144,8 +144,8 @@ PyNumberMethods LazyDictNumbering = {
 
 
 #if PY_MAJOR_VERSION >= 3
-#define Py_TPFLAGS_HAVE_ITER 0
-#define Py_TPFLAGS_HAVE_SEQUENCE_IN 0
+#define Py_TPFLAGS_HAVE_ITER 0  // NOLINT(readability-identifier-naming)
+#define Py_TPFLAGS_HAVE_SEQUENCE_IN 0  // NOLINT(readability-identifier-naming)
 #endif
 
 PyDoc_STRVAR(get__doc__,

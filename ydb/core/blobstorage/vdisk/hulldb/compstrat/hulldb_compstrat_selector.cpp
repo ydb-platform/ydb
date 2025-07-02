@@ -1,7 +1,6 @@
 #include "hulldb_compstrat_selector.h"
 #include "hulldb_compstrat_balance.h"
 #include "hulldb_compstrat_delsst.h"
-#include "hulldb_compstrat_lazy.h"
 #include "hulldb_compstrat_promote.h"
 #include "hulldb_compstrat_ratio.h"
 #include "hulldb_compstrat_space.h"
@@ -155,4 +154,3 @@ namespace NKikimr {
 
     } // NHullComp
 } // NKikimr
-

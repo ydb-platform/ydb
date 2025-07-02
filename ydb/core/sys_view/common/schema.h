@@ -604,6 +604,7 @@ struct Schema : NIceDb::Schema {
         struct PortionsCount: Column<3, NScheme::NTypeIds::Uint64> {};
         struct HostName: Column<4, NScheme::NTypeIds::Utf8> {};
         struct NodeId: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct InternalPathId: Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, TabletId>;
         using TColumns = TableColumns<
@@ -611,7 +612,8 @@ struct Schema : NIceDb::Schema {
             TabletId,
             PortionsCount,
             HostName,
-            NodeId
+            NodeId,
+            InternalPathId
         >;
     };
 
@@ -837,6 +839,8 @@ public:
     virtual bool IsSystemView(const TStringBuf viewName) const = 0;
 
     virtual TVector<TString> GetSystemViewNames(ETarget target) const = 0;
+
+    virtual const THashMap<TString, NKikimrSysView::ESysViewType>& GetSystemViewsTypes(ETarget target) const = 0;
 };
 
 ISystemViewResolver* CreateSystemViewResolver();

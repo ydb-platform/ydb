@@ -261,6 +261,13 @@ namespace NKikimr::NStorage {
         bool ScepterlessOperationInProgress = false; // when a leader operation is running while no Scepter is acquired
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
+        bool ConfigsCollected = false;
+
+        // bridge-related logic
+        std::set<std::tuple<ui32, TGroupId, TBridgePileId>> WorkingSyncersByNode;
+        std::set<std::tuple<TGroupId, TBridgePileId, ui32>> WorkingSyncers;
+        bool SyncerArrangeInFlight = false;
+        bool SyncerArrangePending = false;
 
         // subscribed IC sessions
         struct TSessionSubscription {
@@ -317,6 +324,7 @@ namespace NKikimr::NStorage {
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden(ui64 cookie);
+        void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
@@ -368,6 +376,7 @@ namespace NKikimr::NStorage {
         void CheckRootNodeStatus();
         void BecomeRoot();
         void UnbecomeRoot();
+        void CheckIfDone();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
         bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
@@ -396,7 +405,7 @@ namespace NKikimr::NStorage {
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
             std::optional<TBridgePileId> bridgePileId);
 
-        void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
+        static void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig);
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
@@ -407,6 +416,23 @@ namespace NKikimr::NStorage {
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Bridge ops
+
+        // preparation (may be async)
+        void PrepareScatterTask(ui64 cookie, TScatterTask& task, const TEvScatter::TManageSyncers& request);
+        void Handle(TEvNodeWardenManageSyncersResult::TPtr ev);
+
+        // execute per-node action
+        void Perform(TEvGather::TManageSyncers *response, const TEvScatter::TManageSyncers& request, TScatterTask& task);
+
+        // handle gather result (when completed all along the cluster)
+        void ProcessManageSyncers(TEvGather::TManageSyncers *res);
+
+        void RearrangeSyncing();
+        void OnSyncerUnboundNode(ui32 nodeId);
+        void IssueQuerySyncers();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
@@ -584,6 +610,9 @@ namespace NKikimr::NStorage {
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
 
     std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
+
+    TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
+        const TNodeWardenConfig *cfg, ui32 selfNodeId);
 
 } // NKikimr::NStorage
 

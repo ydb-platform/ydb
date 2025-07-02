@@ -1,58 +1,57 @@
 #pragma once
 
-#include "schemeshard_types.h"
-#include "schemeshard_tx_infly.h"
-#include "schemeshard_path_element.h"
-#include "schemeshard_identificators.h"
-#include "schemeshard_schema.h"
 #include "olap/schema/schema.h"
 #include "olap/schema/update.h"
+#include "schemeshard_identificators.h"
+#include "schemeshard_path_element.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_tx_infly.h"
+#include "schemeshard_types.h"
 
-#include <ydb/core/tx/message_seqno.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/base/storage_pools.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
-#include <ydb/services/lib/sharding/sharding.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/filestore_config.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-
-#include <ydb/core/base/tx_processing.h>
-#include <ydb/core/base/storage_pools.h>
-#include <ydb/core/base/table_index.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/message_seqno.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/util/counted_leaky_bucket.h>
 #include <ydb/core/util/pb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
 
-#include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
-#include <ydb/core/protos/filestore_config.pb.h>
-#include <ydb/core/protos/follower_group.pb.h>
-#include <ydb/core/protos/index_builder.pb.h>
-#include <ydb/core/protos/sys_view_types.pb.h>
-#include <ydb/core/protos/yql_translation_settings.pb.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/api/protos/ydb_coordination.pb.h>
-
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include <util/generic/guid.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
 #include <util/generic/vector.h>
-#include <util/generic/guid.h>
-
-#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -1490,6 +1489,18 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         if (counters) {
             counters->SetPathsQuota(limits.MaxPaths);
             counters->SetShardsQuota(limits.MaxShards);
+        }
+    }
+
+    void MergeSchemeLimits(const NKikimrSubDomains::TSchemeLimits& in, IQuotaCounters* counters = nullptr) {
+        SchemeLimits.MergeFromProto(in);
+        if (counters) {
+            if (in.HasMaxPaths()) {
+                counters->SetPathsQuota(SchemeLimits.MaxPaths);
+            }
+            if (in.HasMaxShards()) {
+                counters->SetShardsQuota(SchemeLimits.MaxShards);
+            }
         }
     }
 
@@ -3012,53 +3023,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 }; // TImportInfo
 // } // NImport
 
-class TBillingStats {
-public:
-    TBillingStats() = default;
-    TBillingStats(const TBillingStats& other) = default;
-    TBillingStats& operator = (const TBillingStats& other) = default;
-
-    TBillingStats(ui64 uploadRows, ui64 uploadBytes, ui64 readRows, ui64 readBytes);
-
-    TBillingStats operator - (const TBillingStats& other) const;
-    TBillingStats& operator -= (const TBillingStats& other) {
-        return *this = *this - other;
-    }
-
-    TBillingStats operator + (const TBillingStats& other) const;
-    TBillingStats& operator += (const TBillingStats& other) {
-        return *this = *this + other;
-    }
-
-    bool operator == (const TBillingStats& other) const = default;
-
-    explicit operator bool () const {
-        return *this != TBillingStats{};
-    }
-
-    TString ToString() const;
-
-    ui64 GetUploadRows() const {
-        return UploadRows;
-    }
-    ui64 GetUploadBytes() const {
-        return UploadBytes;
-    }
-
-    ui64 GetReadRows() const {
-        return ReadRows;
-    }
-    ui64 GetReadBytes() const {
-        return ReadBytes;
-    }
-
-private:
-    ui64 UploadRows = 0;
-    ui64 UploadBytes = 0;
-    ui64 ReadRows = 0;
-    ui64 ReadBytes = 0;
-};
-
 // TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
@@ -3156,15 +3120,17 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
         ui32 K = 0;
         ui32 Levels = 0;
+        ui32 Rounds = 0;
 
         // progress
         enum EState : ui32 {
             Sample = 0,
-            // Recompute,
             Reshuffle,
             MultiLocal,
+            Recompute,
         };
         ui32 Level = 1;
+        ui32 Round = 0;
 
         EState State = Sample;
 
@@ -3175,7 +3141,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         NTableIndex::TClusterId Child = ChildBegin;
 
         ui64 TableSize = 0;
-
 
         ui64 ParentEnd() const noexcept {  // included
             return ChildBegin - 1;
@@ -3193,11 +3158,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ K = " << K
+                << "{ " 
+                << "State = " << State
                 << ", Level = " << Level << " / " << Levels
-                << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd()
-                << "], Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd()
-                << "], State = " << State << " }";
+                << ", K = " << K
+                << ", Round = " << Round
+                << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
+                << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
+                << ", TableSize = " << TableSize
+                << " }";
         }
 
         bool NeedsAnotherLevel() const noexcept {
@@ -3237,8 +3206,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void Set(ui32 level,
                  NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
                  NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
-                 ui32 state, ui64 tableSize) {
+                 ui32 state, ui64 tableSize, ui32 round) {
             Level = level;
+            Round = round;
             ParentBegin = parentBegin;
             Parent = parent;
             ChildBegin = childBegin;
@@ -3377,16 +3347,16 @@ public:
         TSerializedTableRange Range;
         TString LastKeyAck;
         ui64 SeqNoRound = 0;
-        size_t Index = 0;  // size of Shards map before this element was added
+        size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
 
         NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
         Ydb::StatusIds::StatusCode UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         TString DebugMessage;
 
-        TBillingStats Processed;
+        TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
 
-        TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount);
+        TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
         TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
             TStringBuilder result;
@@ -3400,7 +3370,7 @@ public:
             result << " UploadStatus: " << Ydb::StatusIds::StatusCode_Name(UploadStatus);
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
-            result << " Processed: " << Processed.ToString();
+            result << " Processed: " << Processed.ShortDebugString();
 
             result << " }";
 
@@ -3414,8 +3384,8 @@ public:
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
 
-    TBillingStats Processed;
-    TBillingStats Billed;
+    TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
+    TMeteringStats Billed = TMeteringStatsHelper::ZeroValue();
 
     struct TSample {
         struct TRow {
@@ -3442,6 +3412,15 @@ public:
             Done,
         };
         EState State = EState::Collect;
+
+        TString DebugString() const {
+            return TStringBuilder()
+                << "{ " 
+                << "State = " << State
+                << ", Rows = " << Rows.size()
+                << ", MaxProbability = " << MaxProbability
+                << " }";
+        }
 
         bool MakeWeakTop(ui64 k) {
             // 2 * k is needed to make it linear, 2 * N at all.
@@ -3494,6 +3473,8 @@ public:
     };
     TSample Sample;
 
+    std::unique_ptr<NKikimr::NKMeans::IClusters> Clusters;
+
     TString DebugString() const {
         auto result = TStringBuilder() << BuildKind;
 
@@ -3501,7 +3482,8 @@ public:
             result << " "
                 << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
-                << ", Sample = " << Sample.State << " }, "
+                << ", Sample = " << Sample.State
+                << ", Clusters = " << Clusters->GetClusters().size() << " }, "
                 << "{ Done = " << DoneShards.size()
                 << ", ToUpload = " << ToUploadShards.size()
                 << ", InProgress = " << InProgressShards.size() << " }";
@@ -3559,7 +3541,7 @@ public:
     template<class TRow>
     static void FillFromRow(const TRow& row, TIndexBuildInfo* indexInfo) {
         Y_ENSURE(indexInfo); // TODO: pass by ref
-        
+
         TIndexBuildId id = row.template GetValue<Schema::IndexBuild::Id>();
         TString uid = row.template GetValue<Schema::IndexBuild::Uid>();
 
@@ -3657,24 +3639,23 @@ public:
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
 
-        auto& billed = indexInfo->Billed;
-        billed = {
-            row.template GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0),
-        };
-        if (billed.GetUploadRows() != 0 && billed.GetReadRows() == 0 && indexInfo->IsFillBuildIndex()) {
-            // old format: assign upload to read
-            billed += {0, 0, billed.GetUploadRows(), billed.GetUploadBytes()};
+        indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
+        indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
+        indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
+        indexInfo->Billed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0));
+        indexInfo->Billed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuild::CpuTimeUsBilled>(0));
+        if (indexInfo->IsFillBuildIndex()) {
+            TMeteringStatsHelper::TryFixOldFormat(indexInfo->Billed);
         }
 
-        indexInfo->Processed = {
-            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0),
-        };
+        indexInfo->Processed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsProcessed>(0));
+        indexInfo->Processed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesProcessed>(0));
+        indexInfo->Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0));
+        indexInfo->Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0));
+        indexInfo->Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuild::CpuTimeUsProcessed>(0));
+        if (indexInfo->IsFillBuildIndex()) {
+            TMeteringStatsHelper::TryFixOldFormat(indexInfo->Processed);
+        }
 
         // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
         if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
@@ -3692,7 +3673,11 @@ public:
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
-                    indexInfo->SpecializedIndexDescription =std::move(desc);
+                    indexInfo->KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
+                    TString createError;
+                    indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
+                    Y_ENSURE(indexInfo->Clusters && createError == "");
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
                 } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
@@ -3721,7 +3706,7 @@ public:
             AddParent(bound, shardIdx);
         }
         Shards.emplace(
-            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));
+            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
 
         shardStatus.Status =
@@ -3733,18 +3718,15 @@ public:
             Schema::IndexBuildShardStatus::UploadStatus>(
             Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
 
-        auto& processed = shardStatus.Processed;
-        processed = {
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
-        };
-        if (processed.GetUploadRows() != 0 && processed.GetReadRows() == 0 && IsFillBuildIndex()) {
-            // old format: assign upload to read
-            processed += {0, 0, processed.GetUploadRows(), processed.GetUploadBytes()};
+        shardStatus.Processed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadRowsProcessed>(0));
+        shardStatus.Processed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadBytesProcessed>(0));
+        shardStatus.Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0));
+        shardStatus.Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0));
+        shardStatus.Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::CpuTimeUsProcessed>(0));
+        if (IsFillBuildIndex()) {
+            TMeteringStatsHelper::TryFixOldFormat(shardStatus.Processed);
         }
-        Processed += processed;
+        Processed += shardStatus.Processed;
     }
 
     bool IsCancellationRequested() const {
@@ -3926,25 +3908,15 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 }
 
-template <>
-inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus& info)
-{
-    o << info.ToString();
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus, stream, value) {
+    stream << value.ToString();
 }
 
-template <>
-inline void Out<NKikimr::NSchemeShard::TBillingStats>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TBillingStats& stats)
-{
-    o << stats.ToString();
+Y_DECLARE_OUT_SPEC(inline, NKikimrIndexBuilder::TMeteringStats, stream, value) {
+    stream << value.ShortDebugString();
 }
 
-template <>
-inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TIndexBuildInfo& info)
-{
-
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
     o << "TBuildInfo{";
     o << " IndexBuildId: " << info.Id;
     o << ", Uid: " << info.Uid;

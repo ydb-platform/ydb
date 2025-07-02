@@ -1,10 +1,12 @@
+#include "ut_helpers.h"
+
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/protos/index_builder.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -23,10 +25,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
         std::function<void(NKikimrTxDataShard::TEvReshuffleKMeansRequest&)> setupRequest,
-        TString expectedError, bool expectedErrorSubstring = false)
+        const TString& expectedError, bool expectedErrorSubstring = false)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
-        auto& runtime = *server->GetRuntime();
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
         auto datashards = GetTableShards(server, sender, kMainTable);
         TTableId tableId = ResolveTableId(server, sender, kMainTable);
@@ -59,7 +60,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         rec.SetParent(0);
         rec.SetChild(1);
 
-        rec.AddClusters("something");
+        rec.AddClusters("abc");
 
         rec.SetEmbeddingColumn("embedding");
 
@@ -67,19 +68,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         setupRequest(rec);
 
-        runtime.SendToPipe(datashards[0], sender, ev.release(), 0, GetPipeConfigWithRetries());
-
-        TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReshuffleKMeansResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
-        if (expectedErrorSubstring) {
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToOneLineString(), expectedError);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToOneLineString(), expectedError);
-        }
+        NKikimr::DoBadRequest<TEvDataShard::TEvReshuffleKMeansResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     }
 
     static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent,
@@ -202,7 +191,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-        
+
         InitRoot(server, sender);
 
         TShardedTableOptions options;
@@ -243,7 +232,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.ClearClusters();
-        }, "{ <main>: Error: Should be requested at least single cluster }");
+        }, "{ <main>: Error: Should be requested for at least one cluster }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.ClearClusters();
+            request.AddClusters("something");
+        }, "{ <main>: Error: Clusters have invalid format }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.ClearOutputName();
@@ -260,7 +253,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.ClearClusters();
             request.SetEmbeddingColumn("some");
-        }, "[ { <main>: Error: Should be requested at least single cluster } { <main>: Error: Unknown embedding column: some } ]");
+        }, "[ { <main>: Error: Unknown embedding column: some } { <main>: Error: Should be requested for at least one cluster } ]");
     }
 
     Y_UNIT_TEST(MainToPosting) {
@@ -274,7 +267,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-        
+
         InitRoot(server, sender);
 
         TShardedTableOptions options;
@@ -360,7 +353,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-        
+
         InitRoot(server, sender);
 
         TShardedTableOptions options;
@@ -446,7 +439,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-        
+
         InitRoot(server, sender);
 
         TShardedTableOptions options;
@@ -534,7 +527,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-        
+
         InitRoot(server, sender);
 
         TShardedTableOptions options;

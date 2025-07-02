@@ -614,7 +614,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    ydb admin blobstorage bootstrap --uuid <строка>
+    ydb admin cluster bootstrap --uuid <строка>
     echo $?
     ```
 

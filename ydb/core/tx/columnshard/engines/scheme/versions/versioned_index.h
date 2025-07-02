@@ -98,12 +98,12 @@ public:
     }
 
     ISnapshotSchema::TPtr GetSchemaOptional(const ui64 version) const {
-        auto it = SnapshotByVersion.find(version);
+        auto it = SnapshotByVersion.lower_bound(version);
         return it == SnapshotByVersion.end() ? nullptr : it->second;
     }
 
     ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
-        auto it = SnapshotByVersion.find(version);
+        auto it = SnapshotByVersion.lower_bound(version);
         Y_ABORT_UNLESS(it != SnapshotByVersion.end(), "no schema for version %lu", version);
         return it->second;
     }

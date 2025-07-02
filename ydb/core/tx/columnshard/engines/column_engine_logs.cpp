@@ -70,6 +70,8 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
         switchAccessorsManager = !indexInfo.GetMetadataManagerConstructor()->IsEqualTo(*lastIndexInfo.GetMetadataManagerConstructor());
     }
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "new_schema")("snapshot", snapshot.DebugString())("switch_optimizer", switchOptimizer)(
+        "switch_accessors", switchAccessorsManager);
 
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(std::move(indexInfo)));

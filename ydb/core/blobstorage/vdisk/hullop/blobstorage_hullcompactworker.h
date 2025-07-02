@@ -148,14 +148,8 @@ namespace NKikimr {
         // number of currently unresponded write requests
         ui32 InFlightWrites = 0;
 
-        // maximum number of such requests
-        ui32 MaxInFlightWrites;
-
         // number of currently unresponded read requests
         ui32 InFlightReads = 0;
-
-        // maximum number of such requests
-        ui32 MaxInFlightReads;
 
         // vector of freed huge blobs
         TDiskPartVec FreedHugeBlobs;
@@ -295,14 +289,10 @@ namespace NKikimr {
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
-                MaxInFlightWrites = HullCtx->FreshCompMaxInFlightWrites;
-                MaxInFlightReads = 0;
                 ReadsInFlight = nullptr;
                 WritesInFlight = &LevelIndex->FreshCompWritesInFlight;
             } else {
                 ChunksToUse = HullCtx->HullSstSizeInChunksLevel;
-                MaxInFlightWrites = HullCtx->HullCompMaxInFlightWrites;
-                MaxInFlightReads = HullCtx->HullCompMaxInFlightReads;
                 ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
                 WritesInFlight = &LevelIndex->HullCompWritesInFlight;
             }
@@ -411,7 +401,7 @@ namespace NKikimr {
 
                     case EState::FlushingSST:
                         // do not continue processing if there are too many writes in flight
-                        if (InFlightWrites >= MaxInFlightWrites) {
+                        if (InFlightWrites >= GetMaxInFlightWrites()) {
                             return false;
                         }
                         // try to flush SST
@@ -673,7 +663,7 @@ namespace NKikimr {
         bool FlushSST(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             // try to flush some more data; if the flush fails, it means that we have reached in flight write limit and
             // there is nothing to do here now, so we return
-            const bool flushDone = WriterPtr->FlushNext(FirstLsn, LastLsn, MaxInFlightWrites - InFlightWrites);
+            const bool flushDone = WriterPtr->FlushNext(FirstLsn, LastLsn, GetMaxInFlightWrites() - InFlightWrites);
             ProcessPendingMessages(msgsForYard);
             if (!flushDone) {
                 return false;
@@ -697,7 +687,7 @@ namespace NKikimr {
 
             // send new messages until we reach in flight limit
             std::unique_ptr<NPDisk::TEvChunkWrite> msg;
-            while (InFlightWrites < MaxInFlightWrites && (msg = WriterPtr->GetPendingMessage())) {
+            while (InFlightWrites < GetMaxInFlightWrites() && (msg = WriterPtr->GetPendingMessage())) {
                 HullCtx->VCtx->CountCompactionCost(*msg);
                 Statistics.Update(msg.get());
                 msgsForYard.push_back(std::move(msg));
@@ -706,7 +696,7 @@ namespace NKikimr {
             }
 
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
-            while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
+            while (InFlightReads < GetMaxInFlightReads() && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
                 HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());
@@ -723,6 +713,14 @@ namespace NKikimr {
             const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;
             return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num);
+        }
+
+        ui32 GetMaxInFlightWrites() {
+            return IsFresh ? HullCtx->VCfg->FreshCompMaxInFlightWrites : HullCtx->VCfg->HullCompMaxInFlightWrites;
+        }
+
+        ui32 GetMaxInFlightReads() {
+            return IsFresh ? (ui32) 0 : (ui32) HullCtx->VCfg->HullCompMaxInFlightReads;
         }
     };
 

@@ -2,6 +2,7 @@
 #include "config.h"
 #include "self_heal.h"
 #include "sys_view.h"
+#include "cluster_balancing.h"
 #include "util.h"
 
 namespace NKikimr {
@@ -302,6 +303,11 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
         PushStaticGroupsToSelfHeal();
         if (StorageConfigObtained) {
             Execute(CreateTxInitScheme());
+        }
+
+        ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);
+        if (ClusterBalancingSettings.Enable) {
+            ClusterBalanceActorId = Register(CreateClusterBalancingActor(SelfId(), ClusterBalancingSettings));
         }
     }
     Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));

@@ -260,6 +260,7 @@ message TReassignGroupDisk {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
     reserved 8;
+    bool OnlyToLessOccupiedPDisk = 9; // when set, reassignment will only commence if new pdisk is less occupied than the old one
 }
 
 message TSanitizeGroup {
@@ -791,6 +792,7 @@ message TConfigResponse {
             kAlready = 9;
             kMayGetDegraded = 10;
             kGroupNotFound = 11;
+            kReassignNotViable = 12;
         }
 
         message TFailParam {

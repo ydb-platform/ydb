@@ -214,8 +214,6 @@ public:
                 transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
                 transferSpecific.MutableTarget()->SetTransformLambda(specific.GetTarget().GetTransformLambda());
                 transferSpecific.MutableBatching()->CopyFrom(specific.GetBatching());
-
-                continue;
             }
 
             auto& item = *Result->Record.AddTargets();

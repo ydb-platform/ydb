@@ -845,7 +845,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-1"))
         }});
 
-        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
 
         testCase.DropTopic();
 

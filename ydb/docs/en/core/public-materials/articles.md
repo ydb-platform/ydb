@@ -1,5 +1,7 @@
 # Articles
 
+This section contains articles about {{ ydb-short-name }}:
+
 - [{#T}](publications/2024.md)
 - [{#T}](publications/2023.md)
 

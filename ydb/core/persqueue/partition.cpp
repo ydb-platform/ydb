@@ -2,7 +2,7 @@
 #include "mirrorer.h"
 #include "offload_actor.h"
 #include "partition_util.h"
-#include "partition.h"
+#include "partition_common.h"
 #include "partition_log.h"
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -1432,7 +1432,8 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
 
     TReadAnswer answer(info.FormAnswer(
         ctx, *ev->Get(), StartOffset, EndOffset, Partition, userInfo,
-        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
+        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive(),
+        GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
     ));
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
 

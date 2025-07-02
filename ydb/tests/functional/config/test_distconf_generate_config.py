@@ -61,6 +61,12 @@ class KiKiMRDistConfGenerateConfigTest(object):
     def do_request_config(self):
         cfg = self.do_request({"GetStateStorageConfig": {}})["StateStorageConfig"]
         recommended = self.do_request({"GetStateStorageConfig": {"Recommended": True}})["StateStorageConfig"]
+        assert_eq(recommended["StateStorageConfig"]["RingGroups"][0]["RingGroupActorIdOffset"], 1)
+        assert_eq(recommended["StateStorageBoardConfig"]["RingGroups"][0]["RingGroupActorIdOffset"], 1)
+        assert_eq(recommended["SchemeBoardConfig"]["RingGroups"][0]["RingGroupActorIdOffset"], 1)
+        recommended["StateStorageConfig"]["RingGroups"][0].pop("RingGroupActorIdOffset", None)
+        recommended["StateStorageBoardConfig"]["RingGroups"][0].pop("RingGroupActorIdOffset", None)
+        recommended["SchemeBoardConfig"]["RingGroups"][0].pop("RingGroupActorIdOffset", None)
         assert_eq(cfg, recommended)
         return cfg
 

@@ -17,6 +17,7 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_pb.h>
@@ -31,8 +32,8 @@
 #include <util/string/split.h>
 #include <util/system/types.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
-
 #include <ydb/core/fq/libs/checkpointing/utils.h>
+
 namespace NYql {
 
 using namespace NActors;
@@ -97,22 +98,6 @@ public:
     }
 
 public:
-
-    // STATEFN(Handler) {
-    //     switch (ev->GetTypeRewrite()) {
-    //         hFunc(TEvReadyState, OnReadyState);
-    //         hFunc(TEvQueryResponse, OnQueryResult);
-    //         hFunc(TEvDqFailure, OnResultFailure);
-    //         hFunc(NDq::TEvDqCompute::TEvState, OnComputeActorState);
-    //         hFunc(NDq::TEvDq::TEvAbortExecution, OnAbortExecution);
-    //         cFunc(TEvents::TEvPoison::EventType, PassAway);
-    //         hFunc(TEvents::TEvUndelivered, OnUndelivered);
-    //         hFunc(TEvents::TEvWakeup, OnWakeup);
-    //     default:
-    //         YQL_CLOG(ERROR, ProviderDq) << "Unknown type of event came to task controller: " << ev->Type << " (" << ev->GetTypeName() << "), sender: " << ev->Sender;
-    //         Y_ABORT("Watermarks are not supported");
-    //     }
-    // }
 
     STRICT_STFUNC(Handler, {
         hFunc(TEvReadyState, OnReadyState);
@@ -556,7 +541,7 @@ public:
             for (const auto& [settings, actorId] : Tasks) {
                 auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
                     settings.GetId(),
-                    false, // todo
+                    NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
                     NFq::IsIngress(settings),
                     NFq::IsEgress(settings),
                     NFq::HasState(settings),

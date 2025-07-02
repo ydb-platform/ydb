@@ -8,7 +8,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/state/dq_state_load_plan.h>
 
@@ -65,7 +64,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         TComputeActorTransportStuff::TPtr transport = AllActors[actorId] = MakeIntrusive<TComputeActorTransportStuff>();
         transport->EventsQueue.Init(CoordinatorId.ToString(), SelfId(), SelfId(), task.Id);
         transport->EventsQueue.OnNewRecipientId(actorId);
-        if (!task.CheckpointingDisabled) {
+        if (task.IsCheckpointingEnabled) {
             if (task.IsIngress) {
                 ActorsToTrigger[actorId] = transport;
                 ActorsToNotify[actorId] = transport;

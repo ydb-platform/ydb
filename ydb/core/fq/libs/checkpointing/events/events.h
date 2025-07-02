@@ -41,7 +41,7 @@ struct TEvCheckpointCoordinator {
     struct TEvReadyState : public NActors::TEventLocal<TEvReadyState, EvReadyState> {
         struct TTask {
             ui64 Id = 0;
-            bool CheckpointingDisabled = false;
+            bool IsCheckpointingEnabled = false;
             bool IsIngress = false;
             bool IsEgress = false;
             bool HasState = false;

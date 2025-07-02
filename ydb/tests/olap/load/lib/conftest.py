@@ -130,62 +130,150 @@ class LoadSuiteBase:
 
     @classmethod
     def __attach_logs(cls, start_time, attach_name, query_text, ignore_roles=False):
+        logging.info("=== __ATTACH_LOGS METHOD CALLED ===")
+        logging.info(f"Parameters:")
+        logging.info(f"  - start_time: {start_time}")
+        logging.info(f"  - attach_name: {attach_name}")
+        logging.info(f"  - query_text length: {len(query_text) if query_text else 0}")
+        logging.info(f"  - ignore_roles: {ignore_roles}")
+        
         if ignore_roles:
             # Получаем уникальные хосты кластера без фильтрации по роли
-            hosts = sorted(set(node.host for node in YdbCluster.get_cluster_nodes()))
+            logging.info("Getting unique cluster hosts without role filtering...")
+            all_nodes = YdbCluster.get_cluster_nodes()
+            logging.info(f"  - Total cluster nodes: {len(all_nodes)}")
+            
+            unique_hosts = set(node.host for node in all_nodes)
+            hosts = sorted(unique_hosts)
+            logging.info(f"  - Unique hosts found: {len(hosts)}")
+            logging.info(f"  - Hosts: {hosts}")
         else:
             # Оригинальная логика - только STORAGE ноды
-            hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
-
-        tz = timezone('Europe/Moscow')
-        start = datetime.fromtimestamp(start_time, tz).isoformat()
-        cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}}{{container}}"
-        exec_kikimr = {
-            '': {},
-        }
-        exec_start = deepcopy(exec_kikimr)
-        for host in hosts:
-            for c in exec_kikimr.keys():
-                try:
-                    exec_kikimr[c][host] = cls.execute_ssh(host, cmd.format(
-                        storage='kikimr',
-                        container=f' -m k8s_container:{c}' if c else ''
-                    ))
-                except BaseException as e:
-                    logging.error(e)
-            for c in exec_start.keys():
-                try:
-                    exec_start[c][host] = cls.execute_ssh(host, cmd.format(
-                        storage='kikimr-start',
-                        container=f' -m k8s_container:{c}' if c else ''))
-                except BaseException as e:
-                    logging.error(e)
+            logging.info("Getting STORAGE nodes only (original logic)...")
+            all_nodes = YdbCluster.get_cluster_nodes()
+            storage_nodes = list(filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, all_nodes))
+            hosts = [node.host for node in storage_nodes]
+            logging.info(f"  - Total cluster nodes: {len(all_nodes)}")
+            logging.info(f"  - STORAGE nodes found: {len(storage_nodes)}")
+            logging.info(f"  - STORAGE hosts: {hosts}")
 
         if not hosts:
+            logging.warning("No hosts found for log collection!")
             allure.attach(
                 "No cluster hosts found, no kikimr logs collected.",
                 f"{attach_name} logs info",
                 allure.attachment_type.TEXT
             )
+            logging.info("=== __ATTACH_LOGS COMPLETED (NO HOSTS) ===")
             return
 
+        logging.info(f"Starting log collection from {len(hosts)} hosts...")
+
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}}{{container}}"
+        
+        logging.info(f"Log collection setup:")
+        logging.info(f"  - Timezone: {tz}")
+        logging.info(f"  - Start time formatted: {start}")
+        logging.info(f"  - Command template: {cmd}")
+        
+        exec_kikimr = {
+            '': {},
+        }
+        exec_start = deepcopy(exec_kikimr)
+        
+        logging.info("Executing log collection commands on all hosts...")
+        
+        for host in hosts:
+            logging.info(f"  Processing host: {host}")
+            
+            for c in exec_kikimr.keys():
+                try:
+                    kikimr_cmd = cmd.format(
+                        storage='kikimr',
+                        container=f' -m k8s_container:{c}' if c else ''
+                    )
+                    logging.info(f"    - Executing kikimr command: {kikimr_cmd}")
+                    exec_kikimr[c][host] = cls.execute_ssh(host, kikimr_cmd)
+                    logging.info(f"    - Kikimr command started for {host}")
+                except BaseException as e:
+                    logging.error(f"    - Error executing kikimr command on {host}: {e}")
+                    
+            for c in exec_start.keys():
+                try:
+                    start_cmd = cmd.format(
+                        storage='kikimr-start',
+                        container=f' -m k8s_container:{c}' if c else ''
+                    )
+                    logging.info(f"    - Executing start command: {start_cmd}")
+                    exec_start[c][host] = cls.execute_ssh(host, start_cmd)
+                    logging.info(f"    - Start command started for {host}")
+                except BaseException as e:
+                    logging.error(f"    - Error executing start command on {host}: {e}")
+
+        logging.info("Processing start command results...")
         error_log = ''
         for c, execs in exec_start.items():
+            logging.info(f"  Processing container '{c}' start results...")
             for host, e in sorted(execs.items()):
+                logging.info(f"    - Waiting for start command on {host}...")
                 e.wait(check_exit_code=False)
-                error_log += f'{host}:\n{e.stdout if e.returncode == 0 else e.stderr}\n'
+                
+                if e.returncode == 0:
+                    logging.info(f"    - Start command on {host} completed successfully")
+                    logging.info(f"    - Stdout length: {len(e.stdout) if e.stdout else 0}")
+                    error_log += f'{host}:\n{e.stdout}\n'
+                else:
+                    logging.warning(f"    - Start command on {host} failed with code {e.returncode}")
+                    logging.warning(f"    - Stderr: {e.stderr[:200]}..." if e.stderr else "    - No stderr")
+                    error_log += f'{host}:\n{e.stderr}\n'
+                    
+            logging.info(f"  - Attaching start results for container '{c}'")
             allure.attach(cls.__hide_query_text(error_log, query_text), f'{attach_name}_{c}_stderr', allure.attachment_type.TEXT)
 
+        logging.info("Processing kikimr command results...")
         for c, execs in exec_kikimr.items():
+            logging.info(f"  Processing container '{c}' kikimr results...")
+            
             dir = os.path.join(yatest.common.tempfile.gettempdir(), f'{attach_name}_{c}_logs')
+            logging.info(f"  - Creating directory: {dir}")
             os.makedirs(dir, exist_ok=True)
+            
             for host, e in execs.items():
+                logging.info(f"    - Waiting for kikimr command on {host}...")
                 e.wait(check_exit_code=False)
-                with open(os.path.join(dir, host), 'w') as f:
-                    f.write(cls.__hide_query_text(e.stdout if e.returncode == 0 else e.stderr, query_text))
+                
+                file_path = os.path.join(dir, host)
+                logging.info(f"    - Writing results to: {file_path}")
+                
+                with open(file_path, 'w') as f:
+                    if e.returncode == 0:
+                        logging.info(f"    - Kikimr command on {host} completed successfully")
+                        logging.info(f"    - Stdout length: {len(e.stdout) if e.stdout else 0}")
+                        content = cls.__hide_query_text(e.stdout, query_text)
+                    else:
+                        logging.warning(f"    - Kikimr command on {host} failed with code {e.returncode}")
+                        logging.warning(f"    - Stderr: {e.stderr[:200]}..." if e.stderr else "    - No stderr")
+                        content = cls.__hide_query_text(e.stderr, query_text)
+                    
+                    f.write(content)
+                    logging.info(f"    - Written {len(content)} characters to {file_path}")
+                    
             archive = dir + '.tar.gz'
-            yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
-            allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
+            logging.info(f"  - Creating archive: {archive}")
+            
+            try:
+                yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
+                logging.info(f"  - Archive created successfully")
+                
+                allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
+                logging.info(f"  - Archive attached to Allure report")
+                
+            except Exception as e:
+                logging.error(f"  - Error creating archive: {e}")
+
+        logging.info("=== __ATTACH_LOGS COMPLETED SUCCESSFULLY ===")
 
     @classmethod
     def save_nodes_state(cls) -> None:
@@ -546,177 +634,415 @@ class LoadSuiteBase:
 
     def _diagnose_nodes(self, result, workload_name):
         """Проводит диагностику нод (cores/oom) и возвращает список ошибок"""
-        try:
-            end_time = time()
-            diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
-            node_errors = type(self).check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
-        except Exception as e:
-            logging.error(f"Error getting nodes state: {e}")
-            result.add_warning(f"Error getting nodes state: {e}")
-            node_errors = []
-        return node_errors
+        logging.info("=== DIAGNOSE NODES ===")
+        
+        with allure.step("Diagnose cluster nodes"):
+            
+            try:
+                end_time = time()
+                diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
+                
+                logging.info(f"Diagnostics parameters:")
+                logging.info(f"  - diagnostics_start_time: {diagnostics_start_time}")
+                logging.info(f"  - end_time: {end_time}")
+                logging.info(f"  - workload_name: {workload_name}")
+                
+                with allure.step("Check nodes for cores/OOM"):
+                    
+                    logging.info("Calling check_nodes_diagnostics_with_timing...")
+                    node_errors = type(self).check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
+                    
+                    logging.info(f"Node diagnostics completed:")
+                    logging.info(f"  - Found {len(node_errors)} nodes with issues")
+                    
+                    if node_errors:
+                        error_summary = []
+                        for error in node_errors:
+                            error_summary.append(f"  - {error.host}: {error.error_type}")
+                            logging.info(f"  - {error.host}: {error.error_type}")
+                        
+                        allure.attach(
+                            f"Nodes with issues: {len(node_errors)}\n" + "\n".join(error_summary),
+                            "Node Issues Found",
+                            allure.attachment_type.TEXT
+                        )
+                    else:
+                        logging.info("  ✓ No node issues found")
+                        
+                        allure.attach(
+                            "No cores or OOM detected on any nodes",
+                            "Node Diagnostics Clean",
+                            allure.attachment_type.TEXT
+                        )
+
+                # Обновляем статистику
+                with allure.step("Update node statistics"):
+                    
+                    result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
+                    logging.info(f"  - Updated nodes_with_issues = {len(node_errors)}")
+                    
+                    allure.attach(
+                        f"nodes_with_issues statistic set to: {len(node_errors)}",
+                        "Statistics Update",
+                        allure.attachment_type.TEXT
+                    )
+                
+                logging.info("=== DIAGNOSE NODES COMPLETED ===")
+                return node_errors
+                
+            except Exception as e:
+                logging.error(f"Error during node diagnostics: {e}")
+                import traceback
+                traceback_str = traceback.format_exc()
+                logging.error(f"Traceback: {traceback_str}")
+                
+                allure.attach(
+                    f"Node diagnostics failed: {e}\n\nTraceback:\n{traceback_str}",
+                    "Node Diagnostics Error",
+                    allure.attachment_type.TEXT
+                )
+                
+                return []
 
     def _update_summary_flags(self, result, workload_name):
-        """Обновляет summary-флаги для warning/error по всем итерациям"""
-        has_warning = False
-        has_error = False
+        """Обновляет флаги summary (with_warnings, with_errors)"""
+        logging.info("=== UPDATE SUMMARY FLAGS ===")
+        
+        with allure.step("Update summary flags"):
+            
+            has_warnings = bool(result.warnings)
+            has_errors = bool(result.errors)
+            
+            logging.info(f"Summary flags:")
+            logging.info(f"  - has_warnings: {has_warnings} (count: {len(result.warnings) if result.warnings else 0})")
+            logging.info(f"  - has_errors: {has_errors} (count: {len(result.errors) if result.errors else 0})")
+            
+            with allure.step("Set warning flags"):
+                # Устанавливаем флаги предупреждений (оба варианта для совместимости)
+                result.add_stat(workload_name, "with_warnings", has_warnings)
+                result.add_stat(workload_name, "with_warrnings", has_warnings)  # Для обратной совместимости
+                result.add_stat(workload_name, "workload_warnings", has_warnings)
+                
+                logging.info(f"  - Set with_warnings = {has_warnings}")
+                logging.info(f"  - Set with_warrnings = {has_warnings} (legacy)")
+                logging.info(f"  - Set workload_warnings = {has_warnings}")
 
-        # Проверяем ошибки и предупреждения в итерациях
-        for iteration in getattr(result, "iterations", {}).values():
-            if hasattr(iteration, "warning_message") and iteration.warning_message:
-                has_warning = True
-            if hasattr(iteration, "error_message") and iteration.error_message:
-                has_error = True
+            with allure.step("Set error flags"):
+                # Устанавливаем флаги ошибок
+                result.add_stat(workload_name, "with_errors", has_errors)
+                result.add_stat(workload_name, "workload_errors", has_errors)
+                
+                logging.info(f"  - Set with_errors = {has_errors}")
+                logging.info(f"  - Set workload_errors = {has_errors}")
 
-        # Проверяем ошибки и предупреждения в основном результате
-        if result.warnings:
-            has_warning = True
-        if result.errors:
-            has_error = True
-
-        # Для обратной совместимости также проверяем старые поля
-        if hasattr(result, "warning_message") and result.warning_message:
-            has_warning = True
-        if hasattr(result, "error_message") and result.error_message:
-            has_error = True
-
-        stats = result.get_stats(workload_name)
-        if stats is not None:
-            stats["with_warnings"] = has_warning
-            stats["with_errors"] = has_error
+            allure.attach(
+                f"Summary flags updated:\n"
+                f"with_warnings: {has_warnings}\n"
+                f"with_errors: {has_errors}\n"
+                f"warnings count: {len(result.warnings) if result.warnings else 0}\n"
+                f"errors count: {len(result.errors) if result.errors else 0}",
+                "Summary Flags",
+                allure.attachment_type.TEXT
+            )
+            
+        logging.info("=== UPDATE SUMMARY FLAGS COMPLETED ===")
 
     def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
         """Формирует allure-отчёт по результатам workload"""
-        end_time = time()
-        start_time = result.start_time if result.start_time else end_time - 1
-        additional_table_strings = {}
-        if workload_params.get('actual_duration') is not None:
-            actual_duration = workload_params['actual_duration']
-            planned_duration = workload_params.get('planned_duration', getattr(self, 'timeout', 0))
-            actual_minutes = int(actual_duration) // 60
-            actual_seconds = int(actual_duration) % 60
-            planned_minutes = int(planned_duration) // 60
-            planned_seconds = int(planned_duration) % 60
-            additional_table_strings['execution_time'] = f"Actual: {actual_minutes}m {actual_seconds}s (Planned: {planned_minutes}m {planned_seconds}s)"
-        if 'total_iterations' in workload_params and 'total_threads' in workload_params:
-            total_iterations = workload_params['total_iterations']
-            total_threads = workload_params['total_threads']
-            if total_iterations == 1 and total_threads > 1:
-                additional_table_strings['execution_mode'] = f"Single iteration with {total_threads} parallel threads"
-            elif total_iterations > 1:
-                avg_threads = workload_params.get('avg_threads_per_iteration', 1)
-                additional_table_strings['execution_mode'] = f"{total_iterations} iterations with avg {avg_threads:.1f} threads per iteration"
-        allure_test_description(
-            suite=type(self).suite(),
-            test=workload_name,
-            start_time=start_time,
-            end_time=end_time,
-            addition_table_strings=additional_table_strings,
-            node_errors=node_errors,
-            workload_result=result,
-            workload_params=workload_params,
-            use_node_subcols=use_node_subcols
-        )
+        logging.info("=== CREATE ALLURE REPORT ===")
+        
+        with allure.step("Create Allure report"):
+            
+            end_time = time()
+            start_time = result.start_time if result.start_time else end_time - 1
+            
+            logging.info(f"Report parameters:")
+            logging.info(f"  - workload_name: {workload_name}")
+            logging.info(f"  - start_time: {start_time}")
+            logging.info(f"  - end_time: {end_time}")
+            logging.info(f"  - node_errors count: {len(node_errors)}")
+            logging.info(f"  - use_node_subcols: {use_node_subcols}")
+            logging.info(f"  - workload_params keys: {list(workload_params.keys()) if workload_params else 'None'}")
+            
+            with allure.step("Prepare report data"):
+                
+                # Добавляем информацию о времени выполнения
+                additional_table_strings = {}
+                
+                if workload_params and workload_params.get("actual_duration") is not None:
+                    actual_duration = workload_params["actual_duration"]
+                    planned_duration = workload_params.get("planned_duration", 1800)
+                    
+                    actual_minutes = int(actual_duration) // 60
+                    actual_seconds = int(actual_duration) % 60
+                    planned_minutes = int(planned_duration) // 60
+                    planned_seconds = int(planned_duration) % 60
+                    
+                    additional_table_strings["execution_time"] = (
+                        f"Actual: {actual_minutes}m {actual_seconds}s (Planned: {planned_minutes}m {planned_seconds}s)"
+                    )
+                    logging.info(f"  - Execution time: {additional_table_strings['execution_time']}")
+
+                # Информация об итерациях и потоках
+                if workload_params and "total_iterations" in workload_params and "total_threads" in workload_params:
+                    total_iterations = workload_params["total_iterations"]
+                    total_threads = workload_params["total_threads"]
+                    
+                    if total_iterations == 1 and total_threads > 1:
+                        additional_table_strings["execution_mode"] = (
+                            f"Single iteration with {total_threads} parallel threads"
+                        )
+                    elif total_iterations > 1:
+                        avg_threads = workload_params.get("avg_threads_per_iteration", 1)
+                        additional_table_strings["execution_mode"] = (
+                            f"{total_iterations} iterations with avg {avg_threads:.1f} threads per iteration"
+                        )
+                    
+                    logging.info(f"  - Execution mode: {additional_table_strings.get('execution_mode', 'Standard')}")
+
+            with allure.step("Generate Allure description"):
+                
+                try:
+                    from ydb.tests.olap.lib.allure_utils import allure_test_description
+                    
+                    logging.info("  - Calling allure_test_description...")
+                    allure_test_description(
+                        suite="workload",
+                        test=workload_name,
+                        start_time=start_time,
+                        end_time=end_time,
+                        addition_table_strings=additional_table_strings,
+                        node_errors=node_errors,
+                        workload_result=result,
+                        workload_params=workload_params,
+                        use_node_subcols=use_node_subcols,
+                    )
+                    
+                    logging.info("  ✓ Allure description generated successfully")
+                    
+                    allure.attach(
+                        f"Allure description generated successfully\n"
+                        f"Suite: workload\n"
+                        f"Test: {workload_name}\n"
+                        f"Node errors: {len(node_errors)}\n"
+                        f"Use subcols: {use_node_subcols}",
+                        "Allure Generation Result",
+                        allure.attachment_type.TEXT
+                    )
+                    
+                except Exception as e:
+                    logging.error(f"  ✗ Error generating Allure description: {e}")
+                    import traceback
+                    traceback_str = traceback.format_exc()
+                    logging.error(f"  ✗ Traceback: {traceback_str}")
+                    
+                    allure.attach(
+                        f"Allure description generation failed: {e}\n\nTraceback:\n{traceback_str}",
+                        "Allure Generation Error",
+                        allure.attachment_type.TEXT
+                    )
+            
+        logging.info("=== CREATE ALLURE REPORT COMPLETED ===")
 
     def _handle_final_status(self, result, workload_name, node_errors):
         """Обрабатывает финальный статус теста: fail, broken, etc."""
-        stats = result.get_stats(workload_name)
-        node_issues = stats.get("nodes_with_issues", 0) if stats else 0
-        workload_errors = []
-        if result.errors:
-            for err in result.errors:
-                if "coredump" not in err.lower() and "oom" not in err.lower():
-                    workload_errors.append(err)
-
-        # --- Прикладываем логи, если есть проблемы с нодами или ошибки workload ---
-        if node_issues > 0 or workload_errors:
-            # Используем универсальный подход с getattr для вызова приватного метода
-            attach_logs = getattr(self, "__attach_logs", None)
-            if attach_logs:
-                try:
-                    attach_logs(
-                        start_time=getattr(result, "start_time", None),
-                        attach_name="kikimr",
-                        query_text="",
-                        ignore_roles=True  # Собираем логи со всех уникальных хостов
-                    )
-                except Exception as e:
-                    logging.warning(f"Failed to attach kikimr logs: {e}")
-
-        # --- FAIL TEST IF CORES OR OOM FOUND ---
-        if node_issues > 0:
-            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
-            pytest.fail(error_msg)
-        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
-        if workload_errors:
-            allure.dynamic.label("severity", "critical")
-            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
-
-        # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
-        if not result.success and result.error_message:
-            # Создаем детальное сообщение об ошибке с контекстом
-            error_details = []
-            error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
-            error_details.append(f"Main error: {result.error_message}")
-            if result.iterations:
-                error_details.append("\nExecution details:")
-                error_details.append(f"Total iterations attempted: {len(result.iterations)}")
-                failed_iterations = []
-                successful_iterations = []
-                for iter_num, iteration in result.iterations.items():
-                    if iteration.error_message:
-                        failed_iterations.append({
-                            'iteration': iter_num,
-                            'error': iteration.error_message,
-                            'time': iteration.time
-                        })
-                    else:
-                        successful_iterations.append({
-                            'iteration': iter_num,
-                            'time': iteration.time
-                        })
-                if failed_iterations:
-                    error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
-                    for fail_info in failed_iterations:
-                        error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
-                if successful_iterations:
-                    error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
-                    for success_info in successful_iterations:
-                        error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
-            if result.stderr and result.stderr.strip():
-                stderr_preview = result.stderr.strip()
-                if len(stderr_preview) > 500:
-                    stderr_preview = "..." + stderr_preview[-500:]
-                error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
-            if result.stdout and "error" in result.stdout.lower():
-                stdout_lines = result.stdout.split('\n')
-                error_lines = [line for line in stdout_lines if 'error' in line.lower()]
-                if error_lines:
-                    error_details.append("\nError lines from STDOUT:")
-                    for line in error_lines[:5]:
-                        error_details.append(f"  {line.strip()}")
+        from ydb.tests.olap.lib.utils import get_external_param
+        
+        logging.info(f"=== HANDLE FINAL STATUS FOR {workload_name} ===")
+        
+        with allure.step(f"Handle final status for {workload_name}"):
+            
             stats = result.get_stats(workload_name)
-            if stats:
-                if 'successful_runs' in stats and 'total_runs' in stats:
-                    error_details.append("\nRUN STATISTICS:")
-                    error_details.append(f"  Successful runs: {stats['successful_runs']}/{stats['total_runs']}")
-                    if 'failed_runs' in stats:
-                        error_details.append(f"  Failed runs: {stats['failed_runs']}")
-                    if 'success_rate' in stats:
-                        error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
-                if any(key.startswith('deployment_') for key in stats.keys()):
-                    deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
-                    if deployment_info:
-                        error_details.append("\nDEPLOYMENT INFO:")
-                        for key, value in deployment_info.items():
-                            error_details.append(f"  {key}: {value}")
-            detailed_error_message = "\n".join(error_details)
-            exc = pytest.fail.Exception(detailed_error_message)
-            if result.traceback is not None:
-                exc = exc.with_traceback(result.traceback)
-            raise exc
-        if result.warning_message:
-            logging.warning(f"Workload completed with warnings: {result.warning_message}")
+            node_issues = stats.get("nodes_with_issues", 0) if stats else 0
+            workload_errors = []
+            if result.errors:
+                for err in result.errors:
+                    if "coredump" not in err.lower() and "oom" not in err.lower():
+                        workload_errors.append(err)
+
+            logging.info(f"Status analysis:")
+            logging.info(f"  - node_issues: {node_issues}")
+            logging.info(f"  - total errors: {len(result.errors) if result.errors else 0}")
+            logging.info(f"  - workload_errors: {len(workload_errors)}")
+            logging.info(f"  - total warnings: {len(result.warnings) if result.warnings else 0}")
+
+            # Определяем статус теста по приоритету
+            test_status = "PASS"
+            test_reason = "No issues detected"
+
+            with allure.step("Determine test status"):
+                
+                if node_issues > 0:
+                    test_status = "FAIL"
+                    test_reason = f"Cores/OOM detected on {node_issues} nodes"
+                    logging.info(f"  → FAIL: {test_reason}")
+                elif workload_errors:
+                    test_status = "BROKEN"
+                    test_reason = f"{len(workload_errors)} workload errors detected"
+                    logging.info(f"  → BROKEN: {test_reason}")
+                elif result.warnings:
+                    test_status = "WARNING"
+                    test_reason = f"{len(result.warnings)} warnings detected"
+                    logging.info(f"  → WARNING: {test_reason}")
+                else:
+                    logging.info(f"  → PASS: {test_reason}")
+
+                allure.attach(
+                    f"Test Status: {test_status}\n"
+                    f"Reason: {test_reason}\n"
+                    f"Node issues: {node_issues}\n"
+                    f"Workload errors: {len(workload_errors)}\n"
+                    f"Warnings: {len(result.warnings) if result.warnings else 0}",
+                    "Status Decision",
+                    allure.attachment_type.TEXT
+                )
+
+            # Логика attach_logs
+            with allure.step("Decide on log attachment"):
+                
+                cluster_log = get_external_param("cluster_log", "")
+                should_attach = False
+                attach_reason = ""
+
+                logging.info(f"Attach logs decision:")
+                logging.info(f"  - cluster_log parameter: '{cluster_log}'")
+                
+                with allure.step("Check cluster_log parameter"):
+                    if cluster_log == "all":
+                        should_attach = True
+                        attach_reason = "cluster_log=all (always attach)"
+                        logging.info(f"  → {attach_reason}")
+                    elif cluster_log == "never":
+                        should_attach = False
+                        attach_reason = "cluster_log=never (never attach)"
+                        logging.info(f"  → {attach_reason}")
+                    else:
+                        # Автоматическое решение на основе проблем
+                        if node_issues > 0 or workload_errors or result.warnings:
+                            should_attach = True
+                            attach_reason = f"Problems detected: nodes={node_issues}, errors={len(workload_errors)}, warnings={len(result.warnings) if result.warnings else 0}"
+                            logging.info(f"  → {attach_reason}")
+                        else:
+                            should_attach = False
+                            attach_reason = "No problems detected (clean run)"
+                            logging.info(f"  → {attach_reason}")
+
+                allure.attach(
+                    f"Should attach logs: {should_attach}\n"
+                    f"Reason: {attach_reason}\n"
+                    f"cluster_log param: '{cluster_log}'",
+                    "Attach Decision",
+                    allure.attachment_type.TEXT
+                )
+
+                # Выполняем attach_logs если нужно
+                if should_attach:
+                    with allure.step("Attach cluster logs"):
+                        
+                        logging.info(f"Attaching logs: {attach_reason}")
+                        
+                        # Проверяем наличие метода __attach_logs
+                        attach_logs_method = getattr(type(self), "_LoadSuiteBase__attach_logs", None)
+                        logging.info(f"  - __attach_logs method available: {attach_logs_method is not None}")
+                        
+                        if attach_logs_method:
+                            try:
+                                # Получаем время начала workload или используем время начала результата
+                                start_time = getattr(result, 'workload_start_time', result.start_time)
+                                query_text = getattr(result, 'stdout', '') or ''
+                                
+                                logging.info(f"  - Calling __attach_logs with start_time={start_time}")
+                                logging.info(f"  - Query text length: {len(query_text)}")
+                                
+                                # Вызываем метод прикладывания логов как метод класса
+                                attach_logs_method(
+                                    start_time=start_time,
+                                    attach_name=f"{workload_name}_logs",
+                                    query_text=query_text,
+                                    ignore_roles=False
+                                )
+                                
+                                logging.info("  ✓ Logs attached successfully")
+                                
+                                allure.attach(
+                                    f"Logs attached successfully\n"
+                                    f"Start time: {start_time}\n"
+                                    f"Query text length: {len(query_text)}\n"
+                                    f"Reason: {attach_reason}",
+                                    "Logs Attachment Result",
+                                    allure.attachment_type.TEXT
+                                )
+                                
+                            except Exception as e:
+                                logging.error(f"  ✗ Error attaching logs: {e}")
+                                import traceback
+                                traceback_str = traceback.format_exc()
+                                logging.error(f"  ✗ Traceback: {traceback_str}")
+                                
+                                allure.attach(
+                                    f"Log attachment failed: {e}\n\nTraceback:\n{traceback_str}",
+                                    "Logs Attachment Error",
+                                    allure.attachment_type.TEXT
+                                )
+                        else:
+                            logging.warning("  ⚠️ __attach_logs method not available")
+                            
+                            allure.attach(
+                                "__attach_logs method not available - logs cannot be attached",
+                                "Logs Attachment Warning",
+                                allure.attachment_type.TEXT
+                            )
+                else:
+                    with allure.step("Skip log attachment"):
+                        logging.info(f"Skipping log attachment: {attach_reason}")
+                        
+                        allure.attach(
+                            f"Log attachment skipped\n"
+                            f"Reason: {attach_reason}",
+                            "Logs Attachment Skipped",
+                            allure.attachment_type.TEXT
+                        )
+
+            # Применяем финальный статус
+            with allure.step("Apply final test status"):
+                
+                if test_status == "FAIL":
+                    result.success = False
+                    if workload_errors:
+                        for error in workload_errors:
+                            result.add_error(error)
+                    logging.info(f"  → Test marked as FAILED")
+                    
+                    # Вызываем pytest.fail для немедленного завершения
+                    import pytest
+                    pytest.fail(f"Test failed: {test_reason}")
+                    
+                elif test_status == "BROKEN":
+                    result.success = False
+                    for error in workload_errors:
+                        result.add_error(error)
+                    logging.info(f"  → Test marked as BROKEN")
+                    
+                    # Вызываем pytest.fail для немедленного завершения
+                    import pytest
+                    pytest.fail(f"Test broken: {test_reason}")
+                    
+                elif test_status == "WARNING":
+                    # WARNING не делает тест неуспешным, но добавляет предупреждения
+                    logging.info(f"  → Test has warnings but continues")
+                else:
+                    logging.info(f"  → Test passed successfully")
+
+                allure.attach(
+                    f"Final test status applied: {test_status}\n"
+                    f"Result.success: {result.success}\n"
+                    f"Reason: {test_reason}",
+                    "Final Status Applied",
+                    allure.attachment_type.TEXT
+                )
+
+        logging.info(f"=== HANDLE FINAL STATUS COMPLETED ===")
+        logging.info(f"Final result: {test_status} - {test_reason}")
 
     def _upload_results(self, result, workload_name):
         stats = result.get_stats(workload_name)

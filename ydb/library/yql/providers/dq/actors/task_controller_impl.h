@@ -16,8 +16,8 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/library/yql/dq/actors/common/utils.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_pb.h>
@@ -32,7 +32,6 @@
 #include <util/string/split.h>
 #include <util/system/types.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
-#include <ydb/core/fq/libs/checkpointing/utils.h>
 
 namespace NYql {
 
@@ -542,9 +541,9 @@ public:
                 auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
                     settings.GetId(),
                     NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
-                    NFq::IsIngress(settings),
-                    NFq::IsEgress(settings),
-                    NFq::HasState(settings),
+                    NYql::NDq::IsIngress(settings),
+                    NYql::NDq::IsEgress(settings),
+                    NYql::NDq::HasState(settings),
                     actorId
                 };
                 event->Tasks.emplace_back(std::move(task));

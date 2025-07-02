@@ -20,8 +20,6 @@ enum ECheckpointingMode : int;
 
 namespace NYql::NDq {
 
-NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task);
-
 class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints>
 {
     struct TCheckpointCoordinatorId {

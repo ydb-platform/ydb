@@ -7,8 +7,6 @@ SRCS(
     checkpoint_id_generator.h
     pending_checkpoint.cpp
     pending_checkpoint.h
-    utils.cpp
-    utils.h
 )
 
 PEERDIR(

@@ -1,4 +1,3 @@
-#include "utils.h"
 
 #include "checkpoint_coordinator.h"
 
@@ -8,6 +7,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/library/yql/dq/actors/common/utils.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/state/dq_state_load_plan.h>
 

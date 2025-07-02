@@ -52,15 +52,6 @@ TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
     return TStringBuilder() << checkpoint.GetGeneration() << "." << checkpoint.GetId();
 }
 
-bool IsIngressTask(const TDqTaskSettings& task) {
-    for (const auto& input : task.GetInputs()) {
-        if (!input.HasSource()) {
-            return false;
-        }
-    }
-    return true;
-}
-
 std::vector<ui64> TaskIdsFromLoadPlan(const NDqProto::NDqStateLoadPlan::TTaskPlan& plan) {
     std::vector<ui64> taskIds;
     for (const auto& sourcePlan : plan.GetSources()) {
@@ -131,7 +122,7 @@ TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& 
     , Owner(owner)
     , TxId(txId)
     , Task(std::move(task))
-    , IngressTask(IsIngressTask(Task))
+    , IngressTask(IsIngress(Task))
     , CheckpointStorage(MakeCheckpointStorageID())
     , ComputeActor(computeActor)
     , PendingCheckpoint(Task)
@@ -574,24 +565,6 @@ size_t TDqComputeActorCheckpoints::TPendingCheckpoint::GetSinksCount(const TDqTa
 void TDqComputeActorCheckpoints::PassAway() {
     EventsQueue.Unsubscribe();
     NActors::TActor<TDqComputeActorCheckpoints>::PassAway();
-}
-
-static bool IsInfiniteSourceType(const TString& sourceType) {
-    return sourceType == "PqSource";
-}
-
-NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {
-    for (const auto& input : task.GetInputs()) {
-        if (const TString& srcType = input.GetSource().GetType(); srcType && IsInfiniteSourceType(srcType)) {
-            return NDqProto::CHECKPOINTING_MODE_DEFAULT;
-        }
-        for (const auto& channel : input.GetChannels()) {
-            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
-                return NDqProto::CHECKPOINTING_MODE_DEFAULT;
-            }
-        }
-    }
-    return NDqProto::CHECKPOINTING_MODE_DISABLED;
 }
 
 } // namespace NYql::NDq

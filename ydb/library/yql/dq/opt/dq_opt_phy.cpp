@@ -2252,7 +2252,7 @@ TExprBase DqBuildStageForDqPureExpr(TExprBase node, TExprContext& ctx) {
  * is needed for handling UNION ALL case, which generates top-level Extend where some arguments
  * can be pure expressions not wrapped in DqStage (e.g. ... UNION ALL SELECT 1).
  */
-TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
+TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableHashShuffleConnections) {
     if (!node.Maybe<TCoExtendBase>()) {
         return node;
     }
@@ -2313,7 +2313,7 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
         return node;
     }
 
-    const bool replaceWithShuffle = replaces.size() == connectionCount;
+    const bool replaceWithShuffle = (enableHashShuffleConnections && replaces.size() == connectionCount);
     if (replaceWithShuffle) {
         for (auto &connection : pureExprConnections) {
             TCoArgument arg = Build<TCoArgument>(ctx, node.Pos())

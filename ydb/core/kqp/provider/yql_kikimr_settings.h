@@ -76,6 +76,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> UseBlockReader;
+    NCommon::TConfSetting<bool, Static> OptEnableHashShuffleConnectionsForExtend;
 
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
@@ -199,6 +200,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
     bool EnableOlapPushdownProjections = false;
+    bool EnableHashShuffleConnectionsForExtend = false;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
@@ -206,6 +208,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownProjections() const;
+    bool GetEnableHashShuffleConnectionsForExtend() const;
 };
 
 }

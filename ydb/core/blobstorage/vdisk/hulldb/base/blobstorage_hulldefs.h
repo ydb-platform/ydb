@@ -121,7 +121,6 @@ namespace NKikimr {
     ///////////////////////////////////////////////////////////////////////////////////////
     struct THullCtx : public TThrRefBase {
         TVDiskContextPtr VCtx;
-        const TIntrusivePtr<TVDiskConfig> VCfg;
         const TIntrusivePtr<TIngressCache> IngressCache;
         const ui32 ChunkSize;
         const ui32 CompWorthReadSize;
@@ -132,6 +131,9 @@ namespace NKikimr {
         const ui32 HullSstSizeInChunksFresh;
         const ui32 HullSstSizeInChunksLevel;
         const double HullCompFreeSpaceThreshold;
+        const ui32 FreshCompMaxInFlightWrites;
+        const ui32 HullCompMaxInFlightWrites;
+        const ui32 HullCompMaxInFlightReads;
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
@@ -142,7 +144,6 @@ namespace NKikimr {
 
         THullCtx(
                 TVDiskContextPtr vctx,
-                const TIntrusivePtr<TVDiskConfig> vcfg,
                 ui32 chunkSize,
                 ui32 compWorthReadSize,
                 bool freshCompaction,
@@ -152,6 +153,9 @@ namespace NKikimr {
                 ui32 hullSstSizeInChunksFresh,
                 ui32 hullSstSizeInChunksLevel,
                 double hullCompFreeSpaceThreshold,
+                ui32 freshCompMaxInFlightWrites,
+                ui32 hullCompMaxInFlightWrites,
+                ui32 hullCompMaxInFlightReads,
                 double hullCompReadBatchEfficiencyThreshold,
                 TDuration hullCompStorageRatioCalcPeriod,
                 TDuration hullCompStorageRatioMaxCalcDuration,

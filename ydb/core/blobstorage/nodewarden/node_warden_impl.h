@@ -142,10 +142,6 @@ namespace NKikimr::NStorage {
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         TControlWrapper MaxChunksToDefragInflight;
-        TControlWrapper EnableExplicitCompactionAfterDefrag;
-        TControlWrapper FreshCompMaxInFlightWrites;
-        TControlWrapper HullCompMaxInFlightWrites;
-        TControlWrapper HullCompMaxInFlightReads;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;

@@ -35,7 +35,7 @@ namespace NKikimr {
     struct TChunksToDefrag;
 
     IActor *CreateDefragQuantumActor(const std::shared_ptr<TDefragCtx>& dctx, const TVDiskID& selfVDiskId,
-        std::optional<TChunksToDefrag> chunksToDefrag, bool needCompaction);
+        std::optional<TChunksToDefrag> chunksToDefrag);
 
 } // NKikimr
 

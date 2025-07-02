@@ -1352,36 +1352,6 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 50,
             DefaultValue: 10 }];
-
-        optional uint64 EnableExplicitCompactionAfterDefrag = 28 [(ControlOptions) = {
-            Description: "Enable explicit compaction call after defragmentation",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 1 }];
-
-        optional uint64 FreshCompMaxInFlightWrites = 29 [(ControlOptions) = {
-            Description: "Max writes inflight for fresh level compaction",
-            MinValue: 1,
-            MaxValue: 1000,
-            DefaultValue: 10 }];
-
-        optional uint64 FreshCompMaxInFlightReads = 30 [(ControlOptions) = {
-            Description: "Max reads inflight for fresh level compaction",
-            MinValue: 1,
-            MaxValue: 1000,
-            DefaultValue: 10 }];
-        
-        optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
-            Description: "Max writes inflight for level compaction",
-            MinValue: 1,
-            MaxValue: 1000,
-            DefaultValue: 10 }];
-
-        optional uint64 HullCompMaxInFlightReads = 32 [(ControlOptions) = {
-            Description: "Max reads inflight for level compaction",
-            MinValue: 1,
-            MaxValue: 1000,
-            DefaultValue: 20 }];
     }
 
     message TTabletControls {

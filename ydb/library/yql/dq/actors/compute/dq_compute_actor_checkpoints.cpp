@@ -567,27 +567,25 @@ void TDqComputeActorCheckpoints::PassAway() {
     NActors::TActor<TDqComputeActorCheckpoints>::PassAway();
 }
 
-
 static bool IsInfiniteSourceType(const TString& sourceType) {
     return sourceType == "PqSource";
 }
 
-NYql::NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NYql::NDq::TDqTaskSettings& task) {
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {
     for (const auto& input : task.GetInputs()) {
         if (const TString& srcType = input.GetSource().GetType(); srcType && IsInfiniteSourceType(srcType)) {
-            return NYql::NDqProto::CHECKPOINTING_MODE_DEFAULT;
+            return NDqProto::CHECKPOINTING_MODE_DEFAULT;
         }
         for (const auto& channel : input.GetChannels()) {
-            if (channel.GetCheckpointingMode() != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) {
-                return NYql::NDqProto::CHECKPOINTING_MODE_DEFAULT;
+            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                return NDqProto::CHECKPOINTING_MODE_DEFAULT;
             }
         }
     }
-    return NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
+    return NDqProto::CHECKPOINTING_MODE_DISABLED;
 }
 
-
-bool IsIngress(const NYql::NDq::TDqTaskSettings& task) {
+bool IsIngress(const TDqTaskSettings& task) {
     // No inputs at all or the only inputs are sources.
     for (const auto& input : task.GetInputs()) {
         if (!input.HasSource()) {
@@ -597,7 +595,7 @@ bool IsIngress(const NYql::NDq::TDqTaskSettings& task) {
     return true;
 }
 
-bool IsEgress(const NYql::NDq::TDqTaskSettings& task) {
+bool IsEgress(const TDqTaskSettings& task) {
     for (const auto& output : task.GetOutputs()) {
         if (output.HasSink()) {
             return true;
@@ -606,7 +604,7 @@ bool IsEgress(const NYql::NDq::TDqTaskSettings& task) {
     return false;
 }
 
-bool HasState(const NYql::NDq::TDqTaskSettings& task) {
+bool HasState(const TDqTaskSettings& task) {
     Y_UNUSED(task);
     return true;
 }

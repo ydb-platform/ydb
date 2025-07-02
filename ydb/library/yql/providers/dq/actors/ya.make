@@ -19,7 +19,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/fq/libs/checkpoint_storage/events
     ydb/library/actors/core
     library/cpp/yson
     ydb/library/mkql_proto

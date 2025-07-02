@@ -885,18 +885,19 @@ public:
 
             for (auto&& del : i.GetToRemove()) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "useless_schema_removed")("address", del.DebugString());
-//                db.Table<SchemaPresetVersionInfo>()
-//                    .Key(del.GetPresetId(), del.GetSnapshot().GetPlanStep(), del.GetSnapshot().GetTxId())
-//                    .Delete();
+                db.Table<SchemaPresetVersionInfo>()
+                    .Key(del.GetPresetId(), del.GetSnapshot().GetPlanStep(), del.GetSnapshot().GetTxId())
+                    .Delete();
             }
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_updated")("address", i.GetFinish().DebugString());
-            //            db.Table<SchemaPresetVersionInfo>()
-//                .Key(i.GetFinish().GetPresetId(), i.GetFinish().GetSnapshot().GetPlanStep(), i.GetFinish().GetSnapshot().GetTxId())
-//                .Update(NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(finalProto.SerializeAsString()));
+            db.Table<SchemaPresetVersionInfo>()
+                .Key(i.GetFinish().GetPresetId(), i.GetFinish().GetSnapshot().GetPlanStep(), i.GetFinish().GetSnapshot().GetTxId())
+                .Update(NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(finalProto.SerializeAsString()));
         }
         return true;
     }
     virtual void Complete(const TActorContext& /*ctx*/) override {
+        NYDBTest::TControllers::GetColumnShardController()->OnCleanupSchemasFinished();
         Self->BackgroundController.OnCleanupSchemasFinished();
     }
     TTxType GetTxType() const override {
@@ -905,6 +906,10 @@ public:
 };
 
 void TColumnShard::SetupCleanupSchemas() {
+    if (!NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::CleanupSchemas)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_schemas_cleanup")("reason", "disabled");
+        return;
+    }
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupSchemasActive()) {
         ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "in_progress");

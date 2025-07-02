@@ -655,13 +655,15 @@ public:
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
+    using TPileId = ui32;
 
-    using TenantNodesCheckers = THashMap<TString, TSimpleSharedPtr<TNodesLimitsCounterBase>>;
+    using TTenantNodesCheckers = THashMap<TString, TSimpleSharedPtr<TNodesLimitsCounterBase>>;
+    using TClusterPilesNodesCheckers = THashMap<TPileId, TSimpleSharedPtr<TClusterLimitsCounter>>;
 
     friend TOperationLogManager;
 
-    TenantNodesCheckers TenantNodesChecker;
-    TSimpleSharedPtr<TClusterLimitsCounter> ClusterNodes = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u);
+    THashMap<TPileId, TTenantNodesCheckers> TenantNodesChecker;
+    TClusterPilesNodesCheckers ClusterNodes = {{0, MakeSimpleShared<TClusterLimitsCounter>(0u, 0u)}};
 
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
@@ -1036,11 +1038,12 @@ private:
     THashMap<ui32, ui32> StateStorageNodeToRingId;
 
 public:
+    using TSysNodesCheckers = THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>>;
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
 
-    THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>> SysNodesCheckers;
+    THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 
     TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
     TVector<TVector<TStateStorageRingInfoPtr>> StateStorageRings;

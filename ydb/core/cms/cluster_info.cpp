@@ -382,7 +382,7 @@ void TClusterInfo::AddNode(const TEvInterconnect::TNodeInfo &info, const TActorC
         }
     }
 
-    node->AddNodeGroup(ClusterNodes);
+    node->AddNodeGroup(ClusterNodes[node->PileId.GetOrElse(0)]);
 
     HostNameToNodeId.emplace(node->Host, node->NodeId);
     LockableItems[node->ItemName()] = node;
@@ -688,10 +688,14 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
 
 void TClusterInfo::ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit)
 {
-    ClusterNodes->ApplyLimits(clusterLimit, clusterRatioLimit);
+    for (auto &[_, clusterNodes] : ClusterNodes) {
+        clusterNodes->ApplyLimits(clusterLimit, clusterRatioLimit);
+    }
 
-    for (auto &[_, tenantChecker] : TenantNodesChecker) {
-        tenantChecker->ApplyLimits(tenantLimit, tenantRatioLimit);
+    for (auto &[_, tenantCheckers] : TenantNodesChecker) {
+        for (auto &[_, tenantChecker] : tenantCheckers) {
+            tenantChecker->ApplyLimits(tenantLimit, tenantRatioLimit);
+        }
     }
 }
 
@@ -945,19 +949,22 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
 void TClusterInfo::GenerateTenantNodesCheckers() {
     for (auto &[nodeId, nodeInfo] : Nodes) {
         if (nodeInfo->Tenant) {
-            if (!TenantNodesChecker.contains(nodeInfo->Tenant))
-                TenantNodesChecker[nodeInfo->Tenant] = TSimpleSharedPtr<TNodesLimitsCounterBase>(new TTenantLimitsCounter(nodeInfo->Tenant, 0, 0));
+            const ui32 pileId = nodeInfo->PileId.GetOrElse(0);
+            if (!TenantNodesChecker.contains(pileId) || !TenantNodesChecker[pileId].contains(nodeInfo->Tenant))
+                TenantNodesChecker[pileId][nodeInfo->Tenant] = TSimpleSharedPtr<TNodesLimitsCounterBase>(new TTenantLimitsCounter(nodeInfo->Tenant, 0, 0));
 
-            nodeInfo->AddNodeGroup(TenantNodesChecker[nodeInfo->Tenant]);
+            nodeInfo->AddNodeGroup(TenantNodesChecker[pileId][nodeInfo->Tenant]);
         }
     }
 }
 
 void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     for (auto tablet : BootstrapConfig.GetTablet()) {
-        SysNodesCheckers[tablet.GetType()] = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
-
         for (auto nodeId : tablet.GetNode()) {
+            const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
+            auto sysNodesChecker = SysNodesCheckers[pileId][tablet.GetType()];
+            if (!sysNodesChecker)
+                sysNodesChecker = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
             if (!HasNode(nodeId)) {
                 BLOG_ERROR(TStringBuilder() << "Got node " << nodeId
                                             << " with system tablet, which exists in configuration, "
@@ -965,7 +972,7 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
                 continue;
             }
             NodeToTabletTypes[nodeId].push_back(tablet.GetType());
-            NodeRef(nodeId).AddNodeGroup(SysNodesCheckers[tablet.GetType()]);
+            NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
     }
 }

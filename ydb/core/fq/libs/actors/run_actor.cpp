@@ -14,6 +14,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/actors/executer_actor.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/actors/task_controller.h>
@@ -44,7 +45,6 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/protos/issue_message.pb.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
-
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/services/services.pb.h>
 

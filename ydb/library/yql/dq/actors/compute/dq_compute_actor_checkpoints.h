@@ -161,4 +161,13 @@ private:
     bool SavingToDatabase = false;
 };
 
+NYql::NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NYql::NDq::TDqTaskSettings& task);
+
+bool IsIngress(const NYql::NDq::TDqTaskSettings& task);
+
+bool IsEgress(const NYql::NDq::TDqTaskSettings& task);
+
+bool HasState(const NYql::NDq::TDqTaskSettings& task);
+
+
 } // namespace NYql::NDq

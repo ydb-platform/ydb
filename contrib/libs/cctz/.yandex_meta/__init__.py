@@ -23,6 +23,11 @@ cctz = GNUMakeNixProject(
     copy_sources=[
         "src/*_test.cc",
     ],
+    disable_includes=[
+        "fuchsia/intl/cpp/fidl.h",
+        "lib/async-loop/cpp/loop.h",
+        "lib/fdio/directory.h",
+    ],
     use_full_libnames=True,
     install_targets=["libcctz"],
     addincl_global={".": {"./include"}},

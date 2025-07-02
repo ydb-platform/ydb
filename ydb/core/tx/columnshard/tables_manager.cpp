@@ -495,13 +495,16 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
             ignoreToVersion = i.second->GetIndexInfo().GetIgnoreToVersion();
             AFL_VERIFY(versionsToRemove.emplace(i.first).second);
             AFL_VERIFY(toRemove.emplace(addr).second);
-        } else if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first) && lastSchemaVersion != i.first) {
-            AFL_VERIFY(versionsToRemove.emplace(i.first).second);
-            AFL_VERIFY(toRemove.emplace(addr).second);
         } else {
-            if (toRemove.size()) {
-                chains.emplace_back(toRemove, addr);
-                toRemove.clear();
+            ignoreToVersion.reset();
+            if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first) && lastSchemaVersion != i.first) {
+                AFL_VERIFY(versionsToRemove.emplace(i.first).second);
+                AFL_VERIFY(toRemove.emplace(addr).second);
+            } else {
+                if (toRemove.size()) {
+                    chains.emplace_back(toRemove, addr);
+                    toRemove.clear();
+                }
             }
         }
     }

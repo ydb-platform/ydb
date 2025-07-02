@@ -420,6 +420,21 @@ TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::T
     return BuildFullRange(keyColumnTypes);
 }
 
+TVector<TPartitionWithRange> GetKeyRangesIntersectionPartitions(const TVector<TTableRange>& ranges,
+    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TVector<TKeyDesc::TPartitionInfo>& partitions)
+{
+    if (ranges.empty()) {
+        return {};
+    }
+
+    TTableRange intersection = ranges.front();
+    for (size_t i = 1; i < ranges.size(); ++i) {
+        intersection = Intersect(keyColumnTypes, intersection, ranges[i]);
+    }
+
+    return GetKeyRangePartitions(intersection, partitions, keyColumnTypes);
+}
+
 } // anonymous namespace
 
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
@@ -531,9 +546,8 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& 
 
     if (prunerConfig.BatchOperationRange) {
         isFullScan = false;
-        auto intersection = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
-        readPartitions = GetKeyRangePartitions(intersection, stageInfo.Meta.ShardKey->GetPartitions(),
-        keyColumnTypes);
+        readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
+            keyColumnTypes,stageInfo.Meta.ShardKey->GetPartitions());
     } else {
         readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
         keyColumnTypes);
@@ -578,9 +592,8 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges&
 
         if (prunerConfig.BatchOperationRange) {
             isFullScan = false;
-            auto intersection = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
-            readPartitions = GetKeyRangePartitions(intersection, stageInfo.Meta.ShardKey->GetPartitions(),
-            keyColumnTypes);
+            readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
+                keyColumnTypes, stageInfo.Meta.ShardKey->GetPartitions());
         } else {
             readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
             keyColumnTypes);
@@ -691,9 +704,8 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpReadRangesSource
 
         if (prunerConfig.BatchOperationRange) {
             isFullScan = false;
-            auto intersection = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
-            readPartitions = GetKeyRangePartitions(intersection, stageInfo.Meta.ShardKey->GetPartitions(),
-            keyColumnTypes);
+            readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
+                keyColumnTypes, stageInfo.Meta.ShardKey->GetPartitions());
         } else {
             readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
             keyColumnTypes);

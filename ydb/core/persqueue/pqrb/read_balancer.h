@@ -158,7 +158,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     std::vector<TActorId> WaitingResponse;
 
-    public:
+public:
     struct TPartitionInfo {
         ui64 TabletId;
     };

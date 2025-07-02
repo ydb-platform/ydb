@@ -580,6 +580,21 @@ TStateStorageInfo::TRingGroup GetReplicaRingGroup(TActorId target, const TVector
     return {};
 }
 
+TActorId GetFirstParticipatingReplica(const TVector<TStateStorageInfo::TRingGroup>& ringGroups) {
+    for (const auto& ringGroup : ringGroups) {
+        if (ShouldIgnore(ringGroup)) {
+            continue;
+        }
+        for (const auto& ring : ringGroup.Rings) {
+            for (const auto& replica : ring.Replicas) {
+                return replica;
+            }
+        }
+    }
+    UNIT_FAIL("All the replicas are ignored.");
+    return {};
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
@@ -650,6 +665,52 @@ Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
 
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {
         TestSinglePathUpdate({ {.State = PRIMARY}, {.State = PRIMARY, .WriteOnly = true} });
+    }
+
+    Y_UNIT_TEST(ReplicaConfigMismatch) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr TPathId PathId = TPathId(DomainId, 1);
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        const TActorId replica = GetFirstParticipatingReplica(stateStorageInfo->RingGroups);
+        HandshakeReplica(runtime, replica, edge);
+        ui64 pathVersion = 1;
+        runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, pathVersion)));
+        {
+            const auto ev = runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Sender, subscriber, ev->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(Path, ev->Get()->Path);
+        }
+
+        auto newConfig = MakeIntrusive<TStateStorageInfo>(*stateStorageInfo);
+        newConfig->ClusterStateGeneration++;
+        runtime.Send(replica, edge, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, newConfig));
+
+        ++pathVersion;
+        runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, pathVersion)));
+        UNIT_CHECK_GENERATED_EXCEPTION(
+            runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10)),
+            TEmptyEventQueueException
+        );
     }
 }
 
@@ -727,6 +788,63 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
 
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {
         TestSyncQuorum({ {.State = PRIMARY}, {.State = PRIMARY, .WriteOnly = true} });
+    }
+
+    Y_UNIT_TEST(ReplicaConfigMismatch) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        const auto requiredReplicas = GetReplicasRequiredForQuorum(stateStorageInfo->RingGroups);
+        for (const auto& replica : stateStorageInfo->SelectAllReplicas()) {
+            if (!FindPtr(requiredReplicas, replica)) {
+                Cerr << "Poisoning replica: " << replica << '\n';
+                runtime.Send(replica, edge, new TEvents::TEvPoisonPill());
+            }
+        }
+
+        ui64 cookie = 12345;
+        {
+            runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+            const auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
+        }
+
+        {
+            const auto replica = requiredReplicas[RandomNumber(requiredReplicas.size())];
+
+            auto newConfig = MakeIntrusive<TStateStorageInfo>(*stateStorageInfo);
+            newConfig->ClusterStateGeneration++;
+            Cerr << "Updating cluster state generation on replica: " << replica << '\n';
+            runtime.Send(replica, edge, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, newConfig));
+
+            ++cookie;
+            runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+            UNIT_CHECK_GENERATED_EXCEPTION(
+                runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10)),
+                TEmptyEventQueueException
+            );
+        }
     }
 }
 

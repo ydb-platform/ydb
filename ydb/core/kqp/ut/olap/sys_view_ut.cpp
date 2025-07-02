@@ -12,8 +12,6 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSysView) {
-
-
     Y_UNIT_TEST(GranulePathId_Store) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -934,6 +932,35 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             const TVector<TLocalPathId> tablePaths{tablePathId1, tablePathId2, tablePathId3};
             for (size_t i = 0; i < tablePaths.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PathId")), tablePaths[i]);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PortionDistributionSysView) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapStandaloneTable("olapTable", 1);
+        for (ui64 i = 0; i < 10; ++i) {
+            WriteTestData(kikimr, "/Root/olapTable", 0, 1000000 + i * 10000, 2000);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT *
+                FROM `/Root/olapTable/.sys/primary_index_stats`
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+
+            UNIT_ASSERT_GE(rows.size(), 3);
+            for (const auto& row: rows) {
+                for (const auto& [name, cell] : row) {
+                    Cerr << "cell: "  << name << ": " << cell.GetProto().ShortDebugString() << ", ";
+                }
+                Cerr << Endl;
             }
         }
     }

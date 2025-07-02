@@ -49,9 +49,12 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
             filter.Apply(originalBatch);
         }
 
+        Cerr << "BATCH: " << originalBatch->ToString() << Endl;
+
         // Leave only requested columns
         auto resultBatch = NArrow::TColumnOperator().Adapt(originalBatch, ResultSchema).DetachResult();
         NArrow::NSSA::TSchemaColumnResolver resolver(DataSchema);
+
         auto collection = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(resultBatch, resolver);
         auto source = std::make_shared<NArrow::NSSA::TFakeDataSource>();
         auto applyConclusion = ReadMetadata->GetProgram().ApplyProgram(collection, source);
@@ -62,6 +65,7 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
             continue;
         }
         auto table = collection->ToTable({}, &resolver, false);
+        Cerr << "TABLE: " << table->ToString() << Endl;
         return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(std::make_shared<NArrow::TSimpleRow>(lastKey, 0)), Context, std::nullopt);
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "finished_iterator");

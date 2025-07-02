@@ -8,19 +8,19 @@
 
 namespace NKikimr::NOlap::NReader::NSysView::NOptimizer {
 
-bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
-    for (auto&& i : granule.GetOptimizerTasks()) {
-        NArrow::Append<arrow::UInt64Type>(*builders[0], granule.GetPathId().SchemeShardLocalPathId.GetRawValue());
-        NArrow::Append<arrow::UInt64Type>(*builders[1], ReadMetadata->GetTabletId());
-        NArrow::Append<arrow::UInt64Type>(*builders[2], i.GetTaskId());
-        NArrow::Append<arrow::StringType>(*builders[3], HostNameField);
-        NArrow::Append<arrow::UInt64Type>(*builders[4], NActors::TActivationContext::AsActorContext().SelfID.NodeId());
-        NArrow::Append<arrow::StringType>(*builders[5], arrow::util::string_view(i.GetStart().data(), i.GetStart().size()));
-        NArrow::Append<arrow::StringType>(*builders[6], arrow::util::string_view(i.GetFinish().data(), i.GetFinish().size()));
-        NArrow::Append<arrow::StringType>(*builders[7], arrow::util::string_view(i.GetDetails().data(), i.GetDetails().size()));
-        NArrow::Append<arrow::UInt64Type>(*builders[8], i.GetWeightCategory());
-        NArrow::Append<arrow::Int64Type>(*builders[9], i.GetWeight());
-    }
+bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>&, NAbstract::TGranuleMetaView&) const {
+    // for (auto&& i : granule.GetOptimizerTasks()) {
+    //     NArrow::Append<arrow::UInt64Type>(*builders[0], granule.GetPathId().SchemeShardLocalPathId.GetRawValue());
+    //     NArrow::Append<arrow::UInt64Type>(*builders[1], ReadMetadata->GetTabletId());
+    //     NArrow::Append<arrow::UInt64Type>(*builders[2], i.GetTaskId());
+    //     NArrow::Append<arrow::StringType>(*builders[3], HostNameField);
+    //     NArrow::Append<arrow::UInt64Type>(*builders[4], NActors::TActivationContext::AsActorContext().SelfID.NodeId());
+    //     NArrow::Append<arrow::StringType>(*builders[5], arrow::util::string_view(i.GetStart().data(), i.GetStart().size()));
+    //     NArrow::Append<arrow::StringType>(*builders[6], arrow::util::string_view(i.GetFinish().data(), i.GetFinish().size()));
+    //     NArrow::Append<arrow::StringType>(*builders[7], arrow::util::string_view(i.GetDetails().data(), i.GetDetails().size()));
+    //     NArrow::Append<arrow::UInt64Type>(*builders[8], i.GetWeightCategory());
+    //     NArrow::Append<arrow::Int64Type>(*builders[9], i.GetWeight());
+    // }
     return false;
 }
 

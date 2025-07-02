@@ -1,3 +1,4 @@
+#include <memory>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/fq/libs/graph_params/proto/graph_params.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -118,19 +119,33 @@ struct TTestBootstrap : public TTestActorRuntime {
             Counters,
             NProto::TGraphParams(),
             FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
-            {},
-            //
-            "my-graph-id",
-            {} /* ExecuterId */,
-            RunActor,
-            DqSettings,
-            ::NYql::NCommon::TServiceCounters(Counters, nullptr, ""),
-            TDuration::Seconds(3),
-            TDuration::Seconds(1)
+            {}
         ).Release());
-        Send(new IEventHandle(CheckpointCoordinator, {}, new NYql::NDqs::TEvReadyState(std::move(GraphState))));
+        
+        auto ev = BuildEvReadyState();
+        Send(new IEventHandle(CheckpointCoordinator, {}, ev.release()));
 
         EnableScheduleForActor(CheckpointCoordinator);
+    }
+
+    std::unique_ptr<NFq::TEvCheckpointCoordinator::TEvReadyState> BuildEvReadyState() {
+        auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+        auto& tasks = *GraphState.MutableTask();
+        const auto& actorIds = GraphState.GetActorId();
+        for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
+            auto actorId = ActorIdFromProto(actorIds[i]);
+            auto settings = NYql::NDq::TDqTaskSettings(&tasks[i]);
+            auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+                settings.GetId(),
+                NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
+                NFq::IsIngress(settings),
+                NFq::IsEgress(settings),
+                NFq::HasState(settings),
+                actorId
+            };
+            event->Tasks.emplace_back(std::move(task));
+        }                
+        return event;
     }
 
     bool IsEqual(

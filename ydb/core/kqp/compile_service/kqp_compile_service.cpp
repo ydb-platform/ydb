@@ -292,8 +292,6 @@ private:
 
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
 
-        auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
-
         ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
         ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
 
@@ -342,7 +340,6 @@ private:
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
             TableServiceConfig.GetEnableStreamWrite() != enableStreamWrite ||
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||

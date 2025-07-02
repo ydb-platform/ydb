@@ -433,12 +433,12 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                 Y_ABORT_UNLESS(key);
                 RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), *key);
             } else {
-                Done(ctx);
+                PostProcessing(ctx);
             }
             break;
         }
         case NKikimrProto::NODATA:
-            Done(ctx);
+            PostProcessing(ctx);
             break;
         case NKikimrProto::ERROR:
             PQ_LOG_ERROR("read topic error");
@@ -449,6 +449,16 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Y_ABORT("bad status");
     };
 }
+
+void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
+    auto& usersInfoStorage = Partition()->UsersInfoStorage;
+    for (auto& [_, userInfo] : usersInfoStorage->GetAll()) {
+        userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->StartOffset;
+    }
+
+    Done(ctx);
+}
+
 
 
 //

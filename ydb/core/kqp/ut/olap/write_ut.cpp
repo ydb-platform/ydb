@@ -1,3 +1,4 @@
+#include "combinatory/variator.h"
 #include "helpers/get_value.h"
 #include "helpers/local.h"
 #include "helpers/query_executor.h"
@@ -98,7 +99,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csController->WaitCompactions(TDuration::Seconds(5));
     }
-
 
     Y_UNIT_TEST(SchemasSimplification) {
         TKikimrRunner kikimr;
@@ -208,6 +208,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     TString scriptSimplificationWithWrite = R"(
         STOP_SCHEMAS_CLEANUP
         ------
+        STOP_COMPACTION
+        ------
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -235,7 +237,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
         ------
         DATA:
-        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4) VALUES (4u, 4u, 4u)
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4) VALUES (4u, 4u, 4u, 4u)
         ------
         SCHEMA:
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col5 Uint32
@@ -244,7 +246,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4, Col5) VALUES (5u, 5u, 5u, 5u, 5u)
         ------
         SCHEMA:
-        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col3 Uint32
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col3
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5) VALUES (6u, 6u, 6u, 6u)
@@ -261,11 +263,13 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5, Col7, Col8) VALUES (8u, 8u, 8u, 8u, 8u, 8u)
         ------
-        ONE_SCHEMAS_CLEANUP
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: true
         ------
         RESTART_TABLETS
         ------
-        ONE_SCHEMAS_CLEANUP
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: false
     )";
     Y_UNIT_TEST_STRING_VARIATOR(SimplificationWithWrite, scriptSimplificationWithWrite) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
@@ -309,7 +313,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         {
             const auto startInstant = TMonotonic::Now();
             AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)
-                ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+            ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
             while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() &&
                    TMonotonic::Now() - startInstant < TDuration::Seconds(200)) {
                 for (auto&& i : csController->GetShardActualIds()) {

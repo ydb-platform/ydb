@@ -1,5 +1,6 @@
 #include "compaction.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
@@ -26,7 +27,7 @@ TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/
     AFL_VERIFY(controller);
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas));
     const i64 compactions = controller->GetCleanupSchemasFinishedCounter().Val();
-    controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
     const TInstant start = TInstant::Now();
     while (TInstant::Now() - start < TDuration::Seconds(10)) {
         if (compactions < controller->GetCleanupSchemasFinishedCounter().Val()) {
@@ -38,7 +39,9 @@ TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/
         Sleep(TDuration::MilliSeconds(300));
     }
 
-    AFL_VERIFY(compactions < controller->GetCleanupSchemasFinishedCounter().Val());
+    if (Expected) {
+        AFL_VERIFY((compactions < controller->GetCleanupSchemasFinishedCounter().Val()) == *Expected);
+    }
 
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
     return TConclusionStatus::Success();
@@ -69,7 +72,7 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     }
 
     AFL_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
-    
+
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     return TConclusionStatus::Success();
 }

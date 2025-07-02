@@ -32,7 +32,7 @@ static ICq::TPtr GetCqHandle(NActors::TTestActorRuntimeBase* actorSystem, TRdmaC
     return cqHandle->CqPtr;
 }
 
-static std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntime() {
+static std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntime(TString defIp) {
     auto actorSystem = MakeHolder<NActors::TTestActorRuntimeBase>(1, 1, true);
     actorSystem->Initialize();
 
@@ -42,7 +42,7 @@ static std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTes
 
     auto env = std::getenv("IP_TO_BIND_RDMA_TEST");
 
-    TString ip = env ?: "::1";
+    TString ip = env ?: defIp;
 
     NInterconnect::TAddress address(ip, 7777);
     auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
@@ -61,8 +61,8 @@ static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMe
 }
 
 Y_UNIT_TEST_SUITE(RdmaLow) {
-    Y_UNIT_TEST(ReadInOneProcess) {
-        auto [actorSystem, ctx] = PrepareTestRuntime();
+    void DoReadInOneProcess(TString bindTo) {
+        auto [actorSystem, ctx] = PrepareTestRuntime(bindTo);
         auto cqActorId = actorSystem->Register(CreateCqActor(1));
         auto cqPtr = GetCqHandle(actorSystem.Get(), ctx, cqActorId);
 
@@ -113,8 +113,16 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
         UNIT_ASSERT(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
     }
 
+    Y_UNIT_TEST(ReadInOneProcessIpV4) {
+        DoReadInOneProcess("127.0.0.1");
+    }
+
+    Y_UNIT_TEST(ReadInOneProcessIpV6) {
+        DoReadInOneProcess("::1");
+    }
+
     Y_UNIT_TEST(CqOverflow) {
-        auto [actorSystem, ctx] = PrepareTestRuntime();
+        auto [actorSystem, ctx] = PrepareTestRuntime("::1");
         auto cqActorId = actorSystem->Register(CreateCqActor(1));
 
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();

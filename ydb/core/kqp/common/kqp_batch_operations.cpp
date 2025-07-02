@@ -11,7 +11,7 @@ TSerializedTableRange MakePartitionRange(TMaybe<TKeyDesc::TPartitionRangeInfo> b
 
     if (!begin || !begin->EndKeyPrefix) {
         inclusiveTableBegin = true;
-        std::generate_n(std::back_inserter(tableBegin), keySize, []() { return TCell(); });
+        tableBegin.resize(keySize, TCell());
     } else {
         const auto& cells = begin->EndKeyPrefix.GetCells();
         tableBegin.assign(cells.begin(), cells.end());

@@ -81,8 +81,6 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpLookup& loo
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
     const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan);
 
-TMaybe<TSerializedTableRange> IntersectRanges(const TTableRange& range1, const TTableRange& range2, TConstArrayRef<NScheme::TTypeInfo> cellTypes);
-
 std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 

@@ -2,6 +2,7 @@
 #include "../etcd_shared.h"
 #include "../etcd_gate.h"
 #include "../etcd_grpc.h"
+#include "../etcd_lease.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
@@ -65,7 +66,6 @@ public:
         NYdbGrpc::TServerOptions grpcOption;
         grpcOption.SetPort(grpc);
         Server_->EnableGRpc(grpcOption);
-        Server_->GetRuntime()->Register(BuildMainGate({}, stuff));
 
         Tests::TClient(*ServerSettings).InitRootScheme("Root");
 
@@ -76,6 +76,9 @@ public:
         config.SetDatabase("/Root");
         const auto driver = NYdb::TDriver(config);
         stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
+
+        GetRuntime()->Register(BuildMainGate({}, stuff));
+        GetRuntime()->Register(BuildHolderHouse({}, stuff));
     }
 
     ui16 GetPort() {

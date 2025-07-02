@@ -802,7 +802,7 @@ protected:
     virtual std::string ParseGrpcRequest() = 0;
     virtual void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) = 0;
-    virtual bool RequiredNextRevision() const { return false; }
+    virtual std::optional<bool> RequiredNextRevision() const { return std::nullopt; }
     virtual TKeysSet GetAffectedKeysSet() const { return {}; }
 
     i64 Revision = 0LL;
@@ -825,8 +825,11 @@ public:
         if (const auto& error = this->ParseGrpcRequest(); !error.empty()) {
             this->Request_->ReplyWithRpcStatus(grpc::StatusCode::INVALID_ARGUMENT, TString(error));
             this->Die(ctx);
-        } else if (this->RequiredNextRevision()) {
-            RequestNextRevision(ctx);
+        } else if (const auto reqRev = this->RequiredNextRevision()) {
+            if (*reqRev)
+                RequestNextRevision(ctx);
+            else
+                RequestNextLease(ctx);
         } else {
             SendDatabaseRequest();
         }
@@ -837,6 +840,11 @@ protected:
         ctx.Send(Stuff->MainGate, new TEvRequestRevision(this->GetAffectedKeysSet()));
     }
 private:
+    void RequestNextLease(const TActorContext& ctx) {
+        this->Become(&TEtcdRequestGrpc::WaitRevisionFunc);
+        ctx.Send(Stuff->HolderHouse, new TEvRequestRevision(this->GetAffectedKeysSet()));
+    }
+
     TGuard Guard;
 
     static std::string GetRequestName() {
@@ -850,10 +858,11 @@ private:
         NYdb::TParamsBuilder params;
         sql << "-- " << GetRequestName() << " >>>>" << std::endl;
         sql << Stuff->TablePrefix;
-        if (this->RequiredNextRevision())
+        const auto reqRev = this->RequiredNextRevision();
+        if (reqRev && *reqRev)
             AddParam("Revision", params, Revision);
         this->MakeQueryWithParams(sql, params);
-        if (!this->RequiredNextRevision())
+        if (!(reqRev && *reqRev))
             sql << "select nvl(max(`revision`), 0L) from `commited`;" << std::endl;
         else if (!Guard)
             sql << "insert into `commited` (`revision`,`timestamp`) values ($Revision,CurrentUtcTimestamp());" << std::endl;
@@ -898,7 +907,7 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
-        if (!this->RequiredNextRevision()) {
+        if (const auto reqRev = this->RequiredNextRevision(); !reqRev || !*reqRev) {
             if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.back()); parser.TryNextRow()) {
                 Revision = NYdb::TValueParser(parser.GetValue(0)).GetInt64();
             }
@@ -1008,7 +1017,7 @@ private:
         }
     }
 
-    bool RequiredNextRevision() const final {
+    std::optional<bool> RequiredNextRevision() const final {
         return true;
     }
 
@@ -1050,7 +1059,7 @@ private:
         return Reply(response, ctx);
     }
 
-    bool RequiredNextRevision() const final {
+    std::optional<bool> RequiredNextRevision() const final {
         return true;
     }
 
@@ -1108,8 +1117,11 @@ private:
         }
     }
 
-    bool RequiredNextRevision() const final {
-        return !Txn.IsReadOnly();
+    std::optional<bool> RequiredNextRevision() const final {
+        if (Txn.IsReadOnly())
+            return std::nullopt;
+        else
+            return true;
     }
 
     TKeysSet GetAffectedKeysSet() const final {
@@ -1224,28 +1236,29 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        const auto& ttlParamName = AddParam("TimeToLive", params, TTL);
-        sql << "$Next = select `stub`, `revision` + 1L as `revision`, CurrentUtcDatetime(`timestamp`) as `timestamp` from `revision` where `stub`;" << std::endl;
-        sql << "update `revision` on select * from $Next;" << std::endl;
-        sql << "insert into `leases` select `revision` as `id`," << ttlParamName << " as `ttl`,`timestamp` as `created`,`timestamp` as `updated` from $Next;" << std::endl;
-        sql << "select `revision` as `id`, " << ttlParamName << " - unwrap(cast(CurrentUtcDatetime(`timestamp`) - `timestamp` as Int64) / 1000000L) as `ttl` from $Next;" << std::endl;
+        Lease = Revision;
+        Revision = 0LL;
+        sql << "insert into `leases` (`id`,`ttl`,`created`,`updated`) values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << std::endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
-        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
-            etcdserverpb::LeaseGrantResponse response;
-            response.mutable_header()->set_revision(Revision);
-            response.set_id(NYdb::TValueParser(parser.GetValue("id")).GetInt64());
-            response.set_ttl(NYdb::TValueParser(parser.GetValue("ttl")).GetInt64());
-            Dump(std::cout) << '=' << response.id() << ',' << response.ttl() << std::endl;
-            return Reply(response, ctx);
-        }
+    void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
+        etcdserverpb::LeaseGrantResponse response;
+        response.mutable_header()->set_revision(Revision);
+        response.set_id(Lease);
+        response.set_ttl(TTL);
+        Dump(std::cout) << '=' << response.id() << ',' << response.ttl() << std::endl;
+        return Reply(response, ctx);
+    }
+
+    std::optional<bool> RequiredNextRevision() const final {
+        return false;
     }
 
     std::ostream& Dump(std::ostream& out) const final {
         return out << "Grant(" << TTL << ')';
     }
 
+    i64 Lease;
     i64 TTL;
 };
 
@@ -1324,8 +1337,11 @@ private:
         return Reply(response, ctx);
     }
 
-    bool RequiredNextRevision() const final {
-        return !EmptyLease;
+    std::optional<bool> RequiredNextRevision() const final {
+        if (EmptyLease)
+            return std::nullopt;
+        else
+            return true;
     }
 
     std::ostream& Dump(std::ostream& out) const final {

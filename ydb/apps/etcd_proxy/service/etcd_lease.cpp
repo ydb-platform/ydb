@@ -237,11 +237,19 @@ public:
         Become(&TThis::StateFunc);
         Stuff->HolderHouse = SelfId();
         ctx.RegisterWithSameMailbox(new TCollector(Counters, Stuff));
+        ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
     }
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvLeaseKeepAliveRequest, Handle);
+
+            cFunc(TEvents::TEvWakeup::EventType, SendDatabaseRequestIfNeeded);
+
+            HFunc(TEvRequestRevision, Handle);
+
+            HFunc(TEvQueryResult, Handle);
+            HFunc(TEvQueryError, Handle);
         }
     }
 
@@ -249,8 +257,70 @@ private:
         ctx.RegisterWithSameMailbox(new TKeysKeeper(ev->Get()->GetStreamCtx(), Stuff));
     }
 
+    void Handle(TEvRequestRevision::TPtr &ev, const TActorContext& ctx) {
+        if (Current < Limit)
+            ctx.Send(ev->Sender, new TEvReturnRevision(++Current));
+        else {
+            Queue.emplace(ev->Sender);
+            SendDatabaseRequestIfNeeded();
+        }
+    }
+
+    void SendDatabaseRequestIfNeeded() {
+        if (!InFlight && Limit <= Current) {
+            InFlight = true;
+            const auto count = 7LL + Current - Limit + Queue.size();
+
+            NYdb::TParamsBuilder params;
+            std::ostringstream sql;
+            sql << Stuff->TablePrefix;
+            sql << "$Next = select `revision` as `current`, `revision` + " << AddParam<i64>("Count", params, count) << " as `limit`, CurrentUtcTimestamp(`timestamp`) as `timestamp` from `revision` where `stub`;" << std::endl;
+            sql << "update `revision` on select true as `stub`, `limit` as `revision`, `timestamp` from $Next;" << std::endl;
+            sql << "select `current`, `limit` from $Next;" << std::endl;
+
+            TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
+                return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
+            };
+            Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+                if (const auto lock = stuff.lock()) {
+                    if (const auto res = future.GetValue(); res.IsSuccess())
+                        lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
+                    else
+                        lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
+                }
+            });
+        }
+    }
+
+    void Handle(TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
+        InFlight = false;
+
+        if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow()) {
+            Current = NYdb::TValueParser(parser.GetValue("current")).GetInt64();
+            Limit = NYdb::TValueParser(parser.GetValue("limit")).GetInt64();
+        }
+
+        while (!Queue.empty() && Current < Limit) {
+            ctx.Send(Queue.front(), new TEvReturnRevision(++Current));
+            Queue.pop();
+        }
+
+        if (Limit <= Current)
+            ctx.Send(ctx.SelfID, new TEvents::TEvWakeup);
+    }
+
+    void Handle(TEvQueryError::TPtr &ev, const TActorContext& ctx) {
+        InFlight = false;
+        std::cout << "Request next leases SQL error received " << ev->Get()->Issues.ToString() << std::endl;
+        ctx.Schedule(TDuration::Seconds(3), new TEvents::TEvWakeup);
+    }
+
     const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     const TSharedStuff::TPtr Stuff;
+
+    i64 Current = 0LL, Limit = 0LL;
+    std::queue<TActorId> Queue;
+    bool InFlight = false;
 };
 
 }

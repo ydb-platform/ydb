@@ -18,10 +18,6 @@ namespace NPQ {
 using namespace NBalancing;
 
 
-static constexpr TDuration ACL_SUCCESS_RETRY_TIMEOUT = TDuration::Seconds(30);
-static constexpr TDuration ACL_ERROR_RETRY_TIMEOUT = TDuration::Seconds(5);
-static constexpr TDuration ACL_EXPIRATION_TIMEOUT = TDuration::Minutes(5);
-
 TString EncodeAnchor(const TString& v) {
     auto r = Base64Encode(v);
     while (r.EndsWith('=')) {
@@ -39,7 +35,6 @@ TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletSt
         , Version(-1)
         , MaxPartsPerTablet(0)
         , SchemeShardId(0)
-        , LastACLUpdate(TInstant::Zero())
         , TxId(0)
         , NumActiveParts(0)
         , MaxIdx(0)
@@ -48,7 +43,6 @@ TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletSt
         , StartPartitionIdForWrite(0)
         , TotalGroups(0)
         , ResourceMetrics(nullptr)
-        , WaitingForACL(false)
         , StatsReportRound(0)
     {
         Balancer = std::make_unique<TBalancer>(*this);
@@ -149,8 +143,6 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
 
     auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
-
-    ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
@@ -171,10 +163,6 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
     }
 }
 
-void TPersQueueReadBalancer::HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
-    GetACL(ctx);
-}
-
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext&) {
 
     UpdateEvents.push_back(ev->Release().Release());
@@ -189,103 +177,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPt
         StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
     }
 }
-
-
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvCheckACL::TPtr &ev, const TActorContext &ctx) {
-
-    if (!AppData(ctx)->PQConfig.GetCheckACL()) {
-        RespondWithACL(ev, NKikimrPQ::EAccess::ALLOWED, "", ctx);
-        return;
-    }
-
-    if (ctx.Now() > LastACLUpdate + ACL_EXPIRATION_TIMEOUT || Topic.empty()) { //Topic.empty is only for tests
-        WaitingACLRequests.push_back(ev);
-        return;
-    }
-
-    auto& record = ev->Get()->Record;
-
-    if (record.GetToken().empty()) {
-        if (record.GetOperation() == NKikimrPQ::EOperation::WRITE_OP && TabletConfig.GetRequireAuthWrite() ||
-                 record.GetOperation() == NKikimrPQ::EOperation::READ_OP && TabletConfig.GetRequireAuthRead()) {
-            RespondWithACL(ev, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "topic " << Topic << " requires authentication", ctx);
-        } else {
-            RespondWithACL(ev, NKikimrPQ::EAccess::ALLOWED, "", ctx);
-        }
-        return;
-    }
-
-    NACLib::TUserToken token(record.GetToken());
-    CheckACL(ev, token, ctx);
-}
-
-
-void TPersQueueReadBalancer::RespondWithACL(
-        const TEvPersQueue::TEvCheckACL::TPtr &request,
-        const NKikimrPQ::EAccess &access,
-        const TString &error,
-        const TActorContext &ctx) {
-    THolder<TEvPersQueue::TEvCheckACLResponse> res{new TEvPersQueue::TEvCheckACLResponse};
-    res->Record.SetTopic(Topic);
-    res->Record.SetPath(Path);
-    res->Record.SetAccess(access);
-    res->Record.SetError(error);
-    ctx.Send(request->Sender, res.Release());
-}
-
-void TPersQueueReadBalancer::CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx) {
-    NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
-    const auto& record = request->Get()->Record;
-    switch(record.GetOperation()) {
-        case NKikimrPQ::EOperation::READ_OP:
-            rights = NACLib::EAccessRights::SelectRow;
-            break;
-        case NKikimrPQ::EOperation::WRITE_OP:
-            rights = NACLib::EAccessRights::UpdateRow;
-            break;
-    };
-
-    TString user = record.HasUser() ? record.GetUser() : "";
-
-    if (record.GetOperation() == NKikimrPQ::EOperation::READ_OP) {
-        if (!Consumers.contains(user)) {
-            RespondWithACL(request, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "no read rule provided for consumer '"
-                    << NPersQueue::ConvertOldConsumerName(user, ctx)
-                    << "' that allows to read topic from original cluster '" << NPersQueue::GetDC(Topic)
-                    << "'; may be there is read rule with mode all-original only and you are reading with mirrored topics. Change read-rule to mirror-to-<cluster> or options of reading process.", ctx);
-            return;
-        }
-    }
-    if (ACL.CheckAccess(rights, token)) {
-        RespondWithACL(request, NKikimrPQ::EAccess::ALLOWED, "", ctx);
-    } else {
-        RespondWithACL(request, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "access denied for consumer '" << NPersQueue::ConvertOldConsumerName(user, ctx) << "' : no " << (rights == NACLib::EAccessRights::SelectRow ? "ReadTopic" : "WriteTopic") << " permission" , ctx);
-    }
-}
-
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const TActorContext& ctx) {
-    if (ctx.Now() > LastACLUpdate + ACL_EXPIRATION_TIMEOUT || Topic.empty()) { //Topic.empty is only for tests
-        WaitingDescribeRequests.push_back(ev);
-        return;
-    } else {
-        THolder<TEvPersQueue::TEvDescribeResponse> res{new TEvPersQueue::TEvDescribeResponse};
-        res->Record.MutableConfig()->CopyFrom(TabletConfig);
-        res->Record.MutableConfig()->ClearAllPartitions();
-        res->Record.SetVersion(Version);
-        res->Record.SetTopicName(Topic);
-        res->Record.SetPartitionPerTablet(MaxPartsPerTablet);
-        res->Record.SetSchemeShardId(SchemeShardId);
-        res->Record.SetBalancerTabletId(TabletID());
-        res->Record.SetSecurityObject(ACL.SerializeAsString());
-        for (auto& parts : PartitionsInfo) {
-            auto p = res->Record.AddPartitions();
-            p->SetPartition(parts.first);
-            p->SetTabletId(parts.second.TabletId);
-        }
-        ctx.Send(ev->Sender, res.Release());
-    }
-}
-
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
@@ -525,31 +416,23 @@ TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActor
 
 void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TActorContext& ctx, bool pipeReconnected)
 {
-    if (tabletId == SchemeShardId) {
-        if (!WaitingForACL) {
-            return;
+    TActorId pipeClient = GetPipeClient(tabletId, ctx);
+
+    NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
+
+    auto it = AggregatedStats.Cookies.find(tabletId);
+    if (!pipeReconnected || it != AggregatedStats.Cookies.end()) {
+        ui64 cookie;
+        if (pipeReconnected) {
+            cookie = it->second;
+        } else {
+            cookie = ++AggregatedStats.NextCookie;
+            AggregatedStats.Cookies[tabletId] = cookie;
         }
-        TActorId pipeClient = GetPipeClient(tabletId, ctx);
-        NTabletPipe::SendData(ctx, pipeClient, new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(tabletId, PathId));
-    } else {
-        TActorId pipeClient = GetPipeClient(tabletId, ctx);
 
-        NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
-
-        auto it = AggregatedStats.Cookies.find(tabletId);
-        if (!pipeReconnected || it != AggregatedStats.Cookies.end()) {
-            ui64 cookie;
-            if (pipeReconnected) {
-                cookie = it->second;
-            } else {
-                cookie = ++AggregatedStats.NextCookie;
-                AggregatedStats.Cookies[tabletId] = cookie;
-            }
-
-            PQ_LOG_D(
-                TStringBuilder() << "Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
-            NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
-        }
+        PQ_LOG_D(
+            TStringBuilder() << "Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
+        NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
     }
 }
 
@@ -633,39 +516,6 @@ void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui64 avgWriteSpeedPerSe
         NewMetrics.MaxAvgWriteSpeedPerHour = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerHour, avgWriteSpeedPerHour);
         NewMetrics.TotalAvgWriteSpeedPerDay += avgWriteSpeedPerDay;
         NewMetrics.MaxAvgWriteSpeedPerDay = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerDay, avgWriteSpeedPerDay);
-}
-
-void TPersQueueReadBalancer::AnswerWaitingRequests(const TActorContext& ctx) {
-    std::vector<TEvPersQueue::TEvCheckACL::TPtr> ww;
-    ww.swap(WaitingACLRequests);
-    for (auto& r : ww) {
-        Handle(r, ctx);
-    }
-
-    std::vector<TEvPersQueue::TEvDescribe::TPtr> dr;
-    dr.swap(WaitingDescribeRequests);
-    for (auto& r : dr) {
-        Handle(r, ctx);
-    }
-}
-
-void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ctx);
-    if (!WaitingForACL) //ignore if already processed
-        return;
-    WaitingForACL = false;
-    const auto& record = ev->Get()->GetRecord();
-    if (record.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
-        ACL.Clear();
-        Y_PROTOBUF_SUPPRESS_NODISCARD ACL.MutableACL()->ParseFromString(record.GetPathDescription().GetSelf().GetEffectiveACL());
-        LastACLUpdate = ctx.Now();
-        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerMetadataRetryTimeoutSec()), new TEvPersQueue::TEvUpdateACL());
-
-        AnswerWaitingRequests(ctx);
-    } else {
-        PQ_LOG_D("couldn't receive ACL due to " << record.GetStatus());
-        ctx.Schedule(ACL_ERROR_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL());
-    }
 }
 
 void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
@@ -864,18 +714,6 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
         Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++AggregatedStats.Round));
     }
 }
-
-void TPersQueueReadBalancer::GetACL(const TActorContext& ctx) {
-    if (WaitingForACL) // if there is request infly
-        return;
-    if (SchemeShardId == 0) {
-        ctx.Schedule(ACL_SUCCESS_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL());
-    } else {
-        WaitingForACL = true;
-        RequestTabletIfNeeded(SchemeShardId, ctx);
-    }
-}
-
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
     auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();

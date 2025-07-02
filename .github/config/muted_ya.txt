@@ -257,7 +257,6 @@ ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
-ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayScanBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]

@@ -530,19 +530,19 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                     p->second.SetTabletId(partition.GetTabletId());
                 }
             }
-
-            for (const auto& [key, operations] : Operations_) {
-                if (!operations.HasTabletId()) {
-                    builder << "Topic '" << key.Topic_ << "'. Unknown partition " << key.Partition_;
-
-                    status = Ydb::StatusIds::SCHEME_ERROR;
-                    message = std::move(builder);
-
-                    return false;
-                }
-            }
         } else {
             builder << "Topic '" << JoinPath(result.Path) << "' is missing";
+
+            status = Ydb::StatusIds::SCHEME_ERROR;
+            message = std::move(builder);
+
+            return false;
+        }
+    }
+
+    for (const auto& [key, operations] : Operations_) {
+        if (!operations.HasTabletId()) {
+            builder << "Topic '" << key.Topic_ << "'. Unknown partition " << key.Partition_;
 
             status = Ydb::StatusIds::SCHEME_ERROR;
             message = std::move(builder);

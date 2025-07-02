@@ -8,6 +8,33 @@
 
 namespace NKikimr::NKqp {
 
+class TRestartTabletsCommand: public ICommand {
+private:
+    virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;
+
+public:
+    TRestartTabletsCommand() {
+    }
+};
+
+class TStopSchemasCleanupCommand: public ICommand {
+private:
+    virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;
+
+public:
+    TStopCompactionCommand() {
+    }
+};
+
+class TOneSchemasCleanupCommand: public ICommand {
+private:
+    virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;
+
+public:
+    TOneSchemasCleanupCommand() {
+    }
+};
+
 class TStopCompactionCommand: public ICommand {
 private:
     virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;

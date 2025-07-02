@@ -5,6 +5,45 @@
 
 namespace NKikimr::NKqp {
 
+TConclusionStatus TRestartTabletsCommand::DoExecute(TKikimrRunner& kikimr) {
+    auto csController = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    for (auto&& i : csController->GetShardActualIds()) {
+        kikimr.GetTestServer().GetRuntime()->Send(
+            MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), i, false));
+    }
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TStopSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+    auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    AFL_VERIFY(controller);
+    controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+    auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    AFL_VERIFY(controller);
+    AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas));
+    const i64 compactions = controller->GetCleanupSchemasFinishedCounter().Val();
+    controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    const TInstant start = TInstant::Now();
+    while (TInstant::Now() - start < TDuration::Seconds(10)) {
+        if (compactions < controller->GetCleanupSchemasFinishedCounter().Val()) {
+            Cerr << "SCHEMAS_CLEANUP_HAPPENED: " << compactions << " -> " << controller->GetCleanupSchemasFinishedCounter().Val() << Endl;
+            break;
+        }
+
+        Cerr << "WAIT_SCHEMAS_CLEANUP: " << controller->GetCleanupSchemasFinishedCounter().Val() << Endl;
+        Sleep(TDuration::MilliSeconds(300));
+    }
+
+    AFL_VERIFY(compactions < controller->GetCleanupSchemasFinishedCounter().Val());
+
+    controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
+    return TConclusionStatus::Success();
+}
+
 TConclusionStatus TStopCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);

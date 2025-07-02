@@ -112,15 +112,15 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
+            CREATE TABLE `)" << tableName << R"(`(
+                Key Uint64 NOT NULL,
                 PRIMARY KEY (Key)
             )
             WITH (
                 STORE = COLUMN,
                 PARTITION_COUNT = 1
                 )
-            );)";
+            ;)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             auto queryAlter1 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value4 NOT NULL
+                ADD COLUMN Value4 Uint32 NOT NULL DEFAULT 0
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             auto queryAlter1 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(`
-                ADD COLUMN Value6 Uint32
+                DROP COLUMN Value3
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             auto queryAlter1 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(`
-                DROP COLUMN Value3 Uint32
+                ADD COLUMN Value6 Uint32
             ;)";
             auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), NYdb::EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
@@ -202,7 +202,73 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             kikimr.GetTestServer().GetRuntime()->Send(
                 MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), i, false));
         }
-        AFL_VERIFY(csController->WaitCleaningSchemas(TDuration::Seconds(5)));
+        AFL_VERIFY(!csController->WaitCleaningSchemas(TDuration::Seconds(5)));
+    }
+
+    TString scriptSimplificationWithWrite = R"(
+        STOP_SCHEMAS_CLEANUP
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1$$);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1) VALUES (1u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col2 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (2u, 2u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col3 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES (3u, 3u, 3u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4) VALUES (4u, 4u, 4u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col5 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4, Col5) VALUES (5u, 5u, 5u, 5u, 5u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col3 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5) VALUES (6u, 6u, 6u, 6u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col7 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5, Col7) VALUES (7u, 7u, 7u, 7u, 7u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col8 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5, Col7, Col8) VALUES (8u, 8u, 8u, 8u, 8u, 8u)
+        ------
+        ONE_SCHEMAS_CLEANUP
+        ------
+        RESTART_TABLETS
+        ------
+        ONE_SCHEMAS_CLEANUP
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(SimplificationWithWrite, scriptSimplificationWithWrite) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
     Y_UNIT_TEST(TierDraftsGCWithRestart) {

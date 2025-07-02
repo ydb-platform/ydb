@@ -278,11 +278,17 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::MergeDiffs(const std::v
 
 bool TSchemaDiffView::IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) const {
     for (auto&& i : ModifiedIndexes) {
+        if (!i.second) {
+            return false;
+        }
         if (indexInfo.HasIndexId(i.first)) {
             return false;
         }
     }
     for (auto&& i : ModifiedColumns) {
+        if (!i.second) {
+            return false;
+        }
         if (indexInfo.HasColumnId(i.first)) {
             return false;
         }
@@ -291,10 +297,9 @@ bool TSchemaDiffView::IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) co
         }
     }
     if (SchemaOptions) {
-        return false;
-    }
-    if (CompressionOptions) {
-        return false;
+        if (SchemaOptions->GetSchemeNeedActualization()) {
+            return false;
+        }
     }
     return true;
 }

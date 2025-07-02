@@ -884,13 +884,13 @@ public:
             auto finalProto = NOlap::TSchemaDiffView::Merge(schemasProto);
 
             for (auto&& del : i.GetToRemove()) {
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "useless_schema_removed")("address", del.DebugString());
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "useless_schema_removed")("address", del.DebugString());
 //                db.Table<SchemaPresetVersionInfo>()
 //                    .Key(del.GetPresetId(), del.GetSnapshot().GetPlanStep(), del.GetSnapshot().GetTxId())
 //                    .Delete();
             }
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "schema_updated")("address", i.GetFinish().DebugString());
-//            db.Table<SchemaPresetVersionInfo>()
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_updated")("address", i.GetFinish().DebugString());
+            //            db.Table<SchemaPresetVersionInfo>()
 //                .Key(i.GetFinish().GetPresetId(), i.GetFinish().GetSnapshot().GetPlanStep(), i.GetFinish().GetSnapshot().GetTxId())
 //                .Update(NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(finalProto.SerializeAsString()));
         }

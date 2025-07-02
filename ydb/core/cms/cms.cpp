@@ -233,9 +233,9 @@ void TCms::GenerateNodeState(IOutputStream& out)
                                 out << nodeVDisksStatusMap[node.first].Restart;
                             }
                         }
-                        if (ClusterInfo->IsBridgeMode) {
+                        if (ClusterInfo->IsBridgeMode && node.second->PileId) {
                             TABLED() {
-                                out << node.second->PileId.GetOrElse(0);
+                                out << node.second->PileId.GetRef();
                             }
                         }
                     }

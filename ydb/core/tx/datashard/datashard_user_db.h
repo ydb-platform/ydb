@@ -241,6 +241,25 @@ private:
 
     YDB_ACCESSOR_DEF(bool, PerformedUserReads);
 
+    // Becomes true when user-visible reads detect changes over MvccVersion, i.e.
+    // if we would have performed this read under a lock, it would have been broken.
+    YDB_READONLY(bool, MvccReadConflict, false);
+
+    // At commit time we have MvccVersion equal to the commit version, however
+    // when transaction has a snapshot it should behave as if all reads are
+    // performed at the snapshot version. This snapshot version is not used
+    // for reads (we optimistically read from commit version at commit time to
+    // minimize conflicts), however encountering errors which prevent the
+    // transaction from committing having conflicts with the snapshot indicate
+    // it should behave as if an imaginary lock was broken instread.
+    YDB_ACCESSOR(TRowVersion, SnapshotVersion, TRowVersion::Max());
+    // Becomes true when reads detect there have been committed changes between
+    // the snapshot version and the commit version.
+    YDB_READONLY(bool, SnapshotReadConflict, false);
+    // Becomes true when writes detect there have been committed changes between
+    // the snapshot version and the commit version.
+    YDB_READONLY(bool, SnapshotWriteConflict, false);
+
     NMiniKQL::TEngineHostCounters& Counters;
 };
 

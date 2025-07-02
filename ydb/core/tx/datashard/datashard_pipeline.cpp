@@ -1685,7 +1685,8 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
 {
     const auto& rec = ev->Get()->Record;
     TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, NEvWrite::TConvertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
-    if (rec.HasMvccSnapshot()) {
+    // Uncommitted writes are performed over a consistent mvcc snapshot
+    if (rec.HasMvccSnapshot() && rec.GetLockTxId()) {
         info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()),
             rec.GetMvccSnapshot().GetRepeatableRead());
     }
@@ -1699,9 +1700,9 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
-    if (rec.HasMvccSnapshot() && !rec.GetLockTxId()) {
+    if (rec.GetLockMode() != NKikimrDataEvents::OPTIMISTIC) {
         badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-            "MvccSnapshot without LockTxId is not implemented");
+            "Only OPTIMISTIC lock mode is currently implemented");
         return writeOp;
     }
 

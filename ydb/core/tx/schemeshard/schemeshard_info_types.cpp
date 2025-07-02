@@ -2221,7 +2221,9 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     const auto [parentFrom, parentTo] = KMeans.Parent == 0
         ? std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId>{0, 0}
         : KMeans.RangeToBorders(range);
-    // TODO(mbkkt) We can make it more granular
+    // TODO Make it more granular - now we just merge all intersecting ranges.
+    // So if all shards have ranges like [1 2] [2 3] [3 4] and so on then we scan
+    // all shards for each cluster even though we could only scan 2 shards for it.
 
     // the new range does not intersect with other ranges, just add it with 1 shard
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
@@ -2233,7 +2235,7 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     // otherwise, this range has multiple shards and we need to merge all intersecting ranges
     auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
     if (itTo == Cluster2Shards.end()) {
-        itTo = Cluster2Shards.rbegin().base();
+        itTo--;
     }
     if (itTo->first < parentTo) {
         const bool needsToReplaceFrom = itFrom == itTo;

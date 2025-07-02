@@ -2283,7 +2283,7 @@ void TPipeline::AddCommittingOp(const TOperation::TPtr& op) {
     Y_VERIFY_S(!op->GetCommittingOpsVersion(),
         "Trying to AddCommittingOp " << *op << " more than once");
 
-    TRowVersion version = Self->GetReadWriteVersions(op.Get()).WriteVersion;
+    TRowVersion version = Self->GetMvccVersion(op.Get());
     if (op->IsImmediate())
         CommittingOps.Add(op->GetTxId(), version);
     else

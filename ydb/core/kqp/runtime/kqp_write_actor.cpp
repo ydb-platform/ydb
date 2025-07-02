@@ -137,6 +137,14 @@ namespace {
             transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
         }
     }
+
+    std::optional<NKikimrDataEvents::TMvccSnapshot> GetOptionalMvccSnapshot(const NKikimrKqp::TKqpTableSinkSettings& settings) {
+        if (settings.HasMvccSnapshot()) {
+            return settings.GetMvccSnapshot();
+        } else {
+            return std::nullopt;
+        }
+    }
 }
 
 
@@ -1417,7 +1425,7 @@ public:
                 Settings.GetIsOlap(),
                 std::move(keyColumnTypes),
                 Alloc,
-                Settings.GetMvccSnapshot(),
+                GetOptionalMvccSnapshot(Settings),
                 Settings.GetLockMode(),
                 nullptr,
                 TActorId{},
@@ -3244,7 +3252,7 @@ private:
                     .LockTxId = Settings.GetLockTxId(),
                     .LockNodeId = Settings.GetLockNodeId(),
                     .InconsistentTx = Settings.GetInconsistentTx(),
-                    .MvccSnapshot = Settings.GetMvccSnapshot(),
+                    .MvccSnapshot = GetOptionalMvccSnapshot(Settings),
                     .LockMode = Settings.GetLockMode(),
                 },
                 .Priority = Settings.GetPriority(),

@@ -649,11 +649,6 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     std::vector<std::string_view> lKeys(keyMembers1.size()), rKeys(keyMembers2.size());
 
     MKQL_ENSURE(keyMembers1.size() == keyMembers2.size(), "Expected same key sizes.");
-    for (ui32 i = 0; i < keyMembers1.size(); ++i) {
-        if (keyMembers1Inputs[i] != 0) {
-            std::swap(keyMembers1[i], keyMembers2[i]);
-        }
-    }
 
     bool optKey = false, badKey = false;
     const bool filter = joinKind == "Inner" || joinKind.ends_with("Semi");

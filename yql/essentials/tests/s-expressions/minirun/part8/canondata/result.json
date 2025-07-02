@@ -148,9 +148,9 @@
     ],
     "test.test[EquiJoin-YQL-20085-default.txt-Results]": [
         {
-            "checksum": "8b65cde7720bf12d6ef07af1add1e683",
-            "size": 31040,
-            "uri": "https://{canondata_backend}/1937027/d4a75065adb37091f0071155d118edcd18ce277c/resource.tar.gz#test.test_EquiJoin-YQL-20085-default.txt-Results_/results.txt"
+            "checksum": "91d704be27ac65565be129ad9d4beeac",
+            "size": 33372,
+            "uri": "https://{canondata_backend}/1937150/442e463e9e2a721d540e63b473422a22a4d9dbca/resource.tar.gz#test.test_EquiJoin-YQL-20085-default.txt-Results_/results.txt"
         }
     ],
     "test.test[File-DifferentAliasesToSameFiles--Debug]": [

@@ -89,6 +89,7 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     TPresetId PresetId;
+    mutable std::optional<ui32> IgnoreToVersion;
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
@@ -176,6 +177,10 @@ public:
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
+    }
+
+    std::optional<ui32> GetIgnoreToVersion() const {
+        return IgnoreToVersion;
     }
 
     ui64 GetPresetId() const {

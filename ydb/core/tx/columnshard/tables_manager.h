@@ -266,7 +266,6 @@ public:
 
     class TSchemasChain {
     private:
-        YDB_READONLY_DEF(std::optional<TSchemaAddress>, Start);
         YDB_READONLY_DEF(std::set<TSchemaAddress>, ToRemove);
         TSchemaAddress Finish;
 
@@ -276,21 +275,14 @@ public:
         }
 
         void FillAddressesTo(std::set<TSchemaAddress>& addresses) const {
-            if (Start) {
-                addresses.emplace(*Start);
-            }
             addresses.insert(ToRemove.begin(), ToRemove.end());
             addresses.emplace(Finish);
         }
 
-        TSchemasChain(const std::optional<TSchemaAddress>& start, const std::set<TSchemaAddress>& toRemove, const TSchemaAddress& finish)
-            : Start(start)
-            , ToRemove(toRemove)
+        TSchemasChain(const std::set<TSchemaAddress>& toRemove, const TSchemaAddress& finish)
+            : ToRemove(toRemove)
             , Finish(finish) {
             AFL_VERIFY(toRemove.size());
-            if (Start) {
-                AFL_VERIFY(*Start < *ToRemove.begin());
-            }
             AFL_VERIFY(*ToRemove.rbegin() < Finish);
         }
     };

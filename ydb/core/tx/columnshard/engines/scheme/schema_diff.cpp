@@ -1,4 +1,6 @@
+#include "index_info.h"
 #include "schema_diff.h"
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
@@ -272,6 +274,29 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::MergeDiffs(const std::v
         result = ApplyDiff(result, localDiff);
     }
     return result;
+}
+
+bool TSchemaDiffView::IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) const {
+    for (auto&& i : ModifiedIndexes) {
+        if (indexInfo.HasIndexId(i.first)) {
+            return false;
+        }
+    }
+    for (auto&& i : ModifiedColumns) {
+        if (indexInfo.HasColumnId(i.first)) {
+            return false;
+        }
+        if (i.second->GetNotNull()) {
+            return false;
+        }
+    }
+    if (SchemaOptions) {
+        return false;
+    }
+    if (CompressionOptions) {
+        return false;
+    }
+    return true;
 }
 
 }   // namespace NKikimr::NOlap

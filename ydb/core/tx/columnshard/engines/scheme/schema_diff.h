@@ -6,6 +6,8 @@
 
 namespace NKikimr::NOlap {
 
+struct TIndexInfo;
+
 class TSchemaDiffView {
 private:
     ui64 Version = 0;
@@ -23,6 +25,8 @@ private:
 
 public:
     TSchemaDiffView() = default;
+
+    bool IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) const;
 
     void ApplyForColumns(const std::vector<ui32>& originalColumnIds, const std::function<void(const ui32 originalIndex)>& addFromOriginal,
         const std::function<void(const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> originalIndex)>& addFromDiff)

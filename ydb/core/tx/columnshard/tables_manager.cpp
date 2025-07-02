@@ -477,28 +477,35 @@ void TTablesManager::MoveTableProgress(NIceDb::TNiceDb& db, const TSchemeShardLo
 
 std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {
     const ui64 lastSchemaVersion = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion();
-    std::optional<TSchemaAddress> start;
     std::set<TSchemaAddress> toRemove;
     std::vector<TTablesManager::TSchemasChain> chains;
     std::optional<TSchemaAddress> addrPred;
     std::set<ui64> versionsToRemove;
+    std::optional<ui64> ignoreToVersion;
     for (auto&& i : PrimaryIndex->GetVersionedIndex().GetSnapshotByVersions()) {
         TSchemaAddress addr(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot());
         if (addrPred) {
             AFL_VERIFY(*addrPred < addr);
         }
         addrPred = addr;
-        if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first) && lastSchemaVersion != i.first) {
+        if (ignoreToVersion) {
+            AFL_VERIFY(*ignoreToVersion == i.second->GetIndexInfo().GetVersion());
+        }
+        if (i.second->GetIndexInfo().GetIgnoreToVersion()) {
+            ignoreToVersion = i.second->GetIndexInfo().GetIgnoreToVersion();
+            AFL_VERIFY(versionsToRemove.emplace(i.first).second);
+            AFL_VERIFY(toRemove.emplace(addr).second);
+        } else if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first) && lastSchemaVersion != i.first) {
             AFL_VERIFY(versionsToRemove.emplace(i.first).second);
             AFL_VERIFY(toRemove.emplace(addr).second);
         } else {
             if (toRemove.size()) {
-                chains.emplace_back(start, toRemove, addr);
+                chains.emplace_back(toRemove, addr);
                 toRemove.clear();
             }
-            start = addr;
         }
     }
+    AFL_VERIFY(toRemove.empty());
     for (auto&& i : versionsToRemove) {
         MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().MutableVersionedIndex().EraseVersion(i);
     }

@@ -584,6 +584,9 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
 
     DeserializeOptionsFromProto(diff.GetSchemaOptions());
     Version = diff.GetVersion();
+    if (diff.IsCorrectToIgnorePreviouse(original)) {
+        original.IgnoreToVersion = Version;
+    }
     PrimaryKey = original.PrimaryKey;
     if (diff.GetCompressionOptions()) {
         DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());

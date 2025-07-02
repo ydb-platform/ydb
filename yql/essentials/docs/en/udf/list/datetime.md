@@ -172,7 +172,8 @@ Conversions between `Interval` and various time units.
 * `DateTime::ToHours(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`
 * `DateTime::ToMinutes(Interval64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32` Until [2025.03](../../changelog/2025.03.md)
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int64` Since [2025.03](../../changelog/2025.03.md)
 * `DateTime::ToSeconds(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval64{Flags:AutoMap}) -> Int64`

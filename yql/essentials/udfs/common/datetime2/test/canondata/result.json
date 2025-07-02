@@ -119,6 +119,16 @@
             "uri": "file://test.test_StartOf_/results.txt"
         }
     ],
+    "test.test[ToSeconds_2025.02]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.02_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.03]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.03_/results.txt"
+        }
+    ],
     "test.test[To]": [
         {
             "uri": "file://test.test_To_/results.txt"

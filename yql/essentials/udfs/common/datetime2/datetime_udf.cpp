@@ -1,11 +1,15 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
 
+#include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 
+#include <yql/essentials/public/langver/yql_langver.h>
+
 #include <util/datetime/base.h>
+
+#include <concepts>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -131,11 +135,15 @@ const auto UsecondsInMinute = 60000000ll;
 const auto UsecondsInSecond = 1000000ll;
 const auto UsecondsInMilliseconds = 1000ll;
 
-template <const char* TFuncName, typename TResult, typename TWResult, ui32 ScaleAfterSeconds>
+template <
+    const char* TFuncName,
+    std::integral TResult,
+    std::integral TSignedResult,
+    std::integral TWResult,
+    ui32 ScaleAfterSeconds>
 class TToUnits {
 public:
     typedef bool TTypeAwareMarker;
-    using TSignedResult = typename std::make_signed<TResult>::type;
 
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
@@ -3503,9 +3511,13 @@ private:
         TBoundaryOfInterval<EndOfUDF, SimpleDatetimeToIntervalUdf<TMResourceName, EndOf<TTMStorage>>,
                                       SimpleDatetimeToIntervalUdf<TM64ResourceName, EndOf<TTM64Storage>>>,
 
-        TToUnits<ToSecondsUDF, ui32, i64, 1>,
-        TToUnits<ToMillisecondsUDF, ui64, i64, 1000>,
-        TToUnits<ToMicrosecondsUDF, ui64, i64, 1000000>,
+        TLangVerForked<
+            NYql::MakeLangVersion(2025, 03),
+            TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i32, /* TWResult = */ i64, 1>,
+            TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i64, /* TWResult = */ i64, 1>>,
+
+        TToUnits<ToMillisecondsUDF, /* TResult = */ ui64, /* TSignedResult = */ i64, /* TWResult = */ i64, 1000>,
+        TToUnits<ToMicrosecondsUDF, /* TResult = */ ui64, /* TSignedResult = */ i64, /* TWResult = */ i64, 1000000>,
 
         TFormat,
         TParse<ParseUDF, TMResourceName>,

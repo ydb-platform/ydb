@@ -1043,7 +1043,7 @@ public:
         Reads[id].RegisterMessage(*ev->Get());
 
         if (Settings->GetIsBatch() && ev->Get()->GetRowsCount() > 0) {
-            BatchOperationMaxRow = TSerializedCellVec{ev->Get()->GetCells(ev->Get()->GetRowsCount() - 1)};
+            SerializedEndRow = TSerializedCellVec{ev->Get()->GetCells(ev->Get()->GetRowsCount() - 1)};
         }
 
         ReceivedRowCount += ev->Get()->GetRowsCount();
@@ -1496,14 +1496,14 @@ public:
             resultInfo.AddLocks()->CopyFrom(lock);
         }
 
-        if (Settings->GetIsBatch() && BatchOperationMaxRow) {
+        if (Settings->GetIsBatch() && SerializedEndRow) {
             for (const auto& column : Settings->GetColumns()) {
                 if (!IsSystemColumn(column.GetId())) {
-                    resultInfo.AddBatchOperationKeyIds(column.GetId());
+                    resultInfo.AddEndRowColumnIds(column.GetId());
                 }
             }
 
-            resultInfo.SetBatchOperationMaxKey(BatchOperationMaxRow.ReleaseBuffer());
+            resultInfo.SetSerializedEndRow(SerializedEndRow.ReleaseBuffer());
         }
 
         result.PackFrom(resultInfo);
@@ -1632,7 +1632,7 @@ private:
         bool IsPrimary = false;
     };
 
-    TSerializedCellVec BatchOperationMaxRow;
+    TSerializedCellVec SerializedEndRow; // For BATCH operations only
 };
 
 

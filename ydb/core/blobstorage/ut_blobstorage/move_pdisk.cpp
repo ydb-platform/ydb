@@ -94,6 +94,7 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
             }
         }
 
+        // Put some data on the source disk to later read it from the destination disk.
         auto groupId = env.GetGroups()[0];
         TString data = TString::Uninitialized(1024);
         memset(data.Detach(), 1, data.size());
@@ -101,6 +102,7 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
         env.PutBlob(groupId, id, data);
 
         {
+            // Stop destination PDisk.
             NKikimrBlobStorage::TConfigRequest request;
 
             NKikimrBlobStorage::TStopPDisk* cmd = request.AddCommand()->MutableStopPDisk();
@@ -118,6 +120,8 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
         auto srcPDiskState = env.PDiskMockStates[std::make_pair(sourceNodeId, sourcePDiskId)];
 
         {
+            // "Attach" source drive to the destination PDisk.
+            // This is a mock operation that simulates the drive being moved.
             TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
             auto* evChangeState = new TEvMoveDrive(srcPDiskState);
             TActorId destinationPDiskActorId = MakeBlobStoragePDiskID(destinationNodeId, destinationPDiskId);
@@ -125,6 +129,8 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
         }
         
         {
+            // Execute the move PDisk command.
+            // This command will remove source PDisk.
             NKikimrBlobStorage::TConfigRequest request;
 
             NKikimrBlobStorage::TMovePDisk* cmd = request.AddCommand()->MutableMovePDisk();
@@ -143,6 +149,7 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
             UNIT_ASSERT(response.GetSuccess());
         }
 
+        // Wait until destination PDisk is restarted.
         WaitForPDiskRestart(env);
 
         {
@@ -159,6 +166,7 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         }
 
+        // Wait and read the data back from the destination PDisk.
         env.Sim(TDuration::Seconds(30));
 
         {

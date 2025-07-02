@@ -122,7 +122,12 @@ struct TEvPrivate {
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
     static constexpr bool StaticDiscovery = true;
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const ::NMonitoring::TDynamicCounterPtr& taskCounters)
+        TMetrics(
+            const TTxId& txId,
+            ui64 taskId,
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            const ::NMonitoring::TDynamicCounterPtr& taskCounters,
+            const NPq::NProto::TDqPqTopicSource& sourceParams)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters)
             , TaskCounters(taskCounters) {
@@ -132,6 +137,10 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
                 SubGroup = TaskCounters->GetSubgroup("source", "PqRead");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            }
+
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
             }
             auto source = SubGroup->GetSubgroup("tx_id", TxId);
             auto task = source->GetSubgroup("task_id", ToString(taskId));
@@ -199,7 +208,7 @@ public:
         ui32 topicPartitionsCount)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters, taskCounters)
+        , Metrics(txId, taskId, counters, taskCounters, SourceParams)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))

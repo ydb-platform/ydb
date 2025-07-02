@@ -378,6 +378,8 @@ public:
     bool TopicPersistStatsPending = false;
     TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
 
+    bool SysViewsRosterUpdateStarted = false;
+
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
     bool CleanDroppedPathsInFly = false;
@@ -921,6 +923,8 @@ public:
     };
 
     void SubscribeToTempTableOwners();
+
+    void CollectSysViewUpdates(const TActorContext& ctx);
 
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 
@@ -1527,6 +1531,10 @@ public:
 
     void Handle(TEvPrivate::TEvRunCdcStreamScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev, const TActorContext& ctx);
+
+    // Incremental Restore Scan
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev);
+    void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
 
     void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);
 

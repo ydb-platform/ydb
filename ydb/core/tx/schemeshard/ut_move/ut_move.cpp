@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Reject) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -265,8 +265,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(TwoTables) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime,
-                     TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -332,7 +331,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Replace) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -458,7 +457,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Chain) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -536,7 +535,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(OneTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -702,7 +701,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Index) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -767,7 +766,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndex) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -839,7 +838,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndexSameDst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true).EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -904,7 +903,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndexDoesNonExisted) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true).EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

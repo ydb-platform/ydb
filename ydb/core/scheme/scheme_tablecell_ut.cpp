@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(Scheme) {
     Y_UNIT_TEST(TSerializedCellMatrix) {
         const ui32 rowCount = 10;
         const ui16 colCount = 6;
-        
+
         TVector<TCell> cells;
         TVector<TTypeInfo> types;
         TVector<TString> smallStrings;
@@ -467,13 +467,85 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
     }
 
+    ETriBool RunTypedCellVectorsEqualWithNullSemantics(std::vector<TCell> cells1,
+                                                       std::vector<TCell> cells2,
+                                                       const std::vector<NScheme::TTypeInfo>& types) {
+        UNIT_ASSERT_VALUES_EQUAL(cells1.size(), cells2.size());
+        UNIT_ASSERT_VALUES_EQUAL(cells1.size(), types.size());
+
+        return TypedCellVectorsEqualWithNullSemantics(&cells1[0], &cells2[0], &types[0], cells1.size());
+    }
+
+    Y_UNIT_TEST(CompareWithNullSemantics) {
+        UNIT_ASSERT_VALUES_EQUAL(ETriBool::True || ETriBool::True, ETriBool::True);
+        UNIT_ASSERT_VALUES_EQUAL(ETriBool::True || ETriBool::False, ETriBool::True);
+        UNIT_ASSERT_VALUES_EQUAL(ETriBool::Null || ETriBool::True, ETriBool::True);
+        UNIT_ASSERT_VALUES_EQUAL(ETriBool::Null || ETriBool::False, ETriBool::Null);
+        UNIT_ASSERT_VALUES_EQUAL(ETriBool::True && ETriBool::True, ETriBool::True);
+        UNIT_ASSERT_VALUES_EQUAL(ETriBool::True && ETriBool::False, ETriBool::False);
+        UNIT_ASSERT_VALUES_EQUAL(ETriBool::True && ETriBool::Null, ETriBool::Null);
+        UNIT_ASSERT_VALUES_EQUAL(ETriBool::False && ETriBool::Null, ETriBool::False);
+
+        const TCell nullCell;
+
+        const NScheme::TTypeInfo typeString(NScheme::NTypeIds::String);
+        const TCell str1("abc", 3);
+        const TCell str2("def", 3);
+        const NScheme::TTypeInfo typeInt64(NScheme::NTypeIds::Int64);
+        const TCell int1 = TCell::Make<i64>(42);
+        const TCell int2 = TCell::Make<i64>(100500);
+
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(str1, str1, typeString), ETriBool::True);
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(str1, str2, typeString), ETriBool::False);
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(nullCell, str2, typeString), ETriBool::Null);
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(str1, nullCell, typeString), ETriBool::Null);
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(nullCell, nullCell, typeString), ETriBool::Null);
+
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(int1, int1, typeInt64), ETriBool::True);
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(int1, int2, typeInt64), ETriBool::False);
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(nullCell, int2, typeInt64), ETriBool::Null);
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(int1, nullCell, typeInt64), ETriBool::Null);
+        UNIT_ASSERT_VALUES_EQUAL(TypedCellsEqualWithNullSemantics(nullCell, nullCell, typeInt64), ETriBool::Null);
+
+        // vectors
+        UNIT_ASSERT_VALUES_EQUAL(RunTypedCellVectorsEqualWithNullSemantics(
+            {str1, str2, int1, int2},
+            {str1, str2, int1, int2},
+            {typeString, typeString, typeInt64, typeInt64}
+        ), ETriBool::True);
+
+        UNIT_ASSERT_VALUES_EQUAL(RunTypedCellVectorsEqualWithNullSemantics(
+            {str1, int2},
+            {str1, int1},
+            {typeString, typeInt64}
+        ), ETriBool::False);
+
+        UNIT_ASSERT_VALUES_EQUAL(RunTypedCellVectorsEqualWithNullSemantics(
+            {str1, nullCell},
+            {str1, nullCell},
+            {typeString, typeInt64}
+        ), ETriBool::Null);
+
+        UNIT_ASSERT_VALUES_EQUAL(RunTypedCellVectorsEqualWithNullSemantics(
+            {nullCell, int1},
+            {str1, int1},
+            {typeString, typeInt64}
+        ), ETriBool::Null);
+
+        UNIT_ASSERT_VALUES_EQUAL(RunTypedCellVectorsEqualWithNullSemantics(
+            {str1, nullCell, int1},
+            {str1, int1, int2},
+            {typeString, typeInt64, typeInt64}
+        ), ETriBool::False);
+    }
+
     Y_UNIT_TEST(YqlTypesMustBeDefined) {
         const char charArr[64] = { 0 };
 
         TArrayRef<const NScheme::TTypeId> yqlIds(NScheme::NTypeIds::YqlIds);
         for (NScheme::TTypeId typeId : yqlIds) {
-            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Decimal ? 
-                NScheme::TTypeInfo(NScheme::TDecimalType::Default()) : 
+            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Decimal ?
+                NScheme::TTypeInfo(NScheme::TDecimalType::Default()) :
                 NScheme::TTypeInfo(typeId);
             switch (typeId) {
             case NScheme::NTypeIds::Int8:

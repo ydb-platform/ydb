@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_scale_manager.h"
+
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
@@ -7,7 +9,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/partition_scale_manager.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -17,7 +19,6 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <util/system/hp_timer.h>
-#include "utils.h"
 
 #include <unordered_map>
 
@@ -59,7 +60,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TTxWrite;
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
-    void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx);
 
     void Die(const TActorContext& ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -72,15 +72,12 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     TString GenerateStat();
 
-    void Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const TActorContext& ctx);
-
     void HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx);
 
     void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvCheckACL::TPtr&, const TActorContext&);
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&);
@@ -117,20 +114,12 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void UpdateCounters(const TActorContext&);
     void UpdateConfigCounters();
 
-    void RespondWithACL(
-        const TEvPersQueue::TEvCheckACL::TPtr &request,
-        const NKikimrPQ::EAccess &access,
-        const TString &error,
-        const TActorContext &ctx);
-    void CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx);
     void GetStat(const TActorContext&);
     TEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
-    void GetACL(const TActorContext&);
     void AnswerWaitingRequests(const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
@@ -156,9 +145,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui32 MaxPartsPerTablet;
     ui64 SchemeShardId;
     NKikimrPQ::TPQTabletConfig TabletConfig;
-    NACLib::TSecurityObject ACL;
-    TInstant LastACLUpdate;
-
 
     struct TConsumerInfo {
         std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
@@ -171,8 +157,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui32 NumActiveParts;
 
     std::vector<TActorId> WaitingResponse;
-    std::vector<TEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
-    std::vector<TEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
 
 public:
     struct TPartitionInfo {
@@ -214,8 +198,6 @@ private:
 
     std::unordered_map<ui64, TPipeLocation> TabletPipes;
     std::unordered_set<ui64> PipesRequested;
-
-    bool WaitingForACL;
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
 
@@ -295,12 +277,10 @@ public:
 
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
-            HFunc(TEvPersQueue::TEvDescribe, Handle);
             HFunc(TEvPersQueue::TEvRegisterReadSession, HandleOnInit);
             HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
             HFunc(TEvTabletPipe::TEvServerConnected, Handle);
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvPersQueue::TEvCheckACL, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -317,11 +297,8 @@ public:
 
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvWakeup, HandleWakeup);
-            HFunc(TEvPersQueue::TEvUpdateACL, HandleUpdateACL);
-            HFunc(TEvPersQueue::TEvCheckACL, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
             HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
-            HFunc(TEvPersQueue::TEvDescribe, Handle);
             HFunc(TEvPersQueue::TEvRegisterReadSession, Handle);
             HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
             HFunc(TEvPersQueue::TEvPartitionReleased, Handle);
@@ -331,7 +308,6 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvPersQueue::TEvStatusResponse, Handle);
             HFunc(TEvPQ::TEvStatsWakeup, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvPersQueue::TEvStatus, Handle);

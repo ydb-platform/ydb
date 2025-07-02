@@ -33,6 +33,7 @@ SRCS(
     ut_reshuffle_kmeans.cpp
     ut_sample_k.cpp
     ut_secondary_index.cpp
+    ut_unique_index.cpp
 )
 
 END()

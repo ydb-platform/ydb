@@ -611,8 +611,7 @@ public:
         , Counters(counters)
         , SnapshotModification(snapshotModification)
         , NeedBlobs(needBlobs)
-        , TabletActivity(tabletActivity)
-    {
+        , TabletActivity(tabletActivity) {
     }
 };
 

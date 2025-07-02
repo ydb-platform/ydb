@@ -1002,7 +1002,6 @@ protected:
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
             if (!settings.GetInconsistentTx()
-                    && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION
                     && GetSnapshot().IsValid()) {
                 settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
                 settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);

@@ -410,12 +410,38 @@ public:
     void RemoveFromDatabase(IDbWrapper& db) const;
     void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
 
-    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
+    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema, const bool zeroIfAbsent = false) const {
         NArrow::NSplitter::TSerializationStats result;
-        for (auto&& i : GetRecordsVerified()) {
-            if (auto col = schema.GetFieldByColumnIdOptional(i.ColumnId)) {
-                result.AddStat(i.GetSerializationStat(col->name()));
+        if (!zeroIfAbsent) {
+            for (auto&& i : GetRecordsVerified()) {
+                if (auto col = schema.GetFieldByColumnIdOptional(i.ColumnId)) {
+                    result.AddStat(i.GetSerializationStat(col->name()));
+                }
             }
+        } else {
+            auto itSchema = schema.GetColumnIds().begin();
+            auto itRecords = GetRecordsVerified().begin();
+            ui32 schemaIdx = 0;
+            while (itSchema != schema.GetColumnIds().end() && itRecords != GetRecordsVerified().end()) {
+                if (*itSchema < itRecords->ColumnId) {
+                    NArrow::NSplitter::TColumnSerializationStat stat(*itSchema, schema.GetFieldByIndexVerified(schemaIdx)->name());
+                    NArrow::NSplitter::TSimpleSerializationStat simpleStat(0, GetPortionInfo().GetRecordsCount(), 0);
+                    stat.Merge(simpleStat);
+                    result.AddStat(stat);
+                    ++itSchema;
+                    ++schemaIdx;
+                } else if (itRecords->ColumnId < *itSchema) {
+                    ++itRecords;
+                } else {
+                    while (itRecords != GetRecordsVerified().end() && itRecords->ColumnId == *itSchema) {
+                        result.AddStat(itRecords->GetSerializationStat(schema.GetFieldByIndexVerified(schemaIdx)->name()));
+                        ++itRecords;
+                    }
+                    ++itSchema;
+                    ++schemaIdx;
+                }
+            }
+        
         }
         return result;
     }

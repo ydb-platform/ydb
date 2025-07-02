@@ -574,6 +574,11 @@ private:
     void ProcessPendingEvents();
 
     void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
+
+    NWilson::TSpan WriteTxsSpan;
+
+    void DumpBeginWaitRS(const ui64 tabletId, const ui64 txId);
+    void DumpEndWaitRS(const ui64 tabletId, const ui64 txId, const bool hasSpan);
 };
 
 

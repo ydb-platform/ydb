@@ -2,6 +2,8 @@
 #include "utils.h"
 #include "partition_log.h"
 
+#include <ydb/library/wilson_ids/wilson.h>
+
 namespace NKikimr::NPQ {
 
 TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& tx) :
@@ -57,6 +59,21 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
 
     if (tx.HasWriteId()) {
         WriteId = GetWriteId(tx);
+    }
+
+    if (tx.HasExecuteTraceId()) {
+        NWilson::TTraceId traceId(tx.GetExecuteTraceId());
+        ExecuteSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                     std::move(traceId),
+                                     "Topic.Transaction",
+                                     NWilson::EFlags::AUTO_END);
+    }
+    if (tx.HasWaitRSTraceId()) {
+        NWilson::TTraceId traceId(tx.GetWaitRSTraceId());
+        WaitRSSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                    std::move(traceId),
+                                    "Topic.Transaction.WaitRS",
+                                    NWilson::EFlags::AUTO_END);
     }
 }
 
@@ -394,6 +411,13 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
 
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
+
+    if (ExecuteSpan) {
+        ExecuteSpan.GetTraceId().Serialize(tx.MutableExecuteTraceId());
+    }
+    if (WaitRSSpan) {
+        WaitRSSpan.GetTraceId().Serialize(tx.MutableWaitRSTraceId());
+    }
 
     return tx;
 }

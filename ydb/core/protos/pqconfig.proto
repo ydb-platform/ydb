@@ -1135,6 +1135,9 @@ message TTransaction {
     optional NActorsProto.TActorId SourceActor = 14;
 
     optional TWriteId WriteId = 15;
+
+    optional NActorsProto.TTraceId ExecuteTraceId = 16;
+    optional NActorsProto.TTraceId WaitRSTraceId = 17;
 };
 
 message TTabletTxInfo {

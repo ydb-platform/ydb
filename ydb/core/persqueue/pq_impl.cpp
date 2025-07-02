@@ -2908,8 +2908,6 @@ void TPersQueue::AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx)
 {
     THashSet<TDistributedTransaction*> txs;
 
-
-
     for (ui64 txId : GetBindedTxs(tabletId)) {
         PQ_LOG_TX_I("Assume tablet " << tabletId << " dead, sending read set acks for tx " << txId);
 
@@ -3157,7 +3155,7 @@ void TPersQueue::SetTxCompleteLagCounter()
 
     if (!TxQueue.empty()) {
         ui64 firstTxStep = TxQueue.front().first;
-        ui64 currentStep = TAppData::TimeProvider->Now().MilliSeconds();
+        ui64 currentStep = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : TAppData::TimeProvider->Now().MilliSeconds();
 
         if (currentStep > firstTxStep) {
             lag = currentStep - firstTxStep;
@@ -3202,6 +3200,15 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     PQ_LOG_TX_D("Handle TEvPersQueue::TEvProposeTransaction " << event.ShortDebugString());
+
+    NWilson::TSpan span(TWilsonTopic::ExecuteTransaction,
+                        NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
+                        "Topic.Transaction",
+                        NWilson::EFlags::AUTO_END);
+    span.Attribute("TxId", static_cast<i64>(event.GetTxId()));
+    span.Attribute("TabletId", static_cast<i64>(TabletID()));
+
+    ev->Get()->ExecuteSpan = std::move(span);
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
@@ -3257,6 +3264,10 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
 void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
                                        const TActorContext& ctx)
 {
+    auto span = ev->ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                            "Topic.Transaction.HandleDataTransaction",
+                                            NWilson::EFlags::AUTO_END);
+
     NKikimrPQ::TEvProposeTransaction& event = *ev->MutableRecord();
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(event.HasData());
@@ -3415,6 +3426,13 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
     PQ_LOG_TX_I("Handle TEvTxProcessing::TEvReadSet tx " << event.GetTxId() << " tabletProducer " << event.GetTabletProducer());
 
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx && tx->PredicatesReceived.contains(event.GetTabletProducer())) {
+        //auto span = tx->WaitRSSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+        //                                        "Topic.Transaction.ReadSet",
+        //                                        NWilson::EFlags::AUTO_END);
+        //span.Attribute("TabletProducer", static_cast<i64>(event.GetTabletProducer()));
+
+        tx->WaitRSSpan.Attribute("LastTabletId", static_cast<i64>(event.GetTabletProducer()));
+
         if ((tx->State > NKikimrPQ::TTransaction::EXECUTED) ||
             ((tx->State == NKikimrPQ::TTransaction::EXECUTED) && !tx->WriteInProgress)) {
             if (ack) {
@@ -3425,6 +3443,14 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
         }
 
         tx->OnReadSet(event, ev->Sender, std::move(ack));
+
+        if (tx->HaveParticipantsDecision()) {
+            DumpEndWaitRS(TabletID(), tx->TxId, !!tx->WaitRSSpan);
+            if (tx->WaitRSSpan) {
+                tx->WaitRSSpan.End();
+                tx->WaitRSSpan = {};
+            }
+        }
 
         if (tx->State == NKikimrPQ::TTransaction::WAIT_RS) {
             TryExecuteTxs(ctx, *tx);
@@ -3523,6 +3549,9 @@ void TPersQueue::Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& c
         return;
     }
 
+    tx->CommitSpan.End();
+    tx->CommitSpan = {};
+
     Y_ABORT_UNLESS(tx->State == NKikimrPQ::TTransaction::EXECUTING);
 
     tx->OnTxCommitDone(event);
@@ -3617,7 +3646,9 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     NewSupportivePartitions.clear();
 
     PQ_LOG_D("Send TEvKeyValue::TEvRequest (WRITE_TX_COOKIE)");
-    ctx.Send(ctx.SelfID, request.Release());
+    ctx.Send(ctx.SelfID, request.Release(),
+             0, 0,
+             WriteTxsSpan ? WriteTxsSpan.GetTraceId() : NWilson::TTraceId());
 
     TryReturnTabletStateAll(ctx);
 }
@@ -3671,9 +3702,15 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
         const auto front = std::move(EvProposeTransactionQueue.front());
         EvProposeTransactionQueue.pop_front();
 
+        auto span = front->ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                                   "Topic.Transaction.ProcessProposeTransactionQueue",
+                                                   NWilson::EFlags::AUTO_END);
+
         const NKikimrPQ::TEvProposeTransaction& event = front->GetRecord();
         TDistributedTransaction& tx = Txs[event.GetTxId()];
         SetTxInFlyCounter();
+
+        tx.ExecuteSpan = std::move(front->ExecuteSpan);
 
         switch (tx.State) {
         case NKikimrPQ::TTransaction::UNKNOWN:
@@ -3746,6 +3783,16 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
                 if (auto p = Txs.find(txId); p != Txs.end()) {
                     TDistributedTransaction& tx = p->second;
 
+                    auto span = tx.ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                                           "Topic.Transaction.Plan",
+                                                           NWilson::EFlags::AUTO_END);
+                    DumpBeginWaitRS(TabletID(), tx.TxId);
+                    tx.WaitRSSpan = tx.ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                                               "Topic.Transaction.WaitRS",
+                                                               NWilson::EFlags::AUTO_END);
+                    tx.WaitRSSpan.Attribute("TxId", static_cast<i64>(txId));
+                    tx.WaitRSSpan.Attribute("TabletId", static_cast<i64>(TabletID()));
+
                     Y_ABORT_UNLESS(tx.MaxStep >= step);
 
                     if (tx.Step == Max<ui64>()) {
@@ -3790,6 +3837,13 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
 {
     Y_ABORT_UNLESS(!WriteTxsInProgress, "PQ %" PRIu64, TabletID());
 
+    if (!WriteTxs.empty()) {
+        WriteTxsSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                      NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
+                                      "Topic.Transaction.WriteTxs",
+                                      NWilson::EFlags::AUTO_END);
+    }
+
     for (auto& [txId, state] : WriteTxs) {
         // There may be cases when in one iteration of a record we change the state of a transaction and delete it
         auto tx = GetTransaction(ctx, txId);
@@ -3798,6 +3852,8 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
             tx->AddCmdWrite(request, state);
 
             ChangedTxs.emplace(tx->Step, txId);
+
+            tx->PersistSpan.Link(WriteTxsSpan.GetTraceId());
         }
     }
 
@@ -4088,6 +4144,10 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
         Y_ABORT_UNLESS(p != Partitions.end(),
                        "PQ %" PRIu64 ", Partition %" PRIu32 ", TxId %" PRIu64,
                        TabletID(), partitionId, tx.TxId);
+
+        tx.CommitSpan = tx.ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                                   "Topic.Transaction.Commit",
+                                                   NWilson::EFlags::AUTO_END);
 
         ctx.Send(p->second.Actor, event.release());
     }
@@ -4428,6 +4488,12 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_TX_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
+            DumpEndWaitRS(TabletID(), tx.TxId, !!tx.WaitRSSpan);
+            if (tx.WaitRSSpan) {
+                tx.WaitRSSpan.End();
+                tx.WaitRSSpan = {};
+            }
+
             if (tx.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 SendEvTxCommitToPartitions(ctx, tx);
             } else {
@@ -4562,6 +4628,11 @@ void TPersQueue::WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::E
     WriteTxs[tx.TxId] = state;
 
     tx.WriteInProgress = true;
+
+    tx.PersistSpan = tx.ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                                "Topic.Transaction.Persist",
+                                                NWilson::EFlags::AUTO_END);
+    tx.PersistSpan.Attribute("State", NKikimrPQ::TTransaction_EState_Name(state));
 }
 
 void TPersQueue::DeleteTx(TDistributedTransaction& tx)
@@ -4594,7 +4665,15 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
 
         tx->WriteInProgress = false;
 
+        tx->PersistSpan.End();
+        tx->PersistSpan = {};
+
         TryExecuteTxs(ctx, *tx);
+    }
+
+    if (WriteTxsSpan) {
+        WriteTxsSpan.End();
+        WriteTxsSpan = {};
     }
 
     ChangedTxs.clear();
@@ -5257,6 +5336,16 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
             return false;
     }
     return true;
+}
+
+void TPersQueue::DumpBeginWaitRS(const ui64 tabletId, const ui64 txId)
+{
+    PQ_LOG_ERROR("begin wait RS, TabletId " << tabletId << ", TxId " << txId);
+}
+
+void TPersQueue::DumpEndWaitRS(const ui64 tabletId, const ui64 txId, const bool hasSpan)
+{
+    PQ_LOG_ERROR("end wait RS, TabletId " << tabletId << ", TxId " << txId << ", has span " << hasSpan);
 }
 
 } // namespace NKikimr::NPQ

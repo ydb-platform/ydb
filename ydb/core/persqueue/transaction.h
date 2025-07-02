@@ -107,6 +107,11 @@ struct TDistributedTransaction {
     size_t PredicateAcksCount = 0;
 
     bool Pending = false;
+
+    NWilson::TSpan ExecuteSpan;
+    NWilson::TSpan PersistSpan;
+    NWilson::TSpan WaitRSSpan;
+    NWilson::TSpan CommitSpan;
 };
 
 }

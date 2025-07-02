@@ -488,7 +488,7 @@ private:
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
  
-        TPartitionPrunerConfig prunerConfig{
+        TPartitionPruner::TConfig prunerConfig{
             .BatchOperationRange=NBatchOperations::MakePartitionRange(partInfo->BeginRange, partInfo->EndRange, KeyIds.size())
         };
 

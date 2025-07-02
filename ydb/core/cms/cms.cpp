@@ -193,6 +193,11 @@ void TCms::GenerateNodeState(IOutputStream& out)
                     TABLED() {
                         out << "VDisksRestart";
                     }
+                    if (ClusterInfo->IsBridgeMode) {
+                        TABLED() {
+                            out << "PileId";
+                        }
+                    }
                 }
             }
             TABLEBODY() {
@@ -226,6 +231,11 @@ void TCms::GenerateNodeState(IOutputStream& out)
                             }
                             TABLED() {
                                 out << nodeVDisksStatusMap[node.first].Restart;
+                            }
+                        }
+                        if (ClusterInfo->IsBridgeMode) {
+                            TABLED() {
+                                out << node.second->PileId.GetOrElse(0);
                             }
                         }
                     }

@@ -15,43 +15,14 @@
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/actors/task_controller_impl.h>
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NFq {
 
 using namespace NActors;
 using namespace NFq::NConfig;
 
-struct TDqErrorSender {
-    TDqErrorSender(const NActors::TActorId& executerId)
-    : ExecuterId(executerId) {
-    }
-
-    void OnInternalError(const TString& message) {
-        OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message);
-    }
-
-    void OnError(const TString& message) {
-        OnError(NYql::NDqProto::StatusIds::ABORTED, message);
-    }
-
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        TStringBuilder message;
-        message << "Undelivered Event " << ev->Get()->SourceType
-            << " to " << ev->Sender << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
-        OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message);
-    }
-
-    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message) {
-        NYql::TIssues issues({NYql::TIssue(message).SetCode(NYql::TIssuesIds::DQ_GATEWAY_ERROR, NYql::TSeverityIds::S_ERROR)});
-        auto event = std::make_unique<NYql::TEvDqFailure>(statusCode, issues);
-        TActivationContext::Send(new IEventHandle(ExecuterId, NActors::TActorId(), event.release()));
-    }
-
-    NActors::TActorId ExecuterId;
-};
-
-class TCheckpointCoordinator : public NActors::TActorBootstrapped<TCheckpointCoordinator> , TDqErrorSender {
+class TCheckpointCoordinator : public NActors::TActor<TCheckpointCoordinator>  {
 public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
                            const TActorId& storageProxy,
@@ -60,18 +31,8 @@ public:
                            const ::NMonitoring::TDynamicCounterPtr& counters,
                            const NProto::TGraphParams& graphParams,
                            const FederatedQuery::StateLoadMode& stateLoadMode,
-                           const FederatedQuery::StreamingDisposition& streamingDisposition,
-                           // vvv TaskController temporary params vvv
-                           const TString& traceId,
-                           const NActors::TActorId& executerId,
-                           const NActors::TActorId& resultId,
-                           const NYql::TDqConfiguration::TPtr& tcSettings,
-                           const NYql::NCommon::TServiceCounters& serviceCounters,
-                           const TDuration& pingPeriod,
-                           const TDuration& aggrPeriod
+                           const FederatedQuery::StreamingDisposition& streamingDisposition
                            );
-
-    void Bootstrap();
 
     void Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvRegisterCoordinatorResponse::TPtr&);
@@ -132,6 +93,11 @@ private:
     void PassAway() override;
     void RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint);
     void TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint);
+
+    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const NYql::TIssues& subIssues);
+    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message);
+    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
+    void OnInternalError(const TString& message, const NYql::TIssues& subIssues = {});
 
     template <class TEvPtr>
     bool OnComputeActorEventReceived(TEvPtr& ev) {
@@ -232,16 +198,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     const TCheckpointCoordinatorConfig& settings,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
-    const FederatedQuery::StateLoadMode& stateLoadMode /* = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT */,
-    const FederatedQuery::StreamingDisposition& streamingDisposition /* = {} */,
-    // vvv TaskController temporary params vvv
-    const TString& traceId,
-    const NActors::TActorId& executerId,
-    const NActors::TActorId& resultId,
-    const NYql::TDqConfiguration::TPtr& tcSettings,
-    const NYql::NCommon::TServiceCounters& serviceCounters,
-    const TDuration& pingPeriod,
-    const TDuration& aggrPeriod
-    );
+    const FederatedQuery::StateLoadMode& stateLoadMode,
+    const FederatedQuery::StreamingDisposition& streamingDisposition);
 
 } // namespace NFq

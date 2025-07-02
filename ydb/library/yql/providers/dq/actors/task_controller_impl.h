@@ -147,10 +147,6 @@ public:
         OnError(statusCode, issues);
     }
 
-    void OnInternalError(const TString& message, const TIssues& subIssues = {}) {
-        OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message, subIssues);
-    }
-
 private:
     void SendNonFatalIssues() {
         auto req = MakeHolder<TEvDqStats>(Issues.ToIssues());
@@ -611,16 +607,6 @@ public:
             Send(ExecuterId, ev->Release().Release());
             Finished = true;
         }
-    }
-
-    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const TIssues& subIssues) {
-        TIssue issue(message);
-        for (const TIssue& i : subIssues) {
-            issue.AddSubIssue(MakeIntrusive<TIssue>(i));
-        }
-        TIssues issues;
-        issues.AddIssue(std::move(issue));
-        OnError(statusCode, issues);
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {

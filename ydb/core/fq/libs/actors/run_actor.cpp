@@ -1611,16 +1611,7 @@ private:
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
-                Params.StreamingDisposition,
-                // vvv TaskController temporary params vvv
-                SessionId,
-                ExecuterId,
-                resultId,
-                dqConfiguration,
-                QueryCounters,
-                pingPeriod,
-                aggrPeriod
-                ).Release());
+                Params.StreamingDisposition).Release());
         }
 
         ControlId = Register(NYql::MakeTaskController(

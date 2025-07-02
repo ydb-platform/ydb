@@ -233,7 +233,8 @@ message TEvNodeConfigInvokeOnRoot {
     }
 
     message TGetStateStorageConfig {
-    } 
+        optional bool Recommended = 1;
+    }
 
     message TAdvanceGeneration
     {}
@@ -333,7 +334,7 @@ message TEvNodeConfigInvokeOnRootResult {
     TScepter Scepter = 3;
 
     reserved 4, 6, 7, 8, 9;
-    
+
     oneof Response {
         TQueryConfig QueryConfig = 5;
         TFetchStorageConfig FetchStorageConfig = 10;

@@ -784,7 +784,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     static bool ShouldIgnore(const TProxyGroup& proxyGroup) {
-        return proxyGroup.State != ERingGroupState::PRIMARY;
+        return proxyGroup.State == ERingGroupState::DISCONNECTED;
     }
 
     bool IsMajorityReached() const {

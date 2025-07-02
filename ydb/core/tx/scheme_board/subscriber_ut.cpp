@@ -548,7 +548,7 @@ TVector<TActorId> GetReplicasRequiredForQuorum(const TVector<TStateStorageInfo::
 
     for (size_t i = 0; i < ringGroups.size(); ++i) {
         const auto& ringGroup = ringGroups[i];
-        if (ringGroup.WriteOnly || ringGroup.State != ERingGroupState::PRIMARY) {
+        if (ShouldIgnore(ringGroup)) {
             // not participating in the quorum
             continue;
         }

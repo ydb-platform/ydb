@@ -863,7 +863,7 @@ public:
                 db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Select();
             if (rowset.IsReady()) {
                 toRemove.emplace_back(i);
-                AFL_VERIFY(!rowset.EndOfSet())("address", i.DebugString);
+                AFL_VERIFY(!rowset.EndOfSet())("address", i.DebugString());
                 TSchemaPreset::TSchemaPresetVersionInfo info;
                 Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
                 Fetched.emplace(i, std::move(info));
@@ -881,7 +881,7 @@ public:
                 schemasProto.emplace_back(ExtractFetched(del));
             }
             schemasProto.emplace_back(ExtractFetched(i.GetFinish()));
-            auto finalProto = TSchemaDiffView::Merge(schemasProto);
+            auto finalProto = NOlap::TSchemaDiffView::Merge(schemasProto);
 
             for (auto&& del : i.GetToRemove()) {
                 db.Table<SchemaPresetVersionInfo>()

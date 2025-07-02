@@ -241,6 +241,10 @@ public:
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
 
     public:
+        TString DebugString() const {
+            return TStringBuilder() << PresetId << "," << Snapshot.DebugString();
+        }
+
         TSchemaAddress(const ui32 presetId, const NOlap::TSnapshot& snapshot)
             : PresetId(presetId)
             , Snapshot(snapshot) {
@@ -368,7 +372,7 @@ public:
     }
 
     template <class TIndex>
-    TIndex& MutablePrimaryIndexAsVerified() {
+    TIndex& MutablePrimaryIndexAsVerified() const {
         AFL_VERIFY(!!PrimaryIndex);
         auto result = dynamic_cast<TIndex*>(PrimaryIndex.get());
         AFL_VERIFY(result);

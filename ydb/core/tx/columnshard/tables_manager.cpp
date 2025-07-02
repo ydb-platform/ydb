@@ -488,12 +488,11 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
             AFL_VERIFY(*addrPred < addr);
         }
         addrPred = addr;
-        if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first) &&
-            PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion() != i.first) {
+        if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first) && lastSchemaVersion != i.first) {
             AFL_VERIFY(versionsToRemove.emplace(i.first).second);
             AFL_VERIFY(toRemove.emplace(addr).second);
         } else {
-            if (toRemove.empty()) {
+            if (toRemove.size()) {
                 chains.emplace_back(start, toRemove, addr);
                 toRemove.clear();
             }
@@ -501,7 +500,7 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
         }
     }
     for (auto&& i : versionsToRemove) {
-        MutablePrimaryIndexAsVerified<TColumnEngineForLogs>().MutableVersionedIndex().EraseVersion(i);
+        MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().MutableVersionedIndex().EraseVersion(i);
     }
     return chains;
 }

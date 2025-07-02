@@ -251,7 +251,9 @@ NKikimrTxColumnShard::TSchemaPresetVersionInfo TSchemaDiffView::Merge(
     if (lastSchemaIdx) {
         NKikimrSchemeOp::TColumnTableSchema schema = schemas[*lastSchemaIdx].GetSchema();
         for (ui32 idx = *lastSchemaIdx + 1; idx < schemas.size(); ++idx) {
-            schema = ApplyDiff(schema, schemas[idx].GetDiff());
+            TSchemaDiffView view;
+            view.DeserializeFromProto(schemas[idx].GetDiff()).Validate();
+            schema = view.ApplyDiff(schema);
         }
         *result.MutableSchema() = std::move(schema);
     } else {

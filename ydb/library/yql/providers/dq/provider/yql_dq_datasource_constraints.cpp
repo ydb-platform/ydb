@@ -16,9 +16,9 @@ public:
     TDqDataSourceConstraintTransformer()
         : TVisitorTransformerBase(true)
     {
+        AddHandler({TDqReadWrap::CallableName()}, Hndl(&TDqDataSourceConstraintTransformer::CopyFromFirst));
         AddHandler({
             TCoConfigure::CallableName(),
-            TDqReadWrap::CallableName(),
             TDqReadWideWrap::CallableName(),
             TDqReadBlockWideWrap::CallableName(),
             TDqSource::CallableName(),
@@ -31,6 +31,11 @@ public:
     }
 
     TStatus HandleDefault(TExprBase, TExprContext&) {
+        return TStatus::Ok;
+    }
+
+    TStatus CopyFromFirst(TExprBase node, TExprContext&) {
+        node.MutableRaw()->CopyConstraints(node.Raw()->Head());
         return TStatus::Ok;
     }
 };

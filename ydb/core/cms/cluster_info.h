@@ -663,7 +663,7 @@ public:
     friend TOperationLogManager;
 
     THashMap<TPileId, TTenantNodesCheckers> TenantNodesChecker;
-    TClusterPilesNodesCheckers ClusterNodes = {{0, MakeSimpleShared<TClusterLimitsCounter>(0u, 0u)}};
+    TClusterPilesNodesCheckers ClusterNodes;
 
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
@@ -682,6 +682,7 @@ public:
 
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
+    void GenerateClusterNodesCheckers();
 
     bool IsStateStorageReplicaNode(ui32 nodeId) {
         return StateStorageReplicas.contains(nodeId);
@@ -1048,7 +1049,6 @@ public:
     TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
     TVector<TVector<TStateStorageRingInfoPtr>> StateStorageRings;
 
-    std::vector<NKikimr::TBridgeInfo::TPile> Piles;
     THashMap<ui32, ui32> NodeIdToPileId;
     bool IsBridgeMode = false;
 };

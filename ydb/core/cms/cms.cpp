@@ -1777,6 +1777,8 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
     if (!AppData(ctx)->DisableCheckingSysNodesCms)
         info->GenerateSysTabletsNodesCheckers();
 
+    info->GenerateClusterNodesCheckers();
+
     AdjustInfo(info, ctx);
 
     State->ClusterInfo = info;

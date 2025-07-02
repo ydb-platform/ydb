@@ -382,8 +382,6 @@ void TClusterInfo::AddNode(const TEvInterconnect::TNodeInfo &info, const TActorC
         }
     }
 
-    node->AddNodeGroup(ClusterNodes[node->PileId.GetOrElse(0)]);
-
     HostNameToNodeId.emplace(node->Host, node->NodeId);
     LockableItems[node->ItemName()] = node;
 }
@@ -692,8 +690,8 @@ void TClusterInfo::ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui
         clusterNodes->ApplyLimits(clusterLimit, clusterRatioLimit);
     }
 
-    for (auto &[_, tenantCheckers] : TenantNodesChecker) {
-        for (auto &[_, tenantChecker] : tenantCheckers) {
+    for (auto &[_, tenantInPileCheckers] : TenantNodesChecker) {
+        for (auto &[_, tenantChecker] : tenantInPileCheckers) {
             tenantChecker->ApplyLimits(tenantLimit, tenantRatioLimit);
         }
     }
@@ -961,19 +959,29 @@ void TClusterInfo::GenerateTenantNodesCheckers() {
 void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     for (auto tablet : BootstrapConfig.GetTablet()) {
         for (auto nodeId : tablet.GetNode()) {
-            const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
-            auto sysNodesChecker = SysNodesCheckers[pileId][tablet.GetType()];
-            if (!sysNodesChecker)
-                sysNodesChecker = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
             if (!HasNode(nodeId)) {
                 BLOG_ERROR(TStringBuilder() << "Got node " << nodeId
                                             << " with system tablet, which exists in configuration, "
                                                "but does not exist in cluster.");
                 continue;
             }
+            const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
+            auto& sysNodesChecker = SysNodesCheckers[pileId][tablet.GetType()];
+            if (!sysNodesChecker)
+                sysNodesChecker = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
             NodeToTabletTypes[nodeId].push_back(tablet.GetType());
             NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
+    }
+}
+
+void TClusterInfo::GenerateClusterNodesCheckers() {
+    for (auto &[nodeId, nodeInfo] : Nodes) {
+        const ui32 pileId = nodeInfo->PileId.GetOrElse(0);
+        if (!ClusterNodes.contains(pileId))
+            ClusterNodes[pileId] = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u);
+
+        nodeInfo->AddNodeGroup(ClusterNodes[pileId]);
     }
 }
 

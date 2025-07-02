@@ -833,19 +833,64 @@ void TColumnShard::SetupCleanupTables() {
 
 class TTxCleanupSchemasWithnoData: public TTransactionBase<TColumnShard> {
 private:
-    THashSet<TTablesManager::TSchemaAddress> VersionsToClean;
+    std::vector<TTablesManager::TSchemasChain> ChainsToClean;
+    std::set<TTablesManager::TSchemaAddress> AddressesToFetch;
+    THashMap<TTablesManager::TSchemaAddress, TSchemaPreset::TSchemaPresetVersionInfo> Fetched;
+
+    TSchemaPreset::TSchemaPresetVersionInfo ExtractFetched(const TTablesManager::TSchemaAddress addr) {
+        auto it = Fetched.find(addr);
+        AFL_VERIFY(it != Fetched.end());
+        auto result = std::move(it->second);
+        Fetched.erase(it);
+        return result;
+    }
 
 public:
-    TTxCleanupSchemasWithnoData(TColumnShard* self, const THashSet<TTablesManager::TSchemaAddress>& versionsToClean)
+    TTxCleanupSchemasWithnoData(TColumnShard* self, std::vector<TTablesManager::TSchemasChain>&& chainsToClean)
         : TBase(self)
-        , VersionsToClean(versionsToClean) {
+        , ChainsToClean(std::move(chainsToClean)) {
+        for (auto&& i : ChainsToClean) {
+            i.FillAddressesTo(AddressesToFetch);
+        }
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         NIceDb::TNiceDb db(txc.DB);
         using SchemaPresetVersionInfo = NColumnShard::Schema::SchemaPresetVersionInfo;
-        for (auto&& i : VersionsToClean) {
-            db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Delete();
+        std::vector<TTablesManager::TSchemaAddress> toRemove;
+        for (auto&& i : AddressesToFetch) {
+            auto rowset =
+                db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Select();
+            if (rowset.IsReady()) {
+                toRemove.emplace_back(i);
+                AFL_VERIFY(!rowset.EndOfSet())("address", i.DebugString);
+                TSchemaPreset::TSchemaPresetVersionInfo info;
+                Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+                Fetched.emplace(i, std::move(info));
+            }
+        }
+        for (auto&& i : toRemove) {
+            AddressesToFetch.erase(i);
+        }
+        if (AddressesToFetch.size()) {
+            return false;
+        }
+        for (auto&& i : ChainsToClean) {
+            std::vector<TSchemaPreset::TSchemaPresetVersionInfo> schemasProto;
+            for (auto&& del : i.GetToRemove()) {
+                schemasProto.emplace_back(ExtractFetched(del));
+            }
+            schemasProto.emplace_back(ExtractFetched(i.GetFinish()));
+            auto finalProto = TSchemaDiffView::Merge(schemasProto);
+
+            for (auto&& del : i.GetToRemove()) {
+                db.Table<SchemaPresetVersionInfo>()
+                    .Key(del.GetPresetId(), del.GetSnapshot().GetPlanStep(), del.GetSnapshot().GetTxId())
+                    .Delete();
+            }
+            db.Table<SchemaPresetVersionInfo>()
+                .Key(i.GetFinish().GetPresetId(), i.GetFinish().GetSnapshot().GetPlanStep(), i.GetFinish().GetSnapshot().GetTxId())
+                .Update(NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(finalProto.SerializeAsString()));
         }
         return true;
     }
@@ -864,15 +909,14 @@ void TColumnShard::SetupCleanupSchemas() {
         return;
     }
 
-    const THashSet<TTablesManager::TSchemaAddress> schemasToClean = TablesManager.GetSchemasToClean();
-    if (schemasToClean.empty()) {
+    std::vector<TTablesManager::TSchemasChain> chainsToClean = TablesManager.ExtractSchemasToClean();
+    if (chainsToClean.empty()) {
         ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "no_changes");
         return;
     }
 
     BackgroundController.OnCleanupSchemasStarted();
-    Execute(
-        new TTxCleanupSchemasWithnoData(this, schemasToClean), NActors::TActivationContext::AsActorContext());
+    Execute(new TTxCleanupSchemasWithnoData(this, std::move(chainsToClean)), NActors::TActivationContext::AsActorContext());
 }
 
 void TColumnShard::SetupGC() {

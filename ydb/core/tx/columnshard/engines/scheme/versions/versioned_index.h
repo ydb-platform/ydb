@@ -39,6 +39,15 @@ private:
     ISnapshotSchema::TPtr SchemeForActualization;
 
 public:
+    void EraseVersion(const ui64 version) {
+        auto it = SnapshotByVersion.find(version);
+        AFL_VERIFY(it != SnapshotByVersion.end());
+        auto itSnapshot = Snapshots.find(it->second->GetSnapshot());
+        AFL_VERIFY(itSnapshot != Snapshots.end());
+        Snapshots.erase(itSnapshot);
+        SnapshotByVersion.erase(it);
+    }
+
     const std::map<ui64, ISnapshotSchema::TPtr>& GetSnapshotByVersions() const {
         return SnapshotByVersion;
     }

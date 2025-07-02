@@ -475,16 +475,32 @@ void TTablesManager::MoveTableProgress(NIceDb::TNiceDb& db, const TSchemeShardLo
     NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, table->GetPathId());
 }
 
-THashSet<TTablesManager::TSchemaAddress> TTablesManager::GetSchemasToClean() const {
-    THashSet<TSchemaAddress> result;
+std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {
     const ui64 lastSchemaVersion = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion();
+    std::optional<TSchemaAddress> start;
+    std::set<TSchemaAddress> toRemove;
+    std::vector<TTablesManager::TSchemasChain> chains;
+    std::optional<TSchemaAddress> addrPred;
+    std::vector<ui64> toRemove;
     for (auto&& i : PrimaryIndex->GetVersionedIndex().GetSnapshotByVersions()) {
-        if (i.first == lastSchemaVersion) {
-            continue;
+        TSchemaAddress addr(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot());
+        if (addrPred) {
+            AFL_VERIFY(*addrPred < addr);
         }
-        if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first)) {
-            AFL_VERIFY(result.emplace(TSchemaAddress(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot())).second);
+        addrPred = addr;
+        if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first) &&
+            PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion() != i.first) {
+            AFL_VERIFY(toRemove.emplace(addr).second);
+        } else {
+            if (toRemove.empty()) {
+                chains.emplace_back(start, toRemove, addr);
+                toRemove.clear();
+            }
+            start = addr;
         }
+    }
+    for (auto&& i : toRemove) {
+        PrimaryIndex->GetVersionedIndex().EraseVersion(i);
     }
     return result;
 }

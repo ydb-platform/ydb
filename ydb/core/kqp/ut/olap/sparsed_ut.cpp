@@ -439,8 +439,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             // TODO, should be the same
             if (isSparsed) {
                 CompareYson(result, R"([[10;[""];["null"];["abcd"];["null"];["null"];["null"];[""];[""];["null"];["null"]]])");
-            }
-            else {
+            } else {
                 CompareYson(result, R"([[10;#;#;["abcd"];#;#;#;#;#;#;#]])");
             }
         }

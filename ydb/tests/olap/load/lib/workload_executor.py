@@ -2411,7 +2411,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 logging.info(f"  - check_scheme=False, use_node_subcols=True")
                 
                 # Проверяем наличие метода __attach_logs ПЕРЕД вызовом диагностики
-                attach_logs_method = getattr(self, "__attach_logs", None)
+                attach_logs_method = getattr(type(self), "_LoadSuiteBase__attach_logs", None)
                 logging.info(f"  - __attach_logs method available: {attach_logs_method is not None}")
                 if attach_logs_method:
                     logging.info(f"  - __attach_logs method type: {type(attach_logs_method)}")

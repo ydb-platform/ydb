@@ -942,7 +942,7 @@ class LoadSuiteBase:
                         logging.info(f"Attaching logs: {attach_reason}")
                         
                         # Проверяем наличие метода __attach_logs
-                        attach_logs_method = getattr(self, "__attach_logs", None)
+                        attach_logs_method = getattr(type(self), "_LoadSuiteBase__attach_logs", None)
                         logging.info(f"  - __attach_logs method available: {attach_logs_method is not None}")
                         
                         if attach_logs_method:
@@ -954,7 +954,7 @@ class LoadSuiteBase:
                                 logging.info(f"  - Calling __attach_logs with start_time={start_time}")
                                 logging.info(f"  - Query text length: {len(query_text)}")
                                 
-                                # Вызываем метод прикладывания логов
+                                # Вызываем метод прикладывания логов как метод класса
                                 attach_logs_method(
                                     start_time=start_time,
                                     attach_name=f"{workload_name}_logs",

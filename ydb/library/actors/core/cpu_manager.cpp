@@ -108,6 +108,7 @@ namespace NActors {
             Executors[excIdx].Reset(CreateExecutorPool(excIdx));
             bool ignoreThreads = dynamic_cast<TIOExecutorPool*>(Executors[excIdx].Get());
             TSelfPingInfo *pingInfo = (excIdx < Config.PingInfoByPool.size()) ? &Config.PingInfoByPool[excIdx] : nullptr;
+            ignoreThreads &= (Shared != nullptr);
             Harmonizer->AddPool(Executors[excIdx].Get(), pingInfo, ignoreThreads);
         }
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Setup: created");

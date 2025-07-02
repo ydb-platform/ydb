@@ -607,6 +607,7 @@ protected:
     void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev);
     void HandleInit(TEvNodeWardenStorageConfig::TPtr& ev);
+    void Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -1068,6 +1069,8 @@ protected:
     };
 
     THiveStats GetStats() const;
+    template<std::forward_iterator TIter>
+    THiveStats GetStats(TIter begin, TIter end) const;
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
     void WaitToMoveTablets(TActorId actor);

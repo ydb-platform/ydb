@@ -2597,7 +2597,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         auto sendQuery = [&](const TString& queryText) {
@@ -2613,9 +2613,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL_C(
-                reply->Get()->Record.GetYdbStatus(),
+                reply->Get()->Record.GetRef().GetYdbStatus(),
                 Ydb::StatusIds::SUCCESS,
-                reply->Get()->Record.GetResponse().DebugString());
+                reply->Get()->Record.GetRef().GetResponse().DebugString());
         };
 
         createTable(createSession(), R"(

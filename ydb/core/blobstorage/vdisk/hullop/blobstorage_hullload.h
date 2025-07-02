@@ -399,7 +399,7 @@ namespace NKikimr {
             this->PassAway();
         }
 
-        void Handle(const TEvents::TEvActorDied::TPtr& ev) {
+        void Handle(const TEvents::TEvActorDied::TPtr&) {
             // One LevelSegmentLoader termintaed unsuccessfully
             // send TEvActorDied to the parent and Die
             // This actor only has one child actor at a time, no need to clear ActiveActors
@@ -486,7 +486,7 @@ namespace NKikimr {
             this->PassAway();
         }
 
-        void Handle(const TEvents::TEvActorDied::TPtr& ev) {
+        void Handle(const TEvents::TEvActorDied::TPtr&) {
             // One LevelSegmentLoader termintaed unsuccessfully, kill all other actors,
             // send TEvActorDied to the parent and Die
             // This actor only has one child actor at a time, no need to clear ActiveActors
@@ -586,7 +586,7 @@ namespace NKikimr {
             this->PassAway();
         }
 
-        void Handle(const TEvents::TEvActorDied::TPtr& ev) {
+        void Handle(const TEvents::TEvActorDied::TPtr&) {
             // One LevelSegmentLoader termintaed unsuccessfully, kill all other actors,
             // send TEvActorDied to the parent and Die
             // This actor only has one child actor at a time, no need to clear ActiveActors

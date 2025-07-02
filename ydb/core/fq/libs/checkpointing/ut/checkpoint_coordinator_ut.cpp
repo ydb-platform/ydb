@@ -9,6 +9,10 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include <ydb/library/yql/dq/actors/common/utils.h>
+#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
 namespace {
 
 using namespace NKikimr;

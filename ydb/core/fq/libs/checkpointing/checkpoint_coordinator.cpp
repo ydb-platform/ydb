@@ -2,12 +2,10 @@
 #include "checkpoint_coordinator.h"
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <ydb/library/yql/dq/actors/common/utils.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/state/dq_state_load_plan.h>
 
@@ -226,7 +224,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         OnError(NYql::NDqProto::StatusIds::BAD_REQUEST, "Can't restore from plan given", issues);
         return;
     } else { // Report as transient issues
-        Send(RunActorId, new TEvents::TEvRaiseTransientIssues(std::move(issues)));
+        Send(RunActorId, new NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues(std::move(issues)));
     }
 
     PendingRestoreCheckpoint = TPendingRestoreCheckpoint(checkpoint.CheckpointId, false, ActorsToWaitForSet);
@@ -608,7 +606,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph:
 }
 
 void TCheckpointCoordinator::PassAway() {
-     CC_LOG_D("PassAway");
+    CC_LOG_D("PassAway");
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }

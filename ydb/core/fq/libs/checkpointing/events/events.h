@@ -1,10 +1,12 @@
 #pragma once
-#include <ydb/core/fq/libs/checkpointing_common/defs.h>
+
 #include <ydb/core/fq/libs/events/event_subspace.h>
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/interconnect/events_local.h>
+
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq {
 
@@ -16,6 +18,7 @@ struct TEvCheckpointCoordinator {
         EvZeroCheckpointDone,
         EvRunGraph,
         EvReadyState,
+        EvRaiseTransientIssues,
         EvEnd,
     };
 
@@ -48,6 +51,17 @@ struct TEvCheckpointCoordinator {
             NActors::TActorId ActorId;
         };
         std::vector<TTask> Tasks;
+    };
+
+    struct TEvRaiseTransientIssues : public NActors::TEventLocal<TEvRaiseTransientIssues, EvRaiseTransientIssues> {
+        TEvRaiseTransientIssues() = default;
+
+        explicit TEvRaiseTransientIssues(NYql::TIssues issues)
+            : TransientIssues(std::move(issues))
+        {
+        }
+
+        NYql::TIssues TransientIssues;
     };
 };
 

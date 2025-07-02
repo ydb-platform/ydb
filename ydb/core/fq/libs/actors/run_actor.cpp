@@ -429,7 +429,7 @@ private:
         hFunc(TEvents::TEvQueryActionResult, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
-        hFunc(TEvents::TEvRaiseTransientIssues, Handle);
+        hFunc(TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
         hFunc(NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse, Handle);
         hFunc(TEvDqStats, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
@@ -451,7 +451,7 @@ private:
         IgnoreFunc(TEvents::TEvGraphParams);
         IgnoreFunc(TEvents::TEvQueryActionResult);
         IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
-        IgnoreFunc(TEvents::TEvRaiseTransientIssues);
+        IgnoreFunc(TEvCheckpointCoordinator::TEvRaiseTransientIssues);
         IgnoreFunc(TEvDqStats);
     )
 
@@ -940,7 +940,7 @@ private:
         SetLoadFromCheckpointMode();
     }
 
-    void Handle(TEvents::TEvRaiseTransientIssues::TPtr& ev) {
+    void Handle(TEvCheckpointCoordinator::TEvRaiseTransientIssues::TPtr& ev) {
         SendTransientIssues(ev->Get()->TransientIssues);
     }
 

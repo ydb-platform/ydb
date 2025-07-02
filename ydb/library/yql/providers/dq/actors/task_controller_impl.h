@@ -97,7 +97,6 @@ public:
     }
 
 public:
-
     STRICT_STFUNC(Handler, {
         hFunc(TEvReadyState, OnReadyState);
         hFunc(TEvQueryResponse, OnQueryResult);

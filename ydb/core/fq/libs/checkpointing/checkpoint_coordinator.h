@@ -12,8 +12,6 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
-#include <ydb/library/yql/providers/dq/actors/events.h>
-#include <ydb/library/yql/providers/dq/actors/task_controller_impl.h>
 
 #include <ydb/library/actors/core/actor.h>
 

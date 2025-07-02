@@ -77,6 +77,10 @@ public:
         return VersionedIndexCopy;
     }
 
+    TVersionedIndex& MutableVersionedIndex() {
+        return VersionedIndex;
+    }
+
     const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
         return ActualizationController;
     }

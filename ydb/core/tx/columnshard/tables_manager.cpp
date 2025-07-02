@@ -481,7 +481,7 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
     std::set<TSchemaAddress> toRemove;
     std::vector<TTablesManager::TSchemasChain> chains;
     std::optional<TSchemaAddress> addrPred;
-    std::vector<ui64> toRemove;
+    std::set<ui64> versionsToRemove;
     for (auto&& i : PrimaryIndex->GetVersionedIndex().GetSnapshotByVersions()) {
         TSchemaAddress addr(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot());
         if (addrPred) {
@@ -490,6 +490,7 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
         addrPred = addr;
         if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(i.first) &&
             PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion() != i.first) {
+            AFL_VERIFY(versionsToRemove.emplace(i.first).second);
             AFL_VERIFY(toRemove.emplace(addr).second);
         } else {
             if (toRemove.empty()) {
@@ -499,10 +500,10 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
             start = addr;
         }
     }
-    for (auto&& i : toRemove) {
-        PrimaryIndex->GetVersionedIndex().EraseVersion(i);
+    for (auto&& i : versionsToRemove) {
+        MutablePrimaryIndexAsVerified<TColumnEngineForLogs>().MutableVersionedIndex().EraseVersion(i);
     }
-    return result;
+    return chains;
 }
 
 }   // namespace NKikimr::NColumnShard

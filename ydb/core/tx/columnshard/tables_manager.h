@@ -264,9 +264,13 @@ public:
     private:
         YDB_READONLY_DEF(std::optional<TSchemaAddress>, Start);
         YDB_READONLY_DEF(std::set<TSchemaAddress>, ToRemove);
-        YDB_READONLY_DEF(TSchemaAddress, Finish);
+        TSchemaAddress Finish;
 
     public:
+        const TSchemaAddress& GetFinish() const {
+            return Finish;
+        }
+
         void FillAddressesTo(std::set<TSchemaAddress>& addresses) const {
             if (Start) {
                 addresses.emplace(*Start);
@@ -287,7 +291,7 @@ public:
         }
     };
 
-    std::vector<TSchemasChain> GetSchemasToClean() const;
+    std::vector<TSchemasChain> ExtractSchemasToClean() const;
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;

@@ -113,6 +113,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         PARTITION BY HASH(Col1)
         WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1$$);
         ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20, "portions_size_limit" : 40000000, "portions_count_available" : 1},
+                             {"class_name" : "Zero", "expected_blobs_size" : 4000000}]}`)
+        ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1) VALUES (1u)
         ------
@@ -174,6 +179,21 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: false
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        ------
+        DATA:
+        DELETE FROM `/Root/ColumnTable`
+        ------
+        ONE_COMPACTION:
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: true
+        ------
+        RESTART_TABLETS
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: false
     )";
     Y_UNIT_TEST_STRING_VARIATOR(SimplificationWithWrite, scriptSimplificationWithWrite) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
@@ -212,6 +232,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ------
         SCHEMA:
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col8 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col2
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col9 Uint32
         ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: true

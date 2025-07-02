@@ -157,9 +157,17 @@ public:
     }
 
     EExecutionStatus OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
-        if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
+        if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) {
             return EExecutionStatus::Continue;
-        
+        }
+
+        if (userDb.GetSnapshotReadConflict()) {
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
+            writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Read conflict with concurrent transaction.");
+            ResetChanges(userDb, writeOp, txc);
+            return EExecutionStatus::Executed;
+        }
+
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
         writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
         ResetChanges(userDb, writeOp, txc);
@@ -303,7 +311,7 @@ public:
         NMiniKQL::TEngineHostCounters engineHostCounters;
         const ui64 txId = writeTx->GetTxId();
         const auto mvccVersion = DataShard.GetMvccVersion(writeOp);
-        
+
         TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
         userDb.SetIsWriteTx(true);
         userDb.SetIsImmediateTx(op->IsImmediate());
@@ -312,6 +320,11 @@ public:
 
         if (op->HasVolatilePrepareFlag()) {
             userDb.SetVolatileTxId(txId);
+        }
+
+        auto mvccSnapshot = writeTx->GetMvccSnapshot();
+        if (mvccSnapshot && !writeTx->GetLockTxId()) {
+            userDb.SetSnapshotVersion(*mvccSnapshot);
         }
 
         try {

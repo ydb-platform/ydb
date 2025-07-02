@@ -1020,6 +1020,10 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         MaybeRunVersionSync();
     }
 
+    static bool ShouldIgnore(const TEvStateStorage::TEvResolveReplicasList::TReplicaGroup& replicaGroup) {
+        return replicaGroup.WriteOnly || replicaGroup.State == ERingGroupState::DISCONNECTED;
+    }
+
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString());
 
@@ -1047,7 +1051,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         for (size_t groupIdx = 0; groupIdx < replicaGroups.size(); ++groupIdx) {
             const auto& replicaGroup = replicaGroups[groupIdx];
-            if (replicaGroup.WriteOnly || replicaGroup.State == ERingGroupState::DISCONNECTED) {
+            if (ShouldIgnore(replicaGroup)) {
                 continue;
             }
             auto& proxyGroup = ProxyGroups.emplace_back();

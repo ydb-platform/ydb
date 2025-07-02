@@ -719,7 +719,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     };
 
     struct TProxyGroup {
-        ERingGroupState State;
         TVector<TProxyInfo> Proxies;
     };
 
@@ -783,10 +782,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return &it->second;
     }
 
-    static bool ShouldIgnore(const TProxyGroup& proxyGroup) {
-        return proxyGroup.State == ERingGroupState::DISCONNECTED;
-    }
-
     bool IsMajorityReached() const {
         TVector<ui32> responsesByGroup(ProxyGroups.size(), 0);
         for (const auto& [proxy, _] : InitialResponses) {
@@ -798,11 +793,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             }
         }
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
-            const auto& proxyGroup = ProxyGroups[groupIdx];
-            if (ShouldIgnore(proxyGroup)) {
-                continue;
-            }
-            if (responsesByGroup[groupIdx] <= proxyGroup.Proxies.size() / 2) {
+            if (responsesByGroup[groupIdx] <= ProxyGroups[groupIdx].Proxies.size() / 2) {
                 return false;
             }
         }
@@ -989,9 +980,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
         bool syncIsComplete = true;
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
-            if (ShouldIgnore(ProxyGroups[groupIdx])) {
-                continue;
-            }
             const ui32 size = ProxyGroups[groupIdx].Proxies.size();
             const ui32 half = size / 2;
             if (!IsSyncFinished(successesByGroup[groupIdx], failuresByGroup[groupIdx], size)) {
@@ -1063,8 +1051,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 continue;
             }
             auto& proxyGroup = ProxyGroups.emplace_back();
-            proxyGroup.State = replicaGroup.State;
-
             proxyGroup.Proxies.reserve(replicaGroup.Replicas.size());
             for (size_t i = 0; i < replicaGroup.Replicas.size(); ++i) {
                 auto& proxy = proxyGroup.Proxies.emplace_back();

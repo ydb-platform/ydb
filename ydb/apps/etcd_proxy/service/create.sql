@@ -4,7 +4,7 @@ CREATE TABLE revision
     `revision` Int64 NOT NULL,
     `timestamp` Timestamp NOT NULL,
     PRIMARY KEY (`stub`)
-);
+) WITH (PARTITION_AT_KEYS=(false,true));
 
 CREATE TABLE commited
 (

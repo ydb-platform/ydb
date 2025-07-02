@@ -85,6 +85,8 @@ namespace NKikimr {
         NKikimrVDiskData::TScrubEntrypoint ScrubEntrypoint;
         ui64 ScrubEntrypointLsn = 0;
 
+        THugeBlobLayoutChecker HugeBlobLayoutChecker;
+
         TActiveActors ActiveActors;
 
         bool DatabaseStateLoaded() const {
@@ -235,7 +237,8 @@ namespace NKikimr {
         }
 
         void BeginApplyingLog(const TActorContext& ctx) {
-            auto replayerId = ctx.RegisterWithSameMailbox(CreateRecoveryLogReplayer(ctx.SelfID, LocRecCtx));
+            auto replayerId = ctx.RegisterWithSameMailbox(CreateRecoveryLogReplayer(ctx.SelfID, LocRecCtx,
+                std::move(HugeBlobLayoutChecker)));
             ActiveActors.Insert(replayerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Become(&TThis::StateApplyRecoveryLog);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::ApplyLog;
@@ -631,6 +634,7 @@ namespace NKikimr {
             switch (ev->Get()->Type) {
                 case EHullDbType::LogoBlobs:
                     HullLogoBlobsDBInitialized = true;
+                    HugeBlobLayoutChecker = std::move(ev->Get()->HugeBlobLayoutChecker);
                     break;
                 case EHullDbType::Blocks:
                     HullBlocksDBInitialized = true;

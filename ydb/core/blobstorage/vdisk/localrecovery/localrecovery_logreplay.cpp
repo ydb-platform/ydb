@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
 #include <ydb/core/blobstorage/vdisk/hullop/hullop_entryserialize.h>
+#include <ydb/core/blobstorage/vdisk/hullop/huge_blob_checker.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.h>
@@ -76,6 +77,8 @@ namespace NKikimr {
         NHuge::TFreeChunkRecoveryLogRec HugeBlobFreeChunkRecoveryLogRec;
         NHuge::TPutRecoveryLogRec HugeBlobPutRecoveryLogRec;
         NKikimrVDiskData::TPhantomLogoBlobs PhantomLogoBlobs;
+
+        THugeBlobLayoutChecker HugeBlobLayoutChecker;
 
         void Bootstrap(const TActorContext &ctx) {
             LOG_NOTICE(ctx, BS_LOCALRECOVERY,
@@ -227,6 +230,9 @@ namespace NKikimr {
                                 "RECORD (HUGELOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s",
                                 lsn, id.ToString().data()));
                 TLogoBlobID genId(id, 0);
+                if (!diskAddr.Empty()) {
+                    HugeBlobLayoutChecker.AddHugeBlob(id, diskAddr);
+                }
                 LocRecCtx->HullDbRecovery->ReplayAddHugeLogoBlobCmd(ctx, genId, ingress, diskAddr, lsn,
                         THullDbRecovery::RECOVERY);
                 if (diskAddr.ChunkIdx && diskAddr.Size) {
@@ -928,13 +934,15 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_DB_LOCAL_RECOVERY;
         }
 
-        TRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx)
+        TRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx,
+                THugeBlobLayoutChecker&& hugeBlobLayoutChecker)
             : TActorBootstrapped<TRecoveryLogReplayer>()
             , ParentId(parentId)
             , LocRecCtx(std::move(locRecCtx))
             , HugeBlobAllocChunkRecoveryLogRec(0)
             , HugeBlobFreeChunkRecoveryLogRec(TVector<ui32>())
             , HugeBlobPutRecoveryLogRec(TLogoBlobID(), TIngress(), TDiskPart())
+            , HugeBlobLayoutChecker(std::move(hugeBlobLayoutChecker))
         {
             // store last indexed lsn (i.e. lsn of the last record that already in DiskRecLog)
             SyncLogMaxLsnStored = LocRecCtx->SyncLogRecovery->GetLastLsnOfIndexRecord();
@@ -944,8 +952,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // CreateRecoveryLogReplayer
     ////////////////////////////////////////////////////////////////////////////
-    IActor* CreateRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx) {
-        return new TRecoveryLogReplayer(parentId, std::move(locRecCtx));
+    IActor* CreateRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx,
+            THugeBlobLayoutChecker&& hugeBlobLayoutChecker) {
+        return new TRecoveryLogReplayer(parentId, std::move(locRecCtx), std::move(hugeBlobLayoutChecker));
     }
 
 } // NKikimr

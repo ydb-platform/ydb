@@ -103,7 +103,7 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
     test_info['kernel_log'] = f'<details><code>{dmesg_cmd}</code></details>'
 
 
-def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
+def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None, use_node_subcols: bool = False) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload
 
@@ -111,10 +111,16 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
         result: WorkloadRunResult с информацией об итерациях
         node_errors: Список ошибок нод для подсчета cores и OOM
         workload_params: Параметры запуска workload для отображения в заголовке
+        use_node_subcols: Использовать ли подколонки для каждой ноды (workload status и node status)
 
     Returns:
         str: HTML таблица
     """
+    # Если запрошен формат с подколонками для нод, используем новую реализацию
+    if use_node_subcols:
+        return __create_iterations_table_with_node_subcols(result, node_errors, workload_params)
+
+    # Оригинальная реализация таблицы
     def __get_node_issue_info(node_error: NodeErrors) -> tuple[str, str, bool]:
         """Возвращает информацию о проблемах ноды: (цвет, значение, критичность)"""
         issues = []
@@ -359,6 +365,381 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
     return table_html
 
 
+def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
+    """
+    Создает HTML таблицу с информацией об итерациях workload с подколонками для каждой ноды
+
+    Args:
+        result: WorkloadRunResult с информацией об итерациях
+        node_errors: Список ошибок нод для подсчета cores и OOM
+        workload_params: Параметры запуска workload для отображения в заголовке
+
+    Returns:
+        str: HTML таблица с подколонками для каждой ноды
+    """
+    def __get_node_issue_info(node_error: NodeErrors) -> tuple[str, str, bool]:
+        """Возвращает информацию о проблемах ноды: (цвет, значение, критичность)"""
+        issues = []
+        has_issues = False
+        has_critical_issues = False
+
+        # Проверяем основные проблемы (рестарт, падение)
+        if node_error.message and node_error.message not in ['diagnostic info collected']:
+            issues.append(node_error.message.replace('was ', '').replace('is ', ''))
+        # Добавляем cores если есть (критичная проблема)
+        if node_error.core_hashes:
+            issues.append(f"cores:{len(node_error.core_hashes)}")
+        # Добавляем oom если есть (критичная проблема)
+        if node_error.was_oom:
+            issues.append("oom")
+        has_critical_issues = node_error.was_oom or node_error.core_hashes
+        has_issues = len(issues) > 0
+
+        if has_issues:
+            # Красный только для критичных проблем (cores/oom)
+            # Зеленый для обычных проблем (restarted/down)
+            color = "#ffcccc" if has_critical_issues else "#ccffcc"
+            value = ", ".join(issues) if issues else "issues"
+        else:
+            color = "#ccffcc"  # Зеленый
+            value = "ok"
+
+        return color, value, has_critical_issues
+
+    def __get_workload_status(iteration) -> tuple[str, str]:
+        """Возвращает статус workload: (цвет, значение)"""
+        if hasattr(iteration, 'error_message') and iteration.error_message:
+            # Проверяем, содержит ли ошибка информацию о timeout
+            error_msg_lower = iteration.error_message.lower()
+            if ("timeout" in error_msg_lower or "timed out" in error_msg_lower or "command timed out" in error_msg_lower):
+                return "#ffffcc", "timeout"  # Светло-желтый
+            else:
+                return "#ffffcc", "warning"  # Светло-желтый
+        else:
+            return "#ccffcc", "ok"  # Светло-зеленый
+
+    # Собираем информацию о нодах, группируя по хостам
+    node_info_map = {}  # host -> NodeErrors (объединенная информация по хосту)
+
+    # Группируем node_errors по хостам и объединяем информацию
+    for node_error in node_errors:
+        host_key = node_error.node.host
+        # Если для хоста уже есть запись, объединяем информацию
+        if host_key in node_info_map:
+            existing = node_info_map[host_key]
+            # Объединяем cores
+            existing.core_hashes.extend(node_error.core_hashes)
+            # OOM на уровне хоста - если хотя бы одна нода сообщила об OOM
+            existing.was_oom = existing.was_oom or node_error.was_oom
+            # Объединяем сообщения
+            if node_error.message and node_error.message not in existing.message:
+                if existing.message:
+                    existing.message += f", {node_error.message}"
+                else:
+                    existing.message = node_error.message
+        else:
+            node_info_map[host_key] = node_error
+
+    # Получаем ноды для колонок (автоматически)
+    try:
+        all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
+        # Добавляем отладочную информацию о всех нодах
+        logging.info(f"All nodes before filtering: {[(node.slot, node.role) for node in all_cluster_nodes]}")
+
+        # Группируем ноды по хостам
+        hosts_to_nodes = {}
+        for node in all_cluster_nodes:
+            if node.host not in hosts_to_nodes:
+                hosts_to_nodes[node.host] = []
+            hosts_to_nodes[node.host].append(node)
+
+        # Для каждого хоста берем первую ноду в качестве представителя
+        unique_hosts = sorted(hosts_to_nodes.keys())
+        host_representatives = {host: hosts_to_nodes[host][0] for host in unique_hosts}
+
+        all_node_slots = unique_hosts  # Используем хосты как идентификаторы колонок
+        unique_nodes = sorted(all_node_slots)
+        all_cluster_nodes = list(host_representatives.values())  # Представители хостов
+
+        logging.info(f"Auto-discovered hosts (all roles): {len(unique_hosts)} hosts from {sum(len(nodes) for nodes in hosts_to_nodes.values())} total nodes")
+        logging.info(f"Host to nodes mapping: {[(host, len(nodes)) for host, nodes in hosts_to_nodes.items()]}")
+    except Exception as e:
+        # Если не можем получить ноды - используем пустой список
+        unique_nodes = []
+        all_cluster_nodes = []
+        logging.warning(f"Failed to get cluster nodes: {e}")
+
+    # Дополняем node_info_map пустыми записями для хостов без ошибок
+    for node in all_cluster_nodes:
+        host_key = node.host  # Используем хост как ключ
+        if host_key not in node_info_map:
+            # Создаем пустую запись для хоста без проблем
+            node_info_map[host_key] = type('NodeError', (), {
+                'node': node,
+                'message': '',
+                'core_hashes': [],
+                'was_oom': False
+            })()
+
+    # Формируем информацию о параметрах workload для заголовка
+    params_info = ""
+    if workload_params:
+        params_list = []
+        for key, value in workload_params.items():
+            params_list.append(f"{key}: {value}")
+        if params_list:
+            params_info = (
+                "<div style='margin-bottom: 10px; padding: 5px; background-color: #f5f5f5; "
+                "border: 1px solid #ddd;'><strong>Workload Parameters:</strong> "
+                f"{', '.join(params_list)}</div>")
+
+    # Создаем заголовок таблицы с подколонками для каждой ноды
+    table_html = f"""
+    {params_info}
+    <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
+        <tr style='background-color: #f0f0f0;'>
+            <th rowspan="2">Iter</th>
+            <th rowspan="2">Dur(s)</th>
+    """
+
+    # Добавляем объединенные колонки для каждого хоста
+    if unique_nodes:
+        for host in unique_nodes:
+            table_html += f'<th colspan="2">{host}</th>'
+    else:
+        # Если нет нод, добавляем агрегированные колонки
+        table_html += '<th colspan="2">Aggregated</th>'
+
+    table_html += """
+        </tr>
+        <tr style='background-color: #f0f0f0;'>
+    """
+
+    # Добавляем подколонки Workload и Node для каждого хоста
+    if unique_nodes:
+        for _ in unique_nodes:
+            table_html += '<th>Workload</th><th>Node</th>'
+    else:
+        # Если нет нод, добавляем агрегированные подколонки
+        table_html += '<th>Cores</th><th>OOM</th>'
+
+    table_html += """
+        </tr>
+    """
+
+    # Если result None или нет iterations, создаем пустую таблицу с информацией
+    if not result or not result.iterations:
+        # Создаем строку с placeholder
+        table_html += """
+            <tr>
+                <td>-</td>
+                <td style='background-color: #f0f0f0;'>N/A</td>
+        """
+
+        # Добавляем пустые ячейки для каждой ноды
+        if unique_nodes:
+            for host in unique_nodes:
+                node_error = node_info_map.get(host)
+                if node_error:
+                    node_color, node_value, _ = __get_node_issue_info(node_error)
+                else:
+                    node_color, node_value = "#ccffcc", "ok"
+
+                table_html += f"""
+                    <td style='background-color: #f0f0f0;'>-</td>
+                    <td style='background-color: {node_color};'>{node_value}</td>
+                """
+        else:
+            # Если нет нод, добавляем агрегированные ячейки
+            table_html += """
+                <td style='background-color: #ccffcc;'>0</td>
+                <td style='background-color: #ccffcc;'>0</td>
+            """
+
+        table_html += """
+            </tr>
+        </table>
+        """
+
+        return table_html
+
+    # Анализируем итерации и группируем их по iteration_num
+    iteration_groups = {}
+
+    # Извлекаем информацию о iteration_num из дополнительной статистики итераций
+    for iteration_num, iteration in result.iterations.items():
+        iter_num = None
+        node_host = None
+
+        # Проверяем, есть ли у итерации имя с информацией об итерации и ноде
+        if hasattr(iteration, 'name') and iteration.name:
+            # Извлекаем iteration_num из имени итерации
+            name_parts = iteration.name.split('_')
+            # Ищем "iter_X" в имени
+            for i, part in enumerate(name_parts):
+                if part == "iter" and i + 1 < len(name_parts):
+                    try:
+                        iter_num = int(name_parts[i + 1])
+                        break
+                    except (ValueError, IndexError):
+                        pass
+
+            # Извлекаем node_host из имени итерации
+            for host in unique_nodes:
+                if host in iteration.name:
+                    node_host = host
+                    break
+
+        # Проверяем, есть ли статистика в итерации
+        if hasattr(iteration, 'stats') and iteration.stats:
+            # Ищем информацию о iteration_num и node_host в статистике
+            for stat_key, stat_value in iteration.stats.items():
+                if isinstance(stat_value, dict):
+                    # Проверяем iteration_info
+                    if stat_key == 'iteration_info':
+                        if 'iteration_num' in stat_value:
+                            iter_num = stat_value['iteration_num']
+                        if 'node_host' in stat_value:
+                            node_host = stat_value['node_host']
+                    # Для обратной совместимости проверяем chunk_info
+                    elif stat_key == 'chunk_info':
+                        if 'chunk_num' in stat_value:
+                            iter_num = stat_value['chunk_num']
+                        if 'node_host' in stat_value:
+                            node_host = stat_value['node_host']
+                    # Проверяем другие поля
+                    if 'iteration_num' in stat_value:
+                        iter_num = stat_value['iteration_num']
+                    elif 'chunk_num' in stat_value:  # Для обратной совместимости
+                        iter_num = stat_value['chunk_num']
+                    if 'node_host' in stat_value:
+                        node_host = stat_value['node_host']
+
+        # Если все еще нет iter_num, используем iteration_num
+        if iter_num is None:
+            iter_num = iteration_num
+
+        # Если все еще нет node_host и у нас есть уникальные ноды и их столько же, сколько итераций
+        if node_host is None and unique_nodes and len(unique_nodes) == len(result.iterations):
+            # Используем ноду по индексу итерации
+            try:
+                node_idx = (iteration_num - 1) % len(unique_nodes)
+                node_host = unique_nodes[node_idx]
+            except IndexError:
+                pass
+
+        # Добавляем информацию в структуру iteration_groups
+        if iter_num not in iteration_groups:
+            iteration_groups[iter_num] = {
+                'duration': getattr(iteration, 'time', 0),
+                'nodes': {}
+            }
+
+        if node_host:
+            iteration_groups[iter_num]['nodes'][node_host] = {
+                'iteration': iteration,
+                'status': __get_workload_status(iteration)
+            }
+
+    # Если не удалось извлечь iter_num, создаем искусственную группировку
+    if not iteration_groups:
+        # Группируем итерации по номеру (предполагая, что это разные ноды одной итерации)
+        iteration_groups[1] = {
+            'duration': max([getattr(iteration, 'time', 0) for iteration in result.iterations.values()], default=0),
+            'nodes': {}
+        }
+
+        for iteration_num, iteration in result.iterations.items():
+            # Если у нас есть столько же итераций, сколько нод, предполагаем что каждая итерация - это отдельная нода
+            if len(result.iterations) == len(unique_nodes) and iteration_num <= len(unique_nodes):
+                node_host = unique_nodes[iteration_num - 1]
+                iteration_groups[1]['nodes'][node_host] = {
+                    'iteration': iteration,
+                    'status': __get_workload_status(iteration)
+                }
+
+    # Добавляем строки для каждой итерации
+    for iter_num in sorted(iteration_groups.keys()):
+        iter_info = iteration_groups[iter_num]
+
+        # Получаем продолжительность итерации
+        duration = iter_info['duration']
+
+        # Проверяем, есть ли фактическое время выполнения в статистике
+        actual_duration = None
+        for node_info in iter_info['nodes'].values():
+            if 'iteration' in node_info and hasattr(node_info['iteration'], 'stats'):
+                for stat_key, stat_value in node_info['iteration'].stats.items():
+                    if isinstance(stat_value, dict) and stat_key == 'iteration_info' and 'actual_execution_time' in stat_value:
+                        actual_duration = stat_value['actual_execution_time']
+                        break
+                if actual_duration is not None:
+                    break
+
+        # Если нашли фактическое время, используем его вместо planned
+        if actual_duration is not None:
+            duration_str = f"{actual_duration:.1f}"
+            duration_color = "#e0f0e0"  # Светло-зеленый для фактического времени
+        elif duration:
+            duration_str = f"{duration:.1f}"
+            duration_color = "#f0f0f0"  # Нейтральный серый для планового времени
+        else:
+            duration_str = "N/A"
+            duration_color = "#ffffcc"  # Светло-желтый для неизвестных значений
+
+        # Добавляем строку таблицы
+        table_html += f"""
+            <tr>
+                <td>{iter_num}</td>
+                <td style='background-color: {duration_color};'>{duration_str}</td>
+        """
+
+        # Добавляем ячейки для каждой ноды
+        if unique_nodes:
+            for host in unique_nodes:
+                # Получаем статус workload для этой ноды и итерации
+                node_info = iter_info['nodes'].get(host, {})
+                if node_info:
+                    workload_color, workload_value = node_info['status']
+                else:
+                    workload_color, workload_value = "#f0f0f0", "-"
+
+                # Получаем статус ноды
+                node_error = node_info_map.get(host)
+                if node_error:
+                    node_color, node_value, _ = __get_node_issue_info(node_error)
+                else:
+                    node_color, node_value = "#ccffcc", "ok"
+
+                table_html += f"""
+                    <td style='background-color: {workload_color};'>{workload_value}</td>
+                    <td style='background-color: {node_color};'>{node_value}</td>
+                """
+
+        else:
+            # Если нет нод, добавляем агрегированные ячейки
+            cores_count = sum(len(node_error.core_hashes) for node_error in node_errors)
+            oom_count = sum(1 for node_error in node_errors if node_error.was_oom)
+
+            cores_color = "#ffcccc" if cores_count > 0 else "#ccffcc"
+            oom_color = "#ffcccc" if oom_count > 0 else "#ccffcc"
+
+            table_html += f"""
+                <td style='background-color: {cores_color};'>{cores_count}</td>
+                <td style='background-color: {oom_color};'>{oom_count}</td>
+            """
+
+        table_html += """
+            </tr>
+        """
+
+    table_html += """
+    </table>
+    """
+
+    return table_html
+
+
 def allure_test_description(
     suite: str,
     test: str,
@@ -370,6 +751,7 @@ def allure_test_description(
     node_errors: list[NodeErrors] = None,
     workload_result=None,
     workload_params: dict = None,
+    use_node_subcols: bool = False,
 ):
     if addition_table_strings is None:
         addition_table_strings = {}
@@ -415,7 +797,7 @@ def allure_test_description(
         </tbody></table>
     '''
 
-    iterations_table = __create_iterations_table(workload_result, node_errors, workload_params)
+    iterations_table = __create_iterations_table(workload_result, node_errors, workload_params, use_node_subcols)
     logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
     if iterations_table:
         html += f'''

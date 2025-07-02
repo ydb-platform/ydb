@@ -2,7 +2,7 @@
 
 #include "read_balancer__balancing.h"
 
-#include "common_app.h"
+#include <ydb/core/persqueue/common_app.h>
 
 namespace NKikimr::NPQ {
 

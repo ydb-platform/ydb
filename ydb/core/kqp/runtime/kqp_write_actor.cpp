@@ -1004,11 +1004,6 @@ public:
         } else if (isPrepare) {
             YQL_ENSURE(TxId);
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
-            // Note: we may need to send MvccSnapshot for certain operations
-            // like INSERT to not produce phantom unique constraint errors.
-            // Older datashards would hard error when MvccSnapshot is specified
-            // without locks however, and INSERT is currently flushed before
-            // commit anyway. For compatibility don't send it yet.
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
             evWrite->Record.SetLockMode(LockMode);
@@ -1047,6 +1042,20 @@ public:
         } else {
             YQL_ENSURE(!isPrepare);
             Counters->WriteActorImmediateWritesRetries->Inc();
+        }
+
+        if (isPrepare && MvccSnapshot) {
+            bool needMvccSnapshot = false;
+            for (const auto& operation : evWrite->Record.GetOperations()) {
+                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+                    // This operation may fail with an incorrect unique constraint violation otherwise
+                    needMvccSnapshot = true;
+                    break;
+                }
+            }
+            if (needMvccSnapshot) {
+                *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+            }
         }
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "WriteActor");

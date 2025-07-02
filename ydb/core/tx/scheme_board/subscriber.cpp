@@ -719,8 +719,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     };
 
     struct TProxyGroup {
-        bool WriteOnly;
-        ERingGroupState State;
         TVector<TProxyInfo> Proxies;
     };
 
@@ -784,10 +782,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return &it->second;
     }
 
-    static bool ShouldIgnore(const TProxyGroup& proxyGroup) {
-        return proxyGroup.WriteOnly || proxyGroup.State == ERingGroupState::DISCONNECTED;
-    }
-
     bool IsMajorityReached() const {
         TVector<ui32> responsesByGroup(ProxyGroups.size(), 0);
         for (const auto& [proxy, _] : InitialResponses) {
@@ -799,9 +793,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             }
         }
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
-            if (ShouldIgnore(ProxyGroups[groupIdx])) {
-                continue;
-            }
             if (responsesByGroup[groupIdx] <= ProxyGroups[groupIdx].Proxies.size() / 2) {
                 return false;
             }
@@ -989,9 +980,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
         bool syncIsComplete = true;
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
-            if (ProxyGroups[groupIdx].WriteOnly) {
-                continue;
-            }
             const ui32 size = ProxyGroups[groupIdx].Proxies.size();
             const ui32 half = size / 2;
             if (!IsSyncFinished(successesByGroup[groupIdx], failuresByGroup[groupIdx], size)) {
@@ -1032,6 +1020,10 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         MaybeRunVersionSync();
     }
 
+    static bool ShouldIgnore(const TEvStateStorage::TEvResolveReplicasList::TReplicaGroup& replicaGroup) {
+        return replicaGroup.WriteOnly || replicaGroup.State == ERingGroupState::DISCONNECTED;
+    }
+
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString());
 
@@ -1059,11 +1051,10 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         for (size_t groupIdx = 0; groupIdx < replicaGroups.size(); ++groupIdx) {
             const auto& replicaGroup = replicaGroups[groupIdx];
-            if (replicaGroup.WriteOnly) {
+            if (ShouldIgnore(replicaGroup)) {
                 continue;
             }
             auto& proxyGroup = ProxyGroups.emplace_back();
-
             proxyGroup.Proxies.reserve(replicaGroup.Replicas.size());
             for (size_t i = 0; i < replicaGroup.Replicas.size(); ++i) {
                 auto& proxy = proxyGroup.Proxies.emplace_back();

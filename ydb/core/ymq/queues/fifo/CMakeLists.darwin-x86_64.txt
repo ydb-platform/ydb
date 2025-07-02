@@ -19,6 +19,8 @@ target_link_libraries(ymq-queues-fifo PUBLIC
   contrib-libs-cxxsupp
   yutil
   core-ymq-base
+  ymq-actor-cfg
+  ymq-actor-cloud_events
 )
 
 target_sources(ymq-queues-fifo PRIVATE

@@ -12,20 +12,18 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(ymq-queues-fifo)
+add_library(ymq-actor-cfg)
 
 
-target_link_libraries(ymq-queues-fifo PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(ymq-actor-cfg PUBLIC
   contrib-libs-cxxsupp
   yutil
-  core-ymq-base
-  ymq-actor-cfg
-  ymq-actor-cloud_events
+  ydb-core-base
+  ydb-core-protos
+  library-actors-core
 )
 
-target_sources(ymq-queues-fifo PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/queues/fifo/queries.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/queues/fifo/schema.cpp
+target_sources(ymq-actor-cfg PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/actor/cfg/cfg.cpp
 )
 

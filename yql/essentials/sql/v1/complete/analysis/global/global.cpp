@@ -9,6 +9,7 @@
 
 #include <yql/essentials/sql/v1/complete/antlr4/pipeline.h>
 #include <yql/essentials/sql/v1/complete/syntax/ansi.h>
+#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <library/cpp/iterator/functools.h>
 
@@ -142,14 +143,11 @@ namespace NSQLComplete {
 
     private:
         bool IsRecoverable(TCompletionInput input) const {
-            static const TStringBuf prev = " ";
-            static const TStringBuf next = " .(";
-
             TStringBuf s = input.Text;
             size_t i = input.CursorPosition;
 
-            return (i < s.size() && prev.Contains(s[i]) || i == s.size()) &&
-                   (i > 0 /*  */ && next.Contains(s[i - 1]));
+            return (i < s.size() && IsWordBoundary(s[i]) || i == s.size()) &&
+                   (i > 0 /*  */ && IsWordBoundary(s[i - 1]));
         }
 
         SQLv1::Sql_queryContext* Parse(TStringBuf input) {

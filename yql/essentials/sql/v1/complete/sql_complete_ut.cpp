@@ -1210,6 +1210,76 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
     }
 
+    Y_UNIT_TEST(ColumnPositions) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "Age"},
+            {ColumnName, "Name"},
+        };
+
+        {
+            TString query = "SELECT # FROM example.`/people`";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT f(#) FROM example.`/people`";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT * FROM example.`/people` WHERE #";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT * FROM example.`/people` WHERE f(#)";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT * FROM example.`/people` ORDER BY #";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT * FROM example.`/people` ORDER BY f(#)";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT * FROM example.`/people` GROUP BY #";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = R"(
+                SELECT *
+                FROM example.`/people` AS a
+                JOIN example.`/people` AS b ON a.#
+            )";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ProjectionVisibility) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TString query = "SELECT Age as a, # FROM example.`/people`";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "Age"},
+                {ColumnName, "Name"},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT Age as a, b FROM example.`/people` WHERE #";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "a"},
+                {ColumnName, "b"},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+    }
+
     Y_UNIT_TEST(Typing) {
         const auto queryUtf16 = TUtf16String::FromUtf8(
             "SELECT \n"

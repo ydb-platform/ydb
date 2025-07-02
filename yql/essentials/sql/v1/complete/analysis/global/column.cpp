@@ -130,7 +130,12 @@ namespace NSQLComplete {
 
                 TColumnContext imported;
                 for (const TColumnId& qualified : asterisks) {
-                    auto aliased = source.ExtractAliased(qualified.TableAlias);
+                    TMaybe<TStringBuf> alias = qualified.TableAlias;
+                    if (alias->Empty()) {
+                        alias = Nothing();
+                    }
+
+                    auto aliased = source.ExtractAliased(alias);
                     imported = std::move(imported) | std::move(aliased);
                 }
 
@@ -233,15 +238,28 @@ namespace NSQLComplete {
             }
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
-                SQLv1::Join_sourceContext* source = ctx->join_source(0);
-                if (source == nullptr) {
-                    source = ctx->join_source(1);
+                antlr4::ParserRuleContext* source = nullptr;
+                if (IsEnclosingStrict(ctx->expr(0)) ||
+                    IsEnclosingStrict(ctx->group_by_clause()) ||
+                    IsEnclosingStrict(ctx->expr(1)) ||
+                    IsEnclosingStrict(ctx->window_clause()) ||
+                    IsEnclosingStrict(ctx->ext_order_by_clause())) {
+                    source = ctx;
+                } else {
+                    source = ctx->join_source(0);
+                    source = source == nullptr ? ctx->join_source(1) : source;
                 }
+
                 if (source == nullptr) {
                     return {};
                 }
 
                 return TInferenceVisitor().visit(source);
+            }
+
+        private:
+            bool IsEnclosingStrict(antlr4::ParserRuleContext* ctx) const {
+                return ctx != nullptr && IsEnclosing(ctx);
             }
         };
 

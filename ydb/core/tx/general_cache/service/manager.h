@@ -1,8 +1,10 @@
 #pragma once
+
 #include "counters.h"
 
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
+#include <ydb/core/tx/general_cache/source/context.h>
 #include <ydb/core/tx/general_cache/usage/abstract.h>
 #include <ydb/core/tx/general_cache/usage/config.h>
 
@@ -33,7 +35,7 @@ private:
 
     TPositiveControlInteger WaitObjectsCount;
 
-    std::shared_ptr<ICallback> Callback;
+    YDB_READONLY_DEF(std::shared_ptr<ICallback>, Callback);
     const EConsumer Consumer;
 
     bool RemoveAddrOnFinished(const TAddress addr) {
@@ -132,6 +134,7 @@ private:
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
     using TSourceId = typename TPolicy::TSourceId;
+    using TFetchingContext = typename NSource::TFetchingContext<TPolicy>;
     using EConsumer = typename TPolicy::EConsumer;
     using TRequest = TRequest<TPolicy>;
 
@@ -282,7 +285,8 @@ public:
                 it->second.emplace_back(request);
             }
         }
-        ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor, Cookie);
+        ObjectsProcessor->AskData(
+            std::move(requestedAddresses), ObjectsProcessor, std::make_shared<TFetchingContext>(std::move(callbacks), Cookie));
         Counters->ObjectsQueueSize->Set(Counters->GetQueueObjectsCount()->Val());
         Counters->ObjectsInFlight->Set(Counters->GetTotalInFlight()->Val());
     }

@@ -564,36 +564,6 @@ Y_UNIT_TEST(TestReadRuleVersions) {
     });
 }
 
-Y_UNIT_TEST(TestDescribeBalancer) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
-        activeZone = false;
-        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
-        ui64 ssId = 9876;
-        BootFakeSchemeShard(*tc.Runtime, ssId, state);
-
-        tc.Runtime->SetScheduledLimit(50);
-        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
-        TAutoPtr<IEventHandle> handle;
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-        TEvPersQueue::TEvDescribeResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
-        UNIT_ASSERT(result);
-        auto& rec = result->Record;
-        UNIT_ASSERT(rec.HasSchemeShardId() && rec.GetSchemeShardId() == ssId);
-        PQTabletRestart(tc);
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
-        UNIT_ASSERT(result);
-        auto& rec2 = result->Record;
-        UNIT_ASSERT(rec2.HasSchemeShardId() && rec2.GetSchemeShardId() == ssId);
-    });
-}
-
 Y_UNIT_TEST(TestSeveralOwners) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

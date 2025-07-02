@@ -40,6 +40,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         using TAddress = TGlobalPortionAddress;
         using TObject = std::shared_ptr<TPortionDataAccessor>;
         using TSourceId = NActors::TActorId;
+        using TFetchingContext = NKikimr::NGeneralCache::NSource::TFetchingContext<TPortionsMetadataCachePolicy>;
         using EConsumer = TPortionsMetadataCachePolicy::EConsumer;
         using TSelf = NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>;
 
@@ -65,7 +66,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         };
 
         virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
-            const ui64 cookie) const override {
+            const std::shared_ptr<TFetchingContext>& context) const override {
             THashMap<NActors::TActorId, TActorRequestData> requests;
             for (auto&& [c, addresses] : objectAddressesByConsumer) {
                 for (auto&& a : addresses) {
@@ -76,7 +77,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 NActors::TActivationContext::Send(i.first,
                     std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(
                         i.second.ExtractRequest(), std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())),
-                    0, cookie);
+                    0, context->GetCookie());
             }
         }
         virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,

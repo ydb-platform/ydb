@@ -152,7 +152,7 @@ private:
 
         NYql::NDq::TRetryEventsQueue EventsQueue;
     };
-    NActors::TActorId ExecuterId;
+    NActors::TActorId ControlId;
     const TCoordinatorId CoordinatorId;
     const TActorId StorageProxy;
     const TActorId RunActorId;

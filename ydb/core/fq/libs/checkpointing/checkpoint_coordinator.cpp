@@ -49,7 +49,7 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
-    ExecuterId = ev->Sender;
+    ControlId = ev->Sender;
 
     for (const auto& task: ev->Get()->Tasks) {
         auto& actorId = TaskIdToActor[task.Id];
@@ -626,7 +626,7 @@ void TCheckpointCoordinator::OnError(NYql::NDqProto::StatusIds::StatusCode statu
     NYql::TIssues issues;
     issues.AddIssue(std::move(issue));
     auto event = std::make_unique<NYql::NDq::TEvDq::TEvAbortExecution>(statusCode, issues);
-    TActivationContext::Send(new IEventHandle(ExecuterId, NActors::TActorId(), event.release()));
+    TActivationContext::Send(new IEventHandle(ControlId, NActors::TActorId(), event.release()));
 }
 
 void TCheckpointCoordinator::OnInternalError(const TString& message, const NYql::TIssues& subIssues) {

@@ -22,7 +22,7 @@ private:
     virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;
 
 public:
-    TStopCompactionCommand() {
+    TStopSchemasCleanupCommand() {
     }
 };
 

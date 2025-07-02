@@ -19,7 +19,7 @@ namespace {
         {"STOP_SCHEMAS_CLEANUP", []() { return std::make_shared<TStopSchemasCleanupCommand>(); }},
         {"ONE_SCHEMAS_CLEANUP", []() { return std::make_shared<TOneSchemasCleanupCommand>(); }},
         {"ONE_COMPACTION", []() { return std::make_shared<TOneCompactionCommand>(); }},
-        {"ONE_ACTUALIZATION", []() { return std::make_shared<TOneActualizationCommand>(); }}
+        {"ONE_ACTUALIZATION", []() { return std::make_shared<TOneActualizationCommand>(); }},
         {"RESTART_TABLETS", []() { return std::make_shared<TRestartTabletsCommand>(); }}
     };
 

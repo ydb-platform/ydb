@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TestScript) {
 
         auto cache = std::make_shared<TSchemaObjectsCache>();
         TIndexInfo info = TIndexInfo::BuildDefault(1, TTestStoragesManager::GetInstance(), columns, pkIds);
-        return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(0, std::move(info)), TSnapshot(1, 1));
+        return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(std::move(info)), TSnapshot(1, 1));
     }
 
     Y_UNIT_TEST(StepMerging) {

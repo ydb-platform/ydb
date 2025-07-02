@@ -1,5 +1,8 @@
 #include "pq_impl.h"
 
+#include "common_app.h"
+#include <fmt/format.h>
+
 namespace NKikimr::NPQ {
 
 TString MakeReadSetData(bool commit)
@@ -20,6 +23,40 @@ TMaybe<T> GetParameter(NMon::TEvRemoteHttpInfo::TPtr& ev, const TString& name)
         return Nothing();
     }
     return FromString<T>(ev->Get()->Cgi().Get(name));
+}
+
+TString TPersQueue::RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, ui64 tabletSource) const
+{
+    struct TOption {
+        const char* Decision;
+        const char* Text;
+        const char* BtnClass;
+    };
+    static constexpr TOption options[] = {
+        {"commit", "Send commit to {txId}", "btn btn-warning btn-sm"},
+        {"abort", "Send abort to {txId}", "btn btn-danger btn-sm"},
+    };
+
+    TStringStream str;
+    HTML(str) {
+        for (const TOption& option : options) {
+            LAYOUT_COLUMN() {
+                FORM_CLASS("form-horizontal") {
+                    DIV_CLASS("control-group") {
+                        DIV_CLASS("controls") {
+                            str << "<input type='hidden' name='step' value='" << tx.Step << "'/>";
+                            str << "<input type='hidden' name='txId' value='" << tx.TxId << "'/>";
+                            str << "<input type='hidden' name='senderTablet' value='" << tabletSource << "'/>";
+                            str << "<input type='hidden' name='decision' value='" << option.Decision << "'/>";
+                            str << "<input type='hidden' name='TabletID' value='" << TabletID() << "'/>";
+                            str << "<button type='submit' name='SendReadSet' class='" << option.BtnClass << "'>" << fmt::format(fmt::runtime(option.Text), fmt::arg("txId", tx.TxId)) << "</button>";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return std::move(str).Str();
 }
 
 bool TPersQueue::OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx)

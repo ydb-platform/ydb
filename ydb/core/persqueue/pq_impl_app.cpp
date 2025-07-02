@@ -208,30 +208,55 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     } else {
         auto* tx = Txs.FindPtr(txId);
         if (tx) {
+            const bool showSendReadSetAction = tx->State == NKikimrPQ::TTransaction_EState::TTransaction_EState_WAIT_RS;
             HTML_APP_PAGE(str, "PersQueue Tablet " << TabletID() << " (" << TopicName << ") Transaction id " << txId) {
-                PRE() {
-                    str << SecureDebugStringMultiline(tx->Serialize());
-                }
-                TAG(TH2) {str << "Predicates";}
-                TABLE_SORTABLE_CLASS("table") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() {str << "Tablet ID";}
-                            TABLEH() {str << "Predicate value";}
+               LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        PROPERTIES("Transaction info") {
+                            PROPERTY("Transaction id", txId);
+                            PROPERTY("State", NKikimrPQ::TTransaction_EState_Name(tx->State));
+                            PROPERTY("Step", tx->Step);
+                            PROPERTY("Topic", TopicName);
                         }
                     }
-                    TABLEBODY() {
-                        for (const auto& [tabletID, predicate] : tx->PredicatesReceived) {
-                            TABLER() {
-                                TABLED() {
-                                    HREF(TStringBuilder() << "?TabletID=" << tabletID << "&TxId=" << txId) {
-                                        str << tabletID;
-                                    }
+                }
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        PRE() {
+                            str << SecureDebugStringMultiline(tx->Serialize());
+                        }
+                    }
+                }
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        TABLE_SORTABLE_CLASS("table") {
+                            CAPTION() {str << "Predicates";}
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() {str << "TabletID";}
+                                    TABLEH() {str << "Predicate value";}
+                                    TABLEH() {str << "Action";}
                                 }
-                                const TStringBuf cls = predicate.HasPredicate() ? (predicate.GetPredicate() ? "success"sv : "danger"sv) : ""sv;
-                                TABLED_CLASS(cls) {
-                                    if (predicate.HasPredicate()) {
-                                        str << (predicate.GetPredicate() ? "TRUE"sv : "FALSE"sv);
+                            }
+                            TABLEBODY() {
+                                for (const auto& [tabletID, predicate] : tx->PredicatesReceived) {
+                                    TABLER() {
+                                        TABLED() {
+                                            HREF(TStringBuilder() << "?TabletID=" << tabletID << "&TxId=" << txId) {
+                                                str << tabletID;
+                                            }
+                                        }
+                                        const TStringBuf cls = predicate.HasPredicate() ? (predicate.GetPredicate() ? "success"sv : "danger"sv) : ""sv;
+                                        TABLED_CLASS(cls) {
+                                            if (predicate.HasPredicate()) {
+                                                str << (predicate.GetPredicate() ? "TRUE"sv : "FALSE"sv);
+                                            }
+                                        }
+                                        TABLED() {
+                                            if (!predicate.HasPredicate() && showSendReadSetAction) {
+                                                str << RenderSendReadSetHtmlForms(*tx, tabletID);
+                                            }
+                                        }
                                     }
                                 }
                             }

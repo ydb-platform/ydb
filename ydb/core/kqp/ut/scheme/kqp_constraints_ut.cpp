@@ -781,7 +781,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(IndexAutoChooseAndNonReadyIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
         TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );

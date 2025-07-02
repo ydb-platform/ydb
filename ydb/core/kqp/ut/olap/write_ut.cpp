@@ -164,6 +164,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col4, Col5, Col7, Col8) VALUES (9u, 9u, 9u, 9u, 9u)
         ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col9 Uint32
+        ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: true
         ------

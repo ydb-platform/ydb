@@ -1,4 +1,4 @@
-#include "kqp_batch_op_helpers.h"
+#include "kqp_batch_operations.h"
 
 namespace NKikimr::NKqp::NBatchOperations {
 

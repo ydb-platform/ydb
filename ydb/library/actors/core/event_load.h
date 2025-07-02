@@ -25,12 +25,12 @@ namespace NActors {
         size_t Tailroom = 0; // tailroom for the chunk
         size_t Alignment = 0; // required alignment
         bool IsInline = false; // if true, goes through ordinary channel
+        bool IsRdma = false; // if true, goes through RDMA
     };
 
     struct TEventSerializationInfo {
         bool IsExtendedFormat = {};
         std::vector<TEventSectionInfo> Sections;
-        bool IsRdma = false;
         // total sum of Size for every section must match actual serialized size of the event
     };
 

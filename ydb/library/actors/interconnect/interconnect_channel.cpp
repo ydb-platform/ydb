@@ -98,6 +98,15 @@ namespace NActors {
                     } else if (Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
                         State = EState::SECTIONS;
                         SectionIndex = 0;
+
+                        Cerr << Params.UseRdma << " " << bool(RdmaMemPool) << " "
+                             << SerializationInfo->Sections.size() << Endl;
+
+                        SendViaRdma = Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() > 2;
+                        for (const auto& section : SerializationInfo->Sections) {
+                            SendViaRdma &= section.IsRdma;
+                        }
+                        Cerr << "SendViaRdma: " << SendViaRdma << Endl;
                     }
                     break;
 
@@ -143,6 +152,17 @@ namespace NActors {
                         if (section.IsInline && Params.UseXdcShuffle) {
                             type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_INLINE);
                         }
+                        if (SendViaRdma) {
+                            type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_RDMA);
+                        }
+                        Cerr << "Section: "
+                             << " Headroom: " << section.Headroom
+                             << " Size: " << section.Size
+                             << " Tailroom: " << section.Tailroom
+                             << " Alignment: " << section.Alignment
+                             << " IsInline: " << section.IsInline
+                             << " SendViaRdma: " << SendViaRdma
+                             << Endl;
                         Y_ABORT_UNLESS(p <= std::end(sectionInfo));
 
                         const size_t declareLen = p - sectionInfo;
@@ -263,7 +283,8 @@ namespace NActors {
             if (IsPartInline) {
                 Cerr << "FeedInlinePayload" << Endl;
                 complete = FeedInlinePayload(task, event);
-            } else if (Params.UseRdma && RdmaMemPool) {
+            } else if (SendViaRdma) {
+                Cerr << "FeedRdmaPayload" << Endl;
                 complete = FeedRdmaPayload(task, event);
             } else {
                 Cerr << "FeedExternalPayload" << Endl;
@@ -306,9 +327,7 @@ namespace NActors {
 
         if (!event.Buffer && event.Event) {
             std::optional<TRope> rope = event.Event->SerializeToRope(
-                [&](ui32 size) -> TRcBuf {
-                    return RdmaMemPool->AllocRcBuf(size);
-                }
+                [&](ui32 size) -> TRcBuf { return RdmaMemPool->AllocRcBuf(size); }
             );
             if (!rope) {
                 return std::nullopt; // serialization failed
@@ -316,6 +335,7 @@ namespace NActors {
             event.Buffer = MakeIntrusive<TEventSerializedData>(
                 std::move(*rope), event.Event->CreateSerializationInfo()
             );
+            Iter = event.Buffer->GetBeginIter();
         }
 
         if (event.Buffer) {
@@ -338,6 +358,7 @@ namespace NActors {
     std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event) {
         auto rdmaCreds = SerializeEventRdma(event);
 
+        Y_ABORT_UNLESS(rdmaCreds, "Failed to serialize RDMA payload");
         if (!rdmaCreds) {
             return std::nullopt; // no RDMA creds, cannot serialize
         }
@@ -359,6 +380,7 @@ namespace NActors {
         *ptr++ = static_cast<ui8>(EXdcCommand::RDMA_READ);
         ui16 credsSerializedSize = rdmaCreds->ByteSizeLong();
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
+        ptr += sizeof(ui16);
         Y_ABORT_UNLESS(rdmaCreds->SerializePartialToArray(ptr, credsSerializedSize));
 
         task.Write<false>(buffer, partSize);

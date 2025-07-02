@@ -530,7 +530,8 @@ namespace NActors {
         while (ptr != end) {
             switch (const auto cmd = static_cast<EXdcCommand>(*ptr++)) {
                 case EXdcCommand::DECLARE_SECTION:
-                case EXdcCommand::DECLARE_SECTION_INLINE: {
+                case EXdcCommand::DECLARE_SECTION_INLINE:
+                case EXdcCommand::DECLARE_SECTION_RDMA: {
                     // extract and validate command parameters
                     const ui64 headroom = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     const ui64 size = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
@@ -620,6 +621,7 @@ namespace NActors {
                     }
                     NActorsInterconnect::TRdmaCreds creds;
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
+                    ptr += credsSerializedSize;
                     for (const auto& cred: creds.GetCreds()) {
                         Y_UNUSED(cred);
                         // Common->RdmaMemPool

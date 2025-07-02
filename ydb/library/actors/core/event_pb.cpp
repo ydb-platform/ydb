@@ -1,5 +1,7 @@
 #include "event_pb.h"
 
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr) {
         TString res;
@@ -432,17 +434,19 @@ namespace NActors {
         return result;
     }
 
-    bool IsRdma(const TVector<TRope> &payload) {
-        for (const TRope& rope : payload) {
-            Y_UNUSED(rope);
+    bool IsRdma(const TRope &rope) {
+        for (auto it = rope.Begin(); it != rope.End(); ++it) {
+            const TRcBuf& chunk = it.GetChunk();
+            if (NInterconnect::NRdma::TryExtractFromRcBuf(chunk).Empty()) {
+                return false;
+            }
         }
-        return true;;
+        return true;
     }
 
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize) {
             TEventSerializationInfo info;
             info.IsExtendedFormat = static_cast<bool>(payload);
-            info.IsRdma = IsRdma(payload);
 
             if (allowExternalDataChannel) {
                 if (payload) {
@@ -451,14 +455,14 @@ namespace NActors {
                     for (const TRope& rope : payload) {
                         headerLen += SerializeNumber(rope.size(), temp);
                     }
-                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true});
+                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, true});
                     for (const TRope& rope : payload) {
-                        info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false});
+                        info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false, IsRdma(rope)});
                     }
                 }
 
                 const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
-                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
+                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, true}); // protobuf itself
 
 #ifndef NDEBUG
                 size_t total = 0;

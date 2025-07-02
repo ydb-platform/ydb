@@ -53,6 +53,7 @@ namespace NActors {
         DECLARE_SECTION = 1,
         PUSH_DATA,
         DECLARE_SECTION_INLINE,
+        DECLARE_SECTION_RDMA,
         RDMA_READ,
     };
 
@@ -146,6 +147,7 @@ namespace NActors {
         size_t SectionIndex = 0;
         std::vector<char> XdcData;
         std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
+        bool SendViaRdma = false; // TODO: replace per event decision with per section
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);

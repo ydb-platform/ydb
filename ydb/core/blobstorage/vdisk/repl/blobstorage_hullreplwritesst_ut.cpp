@@ -38,9 +38,8 @@ TVDiskContextPtr CreateVDiskContext(const TBlobStorageGroupInfo& info) {
 }
 
 TIntrusivePtr<THullCtx> CreateHullCtx(const TBlobStorageGroupInfo& info, ui32 chunkSize, ui32 compWorthReadSize) {
-    auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
-    return MakeIntrusive<THullCtx>(CreateVDiskContext(info), MakeIntrusive<TVDiskConfig>(baseInfo), chunkSize, compWorthReadSize, true, true, true, true, 1u,
-        1u, 2.0, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), true);
+    return MakeIntrusive<THullCtx>(CreateVDiskContext(info), chunkSize, compWorthReadSize, true, true, true, true, 1u,
+        1u, 2.0, 10u, 10u, 20u, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), true);
 }
 
 TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info) {

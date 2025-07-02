@@ -81,11 +81,7 @@ namespace NKikimr {
         HandoffTimeout = TDuration::Seconds(10);
         RunRepl = !baseInfo.ReadOnly;
 
-        if (const auto& perf = VDiskPerformance.find(baseInfo.DeviceType); perf != VDiskPerformance.end()) {
-            ReplMaxTimeToMakeProgress = perf->second.ReplMaxTimeToMakeProgress;
-        } else {
-            ReplMaxTimeToMakeProgress = TDuration::Minutes(180);
-        }
+        ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
 
         SkeletonFrontGets_MaxInFlightCount = 24;
         SkeletonFrontGets_MaxInFlightCost = 200000000;              // 200ms

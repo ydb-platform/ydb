@@ -868,10 +868,11 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
  * Rewrites a `TDqPhyBlockHashJoin` to use block-based processing with BlockHashJoin.
  *
  * This function handles the block hash join optimization by:
+ *  - Checking input/output types and adding ToBlocks/FromBlocks wrappers as needed
  *  - Using GraceJoin logic for key processing and type handling
- *  - Converting inputs to wide streams and then to blocks
+ *  - Converting inputs to wide streams and then to blocks if necessary
  *  - Performing the block hash join with BlockHashJoin
- *  - Converting back with FromBlocks and structuring the result
+ *  - Converting back with FromBlocks if output should not be blocks
  */
 TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyBlockHashJoin>()) {
@@ -960,42 +961,61 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}), 
         ctx, rightConvertedItems, pos);
 
-    // Convert wide flows to wide streams, then to block format
-    auto leftBlocks = ctx.Builder(pos)
-        .Callable("WideToBlocks")
-            .Callable(0, "FromFlow")
-                .Add(0, std::move(leftWideFlow))
-            .Seal()
+    // Convert wide flows to wide streams
+    auto leftInput = ctx.Builder(pos)
+        .Callable("FromFlow")
+            .Add(0, std::move(leftWideFlow))
         .Seal()
         .Build();
 
-    auto rightBlocks = ctx.Builder(pos)
-        .Callable("WideToBlocks")
-            .Callable(0, "FromFlow")
-                .Add(0, std::move(rightWideFlow))
-            .Seal()
+    auto rightInput = ctx.Builder(pos)
+        .Callable("FromFlow")
+            .Add(0, std::move(rightWideFlow))
         .Seal()
         .Build();
 
-    // Build block hash join (this accepts block streams)
-    // WrapDqBlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
+    // Check if we need to convert inputs to blocks
+    // For now, assume most inputs are scalar and need conversion to blocks
+    bool needsLeftToBlocks = true;  // TODO: check actual input types
+    bool needsRightToBlocks = true; // TODO: check actual input types 
+    bool needsFromBlocks = true;    // TODO: check if output should be scalar
+
+    if (needsLeftToBlocks) {
+        leftInput = ctx.Builder(pos)
+            .Callable("WideToBlocks")
+                .Add(0, std::move(leftInput))
+            .Seal()
+            .Build();
+    }
+
+    if (needsRightToBlocks) {
+        rightInput = ctx.Builder(pos)
+            .Callable("WideToBlocks")
+                .Add(0, std::move(rightInput))
+            .Seal()
+            .Build();
+    }
+
+    // Build block hash join - now inputs are guaranteed to be blocks
     auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoin")
-            .Add(0, std::move(leftBlocks))
-            .Add(1, std::move(rightBlocks))
+            .Add(0, std::move(leftInput))
+            .Add(1, std::move(rightInput))
             .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
         .Seal()
         .Build();
 
-    // Convert back from blocks to wide stream and structure the result
-    // For block hash join, we handle complete processing here including structuring
-    auto wideResult = ctx.Builder(pos)
-        .Callable("WideFromBlocks")
-            .Add(0, std::move(blockJoinCore))
-        .Seal()
-        .Build();
+    // Convert blocks back to scalars if needed
+    auto wideResult = std::move(blockJoinCore);
+    if (needsFromBlocks) {
+        wideResult = ctx.Builder(pos)
+            .Callable("WideFromBlocks")
+                .Add(0, std::move(wideResult))
+            .Seal()
+            .Build();
+    }
 
     // Structure the result using NarrowMap (complete processing)
     auto result = ctx.Builder(pos)

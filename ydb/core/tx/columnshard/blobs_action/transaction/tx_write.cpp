@@ -105,7 +105,7 @@ bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
                 lock.SetDataShard(Self->TabletID());
                 lock.SetGeneration(info.GetGeneration());
                 lock.SetCounter(info.GetInternalGenerationCounter());
-                lock.SetPathId(writeMeta.GetTableId());
+                lock.SetPathId(writeMeta.GetTableId().GetRawValue());
                 auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
                 Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
             }
@@ -151,12 +151,12 @@ void TTxWrite::DoComplete(const TActorContext& ctx) {
                 Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
                 AFL_VERIFY(CommitSnapshot);
                 Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
+                Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
             }
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
-    Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
     Self->SetupIndexation();
 }
 

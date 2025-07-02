@@ -1,0 +1,9 @@
+package NKikimrTxColumnShard;
+
+message TIndexCategoriesDescription {
+    message TCategory {
+        repeated uint64 Hashes = 1;
+        optional uint32 FilterSize = 2;
+    }
+    repeated TCategory Categories = 1;
+}

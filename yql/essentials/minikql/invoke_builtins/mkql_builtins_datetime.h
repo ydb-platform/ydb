@@ -160,7 +160,7 @@ NUdf::TDataType<NUdf::TInterval64>::TLayout FromScaledDate<NUdf::TDataType<NUdf:
 template<typename TDateType>
 inline bool IsBadDateTime(TScaledDate val) {
     static_assert(TDateType::Features & (NYql::NUdf::DateType | NYql::NUdf::TzDateType), "Date type expected");
-    if constexpr (TDateType::Features & NYql::NUdf::BigDateType) {
+    if constexpr (TDateType::Features & NYql::NUdf::ExtDateType) {
         return val < NUdf::MIN_TIMESTAMP64 || val > NUdf::MAX_TIMESTAMP64;
     } else {
         return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
@@ -170,7 +170,7 @@ inline bool IsBadDateTime(TScaledDate val) {
 template<typename TDateType>
 inline bool IsBadInterval(TScaledDate val) {
     static_assert(TDateType::Features & NYql::NUdf::TimeIntervalType, "Interval type expected");
-    if constexpr (TDateType::Features & NYql::NUdf::BigDateType) {
+    if constexpr (TDateType::Features & NYql::NUdf::ExtDateType) {
         return val < -NUdf::MAX_INTERVAL64 || val > NUdf::MAX_INTERVAL64;
     } else {
         return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
@@ -201,7 +201,7 @@ inline Value* GenIsInt64Overflow(Value* value, LLVMContext &context, BasicBlock*
 template<typename TDateType>
 inline Value* GenIsBadDateTime(Value* val, LLVMContext &context, BasicBlock* block) {
     static_assert(TDateType::Features & (NYql::NUdf::DateType | NYql::NUdf::TzDateType), "Date type expected");
-    if constexpr (TDateType::Features & NYql::NUdf::BigDateType) {
+    if constexpr (TDateType::Features & NYql::NUdf::ExtDateType) {
         auto lt = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, val, ConstantInt::get(Type::getInt64Ty(context), NUdf::MIN_TIMESTAMP64), "lt", block);
         auto ge = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, val, ConstantInt::get(Type::getInt64Ty(context), NUdf::MAX_TIMESTAMP64), "ge", block);
         return BinaryOperator::CreateOr(lt, ge, "or", block);
@@ -215,10 +215,10 @@ inline Value* GenIsBadDateTime(Value* val, LLVMContext &context, BasicBlock* blo
 template<typename TDateType>
 inline Value* GenIsBadInterval(Value* val, LLVMContext &context, BasicBlock* block) {
     static_assert(TDateType::Features & NYql::NUdf::TimeIntervalType, "Interval type expected");
-    constexpr i64 lowerBound = (TDateType::Features & NYql::NUdf::BigDateType)
+    constexpr i64 lowerBound = (TDateType::Features & NYql::NUdf::ExtDateType)
         ? (-NUdf::MAX_INTERVAL64 - 1)
         : -(i64)NUdf::MAX_TIMESTAMP;
-    constexpr i64 upperBound = (TDateType::Features & NYql::NUdf::BigDateType)
+    constexpr i64 upperBound = (TDateType::Features & NYql::NUdf::ExtDateType)
         ? (NUdf::MAX_INTERVAL64 + 1)
         : (i64)NUdf::MAX_TIMESTAMP;
     auto le = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, val, ConstantInt::get(Type::getInt64Ty(context), lowerBound), "le", block);

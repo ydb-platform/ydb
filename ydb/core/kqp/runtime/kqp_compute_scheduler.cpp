@@ -188,14 +188,17 @@ public:
 
     void CollectValues() {
         std::vector<TParameterKey> toerase;
-        for (auto& [k, v] : Params) {
-            if (!v.Holder->HasDependents()) {
-                toerase.push_back(k);
+        do {
+            toerase.clear();
+            for (auto& [k, v] : Params) {
+                if (!v.Holder->HasDependents()) {
+                    toerase.push_back(k);
+                }
             }
-        }
-        for (auto& key : toerase) {
-            Params.erase(key);
-        }
+            for (auto& key : toerase) {
+                Params.erase(key);
+            }
+        } while (!toerase.empty());
     }
 
 private:
@@ -228,7 +231,7 @@ private:
 template<typename T>
 class TParameter : public IObservableValue<T> {
 public:
-    TParameter(TObservableUpdater* engine, double initialValue)
+    TParameter(TObservableUpdater* engine, T initialValue)
         : Value_(initialValue)
         , Updater_(engine)
     {
@@ -897,7 +900,8 @@ class TCompositeGroupShare : public IObservableValue<double> {
 protected:
     double DoUpdateValue() override {
         if (ResourceWeightEnabled->GetValue()) {
-            if (ResourceWeightLimit->Enabled()->GetValue()) {
+            auto limitEnabled = ResourceWeightLimit->Enabled();
+            if (limitEnabled->GetValue()) {
                 return Min(TotalLimit->GetValue(), ResourceWeightLimit->GetValue());
             } else {
                 return 0;

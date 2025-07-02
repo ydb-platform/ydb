@@ -42,7 +42,7 @@ private:
     TVector<TTabletChannelInfo> Channels;
     TActorId TRemoveLeakedBlobsActorId;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
-    THashMap<ui64, TPortionInfoConstructor> Portions;
+    THashMap<ui64, std::unique_ptr<TPortionInfoConstructor>> Portions;
     THashMap<ui64, std::vector<TColumnChunkLoadContextV1>> Records;
     THashMap<ui64, std::vector<TIndexChunkLoadContext>> Indexes;
     THashSet<TUnifiedBlobId> BlobsToDelete;

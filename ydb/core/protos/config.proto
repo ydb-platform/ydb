@@ -1094,6 +1094,8 @@ message TQueryServiceConfig {
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
+    repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];   
 }
 
 // Config describes immediate controls and allows
@@ -1417,32 +1419,32 @@ message TImmediateControlsConfig {
         optional uint64 ThrottlingMinLevel0SstCount = 15 [(ControlOptions) = {
             Description: "Minimum level 0 SST count - throttling is turned on",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 100 }];
         optional uint64 ThrottlingMaxLevel0SstCount = 16 [(ControlOptions) = {
             Description: "Maximum level 0 SST count - throttling speed is zero",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 250 }];
         optional uint64 ThrottlingMinInplacedSizeHDD = 17 [(ControlOptions) = {
             Description: "Minimum size of all inplaced blobs (HDD) - throttling is turned on",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 21474836480 }];
         optional uint64 ThrottlingMaxInplacedSizeHDD = 18 [(ControlOptions) = {
             Description: "Maximum size of all inplaced blobs (HDD) - throttling speed is zero",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 64424509440 }];
         optional uint64 ThrottlingMinInplacedSizeSSD = 24 [(ControlOptions) = {
             Description: "Minimum size of all inplaced blobs (SSD) - throttling is turned on",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 21474836480 }];
         optional uint64 ThrottlingMaxInplacedSizeSSD = 25 [(ControlOptions) = {
             Description: "Maximum size of all inplaced blobs (SSD) - throttling speed is zero",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 64424509440 }];
         optional uint64 ThrottlingMinOccupancyPerMille = 19 [(ControlOptions) = {
             Description: "Minimum occupancy of disk per mille - throttling is turned on",
@@ -1457,12 +1459,12 @@ message TImmediateControlsConfig {
         optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
             Description: "Minimum pdisk log chunk count - throttling is turned on",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 100 }];
         optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
             Description: "Maximum pdisk log chunk count - throttling speed is zero",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 130 }];
 
         optional uint64 MaxInProgressSyncCount = 27 [(ControlOptions) = {
@@ -1860,6 +1862,11 @@ message TColumnShardConfig {
     }
     repeated TRepairInfo Repairs = 15;
 
+    enum EJsonDoubleOutOfRangeHandlingPolicy {
+        REJECT = 0;
+        CAST_TO_INFINITY = 1;
+    }
+
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
@@ -1883,6 +1890,9 @@ message TColumnShardConfig {
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
+    optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
+    optional bool PortionMetaV0Usage = 41 [default = true];
+    optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
 }
 
 message TSchemeShardConfig {

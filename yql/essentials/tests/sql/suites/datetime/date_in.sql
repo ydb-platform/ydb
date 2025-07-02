@@ -32,4 +32,11 @@ select cast("2105-12-31T23:59:59.999999Z" as timestamp),cast(cast("2105-12-31T23
 select cast("2106-01-01T00:00:00.000000Z" as timestamp),cast(cast("2106-01-01T00:00:00.000000Z" as timestamp) as string);
 
 select cast("P49672DT23H59M59.999999S" as interval),cast(cast("P49672DT23H59M59.999999S" as interval) as string);
+select cast("-P49672DT23H59M59.999999S" as interval),cast(cast("-P49672DT23H59M59.999999S" as interval) as string);
 select cast("P49673D" as interval),cast(cast("P49673D" as interval) as string);
+select cast("-P49673D" as interval),cast(cast("-P49673D" as interval) as string);
+
+select cast("PT4291747199S" as interval),cast(cast("PT4291747199S" as interval) as string);
+select cast("-PT4291747199S" as interval),cast(cast("-PT4291747199S" as interval) as string);
+select cast("PT4291747200S" as interval),cast(cast("PT4291747200S" as interval) as string);
+select cast("-PT4291747200S" as interval),cast(cast("-PT4291747200S" as interval) as string);

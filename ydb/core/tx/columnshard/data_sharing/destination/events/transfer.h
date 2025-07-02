@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 namespace NKikimr::NOlap::NDataSharing {
@@ -17,7 +18,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 
 class TPathIdData {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_ACCESSOR_DEF(std::vector<TPortionDataAccessor>, Portions);
 
     TPathIdData() = default;
@@ -27,7 +28,7 @@ private:
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
-        PathId = proto.GetPathId();
+        PathId = TInternalPathId::FromRawValue(proto.GetPathId());
         for (auto&& portionProto : proto.GetPortions()) {
             const auto schema = versionedIndex.GetSchemaVerified(portionProto.GetSchemaVersion());
             TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
@@ -40,18 +41,15 @@ private:
     }
 
 public:
-    TPathIdData(const ui64 pathId, const std::vector<TPortionDataAccessor>& portions)
+    TPathIdData(const TInternalPathId pathId, const std::vector<TPortionDataAccessor>& portions)
         : PathId(pathId)
         , Portions(portions) {
     }
 
-    std::vector<TPortionDataAccessor> DetachPortions() {
-        return std::move(Portions);
-    }
     THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId,
         const TTransferContext& context, const TVersionedIndex& index);
 
-    void InitPortionIds(ui64* lastPortionId, const std::optional<ui64> pathId = {}) {
+    void InitPortionIds(ui64* lastPortionId, const std::optional<TInternalPathId> pathId = {}) {
         AFL_VERIFY(lastPortionId);
         for (auto&& i : Portions) {
             i.MutablePortionInfo().SetPortionId(++*lastPortionId);
@@ -62,7 +60,7 @@ public:
     }
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
-        proto.SetPathId(PathId);
+        proto.SetPathId(PathId.GetRawValue());
         for (auto&& i : Portions) {
             i.SerializeToProto(*proto.AddPortions());
         }
@@ -85,7 +83,7 @@ struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NK
     TEvSendDataFromSource() = default;
 
     TEvSendDataFromSource(
-        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<ui64, TPathIdData>& pathIdData, TArrayRef<const NOlap::TSchemaPresetVersionInfo> schemas) {
+        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<TInternalPathId, TPathIdData>& pathIdData, TArrayRef<const NOlap::TSchemaPresetVersionInfo> schemas) {
         Record.SetSessionId(sessionId);
         Record.SetPackIdx(packIdx);
         Record.SetSourceTabletId((ui64)sourceTabletId);

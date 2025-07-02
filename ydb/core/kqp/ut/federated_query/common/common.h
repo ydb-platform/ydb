@@ -14,11 +14,19 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         const NYdb::TOperation::TOperationId& operationId,
         const NYdb::TDriver& ydbDriver);
 
+    void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
+    void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);
+
+    struct TKikimrRunnerOptions {
+        TString DomainRoot = "Root";
+        ui32 NodeCount = 1;
+    };
+
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         bool initializeHttpGateway = false,
         NYql::NConnector::IClient::TPtr connectorClient = nullptr,
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver = nullptr,
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
-        const TString& domainRoot = "Root");
+        const TKikimrRunnerOptions& options = {});
 } // namespace NKikimr::NKqp::NFederatedQueryTest

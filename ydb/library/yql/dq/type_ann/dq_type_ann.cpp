@@ -5,6 +5,7 @@
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
+#include <util/string/join.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
@@ -42,46 +43,6 @@ const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext
     }
 
     return outputType;
-}
-
-const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprContext& ctx) {
-    return GetDqOutputType(node.Output(), ctx);
-}
-
-const TTypeAnnotationNode* GetColumnType(const TDqConnection& node, const TStructExprType& structType, TStringBuf name, TPositionHandle pos, TExprContext& ctx) {
-    TDqStageSettings settings = TDqStageSettings::Parse(node.Output().Stage());
-    if (settings.WideChannels) {
-        auto multiType = node.Output().Stage().Program().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
-        ui32 idx;
-        if (!TryFromString(name, idx)) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Expecting integer as column name, but got '" << name << "'"));
-            return nullptr;
-        }
-        const bool isBlock = AnyOf(multiType->GetItems(), [](const TTypeAnnotationNode* item) { return item->IsBlockOrScalar(); });
-        const ui32 width = isBlock ? (multiType->GetSize() - 1) : multiType->GetSize();
-        if (idx >= width) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Column index too big: " << name << " >= " << width));
-            return nullptr;
-        }
-
-        auto itemType = multiType->GetItems()[idx];
-        if (isBlock) {
-            itemType = itemType->IsBlock() ? itemType->Cast<TBlockExprType>()->GetItemType() :
-                                             itemType->Cast<TScalarExprType>()->GetItemType();
-        }
-        return itemType;
-    }
-
-    auto result = structType.FindItemType(name);
-    if (!result) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos),
-            TStringBuilder() << "Missing column '" << name << "'"));
-        return nullptr;
-    }
-
-    return result;
 }
 
 template <typename TType>
@@ -298,7 +259,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
 }
 
 THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>
-ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprContext& ctx, bool optional) {
+ParseJoinInputType(const TStructExprType& rowType, const THashSet<TStringBuf>& tableLabels, TExprContext& ctx, bool optional) {
     THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>> result;
     for (auto member : rowType.GetItems()) {
         TStringBuf label, column;
@@ -308,7 +269,7 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
             column = member->GetName();
         }
         const bool isSystemKeyColumn = column.starts_with("_yql_dq_key_");
-        if (label.empty() && tableLabel.empty() && !isSystemKeyColumn) {
+        if (label.empty() && (tableLabels.size() == 1 && tableLabels.begin()->empty()) && !isSystemKeyColumn) {
             ctx.AddError(TIssue(TStringBuilder() << "Invalid join input type " << FormatType(&rowType)));
             result.clear();
             return result;
@@ -317,10 +278,17 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
         if (optional && !memberType->IsOptionalOrNull()) {
             memberType = ctx.MakeType<TOptionalExprType>(memberType);
         }
-        if (!tableLabel.empty()) {
-            result[tableLabel][member->GetName()] = memberType;
-        } else {
+        if (tableLabels.size() > 1) {
+            YQL_ENSURE(label);
+            YQL_ENSURE(column);
             result[label][column] = memberType;
+        } else {
+            YQL_ENSURE(tableLabels.size() == 1);
+            if (!(tableLabels.begin())->empty()) {
+                result[*(tableLabels.begin())][member->GetName()] = memberType;
+            } else {
+                result[label][column] = memberType;
+            }
         }
     }
     return result;
@@ -328,12 +296,12 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExprType& leftRowType,
-    const TStringBuf& leftLabel, const TStructExprType& rightRowType, const TStringBuf& rightLabel,
+    const THashSet<TStringBuf>& leftLabels, const TStructExprType& rightRowType, const THashSet<TStringBuf>& rightLabels,
     const TStringBuf& joinType, const TDqJoinKeyTupleList& joinKeys, TExprContext& ctx)
 {
     // check left
     bool isLeftOptional = IsLeftJoinSideOptional(joinType);
-    auto leftType = ParseJoinInputType(leftRowType, leftLabel, ctx, isLeftOptional);
+    auto leftType = ParseJoinInputType(leftRowType, leftLabels, ctx, isLeftOptional);
     if (leftType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse left join input type: ";
         leftRowType.Out(str);
@@ -343,7 +311,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
     // check right
     bool isRightOptional = IsRightJoinSideOptional(joinType);
-    auto rightType = ParseJoinInputType(rightRowType, rightLabel, ctx, isRightOptional);
+    auto rightType = ParseJoinInputType(rightRowType, rightLabels, ctx, isRightOptional);
     if (rightType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse right join input type: ";
         rightRowType.Out(str);
@@ -371,11 +339,11 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
         auto rightKeyLabel = key.RightLabel().Value();
         auto rightKeyColumn = key.RightColumn().Value();
 
-        if (leftLabel && leftLabel != leftKeyLabel) {
+        if ((leftLabels.size() && !leftLabels.begin()->empty()) && !leftLabels.contains(leftKeyLabel)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "different labels for left table"));
             return nullptr;
         }
-        if (rightLabel && rightLabel != rightKeyLabel) {
+        if ((rightLabels.size() && !rightLabels.begin()->empty()) && !rightLabels.contains(rightKeyLabel)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "different labels for right table"));
             return nullptr;
         }
@@ -437,19 +405,31 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 8, 11, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 8, 13, ctx)) {
         return nullptr;
     }
 
     if (!input->Child(TDqJoin::idx_LeftLabel)->IsCallable("Void")) {
-        if (!EnsureAtom(*input->Child(TDqJoin::idx_LeftLabel), ctx)) {
-            return nullptr;
+        if ((input->Child(TDqJoin::idx_LeftLabel)->IsAtom())) {
+            if (!EnsureAtom(*input->Child(TDqJoin::idx_LeftLabel), ctx)) {
+                return nullptr;
+            }
+        } else {
+            if (!EnsureTupleOfAtoms(*input->Child(TDqJoin::idx_LeftLabel), ctx)) {
+                return nullptr;
+            }
         }
     }
 
     if (!input->Child(TDqJoin::idx_RightLabel)->IsCallable("Void")) {
-        if (!EnsureAtom(*input->Child(TDqJoin::idx_RightLabel), ctx)) {
-            return nullptr;
+        if ((input->Child(TDqJoin::idx_RightLabel)->IsAtom())) {
+            if (!EnsureAtom(*input->Child(TDqJoin::idx_RightLabel), ctx)) {
+                return nullptr;
+            }
+        } else {
+            if (!EnsureTupleOfAtoms(*input->Child(TDqJoin::idx_RightLabel), ctx)) {
+                return nullptr;
+            }
         }
     }
 
@@ -499,18 +479,32 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         return nullptr;
     }
     auto leftStructType = leftInputItemType.Cast<TStructExprType>();
-    auto leftTableLabel = join.LeftLabel().Maybe<TCoAtom>()
-        ? join.LeftLabel().Cast<TCoAtom>().Value()
-        : TStringBuf("");
+    THashSet<TStringBuf> leftTableLabels;
+    if (join.LeftLabel().Maybe<TCoAtom>()) {
+        leftTableLabels.emplace(join.LeftLabel().Cast<TCoAtom>().Value());
+    } else if (join.LeftLabel().Maybe<TCoAtomList>()) {
+        for (auto label : join.LeftLabel().Cast<TCoAtomList>())  {
+            leftTableLabels.emplace(label.Value());
+        }
+    } else {
+        leftTableLabels.emplace("");
+    }
 
     const auto& rightInputItemType = GetSeqItemType(*rightInputType);
     if (!EnsureStructType(join.Pos(), rightInputItemType, ctx)) {
         return nullptr;
     }
     auto rightStructType = rightInputItemType.Cast<TStructExprType>();
-    auto rightTableLabel = join.RightLabel().Maybe<TCoAtom>()
-        ? join.RightLabel().Cast<TCoAtom>().Value()
-        : TStringBuf("");
+    THashSet<TStringBuf> rightTableLabels;
+    if (join.RightLabel().Maybe<TCoAtom>()) {
+        rightTableLabels.emplace(join.RightLabel().Cast<TCoAtom>().Value());
+    } else if (join.RightLabel().Maybe<TCoAtomList>()) {
+        for (auto label : join.RightLabel().Cast<TCoAtomList>()) {
+            rightTableLabels.emplace(label.Value());
+        }
+    } else {
+        rightTableLabels.emplace("");
+    }
 
     if (input->ChildrenSize() > TDqJoin::idx_JoinAlgoOptions) {
         const auto& joinAlgo = *input->Child(TDqJoin::idx_JoinAlgo);
@@ -551,11 +545,51 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         }
     }
 
-    return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabel, *rightStructType,
-        rightTableLabel, join.JoinType(), join.JoinKeys(), ctx);
-}
+    return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabels, *rightStructType,
+        rightTableLabels, join.JoinType(), join.JoinKeys(), ctx);
+    }
 
 } // unnamed
+
+const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprContext& ctx) {
+    return GetDqOutputType(node.Output(), ctx);
+}
+
+const TTypeAnnotationNode* GetColumnType(const TDqConnection& node, const TStructExprType& structType, TStringBuf name, TPositionHandle pos, TExprContext& ctx) {
+    TDqStageSettings settings = TDqStageSettings::Parse(node.Output().Stage());
+    if (settings.WideChannels) {
+        auto multiType = node.Output().Stage().Program().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+        ui32 idx;
+        if (!TryFromString(name, idx)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Expecting integer as column name, but got '" << name << "'"));
+            return nullptr;
+        }
+        const bool isBlock = AnyOf(multiType->GetItems(), [](const TTypeAnnotationNode* item) { return item->IsBlockOrScalar(); });
+        const ui32 width = isBlock ? (multiType->GetSize() - 1) : multiType->GetSize();
+        if (idx >= width) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Column index too big: " << name << " >= " << width));
+            return nullptr;
+        }
+
+        auto itemType = multiType->GetItems()[idx];
+        if (isBlock) {
+            itemType = itemType->IsBlock() ? itemType->Cast<TBlockExprType>()->GetItemType() :
+                                             itemType->Cast<TScalarExprType>()->GetItemType();
+        }
+        return itemType;
+    }
+
+    auto result = structType.FindItemType(name);
+    if (!result) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Missing column '" << name << "'"));
+        return nullptr;
+    }
+
+    return result;
+}
 
 TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
     return AnnotateStage<TDqStage>(input, ctx);
@@ -689,12 +723,31 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!EnsureStructType(input->Pos(), rightRowType, ctx)) {
         return TStatus::Error;
     }
+
+    THashSet<TStringBuf> leftLabels;
+    if (cnStreamLookup.LeftLabel().Maybe<TCoAtom>()) {
+        leftLabels.emplace(cnStreamLookup.LeftLabel().Cast<TCoAtom>().Value());
+    } else {
+        for (auto label : cnStreamLookup.LeftLabel().Cast<TCoAtomList>()) {
+            leftLabels.emplace(label.Value());
+        }
+    }
+
+    THashSet<TStringBuf> rightLabels;
+    if (cnStreamLookup.RightLabel().Maybe<TCoAtom>()) {
+        rightLabels.emplace(cnStreamLookup.RightLabel().Cast<TCoAtom>().Value());
+    } else {
+        for (auto label : cnStreamLookup.RightLabel().Cast<TCoAtomList>()) {
+            rightLabels.emplace(label.Value());
+        }
+    }
+
     const auto outputRowType = GetDqJoinResultType<true>(
         input->Pos(),
         *leftRowType.Cast<TStructExprType>(),
-        cnStreamLookup.LeftLabel().Cast<TCoAtom>().StringValue(),
+        leftLabels,
         *rightRowType.Cast<TStructExprType>(),
-        cnStreamLookup.RightLabel().StringValue(),
+        rightLabels,
         cnStreamLookup.JoinType().StringValue(),
         cnStreamLookup.JoinKeys(),
         ctx
@@ -777,7 +830,7 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 2, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 2, 4, ctx)) {
         return TStatus::Error;
     }
 
@@ -819,6 +872,16 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
                 TStringBuilder() << "Non-hashable key column: " << column->Content()));
             return TStatus::Error;
         }
+    }
+
+    if (TDqCnHashShuffle::idx_HashFunc < input->ChildrenSize()) {
+        TString hashFuncName = TString(input->Child(TDqCnHashShuffle::idx_HashFunc)->Content()); hashFuncName.to_lower();
+
+        static const auto allowableHashFuncs = { "columnshardhashv1", "hashv1" };
+        Y_ENSURE(
+            std::find(allowableHashFuncs.begin(), allowableHashFuncs.end(), hashFuncName) != allowableHashFuncs.end(),
+            TStringBuilder{} << "No such hash function: "  << hashFuncName << ", allowable: "  << "{" << JoinSeq(",", allowableHashFuncs) << "}"
+        );
     }
 
     input->SetTypeAnn(outputType);
@@ -1158,7 +1221,7 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             if (TDqCnMerge::Match(input.Get())) {
                 return AnnotateDqCnMerge(input, ctx);
             }
-            
+
             if (TDqReplicate::Match(input.Get())) {
                 return AnnotateDqReplicate(input, ctx);
             }
@@ -1293,6 +1356,9 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
         } else if (name == BlockStatusSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.BlockStatus = FromString<EBlockStatus>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == IsShuffleEliminatedSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.IsShuffleEliminated = FromString<bool>(tuple.Value().Cast<TCoAtom>().Value());
         }
     }
 
@@ -1408,6 +1474,13 @@ NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPo
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(BlockStatusSettingName)
             .Value<TCoAtom>().Build(ToString(*BlockStatus))
+            .Done());
+    }
+
+    if (IsShuffleEliminated) {
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(IsShuffleEliminatedSettingName)
+            .Value<TCoAtom>().Build(ToString(true))
             .Done());
     }
 

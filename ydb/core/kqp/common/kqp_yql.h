@@ -72,7 +72,35 @@ struct TKqpStreamLookupSettings {
     static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
 };
 
-struct TKqpReadTableSettings {
+enum class ERequestSorting {
+    NONE = 0,
+    ASC,
+    DESC
+};
+
+template <ERequestSorting DefaultValue = ERequestSorting::NONE>
+class TSortingOperator {
+private:
+    ERequestSorting Sorting = DefaultValue;
+public:
+    void SetSorting(const ERequestSorting sorting) {
+        Sorting = sorting;
+    }
+    ERequestSorting GetSorting() const {
+        return Sorting;
+    }
+
+    bool IsSorted() const {
+        return Sorting != ERequestSorting::NONE;
+    }
+
+    bool IsReverse() const {
+        return Sorting == ERequestSorting::DESC;
+    }
+};
+
+struct TKqpReadTableSettings: public TSortingOperator<ERequestSorting::NONE> {
+public:
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
     static constexpr TStringBuf ReverseSettingName = "Reverse";
@@ -80,18 +108,16 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
     static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
+    static constexpr TStringBuf TabletIdName = "TabletId";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
-    bool Reverse = false;
-    bool Sorted = false;
     TMaybe<ui64> SequentialInFlight;
+    TMaybe<ui64> TabletId;
     bool ForcePrimary = false;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
-    void SetReverse() { Reverse = true; }
-    void SetSorted() { Sorted = true; }
 
     bool operator == (const TKqpReadTableSettings&) const = default;
 

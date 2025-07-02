@@ -215,6 +215,7 @@ message TKqpTransaction {
         // Type of read result: unboxed values or Arrow blocks of data
         optional EReadType ReadType = 14;
         repeated string GroupByColumnNames = 15;
+        optional uint32 OptionalSorting = 16;
     }
 
     optional EKqpTransactionType Type = 1;
@@ -1759,6 +1760,8 @@ message TEvKqpScan {
     optional string CSScanPolicy = 26;
     optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
     optional NKikimrDataEvents.ELockMode LockMode = 28;
+    optional double CpuGroupThreadsLimit = 29;
+    optional string CpuGroupName = 30;
 }
 
 message TEvCompactTable {

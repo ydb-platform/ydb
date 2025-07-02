@@ -878,7 +878,7 @@ public:
         Locker.RemoveSchema(tableId, db);
     }
 
-    TVector<TLock> ApplyLocks();
+    std::pair<TVector<TLock>, TVector<ui64>> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);

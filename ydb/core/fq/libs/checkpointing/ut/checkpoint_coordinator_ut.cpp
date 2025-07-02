@@ -137,9 +137,9 @@ struct TTestBootstrap : public TTestActorRuntime {
             auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
                 settings.GetId(),
                 NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
-                NFq::IsIngress(settings),
-                NFq::IsEgress(settings),
-                NFq::HasState(settings),
+                NYql::NDq::IsIngress(settings),
+                NYql::NDq::IsEgress(settings),
+                NYql::NDq::HasState(settings),
                 actorId
             };
             event->Tasks.emplace_back(std::move(task));

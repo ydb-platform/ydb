@@ -18,13 +18,11 @@
 #include "blobs_action/storages_manager/manager.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "blobs_action/transaction/tx_remove_blobs.h"
-#include "blobs_action/transaction/tx_gc_indexed.h"
 #include "blobs_reader/actor.h"
-#include "bg_tasks/events/events.h"
-
-#include "data_reader/fetcher.h"
-#include "data_reader/contexts.h"
+#include "column_fetching/cache_policy.h"
 #include "data_accessor/manager.h"
+#include "data_reader/contexts.h"
+#include "data_reader/fetcher.h"
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
 #include "engines/changes/cleanup_portions.h"
@@ -508,10 +506,6 @@ private:
     const NOlap::TSnapshot SnapshotModification;
     const bool NeedBlobs = true;
     const std::shared_ptr<TAtomicCounter> TabletActivity;
-
-    virtual std::optional<ui64> GetMemoryForUsage() const override {
-        return Changes->CalcMemoryForUsage();
-    }
 
     virtual bool IsAborted() const override {
         return !TabletActivity->Val();
@@ -1225,6 +1219,102 @@ public:
 
 void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
     Execute(new TTxAskPortionChunks(this, ev->Get()->GetCallback(), std::move(ev->Get()->DetachPortions())));
+}
+
+void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& /*ctx*/) {
+    class TExecutor: public NOlap::NDataFetcher::IFetchCallback {
+    private:
+        std::shared_ptr<NKikimr::NGeneralCache::NSource::TFetchingContext<NOlap::NGeneralCache::TColumnDataCachePolicy>> Context;
+        std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>> CacheCallback;
+        THashMap<NOlap::TPortionAddress, NOlap::ISnapshotSchema::TPtr> Schemas;
+        TActorId Owner;
+        ui32 ColumnId;
+
+        virtual bool IsAborted() const override {
+            return Context->IsAborted();
+        }
+
+        virtual TString GetClassName() const override {
+            return "ColumnData";
+        }
+
+        virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
+            THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, NOlap::NGeneralCache::TColumnData> result;
+
+            AFL_VERIFY(context.GetResourceGuards().size() == 2)("size", context.GetResourceGuards().size());
+            auto memoryGuard = context.GetResourceGuards().back();
+
+            auto rawBlobs = context.ExtractBlobs();
+            for (const NOlap::TPortionDataAccessor& accessor : context.GetPortionAccessors()) {
+                auto schema = *TValidator::CheckNotNull(Schemas.FindPtr(accessor.GetPortionInfo().GetAddress()));
+                auto blobs = accessor.DecodeBlobAddresses(rawBlobs, schema->GetIndexInfo());
+                auto container = accessor.PrepareForAssemble(*schema, *schema, blobs).AssembleToGeneralContainer({}).DetachResult();
+                AFL_VERIFY(container->GetColumnsCount() == 1);
+                result.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, accessor.GetPortionInfo().GetAddress(), ColumnId),
+                    NOlap::NGeneralCache::TColumnData(container->GetColumnVerified(0), memoryGuard));
+            }
+
+            CacheCallback->OnReceiveData(Owner, std::move(result), {}, {});
+        }
+
+        virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
+            const std::vector<NOlap::TPortionDataAccessor>& acc) const override {
+            AFL_VERIFY(!!columnIds);
+            ui64 memory = 0;
+            for (auto&& a : acc) {
+                memory += a.GetColumnRawBytes(columnIds->GetColumnIds());
+            }
+            return memory;
+        }
+
+        virtual void DoOnError(const TString& errorMessage) override {
+            THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, TString> errorAddresses;
+            for (const auto& [portion, _] : Schemas) {
+                errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, portion, ColumnId), errorMessage);
+            }
+            CacheCallback->OnReceiveData(Owner, {}, {}, std::move(errorAddresses));
+        }
+
+    public:
+        TExecutor(
+            const std::shared_ptr<NKikimr::NGeneralCache::NSource::TFetchingContext<NOlap::NGeneralCache::TColumnDataCachePolicy>>& context,
+            const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
+                cacheCallback,
+            THashMap<NOlap::TPortionAddress, NOlap::ISnapshotSchema::TPtr>&& schemas, const TActorId& owner, const ui32 columnId)
+            : Context(context)
+            , CacheCallback(cacheCallback)
+            , Schemas(schemas)
+            , Owner(owner)
+            , ColumnId(columnId)
+        {
+        }
+    };
+
+    NOlap::NDataFetcher::TFetcherMemoryProcessInfo memoryProcess;
+    const NOlap::TColumnEngineForLogs& index = GetIndexAs<NOlap::TColumnEngineForLogs>();
+
+    for (const auto& [consumer, requestsByColumn] : ev->Get()->GetRequests()) {
+        for (const auto& [columnId, portionAddresses] : requestsByColumn) {
+            std::vector<NOlap::TPortionInfo::TConstPtr> portions;
+            THashMap<NOlap::TPortionAddress, NOlap::ISnapshotSchema::TPtr> schemas;
+            for (const NOlap::TPortionAddress& portionAddress : portionAddresses) {
+                auto granule = index.GetGranulePtrVerified(portionAddress.GetPathId());
+                auto portion = granule->GetPortionVerifiedPtr(portionAddress.GetPortionId());
+                portions.emplace_back(portion);
+                schemas.emplace(portion->GetAddress(), std::make_shared<NOlap::TFilteredSnapshotSchema>(
+                                                           portion->GetSchema(index.GetVersionedIndex()), std::vector<ui32>({ columnId })));
+            }
+
+            auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+            NOlap::NDataFetcher::TRequestInput rInput(portions, actualIndexInfo, consumer, "", memoryProcess);
+            auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
+
+            NOlap::NDataFetcher::TPortionsDataFetcher::StartColumnsFetching(std::move(rInput),
+                std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(std::vector<ui32>({ columnId })),
+                std::make_shared<TExecutor>(ev->Get()->GetContext(), ev->Get()->GetCallback(), std::move(schemas), SelfId(), columnId), env,
+                NConveyorComposite::ESpecialTaskCategory::Scan);
+        }
+    }
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {

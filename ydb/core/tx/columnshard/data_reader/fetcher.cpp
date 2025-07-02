@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap::NDataFetcher {
 
-void TPortionsDataFetcher::StartColumnsFetching(TRequestInput&& input, std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
+void TPortionsDataFetcher::StartColumnsFetching(TRequestInput&& input, const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
     std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
     const NConveyorComposite::ESpecialTaskCategory conveyorCategory) {
     std::shared_ptr<TScript> script = [&]() {

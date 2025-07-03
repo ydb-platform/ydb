@@ -121,9 +121,9 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         tester35.PrepareTable1();
 
         auto check = [](const TDecimalTestCase& tester) {
-            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE id=1", "[[[\"3.14\"];1;[4]]]");
+            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE id=1", "[[[\"3.14\"];1;[4]]]", EQueryMode::EXECUTE_QUERY);
             tester.CheckQuery(
-                "SELECT * FROM `/Root/Table1` order by id", "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "SELECT * FROM `/Root/Table1` order by id", "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", EQueryMode::EXECUTE_QUERY);
         };
 
         check(tester22);
@@ -137,9 +137,9 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         tester35.PrepareTable1();
 
         auto check = [](const TDecimalTestCase& tester) {
-            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec == cast(\"3.14\" as decimal(22,9))", "[[[\"3.14\"];1;[4]]]");
+            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec == cast(\"3.14\" as decimal(22,9))", "[[[\"3.14\"];1;[4]]]", EQueryMode::EXECUTE_QUERY);
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec != cast(\"3.14\" as decimal(22,9)) order by id",
-                "[[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "[[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", EQueryMode::EXECUTE_QUERY);
         };
 
         check(tester22);
@@ -160,10 +160,10 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         };
 
         auto check = [](const TDecimalTestCase& tester) {
-            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is NULL order by id", "[[#;5;[5]];[#;6;[6]]]");
+            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is NULL order by id", "[[#;5;[5]];[#;6;[6]]]", EQueryMode::EXECUTE_QUERY);
 
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is not NULL order by id",
-                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", EQueryMode::EXECUTE_QUERY);
         };
 
         insert(tester22);
@@ -181,16 +181,16 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         auto check = [](const TDecimalTestCase& tester) {
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec < cast(\"12.46\" as decimal(22,9)) order by id",
-                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]]]");
+                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]]]", EQueryMode::EXECUTE_QUERY);
 
             tester.CheckQuery(
-                "SELECT * FROM `/Root/Table1` WHERE dec > cast(\"8.16\" as decimal(22,9)) order by id", "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "SELECT * FROM `/Root/Table1` WHERE dec > cast(\"8.16\" as decimal(22,9)) order by id", "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", EQueryMode::EXECUTE_QUERY);
 
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec <= cast(\"12.46\" as decimal(22,9)) order by id",
-                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", EQueryMode::EXECUTE_QUERY);
 
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec >= cast(\"8.492\" as decimal(22,9)) order by id",
-                "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", EQueryMode::EXECUTE_QUERY);
         };
 
         check(tester22);
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         auto check = [](const TDecimalTestCase& tester) {
             tester.CheckQuery(
-                "SELECT * FROM `/Root/Table1` order by dec", "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "SELECT * FROM `/Root/Table1` order by dec", "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", EQueryMode::EXECUTE_QUERY);
         };
 
         check(tester22);
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         auto check = [](const TDecimalTestCase& tester) {
             tester.CheckQuery("SELECT dec, count(*) FROM `/Root/Table1` group by dec order by dec",
-                "[[[\"3.14\"];1u];[[\"8.16\"];1u];[[\"8.492\"];2u];[[\"12.46\"];2u]]");
+                "[[[\"3.14\"];1u];[[\"8.16\"];1u];[[\"8.492\"];2u];[[\"12.46\"];2u]]", EQueryMode::EXECUTE_QUERY);
         };
 
         insert(tester22);
@@ -245,8 +245,8 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         auto check = [](const TDecimalTestCase& tester) {
             tester.CheckQuery("SELECT min(dec) FROM `/Root/Table1`", "[[[\"3.14\"]]]", EQueryMode::EXECUTE_QUERY);
-            tester.CheckQuery("SELECT max(dec) FROM `/Root/Table1`", "[[[\"12.46\"]]]");
-            tester.CheckQuery("SELECT sum(dec) FROM `/Root/Table1`", "[[[\"32.252\"]]]");
+            tester.CheckQuery("SELECT max(dec) FROM `/Root/Table1`", "[[[\"12.46\"]]]", EQueryMode::EXECUTE_QUERY);
+            tester.CheckQuery("SELECT sum(dec) FROM `/Root/Table1`", "[[[\"32.252\"]]]", EQueryMode::EXECUTE_QUERY);
         };
 
         check(tester22);
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             tester.CheckQuery(
                 "SELECT t1.id, t1.dec, t2.dec FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.id = t2.table1_id order by t1.id, t1.dec, "
                 "t2.dec",
-                R"([[1;["3.14"];["8.16"]];[1;["3.14"];["12.46"]];[2;["8.16"];["8.16"]];[2;["8.16"];["12.46"]]])");
+                R"([[1;["3.14"];["8.16"]];[1;["3.14"];["12.46"]];[2;["8.16"];["8.16"]];[2;["8.16"];["12.46"]]])", EQueryMode::EXECUTE_QUERY);
         };
 
         check(tester22);
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         auto check = [](const TDecimalTestCase& tester) {
             tester.CheckQuery(
                 "SELECT t1.id, t2.id, t1.dec FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.dec = t2.dec order by t1.id, t2.id, t1.dec",
-                R"([[2;2;["8.16"]];[2;4;["8.16"]];[4;1;["12.46"]];[4;3;["12.46"]]])");
+                R"([[2;2;["8.16"]];[2;4;["8.16"]];[4;1;["12.46"]];[4;3;["12.46"]]])", EQueryMode::EXECUTE_QUERY);
         };
 
         check(tester22);

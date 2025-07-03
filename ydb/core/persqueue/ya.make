@@ -58,6 +58,7 @@ GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json

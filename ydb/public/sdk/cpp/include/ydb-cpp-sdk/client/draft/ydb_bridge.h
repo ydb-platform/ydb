@@ -51,7 +51,8 @@ public:
     explicit TBridgeClient(const TDriver& driver, const TCommonClientSettings& settings = {});
     ~TBridgeClient();
 
-    TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates, const TUpdateClusterStateSettings& settings = {});
+    TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates,
+        const std::vector<std::uint32_t>& specificPileIds, const TUpdateClusterStateSettings& settings = {});
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings = {});
 

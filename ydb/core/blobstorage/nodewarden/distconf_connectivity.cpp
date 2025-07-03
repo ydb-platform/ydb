@@ -50,6 +50,9 @@ namespace NKikimr::NStorage {
                         if (pile.State != NKikimrBridge::TClusterState::DISCONNECTED) {
                             continue;
                         }
+                        if (pile.BridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
+                            continue; // do not disconnect from the same pile
+                        }
                         for (const ui32 nodeId : pile.StaticNodeIds) {
                             STLOG(PRI_DEBUG, BS_NODE, NWDCC00, "disconnecting", (PeerNodeId, nodeId),
                                 (BridgePileId, pile.BridgePileId));
@@ -100,10 +103,9 @@ namespace NKikimr::NStorage {
                 std::optional<TString> error;
 
                 if (BridgeInfo) {
-                    if (const auto *pile = BridgeInfo->GetPileForNode(ev->Get()->PeerNodeId)) {
-                        if (pile->State == NKikimrBridge::TClusterState::DISCONNECTED) {
-                            error = "can't establish connection to node belonging to disconnected pile";
-                        }
+                    if (const auto *pile = BridgeInfo->GetPileForNode(ev->Get()->PeerNodeId); pile &&
+                            pile != BridgeInfo->SelfNodePile && pile->State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                        error = "can't establish connection to node belonging to disconnected pile";
                     } else {
                         // dynamic node?
                     }
@@ -194,7 +196,7 @@ namespace NKikimr::NStorage {
             std::optional<TString> CheckPeerConfig(TBridgePileId peerBridgePileId,
                     const NKikimrBlobStorage::TStorageConfig& config) {
                 const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
-                if (peerPile->State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                if (peerPile->State == NKikimrBridge::TClusterState::DISCONNECTED && peerPile != BridgeInfo->SelfNodePile) {
                     // peer pile is considered disconnected according to our config; this is incoming connection and we
                     // should definitely drop it
                     return "can't establish connection to node belonging to disconnected pile -- remote disconnected";

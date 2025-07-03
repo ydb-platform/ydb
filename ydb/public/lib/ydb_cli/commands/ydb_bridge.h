@@ -29,6 +29,7 @@ private:
     TString FilePath;
 
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
+    std::vector<std::uint32_t> SpecificPileIds;
 };
 
 class TCommandBridgeGet : public TYdbReadOnlyCommand, public TCommandWithOutput {

@@ -88,6 +88,10 @@ default:
       name: Антон Коваленко
       position: Технический менеджер
       profile: https://www.linkedin.com/in/kovalad/
+    kalinina:
+      name: Елена Калинина
+      position: Технический менеджер
+      profile: https://www.linkedin.com/in/elena-kalinina-2907b398/
     ivanov:
       name: Евгений Иванов
       position: Старший разработчик

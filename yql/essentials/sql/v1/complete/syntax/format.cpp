@@ -40,6 +40,10 @@ namespace NSQLComplete {
         return text;
     }
 
+    bool IsPlain(TStringBuf content) {
+        return GetSqlGrammar().IsPlainIdentifier(content);
+    }
+
     TString Quoted(TString content) {
         content.prepend('`');
         content.append('`');

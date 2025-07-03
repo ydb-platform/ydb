@@ -121,7 +121,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 }}
             }},
             "saurus": { "type": "Folder", "entries": {
-                "maxim": { "type": "Table", "columns": {} }
+                "maxim": { "type": "Table", "columns": {
+                   "Y Q L": {},
+                   "o``o": {}
+                }}
             }}
         })";
 
@@ -1278,6 +1281,21 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
+    }
+
+    Y_UNIT_TEST(ColumnQuoted) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "`Y Q L`"},
+            {ColumnName, "`o````o`"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM saurus.maxim"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT Y# FROM saurus.maxim").at(0), expected.at(0));
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT `# FROM saurus.maxim").size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT `#` FROM saurus.maxim").size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT `Y #` FROM saurus.maxim").size(), 0);
     }
 
     Y_UNIT_TEST(Typing) {

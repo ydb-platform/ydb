@@ -45,8 +45,10 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltpNoSink
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/persqueue/ut [*/*] chunk chunk

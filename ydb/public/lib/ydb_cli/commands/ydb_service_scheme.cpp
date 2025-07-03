@@ -287,7 +287,7 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::ExternalTable:
         return DescribeExternalTable(driver);
     case NScheme::ESchemeEntryType::SysView:
-        return DescribeTable(driver);
+        return DescribeSystemView(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -650,8 +650,19 @@ int TCommandDescribe::DescribeExternalTable(const TDriver& driver) {
     return PrintDescription(this, OutputFormat, result.GetExternalTableDescription(), &TCommandDescribe::PrintExternalTableResponsePretty);
 }
 
+int TCommandDescribe::DescribeSystemView(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto result = sessionResult.GetSession().DescribeSystemView(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    return PrintDescription(this, OutputFormat, result.GetSystemViewDescription(), &TCommandDescribe::PrintSystemViewResponsePretty);
+}
+
 namespace {
-    void PrintColumns(const NTable::TTableDescription& tableDescription) {
+    template<typename TTableLikeObjectDescription>
+    void PrintColumns(const TTableLikeObjectDescription& tableDescription) {
         if (!tableDescription.GetTableColumns().size()) {
             return;
         }
@@ -790,7 +801,8 @@ namespace {
         Cout << table;
     }
 
-    void PrintAttributes(const NTable::TTableDescription& tableDescription) {
+    template<typename TTableLikeObjectDescription>
+    void PrintAttributes(const TTableLikeObjectDescription& tableDescription) {
         if (tableDescription.GetAttributes().empty()) {
             return;
         }
@@ -1003,6 +1015,15 @@ int TCommandDescribe::PrintTableResponsePretty(const NTable::TTableDescription& 
     if (ShowKeyShardBoundaries || ShowPartitionStats) {
         PrintPartitionInfo(tableDescription, ShowKeyShardBoundaries, ShowPartitionStats);
     }
+
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const {
+    Cout << "Type: "  << result.GetTypeId() << " (" << result.GetTypeName() <<  ")" << Endl;
+
+    PrintColumns(result);
+    PrintAttributes(result);
 
     return EXIT_SUCCESS;
 }

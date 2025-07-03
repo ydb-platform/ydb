@@ -911,6 +911,9 @@ void TColumnShard::SetupCleanupSchemas() {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_schemas_cleanup")("reason", "disabled");
         return;
     }
+    if (!AppDataVerified().FeatureFlags.GetEnableCSSchemasCollapsing()) {
+        return;
+    }
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupSchemasActive()) {
         ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "in_progress");

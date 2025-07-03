@@ -840,10 +840,10 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
 
             ++cookie;
             runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
-            UNIT_CHECK_GENERATED_EXCEPTION(
-                runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10)),
-                TEmptyEventQueueException
-            );
+            const auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, true, syncResponse->ToString());
         }
     }
 }

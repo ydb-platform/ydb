@@ -939,19 +939,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             return;
         }
 
-        const auto& record = ev->Get()->Record;
-        if (record.HasClusterState()) {
-            const TClusterState received(record.GetClusterState());
-            if (ClusterState != received) {
-                SBS_LOG_D("Cluster State mismatch in sync version response"
-                    << ": sender# " << ev->Sender
-                    << ", cookie# " << ev->Cookie
-                    << ", subscriber cluster state# " << ClusterState
-                    << ", replica cluster state# " << received);
-                return;
-            }
-        }
-
         if (!ProxyToGroupMap.contains(ev->Sender)) {
             SBS_LOG_E("Sync sender is unknown"
                 << ": sender# " << ev->Sender
@@ -959,9 +946,21 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             return;
         }
 
+        const auto& record = ev->Get()->Record;
+        bool configMismatch = record.HasClusterState() && ClusterState != TClusterState(record.GetClusterState());
+        if (configMismatch) {
+            SBS_LOG_I("Cluster State mismatch in sync version response"
+                << ": sender# " << ev->Sender
+                << ", cookie# " << ev->Cookie
+                << ", subscriber cluster state# " << ClusterState
+                << ", replica cluster state# {" << record.GetClusterState().ShortDebugString() << "}"
+            );
+        }
+
         PendingSync.erase(it);
         Y_ABORT_UNLESS(!ReceivedSync.contains(ev->Sender));
-        ReceivedSync[ev->Sender] = record.GetPartial();
+        // Treat both partial syncs and configuration mismatches as sync failures.
+        ReceivedSync[ev->Sender] = record.GetPartial() || configMismatch;
 
         TVector<ui32> successesByGroup(ProxyGroups.size(), 0);
         TVector<ui32> failuresByGroup(ProxyGroups.size(), 0);

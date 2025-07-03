@@ -54,7 +54,7 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
 
 ## Checklist {#checklist}
 
-## If the PR is new content for the main branch
+### If the PR is new content for the main branch
 
 - [ ] The text is understandable for the article's target audience.
 - [ ] The text is technically accurate.

@@ -19,7 +19,6 @@ namespace NPDisk {
 TCompletionChunkWritePart::TCompletionChunkWritePart(TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion)
     : TCompletionAction()
     , PDisk(piece->PDisk)
-    , ChunkWrite(piece->ChunkWrite)
     , PieceShift(piece->PieceShift)
     , PieceSize(piece->PieceSize)
     , CumulativeCompletion(cumulativeCompletion)
@@ -41,9 +40,12 @@ void TCompletionChunkWritePart::Exec(TActorSystem *actorSystem) {
         Release(actorSystem);
         return;
     }
+    Y_UNUSED(PieceShift);
+    Y_UNUSED(PieceSize);
+    
 
-    double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
-    LWTRACK(PDiskChunkWritePieceComplete, ChunkWrite->Orbit, PDisk->PCtx->PDiskId, PieceSize, PieceShift, deviceTimeMs);
+    // double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
+    // LWTRACK(PDiskChunkWritePieceComplete, ChunkWrite->Orbit, PDisk->PCtx->PDiskId, PieceSize, PieceShift, deviceTimeMs);
 
     CumulativeCompletion->CompletePart(actorSystem);
     CumulativeCompletion = nullptr;

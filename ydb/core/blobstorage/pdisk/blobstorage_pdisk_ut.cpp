@@ -9,6 +9,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <util/system/hp_timer.h>
+#include <sanitizer/lsan_interface.h>
 
 namespace NKikimr {
 
@@ -1054,7 +1055,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             void Bootstrap() {
                 Become(&TThis::StateDefault);
             }
-            
+
             STATEFN(StateDefault) {
                 switch (ev->GetTypeRewrite()) {
                     case TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType: {
@@ -1460,6 +1461,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
         Cerr << " total_speed# " << 2 * written / duration.SecondsFloat() / 1e9 << " GB/s" << Endl;
     }
+
 
     Y_UNIT_TEST(ChunkWriteBadOffset) {
         TActorTestContext testCtx{{}};
@@ -2250,6 +2252,9 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
 
 } // namespace NKikimr
 
-//TPDiskTest::ChunkWriteBadOffset
+//TPDiskTest::AllRequestsAreAnsweredOnPDiskRestart
+//TPDiskTest::PlainChunksWriteReadALot
 //TPDiskUtil::FormatSectorMap
-//WilsonTrace::LogWriteChunkWriteChunkRead
+//TPDiskTest::TestStartEncryptedOrPlainAndRestart
+//TPDiskTest::PDiskSlotSizeInUnits
+//TPDiskTest::FailedToFormatDiskInfoUpdate

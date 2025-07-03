@@ -65,6 +65,11 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
     SlackSize = Max<ui32>();
 }
 
+void TChunkWrite::Abort(TActorSystem* actorSystem) {
+    if (!AtomicSwap(&Aborted, true)) {
+        actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkRead
@@ -91,6 +96,12 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkWritePiece
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+namespace {
+    std::atomic<int> deletecount;
+    std::atomic<int> deleteunreleased;
+
+    std::atomic<int> createcount;
+}
 
 TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
     : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
@@ -99,10 +110,23 @@ TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &wr
     , PieceShift(pieceShift)
     , PieceSize(pieceSize)
 {
+    Cerr << "Createcount " << createcount.fetch_add(1) << Endl;
     ChunkWrite->RegisterPiece();
 }
 
+TChunkWritePiece::~TChunkWritePiece()  {
+    Cerr << "Deletecount " << deletecount.fetch_add(1) << Endl;
+    if (Completion) {
+        Cerr << "Delete w unreleased completion count " << deleteunreleased.fetch_add(1) << Endl;
+    }
+}
+
+namespace {
+    std::atomic<int> process;
+}
+
 void TChunkWritePiece::Process(void*) {
+    Cerr << "TChunkWritePiece::Process " << process.fetch_add(1) << Endl;
     this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this));
     PDisk->PushChunkWrite(this);
 }

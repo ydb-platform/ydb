@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         for (const auto& event : blockedAcks) {
             const auto& replica = populatorToReplicaMap.at(event->Sender);
             const size_t ringGroup = replicaToRingGroupMap.at(replica);
-            if (ShouldIgnore(ringGroups[ringGroup]) || IsMajorityReached(ringGroups[ringGroup], ringGroupAcks[ringGroup])) {
+            if (ShouldIgnoreInQuorum(ringGroups[ringGroup]) || IsMajorityReached(ringGroups[ringGroup], ringGroupAcks[ringGroup])) {
                 // not required for quorum
                 continue;
             }

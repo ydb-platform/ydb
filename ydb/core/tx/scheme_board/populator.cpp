@@ -54,6 +54,10 @@ bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
     return ringGroup.State == ERingGroupState::DISCONNECTED;
 }
 
+bool ShouldIgnoreInQuorum(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ShouldIgnore(ringGroup) || ringGroup.WriteOnly;
+}
+
 bool IsMajorityReached(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
     return ringGroupAcks > ringGroup.NToSelect / 2;
 }
@@ -739,7 +743,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         TVector<bool> ringGroupQuorums(GroupInfo->RingGroups.size(), false);
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
-            ringGroupQuorums[ringGroupIndex] = ShouldIgnore(ringGroup) || IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex]);
+            ringGroupQuorums[ringGroupIndex] = ShouldIgnoreInQuorum(ringGroup) || IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex]);
         }
         ProcessReplicaAck(ringGroupAcks, ackedReplica, ringGroupQuorums);
         return Count(ringGroupQuorums, false) == 0;

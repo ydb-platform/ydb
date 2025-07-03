@@ -45,7 +45,7 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
     затем включения через минуту и перехода к следующему ДЦ.
     """
     
-    def __init__(self, cluster, schedule=(3600, 7200), stop_duration=60):
+    def __init__(self, cluster, schedule=(300, 600), stop_duration=60):
         """
         Инициализация nemesis для тестирования отключения сервисов по ДЦ.
         
@@ -232,10 +232,10 @@ class SingleDataCenterFailureNemesis(DataCenterNetworkNemesis):
     Nemesis для тестирования отказа одного ДЦ на более длительное время.
     """
     
-    def __init__(self, cluster, schedule=(86400, 172800), stop_duration=3600):
+    def __init__(self, cluster, schedule=(1200, 2400), stop_duration=3600):
         """
         :param cluster: Кластер YDB
-        :param schedule: Интервал между отказами ДЦ (по умолчанию 1-2 дня)
+        :param schedule: Интервал между отказами ДЦ (по умолчанию 20-40 минут для тестирования)
         :param stop_duration: Длительность отказа ДЦ (по умолчанию 1 час)
         """
         super(SingleDataCenterFailureNemesis, self).__init__(

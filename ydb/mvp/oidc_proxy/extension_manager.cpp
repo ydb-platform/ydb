@@ -26,9 +26,10 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
     ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
     if (!event) {
         ExtensionCtx->Params->ResponseError = "Timeout while waiting for whoami info";
-    } else if (!event->Get()->Response) {
-        ExtensionCtx->Params->ResponseError = event->Get()->GetError();
     } else {
+        ExtensionCtx->Params->ResponseError = event->Get()->GetError();
+    }
+    if (event->Get()->Response) {
         auto& response = event->Get()->Response;
         ExtensionCtx->Params->StatusOverride = response->Status;
         auto headers = NHttp::THeaders(response->Headers);
@@ -42,15 +43,17 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
 
 void TExtensionManager::AddExtensionWhoami() {
     EnrichmentExtension = true;
-    AddExtension(NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoami(Settings, AuthHeader)));
+    auto ext = std::make_unique<TExtensionWhoami>(Settings, AuthHeader);
+    AddExtension(std::move(ext));
 }
 
 void TExtensionManager::AddExtensionFinal() {
-    AddExtension(NActors::TActivationContext::ActorSystem()->Register(new TExtensionFinal(Settings)));
+    auto ext = std::make_unique<TExtensionFinal>(Settings);
+    AddExtension(std::move(ext));
 }
 
-void TExtensionManager::AddExtension(const NActors::TActorId& stage) {
-    ExtensionCtx->Route.push(stage);
+void TExtensionManager::AddExtension(std::unique_ptr<IExtension> ext) {
+    ExtensionCtx->Steps.push(std::move(ext));
 }
 
 bool TExtensionManager::NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const {
@@ -90,8 +93,8 @@ void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr req
     SetRequest(std::move(request));
     SetOverrideResponse(std::move(event));
 
-    const auto route = ExtensionCtx->Route.Next();
-    NActors::TActivationContext::ActorSystem()->Send(route, new TEvPrivate::TEvExtensionRequest(std::move(ExtensionCtx)));
+    const auto step = ExtensionCtx->Steps.Next();
+    step->Execute(std::move(ExtensionCtx));
 }
 
 } // NMVP::NOIDC

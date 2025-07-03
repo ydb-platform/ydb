@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/mvp/core/protos/mvp.pb.h>
+#include <util/datetime/base.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -17,7 +18,8 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
     static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
 
-    static const inline ui32 DEFAULT_ENRICHMENT_PROCESS_TIMEOUT_MS = 10000;
+    static constexpr inline TDuration DEFAULT_REQUEST_WITH_ENRICHMENT_TIMEOUT = TDuration::Seconds(10);
+    static constexpr inline TDuration DEFAULT_REQUEST_TIMEOUT = TDuration::Seconds(120);
 
     static const TVector<TStringBuf> REQUEST_HEADERS_WHITE_LIST;
     static const TVector<TStringBuf> RESPONSE_HEADERS_WHITE_LIST;
@@ -28,7 +30,8 @@ struct TOpenIdConnectSettings {
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
     TString WhoamiExtendedInfoEndpoint;
-    ui32 EnrichmentProcessTimeoutMs = DEFAULT_ENRICHMENT_PROCESS_TIMEOUT_MS;
+    TDuration RequestWithEnrichmentTimeout = DEFAULT_REQUEST_WITH_ENRICHMENT_TIMEOUT;
+    TDuration RequestTimeout = DEFAULT_REQUEST_TIMEOUT;
 
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;

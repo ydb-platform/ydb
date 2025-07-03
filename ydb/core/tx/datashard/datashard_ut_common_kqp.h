@@ -224,8 +224,8 @@ namespace NKqpHelpers {
         return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */));
     }
 
-    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
-        auto response = AwaitResponse(runtime, KqpSimpleSendCommit(runtime, sessionId, txId, query));
+    inline TString KqpSimpleWaitCommit(TTestActorRuntime& runtime, NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> future) {
+        auto response = AwaitResponse(runtime, std::move(future));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -233,6 +233,10 @@ namespace NKqpHelpers {
         response.operation().result().UnpackTo(&result);
         Y_ABORT_UNLESS(result.tx_meta().id().empty(), "must be empty transaction");
         return FormatResult(result);
+    }
+
+    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
+        return KqpSimpleWaitCommit(runtime, KqpSimpleSendCommit(runtime, sessionId, txId, query));
     }
 
     inline Ydb::Table::ExecuteSchemeQueryRequest MakeSchemeRequestRPC(

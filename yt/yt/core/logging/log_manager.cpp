@@ -19,6 +19,7 @@
 
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/fs.h>
+#include <yt/yt/core/misc/inotify.h>
 #include <yt/yt/core/misc/spsc_queue.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/pattern_formatter.h>
@@ -68,12 +69,6 @@
     #include <unistd.h>
 #endif
 
-#ifdef _linux_
-    #include <sys/inotify.h>
-#endif
-
-#include <errno.h>
-
 namespace NYT::NLogging {
 
 using namespace NYTree;
@@ -99,159 +94,6 @@ bool operator == (const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs)
 {
     return lhs.Category == rhs.Category && lhs.LogLevel == rhs.LogLevel && lhs.Family == rhs.Family;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TNotificationHandle
-    : private TNonCopyable
-{
-public:
-    TNotificationHandle()
-        : FD_(-1)
-    {
-#ifdef _linux_
-        FD_ = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-        YT_VERIFY(FD_ >= 0);
-#endif
-    }
-
-    ~TNotificationHandle()
-    {
-#ifdef _linux_
-        YT_VERIFY(FD_ >= 0);
-        ::close(FD_);
-#endif
-    }
-
-    int Poll()
-    {
-#ifdef _linux_
-        YT_VERIFY(FD_ >= 0);
-
-        char buffer[sizeof(struct inotify_event) + NAME_MAX + 1];
-        ssize_t rv = HandleEintr(::read, FD_, buffer, sizeof(buffer));
-
-        if (rv < 0) {
-            if (errno != EAGAIN) {
-                YT_LOG_ERROR(
-                    TError::FromSystem(errno),
-                    "Unable to poll inotify() descriptor %v",
-                    FD_);
-            }
-        } else if (rv > 0) {
-            YT_ASSERT(rv >= static_cast<ssize_t>(sizeof(struct inotify_event)));
-            struct inotify_event* event = (struct inotify_event*)buffer;
-
-            if (event->mask & IN_DELETE_SELF) {
-                YT_LOG_TRACE(
-                    "Watch %v has triggered a deletion (IN_DELETE_SELF)",
-                    event->wd);
-            }
-            if (event->mask & IN_MOVE_SELF) {
-                YT_LOG_TRACE(
-                    "Watch %v has triggered a movement (IN_MOVE_SELF)",
-                    event->wd);
-            }
-
-            return event->wd;
-        } else {
-            // Do nothing.
-        }
-#endif
-        return 0;
-    }
-
-    DEFINE_BYVAL_RO_PROPERTY(int, FD);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TNotificationWatch
-    : private TNonCopyable
-{
-public:
-    TNotificationWatch(
-        TNotificationHandle* handle,
-        const TString& path,
-        TClosure callback)
-        : FD_(handle->GetFD())
-        , WD_(-1)
-        , Path_(path)
-        , Callback_(std::move(callback))
-
-    {
-        FD_ = handle->GetFD();
-        YT_VERIFY(FD_ >= 0);
-
-        CreateWatch();
-    }
-
-    ~TNotificationWatch()
-    {
-        DropWatch();
-    }
-
-    DEFINE_BYVAL_RO_PROPERTY(int, FD);
-    DEFINE_BYVAL_RO_PROPERTY(int, WD);
-
-    bool IsValid() const
-    {
-        return WD_ >= 0;
-    }
-
-    void Run()
-    {
-        // Unregister before create a new file.
-        DropWatch();
-        Callback_();
-        // Register the newly created file.
-        CreateWatch();
-    }
-
-private:
-    void CreateWatch()
-    {
-        YT_VERIFY(WD_ <= 0);
-#ifdef _linux_
-        WD_ = inotify_add_watch(
-            FD_,
-            Path_.c_str(),
-            IN_DELETE_SELF | IN_MOVE_SELF);
-
-        if (WD_ < 0) {
-            YT_LOG_ERROR(TError::FromSystem(errno), "Error registering watch for %v",
-                Path_);
-            WD_ = -1;
-        } else if (WD_ > 0) {
-            YT_LOG_TRACE("Registered watch %v for %v",
-                WD_,
-                Path_);
-        } else {
-            YT_ABORT();
-        }
-#else
-        WD_ = -1;
-#endif
-    }
-
-    void DropWatch()
-    {
-#ifdef _linux_
-        if (WD_ > 0) {
-            YT_LOG_TRACE("Unregistering watch %v for %v",
-                WD_,
-                Path_);
-            inotify_rm_watch(FD_, WD_);
-        }
-#endif
-        WD_ = -1;
-    }
-
-private:
-    TString Path_;
-    TClosure Callback_;
-
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -767,20 +609,20 @@ private:
         return EmplaceOrCrash(KeyToCachedWriter_, cacheKey, writers)->second;
     }
 
-    std::unique_ptr<TNotificationWatch> CreateNotificationWatch(
+    std::unique_ptr<TInotifyWatch> CreateNotificationWatch(
         const TLogManagerConfigPtr& config,
         const IFileLogWriterPtr& writer)
     {
 #ifdef _linux_
         if (config->WatchPeriod) {
             if (!NotificationHandle_) {
-                NotificationHandle_ = std::make_unique<TNotificationHandle>();
+                NotificationHandle_ = std::make_unique<TInotifyHandle>();
             }
-            return std::unique_ptr<TNotificationWatch>(
-                new TNotificationWatch(
-                    NotificationHandle_.get(),
-                    writer->GetFileName().c_str(),
-                    BIND(&ILogWriter::Reload, writer)));
+            return std::make_unique<TInotifyWatch>(
+                NotificationHandle_.get(),
+                writer->GetFileName(),
+                EInotifyWatchEvents::DeleteSelf | EInotifyWatchEvents::MoveSelf,
+                BIND(&ILogWriter::Reload, writer));
         }
 #else
         Y_UNUSED(config, writer);
@@ -985,7 +827,7 @@ private:
         }
     }
 
-    void RegisterNotificatonWatch(TNotificationWatch* watch)
+    void RegisterNotificatonWatch(TInotifyWatch* watch)
     {
         YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
@@ -1006,12 +848,12 @@ private:
             return;
         }
 
-        int previousWD = -1, currentWD = -1;
-        while ((currentWD = NotificationHandle_->Poll()) > 0) {
-            if (currentWD == previousWD) {
+        int previousWD = -1;
+        while (auto pollResult = NotificationHandle_->Poll()) {
+            if (pollResult->WD == previousWD) {
                 continue;
             }
-            auto it = WDToNotificationWatch_.find(currentWD);
+            auto it = WDToNotificationWatch_.find(pollResult->WD);
             auto jt = WDToNotificationWatch_.end();
             if (it == jt) {
                 continue;
@@ -1020,16 +862,16 @@ private:
             auto* watch = it->second;
             watch->Run();
 
-            if (watch->GetWD() != currentWD) {
+            if (watch->GetWD() != pollResult->WD) {
                 WDToNotificationWatch_.erase(it);
                 RegisterNotificatonWatch(watch);
             }
 
-            previousWD = currentWD;
+            previousWD = pollResult->WD;
         }
         // Handle invalid watches, try to register they again.
         {
-            std::vector<TNotificationWatch*> invalidNotificationWatches;
+            std::vector<TInotifyWatch*> invalidNotificationWatches;
             invalidNotificationWatches.swap(InvalidNotificationWatches_);
             for (auto* watch : invalidNotificationWatches) {
                 watch->Run();
@@ -1515,10 +1357,10 @@ private:
 
     const IThreadPoolPtr CompressionThreadPool_;
 
-    std::unique_ptr<TNotificationHandle> NotificationHandle_;
-    std::vector<std::unique_ptr<TNotificationWatch>> NotificationWatches_;
-    THashMap<int, TNotificationWatch*> WDToNotificationWatch_;
-    std::vector<TNotificationWatch*> InvalidNotificationWatches_;
+    std::unique_ptr<TInotifyHandle> NotificationHandle_;
+    std::vector<std::unique_ptr<TInotifyWatch>> NotificationWatches_;
+    THashMap<int, TInotifyWatch*> WDToNotificationWatch_;
+    std::vector<TInotifyWatch*> InvalidNotificationWatches_;
 
     THashMap<TString, TLoggingAnchor*> AnchorMap_;
     std::atomic<TLoggingAnchor*> FirstAnchor_ = nullptr;

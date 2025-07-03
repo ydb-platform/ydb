@@ -99,8 +99,12 @@ private:
             auto& error = *response->Record.MutableError();
             error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
             error.SetMessage("Incorrect request - 0 nodes requested");
+        } else if (Peers.empty()) {
+            auto& error = *response->Record.MutableError();
+            error.SetStatusCode(NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            error.SetMessage("No active workers");
         } else if (!scheduler) {
-            ScheduleUniformly(request, response);            
+            ScheduleUniformly(request, response);
         } else {
             try {
                 auto schedulerSettings = NSc::TValue::FromJsonThrow(scheduler);

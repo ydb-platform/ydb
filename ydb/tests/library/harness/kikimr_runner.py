@@ -22,6 +22,7 @@ from . import kikimr_node_interface
 from . import kikimr_cluster_interface
 
 import ydb.core.protos.blobstorage_config_pb2 as bs
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 
 
@@ -453,8 +454,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         while time.time() - start_time < timeout:
             try:
                 result = self.config_client.bootstrap_cluster(self_assembly_uuid=self_assembly_uuid)
-                logger.info("Successfully bootstrapped cluster")
-                return result
+                if result.operation.status == StatusIds.SUCCESS:
+                    logger.info("Successfully bootstrapped cluster")
+                    return result
+                else:
+                    error_msg = f"Bootstrap cluster failed with status: {result.operation.status}"
+                    for issue in result.operation.issues:
+                        error_msg += f"\nIssue: {issue}"
+                    raise Exception(error_msg)
+
             except Exception as e:
                 last_exception = e
                 time.sleep(interval)

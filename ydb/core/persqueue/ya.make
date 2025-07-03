@@ -28,6 +28,7 @@ SRCS(
     pq.cpp
     pq_database.cpp
     pq_impl_app.cpp
+    pq_impl_app_sendreadset.cpp
     pq_impl.cpp
     pq_l2_cache.cpp
     pq_rl_helpers.cpp
@@ -50,6 +51,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json

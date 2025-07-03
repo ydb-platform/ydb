@@ -66,7 +66,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         };
 
         virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
-            const std::shared_ptr<TFetchingContext>& context) const override {
+            const ui64 cookie) const override {
             THashMap<NActors::TActorId, TActorRequestData> requests;
             for (auto&& [c, addresses] : objectAddressesByConsumer) {
                 for (auto&& a : addresses) {
@@ -74,10 +74,9 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
             }
             for (auto&& i : requests) {
-                NActors::TActivationContext::Send(i.first,
-                    std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(
-                        i.second.ExtractRequest(), std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())),
-                    0, context->GetCookie());
+                NActors::TActivationContext::Send(
+                    i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
+                                 std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())), 0, cookie);
             }
         }
         virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,

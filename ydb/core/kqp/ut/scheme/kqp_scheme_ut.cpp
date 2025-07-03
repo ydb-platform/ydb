@@ -4989,7 +4989,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
 
             auto rs = result.GetResultSet(0);
-            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 34);
+            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 39);
             UNIT_ASSERT_VALUES_EQUAL(rs.ColumnsCount(), 30);
         }
     }

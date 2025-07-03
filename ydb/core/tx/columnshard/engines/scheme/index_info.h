@@ -181,7 +181,7 @@ public:
 
     void SetIgnoreToVersion(const ui64 version) const {
         AFL_VERIFY(!IgnoreToVersion->Val())("already", IgnoreToVersion->Val());
-        IgnoreToVersion->Set(version);
+        *IgnoreToVersion = version;
     }
 
     std::optional<ui64> GetIgnoreToVersion() const {

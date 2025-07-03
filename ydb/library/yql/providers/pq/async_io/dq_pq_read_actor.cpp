@@ -728,7 +728,7 @@ private:
         ReadyBuffer.back().Watermark = watermark;
     }
 
-    // must be called (visted) with called allocator
+    // must be called (visted) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());

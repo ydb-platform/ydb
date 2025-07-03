@@ -379,7 +379,8 @@ namespace NKikimr::NStorage {
         void CheckIfDone();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
-        bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
+        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+            const THashSet<TBridgePileId>& specificBridgePileIds = {}) const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
 
         struct TProcessCollectConfigsResult {
@@ -389,7 +390,8 @@ namespace NKikimr::NStorage {
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
             std::optional<TStringBuf> selfAssemblyUUID);
 
-        std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
+        std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res,
+            const THashSet<TBridgePileId>& specificBridgePileIds);
 
         struct TExConfigError : yexception {};
 

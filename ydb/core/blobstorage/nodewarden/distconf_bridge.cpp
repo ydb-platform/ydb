@@ -184,7 +184,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::IssueQuerySyncers() {
-        if (!Cfg->BridgeConfig) {
+        if (!Cfg->BridgeConfig || !Scepter) {
             return;
         }
         if (!SyncerArrangeInFlight) {

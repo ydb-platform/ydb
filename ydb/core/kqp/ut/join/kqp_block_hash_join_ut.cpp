@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <util/string/printf.h>
 
@@ -10,6 +11,7 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NQuery;
 
 class TBlockHashJoinTester {
 public:
@@ -89,7 +91,7 @@ private:
 
         result = Session.ExecuteDataQuery(
             insertData,
-            NYdb::NTable::TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()
         ).GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -97,7 +99,7 @@ private:
 
     void TestSimpleInnerJoin() {
         auto query = R"(
-            SELECT l.id, l.value, r.data
+            SELECT l.id as id, l.value as value, r.data as data
             FROM `/Root/left_table` AS l
             INNER JOIN `/Root/right_table` AS r
             ON l.id = r.id
@@ -106,7 +108,7 @@ private:
 
         auto result = Session.ExecuteDataQuery(
             query,
-            NYdb::NTable::TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()
         ).GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -116,20 +118,48 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
 
         TResultSetParser parser(resultSet);
-        parser.TryNextRow();
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("id").GetInt32(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetString(), "left1");
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("data").GetString(), "right1");
 
+        // Первая строка
         parser.TryNextRow();
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("id").GetInt32(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetString(), "left2");
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("data").GetString(), "right2");
+        auto idOpt = parser.ColumnParser("id").GetOptionalInt32();
+        UNIT_ASSERT(idOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*idOpt, 1);
 
+        auto valueOpt = parser.ColumnParser("value").GetOptionalString();
+        UNIT_ASSERT(valueOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(TString(*valueOpt), TString("left1"));
+
+        auto dataOpt = parser.ColumnParser("data").GetOptionalString();
+        UNIT_ASSERT(dataOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(TString(*dataOpt), TString("right1"));
+
+        // Вторая строка
         parser.TryNextRow();
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("id").GetInt32(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetString(), "left3");
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("data").GetString(), "right3");
+        idOpt = parser.ColumnParser("id").GetOptionalInt32();
+        UNIT_ASSERT(idOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*idOpt, 2);
+
+        valueOpt = parser.ColumnParser("value").GetOptionalString();
+        UNIT_ASSERT(valueOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(TString(*valueOpt), TString("left2"));
+
+        dataOpt = parser.ColumnParser("data").GetOptionalString();
+        UNIT_ASSERT(dataOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(TString(*dataOpt), TString("right2"));
+
+        // Третья строка
+        parser.TryNextRow();
+        idOpt = parser.ColumnParser("id").GetOptionalInt32();
+        UNIT_ASSERT(idOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*idOpt, 3);
+
+        valueOpt = parser.ColumnParser("value").GetOptionalString();
+        UNIT_ASSERT(valueOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(TString(*valueOpt), TString("left3"));
+
+        dataOpt = parser.ColumnParser("data").GetOptionalString();
+        UNIT_ASSERT(dataOpt.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(TString(*dataOpt), TString("right3"));
     }
 
     void TestBlockHashJoinInPlan() {
@@ -144,7 +174,7 @@ private:
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-        TString plan = result.GetPlan();
+        TString plan = TString(result.GetPlan());
         Cout << "Plan: " << plan << Endl;
 
         // Check that the plan contains some kind of join operation
@@ -155,7 +185,7 @@ private:
 private:
     TKikimrRunner Kikimr;
     NYdb::NTable::TTableClient TableClient;
-    TSession Session;
+    NYdb::NTable::TSession Session;
 };
 
 Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
@@ -239,28 +269,28 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             ORDER BY l.id;
         )";
 
-        result = session.ExecuteQuery(
+        auto executeResult = session.ExecuteQuery(
             joinQuery,
             NYdb::NQuery::TTxControl::BeginTx().CommitTx()
         ).GetValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        executeResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(executeResult.GetStatus(), EStatus::SUCCESS);
 
         // Verify result
-        auto resultSets = result.GetResultSets();
+        auto resultSets = executeResult.GetResultSets();
         UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(resultSets[0].RowsCount(), 2);
 
         // Test explain to check plan
-        result = session.ExecuteQuery(
+        auto explainResult = session.ExecuteQuery(
             joinQuery,
             NYdb::NQuery::TTxControl::NoTx(),
             NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
         ).GetValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        explainResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(explainResult.GetStatus(), EStatus::SUCCESS);
 
-        auto plan = result.GetStats()->GetPlan();
+        auto plan = explainResult.GetStats()->GetPlan();
         UNIT_ASSERT(plan.has_value());
         Cout << "Explain Plan: " << *plan << Endl;
 
@@ -290,9 +320,9 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             );
         )";
 
-        auto result = session.ExecuteSchemeQuery(createSchema).GetValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        auto schemeResult = session.ExecuteSchemeQuery(createSchema).GetValueSync();
+        schemeResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(schemeResult.GetStatus(), EStatus::SUCCESS);
 
         // Insert data with NULLs
         auto insertData = R"(
@@ -307,12 +337,12 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 (3, NULL);
         )";
 
-        result = session.ExecuteDataQuery(
+        auto insertResult = session.ExecuteDataQuery(
             insertData,
-            NYdb::NTable::TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()
         ).GetValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        insertResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(insertResult.GetStatus(), EStatus::SUCCESS);
 
         // Test join on nullable fields
         auto joinQuery = R"(
@@ -323,18 +353,18 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             ORDER BY l.id;
         )";
 
-        result = session.ExecuteDataQuery(
+        auto joinResult = session.ExecuteDataQuery(
             joinQuery,
-            NYdb::NTable::TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()
         ).GetValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        joinResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(joinResult.GetStatus(), EStatus::SUCCESS);
 
         // NULLs should not match in inner join, so we expect 0 rows
-        auto resultSet = result.GetResultSets()[0];
+        auto resultSet = joinResult.GetResultSets()[0];
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
     }
 }
 
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

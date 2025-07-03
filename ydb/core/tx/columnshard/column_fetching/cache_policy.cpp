@@ -40,7 +40,7 @@ private:
     };
 
     virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
-        const std::shared_ptr<TFetchingContext>& context) const override {
+        const ui64 cookie) const override {
         THashMap<TActorId, THashMap<EConsumer, THashMap<ui32, std::vector<TPortionAddress>>>> columns;
         for (const auto& [consumer, addresses] : objectAddressesByConsumer) {
             for (const auto& address : addresses) {
@@ -49,7 +49,7 @@ private:
         }
         for (auto&& [tablet, request] : columns) {
             NActors::TActivationContext::Send(
-                tablet, std::make_unique<NColumnShard::TEvPrivate::TEvAskColumnData>(std::move(request), selfPtr, context));
+                tablet, std::make_unique<NColumnShard::TEvPrivate::TEvAskColumnData>(std::move(request), selfPtr), cookie);
         }
     }
     virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,

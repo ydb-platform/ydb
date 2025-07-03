@@ -14,7 +14,7 @@ namespace NKikimr::NSharedCache::NTest {
         {}
 
         ui32 CacheId : 4 = 0;
-        ECacheTier CacheTier : CacheTierBits = ECacheTier::None;
+        ECacheTier CacheTier : 2 = ECacheTier::Regular;
     };
 
     struct TPageTraits {

@@ -89,7 +89,7 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     TPresetId PresetId;
-    mutable std::optional<ui32> IgnoreToVersion;
+    std::shared_ptr<TAtomicCounter> IgnoreToVersion = std::make_shared<TAtomicCounter>(0);
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
@@ -179,8 +179,17 @@ public:
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
     }
 
-    std::optional<ui32> GetIgnoreToVersion() const {
-        return IgnoreToVersion;
+    void SetIgnoreToVersion(const ui64 version) const {
+        AFL_VERIFY(!IgnoreToVersion->Val())("already", IgnoreToVersion->Val());
+        IgnoreToVersion->Set(version);
+    }
+
+    std::optional<ui64> GetIgnoreToVersion() const {
+        if (IgnoreToVersion->Val()) {
+            return IgnoreToVersion->Val();
+        } else {
+            return std::nullopt;
+        }
     }
 
     ui64 GetPresetId() const {

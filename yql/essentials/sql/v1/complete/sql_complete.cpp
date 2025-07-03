@@ -20,6 +20,14 @@
 
 namespace NSQLComplete {
 
+    TString TCandidate::FilterText() const {
+        TStringBuf text = Content;
+        if (IsQuoted(text)) {
+            text = Unquoted(text);
+        }
+        return ToLowerUTF8(text);
+    }
+
     class TSqlCompletionEngine: public ISqlCompletionEngine {
     public:
         TSqlCompletionEngine(

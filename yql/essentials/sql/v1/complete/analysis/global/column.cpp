@@ -49,7 +49,7 @@ namespace NSQLComplete {
             std::any visitTerminal(antlr4::tree::TerminalNode* node) override {
                 switch (node->getSymbol()->getType()) {
                     case SQLv1::TOKEN_ID_QUOTED:
-                        return Unquoted(GetText(node));
+                        return TString(Unquoted(GetText(node)));
                     case SQLv1::TOKEN_ID_PLAIN:
                         return GetText(node);
                 }

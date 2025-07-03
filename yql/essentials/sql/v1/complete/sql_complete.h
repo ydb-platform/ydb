@@ -41,6 +41,8 @@ namespace NSQLComplete {
         size_t CursorShift = 0;
 
         friend bool operator==(const TCandidate& lhs, const TCandidate& rhs) = default;
+
+        TString FilterText() const;
     };
 
     struct TCompletion {

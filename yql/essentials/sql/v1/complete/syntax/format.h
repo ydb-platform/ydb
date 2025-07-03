@@ -7,7 +7,8 @@ namespace NSQLComplete {
 
     TString FormatKeywords(const TVector<TString>& seq);
     bool IsPlain(TStringBuf content);
+    bool IsQuoted(TStringBuf content);
     TString Quoted(TString content);
-    TString Unquoted(TString content);
+    TStringBuf Unquoted(TStringBuf content);
 
 } // namespace NSQLComplete

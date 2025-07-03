@@ -95,6 +95,7 @@ public:
         , ReqId(reqId)
         , Span(std::move(span))
     {
+        Cerr << "TCompletionChunkWrite" << Endl;
         TCompletionAction::ShouldBeExecutedInCompletionThread = false;
     }
 
@@ -142,6 +143,7 @@ public:
     }
 
     ~TCompletionChunkWrite() {
+        Cerr << "~TCompletionChunkWrite" << Endl;
         OnDestroy();
     }
 
@@ -164,6 +166,7 @@ public:
         if (Mon) {
             Mon->GetWriteCounter(PriorityClass)->CountResponse();
         }
+        
         delete this;
     }
 
@@ -185,6 +188,7 @@ public:
 
     void RemovePart(TActorSystem *actorSystem) {
         PartsRemoved++;
+        Cerr << "partsremoved: " << (int)PartsRemoved.load() << ", pieces: " << (int)Pieces << Endl;
         if (PartsRemoved == Pieces) {
             if (PartsWritten == Pieces) {
                 Exec(actorSystem);
@@ -204,7 +208,6 @@ class TChunkWritePiece;
 
 class TCompletionChunkWritePart : public TCompletionAction {
     TPDisk *PDisk;
-    TIntrusivePtr<TChunkWrite> ChunkWrite;
     ui32 PieceShift;
     ui32 PieceSize;
     TCompletionChunkWrite* CumulativeCompletion;

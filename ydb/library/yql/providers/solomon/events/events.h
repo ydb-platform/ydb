@@ -62,7 +62,7 @@ struct TEvSolomonProvider {
         public NActors::TEventPB<TEvMetricsBatch, NSo::MetricQueue::TEvMetricsBatch, EvMetricsBatch> {
 
         TEvMetricsBatch() = default;
-        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, const NDqProto::TMessageTransportMeta& transportMeta) {
+        explicit TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.MutableMetrics()->Assign(
                 metrics.begin(), 
                 metrics.end());
@@ -75,7 +75,7 @@ struct TEvSolomonProvider {
         public NActors::TEventPB<TEvMetricsReadError, NSo::MetricQueue::TEvMetricsReadError, EvMetricsReadError> {
         
         TEvMetricsReadError() = default;
-        TEvMetricsReadError(const TString& issues, const NDqProto::TMessageTransportMeta& transportMeta) {
+        explicit TEvMetricsReadError(const TString& issues, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.SetIssues(issues);
             *Record.MutableTransportMeta() = transportMeta;
         }
@@ -84,7 +84,7 @@ struct TEvSolomonProvider {
     struct TEvPointsCountBatch : public NActors::TEventLocal<TEvPointsCountBatch, EvPointsCountBatch> {
         NSo::TMetric Metric;
         NSo::TGetPointsCountResponse Response;
-        TEvPointsCountBatch(NSo::TMetric&& metric, const NSo::TGetPointsCountResponse& response)
+        explicit TEvPointsCountBatch(NSo::TMetric&& metric, const NSo::TGetPointsCountResponse& response)
             : Metric(std::move(metric))
             , Response(response)
         {}
@@ -93,7 +93,7 @@ struct TEvSolomonProvider {
     struct TEvNewDataBatch: public NActors::TEventLocal<TEvNewDataBatch, EvNewDataBatch> {
         NSo::TGetDataResponse Response;
         TMetricTimeRange Request;
-        TEvNewDataBatch(NSo::TGetDataResponse&& response, TMetricTimeRange&& request)
+        explicit TEvNewDataBatch(NSo::TGetDataResponse&& response, TMetricTimeRange&& request)
             : Response(std::move(response))
             , Request(std::move(request))
         {}

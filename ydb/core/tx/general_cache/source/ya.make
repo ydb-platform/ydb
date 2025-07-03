@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     abstract.cpp
     events.cpp
-    context.cpp
 )
 
 PEERDIR(

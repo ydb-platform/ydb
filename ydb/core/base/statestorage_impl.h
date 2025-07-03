@@ -87,6 +87,16 @@ struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroup
         , BoardConfig(board)
         , SchemeBoardConfig(scheme)
     {}
+
+    TString ToString() const override {
+        TStringStream str;
+        str << "{EvUpdateGroupConfig"
+            << " GroupConfig: " << (GroupConfig ? GroupConfig->ToString() : "empty")
+            << " BoardConfig: " << (BoardConfig ? BoardConfig->ToString() : "empty")
+            << " SchemeBoardConfig: " << (SchemeBoardConfig ? SchemeBoardConfig->ToString() : "empty")
+            << "}";
+        return str.Str();
+    }
 };
 
 struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplicas, EvResolveReplicas> {
@@ -140,7 +150,7 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
         bool WriteOnly;
         ERingGroupState State;
     };
-    
+
     TVector<TReplicaGroup> ReplicaGroups;
     ui32 ConfigContentHash = Max<ui32>();
     ui64 ClusterStateGeneration;

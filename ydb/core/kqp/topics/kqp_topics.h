@@ -65,6 +65,7 @@ public:
 
     void SetTabletId(ui64 value);
     ui64 GetTabletId() const;
+    bool HasTabletId() const;
 
     TMaybe<TString> GetTopicName() const;
 

@@ -307,11 +307,16 @@ public:
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString();
+        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumer {";
         ui32 i = 0;
         for (auto output : Outputs) {
-            builder << " HASH C-" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
         }
+        builder << " }";
         return builder;
     }
 
@@ -445,11 +450,16 @@ private:
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString();
+        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerScalar {";
         ui32 i = 0;
         for (auto output : Outputs_) {
-            builder << " HASH C-" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
         }
+        builder << " }";
         return builder;
     }
 
@@ -577,11 +587,16 @@ private:
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString();
+        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerBlock {";
         ui32 i = 0;
         for (auto output : Outputs_) {
-            builder << " HASH C-" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
         }
+        builder << " }";
         return builder;
     }
 
@@ -785,11 +800,16 @@ public:
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString();
+        builder << Aggregator->DebugString() << " TDqOutputBroadcastConsumer {";
         ui32 i = 0;
         for (auto output : Outputs) {
-            builder << " BROADCAST C-" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
         }
+        builder << " }";
         return builder;
     }
 

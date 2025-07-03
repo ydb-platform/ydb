@@ -73,9 +73,10 @@ struct TDqFillAggregator {
     }
 
     TString DebugString() {
-        return TStringBuilder() << "AGG: N=" << Counts[static_cast<ui32>(HardLimit)].load()
+        return TStringBuilder() << "TDqFillAggregator { N=" << Counts[static_cast<ui32>(NoLimit)].load()
             << " S=" << Counts[static_cast<ui32>(SoftLimit)].load()
-            << " H=" << Counts[static_cast<ui32>(HardLimit)].load();
+            << " H=" << Counts[static_cast<ui32>(HardLimit)].load()
+            << " }";
     }
 };
 

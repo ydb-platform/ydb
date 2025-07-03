@@ -54,10 +54,15 @@ protected:
     }
 
     void DoTerminateImpl() override {
-
-        if (TBase::State == NDqProto::COMPUTE_STATE_FAILURE) {
-            CA_LOG_E("******* Task Runner DEBUG: *******" << Endl
-                << TaskRunner->DebugString() << Endl);
+        // we want to log debug output info only for long running (OLAP) tasks
+        if (TaskRunner && TBase::State == NDqProto::COMPUTE_STATE_FAILURE && TBase::RuntimeSettings.CollectFull()) {
+            auto& stats = *TaskRunner->GetStats();
+            if (stats.StartTs && TInstant::Now() - stats.StartTs > TDuration::Seconds(60)) {
+                auto taskRunnerDebugString = TaskRunner->GetOutputDebugString();
+                if (taskRunnerDebugString) {
+                    CA_LOG_E("TaskRunner->Output Debug String:" << Endl << taskRunnerDebugString << Endl);
+                }
+            }
         }
 
         TaskRunner.Reset();

@@ -1336,14 +1336,13 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::T
 void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& /*ctx*/) {
     class TExecutor: public NOlap::NDataFetcher::IFetchCallback {
     private:
-        std::shared_ptr<NKikimr::NGeneralCache::NSource::TFetchingContext<NOlap::NGeneralCache::TColumnDataCachePolicy>> Context;
         std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>> CacheCallback;
         THashMap<NOlap::TPortionAddress, NOlap::ISnapshotSchema::TPtr> Schemas;
         TActorId Owner;
         ui32 ColumnId;
 
         virtual bool IsAborted() const override {
-            return Context->IsAborted();
+            return false;
         }
 
         virtual TString GetClassName() const override {
@@ -1388,13 +1387,10 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         }
 
     public:
-        TExecutor(
-            const std::shared_ptr<NKikimr::NGeneralCache::NSource::TFetchingContext<NOlap::NGeneralCache::TColumnDataCachePolicy>>& context,
-            const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
-                cacheCallback,
+        TExecutor(const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
+                      cacheCallback,
             THashMap<NOlap::TPortionAddress, NOlap::ISnapshotSchema::TPtr>&& schemas, const TActorId& owner, const ui32 columnId)
-            : Context(context)
-            , CacheCallback(cacheCallback)
+            : CacheCallback(cacheCallback)
             , Schemas(schemas)
             , Owner(owner)
             , ColumnId(columnId)
@@ -1423,7 +1419,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
 
             NOlap::NDataFetcher::TPortionsDataFetcher::StartColumnsFetching(std::move(rInput),
                 std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(std::vector<ui32>({ columnId })),
-                std::make_shared<TExecutor>(ev->Get()->GetContext(), ev->Get()->GetCallback(), std::move(schemas), SelfId(), columnId), env,
+                std::make_shared<TExecutor>(ev->Get()->GetCallback(), std::move(schemas), SelfId(), columnId), env,
                 NConveyorComposite::ESpecialTaskCategory::Scan);
         }
     }

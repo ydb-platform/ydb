@@ -334,7 +334,8 @@ protected:
     TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        TExprBase output = DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildShuffleStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -350,7 +351,8 @@ protected:
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -359,10 +361,12 @@ protected:
     TMaybeNode<TExprBase> BuildPartitionStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildPartitionStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        TExprBase output = DqBuildPartitionStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildPartitionStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
+
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTopStageRemoveSort(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)

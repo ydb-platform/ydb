@@ -802,6 +802,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(CheckNoSortings(plan));
     }
 
+    Y_UNIT_TEST_TWIN(SortingsPropagateThroughMapJoin, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_propagate_through_map_join.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
     Y_UNIT_TEST_TWIN(SortingsDifferentDirs, RemoveLimitOperator) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_different_dirs.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
         UNIT_ASSERT(CheckSorting(plan));

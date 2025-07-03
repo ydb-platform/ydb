@@ -145,10 +145,10 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     return WriteAndRead<TProduceResponseData>(header, request);
 }
 
-TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition, 
-                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages, 
-                                                            ui32 baseSequence, 
-                                                            const std::optional<TProducerInstanceId>& producerInstanceId, 
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition,
+                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                                                            ui32 baseSequence,
+                                                            const std::optional<TProducerInstanceId>& producerInstanceId,
                                                             const std::optional<TString>& transactionalId) {
     TKafkaRecordBatch batch;
     batch.BaseSequence = baseSequence;
@@ -428,6 +428,12 @@ TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TOffsetFetch
     Cerr << ">>>>> TOffsetFetchRequestData\n";
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_FETCH, 8);
     return WriteAndRead<TOffsetFetchResponseData>(header, request);
+}
+
+TMessagePtr<TListGroupsResponseData> TKafkaTestClient::ListGroups(TListGroupsRequestData request) {
+    Cerr << ">>>>> TListGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::LIST_GROUPS, 4);
+    return WriteAndRead<TListGroupsResponseData>(header, request);
 }
 
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {

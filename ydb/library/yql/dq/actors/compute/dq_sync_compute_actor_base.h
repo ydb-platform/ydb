@@ -60,7 +60,7 @@ protected:
             if (stats.StartTs && TInstant::Now() - stats.StartTs > TDuration::Seconds(60)) {
                 auto taskRunnerDebugString = TaskRunner->GetOutputDebugString();
                 if (taskRunnerDebugString) {
-                    CA_LOG_E("TaskRunner->Output Debug String:" << Endl << taskRunnerDebugString << Endl);
+                    CA_LOG_E("TaskRunner->Output Debug String: " << taskRunnerDebugString);
                 }
             }
         }

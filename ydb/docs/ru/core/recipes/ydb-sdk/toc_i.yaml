@@ -61,3 +61,5 @@ items:
     href: debug-prometheus.md
   - name: Подключить трассировку в Jaeger
     href: debug-jaeger.md
+- name: Векторный поиск
+  href: vector-search.md

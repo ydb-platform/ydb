@@ -5,6 +5,9 @@
 
 #include <yql/essentials/sql/v1/complete/syntax/format.h>
 
+#include <util/generic/hash_set.h>
+#include <util/generic/scope.h>
+
 namespace NSQLComplete {
 
     namespace {
@@ -73,6 +76,11 @@ namespace NSQLComplete {
 
         class TInferenceVisitor: public TSQLv1BaseVisitor {
         public:
+            explicit TInferenceVisitor(THashMap<TString, SQLv1::Subselect_stmtContext*> subqueries)
+                : Subqueries_(std::move(subqueries))
+            {
+            }
+
             std::any visitJoin_source(SQLv1::Join_sourceContext* ctx) override {
                 return AccumulatingVisit(ctx->flatten_source());
             }
@@ -98,18 +106,31 @@ namespace NSQLComplete {
             }
 
             std::any visitTable_ref(SQLv1::Table_refContext* ctx) override {
-                TString cluster = GetId(ctx->cluster_expr()).GetOrElse("");
-
-                TMaybe<TString> path = GetId(ctx->table_key());
-                if (path.Empty()) {
-                    return {};
+                if (TMaybe<TString> path = GetId(ctx->table_key())) {
+                    TString cluster = GetId(ctx->cluster_expr()).GetOrElse("");
+                    return TColumnContext{
+                        .Tables = {
+                            TTableId{std::move(cluster), std::move(*path)},
+                        },
+                    };
                 }
 
-                return TColumnContext{
-                    .Tables = {
-                        TTableId{std::move(cluster), std::move(*path)},
-                    },
-                };
+                if (TMaybe<TString> named = NSQLComplete::GetId(ctx->bind_parameter())) {
+                    if (auto it = Subqueries_.find(*named); it != Subqueries_.end()) {
+                        if (Resolving_.contains(*named)) {
+                            return {};
+                        }
+
+                        Resolving_.emplace(*named);
+                        Y_DEFER {
+                            Resolving_.erase(*named);
+                        };
+
+                        return visit(it->second);
+                    }
+                }
+
+                return {};
             }
 
             std::any visitSelect_stmt(SQLv1::Select_stmtContext* ctx) override {
@@ -247,6 +268,9 @@ namespace NSQLComplete {
                         return std::move(acc) | std::move(child);
                     });
             }
+
+            THashMap<TString, SQLv1::Subselect_stmtContext*> Subqueries_;
+            THashSet<TString> Resolving_;
         };
 
         class TVisitor: public TSQLv1NarrowingVisitor {
@@ -257,7 +281,7 @@ namespace NSQLComplete {
             }
 
             std::any visitSql_stmt_core(SQLv1::Sql_stmt_coreContext* ctx) override {
-                if (IsEnclosing(ctx)) {
+                if (ctx->named_nodes_stmt() || IsEnclosing(ctx)) {
                     return visitChildren(ctx);
                 }
                 return {};
@@ -280,13 +304,39 @@ namespace NSQLComplete {
                     return {};
                 }
 
-                return TInferenceVisitor().visit(source);
+                return TInferenceVisitor(std::move(Subqueries_)).visit(source);
             }
 
         private:
+            std::any visitNamed_nodes_stmt(SQLv1::Named_nodes_stmtContext* ctx) override {
+                TMaybe<std::string> name = Name(ctx->bind_parameter_list());
+                if (name.Empty()) {
+                    return {};
+                }
+
+                SQLv1::Subselect_stmtContext* subselect = ctx->subselect_stmt();
+                if (subselect == nullptr) {
+                    return {};
+                }
+
+                Subqueries_[std::move(*name)] = subselect;
+                return {};
+            }
+
+            TMaybe<std::string> Name(SQLv1::Bind_parameter_listContext* ctx) const {
+                auto parameters = ctx->bind_parameter();
+                if (parameters.size() != 1) {
+                    return Nothing();
+                }
+
+                return NSQLComplete::GetId(parameters[0]);
+            }
+
             bool IsEnclosingStrict(antlr4::ParserRuleContext* ctx) const {
                 return ctx != nullptr && IsEnclosing(ctx);
             }
+
+            THashMap<TString, SQLv1::Subselect_stmtContext*> Subqueries_;
         };
 
     } // namespace

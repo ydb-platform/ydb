@@ -69,6 +69,18 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
         UNIT_ASSERT_VALUES_EQUAL(ctx.Names, expected);
     }
 
+    Y_UNIT_TEST(RecursiveName) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+        TString query = R"(
+            $x = $x;
+            #
+        )";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Names, TVector<TString>{"x"});
+    }
+
     Y_UNIT_TEST(EnclosingFunctionName) {
         IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
         {
@@ -291,6 +303,54 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
             TColumnContext expected = {.Tables = {TAliased<TTableId>("", {"", "x"})}};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+    }
+
+    Y_UNIT_TEST(NamedSubquery) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+        {
+            TString query = R"(
+                $subquery = (SELECT * FROM x);
+                SELECT # FROM $subquery;
+            )";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {.Tables = {TAliased<TTableId>("", {"", "x"})}};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+        {
+            TString query = R"(
+                SELECT # FROM $subquery;
+            )";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+        {
+            TString query = R"(
+                $subquery1 = (SELECT * FROM $subquery1);
+                SELECT # FROM $subquery1;
+            )";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+        {
+            TString query = R"(
+                $subquery1 = (SELECT * FROM $subquery2);
+                $subquery2 = (SELECT * FROM $subquery1);
+                SELECT # FROM $subquery2;
+            )";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {};
             UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
         }
     }

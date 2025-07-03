@@ -6,6 +6,10 @@
 namespace NSQLComplete {
 
     TMaybe<std::string> GetId(SQLv1::Bind_parameterContext* ctx) {
+        if (ctx == nullptr) {
+            return Nothing();
+        }
+
         if (auto* x = ctx->an_id_or_type()) {
             return x->getText();
         } else if (auto* x = ctx->TOKEN_TRUE()) {

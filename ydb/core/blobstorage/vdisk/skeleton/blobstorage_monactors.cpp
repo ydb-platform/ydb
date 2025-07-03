@@ -355,7 +355,7 @@ namespace NKikimr {
             TSkeletonFrontMonLogoBlobsQueryParams params{
                 .DbName = "",
                 .Form = "",
-                .IndexOnly = true,
+                .IndexOnly = !record.need_data(),
                 .ShowInternals = record.show_internals(),
                 .SubmitButton = true,
                 .AllButton = false,
@@ -368,6 +368,9 @@ namespace NKikimr {
             auto &range = record.range();
             params.From = convert(range.from());
             params.To = convert(range.to());
+            if (params.To == params.From) {
+                params.To.Clear();
+            }
 
             return params;
         }
@@ -479,13 +482,17 @@ namespace NKikimr {
             }
         }
 
-        void OutputOneQueryResultToProto(NKikimrVDisk::GetLogoBlobResponse::LogoBlob *blob, const NKikimrBlobStorage::TQueryResult &q) {
+        void OutputOneQueryResultToProto(NKikimrVDisk::GetLogoBlobResponse::LogoBlob *blob, const NKikimrBlobStorage::TQueryResult &q,
+                TEvBlobStorage::TEvVGetResult *ev) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
             blob->set_id(id.ToString());
             blob->set_status(NKikimrProto::EReplyStatus_Name(q.GetStatus()));
             if (ShowInternals) {
                 TIngress ingress(q.GetIngress());
                 blob->set_ingress(ingress.ToString(Top.get(), TVDiskIdShort(SelfVDiskId), id));
+            }
+            if (TRope data = ev->GetBlobData(q)) {
+                blob->set_data_base64(Base64Encode(data.ConvertToString()));
             }
         }
 
@@ -521,7 +528,7 @@ namespace NKikimr {
             } else {
                 auto res = std::make_unique<TEvGetLogoBlobResponse>();
                 for (ui32 i = 0; i < size; i++) {
-                    OutputOneQueryResultToProto(res->Record.add_logoblobs(), rec.GetResult(i));
+                    OutputOneQueryResultToProto(res->Record.add_logoblobs(), rec.GetResult(i), ev->Get());
                 }
                 Finish(ctx, res.release());
             }

@@ -299,20 +299,15 @@ public:
         SpillerFactory = spillerFactory;
     }
 
-    TString DebugString() override {
-        if (!AllocatedHolder->Output) {
-            return "Output == nullptr";
-        } else {
-            TStringBuilder builder;
+    TString GetOutputDebugString() override {
+        if (AllocatedHolder->Output) {
             switch (AllocatedHolder->Output->GetFillLevel()) {
-                case NoLimit:   builder << "Output == NoLimit"; break;
-                case SoftLimit: builder << "Output == SoftLimit"; break;
-                case HardLimit: builder << "Output == HardLimit"; break;
+                case NoLimit:   return "";
+                case SoftLimit: return TStringBuilder() << "Output == SoftLimit" << Endl << AllocatedHolder->Output->DebugString();
+                case HardLimit: return TStringBuilder() << "Output == HardLimit" << Endl << AllocatedHolder->Output->DebugString();
             }
-            builder << Endl;
-            builder << AllocatedHolder->Output->DebugString();
-            return builder;
         }
+        return "";
     }
 
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {

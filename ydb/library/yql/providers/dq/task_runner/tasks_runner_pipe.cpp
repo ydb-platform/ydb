@@ -1682,7 +1682,7 @@ public:
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
     }
 
-    TString DebugString() override {
+    TString GetOutputDebugString() override {
         return "";
     }
 

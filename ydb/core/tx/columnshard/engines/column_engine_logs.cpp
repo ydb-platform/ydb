@@ -109,8 +109,10 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
         AFL_VERIFY(!VersionedIndex.IsEmpty());
         const auto& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
         AFL_VERIFY(presetId == lastIndexInfo.GetPresetId());
-        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(*schema.GetDiff(), lastIndexInfo, StoragesManager, SchemaObjectsCache);
-        if (schema.GetDiff()->IsCorrectToIgnorePreviouse(lastIndexInfo)) {
+        TSchemaDiffView diffView;
+        diffView.DeserializeFromProto(*schema.GetDiff()).Validate();
+        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(diffView, lastIndexInfo, StoragesManager, SchemaObjectsCache);
+        if (diffView.IsCorrectToIgnorePreviouse(lastIndexInfo)) {
             lastIndexInfo.SetIgnoreToVersion(indexInfoOptional.GetVersion());
             AFL_VERIFY(indexInfoOptional.GetVersion() != lastIndexInfo.GetVersion());
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_will_be_ignored")("last_version", lastIndexInfo.Version)(

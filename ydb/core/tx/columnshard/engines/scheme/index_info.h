@@ -287,8 +287,10 @@ public:
 
     static std::optional<TIndexInfo> BuildFromProto(const ui64 presetId, const NKikimrSchemeOp::TColumnTableSchema& schema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
-    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& schema,
-        const TIndexInfo& prevSchema, const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
+    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff, const TIndexInfo& prevSchema,
+        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
+    static std::optional<TIndexInfo> BuildFromProto(const TSchemaDiffView& diff, const TIndexInfo& prevSchema,
+        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     bool HasColumnId(const ui32 columnId) const {
         return !!GetColumnIndexOptional(columnId);

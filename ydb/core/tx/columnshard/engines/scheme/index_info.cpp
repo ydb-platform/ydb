@@ -344,6 +344,11 @@ std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TCol
     return TIndexInfo(prevSchema, diffView, operators, cache);
 }
 
+std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const TSchemaDiffView& diff, const TIndexInfo& prevSchema,
+    const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    return TIndexInfo(prevSchema, diff, operators, cache);
+}
+
 std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
     const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
     std::vector<std::shared_ptr<arrow::Field>> fields;

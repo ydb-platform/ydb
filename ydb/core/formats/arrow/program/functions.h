@@ -343,7 +343,6 @@ public:
     TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const override {
         auto argumentsReader = resources->GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
         TAccessorsCollection::TChunksMerger merger;
-        std::cout << "la-la-la-2222222222222\n";
         while (auto args = argumentsReader.ReadNext()) {
             try {
                 for (auto& arg: *args) {

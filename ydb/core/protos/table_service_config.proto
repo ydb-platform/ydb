@@ -356,7 +356,7 @@ message TTableServiceConfig {
 
     optional EBlockTrackingMode BlockTrackingMode = 73 [ default = BLOCK_TRACKING_SERIALIZE ];
 
-    optional bool AllowOlapDataQuery = 74 [default = true];
+    optional bool AllowOlapDataQuery = 74 [default = false];
 
     // DISCLAIMER: do not change this value if you don't know what you are doing!
     optional uint32 ArrayBufferMinFillPercentage = 75 [default = 100];

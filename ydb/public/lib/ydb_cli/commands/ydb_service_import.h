@@ -25,6 +25,12 @@ public:
     void Parse(TConfig& config) override;
     void ExtractParams(TConfig& config) override;
     int Run(TConfig& config) override;
+    void FillItems(NYdb::NImport::TImportFromS3Settings& settings) const;
+    void FillItemsFromItemParam(NYdb::NImport::TImportFromS3Settings& settings) const;
+    void FillItemsFromIncludeParam(NYdb::NImport::TImportFromS3Settings& settings) const;
+
+    template <class TSettings>
+    TSettings MakeSettings();
 
 private:
     struct TItemFields {
@@ -37,11 +43,19 @@ private:
     ES3Scheme AwsScheme = ES3Scheme::HTTPS;
     TString AwsBucket;
     TVector<TItem> Items;
+    TVector<TString> IncludePaths;
     TString Description;
     ui32 NumberOfRetries = 10;
     bool UseVirtualAddressing = true;
     bool NoACL = false;
     bool SkipChecksumValidation = false;
+    TString CommonSourcePrefix;
+    TString CommonDestinationPath;
+    bool ListObjectsInExistingExport = false;
+
+    // Encryption params
+    TString EncryptionKey;
+    TString EncryptionKeyFile;
 };
 
 class TCommandImportFromFile : public TClientCommandTree {

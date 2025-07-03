@@ -3263,9 +3263,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         );
 
         userInfo.Offset = offset;
-        if (userInfo.Offset <= (i64)StartOffset) {
-            userInfo.AnyCommits = false;
-        }
+        userInfo.AnyCommits = userInfo.Offset > (i64)StartOffset;
 
         if (LastOffsetHasBeenCommited(userInfo)) {
             SendReadingFinished(user);

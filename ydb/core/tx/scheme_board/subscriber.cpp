@@ -947,7 +947,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
 
         const auto& record = ev->Get()->Record;
-        bool configMismatch = record.HasClusterState() && ClusterState != TClusterState(record.GetClusterState());
+        const bool configMismatch = record.HasClusterState() && ClusterState != TClusterState(record.GetClusterState());
         if (configMismatch) {
             SBS_LOG_I("Cluster State mismatch in sync version response"
                 << ": sender# " << ev->Sender

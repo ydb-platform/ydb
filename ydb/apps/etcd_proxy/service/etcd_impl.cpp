@@ -862,9 +862,9 @@ private:
         if (reqRev && *reqRev)
             AddParam("Revision", params, Revision);
         this->MakeQueryWithParams(sql, params);
-        if (!(reqRev && *reqRev))
+        if (!reqRev)
             sql << "select nvl(max(`revision`), 0L) from `commited`;" << std::endl;
-        else if (!Guard)
+        else if (!Guard && *reqRev)
             sql << "insert into `commited` (`revision`,`timestamp`) values ($Revision,CurrentUtcTimestamp());" << std::endl;
         sql << "-- " << GetRequestName() << " <<<<" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
@@ -907,7 +907,7 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
-        if (const auto reqRev = this->RequiredNextRevision(); !reqRev || !*reqRev) {
+        if (!this->RequiredNextRevision()) {
             if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.back()); parser.TryNextRow()) {
                 Revision = NYdb::TValueParser(parser.GetValue(0)).GetInt64();
             }
@@ -1237,7 +1237,7 @@ private:
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         Lease = Revision;
-        Revision = 0LL;
+        Revision = Stuff->Revision.load();
         sql << "insert into `leases` (`id`,`ttl`,`created`,`updated`) values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << std::endl;
     }
 

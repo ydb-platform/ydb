@@ -100,6 +100,7 @@ public:
 private:
     std::unique_ptr<TKikimrRunner> Kikimr;
     std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
+    std::unique_ptr<NYdb::NQuery::TQueryClient> QueryClient;
     std::unique_ptr<NYdb::NTable::TSession> Session;
 
 public:

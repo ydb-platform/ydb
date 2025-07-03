@@ -27,6 +27,8 @@ namespace NKqp {
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
         TableClient =
             std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
+        QueryClient =
+            std::make_unique<NYdb::NQuery::TQueryClient>(Kikimr->GetQueryClient(NYdb::NQuery::TClientSettings().AuthToken("root@builtin")));
         Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
 
         NOlap::TSchemaCachesManager::DropCaches();
@@ -106,8 +108,7 @@ namespace NKqp {
     }
 
     void TTestHelper::ExecuteQuery(const TString& query) const {
-        auto session = TableClient->CreateSession().GetValueSync().GetSession();
-        auto it = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto it = QueryClient->ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
     }
 
@@ -390,7 +391,7 @@ namespace NKqp {
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Decimal:
-            return arrow::field(name, arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale()));
+            return arrow::field(name, arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale()), nullable);
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:

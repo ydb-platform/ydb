@@ -85,7 +85,6 @@ public:
         if (!!Self->ProgressTxController->GetPlannedTx()) {
             Self->EnqueueProgressTx(ctx, std::nullopt);
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished_tx")("tx_id", "la-la-la");
         return true;
     }
 

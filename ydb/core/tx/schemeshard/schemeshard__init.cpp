@@ -4338,7 +4338,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         for (auto& item : Self->TxInFlight) {
             const TTxState& txState = item.second;
 
-            ui32 inFlightCounter = TTxState::TxTypeInFlightCounter(txState.TxType);
+            ui32 inFlightCounter = TxTypeInFlightCounter(txState.TxType);
             Self->TabletCounters->Simple()[inFlightCounter].Add(1);
         }
 

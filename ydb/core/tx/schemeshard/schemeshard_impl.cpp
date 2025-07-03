@@ -1595,7 +1595,7 @@ bool TSchemeShard::CheckInFlightLimit(TTxState::ETxType txType, TString& errStr)
         return true;
     }
 
-    if (it->second != 0 && TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(txType)].Get() >= it->second) {
+    if (it->second != 0 && TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Get() >= it->second) {
         errStr = TStringBuilder() << "the limit of operations with type " << TTxState::TypeName(txType)
             << " has been exceeded"
             << ", limit: " << it->second;
@@ -1606,7 +1606,7 @@ bool TSchemeShard::CheckInFlightLimit(TTxState::ETxType txType, TString& errStr)
 }
 
 bool TSchemeShard::CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TString& errStr) const {
-    if (const auto txType = TTxState::ConvertToTxType(opType); txType != TTxState::TxInvalid) {
+    if (const auto txType = ConvertToTxType(opType); txType != TTxState::TxInvalid) {
         return CheckInFlightLimit(txType, errStr);
     }
 
@@ -5366,7 +5366,7 @@ TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TP
                "Trying to create duplicate Tx " << opId);
     TTxState& txState = TxInFlight[opId];
     txState = TTxState(txType, targetPath, sourcePath);
-    TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(txType)].Add(1);
+    TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Add(1);
     IncrementPathDbRefCount(targetPath, "transaction target path");
     if (sourcePath) {
         IncrementPathDbRefCount(sourcePath, "transaction source path");
@@ -5403,12 +5403,12 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     auto pathId = txState->TargetPathId;
 
     PersistRemoveTx(db, opId, *txState);
-    TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(txState->TxType)].Sub(1);
+    TabletCounters->Simple()[TxTypeInFlightCounter(txState->TxType)].Sub(1);
 
     if (txState->IsItActuallyMerge()) {
-        TabletCounters->Cumulative()[TTxState::TxTypeFinishedCounter(TTxState::TxMergeTablePartition)].Increment(1);
+        TabletCounters->Cumulative()[TxTypeFinishedCounter(TTxState::TxMergeTablePartition)].Increment(1);
     } else {
-        TabletCounters->Cumulative()[TTxState::TxTypeFinishedCounter(txState->TxType)].Increment(1);
+        TabletCounters->Cumulative()[TxTypeFinishedCounter(txState->TxType)].Increment(1);
     }
 
     DecrementPathDbRefCount(pathId, "remove txstate target path");
@@ -7671,7 +7671,7 @@ void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfi
 void TSchemeShard::ConfigureStatsOperations(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
     for (const auto& operationConfig: config.GetInFlightCounterConfig()) {
         ui32 limit = operationConfig.GetInFlightLimit();
-        auto txState = TTxState::ConvertToTxType(operationConfig.GetType());
+        auto txState = ConvertToTxType(operationConfig.GetType());
         InFlightLimits[txState] = limit;
     }
 

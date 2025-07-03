@@ -39,9 +39,11 @@
 
 {% endnote %}
 
-## Текущее ограничение
+## Текущее ограничение {#current-limitation}
 
 В качестве первичного ключа таблицы выбирается первая колонка. При необходимости можно изменить состав колонок первичного ключа на требуемый.
+
+[{#T}](../../dev/primary-key/index.md)
 
 ## Примеры {#examples}
 
@@ -82,9 +84,10 @@ WITH (
 
 {% endnote %}
 
-### Имена колонок в первой строке, используется опция `--header` {#example-header}
+### Имена колонок в первой строке CSV-файла, используется опция `--header` {#example-header}
 
-В этом примере значения `key` и `value` в первой строке совпадают с типами данных (`Text`) в остальных строках. Поэтому без опции `--header` команда не будет использовать первую строку как имена колонок, а сгенерирует их автоматически. Чтобы использовать первую строку как имена колонок в таком случае, явно укажите опцию `--header`:
+В этом примере значения `key` и `value` в первой строке совпадают с типами данных (`Text`) в остальных строках. Поэтому без опции `--header` команда не будет использовать первую строку как имена колонок, а сгенерирует их автоматически.
+Чтобы использовать первую строку как имена колонок в таком случае, явно укажите опцию `--header`:
 
 ```bash
 $ cat data_with_header_text.csv
@@ -155,5 +158,36 @@ WITH (
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
     --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
 );
+```
+
+### Выполнение сгенерированного запроса с помощью опции `--execute` {#example-execute}
+
+В этом примере запрос `CREATE TABLE` выполняется сразу после генерации.
+
+```bash
+$ cat data_with_header.csv
+key,value
+123,abc
+456,def
+
+{{ ydb-cli }} -p quickstart tools infer csv data_with_header.csv --execute
+Executing request:
+
+CREATE TABLE table (
+    key Int64,
+    value Text,
+    PRIMARY KEY (key) -- First column is chosen. Probably need to change this.
+)
+WITH (
+    STORE = ROW -- or COLUMN
+    -- Other useful table options to consider:
+    --, AUTO_PARTITIONING_BY_SIZE = ENABLED
+    --, AUTO_PARTITIONING_BY_LOAD = ENABLED
+    --, UNIFORM_PARTITIONS = 100 -- Initial number of partitions
+    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+    --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+);
+
+Query executed successfully.
 ```
 

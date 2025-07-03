@@ -1,6 +1,6 @@
 # Table schema inference from data files
 
-You can use the `{{ ydb-cli }} tools infer csv` command to generate a `CREATE TABLE` statement from a CSV data file. This can be very helpful when you want to [import](./export-import/import-file.md) data into a database and the table has not been created yet.
+You can use the `{{ ydb-cli }} tools infer csv` command to generate a `CREATE TABLE` statement from a CSV data file. This can be helpful when you want to [import](./export-import/import-file.md) data into a database and the table has not been created yet.
 
 Command syntax:
 
@@ -21,16 +21,16 @@ To get the most up-to-date information about the command, use the `--help` optio
 
 Option Name | Description
 ---|---
-`-p, --path` | Database path to table that should be created. Default: `table`.
+`-p, --path` | Database path to the table that should be created. Default: `table`.
 `--columns` | Explicitly specifies table column names, as a comma-separated list.
 `--gen-columns` | Explicitly indicates that table column names should be generated automatically (column1, column2, ...).
 `--header` | Explicitly indicates that the first row in the CSV contains column names.
-`--rowsalyze` | Number of rows to analyze. 0 means unlimited. Reading will be stopped soon after this number of rows is read. Default: `500000`.
-`--execute` | Execute `CREATE TABLE` request right after generation.
+`--rows-to-analyze` | Number of rows to analyze. 0 means unlimited. Reading will stop as soon as this number of rows is read. Default: `500000`.
+`--execute` | Execute the `CREATE TABLE` request immediately after generation.
 
 {% note info %}
 
-If none of the options `--columns`, `--gen-columns`, or `--header` are explicitly specified, the following algorithm is used: The first row of the file is taken, and its values are checked for the following conditions:
+If none of the options `--columns`, `--gen-columns`, or `--header` are explicitly specified, the following algorithm is used. The first row of the file is taken, and its values are checked for the following conditions:
 
 * The values meet the requirements for column names.
 * The types of these values are different from the data types in the other rows of the file.
@@ -39,9 +39,11 @@ If both conditions are met, the values from the first row are used as the table'
 
 {% endnote %}
 
-## Current Limitation
+## Current Limitation {#current-limitation}
 
-The first column is always chosen as the primary key. You may need to change the primary key to a more appropriate one for your use case.
+The first column is always chosen as the primary key. You may need to change the primary key to one that is more appropriate for your use case.
+
+[{#T}](../../dev/primary-key/index.md)
 
 ## Examples {#examples}
 
@@ -49,8 +51,8 @@ The first column is always chosen as the primary key. You may need to change the
 
 ### Column names in the first row, no options specified {#example-default}
 
-In this example no options are specified.
-Values `key` and `value` in the first row match the table column name requirements and do not match data types in the other rows (`Int64` and `Text`).
+In this example, no options are specified.
+Values `key` and `value` in the first row match the table column name requirements and do not match the data types in the other rows (`Int64` and `Text`).
 So the command uses the first row of the file as column names.
 
 ```bash
@@ -78,14 +80,15 @@ WITH (
 
 {% note info %}
 
-The WITH block lists some useful table options. Uncomment the ones you need, and remove the rest as appropriate.
+The `WITH` block lists some useful table options. Uncomment the ones you need and remove the rest as appropriate.
 
 {% endnote %}
 
-### Column names in the first, using `--header` option {#example-header}
+### Column names in the first row, using `--header` option {#example-header}
 
-In this example values `key` and `value` in the first row match data types (`Text`) in the other rows.
-So without the --header option, the command would not use the first row of the file as column names but would generate column names automatically. To use the first row as column names in this situation, use the --header option explicitly.
+In this example, the values `key` and `value` in the first row match the data types (`Text`) in the other rows.  
+In this case, without the `--header` option, the command would not use the first row of the file as column names but would generate column names automatically.
+To use the first row as column names in this situation, use the `--header` option explicitly.
 
 ```bash
 $ cat data_with_header_text.csv
@@ -156,4 +159,35 @@ WITH (
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
     --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
 );
+```
+
+### Executing generated statement using the `--execute` option {#example-execute}
+
+In this example, the `CREATE TABLE` statement is actually executed right after generation.
+
+```bash
+$ cat data_with_header.csv
+key,value
+123,abc
+456,def
+
+{{ ydb-cli }} -p quickstart tools infer csv data_with_header.csv --execute
+Executing request:
+
+CREATE TABLE table (
+    key Int64,
+    value Text,
+    PRIMARY KEY (key) -- First column is chosen. Probably need to change this.
+)
+WITH (
+    STORE = ROW -- or COLUMN
+    -- Other useful table options to consider:
+    --, AUTO_PARTITIONING_BY_SIZE = ENABLED
+    --, AUTO_PARTITIONING_BY_LOAD = ENABLED
+    --, UNIFORM_PARTITIONS = 100 -- Initial number of partitions
+    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+    --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+);
+
+Query executed successfully.
 ```

@@ -1237,6 +1237,8 @@ private:
     }
 
     void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr ev) {
+        SBR_LOG_I("Handle " << ev->Get()->ToString());
+
         Info = ev->Get()->SchemeBoardConfig;
         Y_ABORT_UNLESS(!ev->Get()->GroupConfig);
         Y_ABORT_UNLESS(!ev->Get()->BoardConfig);

@@ -303,8 +303,8 @@ public:
         if (AllocatedHolder->Output) {
             switch (AllocatedHolder->Output->GetFillLevel()) {
                 case NoLimit:   return "";
-                case SoftLimit: return TStringBuilder() << "Output == SoftLimit" << Endl << AllocatedHolder->Output->DebugString();
-                case HardLimit: return TStringBuilder() << "Output == HardLimit" << Endl << AllocatedHolder->Output->DebugString();
+                case SoftLimit: return TStringBuilder() << "Output.FillLimit == SoftLimit " << AllocatedHolder->Output->DebugString();
+                case HardLimit: return TStringBuilder() << "Output.FillLimit == HardLimit " << AllocatedHolder->Output->DebugString();
             }
         }
         return "";

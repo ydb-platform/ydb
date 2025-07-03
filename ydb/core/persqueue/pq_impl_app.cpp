@@ -28,6 +28,10 @@ namespace {
         ui64 MinStep;
         ui64 MaxStep;
     };
+
+    bool ShouldShowSendReadSetAction(const TDistributedTransaction& tx) {
+        return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
+    }
 }
 
 
@@ -208,7 +212,6 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     } else {
         auto* tx = Txs.FindPtr(txId);
         if (tx) {
-            const bool showSendReadSetAction = tx->State == NKikimrPQ::TTransaction_EState::TTransaction_EState_WAIT_RS;
             HTML_APP_PAGE(str, "PersQueue Tablet " << TabletID() << " (" << TopicName << ") Transaction id " << txId) {
                LAYOUT_ROW() {
                     LAYOUT_COLUMN() {
@@ -253,13 +256,25 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const T
                                             }
                                         }
                                         TABLED() {
-                                            if (!predicate.HasPredicate() && showSendReadSetAction) {
-                                                str << RenderSendReadSetHtmlForms(*tx, tabletID);
+                                            if (!predicate.HasPredicate() && ShouldShowSendReadSetAction(*tx)) {
+                                                str << RenderSendReadSetHtmlForms(*tx, MakeArrayRef(&tabletID, 1));
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        size_t readSetPending = 0;
+                        for (const auto& [tabletID, predicate] : tx->PredicatesReceived) {
+                            readSetPending += !predicate.HasPredicate();
+                        }
+                        if (readSetPending > 0 && ShouldShowSendReadSetAction(*tx)) {
+                             str << "Send ReadSet for all " << readSetPending << " waiting tablets";
+                             str << RenderSendReadSetHtmlForms(*tx, Nothing());
                         }
                     }
                 }

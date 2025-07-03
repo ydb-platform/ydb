@@ -523,6 +523,10 @@ NInternalEvents::TEvHandshakeResponse::TPtr HandshakeReplica(
     return nullptr;
 }
 
+bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
+}
+
 ui32 CountReplicas(const TStateStorageInfo::TRingGroup& ringGroup) {
     ui32 replicas = 0;
     for (const auto& ring : ringGroup.Rings) {

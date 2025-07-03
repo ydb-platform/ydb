@@ -50,6 +50,14 @@ namespace {
 
 } // anonymous
 
+bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ringGroup.State == ERingGroupState::DISCONNECTED;
+}
+
+bool ShouldIgnoreInQuorum(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ShouldIgnore(ringGroup) || ringGroup.WriteOnly;
+}
+
 bool IsMajorityReached(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
     return ringGroupAcks > ringGroup.NToSelect / 2;
 }
@@ -486,6 +494,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const ui64 idHash = pathId.Hash();
 
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+            if (ShouldIgnore(GroupInfo->RingGroups[ringGroupIndex])) {
+                continue;
+            }
             TStateStorageInfo::TSelection selection;
 
             GroupInfo->SelectReplicas(pathHash, &selection, ringGroupIndex);
@@ -732,7 +743,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         TVector<bool> ringGroupQuorums(GroupInfo->RingGroups.size(), false);
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
-            ringGroupQuorums[ringGroupIndex] = ShouldIgnore(ringGroup) || IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex]);
+            ringGroupQuorums[ringGroupIndex] = ShouldIgnoreInQuorum(ringGroup) || IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex]);
         }
         ProcessReplicaAck(ringGroupAcks, ackedReplica, ringGroupQuorums);
         return Count(ringGroupQuorums, false) == 0;
@@ -802,12 +813,20 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         THashSet<TActorId> neededReplicas;
 
         GroupInfo = info;
-        for (auto& replica : info->SelectAllReplicas()) {
-            neededReplicas.insert(replica);
-            if (!ReplicaToReplicaPopulator.contains(replica)) {
-                IActor* replicaPopulator = new TReplicaPopulator(SelfId(), replica, Owner, Generation);
-                ReplicaToReplicaPopulator.emplace(replica, Register(replicaPopulator, TMailboxType::ReadAsFilled));
-                ReplicaToReplicaPopulatorBackMap[ReplicaToReplicaPopulator[replica]] = replica;
+        for (const auto& ringGroup : info->RingGroups) {
+            if (ShouldIgnore(ringGroup)) {
+                continue;
+            }
+            for (const auto& ring : ringGroup.Rings) {
+                for (const auto& replica : ring.Replicas) {
+                    neededReplicas.emplace(replica);
+                    if (!ReplicaToReplicaPopulator.contains(replica)) {
+                        IActor* replicaPopulator = new TReplicaPopulator(SelfId(), replica, Owner, Generation);
+                        TActorId replicaPopulatorId = Register(replicaPopulator, TMailboxType::ReadAsFilled);
+                        ReplicaToReplicaPopulator.emplace(replica, replicaPopulatorId);
+                        ReplicaToReplicaPopulatorBackMap[replicaPopulatorId] = replica;
+                    }
+                }
             }
         }
 

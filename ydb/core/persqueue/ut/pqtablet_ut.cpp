@@ -96,10 +96,10 @@ struct TWriteRequestParams {
 };
 
 struct TManualSendReadSetParams {
-  ui64 Step;
-  ui64 TxId;
-  ui64 SenderId;
-  bool Predicate;
+  ui64 Step = 0;
+  ui64 TxId = 0;
+  TMaybe<ui64> SenderId;
+  bool Predicate = true;
 };
 
 using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
@@ -180,6 +180,16 @@ protected:
     struct TManualSendRsMatcher {
         TMaybe<bool> Status;
     };
+
+    struct TSendRsViaAppTestParams {
+        size_t TabletsCount = 0;
+        NKikimrTx::TReadSetData::EDecision Decision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
+        size_t TabletsRSCount = 0;
+        NKikimrTx::TReadSetData::EDecision AppDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
+        bool ExpectedAppResponseStatus = true;
+        NKikimrPQ::TEvProposeTransactionResult::EStatus ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE;
+    };
+
 
     using TProposeTransactionParams = NHelpers::TProposeTransactionParams;
     using TPlanStepParams = NHelpers::TPlanStepParams;
@@ -274,6 +284,7 @@ protected:
 
     void SendManualSendRsRequest(const TManualSendReadSetParams& params);
     void WaitForManualSendRsResponse(const TManualSendRsMatcher& matcher);
+    void TestSendingTEvReadSetViaApp(const TSendRsViaAppTestParams& params);
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -1302,14 +1313,18 @@ NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
 
 void TPQTabletFixture::SendManualSendRsRequest(const TManualSendReadSetParams& params) {
     auto makeEv = [this, &params]() {
-        const TCgiParameters cgi{
+        TCgiParameters cgi{
             {"TabletID", ToString(Ctx->TabletId)},
             {"SendReadSet", "1"},
             {"decision", params.Predicate ? "commit" : "abort"},
             {"step", ToString(params.Step)},
             {"txId", ToString(params.TxId)},
-            {"senderTablet", ToString(params.SenderId)},
         };
+        if (params.SenderId.Defined()) {
+            cgi.InsertUnescaped("senderTablet", ToString(*params.SenderId));
+        } else {
+            cgi.InsertUnescaped("allSenderTablets", "1");
+        }
         return std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(TStringBuilder() << "/app?" << cgi.Print());
     };
     Ctx->Runtime->SendToPipe(Ctx->TabletId, Ctx->Edge, makeEv().release(), 0, GetPipeConfigWithRetries());
@@ -2454,6 +2469,142 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     auto txInfo = GetTxWritesFromKV();
     UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId2.Id);
+}
+
+void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendRsViaAppTestParams& params)
+{
+    Y_ABORT_UNLESS(params.TabletsRSCount <= params.TabletsCount);
+    const ui64 txId = 67890;
+
+    TVector<NHelpers::TPQTabletMock*> tablets;
+    TVector<ui64> tabletIds;
+    for (size_t i = 0; i < params.TabletsCount; ++i) {
+        tabletIds.push_back(22222 + i);
+        tablets.push_back(CreatePQTabletMock(tabletIds.back()));
+    }
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders=tabletIds, .Receivers=tabletIds,
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"}
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+
+    for (auto* tablet : tablets) {
+        WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=tablet->TabletID(), .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    }
+    for (size_t i = 0; i < Min(params.TabletsRSCount, params.TabletsCount); ++i) {
+        tablets[i]->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=params.Decision});
+    }
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(500));
+
+    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=Nothing(), .Predicate=(params.AppDecision == NKikimrTx::TReadSetData::DECISION_COMMIT),});
+    WaitForManualSendRsResponse({.Status = params.ExpectedAppResponseStatus,});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=params.ExpectedStatus});
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c0c, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 0,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c3c, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 3,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c5c, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 5,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .ExpectedAppResponseStatus = false,  // получены все RS до вызова app
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c0a, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 0,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c3a, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 3,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c5a, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 5,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .ExpectedAppResponseStatus = false,  // получены все RS до вызова app
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5a4c, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .TabletsRSCount = 4,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5a4a, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .TabletsRSCount = 4,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
 }
 
 Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Commit, TPQTabletFixture)

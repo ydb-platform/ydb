@@ -117,6 +117,11 @@ namespace NSQLComplete {
             }
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
+                TColumnContext without;
+                if (std::any any = VisitNullable(ctx->without_column_list()); any.has_value()) {
+                    without = std::move(std::any_cast<TColumnContext>(any));
+                }
+
                 TColumnContext context = AccumulatingVisit(ctx->result_column());
                 auto asterisks = std::ranges::partition(context.Columns, [](const TColumnId& x) {
                     return x.Name != "*";
@@ -141,7 +146,7 @@ namespace NSQLComplete {
 
                 context.Columns.erase(asterisks.begin(), asterisks.end());
                 imported = std::move(imported).Renamed("");
-                return std::move(context) | std::move(imported);
+                return std::move(context) | std::move(imported) | std::move(without);
             }
 
             std::any visitResult_column(SQLv1::Result_columnContext* ctx) override {
@@ -172,6 +177,27 @@ namespace NSQLComplete {
                 }
 
                 return {};
+            }
+
+            std::any visitWithout_column_list(SQLv1::Without_column_listContext* ctx) override {
+                return AccumulatingVisit(ctx->without_column_name());
+            };
+
+            std::any visitWithout_column_name(SQLv1::Without_column_nameContext* ctx) override {
+                TString table = GetId(ctx->an_id(0)).GetOrElse("");
+                TMaybe<TString> column = GetId(ctx->an_id(1)).Or([&] {
+                    return GetId(ctx->an_id_without());
+                });
+
+                if (column.Empty()) {
+                    return {};
+                }
+
+                return TColumnContext{
+                    .WithoutByTableAlias = {
+                        {std::move(table), {{std::move(*column)}}},
+                    },
+                };
             }
 
         private:

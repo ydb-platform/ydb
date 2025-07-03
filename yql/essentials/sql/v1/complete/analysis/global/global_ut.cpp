@@ -239,6 +239,50 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
         }
     }
 
+    Y_UNIT_TEST(SubqueryWithout) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+        {
+            TString query = "SELECT # FROM (SELECT * WITHOUT a FROM x)";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {
+                .Tables = {
+                    TAliased<TTableId>("", {"", "x"}),
+                },
+                .WithoutByTableAlias = {
+                    {"", {"a"}},
+                },
+            };
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+        {
+            TString query = R"(
+                SELECT #
+                FROM (
+                    SELECT * WITHOUT Age, eqt.course
+                    FROM example.`/people` AS epp
+                    JOIN example.`/yql/tutorial` AS eqt ON TRUE
+                    JOIN testing ON TRUE
+                ) AS ep
+            )";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {
+                .Tables = {
+                    TAliased<TTableId>("ep", {"", "testing"}),
+                    TAliased<TTableId>("ep", {"example", "/people"}),
+                    TAliased<TTableId>("ep", {"example", "/yql/tutorial"}),
+                },
+                .WithoutByTableAlias = {
+                    {"ep", {"course", "Age"}},
+                },
+            };
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+    }
+
     Y_UNIT_TEST(Projection) {
         IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
         {

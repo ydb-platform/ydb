@@ -70,6 +70,7 @@ namespace NSQLComplete {
     struct TColumnName: TIndentifier {
         struct TConstraints {
             TVector<TAliased<TTableId>> Tables;
+            THashMap<TString, THashSet<TString>> WithoutByTableAlias;
         };
 
         TString TableAlias;
@@ -145,7 +146,7 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<INameService>;
 
-        ~INameService() override = default;
+        ~INameService() override = default; // TODO(YQL-19747): receive as const ref
         virtual NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const = 0;
     };
 

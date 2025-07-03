@@ -1211,6 +1211,30 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, query), expected);
         }
+        {
+            TString query = R"(
+                SELECT #
+                FROM (
+                    SELECT * WITHOUT Age, eqt.course
+                    FROM example.`/people` AS epp
+                    JOIN example.`/yql/tutorial` AS eqt ON TRUE
+                    JOIN testing ON TRUE
+                ) AS ep
+                JOIN example.`/people`      ON TRUE
+                JOIN example.`/people`      ON TRUE
+                JOIN example.`/people` AS x ON TRUE
+            )";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "x.Age"},
+                {ColumnName, "x.Name"},
+                {ColumnName, "ep.Name"},
+                {ColumnName, "ep.room"},
+                {ColumnName, "ep.time"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(6, engine, query), expected);
+        }
     }
 
     Y_UNIT_TEST(ColumnPositions) {

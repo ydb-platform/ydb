@@ -29,6 +29,11 @@ namespace NSQLComplete {
                 TNameResponse response;
 
                 for (const TString& tableName : Tables_) {
+                    THashSet<TString> without =
+                        request.Constraints.Column->WithoutByTableAlias[tableName];
+                    without.insert(request.Constraints.Column->WithoutByTableAlias[""].begin(),
+                                   request.Constraints.Column->WithoutByTableAlias[""].end());
+
                     TDescribeTableRequest describeRequest = {
                         .TableCluster = "",
                         .TablePath = Escaped(tableName),
@@ -43,6 +48,10 @@ namespace NSQLComplete {
 
                     Y_ENSURE(table.IsExisting);
                     for (TString& column : table.Columns) {
+                        if (without.contains(column)) {
+                            continue;
+                        }
+
                         TColumnName name;
                         name.TableAlias = tableName;
                         name.Indentifier = std::move(column);

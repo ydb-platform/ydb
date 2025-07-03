@@ -163,6 +163,7 @@ namespace NSQLComplete {
                 request.Constraints.Column = TColumnName::TConstraints();
                 request.Constraints.Column->Tables =
                     TColumnContext(*global.Column).ExtractAliased(table).Tables;
+                request.Constraints.Column->WithoutByTableAlias = global.Column->WithoutByTableAlias;
             }
 
             return request;

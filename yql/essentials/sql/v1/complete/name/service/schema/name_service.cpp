@@ -24,6 +24,7 @@ namespace NSQLComplete {
                 if (request.Constraints.Column && !request.Constraints.Column->Tables.empty()) {
                     return BatchDescribe(
                         std::move(request.Constraints.Column->Tables),
+                        std::move(request.Constraints.Column->WithoutByTableAlias),
                         request.Prefix,
                         request.Limit);
                 }
@@ -33,7 +34,10 @@ namespace NSQLComplete {
 
         private:
             NThreading::TFuture<TNameResponse> BatchDescribe(
-                TVector<TAliased<TTableId>> tables, TString prefix, ui64 limit) const {
+                TVector<TAliased<TTableId>> tables,
+                THashMap<TString, THashSet<TString>> withoutByTableAlias,
+                TString prefix,
+                ui64 limit) const {
                 THashMap<TTableId, TVector<TString>> aliasesByTable;
                 for (TAliased<TTableId> table : std::move(tables)) {
                     aliasesByTable[std::move(static_cast<TTableId&>(table))]
@@ -57,13 +61,20 @@ namespace NSQLComplete {
 
                 return NThreading::WaitAll(std::move(futures))
                     .Apply([aliasesByTable = std::move(aliasesByTable),
-                            futuresByTable = std::move(futuresByTable)](auto) mutable {
+                            futuresByTable = std::move(futuresByTable),
+                            withoutByTableAlias = std::move(withoutByTableAlias)](auto) mutable {
                         TNameResponse response;
 
                         for (auto [table, f] : futuresByTable) {
                             TDescribeTableResponse description = f.ExtractValue();
                             for (const TString& column : description.Columns) {
-                                for (const TString& alias : aliasesByTable[table]) {
+                                const auto& aliases = aliasesByTable[table];
+                                for (const TString& alias : aliases) {
+                                    if ((withoutByTableAlias[alias].contains(column)) ||
+                                        (alias.empty() && 1 < aliases.size())) {
+                                        continue;
+                                    }
+
                                     TColumnName name;
                                     name.Indentifier = column;
                                     name.TableAlias = alias;

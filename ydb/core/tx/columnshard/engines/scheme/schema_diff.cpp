@@ -139,10 +139,10 @@ NKikimrSchemeOp::TColumnTableSchema TSchemaDiffView::ApplyDiff(const NKikimrSche
                 if (itDiff->second) {
                     *result.AddColumns() = *itDiff->second;
                 }
-                ++itDiff;
                 if (itSchema != schema.GetColumns().end() && itDiff->first == itSchema->GetId()) {
                     ++itSchema;
                 }
+                ++itDiff;
             }
         }
     }
@@ -157,10 +157,10 @@ NKikimrSchemeOp::TColumnTableSchema TSchemaDiffView::ApplyDiff(const NKikimrSche
                 if (itDiff->second) {
                     *result.AddIndexes() = *itDiff->second;
                 }
-                ++itDiff;
                 if (itSchema != schema.GetIndexes().end() && itDiff->first == itSchema->GetId()) {
                     ++itSchema;
                 }
+                ++itDiff;
             }
         }
     }
@@ -203,10 +203,10 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::ApplyDiff(
                 } else {
                     result.AddDropColumns(it1->first);
                 }
-                ++it1;
                 if (it0 != view0.ModifiedColumns.end() && it1->first == it0->first) {
                     ++it0;
                 }
+                ++it1;
             }
         }
     }
@@ -227,10 +227,10 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::ApplyDiff(
                 } else {
                     result.AddDropIndexes(it1->first);
                 }
-                ++it1;
                 if (it0 != view0.ModifiedIndexes.end() && it1->first == it0->first) {
                     ++it0;
                 }
+                ++it1;
             }
         }
     }

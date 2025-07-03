@@ -492,8 +492,8 @@ void TQueryPlanPrinter::PrintSimplifyJson(const NJson::TJsonValue& plan) {
 }
 
 void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
-    static const TVector<TString> explainColumnNames = {"Operation", "E-Cost", "E-Rows", "E-Size"};
-    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "A-Cpu", "A-Rows", "E-Cost", "E-Rows", "E-Size"};
+    static const TVector<TString> explainColumnNames = {"Operation"};
+    static const TVector<TString> explainAnalyzeColumnNames = {"Operation"};
 
     if (plan.GetMapSafe().contains("SimplifiedPlan")) {
         auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
@@ -579,7 +579,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 arrowOffset << "└──> ";
             }
         } else {
-            arrowOffset << "├──> ";
+            arrowOffset << "├─┬> ";
         }
     }
 
@@ -620,33 +620,52 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 }
             }
 
+            TStringBuilder estimates;
+            if (AnalyzeMode) {
+                if (!aCpu.empty()) {
+                    estimates << "A-Cpu: " << aCpu;
+                }
+                if (!aRows.empty()) {
+                    if (!estimates.empty()) estimates << ", ";
+                    estimates << ", A-Rows: " << aRows;
+                }
+            }
+
+            if (!eCost.empty()) {
+                if (!estimates.empty()) estimates << ", ";
+                estimates << "E-Cost: " << eCost;
+            }
+            if (!eRows.empty()) {
+                if (!estimates.empty()) estimates << ", ";
+                estimates << "E-Rows: " << eRows;
+            }
+            if (!eSize.empty()) {
+                if (!estimates.empty()) estimates << ", ";
+                estimates << "E-Size: " << eSize;
+            }
+
             TStringBuilder operation;
+
+            operation << " " << arrowOffset << colors.LightCyan();
+            if (!estimates.empty()) {
+                operation << " [" << estimates << "]";
+            }
+
             if (info.empty()) {
-                operation << arrowOffset << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default();
+                operation << op.GetMapSafe().at("Name").GetString() << colors.Default();
             } else {
-                operation << arrowOffset << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default()
+                operation << op.GetMapSafe().at("Name").GetString() << colors.Default()
                      << " (" << JoinStrings(info, ", ") << ")";
             }
 
             newRow.Column(0, std::move(operation));
-            if (AnalyzeMode) {
-                newRow.Column(1, std::move(aCpu));
-                newRow.Column(2, std::move(aRows));
-                newRow.Column(3, std::move(eCost));
-                newRow.Column(4, std::move(eRows));
-                newRow.Column(5, std::move(eSize));
-            }
-            else {
-                newRow.Column(1, std::move(eCost));
-                newRow.Column(2, std::move(eRows));
-                newRow.Column(3, std::move(eSize));
-            }
         }
     } else {
         TStringBuilder operation;
         operation << arrowOffset << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
         newRow.Column(0, std::move(operation));
     }
+
 
     if (node.contains("Plans")) {
         auto& plans = node.at("Plans").GetArraySafe();

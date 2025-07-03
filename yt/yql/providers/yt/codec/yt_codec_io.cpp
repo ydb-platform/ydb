@@ -1623,6 +1623,8 @@ public:
 
     void Reset(bool hasRangeIndices, ui32 tableIndex, bool ignoreStreamTableIndex) override {
         TDecoder::Reset(hasRangeIndices, tableIndex, ignoreStreamTableIndex);
+
+        InputStream_->Reset();
         HandleTableSwitch();
     }
 

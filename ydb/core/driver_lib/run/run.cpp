@@ -152,7 +152,7 @@
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #if !defined(_win_)
-#   include <ydb/library/signal_backtrace/signal_backtrace.h>
+#include <ydb/library/signal_backtrace/signal_backtrace.h>
 #endif
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 

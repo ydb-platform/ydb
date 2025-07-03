@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         for (const auto& event : blockedAcks) {
             const auto& replica = populatorToReplicaMap.at(event->Sender);
             const size_t ringGroup = replicaToRingGroupMap.at(replica);
-            if (ShouldIgnore(ringGroups[ringGroup]) || IsMajorityReached(ringGroups[ringGroup], ringGroupAcks[ringGroup])) {
+            if (ShouldIgnoreInQuorum(ringGroups[ringGroup]) || IsMajorityReached(ringGroups[ringGroup], ringGroupAcks[ringGroup])) {
                 // not required for quorum
                 continue;
             }
@@ -186,12 +186,17 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         constexpr ui64 owner = TTestTxConfig::SchemeShard;
 
         auto stateStorageInfo = GetStateStorageInfo(runtime);
-        const auto replicas = stateStorageInfo->SelectAllReplicas();
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            replicas.size(),
-            ReplicasInRingGroup * ringGroupsConfiguration.size(),
-            stateStorageInfo->ToString()
-        );
+        TVector<TActorId> replicas;
+        for (const auto& ringGroup : stateStorageInfo->RingGroups) {
+            if (ShouldIgnore(ringGroup)) {
+                continue;
+            }
+            for (const auto& ring : ringGroup.Rings) {
+                for (const auto& replica : ring.Replicas) {
+                    replicas.emplace_back(replica);
+                }
+            }
+        }
         Cerr << "replicas: " << JoinSeq(", ", replicas) << '\n';
 
         THashMap<TActorId, TActorId> replicaActorToServiceMap;

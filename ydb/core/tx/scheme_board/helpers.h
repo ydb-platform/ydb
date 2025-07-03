@@ -63,8 +63,6 @@ NKikimrScheme::TEvDescribeSchemeResult DeserializeDescribeSchemeResult(const TSt
 NKikimrScheme::TEvDescribeSchemeResult* DeserializeDescribeSchemeResult(const TString& serialized, google::protobuf::Arena* arena);
 TString JsonFromDescribeSchemeResult(const TString& serialized);
 
-bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup);
-
 struct TClusterState {
     ui64 Generation = 0;
     ui64 Guid = 0;

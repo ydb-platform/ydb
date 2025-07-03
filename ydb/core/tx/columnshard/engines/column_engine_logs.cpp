@@ -115,10 +115,10 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
         if (diffView.IsCorrectToIgnorePreviouse(lastIndexInfo)) {
             lastIndexInfo.SetIgnoreToVersion(indexInfoOptional.GetVersion());
             AFL_VERIFY(indexInfoOptional.GetVersion() != lastIndexInfo.GetVersion());
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_will_be_ignored")("last_version", lastIndexInfo.Version)(
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_will_be_ignored")("last_version", lastIndexInfo.GetVersion())(
                 "to_version", indexInfoOptional.GetVersion())("diff", schema.GetDiff()->DebugString());
         } else {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_will_not_be_ignored")("last_version", lastIndexInfo.Version)(
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_will_not_be_ignored")("last_version", lastIndexInfo.GetVersion())(
                 "to_version", indexInfoOptional.GetVersion())("diff", schema.GetDiff()->DebugString());
         }
     } else {

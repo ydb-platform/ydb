@@ -132,13 +132,11 @@ struct TEvPrivate {
         using TRequestsByColumn = THashMap<NOlap::NBlobOperations::EConsumer, THashMap<ui32, std::vector<NOlap::TPortionAddress>>>;
         YDB_READONLY_DEF(TRequestsByColumn, Requests);
         YDB_READONLY_DEF(std::shared_ptr<TCallback>, Callback);
-        YDB_READONLY_DEF(std::shared_ptr<TContext>, Context);
 
     public:
-        explicit TEvAskColumnData(TRequestsByColumn&& requests, const std::shared_ptr<TCallback>& callback, const std::shared_ptr<TContext>& context)
+        explicit TEvAskColumnData(TRequestsByColumn&& requests, const std::shared_ptr<TCallback>& callback)
             : Requests(std::move(requests))
             , Callback(callback)
-            , Context(context)
         {
         }
     };

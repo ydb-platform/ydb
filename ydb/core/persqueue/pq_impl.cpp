@@ -3445,7 +3445,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
         tx->OnReadSet(event, ev->Sender, std::move(ack));
 
         if (tx->HaveParticipantsDecision()) {
-            DumpEndWaitRS(TabletID(), tx->TxId, !!tx->WaitRSSpan);
+            //DumpEndWaitRS(TabletID(), tx->TxId, !!tx->WaitRSSpan);
             if (tx->WaitRSSpan) {
                 tx->WaitRSSpan.End();
                 tx->WaitRSSpan = {};
@@ -3786,7 +3786,7 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
                     auto span = tx.ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
                                                            "Topic.Transaction.Plan",
                                                            NWilson::EFlags::AUTO_END);
-                    DumpBeginWaitRS(TabletID(), tx.TxId);
+                    //DumpBeginWaitRS(TabletID(), tx.TxId);
                     tx.WaitRSSpan = tx.ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
                                                                "Topic.Transaction.WaitRS",
                                                                NWilson::EFlags::AUTO_END);
@@ -4488,7 +4488,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_TX_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
-            DumpEndWaitRS(TabletID(), tx.TxId, !!tx.WaitRSSpan);
+            //DumpEndWaitRS(TabletID(), tx.TxId, !!tx.WaitRSSpan);
             if (tx.WaitRSSpan) {
                 tx.WaitRSSpan.End();
                 tx.WaitRSSpan = {};

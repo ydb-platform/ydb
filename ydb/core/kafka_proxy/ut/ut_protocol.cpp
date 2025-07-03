@@ -2524,9 +2524,25 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         ui64 totalPartitions = 24;
         TString groupId1 = "consumer-0";
         TString groupId2 = "consumer-1";
+        TString groupId3 = "consumer-2";
 
         TString protocolType = "consumer";
         TString protocolName = "range";
+
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+        TKafkaTestClient clientB(testServer.Port, "ClientB");
+        TKafkaTestClient clientC(testServer.Port, "ClientC");
+
+        // Checking that DescribeGroups method works correctly if tables have not been inited yet
+
+        std::vector<std::optional<TString>> requestedGroups;
+        requestedGroups.push_back(groupId1);
+        auto response0 = clientA.DescribeGroups(requestedGroups);
+
+        UNIT_ASSERT_VALUES_EQUAL(response0->Groups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response0->Groups[0].GroupId, groupId1);
+        UNIT_ASSERT_VALUES_EQUAL(response0->Groups[0].Members.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response0->Groups[0].ErrorCode, (TKafkaInt16)EKafkaErrors::GROUP_ID_NOT_FOUND);
 
         // Creating 3 group members. One member of group "consumer-0" and two members of group "consumer-1"
 
@@ -2547,9 +2563,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             );
         }
 
-        TKafkaTestClient clientA(testServer.Port, "ClientA");
-        TKafkaTestClient clientB(testServer.Port, "ClientB");
-        TKafkaTestClient clientC(testServer.Port, "ClientC");
+
 
         std::vector<TString> topics = {topicName};
         i32 heartbeatTimeout = 15000;
@@ -2607,25 +2621,30 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         // check that DescribeGroups information is returned correctly when one group is requested
 
-        TDescribeGroupsRequestData requestGroupsDescription;
-        requestGroupsDescription.Groups.push_back(groupId1);
-        auto response1 = clientA.DescribeGroups(requestGroupsDescription);
+        auto response1 = clientA.DescribeGroups(requestedGroups);
         UNIT_ASSERT_VALUES_EQUAL(response1->Groups.size(), 1);
         auto& groupResponse = response1->Groups[0];
         UNIT_ASSERT(groupResponse.GroupId.has_value());
         UNIT_ASSERT_VALUES_EQUAL(*groupResponse.GroupId, groupId1);
         UNIT_ASSERT_VALUES_EQUAL(groupResponse.Members.size(), 1);
 
-        // check that for two requested groups DescribeGroups returns correct member information
+        // check that for two existing requested groups DescribeGroups returns correct member information
+        // and for one unexisting requested group the returned response constains error
 
-        requestGroupsDescription.Groups.push_back(groupId2);
-        auto response2 = clientA.DescribeGroups(requestGroupsDescription);
-        UNIT_ASSERT_VALUES_EQUAL(response2->Groups.size(), 2);
+        requestedGroups.push_back(groupId2);
+        requestedGroups.push_back(groupId3);
+        auto response2 = clientA.DescribeGroups(requestedGroups);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(response2->Groups[0].GroupId, groupId1);
         UNIT_ASSERT_VALUES_EQUAL(response2->Groups[0].Members.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response2->Groups[0].Members[0].MemberId, joinRespA->MemberId);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[0].ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(response2->Groups[1].Members.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(response2->Groups[1].GroupId, groupId2);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[1].ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[2].GroupId, groupId3);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[2].Members.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[2].ErrorCode, (TKafkaInt16)EKafkaErrors::GROUP_ID_NOT_FOUND);
 
         ui32 memberIdBCount = 0;
         ui32 memberIdCCount = 0;
@@ -2652,6 +2671,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         ui64 totalPartitions = 24;
         TString protocolType = "consumer";
         TString protocolName = "range";
+
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+        TKafkaTestClient clientB(testServer.Port, "ClientB");
+
+        // check that ListGroups doesn't fail if tables have not been inited yet
+
+        std::vector<std::optional<TString>> statesFilter = {"PreparingRebalance"};
+        auto responseBeforeTablesInit = clientA.ListGroups(statesFilter);
+        UNIT_ASSERT_VALUES_EQUAL(responseBeforeTablesInit->Groups.size(), 0);
+
         {
             NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
             auto result = pqClient
@@ -2668,8 +2697,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 "CreateTopic failed, issues: " << result.GetIssues().ToString()
             );
         }
-        TKafkaTestClient clientA(testServer.Port, "ClientA");
-        TKafkaTestClient clientB(testServer.Port, "ClientB");
+
 
         // check that before adding any consumers response will contain no groups
 

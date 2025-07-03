@@ -499,12 +499,12 @@ public:
     }
 };
 
-
-class TCompletionChunkWrite;
-class TCompletionChunkWritePart;
 //
 // TChunkWrite
 //
+class TCompletionChunkWrite;
+class TCompletionChunkWritePart;
+
 class TChunkWrite : public TRequestBase {
 public:
     ui32 ChunkIdx;
@@ -525,7 +525,7 @@ public:
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
 
-    TCompletionChunkWrite* Completion;
+    TCompletionChunkWrite* Completion = nullptr;
 
     TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span);
 
@@ -565,11 +565,7 @@ public:
         }
     }
 
-    void Abort(TActorSystem* actorSystem) override {
-        if (!AtomicSwap(&Aborted, true)) {
-            actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
-        }
-    }
+    void Abort(TActorSystem* actorSystem) override;
 };
 
 //
@@ -587,6 +583,8 @@ public:
     THolder<TCompletionChunkWritePart> Completion;
 
     TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span);
+
+    ~TChunkWritePiece();
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;

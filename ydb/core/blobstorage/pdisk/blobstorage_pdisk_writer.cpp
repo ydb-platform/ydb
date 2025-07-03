@@ -11,8 +11,8 @@ namespace NPDisk {
 // TBlockDeviceWrite
 ////////////////////////////////////////////////////////////////////////////
 
-TBufferedWriter::TBlockDeviceWrite::TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr &&buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId) 
-    : TBlockDeviceAction(ReqId), Buffer(std::move(buffer)), StartOffset(StartOffset), DirtyFrom(DirtyFrom), DirtyTo(DirtyTo), TraceId(*TraceId)
+TBufferedWriter::TBlockDeviceWrite::TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr &&buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId, TActorSystem* ActorSystem) 
+    : TBlockDeviceAction(ReqId), Deleter(ActorSystem), Buffer(std::unique_ptr<TBuffer, TReleaseWriteAction>(buffer.Release(), Deleter)), StartOffset(StartOffset), DirtyFrom(DirtyFrom), DirtyTo(DirtyTo), TraceId(*TraceId)
 {
 }
 
@@ -20,25 +20,50 @@ void TBufferedWriter::TBlockDeviceWrite::DoCall(IBlockDevice &BlockDevice) {
     // TODO: do not mock writes one-by-one, do a huge PwriteAsync
     ui8 *source = Buffer->Data() + DirtyFrom - StartOffset;
     ui32 sizeToWrite = (ui32)(DirtyTo - DirtyFrom);
-    BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, Buffer.Release(), ReqId, &TraceId);
+    BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, Buffer.release(), ReqId, &TraceId);
 }
+
+TBufferedWriter::TBlockDeviceWrite::TReleaseWriteAction::TReleaseWriteAction(TActorSystem *ActorSystem) : ActorSystem(ActorSystem) {}
+
+void TBufferedWriter::TBlockDeviceWrite::TReleaseWriteAction::operator()(TBuffer *buffer) const {
+        if (buffer->FlushAction) {
+            //should call "delete this"
+            buffer->FlushAction->Release(ActorSystem);
+        }
+
+        buffer->ReturnToPool();
+}
+
 
 ////////////////////////////////////////////////////////////////////////////
 // TBlockDeviceFlush
 ////////////////////////////////////////////////////////////////////////////
-TBufferedWriter::TBlockDeviceFlush::TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction *action) 
-    : TBlockDeviceAction(ReqId), CompletionAction(action) 
+TBufferedWriter::TBlockDeviceFlush::TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction* Completion1, TActorSystem* actorSystem) 
+    : TBlockDeviceAction(ReqId), Deleter(actorSystem), Completion(std::unique_ptr<TCompletionAction, TReleaseFlushAction>(Completion1, Deleter))
 {
 }
 
 void TBufferedWriter::TBlockDeviceFlush::DoCall(IBlockDevice &BlockDevice) {
-    BlockDevice.FlushAsync(CompletionAction, ReqId);
+    BlockDevice.FlushAsync(Completion.release(), ReqId);
 }
 
+TBufferedWriter::TBlockDeviceFlush::TReleaseFlushAction::TReleaseFlushAction(TActorSystem *ActorSystem) : ActorSystem(ActorSystem) {}
+
+void TBufferedWriter::TBlockDeviceFlush::TReleaseFlushAction::operator()(TCompletionAction *action) const {
+        if (action->FlushAction) {
+            action->FlushAction->Release(ActorSystem);
+        }
+        //should call "delete this"
+        action->Release(ActorSystem);
+}
 
 ////////////////////////////////////////////////////////////////////////////
 // BufferedWriter
 ////////////////////////////////////////////////////////////////////////////
+
+namespace {
+    std::atomic<int> pushes, pops;
+}
 
 void TBufferedWriter::WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
         TCompletionAction *flushAction, ui32 chunkIdx) {
@@ -51,7 +76,8 @@ void TBufferedWriter::WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
         CurrentBuffer->CostNs = DriveModel->TimeForSizeNs(sizeToWrite, chunkIdx, TDriveModel::OP_TYPE_WRITE);
         Y_VERIFY_DEBUG_S(sizeToWrite <= CurrentBuffer->Size(), PCtx->PDiskLogPrefix);
         if (WithDelayedFlush) {
-            BlockDeviceActions.push(MakeHolder<TBlockDeviceWrite>(reqId, std::move(CurrentBuffer), StartOffset, DirtyFrom, DirtyTo, traceId));
+            Cerr << "bad pushes " << pushes.fetch_add(1) << Endl;
+            BlockDeviceActions.push(MakeHolder<TBlockDeviceWrite>(reqId, std::move(CurrentBuffer), StartOffset, DirtyFrom, DirtyTo, traceId, PCtx->ActorSystem));
         } else {
             BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, CurrentBuffer.Release(), reqId, traceId);
         }
@@ -63,7 +89,8 @@ void TBufferedWriter::WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
     } else if (flushAction) {
         flushAction->CostNs = 1;
         if (WithDelayedFlush) {
-            BlockDeviceActions.push(MakeHolder<TBlockDeviceFlush>(reqId, flushAction));
+            Cerr << "good pushes " << pushes.fetch_add(1);
+            BlockDeviceActions.push(MakeHolder<TBlockDeviceFlush>(reqId, flushAction, PCtx->ActorSystem));
         } else {
             BlockDevice.FlushAsync(flushAction, reqId);
         }
@@ -148,15 +175,15 @@ void TBufferedWriter::WriteToBlockDevice() {
     while (!BlockDeviceActions.empty()) {
         const auto& action = BlockDeviceActions.front();
         action->DoCall(BlockDevice);
+        Cerr << "pops " << pops.fetch_add(1) << Endl;
         BlockDeviceActions.pop();
     }
 }
 
 TBufferedWriter::~TBufferedWriter() {
-    //if TBufferedWriter with delayed flush is aborted, all delayed disk operations are not executed (but the last flush).
-    //we can pass custom deleter to TChunkWriter to not call last flush on abort.
-    WithDelayedFlush = false; 
-
+    while (!BlockDeviceActions.empty()) {
+        BlockDeviceActions.pop();
+    }
     Flush(LastReqId, nullptr, nullptr, 0);
 }
 

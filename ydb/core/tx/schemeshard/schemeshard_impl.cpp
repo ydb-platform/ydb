@@ -5248,7 +5248,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         //data erasure
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasure, DataErasureManager->WakeupToRunDataErasure);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureRequest, Handle);
-        HFuncTraced(TEvDataShard::TEvForceDataCleanupResult, Handle);
+        HFuncTraced(TEvDataShard::TEvVacuumResult, Handle);
         HFuncTraced(TEvKeyValue::TEvCleanUpDataResponse, Handle);
         HFuncTraced(TEvPrivate::TEvAddNewShardToDataErasure, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureResponse, Handle);
@@ -7977,8 +7977,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev,
     Execute(CreateTxRunTenantDataErasure(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxCompleteDataErasureShard<TEvDataShard::TEvForceDataCleanupResult::TPtr>(ev), ctx);
+void TSchemeShard::Handle(TEvDataShard::TEvVacuumResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxCompleteDataErasureShard<TEvDataShard::TEvVacuumResult::TPtr>(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) {

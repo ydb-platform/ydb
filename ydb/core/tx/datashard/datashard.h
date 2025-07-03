@@ -346,8 +346,8 @@ namespace TEvDataShard {
         EvInMemoryStateRequest,
         EvInMemoryStateResponse,
 
-        EvForceDataCleanup,
-        EvForceDataCleanupResult,
+        EvVacuum,
+        EvVacuumResult,
 
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
@@ -1604,21 +1604,21 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvForceDataCleanup : TEventPB<TEvForceDataCleanup, NKikimrTxDataShard::TEvForceDataCleanup,
-                                          TEvDataShard::EvForceDataCleanup> {
-        TEvForceDataCleanup() = default;
+    struct TEvVacuum : TEventPB<TEvVacuum, NKikimrTxDataShard::TEvVacuum,
+                                          TEvDataShard::EvVacuum> {
+        TEvVacuum() = default;
 
-        TEvForceDataCleanup(ui64 dataCleanupGeneration) {
-            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        TEvVacuum(ui64 vacuumGeneration) {
+            Record.SetVacuumGeneration(vacuumGeneration);
         }
     };
 
-    struct TEvForceDataCleanupResult : TEventPB<TEvForceDataCleanupResult, NKikimrTxDataShard::TEvForceDataCleanupResult,
-                                                TEvDataShard::EvForceDataCleanupResult> {
-        TEvForceDataCleanupResult() = default;
+    struct TEvVacuumResult : TEventPB<TEvVacuumResult, NKikimrTxDataShard::TEvVacuumResult,
+                                                TEvDataShard::EvVacuumResult> {
+        TEvVacuumResult() = default;
 
-        TEvForceDataCleanupResult(ui64 dataCleanupGeneration, ui64 tabletId, NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus status) {
-            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        TEvVacuumResult(ui64 vacuumGeneration, ui64 tabletId, NKikimrTxDataShard::TEvVacuumResult::EStatus status) {
+            Record.SetVacuumGeneration(vacuumGeneration);
             Record.SetTabletId(tabletId);
             Record.SetStatus(status);
         }

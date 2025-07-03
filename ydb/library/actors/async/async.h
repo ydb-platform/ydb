@@ -1066,49 +1066,16 @@ namespace NActors {
             TAwaiter Awaiter;
         };
 
-        template<class T, template<class> class TAsyncResultType = TAsyncResult>
-        class TAsyncPromiseResultHandler : public TAsyncResultType<T> {
+        class TAsyncPromiseBase {
         public:
-            template<class U>
-            void return_value(U&& value)
-                requires (std::is_convertible_v<U&&, T>)
-            {
-                this->SetValue(std::forward<U>(value));
-            }
-
-            void unhandled_exception() noexcept {
-                this->SetException(std::current_exception());
-            }
-        };
-
-        template<template<class> class TAsyncResultType>
-        class TAsyncPromiseResultHandler<void, TAsyncResultType> : public TAsyncResultType<void> {
-        public:
-            void return_void() {
-                this->SetValue();
-            }
-
-            void unhandled_exception() noexcept {
-                this->SetException(std::current_exception());
-            }
-        };
-
-        template<class T>
-        class TAsyncPromise
-            : public TAsyncPromiseResultHandler<T>
-            , public TAsyncAwaitTransform
-        {
-        public:
-            constexpr async<T> get_return_object() noexcept {
-                return async<T>(std::coroutine_handle<TAsyncPromise<T>>::from_promise(*this));
-            }
-
             struct TFinalSuspend {
                 constexpr bool await_ready() noexcept { return false; }
                 constexpr void await_resume() noexcept {}
 
-                constexpr std::coroutine_handle<> await_suspend(std::coroutine_handle<TAsyncPromise<T>> self) noexcept {
-                    return self.promise().Continuation;
+                template<class TPromise>
+                constexpr std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> self) noexcept {
+                    TAsyncPromiseBase& promise = self.promise();
+                    return promise.Continuation;
                 }
             };
 
@@ -1141,9 +1108,48 @@ namespace NActors {
             }
 
         private:
+            std::coroutine_handle<> Continuation;
             IActor* Actor = nullptr;
             TAwaitCancelSource* Source = nullptr;
-            std::coroutine_handle<> Continuation;
+        };
+
+        template<class T, template<class> class TAsyncResultType = TAsyncResult>
+        class TAsyncPromiseResult : public TAsyncResultType<T> {
+        public:
+            template<class U>
+            void return_value(U&& value)
+                requires (std::is_convertible_v<U&&, T>)
+            {
+                this->SetValue(std::forward<U>(value));
+            }
+
+            void unhandled_exception() noexcept {
+                this->SetException(std::current_exception());
+            }
+        };
+
+        template<template<class> class TAsyncResultType>
+        class TAsyncPromiseResult<void, TAsyncResultType> : public TAsyncResultType<void> {
+        public:
+            void return_void() {
+                this->SetValue();
+            }
+
+            void unhandled_exception() noexcept {
+                this->SetException(std::current_exception());
+            }
+        };
+
+        template<class T>
+        class TAsyncPromise
+            : public TAsyncPromiseBase
+            , public TAsyncPromiseResult<T>
+            , public TAsyncAwaitTransform
+        {
+        public:
+            constexpr async<T> get_return_object() noexcept {
+                return async<T>(std::coroutine_handle<TAsyncPromise<T>>::from_promise(*this));
+            }
         };
 
         template<class T>

@@ -89,7 +89,7 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     TPresetId PresetId;
-    std::shared_ptr<TAtomicCounter> IgnoreToVersion = std::make_shared<TAtomicCounter>(0);
+    std::shared_ptr<TAtomic> IgnoreToVersion = std::make_shared<TAtomic>(0);
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
@@ -180,13 +180,13 @@ public:
     }
 
     void SetIgnoreToVersion(const ui64 version) const {
-        AFL_VERIFY(!IgnoreToVersion->Val() || (ui64)IgnoreToVersion->Val() == version)("already", IgnoreToVersion->Val())("version", version);
-        *IgnoreToVersion = version;
+        AFL_VERIFY(AtomicCas(&*IgnoreToVersion, version, 0) || (ui64)AtomicGet(*IgnoreToVersion) == version)("already", AtomicGet(*IgnoreToVersion))(
+                                                               "version", version);
     }
 
     std::optional<ui64> GetIgnoreToVersion() const {
-        if (IgnoreToVersion->Val()) {
-            return IgnoreToVersion->Val();
+        if (const ui64 val = AtomicGet(*IgnoreToVersion)) {
+            return val;
         } else {
             return std::nullopt;
         }

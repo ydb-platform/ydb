@@ -132,14 +132,20 @@ NKikimrSchemeOp::TColumnTableSchema TSchemaDiffView::ApplyDiff(const NKikimrSche
         auto itDiff = ModifiedColumns.begin();
         auto itSchema = schema.GetColumns().begin();
         while (itDiff != ModifiedColumns.end() || itSchema != schema.GetColumns().end()) {
-            if (itDiff == ModifiedColumns.end() || itSchema->GetId() < itDiff->first) {
+            if (itDiff == ModifiedColumns.end()) {
                 *result.AddColumns() = *itSchema;
                 ++itSchema;
-            } else if (itSchema == schema.GetColumns().end() || itDiff->first <= itSchema->GetId()) {
+            } else if (itSchema == schema.GetColumns().end()) {
+                *result.AddColumns() = *itDiff->second;
+                ++itDiff;
+            } else if (itSchema->GetId() < itDiff->first) {
+                *result.AddColumns() = *itSchema;
+                ++itSchema;
+            } else if (itDiff->first <= itSchema->GetId()) {
                 if (itDiff->second) {
                     *result.AddColumns() = *itDiff->second;
                 }
-                if (itSchema != schema.GetColumns().end() && itDiff->first == itSchema->GetId()) {
+                if (itDiff->first == itSchema->GetId()) {
                     ++itSchema;
                 }
                 ++itDiff;
@@ -150,14 +156,20 @@ NKikimrSchemeOp::TColumnTableSchema TSchemaDiffView::ApplyDiff(const NKikimrSche
         auto itDiff = ModifiedIndexes.begin();
         auto itSchema = schema.GetIndexes().begin();
         while (itDiff != ModifiedIndexes.end() || itSchema != schema.GetIndexes().end()) {
-            if (itDiff == ModifiedIndexes.end() || itSchema->GetId() < itDiff->first) {
+            if (itDiff == ModifiedIndexes.end()) {
                 *result.AddIndexes() = *itSchema;
                 ++itSchema;
-            } else if (itSchema == schema.GetIndexes().end() || itDiff->first <= itSchema->GetId()) {
+            } else if (itSchema == schema.GetIndexes().end()) {
+                *result.AddIndexes() = *itDiff->second;
+                ++itDiff;
+            } else if (itSchema->GetId() < itDiff->first) {
+                *result.AddIndexes() = *itSchema;
+                ++itSchema;
+            } else if (itDiff->first <= itSchema->GetId()) {
                 if (itDiff->second) {
                     *result.AddIndexes() = *itDiff->second;
                 }
-                if (itSchema != schema.GetIndexes().end() && itDiff->first == itSchema->GetId()) {
+                if (itDiff->first == itSchema->GetId()) {
                     ++itSchema;
                 }
                 ++itDiff;
@@ -189,21 +201,26 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::ApplyDiff(
     {
         auto it0 = view0.ModifiedColumns.begin();
         auto it1 = view1.ModifiedColumns.begin();
+        const auto predUpsert = [&](const ui32 entityId, const NKikimrSchemeOp::TOlapColumnDescription* data) {
+            if (data) {
+                *result.AddUpsertColumns() = *data;
+            } else {
+                result.AddDropColumns(entityId);
+            }
+        };
         while (it0 != view0.ModifiedColumns.end() || it1 != view1.ModifiedColumns.end()) {
-            if (it1 == view1.ModifiedColumns.end() || it0->first < it1->first) {
-                if (it0->second) {
-                    *result.AddUpsertColumns() = *it0->second;
-                } else {
-                    result.AddDropColumns(it0->first);
-                }
+            if (it1 == view1.ModifiedColumns.end()) {
+                predUpsert(it0->first, it0->second);
                 ++it0;
-            } else if (it0 == view0.ModifiedColumns.end() || it1->first <= it0->first) {
-                if (it1->second) {
-                    *result.AddUpsertColumns() = *it1->second;
-                } else {
-                    result.AddDropColumns(it1->first);
-                }
-                if (it0 != view0.ModifiedColumns.end() && it1->first == it0->first) {
+            } else if (it0 == view0.ModifiedColumns.end()) {
+                predUpsert(it1->first, it1->second);
+                ++it1;
+            } else if (it0->first < it1->first) {
+                predUpsert(it0->first, it0->second);
+                ++it0;
+            } else if (it1->first <= it0->first) {
+                predUpsert(it1->first, it1->second);
+                if (it1->first == it0->first) {
                     ++it0;
                 }
                 ++it1;
@@ -213,21 +230,26 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::ApplyDiff(
     {
         auto it0 = view0.ModifiedIndexes.begin();
         auto it1 = view1.ModifiedIndexes.begin();
+        const auto predUpsert = [&](const ui32 entityId, const NKikimrSchemeOp::TOlapIndexDescription* data) {
+            if (data) {
+                *result.AddUpsertIndexes() = *data;
+            } else {
+                result.AddDropIndexes(entityId);
+            }
+        };
         while (it0 != view0.ModifiedIndexes.end() || it1 != view1.ModifiedIndexes.end()) {
-            if (it1 == view1.ModifiedIndexes.end() || it0->first < it1->first) {
-                if (it0->second) {
-                    *result.AddUpsertIndexes() = *it0->second;
-                } else {
-                    result.AddDropIndexes(it0->first);
-                }
+            if (it1 == view1.ModifiedIndexes.end()) {
+                predUpsert(it0->first, it0->second);
                 ++it0;
-            } else if (it0 == view0.ModifiedIndexes.end() || it1->first <= it0->first) {
-                if (it1->second) {
-                    *result.AddUpsertIndexes() = *it1->second;
-                } else {
-                    result.AddDropIndexes(it1->first);
-                }
-                if (it0 != view0.ModifiedIndexes.end() && it1->first == it0->first) {
+            } else if (it0 == view0.ModifiedIndexes.end()) {
+                predUpsert(it1->first, it1->second);
+                ++it1;
+            } else if (it0->first < it1->first) {
+                predUpsert(it0->first, it0->second);
+                ++it0;
+            } else if (it1->first <= it0->first) {
+                predUpsert(it1->first, it1->second);
+                if (it1->first == it0->first) {
                     ++it0;
                 }
                 ++it1;
@@ -242,7 +264,8 @@ NKikimrTxColumnShard::TSchemaPresetVersionInfo TSchemaDiffView::Merge(
     AFL_VERIFY(schemas.size());
     std::optional<ui32> lastSchemaIdx;
     for (ui32 idx = 0; idx < schemas.size(); ++idx) {
-        if (schemas[idx].HasSchema()) {
+        if (!schemas[idx].HasDiff()) {
+            AFL_VERIFY(schemas[idx].HasSchema());
             lastSchemaIdx = idx;
         }
     }

@@ -882,9 +882,15 @@ public:
             }
             schemasProto.emplace_back(ExtractFetched(i.GetFinish()));
             auto finalProto = NOlap::TSchemaDiffView::Merge(schemasProto);
+            AFL_VERIFY(schemasProto.back().HasSchema());
+            *finalProto.MutableSchema() = schemasProto.back().GetSchema();
 
+            ui32 idx = 0;
             for (auto&& del : i.GetToRemove()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "useless_schema_removed")("address", del.DebugString());
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "useless_schema_removed")("address", del.DebugString())(
+                    "is_diff", schemasProto[idx].HasDiff())("version",
+                    schemasProto[idx].HasDiff() ? schemasProto[idx].GetDiff().GetVersion() : schemasProto[idx].GetSchema().GetVersion());
+                ++idx;
                 db.Table<SchemaPresetVersionInfo>()
                     .Key(del.GetPresetId(), del.GetSnapshot().GetPlanStep(), del.GetSnapshot().GetTxId())
                     .Delete();

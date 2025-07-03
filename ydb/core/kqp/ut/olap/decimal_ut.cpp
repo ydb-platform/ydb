@@ -24,6 +24,11 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+enum class EQueryMode {
+    SCAN_QUERY,
+    EXECUTE_QUERY
+};
+
 Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
     class TDecimalTestCase {
     public:
@@ -41,8 +46,20 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             TestHelper.BulkUpsert(TestTable, inserter);
         }
 
-        void CheckQuery(const TString& query, const TString& expected) const {
-            TestHelper.ReadData(query, expected);
+        void CheckQuery(const TString& query, const TString& expected, EQueryMode mode = EQueryMode::SCAN_QUERY) const {
+            switch (mode) {
+            case EQueryMode::SCAN_QUERY:
+                TestHelper.ReadData(query, expected);
+                break;
+            case EQueryMode::EXECUTE_QUERY: {
+                TestHelper.ExecuteQuery(query);
+                break;
+            }
+            }
+        }
+
+        void ExecuteDataQuery(const TString& query) const {
+            TestHelper.ExecuteQuery(query);
         }
 
         void PrepareTable1() {

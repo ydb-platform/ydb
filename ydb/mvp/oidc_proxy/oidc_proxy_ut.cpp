@@ -1586,10 +1586,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         // oidc extends whoami
         const TString url = "/" + allowedProxyHost + "/viewer/whoami";
-        auto request = new NHttp::THttpIncomingRequest();
-        request->Method = "GET";
-        request->URL = url;
-        request->Endpoint->Secure = true;
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));

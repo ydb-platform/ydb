@@ -1,7 +1,7 @@
 #include "service.h"
 
 #include "auth_factory.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "executor.h"
 #include "garbage_collector.h"
 #include "local_rate_limiter_allocator.h"

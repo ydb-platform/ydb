@@ -1,8 +1,7 @@
 #include "read_balancer__balancing.h"
 
-#include "common_app.h"
-
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <ydb/core/persqueue/common_app.h>
 
 #define DEBUG(message)
 

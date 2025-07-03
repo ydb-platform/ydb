@@ -436,9 +436,25 @@ TMessagePtr<TListGroupsResponseData> TKafkaTestClient::ListGroups(TListGroupsReq
     return WriteAndRead<TListGroupsResponseData>(header, request);
 }
 
+TMessagePtr<TListGroupsResponseData> TKafkaTestClient::ListGroups(const std::vector<std::optional<TString>>& statesFilter) {
+    Cerr << ">>>>> TListGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::LIST_GROUPS, 4);
+    TListGroupsRequestData request;
+    request.StatesFilter = statesFilter;
+    return WriteAndRead<TListGroupsResponseData>(header, request);
+}
+
 TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(TDescribeGroupsRequestData& request) {
     Cerr << ">>>>> TDescribeGroupsResponseData\n";
     TRequestHeaderData header = Header(NKafka::EApiKey::DESCRIBE_GROUPS, 5);
+    return WriteAndRead<TDescribeGroupsResponseData>(header, request);
+}
+
+TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(const std::vector<std::optional<TString>>& groups) {
+    Cerr << ">>>>> TDescribeGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::DESCRIBE_GROUPS, 5);
+    TDescribeGroupsRequestData request;
+    request.Groups = groups;
     return WriteAndRead<TDescribeGroupsResponseData>(header, request);
 }
 

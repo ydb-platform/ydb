@@ -71,7 +71,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         engineHostCounters.emplace();
-        userDb.emplace(*self, params.Txc->DB, params.GlobalTxId, params.ReadVersion, params.WriteVersion, *engineHostCounters, TAppData::TimeProvider->Now());
+        userDb.emplace(*self, params.Txc->DB, params.GlobalTxId, params.MvccVersion, *engineHostCounters, TAppData::TimeProvider->Now());
         groupProvider.emplace(*self, params.Txc->DB);
         params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo));
     }
@@ -155,7 +155,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
                     pageFault = true;
                 }
             } else {
-                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion)) {
+                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion)) {
                     pageFault = true;
                 }
             }
@@ -175,11 +175,11 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             self->GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells.GetCells(), params.GlobalTxId, params.Txc->DB);
             if (!commitAdded && userDb) {
                 // Make sure we see our own changes on further iterations
-                userDb->AddCommitTxId(fullTableId, params.GlobalTxId, params.WriteVersion);
+                userDb->AddCommitTxId(fullTableId, params.GlobalTxId);
                 commitAdded = true;
             }
         } else {
-            params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion);
+            params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion);
             self->GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells.GetCells(), params.Txc->DB);
         }
     }
@@ -201,7 +201,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     if (!volatileDependencies.empty()) {
         self->GetVolatileTxManager().PersistAddVolatileTx(
             params.GlobalTxId,
-            params.WriteVersion,
+            params.MvccVersion,
             /* commitTxIds */ { params.GlobalTxId },
             volatileDependencies,
             /* participants */ { },
@@ -231,16 +231,15 @@ bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TE
 }
 
 bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies)
+        const TRowVersion& mvccVersion, ui64 globalTxId,
+        absl::flat_hash_set<ui64>& volatileReadDependencies)
 {
     const auto& record = Ev->Get()->Record;
 
     Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
     Result->Record.SetTabletID(self->TabletID());
 
-    const auto params = TExecuteParams::ForExecute(this, &txc, readVersion, writeVersion,
-        globalTxId, &volatileReadDependencies);
+    const auto params = TExecuteParams::ForExecute(this, &txc, mvccVersion, globalTxId, &volatileReadDependencies);
     NKikimrTxDataShard::TEvEraseRowsResponse::EStatus status;
     TString error;
 

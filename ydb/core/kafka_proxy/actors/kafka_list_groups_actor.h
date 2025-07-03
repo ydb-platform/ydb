@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/event.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include "ydb/library/aclib/aclib.h"
 #include <ydb/core/kafka_proxy/kqp_helper.h>
@@ -61,24 +62,28 @@ private:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
         }
     }
 
-    void StartKqpSession(const TActorContext& ctx);
-    void SendToKqpConsumerGroupsRequest(const TActorContext& ctx);
+    void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
-    TString GetYqlWithTableNames(const TString& templateStr);
-    TListGroupsResponseData ParseGroupsMetadata(const NKqp::TEvKqp::TEvQueryResponse& response);
-    void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
-    NYdb::TParams BuildSelectParams();
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+    void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
 
+    void Die(const TActorContext &ctx);
+
+    void StartKqpSession(const TActorContext& ctx);
+    TListGroupsResponseData ParseGroupsMetadata(const NKqp::TEvKqp::TEvQueryResponse& response);
+
+    TString GetYqlWithTableNames(const TString& templateStr);
+    TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
+    NYdb::TParams BuildSelectParams();
+    std::shared_ptr<TListGroupsResponseData> BuildResponse(TListGroupsResponseData responseData);
+    void SendToKqpConsumerGroupsRequest(const TActorContext& ctx);
     void SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage);
 
-    TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
-                                            const TActorContext& ctx);
-    void Die(const TActorContext &ctx);
     const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TMessagePtr<TListGroupsRequestData> ListGroupsRequestData;

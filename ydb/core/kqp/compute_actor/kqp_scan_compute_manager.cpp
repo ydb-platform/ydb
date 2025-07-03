@@ -5,11 +5,11 @@
 namespace NKikimr::NKqp::NScanPrivate {
 
 TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "put_inflight")("tablet_id", state.TabletId)("state", state.State)("gen", state.Generation);
     TScanShardsStatistics::OnScansDiff(Shards.size(), GetScansCount());
     MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
     TShardState::TPtr result = std::make_shared<TShardState>(std::move(state));
-    result->Generation = 1;
     AFL_ENSURE(Shards.emplace(result->TabletId, result).second)("tablet_id", result->TabletId);
     return result;
 }

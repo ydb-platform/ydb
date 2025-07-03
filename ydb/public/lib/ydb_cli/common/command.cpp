@@ -14,7 +14,6 @@ using namespace NUtils;
 
 namespace {
     void PrintUsageAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
-        Cerr << "PrintUsageAndThrowHelpPrinted" << Endl;
         parser->PrintUsage();
         throw TNeedToExitWithCode(EXIT_SUCCESS);
     }

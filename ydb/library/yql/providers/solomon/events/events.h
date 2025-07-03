@@ -4,7 +4,18 @@
 #include <ydb/library/yql/providers/solomon/proto/metrics_queue.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 namespace NYql::NDq {
+
+struct TMetricTimeRange {
+    std::map<TString, TString> Selectors;
+    TString Program;
+    TInstant From;
+    TInstant To;
+};
+
+bool operator<(const TMetricTimeRange& a, const TMetricTimeRange& b);
 
 struct TEvSolomonProvider {
 
@@ -81,8 +92,10 @@ struct TEvSolomonProvider {
     
     struct TEvNewDataBatch: public NActors::TEventLocal<TEvNewDataBatch, EvNewDataBatch> {
         NSo::TGetDataResponse Response;
-        TEvNewDataBatch(const NSo::TGetDataResponse& response)
-            : Response(response)
+        TMetricTimeRange Request;
+        TEvNewDataBatch(NSo::TGetDataResponse&& response, TMetricTimeRange&& request)
+            : Response(std::move(response))
+            , Request(std::move(request))
         {}
     };
 };

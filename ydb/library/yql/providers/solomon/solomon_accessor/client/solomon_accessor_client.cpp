@@ -581,8 +581,8 @@ private:
 private:
     const TString DefaultReplica;
     const ui64 ListSizeLimit = 1ull << 20;
-    const ui64 HttpMaxInflight = 1000;
-    const ui64 GrpcMaxInflight = 1000;
+    const ui64 HttpMaxInflight = 50;
+    const ui64 GrpcMaxInflight = 50;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 

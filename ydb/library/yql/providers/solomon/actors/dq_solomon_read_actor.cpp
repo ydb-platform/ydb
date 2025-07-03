@@ -68,13 +68,6 @@ using namespace NKikimr::NMiniKQL;
 namespace {
 
 class TDqSolomonReadActor : public NActors::TActorBootstrapped<TDqSolomonReadActor>, public IDqComputeActorAsyncInput {
-private:
-    struct TMetricTimeRange {
-        NSo::TMetric Metric;
-        TInstant From;
-        TInstant To;
-    };
-
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_READ_ACTOR";
 
@@ -110,6 +103,19 @@ public:
         SOURCE_LOG_D("Init");
         IngressStats.Level = statsLevel;
 
+        RetryPolicy = IRetryPolicy<NSo::TGetDataResponse>::GetExponentialBackoffPolicy(
+            [](const NSo::TGetDataResponse& response) {
+                if (response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
+                    return ERetryErrorClass::ShortRetry;
+                }
+                return ERetryErrorClass::NoRetry;
+            },
+            TDuration::MilliSeconds(25),
+            TDuration::MilliSeconds(200),
+            TDuration::MilliSeconds(500),
+            5
+        );
+
         UseMetricsQueue = !ReadParams.Source.HasProgram();
 
         auto stringType = ProgramBuilder.NewDataType(NYql::NUdf::TDataType<char*>::Id);
@@ -141,6 +147,15 @@ public:
             RequestMetrics();
         } else {
             Become(&TDqSolomonReadActor::LimitedModeState);
+
+            TMetricTimeRange metric {
+                {},
+                ReadParams.Source.GetProgram(),
+                TInstant::Seconds(ReadParams.Source.GetFrom()),
+                TInstant::Seconds(ReadParams.Source.GetTo())
+            };
+
+            MetricsWithTimeRange.push_back(metric);
             RequestData();
         }
     }
@@ -223,26 +238,35 @@ public:
         auto& metric = batch.Metric;
         auto& pointsCount = batch.Response.Result.PointsCount;
         ParsePointsCount(metric, pointsCount);
+        CompletedMetricsCount++;
 
         TryRequestData();
     }
 
     void HandleNewDataBatch(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
         auto& batch = *newDataBatch->Get();
+        auto request = batch.Request;
 
-        if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
+        if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response); batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR && delay) {
+            SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
+            RetryDataRequest(std::move(batch), *delay);
+            return;
+        } else if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            PendingDataRequests_.erase(request);
             return;
         }
 
+        PendingDataRequests_.erase(request);
         MetricsData.insert(MetricsData.end(), batch.Response.Result.Timeseries.begin(), batch.Response.Result.Timeseries.end());
-        CompletedMetricsCount++;
+        CompletedTimeRanges++;
 
         if (!MetricsWithTimeRange.empty()) {
             TryRequestData();
-        } else if (MetricsData.size() >= ComputeActorBatchSize || LastMetricProcessed()) {
+        }
+        if (MetricsData.size() >= ComputeActorBatchSize || LastMetricProcessed()) {
             NotifyComputeActorWithData();
         }
     }
@@ -276,16 +300,23 @@ public:
 
     void HandleNewDataBatchLimited(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
         auto& batch = *newDataBatch->Get();
+        auto request = batch.Request;
 
-        if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
+        if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response); batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR && delay) {
+            SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
+            RetryDataRequest(std::move(batch), *delay);
+            return;
+        } else if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            PendingDataRequests_.erase(request);
             return;
         }
 
+        PendingDataRequests_.erase(request);
         MetricsData.insert(MetricsData.end(), batch.Response.Result.Timeseries.begin(), batch.Response.Result.Timeseries.end());
-        CompletedMetricsCount++;
+        CompletedTimeRanges++;
 
         NotifyComputeActorWithData();
     }
@@ -380,13 +411,13 @@ private:
 
     bool LastMetricProcessed() const {
         if (UseMetricsQueue) {
-            return IsMetricsQueueEmpty && CompletedMetricsCount == ListedMetricsCount;
+            return IsMetricsQueueEmpty && CompletedMetricsCount == ListedMetricsCount && CompletedTimeRanges == ListedTimeRanges;
         }
-        return CompletedMetricsCount == 1;
+        return CompletedTimeRanges == 1;
     }
 
     void TryRequestMetrics() {
-        if (ListedMetrics.size() < 1000 && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
+        if (ListedMetrics.empty() && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
             RequestMetrics();
         }
     }
@@ -432,61 +463,51 @@ private:
     }
 
     void RequestData() {
-        NSo::TMetric metric;
-        TString program;
-        TInstant from;
-        TInstant to;
+        YQL_ENSURE(RetryPolicy);
+        NThreading::TFuture<NSo::TGetDataResponse> dataRequestFuture;
+
+        auto request = MetricsWithTimeRange.back();
+        MetricsWithTimeRange.pop_back();
 
         if (UseMetricsQueue) {
-            auto request = MetricsWithTimeRange.back();
-            MetricsWithTimeRange.pop_back();
-
-            metric = request.Metric;
-            from = request.From;
-            to = request.To;
+            dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
         } else {
-            program = ReadParams.Source.GetProgram();
-            from = TInstant::Seconds(ReadParams.Source.GetFrom());
-            to = TInstant::Seconds(ReadParams.Source.GetTo());
+            dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
         }
 
-        auto makeDataRequest = [metric, program, from, to, this] () {
-            if (UseMetricsQueue) {
-                return SolomonClient->GetData(metric.Labels, from, to);
-            }
-            return SolomonClient->GetData(program, from, to);
-        };
+        PendingDataRequests_[request] = RetryPolicy->CreateRetryState();
 
-        auto retryPolicy= IRetryPolicy<NSo::TGetDataResponse>::GetExponentialBackoffPolicy(
-            [](const NSo::TGetDataResponse& response) {
-                if (response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
-                    return ERetryErrorClass::ShortRetry;
-                }
-                return ERetryErrorClass::NoRetry;
-            },
-            TDuration::MilliSeconds(50),
-            TDuration::MilliSeconds(200),
-            TDuration::MilliSeconds(1000),
-            5
-        );
-
-        auto getDataFuture = makeDataRequest();
-
-        NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        getDataFuture.Subscribe([actorSystem, makeDataRequest, retryPolicy, selfId = SelfId()](
-            const NThreading::TFuture<NSo::TGetDataResponse>& response) -> void
+        auto actorSystem = TActivationContext::ActorSystem();
+        dataRequestFuture.Subscribe([request, actorSystem, selfId = SelfId()](
+            NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
         {
-            auto value = response.GetValue();
-            if (value.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
-                value = DoWithRetryOnRetCode<NSo::TGetDataResponse>(
-                    [makeDataRequest] () {
-                        return makeDataRequest().GetValueSync();
-                    },
-                    retryPolicy
-                );
-            }
+            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
+                response.ExtractValue(),
+                std::move(request)
+            ));
+        });
+    }
 
-            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(value));
+    void RetryDataRequest(TEvSolomonProvider::TEvNewDataBatch&& batch, TDuration delay) {
+        Sleep(delay);
+        
+        NThreading::TFuture<NSo::TGetDataResponse> dataRequestFuture;
+        
+        auto request = batch.Request;
+        if (UseMetricsQueue) {
+            dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
+        } else {
+            dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+        }
+
+        auto actorSystem = TActivationContext::ActorSystem();
+        dataRequestFuture.Subscribe([request, actorSystem, selfId = SelfId()](
+            NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
+        {
+            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
+                response.ExtractValue(),
+                std::move(request)
+            ));
         });
     }
 
@@ -496,14 +517,10 @@ private:
 
         auto ranges = SplitTimeIntervalIntoRanges(from, to, pointsCount);
 
-        if (ranges.empty()) {
-            CompletedMetricsCount++;
-            return;
-        }
-
         for (const auto& [fromRange, toRange] : ranges) {
-            MetricsWithTimeRange.emplace_back(metric, fromRange, toRange);
+            MetricsWithTimeRange.emplace_back(metric.Labels, "", fromRange, toRange);
         }
+        ListedTimeRanges += ranges.size();
     }
 
     std::vector<std::pair<TInstant, TInstant>> SplitTimeIntervalIntoRanges(TInstant from, TInstant to, ui64 pointsCount) const {
@@ -537,6 +554,7 @@ private:
     const TDqSolomonReadParams ReadParams;
     const ui64 ComputeActorBatchSize;
     const ui64 MetricsQueueConsumersCountDelta;
+    IRetryPolicy<NSo::TGetDataResponse>::TPtr RetryPolicy;
 
     bool UseMetricsQueue;
     TRetryEventsQueue MetricsQueueEvents;
@@ -545,11 +563,14 @@ private:
     bool IsMetricsQueueEmpty = false;
     bool IsConfirmedMetricsQueueFinish = false;
 
+    std::map<TMetricTimeRange, IRetryPolicy<NSo::TGetDataResponse>::IRetryState::TPtr> PendingDataRequests_;
     std::deque<NSo::TMetric> ListedMetrics;
     std::deque<TMetricTimeRange> MetricsWithTimeRange;
     std::deque<NSo::TTimeseries> MetricsData;
-    size_t ListedMetricsCount = 0;
-    size_t CompletedMetricsCount = 0;
+    ui64 ListedMetricsCount = 0;
+    ui64 CompletedMetricsCount = 0;
+    ui64 ListedTimeRanges = 0;
+    ui64 CompletedTimeRanges = 0;
     const ui64 MaxPointsPerOneRequest = 10000;
 
     TString SourceId;

@@ -176,10 +176,6 @@ TString JsonFromDescribeSchemeResult(const TString& serialized) {
     return json;
 }
 
-bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
-    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
-}
-
 TClusterState::TClusterState(const NKikimrSchemeBoard::TClusterState& proto)
     : Generation(proto.GetGeneration())
     , Guid(proto.GetGuid())

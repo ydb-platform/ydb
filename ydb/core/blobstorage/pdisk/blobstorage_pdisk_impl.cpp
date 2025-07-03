@@ -340,6 +340,7 @@ void TPDisk::Stop() {
     ChunkEncoder->Stop();
     {
         while (!JointChunkWrites.IsEmpty()) {
+            //TODO: need to also clear all released completions.
             TRequestBase* req;
             JointChunkWrites.Dequeue(&req);
             Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkWritePiece,
@@ -3257,12 +3258,12 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             auto onDestroy = [&, inFlight = ownerData.InFlight]() {
                 --state.OperationsInProgress;
                 --inFlight->ChunkWrites;
+                ev.Completion = nullptr;
             };
             ev.Completion = new TCompletionChunkWrite(ev.Sender, result.release(), &Mon, PCtx->PDiskId,
                     ev.CreationTime, ev.TotalSize, ev.PriorityClass, std::move(onDestroy), ev.ReqId,
                     ev.Span.CreateChild(TWilson::PDiskBasic, "PDisk.CompletionChunkWrite"));
             ev.Completion->Parts = ev.PartsPtr;
-
 
             return true;
         }

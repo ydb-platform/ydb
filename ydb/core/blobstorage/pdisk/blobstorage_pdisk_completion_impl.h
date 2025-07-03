@@ -164,6 +164,7 @@ public:
         if (Mon) {
             Mon->GetWriteCounter(PriorityClass)->CountResponse();
         }
+        
         delete this;
     }
 

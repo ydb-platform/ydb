@@ -65,6 +65,14 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
     SlackSize = Max<ui32>();
 }
 
+void TChunkWrite::Abort(TActorSystem* actorSystem) {
+    if (!AtomicSwap(&Aborted, true)) {
+        actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
+        if (Completion) {
+            Completion->Release(actorSystem);
+        }
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkRead

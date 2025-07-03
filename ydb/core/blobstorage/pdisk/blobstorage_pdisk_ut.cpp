@@ -2143,3 +2143,4 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
 //TPDiskTest::ChunkWriteBadOffset
 //TPDiskUtil::FormatSectorMap
 //WilsonTrace::LogWriteChunkWriteChunkRead
+//*TPDiskTest::AllRequestsAreAnsweredOnPDiskRestart

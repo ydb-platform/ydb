@@ -1,8 +1,9 @@
 #pragma once
 
+#include "partition_scale_request.h"
+
 #include <ydb/core/base/path.h>
 #include "ydb/core/persqueue/utils.h"
-#include <ydb/core/persqueue/partition_scale_request.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>

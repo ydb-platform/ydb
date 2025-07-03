@@ -34,7 +34,7 @@ struct TShardState: public TCommonRetriesState {
     const ui64 TabletId;
     TSmallVec<TSerializedTableRange> Ranges;
     EShardState State = EShardState::Initial;
-    ui32 Generation = 0;
+    ui32 Generation = 1;
     bool SubscribedOnTablet = false;
     TActorId ActorId;
     TOwnedCellVec LastKey;

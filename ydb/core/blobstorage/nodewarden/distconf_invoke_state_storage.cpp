@@ -5,16 +5,70 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    void TInvokeRequestHandlerActor::GetStateStorageConfig() {
+    void TInvokeRequestHandlerActor::GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd) {
         if (!RunCommonChecks()) {
             return;
         }
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         auto ev = PrepareResult(TResult::OK, std::nullopt);
         auto* currentConfig = ev->Record.MutableStateStorageConfig();
-        currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
-        currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
-        currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+
+        if (cmd.GetRecommended()) {
+            auto testNewConfig = [](auto newSSInfo, auto oldSSInfo) {
+                THashSet<TActorId> replicas;
+                for (auto& ringGroup : oldSSInfo->RingGroups) {
+                    for(auto& ring : ringGroup.Rings) {
+                        for(auto& node : ring.Replicas) {
+                            if(!replicas.insert(node).second) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                for (auto& ringGroup : newSSInfo->RingGroups) {
+                    for(auto& ring : ringGroup.Rings) {
+                        for(auto& node : ring.Replicas) {
+                            if(!replicas.insert(node).second) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            };
+            auto process = [&](const char *name, auto mutableFunc, auto ssMutableFunc, auto buildFunc) {
+                ui32 actorIdOffset = 0;
+                auto *newMutableConfig = (currentConfig->*ssMutableFunc)();
+                GenerateStateStorageConfig(newMutableConfig, config);
+                TIntrusivePtr<TStateStorageInfo> newSSInfo;
+                TIntrusivePtr<TStateStorageInfo> oldSSInfo;
+                oldSSInfo = (*buildFunc)(*(config.*mutableFunc)());
+                newSSInfo = (*buildFunc)(*newMutableConfig);
+                while (!testNewConfig(newSSInfo, oldSSInfo)) {
+                    if (actorIdOffset > 16) {
+                        FinishWithError(TResult::ERROR, TStringBuilder() << name << " can not adjust RingGroupActorIdOffset");
+                        return false;
+                    }
+                    for (ui32 rg : xrange(newMutableConfig->RingGroupsSize())) {
+                        newMutableConfig->MutableRingGroups(rg)->SetRingGroupActorIdOffset(++actorIdOffset);
+                    }
+                    newSSInfo = (*buildFunc)(*newMutableConfig);
+                }
+                return true;
+            };
+            #define F(NAME) \
+            if (!process(#NAME, &NKikimrBlobStorage::TStorageConfig::Mutable##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)) { \
+                return; \
+            }
+            F(StateStorage)
+            F(StateStorageBoard)
+            F(SchemeBoard)
+            #undef F
+        } else {
+            currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
+            currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
+            currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
+        }
         Finish(Sender, SelfId(), ev.release(), 0, Cookie);
     }
 
@@ -235,7 +289,7 @@ namespace NKikimr::NStorage {
         F(StateStorage)
         F(StateStorageBoard)
         F(SchemeBoard)
-
+#undef F
         config.SetGeneration(config.GetGeneration() + 1);
         StartProposition(&config);
     }

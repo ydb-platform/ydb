@@ -29,6 +29,7 @@ namespace NCloudEvents {
         ui64 CreatedAt;
         TString CloudId;
         TString FolderId;
+        TString ResourceId;
 
         TString RemoteAddress;
         TString RequestId;

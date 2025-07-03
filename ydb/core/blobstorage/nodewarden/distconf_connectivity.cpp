@@ -82,7 +82,7 @@ namespace NKikimr::NStorage {
                             if (nodeId <= AppData()->DynamicNameserviceConfig->MaxStaticNodeId) {
                                 continue; // static nodes were already processed
                             }
-                            STLOG(PRI_DEBUG, BS_NODE, NWDCC00, "disconnecting dynamic", (PeerNodeId, nodeId),
+                            STLOG(PRI_DEBUG, BS_NODE, NWDCC03, "disconnecting dynamic", (PeerNodeId, nodeId),
                                 (BridgePileId, pile.BridgePileId));
                             as->Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0, as->InterconnectProxy(nodeId),
                                 {}, nullptr, 0));

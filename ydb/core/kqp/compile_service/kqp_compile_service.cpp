@@ -98,6 +98,8 @@ struct TKqpCompileRequest {
 
     bool FindInCache = true;
 
+    TInstant CompileQueueEnqueuedAt = TInstant::Now();
+
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
     }
@@ -116,8 +118,9 @@ class TKqpRequestsQueue {
     using TRequestsIteratorSet = THashSet<TRequestsIterator, TRequestsIteratorHash>;
 
 public:
-    TKqpRequestsQueue(size_t maxSize)
-        : MaxSize(maxSize) {}
+    TKqpRequestsQueue(TIntrusivePtr<TKqpCounters> counters, size_t maxSize)
+        : Counters(counters)
+        , MaxSize(maxSize) {}
 
     bool Enqueue(TKqpCompileRequest&& request) {
         if (Size() >= MaxSize) {
@@ -130,7 +133,7 @@ public:
         return true;
     }
 
-    TMaybe<TKqpCompileRequest> Dequeue() {
+    TMaybe<TKqpCompileRequest> Dequeue(const TInstant& now) {
         auto it = Queue.begin();
 
         while (it != Queue.end()) {
@@ -149,6 +152,7 @@ public:
             if (!ActiveRequests.contains(request.Query)) {
                 auto result = std::move(request);
 
+                Counters->ReportCompileQueueWaitTime(now - result.CompileQueueEnqueuedAt);
                 QueryIndex[result.Query].erase(curIt);
                 Queue.erase(curIt);
 
@@ -203,6 +207,7 @@ public:
     }
 
 private:
+    TIntrusivePtr<TKqpCounters> Counters;
     size_t MaxSize = 0;
     TRequestsList Queue;
     THashMap<TKqpQueryId, TRequestsIteratorSet> QueryIndex;
@@ -229,7 +234,7 @@ public:
         , KqpSettings(kqpSettings)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
-        , RequestsQueue(TableServiceConfig.GetCompileRequestQueueSize())
+        , RequestsQueue(Counters, TableServiceConfig.GetCompileRequestQueueSize())
         , QueryReplayFactory(std::move(queryReplayFactory))
         , FederatedQuerySetup(federatedQuerySetup)
     {}
@@ -287,8 +292,6 @@ private:
 
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
 
-        auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
-
         ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
         ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
 
@@ -337,7 +340,6 @@ private:
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
             TableServiceConfig.GetEnableStreamWrite() != enableStreamWrite ||
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
@@ -842,9 +844,9 @@ private:
 
     void ProcessQueue(const TActorContext& ctx) {
         auto maxActiveRequests = TableServiceConfig.GetCompileMaxActiveRequests();
-
+        TInstant processStartedAt = TInstant::Now();
         while (RequestsQueue.ActiveRequestsCount() < maxActiveRequests) {
-            auto request = RequestsQueue.Dequeue();
+            auto request = RequestsQueue.Dequeue(processStartedAt);
             if (!request) {
                 break;
             }

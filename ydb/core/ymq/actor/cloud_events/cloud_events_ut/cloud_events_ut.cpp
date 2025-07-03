@@ -85,12 +85,12 @@ private:
                 .AddNullableColumn("Type", EPrimitiveType::Utf8)
                 .AddNullableColumn("CloudId", EPrimitiveType::Utf8)
                 .AddNullableColumn("FolderId", EPrimitiveType::Utf8)
+                .AddNullableColumn("ResourceId", EPrimitiveType::Utf8)
                 .AddNullableColumn("UserSID", EPrimitiveType::Utf8)
                 .AddNullableColumn("MaskedToken", EPrimitiveType::Utf8)
                 .AddNullableColumn("AuthType", EPrimitiveType::Utf8)
                 .AddNullableColumn("PeerName", EPrimitiveType::Utf8)
                 .AddNullableColumn("RequestId", EPrimitiveType::Utf8)
-                .AddNullableColumn("IdempotencyId", EPrimitiveType::Utf8)
                 .AddNullableColumn("Labels", EPrimitiveType::Utf8)
                 .SetPrimaryKeyColumns({"CreatedAt", "Id"})
             .Build();
@@ -128,12 +128,12 @@ private:
             const TString& type,
             const TString& cloudId,
             const TString& folderId,
+            const TString& resourceId,
             const TString& userSID,
             const TString& token,
             const TString& authType,
             const TString& peerName,
             const TString& requestId,
-            const TString& idempotencyId,
             const TString& labels
         )
         {
@@ -151,12 +151,12 @@ private:
                     << "Type,"
                     << "CloudId,"
                     << "FolderId,"
+                    << "ResourceId,"
                     << "UserSID,"
                     << "MaskedToken,"
                     << "AuthType,"
                     << "PeerName,"
                     << "RequestId,"
-                    << "IdempotencyId,"
                     << "Labels"
                 << ")"
                 << "VALUES"
@@ -167,12 +167,12 @@ private:
                     << "'" << type << "'" << ","                                                  // DeleteMessageQueue or CreateMessageQueue or UpdateMessageQueue
                     << "'" << cloudId << "'" << ","
                     << "'" << folderId << "'" << ","
+                    << "'" << resourceId << "'" << ","
                     << "'" << userSID << "'" << ","
                     << "'" << token << "'" << ","
                     << "'" << authType << "'" << ","
                     << "'" << peerName << "'" << ","
                     << "'" << requestId << "'" << ","
-                    << "'" << idempotencyId << "'" << ","
                     << "'" << labels << "'" 
                 << ");";
 
@@ -204,12 +204,12 @@ private:
         TString queueName = "queue1";
         TString cloudId = "cloud1";
         TString folderId = "folder1";
+        TString resourceId = "/Root/sqs/folder/queue1";
         TString sid = "username";
         TString token = "maskedToken123";
         TString authType = "authtype";
         TString peerName = "localhost:8000";
         TString requestId = "req1";
-        TString idempotencyKey = "idemp1";
         TString labels = "{\"k1\" : \"v1\"}";
 
         Sleep(TDuration::Seconds(1));
@@ -219,12 +219,12 @@ private:
             "CreateMessageQueue",
             cloudId,
             folderId,
+            resourceId,
             sid,
             token,
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 
@@ -233,12 +233,12 @@ private:
             "UpdateMessageQueue",
             cloudId,
             folderId,
+            resourceId,
             sid,
             token,
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 
@@ -247,12 +247,12 @@ private:
             "DeleteMessageQueue",
             cloudId,
             folderId,
+            resourceId,
             sid,
             token,
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 
@@ -267,9 +267,9 @@ private:
 
         EWaitState state = EWaitState::Create;
 
-        [[maybe_unused]] int createCount = 0;
-        [[maybe_unused]] int updateCount = 0;
-        [[maybe_unused]] int deleteCount = 0;
+        int createCount = 0;
+        int updateCount = 0;
+        int deleteCount = 0;
 
         for (const auto& line : *AuditLinesPtr) {
             std::cerr << line << std::endl;

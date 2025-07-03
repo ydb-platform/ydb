@@ -1887,7 +1887,7 @@ public:
         if (State == EState::FLUSHING) {
             bool isEmpty = true;
             for (auto& [_, info] : WriteInfos) {
-                if (NeedToFlushActor(actor)) {
+                if (NeedToFlushActor(info.WriteTableActor)) {
                     isEmpty = isEmpty && info.WriteTableActor->IsReady() && info.WriteTableActor->IsEmpty();
                 }
             }
@@ -1943,7 +1943,7 @@ public:
         }
     }
 
-    bool ProcessFlush() {
+    bool ProcessWrite() {
         if (!EnableStreamWrite && GetTotalFreeSpace() <= 0) {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
@@ -1957,7 +1957,7 @@ public:
         if (NeedToFlush()) {
             CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
-                if (info.WriteTableActor->IsReady() && NeedToFlushActor(actor)) {
+                if (info.WriteTableActor->IsReady() && NeedToFlushActor(info.WriteTableActor)) {
                     if (!info.WriteTableActor->FlushToShards()) {
                         return false;
                     }
@@ -1993,7 +1993,7 @@ public:
         }
         YQL_ENSURE(TxId);
         for (auto& [_, info] : WriteInfos) {
-            AFL_ENSURE(!actor->FlushBeforeCommit());
+            AFL_ENSURE(!info.WriteTableActor->FlushBeforeCommit());
             info.WriteTableActor->SetPrepare(*TxId);
         }
         Close();

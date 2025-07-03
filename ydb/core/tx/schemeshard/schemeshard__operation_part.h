@@ -6,6 +6,9 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>  // for NKikimrSchemeOp::EOperationType
+#include <ydb/core/protos/counters_schemeshard.pb.h>  // for NKikimr::NSchemeShard::ETxTypes, not to be confused with NKikimr::NSchemeShard::ETxType
+
 #include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler

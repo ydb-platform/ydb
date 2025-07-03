@@ -4301,7 +4301,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         for (auto& item : Self->TxInFlight) {
             const TTxState& txState = item.second;
 
-            ui32 inFlightCounter = TTxState::TxTypeInFlightCounter(txState.TxType);
+            ui32 inFlightCounter = TxTypeInFlightCounter(txState.TxType);
             Self->TabletCounters->Simple()[inFlightCounter].Add(1);
         }
 
@@ -5265,14 +5265,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             if (op.HasFullBackupTrimmedName()) {
                                 TString fullBackupName = op.GetFullBackupTrimmedName() + "_full";
                                 TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
-                                
+
                                 // Set state for each table in the full backup
                                 for (const auto& tablePath : op.GetTablePathList()) {
                                     TPath originalTablePath = TPath::Resolve(tablePath, Self);
                                     if (originalTablePath.IsResolved()) {
                                         TString tableName = originalTablePath.LeafName();
                                         TString fullBackupTablePath = fullBackupPath + "/" + tableName;
-                                        
+
                                         TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
                                         if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
                                             auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
@@ -5286,14 +5286,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
                                 TString incrBackupName = trimmedIncrName + "_incremental";
                                 TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
-                                
+
                                 // Set state for each table in the incremental backup
                                 for (const auto& tablePath : op.GetTablePathList()) {
                                     TPath originalTablePath = TPath::Resolve(tablePath, Self);
                                     if (originalTablePath.IsResolved()) {
                                         TString tableName = originalTablePath.LeafName();
                                         TString incrBackupTablePath = incrBackupPath + "/" + tableName;
-                                        
+
                                         TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
                                         if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
                                             auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);

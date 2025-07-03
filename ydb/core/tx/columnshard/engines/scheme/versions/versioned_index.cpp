@@ -16,9 +16,8 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     const bool needActualization = indexInfo->GetSchemeNeedActualization();
     auto newVersion = indexInfo->GetVersion();
     auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
-    if (!itVersion.second) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("message", "Skip registered version")("version", LastSchemaVersion);
-    } else if (needActualization) {
+    AFL_VERIFY(itVersion.second)("message", "duplication for registered version")("version", LastSchemaVersion);
+    if (needActualization) {
         if (!SchemeVersionForActualization || *SchemeVersionForActualization < newVersion) {
             SchemeVersionForActualization = newVersion;
             SchemeForActualization = itVersion.first->second;

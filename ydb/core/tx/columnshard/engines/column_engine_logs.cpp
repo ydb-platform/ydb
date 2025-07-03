@@ -99,6 +99,11 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
                                                                   "current", schema.GetVersion())(
                                                                   "last", VersionedIndex.GetLastSchema()->GetVersion());
 
+    if (!VersionedIndex.IsEmpty() && schema.GetVersion() == VersionedIndex.GetLastSchema()->GetVersion()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "double_schema_version")("v", schema.GetVersion());
+        return;
+    }
+
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.GetDiff()) {
         AFL_VERIFY(!VersionedIndex.IsEmpty());

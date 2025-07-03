@@ -15,7 +15,7 @@ private:
     const NColumnShard::TEngineLogsCounters Counters;
     bool PackModificationFlag = false;
     THashMap<TInternalPathId, const TGranuleMeta*> PackModifiedGranules;
-    THashMap<ui64, TPositiveControlInteger> SchemaVersionsControl;
+    std::map<ui64, TPositiveControlInteger> SchemaVersionsControl;
 
     static inline TAtomicCounter SumMetadataMemoryPortionsSize = 0;
 
@@ -38,8 +38,10 @@ public:
         : Counters(counters) {
     }
 
-    bool HasSchemaVersion(const ui64 version) const {
-        return SchemaVersionsControl.contains(version);
+    bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const {
+        AFL_VERIFY(fromVersion <= version);
+        auto it = SchemaVersionsControl.lower_bound(fromVersion);
+        return (it != SchemaVersionsControl.end() && it->first <= version);
     }
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {

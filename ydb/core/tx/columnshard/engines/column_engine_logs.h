@@ -200,8 +200,8 @@ public:
         return *GetGranulePtrVerified(pathId);
     }
 
-    bool HasDataWithSchemaVersion(const ui64 version) const {
-        return GranulesStorage->GetStats()->HasSchemaVersion(version);
+    bool HasDataWithSchemaVersion(const ui64 fromVersion, const ui64 version) const {
+        return GranulesStorage->GetStats()->HasSchemaVersion(fromVersion, version);
     }
 
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const TInternalPathId pathId) const {

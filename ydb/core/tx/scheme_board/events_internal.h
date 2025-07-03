@@ -384,7 +384,7 @@ struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSc
         return TStringBuilder() << ToStringHeader() << " {"
             << " Version: " << Record.GetVersion()
             << " Partial: " << Record.GetPartial()
-            << " Cluster State: " << Record.GetClusterState().ShortDebugString()
+            << " Cluster State: { " << Record.GetClusterState().ShortDebugString() << " }"
         << " }";
     }
 };

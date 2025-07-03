@@ -2380,44 +2380,55 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     // For Parent == 0 only single kmeans needed, so there are two options:
     // 1. It fits entirely in the single shard => local kmeans for single shard
     // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
-    const auto [parentFrom, parentTo] = KMeans.Parent == 0
+    auto [parentFrom, parentTo] = KMeans.Parent == 0
         ? std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId>{0, 0}
         : KMeans.RangeToBorders(range);
-    // TODO Make it more granular - now we just merge all intersecting ranges.
-    // So if all shards have ranges like [1 2] [2 3] [3 4] and so on then we scan
-    // all shards for each cluster even though we could only scan 2 shards for it.
 
-    // the new range does not intersect with other ranges, just add it with 1 shard
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
     if (itFrom == Cluster2Shards.end() || parentTo < itFrom->second.From) {
+        // The new range does not intersect with other ranges, just add it with 1 shard
         Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
         return;
     }
 
-    // otherwise, this range has multiple shards and we need to merge all intersecting ranges
-    auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
-    if (itTo == Cluster2Shards.end()) {
-        itTo--;
+    for (auto it = itFrom; it != Cluster2Shards.end() && it->second.From <= parentTo && it->first >= parentFrom; it++) {
+        // The new shard may only intersect with existing shards by its starting or ending edge
+        Y_ENSURE(it->second.From == parentTo || it->first == parentFrom);
     }
-    if (itTo->first < parentTo) {
-        const bool needsToReplaceFrom = itFrom == itTo;
-        auto node = Cluster2Shards.extract(itTo);
-        node.key() = parentTo;
-        itTo = Cluster2Shards.insert(Cluster2Shards.end(), std::move(node));
-        itFrom = needsToReplaceFrom ? itTo : itFrom;
-    }
-    auto& [toFrom, toShards] = itTo->second;
 
-    toFrom = std::min(toFrom, parentFrom);
-    toShards.emplace_back(shard);
-
-    while (itFrom != itTo) {
-        const auto& [fromFrom, fromShards] = itFrom->second;
-        toFrom = std::min(toFrom, fromFrom);
-        Y_ASSERT(!fromShards.empty());
-        toShards.insert(toShards.end(), fromShards.begin(), fromShards.end());
-        itFrom = Cluster2Shards.erase(itFrom);
+    if (parentFrom == itFrom->first) {
+        // Intersects by parentFrom
+        if (itFrom->second.From < itFrom->first) {
+            Cluster2Shards.emplace_hint(itFrom, itFrom->first-1, itFrom->second);
+            itFrom->second.From = parentFrom;
+        }
+        itFrom->second.Shards.push_back(shard);
+        // Increment to also check intersection by parentTo
+        itFrom++;
+        if (parentTo == parentFrom) {
+            return;
+        }
+        parentFrom++;
     }
+
+    if (parentTo == itFrom->second.From) {
+        // Intersects by parentTo
+        if (itFrom->second.From < itFrom->first) {
+            auto endShards = itFrom->second.Shards;
+            endShards.push_back(shard);
+            Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentTo, .Shards = std::move(endShards)});
+            itFrom->second.From = parentTo+1;
+        } else {
+            itFrom->second.Shards.push_back(shard);
+        }
+        if (parentTo == parentFrom) {
+            return;
+        }
+        parentTo--;
+    }
+
+    // Add the remaining range
+    Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
 }
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)

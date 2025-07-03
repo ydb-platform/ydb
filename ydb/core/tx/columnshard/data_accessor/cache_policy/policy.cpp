@@ -40,7 +40,6 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         using TAddress = TGlobalPortionAddress;
         using TObject = std::shared_ptr<TPortionDataAccessor>;
         using TSourceId = NActors::TActorId;
-        using TFetchingContext = NKikimr::NGeneralCache::NSource::TFetchingContext<TPortionsMetadataCachePolicy>;
         using EConsumer = TPortionsMetadataCachePolicy::EConsumer;
         using TSelf = NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>;
 

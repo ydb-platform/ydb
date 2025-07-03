@@ -88,7 +88,7 @@ void TExtensionFinal::Execute(TIntrusivePtr<TExtensionContext> ctx) {
         SetProxyResponseBody();
     }
 
-    Continue();
+    Context->Continue();
 }
 
 } // NMVP::NOIDC

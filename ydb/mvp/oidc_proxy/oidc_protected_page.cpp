@@ -45,11 +45,6 @@ void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomi
     PassAway();
 }
 
-void THandlerSessionServiceCheck::HandleEnrichmentTimeout() {
-    ExtensionManager->StartExtensionProcess(std::move(Request));
-    PassAway();
-}
-
 void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse::TPtr event) {
     if (event->Get()->Response != nullptr) {
         NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
@@ -113,11 +108,17 @@ bool THandlerSessionServiceCheck::IsAuthorizedRequest(TStringBuf authHeader) {
 void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool secure) {
     BLOG_D("Forward user request bypass OIDC");
 
+    ExtensionManager = MakeHolder<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
+    ExtensionManager->ArrangeExtensions(Request);
+
     TProxiedRequestParams params(Request, authHeader, secure, ProtectedPage, Settings);
     auto httpRequest = CreateProxiedRequest(params);
 
     auto requestEvent = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
-    requestEvent->Timeout = TDuration::Seconds(120);
+    auto timeout = ExtensionManager->HasEnrichmentExtension()
+        ? Settings.RequestWithEnrichmentTimeout
+        : Settings.RequestTimeout;
+    requestEvent->Timeout = timeout;
     requestEvent->AllowConnectionReuse = !Request->IsConnectionClose();
     requestEvent->StreamContentTypes = {
         "multipart/x-mixed-replace",
@@ -126,12 +127,6 @@ void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool
     };
 
     Send(HttpProxyId, requestEvent.release());
-
-    ExtensionManager = MakeHolder<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
-    ExtensionManager->ArrangeExtensions(Request);
-    if (ExtensionManager->HasEnrichmentExtension()) {
-        Schedule(TDuration::MilliSeconds(Settings.EnrichmentProcessTimeoutMs), new NActors::TEvents::TEvWakeup());
-    }
 }
 
 void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) {

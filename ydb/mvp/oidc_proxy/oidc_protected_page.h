@@ -37,7 +37,6 @@ public:
     void HandleDataChunk(NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk::TPtr event);
     void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr event);
     void HandleCancelled();
-    void HandleEnrichmentTimeout();
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -46,7 +45,6 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk, HandleDataChunk);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, HandleCancelled);
             hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
-            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleEnrichmentTimeout);
         }
     }
 

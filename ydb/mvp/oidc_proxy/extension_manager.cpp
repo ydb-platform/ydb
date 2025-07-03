@@ -24,9 +24,9 @@ void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
 
 void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-    ExtensionCtx->Params->ResponseError = event ? event->Get()->GetError() : "Timeout while waiting info";
+    ExtensionCtx->Params->ResponseError = event->Get()->GetError();
 
-    if (!event || !event->Get()->Response)
+    if (!event->Get()->Response)
         return;
 
     auto& response = event->Get()->Response;
@@ -50,7 +50,7 @@ void TExtensionManager::AddExtensionFinal() {
     AddExtension(std::move(ext));
 }
 
-void TExtensionManager::AddExtension(std::unique_ptr<TExtension> ext) {
+void TExtensionManager::AddExtension(std::unique_ptr<IExtension> ext) {
     ExtensionCtx->Steps.push(std::move(ext));
 }
 

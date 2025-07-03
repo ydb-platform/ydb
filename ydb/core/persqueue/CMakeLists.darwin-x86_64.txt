@@ -36,6 +36,7 @@ target_link_libraries(ydb-core-persqueue PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
+  contrib-libs-fmt
   library-actors-core
   cpp-html-pcdata
   library-cpp-json
@@ -86,6 +87,7 @@ target_sources(ydb-core-persqueue PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_database.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_impl_app.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_impl_app_sendreadset.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_l2_cache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_rl_helpers.cpp

@@ -43,6 +43,7 @@ target_link_libraries(ydb-core-persqueue-ut PUBLIC
   cpp-testing-unittest_main
   ydb-core-persqueue
   library-cpp-getopt
+  library-cpp-json
   cpp-regex-pcre
   library-cpp-svnversion
   persqueue-ut-common

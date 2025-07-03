@@ -95,7 +95,7 @@ struct TWriteRequestParams {
     TMaybe<ui64> Cookie;
 };
 
-struct TManualSendReadSetParams {
+struct TAppSendReadSetParams {
   ui64 Step = 0;
   ui64 TxId = 0;
   TMaybe<ui64> SenderId;
@@ -177,11 +177,11 @@ protected:
         TMaybe<ui64> Cookie;
     };
 
-    struct TManualSendRsMatcher {
+    struct TAppSendReadSetMatcher {
         TMaybe<bool> Status;
     };
 
-    struct TSendRsViaAppTestParams {
+    struct TSendReadSetViaAppTestParams {
         size_t TabletsCount = 0;
         NKikimrTx::TReadSetData::EDecision Decision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
         size_t TabletsRSCount = 0;
@@ -198,7 +198,7 @@ protected:
     using TCancelTransactionProposalParams = NHelpers::TCancelTransactionProposalParams;
     using TGetOwnershipRequestParams = NHelpers::TGetOwnershipRequestParams;
     using TWriteRequestParams = NHelpers::TWriteRequestParams;
-    using TManualSendReadSetParams = NHelpers::TManualSendReadSetParams;
+    using TAppSendReadSetParams = NHelpers::TAppSendReadSetParams;
 
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
@@ -282,9 +282,9 @@ protected:
     NKikimrPQ::TTabletTxInfo WaitForExactTxWritesCount(ui32 expectedCount);
     NKikimrPQ::TTabletTxInfo GetTxWritesFromKV();
 
-    void SendManualSendRsRequest(const TManualSendReadSetParams& params);
-    void WaitForManualSendRsResponse(const TManualSendRsMatcher& matcher);
-    void TestSendingTEvReadSetViaApp(const TSendRsViaAppTestParams& params);
+    void SendAppSendRsRequest(const TAppSendReadSetParams& params);
+    void WaitForAppSendRsResponse(const TAppSendReadSetMatcher& matcher);
+    void TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestParams& params);
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -1311,7 +1311,7 @@ NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
 }
 
 
-void TPQTabletFixture::SendManualSendRsRequest(const TManualSendReadSetParams& params) {
+void TPQTabletFixture::SendAppSendRsRequest(const TAppSendReadSetParams& params) {
     auto makeEv = [this, &params]() {
         TCgiParameters cgi{
             {"TabletID", ToString(Ctx->TabletId)},
@@ -1330,7 +1330,7 @@ void TPQTabletFixture::SendManualSendRsRequest(const TManualSendReadSetParams& p
     Ctx->Runtime->SendToPipe(Ctx->TabletId, Ctx->Edge, makeEv().release(), 0, GetPipeConfigWithRetries());
 }
 
-void TPQTabletFixture::WaitForManualSendRsResponse(const TManualSendRsMatcher& matcher) {
+void TPQTabletFixture::WaitForAppSendRsResponse(const TAppSendReadSetMatcher& matcher) {
     THolder<NMon::TEvRemoteJsonInfoRes> handle = Ctx->Runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>();
     UNIT_ASSERT(handle != nullptr);
     const TString& response = handle->Json;
@@ -2471,7 +2471,7 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId2.Id);
 }
 
-void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendRsViaAppTestParams& params)
+void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestParams& params)
 {
     Y_ABORT_UNLESS(params.TabletsRSCount <= params.TabletsCount);
     const ui64 txId = 67890;
@@ -2504,8 +2504,8 @@ void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendRsViaAppTestParams
     }
     Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(500));
 
-    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=Nothing(), .Predicate=(params.AppDecision == NKikimrTx::TReadSetData::DECISION_COMMIT),});
-    WaitForManualSendRsResponse({.Status = params.ExpectedAppResponseStatus,});
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=Nothing(), .Predicate=(params.AppDecision == NKikimrTx::TReadSetData::DECISION_COMMIT),});
+    WaitForAppSendRsResponse({.Status = params.ExpectedAppResponseStatus,});
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=params.ExpectedStatus});
@@ -2607,7 +2607,7 @@ Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5a4a, TPQTabletFixture)
     });
 }
 
-Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Commit, TPQTabletFixture)
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Commit, TPQTabletFixture)
 {
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -2630,14 +2630,14 @@ Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Commit, TPQTabletFixture)
 
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
 
-    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
-    WaitForManualSendRsResponse({.Status = true,});
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForAppSendRsResponse({.Status = true,});
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 }
 
-Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Abort, TPQTabletFixture)
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Abort, TPQTabletFixture)
 {
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -2660,14 +2660,14 @@ Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Abort, TPQTabletFixture)
 
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
 
-    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
-    WaitForManualSendRsResponse({.Status = true,});
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
+    WaitForAppSendRsResponse({.Status = true,});
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
-Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Commit_After_Abort, TPQTabletFixture)
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Commit_After_Abort, TPQTabletFixture)
 {
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -2691,14 +2691,14 @@ Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Commit_After_Abort, TPQTabletFixture)
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
 
-    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
-    WaitForManualSendRsResponse({.Status = true,});
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForAppSendRsResponse({.Status = true,});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 
-Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Abort_After_Commit, TPQTabletFixture)
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Abort_After_Commit, TPQTabletFixture)
 {
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -2722,13 +2722,13 @@ Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_With_Abort_After_Commit, TPQTabletFixture)
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
-    SendManualSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
-    WaitForManualSendRsResponse({.Status = true,});
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
+    WaitForAppSendRsResponse({.Status = true,});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED}); // RS=commit + ручной abort -> abort
 }
 
-Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_Invalid_Tx, TPQTabletFixture)
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Tx, TPQTabletFixture)
 {
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -2751,11 +2751,11 @@ Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_Invalid_Tx, TPQTabletFixture)
 
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
 
-    SendManualSendRsRequest({.Step=100, .TxId=txId+1, .SenderId=22222, .Predicate=true,});
-    WaitForManualSendRsResponse({.Status = false,});
+    SendAppSendRsRequest({.Step=100, .TxId=txId+1, .SenderId=22222, .Predicate=true,});
+    WaitForAppSendRsResponse({.Status = false,});
 }
 
-Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_Invalid_Step, TPQTabletFixture)
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Step, TPQTabletFixture)
 {
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -2779,8 +2779,8 @@ Y_UNIT_TEST_F(PQTablet_Manual_Send_RS_Invalid_Step, TPQTabletFixture)
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
 
-    SendManualSendRsRequest({.Step=101, .TxId=txId, .SenderId=22222, .Predicate=true,});
-    WaitForManualSendRsResponse({.Status = false,});
+    SendAppSendRsRequest({.Step=101, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForAppSendRsResponse({.Status = false,});
 }
 
 

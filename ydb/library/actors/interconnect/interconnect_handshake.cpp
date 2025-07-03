@@ -405,7 +405,7 @@ namespace NActors {
                 ExternalDataChannel.ResetPollerToken();
                 Y_ABORT_UNLESS(!ExternalDataChannel == !Params.UseExternalDataChannel);
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
-                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()), std::move(RdmaQp)));
+                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()), std::move(RdmaQp), RdmaCq));
             }
 
             MainChannel.Reset();
@@ -907,7 +907,7 @@ namespace NActors {
                 request.SetRequestExtendedTraceFmt(true);
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
-                request.SetRequestXdcShuffle(true);
+                request.SetRequestXdcShuffle(false);
                 request.SetHandshakeId(*HandshakeId);
 
                 if (RdmaQp) {

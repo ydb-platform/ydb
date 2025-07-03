@@ -23,6 +23,7 @@
 #include "interconnect_zc_processor.h"
 #include "poller_tcp.h"
 #include "poller_actor.h"
+#include "rdma/events.h"
 #include "interconnect_channel.h"
 #include "logging.h"
 #include "watchdog_timer.h"
@@ -137,7 +138,9 @@ namespace NActors {
 
                 // number of bytes remaining through XDC channel
                 size_t XdcSizeLeft = 0;
-                std::shared_ptr<std::atomic<size_t>> RdmaItemsLeft = nullptr;
+
+                std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
+                std::shared_ptr<std::atomic<size_t>> RdmaSizeLeft = nullptr;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -152,6 +155,7 @@ namespace NActors {
             void ApplyCatchBuffer();
             void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
             void DropFront(TRope *from, size_t numBytes);
+            void ScheduleRdmaReadRequests(const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel);
         };
 
         std::array<TPerChannelContext, 16> ChannelArray;
@@ -213,7 +217,8 @@ namespace NActors {
                          ui64 lastConfirmed,
                          TDuration deadPeerTimeout,
                          TSessionParams params,
-                         std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp);
+                         std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp,
+                         NInterconnect::NRdma::ICq::TPtr cq);
 
     private:
         friend class TActorBootstrapped<TInputSessionTCP>;
@@ -234,6 +239,7 @@ namespace NActors {
             cFunc(TEvents::TSystem::PoisonPill, PassAway)
             hFunc(TEvPollerReady, Handle)
             hFunc(TEvPollerRegisterResult, Handle)
+            hFunc(NInterconnect::NRdma::TEvRdmaReadDone, Handle)
             cFunc(EvResumeReceiveData, ReceiveData)
             cFunc(TEvInterconnect::TEvCloseInputSession::EventType, CloseInputSession)
             cFunc(EvCheckDeadPeer, HandleCheckDeadPeer)
@@ -254,6 +260,7 @@ namespace NActors {
         const ui32 NodeId;
         const TSessionParams Params;
         std::unique_ptr<NInterconnect::NRdma::TQueuePair> RdmaQp;
+        NInterconnect::NRdma::ICq::TPtr RdmaCq;
         XXH3_state_t XxhashState;
         XXH3_state_t XxhashXdcState;
 
@@ -307,6 +314,7 @@ namespace NActors {
         void Handle(TEvPollerReady::TPtr ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void HandleConfirmUpdate();
+        void Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev);
         void ReceiveData();
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
@@ -320,7 +328,7 @@ namespace NActors {
         void ApplyXdcCatchStream();
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
-        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom);
+        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma);
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 

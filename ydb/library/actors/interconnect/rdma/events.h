@@ -11,6 +11,7 @@ namespace NInterconnect::NRdma {
         Start = EventSpaceBegin(NActors::TEvents::ES_INTERCONNECT_RDMA),
         EvGetCqHandle = Start,
         EvRdmaIoDone,
+        EvRdmaReadDone,
     };
 
     struct TEvGetCqHandle: public NActors::TEventLocal<TEvGetCqHandle, ui32(ERdma::EvGetCqHandle)> {
@@ -79,5 +80,18 @@ namespace NInterconnect::NRdma {
         }
 
         std::variant<TSuccess, TWcErr, TCqErr> Record;
+    };
+
+    struct TEvRdmaReadDone : NActors::TEventLocal<TEvRdmaReadDone, (ui32)ERdma::EvRdmaReadDone> {
+        std::unique_ptr<NInterconnect::NRdma::TEvRdmaIoDone> Event;
+        ui16 Channel;
+
+        TEvRdmaReadDone(
+            std::unique_ptr<NInterconnect::NRdma::TEvRdmaIoDone> event,
+            ui16 channel
+        )
+            : Event(std::move(event))
+            , Channel(channel)
+        {}
     };
 }

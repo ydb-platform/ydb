@@ -82,6 +82,7 @@ namespace NActors {
         ~TCoroutineChunkSerializer();
 
         void SetSerializingEvent(const IEventBase *event);
+        void DropEvent();
         void Abort();
         std::span<TChunk> FeedBuf(void* data, size_t size);
         bool IsComplete() const {

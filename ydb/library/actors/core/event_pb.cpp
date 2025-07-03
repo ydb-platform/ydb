@@ -177,6 +177,10 @@ namespace NActors {
         AbortFlag = false;
     }
 
+    void TCoroutineChunkSerializer::DropEvent() {
+        Event = nullptr; // TODO: fix
+    }
+
     void TCoroutineChunkSerializer::Abort() {
         Y_ABORT_UNLESS(Event);
         AbortFlag = true;

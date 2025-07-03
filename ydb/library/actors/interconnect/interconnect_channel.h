@@ -69,7 +69,7 @@ namespace NActors {
     public:
         TEventOutputChannel(ui16 id, ui32 peerNodeId, ui32 maxSerializedEventSize,
                 std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params,
-                std::shared_ptr<NInterconnect::NRdma::IMemPool> rdmaMemPool = nullptr)
+                std::shared_ptr<NInterconnect::NRdma::IMemPool> rdmaMemPool)
             : TInterconnectLoggingBase(Sprintf("OutputChannel %" PRIu16 " [node %" PRIu32 "]", id, peerNodeId))
             , PeerNodeId(peerNodeId)
             , ChannelId(id)

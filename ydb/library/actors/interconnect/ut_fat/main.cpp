@@ -22,12 +22,14 @@ namespace {
         TDeque<ui64> InFly;
         ui16 SendFlags;
         bool UseRope;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool = nullptr;
 
     public:
         TSenderActor(const TActorId& recipientActorId, ui16 sendFlags, bool useRope)
             : TSenderBaseActor(recipientActorId, 32)
             , SendFlags(sendFlags)
             , UseRope(useRope)
+            , MemPool(NInterconnect::NRdma::CreateDummyMemPool())
         {
         }
 
@@ -45,7 +47,10 @@ namespace {
             ev->Record.SetDataCrc(Crc32c(payload.data(), payload.size()));
 
             if (UseRope) {
-                ev->Record.SetPayloadId(ev->AddPayload(TRope(payload)));
+                auto buf = MemPool->AllocRcBuf(payload.size());
+                std::memcpy(buf.GetDataMut(), payload.data(), payload.size());
+                ev->Record.SetPayloadId(ev->AddPayload(TRope(std::move(buf))));
+                // ev->Record.SetPayloadId(ev->AddPayload(TRope(payload)));
             } else {
                 ev->Record.SetPayload(payload);
             }

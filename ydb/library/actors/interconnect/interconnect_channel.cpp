@@ -99,14 +99,15 @@ namespace NActors {
                         State = EState::SECTIONS;
                         SectionIndex = 0;
 
-                        Cerr << Params.UseRdma << " " << bool(RdmaMemPool) << " "
-                             << SerializationInfo->Sections.size() << Endl;
-
                         SendViaRdma = Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() > 2;
                         for (const auto& section : SerializationInfo->Sections) {
                             SendViaRdma &= section.IsRdma;
                         }
-                        Cerr << "SendViaRdma: " << SendViaRdma << Endl;
+                        if (SendViaRdma) {
+                            Chunker.DropEvent();
+                        }
+                        Cerr << "SendViaRdma: " << SendViaRdma << " : " << Params.UseRdma << " " << bool(RdmaMemPool) << " "
+                             << SerializationInfo->Sections.size() << Endl;
                     }
                     break;
 
@@ -264,7 +265,7 @@ namespace NActors {
                     // all data goes inline
                     IsPartInline = true;
                     PartLenRemain = Max<size_t>();
-                } else if (!Params.UseXdcShuffle) {
+                } else if (!Params.UseXdcShuffle || SendViaRdma) {
                     // when UseXdcShuffle feature is not supported by the remote side, we transfer whole event over XDC
                     IsPartInline = false;
                     PartLenRemain = Max<size_t>();

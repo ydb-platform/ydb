@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
         TEventHolderPool pool(common, callback);
         TSessionParams p;
         p.UseExternalDataChannel = true;
-        TEventOutputChannel channel(1, 1, 64 << 20, ctr, p);
+        TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, nullptr);
 
         auto ev = MakeTestEvent();
         auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
         return part;
     }
 
-    Y_UNIT_TEST(RdmaRead) {
+    Y_UNIT_TEST(OutputChannelRdmaRead) {
         auto common = MakeIntrusive<TInterconnectProxyCommon>();
         common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
@@ -135,7 +135,6 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
         TVector<char> mainDataFlat;
         for (const auto& [ptr, len] : mainData) {
             for (size_t i = 0; i < len; ++i) {
-                // mainDataFlat.push_back((i32)(((char*)ptr)[i]));
                 mainDataFlat.push_back(((char*)ptr)[i]);
             }
         }
@@ -254,15 +253,16 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
 
     Y_UNIT_TEST(Send) {
         TTestICCluster cluster(2);
-        auto ev = new TEvTestSerialization();
-        ev->Record.SetBlobID(123);
-        ev->Record.SetBuffer("hello world");
-        ev->AddPayload(TRope(TString(5000, 'X')));
-        UNIT_ASSERT(ev->AllowExternalDataChannel());
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(memPool.get());
 
         auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+            Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
         });
         const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
 

@@ -498,7 +498,7 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
         if (ignoreToVersion) {
             AFL_VERIFY(*ignoreToVersion == i.second->GetIndexInfo().GetVersion());
         }
-        if (i.second->GetIndexInfo().GetIgnoreToVersion()) {
+        if (i.second->GetIndexInfo().GetIgnoreToVersion() && *i.second->GetIndexInfo().GetIgnoreToVersion() <= lastSchemaVersion) {
             ignoreToVersion = i.second->GetIndexInfo().GetIgnoreToVersion();
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_to_remove")("reason", "equal_to_use")("from", i.first)(
                 "to", ignoreToVersion);

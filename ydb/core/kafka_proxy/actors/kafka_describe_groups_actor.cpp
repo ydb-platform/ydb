@@ -26,7 +26,9 @@ NActors::IActor* CreateKafkaDescribeGroupsActor(const TContext::TPtr context, co
 
 void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-        StartKqpSession(ctx);
+        Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
+        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
         Become(&TKafkaDescribeGroupsActor::StateWork);
         auto wakeup = std::make_unique<TEvents::TEvWakeup>(1);
         ctx.ActorSystem()->Schedule(
@@ -43,6 +45,15 @@ void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     }
 }
 
+void TKafkaDescribeGroupsActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
+    KAFKA_LOG_D("Received TEvManagerPrepared. Sending create session request to KQP.");
+    InitedTablesCount++;
+    if (InitedTablesCount == TABLES_TO_INIT_COUNT) {
+        StartKqpSession(ctx);
+    }
+}
+
+
 void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_D("KQP session created");
     if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
@@ -56,18 +67,13 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::T
 void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_D("Received query response from KQP DescribeGroups request");
     if (auto error = GetErrorFromYdbResponse(ev, ctx)) {
-        // return error for each group with incorrect query
         KAFKA_LOG_W(error);
         PendingResponses--;
-        if (KqpCookieToGroupId.find(ev->Cookie) != KqpCookieToGroupId.end()) {
-            KAFKA_LOG_W("Recieved an unknown cookie. Dying.");
-            SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, "Incorrect cookie number");
-            Die(ctx);
-        }
-        GroupIdToDescription[KqpCookieToGroupId[ev->Cookie]].ErrorCode = EKafkaErrors::INVALID_REQUEST;
+        SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, *error);
+        Die(ctx);
         return;
     }
-    HandleSelectResponse(*ev->Get(), ctx, ev->Cookie);
+    HandleSelectResponse(*ev->Get(), ctx);
 }
 
 void TKafkaDescribeGroupsActor::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
@@ -86,63 +92,20 @@ void TKafkaDescribeGroupsActor::Die(const TActorContext &ctx) {
 }
 
 void TKafkaDescribeGroupsActor::StartKqpSession(const TActorContext& ctx) {
-    Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
     KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
     Kqp->SendCreateSessionRequest(ctx);
 }
 
-void TKafkaDescribeGroupsActor::SendToKqpDescribeGroupsMetadataRequest(const TActorContext& ctx) {
-    if (DescribeGroupsRequestData->Groups.size() == 0) {
-        auto response = BuildResponse();
-        Send(Context->ConnectionId,
-            new TEvKafka::TEvResponse(CorrelationId,
-                                response,
-                                EKafkaErrors::NONE_ERROR));
-        Die(ctx);
-    }
-    for (auto& groupId : DescribeGroupsRequestData->Groups) {
-        // check that groupId is not empty to avoid incorrect requests
-        if (groupId.has_value()) {
-            KAFKA_LOG_D("Sending SELECT_DESCRIPTION_OF_GROUP_MEMBERS request to KQP for database " << DatabasePath << " for " << groupId << " group.");
-            PendingResponses++;
-            ++KqpCookie;
-            KqpCookieToGroupId[KqpCookie] = *groupId;
-            KqpQueryCookiesQueue.emplace(KqpCookie);
-            if (KqpQueryCookiesQueue.size() == 1) {
-                KAFKA_LOG_W("Sending SELECT_GROUP_INFO request to KQP for database " << DatabasePath << " for " << groupId << " group.");
-                Kqp->SendYqlRequest(GetYqlWithTableNames(SELECT_GROUP_DESCRIPTION),
-                                    BuildSelectParams(*groupId),
-                                    KqpCookie,
-                                    ctx,
-                                    false);
-            }
-        }
-    }
-}
-
-void TKafkaDescribeGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx, ui64 responseCookie) {
-    KAFKA_LOG_D("Handling Select Response " << response.Record.GetResponse().GetYdbResults().size());
+void TKafkaDescribeGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx) {
+    KAFKA_LOG_D("Handling Select Response for DescribeGroups. SELECT result size: " << response.Record.GetResponse().GetYdbResults().size());
     if (response.Record.GetResponse().GetYdbResults().size() != 2) {
         TString errorMessage = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.Record.GetResponse().GetYdbResults().size() << ".";
         KAFKA_LOG_W(errorMessage);
-        TString groupId = KqpCookieToGroupId[responseCookie];
-        GroupIdToDescription[groupId].ErrorCode = EKafkaErrors::BROKER_NOT_AVAILABLE;
         PendingResponses--;
         return;
     }
     ParseGroupDescriptionMetadata(response);
     PendingResponses--;
-    KAFKA_LOG_D("Write info for group" << KqpCookieToGroupId[responseCookie]);
-    KqpQueryCookiesQueue.pop();
-
-    if (!KqpQueryCookiesQueue.empty()) {
-        auto nextQueryCookie = KqpQueryCookiesQueue.front();
-        Kqp->SendYqlRequest(GetYqlWithTableNames(SELECT_GROUP_DESCRIPTION),
-                                        BuildSelectParams(KqpCookieToGroupId[nextQueryCookie]),
-                                        nextQueryCookie,
-                                        ctx,
-                                        false);
-    }
     if (PendingResponses == 0) {
       auto responseDescribeGroups = BuildResponse();
       Send(Context->ConnectionId,
@@ -153,25 +116,48 @@ void TKafkaDescribeGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQuer
 }
 
 void TKafkaDescribeGroupsActor::ParseGroupDescriptionMetadata(const NKqp::TEvKqp::TEvQueryResponse& response) {
-    KAFKA_LOG_D("Parsing KQP response");
+    KAFKA_LOG_D("Parsing Groups metadata");
+    ParseGroupMetadata(response);
+    KAFKA_LOG_D("Parsing Members metadata");
+    ParseMembersMetadata(response);
+}
 
+void TKafkaDescribeGroupsActor::FillInMemberMetadata(NKafka::TDescribeGroupsResponseData::TDescribedGroup& describedGroup,
+        NKafka::TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember& groupMember,
+        const TString& protoStr) {
+    NKafka::TWorkerState workerState;
+    if (protoStr.empty() || workerState.ParseFromString(protoStr)) {
+        const auto& protocols = workerState.protocols();
+        TString protocol = *describedGroup.ProtocolData;
+        for (const auto& p : protocols) {
+            if (p.protocol_name() == protocol) {
+                groupMember.MemberMetadata = p.metadata();
+                break;
+            }
+        }
+    }
+}
+
+void TKafkaDescribeGroupsActor::ParseGroupMetadata(const NKqp::TEvKqp::TEvQueryResponse& response) {
     NYdb::TResultSetParser parser_group(response.Record.GetResponse().GetYdbResults(0));
-    TString groupId;
     while (parser_group.TryNextRow()) {
-        groupId = parser_group.ColumnParser("consumer_group").GetUtf8().c_str();
+        TString groupId = parser_group.ColumnParser("consumer_group").GetUtf8().c_str();
         ui64 state = parser_group.ColumnParser("state").GetUint64();
         TString protocolType = parser_group.ColumnParser("protocol_type").GetUtf8().c_str();
         TString protocolData = parser_group.ColumnParser("protocol").GetOptionalUtf8().value_or("").c_str();
-        GroupIdToDescription[groupId].ProtocolData = protocolData;
-        GroupIdToDescription[groupId].GroupId = groupId;
-        GroupIdToDescription[groupId].ProtocolType = protocolType;
-        GroupIdToDescription[groupId].GroupState = NKafka::numbersToStatesMapping.at(state);
+        auto& describedGroup = GroupIdToDescription[groupId];
+        describedGroup.ProtocolData = protocolData;
+        describedGroup.GroupId = groupId;
+        describedGroup.ProtocolType = protocolType;
+        describedGroup.GroupState = NKafka::numbersToStatesMapping.at(state);
     }
+}
 
+void TKafkaDescribeGroupsActor::ParseMembersMetadata(const NKqp::TEvKqp::TEvQueryResponse& response) {
     NYdb::TResultSetParser parser_members(response.Record.GetResponse().GetYdbResults(1));
     while (parser_members.TryNextRow()) {
         TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember groupMember;
-        groupId = parser_members.ColumnParser("consumer_group").GetUtf8().c_str();
+        TString groupId = parser_members.ColumnParser("consumer_group").GetUtf8().c_str();
         TString memberId = parser_members.ColumnParser("member_id").GetUtf8().c_str();
         TString groupInstanceId = parser_members.ColumnParser("instance_id").GetOptionalUtf8().value_or("").c_str();
 
@@ -180,28 +166,27 @@ void TKafkaDescribeGroupsActor::ParseGroupDescriptionMetadata(const NKqp::TEvKqp
         groupMember.MemberId = memberId;
         groupMember.MemberAssignmentStr = parser_members.ColumnParser("assignment").GetOptionalString().value_or("");
         groupMember.MemberAssignment = TString(groupMember.MemberAssignmentStr);
-        NKafka::TWorkerState workerState;
-        groupMember.MemberMetadata = "";
 
-        if (protoStr.empty() || workerState.ParseFromString(protoStr)) {
-            const auto& protocols = workerState.protocols();
-            TString protocol = *GroupIdToDescription[groupId].ProtocolData;
-            for (const auto& p : protocols) {
-                if (p.protocol_name() == protocol) {
-                    groupMember.MemberMetadata = p.metadata();
-                    break;
-                }
-            }
-        }
-        GroupIdToDescription[groupId].Members.push_back(std::move(groupMember));
-        GroupIdToDescription[groupId].ErrorCode = EKafkaErrors::NONE_ERROR;
+        auto& describedGroup = GroupIdToDescription[groupId];
+        FillInMemberMetadata(describedGroup, groupMember, protoStr);
+
+        describedGroup.Members.push_back(std::move(groupMember));
+        describedGroup.ErrorCode = EKafkaErrors::NONE_ERROR;
     }
 }
 
-NYdb::TParams TKafkaDescribeGroupsActor::BuildSelectParams(const TString& groupId) {
+NYdb::TParams TKafkaDescribeGroupsActor::BuildSelectParams() {
     NYdb::TParamsBuilder params;
     params.AddParam("$Database").Utf8(DatabasePath).Build();
-    params.AddParam("$GroupId").Utf8(groupId).Build();
+    auto& groupIds = params.AddParam("$GroupIds").BeginList();
+
+    KAFKA_LOG_D(TStringBuilder() << "Groups count: " << DescribeGroupsRequestData->Groups.size());
+
+    for (auto& groupId: DescribeGroupsRequestData->Groups) {
+        groupIds.AddListItem().Utf8(*groupId);
+    }
+    groupIds.EndList().Build();
+
     return params.Build();
 }
 
@@ -222,19 +207,44 @@ TString TKafkaDescribeGroupsActor::GetYqlWithTableNames(const TString& templateS
 }
 
 std::shared_ptr<TDescribeGroupsResponseData> TKafkaDescribeGroupsActor::BuildResponse() {
+    for (auto& groupId : DescribeGroupsRequestData->Groups) {
+        GroupIdToDescription[*groupId].ErrorCode = EKafkaErrors::GROUP_ID_NOT_FOUND;
+    }
     TDescribeGroupsResponseData describeGroupsResponse;
     for (auto& groupIdToDescription : GroupIdToDescription) {
-        TString groupId = groupIdToDescription.first;
+        std::optional<TString> groupId = groupIdToDescription.first;
+        if (!groupIdToDescription.second.Members.empty()) {
+            groupIdToDescription.second.ErrorCode = EKafkaErrors::NONE_ERROR;
+        }
+        // if this group doesn't exist, we must put the its name to the GroupId field directly
+        // or it will be empty otherwise
+        groupIdToDescription.second.GroupId = groupId;
         describeGroupsResponse.Groups.push_back(std::move(groupIdToDescription.second));
     }
     return std::make_shared<TDescribeGroupsResponseData>(std::move(describeGroupsResponse));
-};
+}
+
+void TKafkaDescribeGroupsActor::SendToKqpDescribeGroupsMetadataRequest(const TActorContext& ctx) {
+    if (DescribeGroupsRequestData->Groups.size() == 0) {
+        auto response = BuildResponse();
+        Send(Context->ConnectionId,
+            new TEvKafka::TEvResponse(CorrelationId,
+                                response,
+                                EKafkaErrors::NONE_ERROR));
+        Die(ctx);
+    }
+    PendingResponses++;
+    ++KqpCookie;
+    Kqp->SendYqlRequest(GetYqlWithTableNames(SELECT_GROUPS_DESCRIPTION),
+                                    BuildSelectParams(),
+                                    KqpCookie,
+                                    ctx,
+                                    false);
+}
 
 void TKafkaDescribeGroupsActor::SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage = std::nullopt) {
     for (auto& groupId : DescribeGroupsRequestData->Groups) {
-        if (groupId.has_value()) {
-            GroupIdToDescription[*groupId].ErrorCode = errorCode;
-        }
+        GroupIdToDescription[*groupId].ErrorCode = errorCode;
     }
     if (errorMessage.has_value()) {
         KAFKA_LOG_W("Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
@@ -246,17 +256,9 @@ void TKafkaDescribeGroupsActor::SendFailResponse(EKafkaErrors errorCode, const s
         new TEvKafka::TEvResponse(CorrelationId, BuildResponse(), errorCode));
 }
 
-TMaybe<TString> TKafkaDescribeGroupsActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+TMaybe<TString> TKafkaDescribeGroupsActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
     TStringBuilder builder = TStringBuilder() << "Recieved error on request to KQP. ErrorCode: " << ev->Get()->Record.GetYdbStatus();
-    if (KqpCookieToGroupId.find(ev->Cookie) == KqpCookieToGroupId.end()) {
-        return builder << "Unexpected cookie met in TEvQueryResponse. Cookie met: " << ev->Cookie << ".";
-    } else if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SCHEME_ERROR) {
-        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
-        KAFKA_LOG_D("Created ConsumerGroupsMeta table.");
-        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
-        KAFKA_LOG_D("Created ConsumerMembersMeta table.");
-        return builder << "Unexpected YDB status in TEvQueryResponse. Expected YDB SUCCESS status, Actual: " << ev->Get()->Record.GetYdbStatus();
-    } else if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+    if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         return builder << "Unexpected YDB status in TEvQueryResponse. Expected YDB SUCCESS status, Actual: " << ev->Get()->Record.GetYdbStatus();
     } else {
         return {};

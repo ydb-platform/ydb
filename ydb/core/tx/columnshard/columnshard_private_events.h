@@ -128,7 +128,6 @@ struct TEvPrivate {
     class TEvAskColumnData: public NActors::TEventLocal<TEvAskColumnData, NColumnShard::TEvPrivate::EEv::EvAskColumnData> {
     private:
         using TCallback = NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>;
-        using TContext = NKikimr::NGeneralCache::NSource::TFetchingContext<NOlap::NGeneralCache::TColumnDataCachePolicy>;
         using TRequestsByColumn = THashMap<NOlap::NBlobOperations::EConsumer, THashMap<ui32, std::vector<NOlap::TPortionAddress>>>;
         YDB_READONLY_DEF(TRequestsByColumn, Requests);
         YDB_READONLY_DEF(std::shared_ptr<TCallback>, Callback);

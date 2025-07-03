@@ -180,7 +180,7 @@ public:
     }
 
     void SetIgnoreToVersion(const ui64 version) const {
-        AFL_VERIFY(!IgnoreToVersion->Val())("already", IgnoreToVersion->Val());
+        AFL_VERIFY(!IgnoreToVersion->Val() || IgnoreToVersion->Val() == version)("already", IgnoreToVersion->Val())("version", version);
         *IgnoreToVersion = version;
     }
 

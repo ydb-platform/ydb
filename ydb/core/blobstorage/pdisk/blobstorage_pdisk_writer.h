@@ -37,18 +37,34 @@ private:
     };
     class TBlockDeviceWrite : public TBlockDeviceAction {
     public:
-        TBuffer::TPtr Buffer;
+        class TReleaseWriteAction {
+        public:
+            TActorSystem* ActorSystem;
+            TReleaseWriteAction() = delete;
+            TReleaseWriteAction(TActorSystem* actorSystem);
+            void operator()(TBuffer *buffer) const;
+        };
+        TReleaseWriteAction Deleter;
+        std::unique_ptr<TBuffer, TReleaseWriteAction> Buffer;
         ui64 StartOffset;
         ui64 DirtyFrom;
         ui64 DirtyTo;
         NWilson::TTraceId TraceId;
-        TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr&& buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId);
+        TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr&& buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId, TActorSystem* actorSystem);
         virtual void DoCall(IBlockDevice &BlockDevice) override;
     };
     class TBlockDeviceFlush : public TBlockDeviceAction {
     public:
-        TCompletionAction *CompletionAction;
-        TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction *CompletionAction);
+        class TReleaseFlushAction {
+        public:
+            TActorSystem* ActorSystem;
+            TReleaseFlushAction() = delete;
+            TReleaseFlushAction(TActorSystem* actorSystem);
+            void operator()(TCompletionAction *action) const;
+        };
+        TReleaseFlushAction Deleter;
+        std::unique_ptr<TCompletionAction, TReleaseFlushAction> Completion;
+        TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction* Completion, TActorSystem* actorSystem);
         virtual void DoCall(IBlockDevice &BlockDevice) override;
     };
 protected:

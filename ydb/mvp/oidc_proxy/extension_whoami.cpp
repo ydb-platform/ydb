@@ -22,20 +22,20 @@ void TExtensionWhoamiWorker::Bootstrap() {
 
     NYdbGrpc::TCallMeta meta;
     SetHeader(meta, "authorization", AuthHeader);
-    meta.Timeout = TDuration::MilliSeconds(Settings.EnrichmentProcessTimeoutMs);
+    meta.Timeout = Settings.RequestWithEnrichmentTimeout;
 
     connection->DoRequest(request, std::move(responseCb), &nebius::iam::v1::ProfileService::Stub::AsyncGet, meta);
     Become(&TExtensionWhoamiWorker::StateWork);
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvGetProfileResponse::TPtr event) {
-    BLOG_D("Whoami Extention Info: OK");
+    BLOG_D("Whoami Extension Info: OK");
     IamResponse = std::move(event);
     ApplyIfReady();
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
-    BLOG_D("Whoami Extention Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
+    BLOG_D("Whoami Extension Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
     IamError = std::move(event);
     ApplyIfReady();
 }
@@ -94,7 +94,7 @@ void TExtensionWhoamiWorker::ApplyIfReady() {
     if (!Context) {
         return;
     }
-    if (IamResponse.has_value() || IamError.has_value() || Timeout) {
+    if (IamResponse.has_value() || IamError.has_value()) {
         ApplyExtension();
     }
 }
@@ -114,6 +114,9 @@ void TExtensionWhoamiWorker::ApplyExtension() {
         }
     } else {
         TString& error = params->ResponseError;
+        if (!error) {
+            error = "Can not process request to protected resource";
+        }
         BLOG_D("Incoming client error for protected resource: " << error);
         SetExtendedError(errorJson, "Ydb", "ClientError", error);
     }
@@ -156,7 +159,7 @@ void TExtensionWhoamiWorker::ApplyExtension() {
 }
 
 void TExtensionWhoamiWorker::ContinueAndPassAway() {
-    Continue();
+    Context->Continue();
     PassAway();
 }
 

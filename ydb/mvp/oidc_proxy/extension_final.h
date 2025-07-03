@@ -4,10 +4,14 @@
 
 namespace NMVP::NOIDC {
 
-class TExtensionFinal : public TExtension, public TExtensionWorker {
+class TExtensionFinal : public IExtension {
+private:
+    const TOpenIdConnectSettings Settings;
+    TIntrusivePtr<TExtensionContext> Context;
+
 public:
     TExtensionFinal(const TOpenIdConnectSettings& settings)
-        : TExtensionWorker(settings)
+        : Settings(settings)
     {}
     void Execute(TIntrusivePtr<TExtensionContext> ctx) override;
 

@@ -6,22 +6,22 @@
 
 namespace NMVP::NOIDC {
 
-class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoamiWorker>, public TExtensionWorker {
-private:
-    using TBase = TExtension;
+class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoamiWorker> {
+    using TBase = IExtension;
     using TProfileService = nebius::iam::v1::ProfileService;
 
-protected:
     const TString AuthHeader;
-    bool Timeout = false;
+
+    const TOpenIdConnectSettings Settings;
+    TIntrusivePtr<TExtensionContext> Context;
 
     std::optional<TEvPrivate::TEvGetProfileResponse::TPtr> IamResponse;
     std::optional<TEvPrivate::TEvErrorResponse::TPtr> IamError;
 
 public:
     TExtensionWhoamiWorker(const TOpenIdConnectSettings& settings, const TString& authHeader)
-        : TExtensionWorker(settings)
-        , AuthHeader(authHeader)
+        : AuthHeader(authHeader)
+        , Settings(settings)
     {}
     void Bootstrap();
     void Handle(TEvPrivate::TEvExtensionRequest::TPtr event);
@@ -44,7 +44,7 @@ private:
     void ContinueAndPassAway();
 };
 
-class TExtensionWhoami : public TExtension {
+class TExtensionWhoami : public IExtension {
 private:
     TActorId WhoamiHandlerId;
 

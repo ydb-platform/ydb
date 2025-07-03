@@ -26,7 +26,7 @@ private:
     bool NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const;
     void AddExtensionWhoami();
     void AddExtensionFinal();
-    void AddExtension(std::unique_ptr<TExtension> ext);
+    void AddExtension(std::unique_ptr<IExtension> ext);
 };
 
 } // NMVP::NOIDC

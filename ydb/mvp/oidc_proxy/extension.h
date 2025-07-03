@@ -12,7 +12,7 @@
 
 namespace NMVP::NOIDC {
 
-class TExtension;
+class IExtension;
 
 struct TProxiedResponseParams {
     NHttp::THttpIncomingRequestPtr Request;
@@ -25,35 +25,24 @@ struct TProxiedResponseParams {
     THolder<NHttp::THeadersBuilder> HeadersOverride;
 };
 
-struct TExtensionsSteps: public TQueue<std::unique_ptr<TExtension>> {
-    std::unique_ptr<TExtension> Next();
+struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
+    std::unique_ptr<IExtension> Next();
 };
 
 struct TExtensionContext : public TThrRefBase {
     TActorId Sender;
     TExtensionsSteps Steps;
     THolder<TProxiedResponseParams> Params;
-};
-
-class TExtension {
-public:
-    virtual ~TExtension() = default;
-    virtual void Execute(TIntrusivePtr<TExtensionContext> ctx) = 0;
-};
-
-class TExtensionWorker {
-protected:
-    const TOpenIdConnectSettings Settings;
-    TIntrusivePtr<TExtensionContext> Context;
 
     void Reply(NHttp::THttpOutgoingResponsePtr httpResponse);
     void Reply();
     void Continue();
+};
 
+class IExtension {
 public:
-    TExtensionWorker(const TOpenIdConnectSettings& settings)
-        : Settings(settings)
-    {}
+    virtual ~IExtension() = default;
+    virtual void Execute(TIntrusivePtr<TExtensionContext> ctx) = 0;
 };
 
 } // NMVP::NOIDC

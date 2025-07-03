@@ -3684,7 +3684,7 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
         TabletCounters->Cumulative()[NHive::COUNTER_SUGGESTED_SCALE_DOWN].Increment(1);
     }
 
-    Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateBalanceCounters());
+    Schedule(GetBalanceCountersRefreshFrequency(), new TEvPrivate::TEvUpdateBalanceCounters());
 }
 
 void THive::MakeScaleRecommendation() {

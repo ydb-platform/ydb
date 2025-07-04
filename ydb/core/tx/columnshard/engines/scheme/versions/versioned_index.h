@@ -44,7 +44,7 @@ public:
         AFL_VERIFY(IgnoreSchemaVersionTo.emplace(from, to).second);
     }
 
-    std::optional<ui64> ExtractIgnoreSchemaVersionFor(const ui64 from) {
+    std::optional<ui64> ExtractIgnoreSchemaVersionFor(const ui64 from) const {
         auto it = IgnoreSchemaVersionTo.find(from);
         if (it == IgnoreSchemaVersionTo.end()) {
             return std::nullopt;

@@ -722,11 +722,10 @@ void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation
 }
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
     const auto& request = ev->Get()->Record;
+    auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
+
     auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
-        auto* pResponse = evResponse->Record.AddLocations();
-        pResponse->SetPartitionId(partitionId);
         if (PipesRequested.contains(tabletId)) {
             return false;
         }
@@ -735,36 +734,48 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
             GetPipeClient(tabletId, ctx);
             return false;
         }
+
+        auto* pResponse = evResponse->Record.AddLocations();
+        pResponse->SetPartitionId(partitionId);
         pResponse->SetNodeId(iter->second.NodeId.GetRef());
         pResponse->SetGeneration(iter->second.Generation.GetRef());
 
-        PQ_LOG_D("addPartitionToResponse tabletId " << tabletId << ", partitionId " << partitionId
+        PQ_LOG_D("The partition location was added to response: TabletId " << tabletId << ", PartitionId " << partitionId
                 << ", NodeId " << pResponse->GetNodeId() << ", Generation " << pResponse->GetGeneration());
+
         return true;
     };
-    auto sendResponse = [&](bool status) {
-        evResponse->Record.SetStatus(status);
-        ctx.Send(ev->Sender, evResponse);
+
+    auto sendError = [&]() {
+        auto response = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
+        response->Record.SetStatus(false);
+        ctx.Send(ev->Sender, response.release());
     };
-    bool ok = true;
+
     if (request.PartitionsSize() == 0) {
         if (!PipesRequested.empty() || TabletPipes.size() < TabletsInfo.size()) {
             // Do not have all pipes connected.
-            return sendResponse(false);
+            return sendError();
         }
         for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
-            ok = addPartitionToResponse(partitionId, partitionInfo.TabletId) && ok;
+            if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
+                return sendError();
+            }
         }
     } else {
         for (const auto& partitionInRequest : request.GetPartitions()) {
             auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
             if (partitionInfoIter == PartitionsInfo.end()) {
-                return sendResponse(false);
+                return sendError();
             }
-            ok = addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId) && ok;
+            if (!addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId)) {
+                return sendError();
+            }
         }
     }
-    return sendResponse(ok);
+
+    evResponse->Record.SetStatus(true);
+    ctx.Send(ev->Sender, evResponse.release());
 }
 
 

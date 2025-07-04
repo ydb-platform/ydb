@@ -19,7 +19,6 @@
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
 #include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/scheduler_actor.h>
 #include <ydb/library/actors/core/scheduler_basic.h>

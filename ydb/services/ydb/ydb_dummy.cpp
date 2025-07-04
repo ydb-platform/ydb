@@ -6,6 +6,7 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
 

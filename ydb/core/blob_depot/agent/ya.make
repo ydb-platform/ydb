@@ -26,6 +26,7 @@ LIBRARY()
         storage_get.cpp
         storage_get_block.cpp
         storage_block.cpp
+        storage_check_integrity.cpp
         storage_discover.cpp
         storage_range.cpp
         storage_collect_garbage.cpp

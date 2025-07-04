@@ -1,3 +1,4 @@
+#include "combinatory/variator.h"
 #include "helpers/get_value.h"
 #include "helpers/local.h"
 #include "helpers/query_executor.h"
@@ -99,6 +100,160 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         csController->WaitCompactions(TDuration::Seconds(5));
     }
 
+    TString scriptSimplificationWithWrite = R"(
+        STOP_SCHEMAS_CLEANUP
+        ------
+        FAST_PORTIONS_CLEANUP
+        ------
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1$$);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20, "portions_live_duration" : "1s", "portions_size_limit" : 40000000, "portions_count_available" : 1},
+                             {"class_name" : "Zero", "expected_blobs_size" : 4000000}]}`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1) VALUES (1u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col2 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (2u, 2u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col3 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES (3u, 3u, 3u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4) VALUES (4u, 4u, 4u, 4u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col5 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4, Col5) VALUES (5u, 5u, 5u, 5u, 5u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col3
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5) VALUES (6u, 6u, 6u, 6u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col7 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5, Col7) VALUES (7u, 7u, 7u, 7u, 7u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col8 Uint32
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col4, Col5, Col7, Col8) VALUES (8u, 8u, 8u, 8u, 8u, 8u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col2
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col4, Col5, Col7, Col8) VALUES (9u, 9u, 9u, 9u, 9u)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col9 Uint32
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: true
+        ------
+        RESTART_TABLETS
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: false
+        ------
+        READ: SELECT Col1, Col4, Col5, Col7, Col8 FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;#;#;#;#];[2u;#;#;#;#];[3u;#;#;#;#];[4u;[4u];#;#;#];[5u;[5u];[5u];#;#];[6u;[6u];[6u];#;#];[7u;[7u];[7u];[7u];#];[8u;[8u];[8u];[8u];[8u]];[9u;[9u];[9u];[9u];[9u]]]
+        ------
+        DATA:
+        DELETE FROM `/Root/ColumnTable`
+        ------
+        ONE_COMPACTION:
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: true
+        ------
+        RESTART_TABLETS
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: false
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(SimplificationWithWrite, scriptSimplificationWithWrite) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
+    TString scriptSimplificationEmptyTable = R"(
+        STOP_SCHEMAS_CLEANUP
+        ------
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1$$);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col2 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col3 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col5 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col3
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col7 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col8 Uint32
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` DROP COLUMN Col2
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col9 Uint32
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: true
+        ------
+        RESTART_TABLETS
+        ------
+        ONE_SCHEMAS_CLEANUP:
+        EXPECTED: false
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(SimplificationEmptyTable, scriptSimplificationEmptyTable) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
     Y_UNIT_TEST(TierDraftsGCWithRestart) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(1000000);
@@ -135,7 +290,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         {
             const auto startInstant = TMonotonic::Now();
             AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)
-                ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+            ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
             while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() &&
                    TMonotonic::Now() - startInstant < TDuration::Seconds(200)) {
                 for (auto&& i : csController->GetShardActualIds()) {

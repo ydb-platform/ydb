@@ -99,6 +99,7 @@ class TArrowData;
 class TEvWriteCommitPrimaryTransactionOperator;
 class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
+class TTxCleanupSchemasWithnoData;
 class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
@@ -160,6 +161,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
+    friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
     friend class TTxProposeTransaction;
@@ -570,6 +572,7 @@ private:
     bool SetupTtl();
     void SetupCleanupPortions();
     void SetupCleanupTables();
+    void SetupCleanupSchemas();
     void SetupGC();
 
     void UpdateIndexCounters();

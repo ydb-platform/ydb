@@ -452,6 +452,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SharingSessionsManager->Start(*this);
 
     SetupCompaction({});
+    SetupCleanupSchemas();
     SetupCleanupPortions();
     SetupCleanupTables();
     SetupMetadata();
@@ -778,7 +779,7 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
     if (BackgroundController.IsCleanupPortionsActive()) {
-        ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
+        ACFL_DEBUG("background", "cleanup_portions")("skip_reason", "in_progress");
         return;
     }
 
@@ -805,7 +806,7 @@ void TColumnShard::SetupCleanupPortions() {
 void TColumnShard::SetupCleanupTables() {
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupTablesActive()) {
-        ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
+        ACFL_DEBUG("background", "cleanup_tables")("skip_reason", "in_progress");
         return;
     }
 
@@ -828,6 +829,111 @@ void TColumnShard::SetupCleanupTables() {
     changes->Start(*this);
 
     Send(SelfId(), ev.release());
+}
+
+class TTxCleanupSchemasWithnoData: public TTransactionBase<TColumnShard> {
+private:
+    std::vector<TTablesManager::TSchemasChain> ChainsToClean;
+    std::set<TTablesManager::TSchemaAddress> AddressesToFetch;
+    THashMap<TTablesManager::TSchemaAddress, TSchemaPreset::TSchemaPresetVersionInfo> Fetched;
+
+    TSchemaPreset::TSchemaPresetVersionInfo ExtractFetched(const TTablesManager::TSchemaAddress addr) {
+        auto it = Fetched.find(addr);
+        AFL_VERIFY(it != Fetched.end());
+        auto result = std::move(it->second);
+        Fetched.erase(it);
+        return result;
+    }
+
+public:
+    TTxCleanupSchemasWithnoData(TColumnShard* self, std::vector<TTablesManager::TSchemasChain>&& chainsToClean)
+        : TBase(self)
+        , ChainsToClean(std::move(chainsToClean)) {
+        for (auto&& i : ChainsToClean) {
+            i.FillAddressesTo(AddressesToFetch);
+        }
+    }
+
+    virtual bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        NIceDb::TNiceDb db(txc.DB);
+        using SchemaPresetVersionInfo = NColumnShard::Schema::SchemaPresetVersionInfo;
+        std::vector<TTablesManager::TSchemaAddress> toRemove;
+        for (auto&& i : AddressesToFetch) {
+            auto rowset =
+                db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Select();
+            if (rowset.IsReady()) {
+                toRemove.emplace_back(i);
+                AFL_VERIFY(!rowset.EndOfSet())("address", i.DebugString());
+                TSchemaPreset::TSchemaPresetVersionInfo info;
+                Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+                Fetched.emplace(i, std::move(info));
+            }
+        }
+        for (auto&& i : toRemove) {
+            AddressesToFetch.erase(i);
+        }
+        if (AddressesToFetch.size()) {
+            return false;
+        }
+        for (auto&& i : ChainsToClean) {
+            std::vector<TSchemaPreset::TSchemaPresetVersionInfo> schemasProto;
+            for (auto&& del : i.GetToRemove()) {
+                schemasProto.emplace_back(ExtractFetched(del));
+            }
+            schemasProto.emplace_back(ExtractFetched(i.GetFinish()));
+            auto finalProto = NOlap::TSchemaDiffView::Merge(schemasProto);
+            AFL_VERIFY(schemasProto.back().HasSchema());
+            *finalProto.MutableSchema() = schemasProto.back().GetSchema();
+
+            ui32 idx = 0;
+            for (auto&& del : i.GetToRemove()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "useless_schema_removed")("address", del.DebugString())(
+                    "is_diff", schemasProto[idx].HasDiff())("version",
+                    schemasProto[idx].HasDiff() ? schemasProto[idx].GetDiff().GetVersion() : schemasProto[idx].GetSchema().GetVersion());
+                ++idx;
+                db.Table<SchemaPresetVersionInfo>()
+                    .Key(del.GetPresetId(), del.GetSnapshot().GetPlanStep(), del.GetSnapshot().GetTxId())
+                    .Delete();
+            }
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_updated")("address", i.GetFinish().DebugString())(
+                "new_schema", finalProto.DebugString());
+            db.Table<SchemaPresetVersionInfo>()
+                .Key(i.GetFinish().GetPresetId(), i.GetFinish().GetSnapshot().GetPlanStep(), i.GetFinish().GetSnapshot().GetTxId())
+                .Update(NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(finalProto.SerializeAsString()));
+        }
+        return true;
+    }
+    virtual void Complete(const TActorContext& /*ctx*/) override {
+        NYDBTest::TControllers::GetColumnShardController()->OnCleanupSchemasFinished();
+        Self->BackgroundController.OnCleanupSchemasFinished();
+    }
+    TTxType GetTxType() const override {
+        return TXTYPE_CLEANUP_SCHEMAS;
+    }
+};
+
+void TColumnShard::SetupCleanupSchemas() {
+    if (!NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::CleanupSchemas)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_schemas_cleanup")("reason", "disabled");
+        return;
+    }
+    if (!AppDataVerified().FeatureFlags.GetEnableCSSchemasCollapsing()) {
+        return;
+    }
+    Counters.GetCSCounters().OnSetupCleanup();
+    if (BackgroundController.IsCleanupSchemasActive()) {
+        ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "in_progress");
+        return;
+    }
+
+    std::vector<TTablesManager::TSchemasChain> chainsToClean = TablesManager.ExtractSchemasToClean();
+    if (chainsToClean.empty()) {
+        ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "no_changes");
+        return;
+    }
+
+    BackgroundController.OnCleanupSchemasStarted();
+    Execute(new TTxCleanupSchemasWithnoData(this, std::move(chainsToClean)), NActors::TActivationContext::AsActorContext());
 }
 
 void TColumnShard::SetupGC() {

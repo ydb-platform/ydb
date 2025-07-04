@@ -68,7 +68,8 @@ public:
         Compaction,
         TTL,
         Cleanup,
-        GC
+        GC,
+        CleanupSchemas
     };
     YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
@@ -163,6 +164,9 @@ public:
             return AppDataVerified().ColumnShardConfig;
         }
         return DefaultConfig;
+    }
+
+    virtual void OnCleanupSchemasFinished() {
     }
 
     const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(

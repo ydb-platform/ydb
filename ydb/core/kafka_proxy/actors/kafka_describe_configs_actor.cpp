@@ -157,6 +157,7 @@ void AddConfigEntry(
     configEntry.Name = name;
     configEntry.Value = value;
     configEntry.ConfigType = (ui32)type;
+    configEntry.ConfigSource = ConfigSource::DEFAULT_CONFIG; // TOPIC_CONFIG
     descrResult.Configs.emplace_back(std::move(configEntry));
 }
 

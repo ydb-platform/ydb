@@ -298,16 +298,17 @@ void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
     ParseAssignments(ev, assignments);
     TString groupId = CookieToGroupId[cookieFromEvent];
     ui32 groupIndex = GroupIdToIndex[groupId];
+    auto& groupRequest = Message->Groups[groupIndex];
     for (const auto& consumerAssignment : assignments) {
         for (auto& partitionAssignment : consumerAssignment.AssignedPartitions) {
             NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topic;
             topic.Name = partitionAssignment.Topic;
             topic.PartitionIndexes = partitionAssignment.Partitions;
-            Message->Groups[groupIndex].Topics.push_back(topic);
+            groupRequest.Topics.push_back(topic);
         }
     }
-    for (const auto& topic: Message->Groups[groupIndex].Topics) {
-        ExtractPartitions(Message->Groups[groupIndex].GroupId.value(), topic);
+    for (const auto& topic: groupRequest.Topics) {
+        ExtractPartitions(groupRequest.GroupId.value(), topic);
     }
     KAFKA_LOG_D("Extracted partitions" << WaitingGroupTopicsInfo);
     if (WaitingGroupTopicsInfo == 0) {

@@ -25,6 +25,11 @@ class TPortionInfo;
 class TPortionInfoConstructor;
 }   // namespace NKikimr::NOlap
 
+namespace NKikimr::NOlap::NGeneralCache {
+class TColumnDataCachePolicy;
+class TGlobalColumnAddress;
+}   // namespace NKikimr::NOlap::NGeneralCache
+
 namespace NKikimr::NColumnShard {
 
 struct TEvPrivate {
@@ -68,6 +73,7 @@ struct TEvPrivate {
         EvRemovePortionDataAccessor,
         EvClearCacheDataAccessor,
         EvMetadataAccessorsInfo,
+        EvAskColumnData,
 
         EvRequestFilter,
         EvFilterConstructionResult,
@@ -116,6 +122,21 @@ struct TEvPrivate {
         explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback)
             : Portions(std::move(portions))
             , Callback(callback) {
+        }
+    };
+
+    class TEvAskColumnData: public NActors::TEventLocal<TEvAskColumnData, NColumnShard::TEvPrivate::EEv::EvAskColumnData> {
+    private:
+        using TCallback = NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>;
+        using TRequestsByColumn = THashMap<NOlap::NBlobOperations::EConsumer, THashMap<ui32, std::vector<NOlap::TPortionAddress>>>;
+        YDB_READONLY_DEF(TRequestsByColumn, Requests);
+        YDB_READONLY_DEF(std::shared_ptr<TCallback>, Callback);
+
+    public:
+        explicit TEvAskColumnData(TRequestsByColumn&& requests, const std::shared_ptr<TCallback>& callback)
+            : Requests(std::move(requests))
+            , Callback(callback)
+        {
         }
     };
 

@@ -7,15 +7,17 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
+#include <util/string/builder.h>
+
 using namespace NActors;
 
 struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnectTest::TEvTestSerialization, 123> {};
 
 Y_UNIT_TEST_SUITE(RdmaSerialization) {
 
-    TEvTestSerialization* MakeTestEvent(NInterconnect::NRdma::IMemPool* memPool = nullptr) {
+    TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool = nullptr) {
         auto ev = new TEvTestSerialization();
-        ev->Record.SetBlobID(123);
+        ev->Record.SetBlobID(blobId);
         ev->Record.SetBuffer("hello world");
         if (!memPool) {
             ev->AddPayload(TRope(TString(5000, 'X')));
@@ -40,7 +42,7 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
         p.UseExternalDataChannel = true;
         TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, nullptr);
 
-        auto ev = MakeTestEvent();
+        auto ev = MakeTestEvent(123);
         auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
 
         channel.Push(*evHandle, pool);
@@ -118,7 +120,7 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
         TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
 
-        auto* ev = MakeTestEvent(memPool.get());
+        auto* ev = MakeTestEvent(123, memPool.get());
         auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
         channel.Push(*evHandle, pool);
 
@@ -238,23 +240,22 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
             Become(&TReceiveActor::StateFunc);
         }
         void Handle(TEvTestSerialization::TPtr& ev) {
-            Cerr << "Received event" << Endl;
             Check(ev);
-            Received = true;
+            ReceivedEvents++;
         }
         STRICT_STFUNC(StateFunc,
             hFunc(TEvTestSerialization, Handle);
         )
     public:
-        std::atomic<bool> Received = false;
+        ui32 ReceivedEvents = 0;
     private:
         std::function<void(TEvTestSerialization::TPtr)> Check;
     };
 
-    Y_UNIT_TEST(Send) {
+    Y_UNIT_TEST(SendRdma) {
         TTestICCluster cluster(2);
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(memPool.get());
+        auto* ev = MakeTestEvent(123, memPool.get());
 
         auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
             Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
@@ -272,9 +273,118 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
         cluster.RegisterActor(senderPtr, 2);
 
         Sleep(TDuration::MilliSeconds(1000));
-        // while (!recieverPtr->Received) {
-        //     Sleep(TDuration::MilliSeconds(100));
-        // }
+        UNIT_ASSERT_VALUES_EQUAL(recieverPtr->ReceivedEvents, 1);
+    }
+
+    Y_UNIT_TEST(SendMix) {
+        TTestICCluster cluster(2);
+
+        ui32 index = 0;
+        auto recieverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
+            Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), index++);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
+        });
+        const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+        Sleep(TDuration::MilliSeconds(1000));
+
+        const ui32 numEvents = 10;
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        for (ui32 i = 0; i < numEvents; ++i) {
+            const bool isRdma = i % 2 == 0;
+            auto* ev = MakeTestEvent(i, isRdma ? memPool.get() : nullptr);
+            auto senderPtr = new TSendActor(receiver, ev);
+            cluster.RegisterActor(senderPtr, 2);
+        }
+
+        Sleep(TDuration::MilliSeconds(1000));
+        UNIT_ASSERT_VALUES_EQUAL(recieverPtr->ReceivedEvents, numEvents);
+    }
+
+    struct TEventsForTest {
+        std::vector<TEvTestSerialization*> Events;
+        std::unordered_map<ui64, std::function<void(TEvTestSerialization*)>> Checks;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
+
+        TEventsForTest(ui32 numEvents)
+            : MemPool(NInterconnect::NRdma::CreateDummyMemPool())
+        {
+            Generate(numEvents, MemPool.get());
+        }
+
+        void Generate(ui32 numEvents, NInterconnect::NRdma::IMemPool* memPool) {
+            for (ui32 i = 0; i < numEvents; ++i) {
+                const bool isInline = i % 3 == 0;
+                const bool isXdc = i % 3 == 1;
+                const bool isRdma = i % 3 == 2;
+                const ui32 numPayloads = i % 5 + (isXdc || isRdma);
+
+                auto ev = new TEvTestSerialization();
+                ev->Record.SetBlobID(i);
+                ev->Record.SetBuffer(TStringBuilder{} << "hello world " << i);
+                for (ui32 j = 0; j < numPayloads; ++j) {
+                    if (isInline) {
+                        ev->AddPayload(TRope(TString(10 + j, j + i)));
+                    } else if (isXdc) {
+                        ev->AddPayload(TRope(TString(5000 + j, j + i)));
+                    } else if (isRdma) {
+                        auto buf = memPool->AllocRcBuf(5000 + j);
+                        std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000 + j, j + i);
+                        ev->AddPayload(TRope(std::move(buf)));
+                        UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), 5000 + j);
+                    }
+                }
+
+                if (isXdc || isRdma) {
+                    UNIT_ASSERT(ev->AllowExternalDataChannel());
+                }
+
+                Events.push_back(ev);
+
+                Checks.emplace(i, [i, numPayloads, isInline](TEvTestSerialization* ev) {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Record.GetBlobID(), i);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Record.GetBuffer(), TStringBuilder{} << "hello world " << i);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().size(), numPayloads);
+                    for (ui32 j = 0; j < numPayloads; ++j) {
+                        ui32 payloadSize = isInline ? 10 + j : 5000 + j;
+                        UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload()[j].GetSize(), payloadSize);
+                        UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload()[j].ConvertToString(), TString(payloadSize, j + i));
+                    }
+                });
+
+            }
+
+            std::random_shuffle(Events.begin(), Events.end());
+        }
+    };
+
+    Y_UNIT_TEST(SendMixBig) {
+        TTestICCluster cluster(2);
+        TEventsForTest events(1000);
+
+        auto recieverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {
+            ui64 blobId = ev->Get()->Record.GetBlobID();
+            auto checkIt = events.Checks.find(blobId);
+            UNIT_ASSERT(checkIt != events.Checks.end());
+            checkIt->second(ev->Get());
+            events.Checks.erase(checkIt);
+        });
+        const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+        Sleep(TDuration::MilliSeconds(1000));
+
+        for (auto* ev : events.Events) {
+            auto senderPtr = new TSendActor(receiver, ev);
+            cluster.RegisterActor(senderPtr, 2);
+        }
+
+        for (ui32 attempt = 0; attempt < 10 && !events.Checks.empty(); ++attempt) {
+            Sleep(TDuration::MilliSeconds(1000));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(events.Checks.size(), 0);
     }
 
 }

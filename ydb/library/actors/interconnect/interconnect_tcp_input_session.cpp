@@ -717,7 +717,8 @@ namespace NActors {
     void TInputSessionTCP::ProcessEvents(TReceiveContext::TPerChannelContext& context) {
         for (; !context.PendingEvents.empty(); context.PendingEvents.pop_front()) {
             auto& pendingEvent = context.PendingEvents.front();
-            if (!pendingEvent.EventData || pendingEvent.XdcSizeLeft || pendingEvent.RdmaSizeLeft) {
+            size_t rdmaSizeLeft = pendingEvent.RdmaSizeLeft ? pendingEvent.RdmaSizeLeft->load() : 0;
+            if (!pendingEvent.EventData || pendingEvent.XdcSizeLeft || rdmaSizeLeft) {
                 break; // event is not ready yet
             }
             auto& descr = *pendingEvent.EventData;

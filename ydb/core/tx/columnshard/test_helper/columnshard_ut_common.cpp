@@ -467,7 +467,7 @@ NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& 
         columns[*it].KeyOrder = idx++;
         pkIds.push_back(*it);
     }
-    return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
+    return NOlap::TIndexInfo::BuildDefault(1, NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
 }
 
 NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {

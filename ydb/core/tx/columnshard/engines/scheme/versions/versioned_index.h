@@ -39,6 +39,19 @@ private:
     ISnapshotSchema::TPtr SchemeForActualization;
 
 public:
+    void EraseVersion(const ui64 version) {
+        auto it = SnapshotByVersion.find(version);
+        AFL_VERIFY(it != SnapshotByVersion.end());
+        auto itSnapshot = Snapshots.find(it->second->GetSnapshot());
+        AFL_VERIFY(itSnapshot != Snapshots.end());
+        Snapshots.erase(itSnapshot);
+        SnapshotByVersion.erase(it);
+    }
+
+    const std::map<ui64, ISnapshotSchema::TPtr>& GetSnapshotByVersions() const {
+        return SnapshotByVersion;
+    }
+
     bool IsEqualTo(const TVersionedIndex& vIndex) {
         return LastSchemaVersion == vIndex.LastSchemaVersion && SnapshotByVersion.size() == vIndex.SnapshotByVersion.size() &&
                ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeVersionForActualization == vIndex.SchemeVersionForActualization;
@@ -78,19 +91,19 @@ public:
 
     TString DebugString() const {
         TStringBuilder sb;
-        for (auto&& i : Snapshots) {
+        for (auto&& i : SnapshotByVersion) {
             sb << i.first << ":" << i.second->DebugString() << ";";
         }
         return sb;
     }
 
     ISnapshotSchema::TPtr GetSchemaOptional(const ui64 version) const {
-        auto it = SnapshotByVersion.find(version);
+        auto it = SnapshotByVersion.lower_bound(version);
         return it == SnapshotByVersion.end() ? nullptr : it->second;
     }
 
     ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
-        auto it = SnapshotByVersion.find(version);
+        auto it = SnapshotByVersion.lower_bound(version);
         Y_ABORT_UNLESS(it != SnapshotByVersion.end(), "no schema for version %lu", version);
         return it->second;
     }
@@ -117,12 +130,12 @@ public:
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {
-        Y_ABORT_UNLESS(!Snapshots.empty());
-        return Snapshots.rbegin()->second;
+        Y_ABORT_UNLESS(!SnapshotByVersion.empty());
+        return SnapshotByVersion.rbegin()->second;
     }
 
     bool IsEmpty() const {
-        return Snapshots.empty();
+        return SnapshotByVersion.empty();
     }
 
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const noexcept {

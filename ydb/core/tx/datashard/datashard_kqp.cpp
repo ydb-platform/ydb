@@ -791,7 +791,7 @@ void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TS
     }
 }
 
-void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, const TRowVersion& writeVersion, IDataShardUserDb& userDb) {
+void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, IDataShardUserDb& userDb) {
     if (kqpLocks == nullptr) {
         return;
     }
@@ -811,7 +811,7 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto txId = lockProto.GetLockId();
 
-            userDb.CommitChanges(tableId, txId, writeVersion);
+            userDb.CommitChanges(tableId, txId);
         }
     } else {
         KqpEraseLocks(origin, kqpLocks, sysLocks);

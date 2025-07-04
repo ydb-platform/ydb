@@ -14,7 +14,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const bool hasQuorum = StorageConfig && HasQuorum(*StorageConfig);
+        const bool hasQuorum = StorageConfig && HasConnectedNodeQuorum(*StorageConfig);
 
         if (RootState == ERootState::INITIAL && hasQuorum) { // becoming root node
             Y_ABORT_UNLESS(!Scepter);
@@ -26,22 +26,23 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::BecomeRoot() {
-        auto makeAllBoundNodes = [&] {
-            TStringStream s;
-            const char *sep = "{";
-            for (const auto& [nodeId, _] : AllBoundNodes) {
-                s << std::exchange(sep, " ") << nodeId;
-            }
-            s << '}';
-            return s.Str();
-        };
-        STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection", (Scepter, Scepter->Id),
-            (AllBoundNodes, makeAllBoundNodes()));
-        RootState = ERootState::IN_PROGRESS;
+        RootState = ERootState::IN_PROGRESS; // collecting configs at least
+
+        WorkingSyncersByNode.clear();
+        WorkingSyncers.clear();
+        SyncerArrangeInFlight = false;
+        SyncerArrangePending = false;
+
+        // start collecting configs from all bound nodes
+        STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection", (Scepter, Scepter->Id));
+        ConfigsCollected = false;
         TEvScatter task;
         task.SetTaskId(RandomNumber<ui64>());
         task.MutableCollectConfigs();
         IssueScatterTask(TActorId(), std::move(task));
+
+        // start collecting syncers state if needed
+        IssueQuerySyncers();
 
         // establish connection to console tablet (if we have means to do it)
         Y_ABORT_UNLESS(!ConsolePipeId);
@@ -50,6 +51,12 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
         DisconnectFromConsole();
+    }
+
+    void TDistributedConfigKeeper::CheckIfDone() {
+        if (RootState == ERootState::IN_PROGRESS && ConfigsCollected) {
+            RootState = ERootState::RELAX;
+        }
     }
 
     void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
@@ -90,12 +97,16 @@ namespace NKikimr::NStorage {
                 return ProcessCollectConfigs(res->MutableCollectConfigs());
 
             case TEvGather::kProposeStorageConfig:
-                if (auto error = ProcessProposeStorageConfig(res->MutableProposeStorageConfig())) {
+                if (auto error = ProcessProposeStorageConfig(res->MutableProposeStorageConfig(), {} /* all piles */)) {
                     SwitchToError(*error);
                 } else {
-                    RootState = ERootState::RELAX;
+                    ConfigsCollected = true;
+                    CheckIfDone();
                 }
                 return;
+
+            case TEvGather::kManageSyncers:
+                return ProcessManageSyncers(res->MutableManageSyncers());
 
             case TEvGather::RESPONSE_NOT_SET:
                 return SwitchToError("response not set");
@@ -104,13 +115,14 @@ namespace NKikimr::NStorage {
         SwitchToError("incorrect response from peer");
     }
 
-    bool TDistributedConfigKeeper::HasQuorum(const NKikimrBlobStorage::TStorageConfig& config) const {
+    bool TDistributedConfigKeeper::HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+            const THashSet<TBridgePileId>& specificBridgePileIds) const {
         auto generateConnected = [&](auto&& callback) {
             for (const auto& [nodeId, node] : AllBoundNodes) {
                 callback(nodeId);
             }
         };
-        return HasNodeQuorum(config, generateConnected);
+        return HasNodeQuorum(config, generateConnected, GetMandatoryPileIds(config, specificBridgePileIds));
     }
 
     void TDistributedConfigKeeper::ProcessCollectConfigs(TEvGather::TCollectConfigs *res) {
@@ -118,7 +130,8 @@ namespace NKikimr::NStorage {
         std::visit(TOverloaded{
             [&](std::monostate&) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC61, "ProcessCollectConfigs: monostate");
-                RootState = ERootState::RELAX;
+                ConfigsCollected = true;
+                CheckIfDone();
             },
             [&](TString& error) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC63, "ProcessCollectConfigs: error", (Error, error));
@@ -434,7 +447,8 @@ namespace NKikimr::NStorage {
         return {};
     }
 
-    std::optional<TString> TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res) {
+    std::optional<TString> TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res,
+            const THashSet<TBridgePileId>& specificBridgePileIds) {
         auto generateSuccessful = [&](auto&& callback) {
             for (const auto& item : res->GetStatus()) {
                 const TNodeIdentifier node(item.GetNodeId());
@@ -446,7 +460,7 @@ namespace NKikimr::NStorage {
 
         if (!CurrentProposedStorageConfig) {
             return "no currently proposed StorageConfig";
-        } else if (HasConfigQuorum(*CurrentProposedStorageConfig, generateSuccessful, *Cfg)) {
+        } else if (HasConfigQuorum(*CurrentProposedStorageConfig, generateSuccessful, *Cfg, true, specificBridgePileIds)) {
             // apply configuration and spread it
             ApplyStorageConfig(*CurrentProposedStorageConfig);
             FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);
@@ -540,6 +554,10 @@ namespace NKikimr::NStorage {
                 }
                 break;
 
+            case TEvScatter::kManageSyncers:
+                PrepareScatterTask(cookie, task, task.Request.GetManageSyncers());
+                break;
+
             case TEvScatter::REQUEST_NOT_SET:
                 break;
         }
@@ -553,6 +571,10 @@ namespace NKikimr::NStorage {
 
             case TEvScatter::kProposeStorageConfig:
                 Perform(task.Response.MutableProposeStorageConfig(), task.Request.GetProposeStorageConfig(), task);
+                break;
+
+            case TEvScatter::kManageSyncers:
+                Perform(task.Response.MutableManageSyncers(), task.Request.GetManageSyncers(), task);
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:

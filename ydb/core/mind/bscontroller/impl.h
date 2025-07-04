@@ -11,6 +11,8 @@
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
 #include <util/generic/hash_multi_map.h>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
@@ -1639,6 +1641,9 @@ private:
     class TConsoleInteraction;
     std::unique_ptr<TConsoleInteraction> ConsoleInteraction;
 
+    TBackoffTimer InvokeOnRootTimer{10, 3000};
+    std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot> InvokeOnRootCmd;
+
     struct TEvPrivate {
         enum EEv {
             EvUpdateSystemViews = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -1850,6 +1855,7 @@ private:
     bool HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const;
     void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
     void ApplyStorageConfig(bool ignoreDistconf = false);
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
 

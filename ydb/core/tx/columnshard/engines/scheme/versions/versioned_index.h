@@ -37,11 +37,26 @@ private:
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
     ISnapshotSchema::TPtr SchemeForActualization;
+    mutable THashMap<ui64, ui64> IgnoreSchemaVersionTo;
 
     TVersionedIndex(const TVersionedIndex& base) = default;
     TVersionedIndex& operator=(const TVersionedIndex&) = delete;
 
 public:
+    void AddIgnoreSchemaVersionTo(const ui64 from, const ui64 to) {
+        AFL_VERIFY(IgnoreSchemaVersionTo.emplace(from, to).second);
+    }
+
+    std::optional<ui64> ExtractIgnoreSchemaVersionFor(const ui64 from) {
+        auto it = IgnoreSchemaVersionTo.find(from);
+        if (it == IgnoreSchemaVersionTo.end()) {
+            return std::nullopt;
+        }
+        const ui64 result = it->second;
+        IgnoreSchemaVersionTo.erase(it);
+        return result;
+    }
+
     TVersionedIndex() = default;
     std::shared_ptr<const TVersionedIndex> DeepCopy() {
         return std::shared_ptr<const TVersionedIndex>(new TVersionedIndex(*this));

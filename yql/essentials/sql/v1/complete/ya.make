@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    configuration.cpp
+    name_mapping.cpp
     sql_complete.cpp
 )
 

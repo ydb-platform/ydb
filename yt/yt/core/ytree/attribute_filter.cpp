@@ -199,22 +199,22 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
 TAttributeFilter::TAttributeFilter(std::vector<IAttributeDictionary::TKey> keys, std::vector<TYPath> paths)
     : Keys_(std::move(keys))
     , Paths_(std::move(paths))
-    , Universal(false)
+    , Universal_(false)
 { }
 
 TAttributeFilter::TAttributeFilter(std::initializer_list<TString> keys)
     : Keys_({keys.begin(), keys.end()})
-    , Universal(false)
+    , Universal_(false)
 { }
 
 TAttributeFilter::TAttributeFilter(const std::vector<TString>& keys)
     : Keys_({keys.begin(), keys.end()})
-    , Universal(false)
+    , Universal_(false)
 { }
 
 TAttributeFilter::operator bool() const
 {
-    return !Universal;
+    return !Universal_;
 }
 
 void TAttributeFilter::ValidateKeysOnly(TStringBuf context) const
@@ -226,18 +226,7 @@ void TAttributeFilter::ValidateKeysOnly(TStringBuf context) const
 
 bool TAttributeFilter::IsEmpty() const
 {
-    return !Universal && Keys_.empty() && Paths_.empty();
-}
-
-void TAttributeFilter::AddKey(IAttributeDictionary::TKey key)
-{
-    Universal = false;
-    Keys_.emplace_back(std::move(key));
-}
-
-void TAttributeFilter::ReserveKeys(size_t capacity)
-{
-    Keys_.reserve(capacity);
+    return !Universal_ && Keys_.empty() && Paths_.empty();
 }
 
 bool TAttributeFilter::AdmitsKeySlow(TStringBuf key) const

@@ -37,14 +37,14 @@ private:
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
     ISnapshotSchema::TPtr SchemeForActualization;
-    mutable THashMap<ui64, ui64> IgnoreSchemaVersionTo;
+    THashMap<ui64, ui64> IgnoreSchemaVersionTo;
 
 public:
     void AddIgnoreSchemaVersionTo(const ui64 from, const ui64 to) {
         AFL_VERIFY(IgnoreSchemaVersionTo.emplace(from, to).second);
     }
 
-    std::optional<ui64> ExtractIgnoreSchemaVersionFor(const ui64 from) const {
+    std::optional<ui64> ExtractIgnoreSchemaVersionFor(const ui64 from) {
         auto it = IgnoreSchemaVersionTo.find(from);
         if (it == IgnoreSchemaVersionTo.end()) {
             return std::nullopt;

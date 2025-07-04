@@ -221,7 +221,8 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
     THashMap<TChunkAddress, TString> result;
 
     for (auto&& record : GetRecordsVerified()) {
-        std::optional<TString> blob = blobs.GetBlobRangeOptional(PortionInfo->GetColumnStorageId(record.GetColumnId(), indexInfo), RestoreBlobRange(record.GetBlobRange()));
+        std::optional<TString> blob =
+            blobs.ExtractOptional(PortionInfo->GetColumnStorageId(record.GetColumnId(), indexInfo), RestoreBlobRange(record.GetBlobRange()));
         if (blob) {
             result.emplace(record.GetAddress(), std::move(*blob));
         }
@@ -231,7 +232,8 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
         if (!record.HasBlobRange()) {
             continue;
         }
-        std::optional<TString> blob = blobs.GetBlobRangeOptional(indexInfo.GetIndexStorageId(record.GetIndexId()), RestoreBlobRange(record.GetBlobRangeVerified()));
+        std::optional<TString> blob =
+            blobs.ExtractOptional(indexInfo.GetIndexStorageId(record.GetIndexId()), RestoreBlobRange(record.GetBlobRangeVerified()));
         if (blob) {
             result.emplace(record.GetAddress(), std::move(*blob));
         }

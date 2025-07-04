@@ -28,3 +28,4 @@
 * [TPC-DS](../../../workload-tpcds.md) - [TPC-DS бенчмарк](https://www.tpc.org/tpcds/).
 * [Topic](../../../workload-topic.md) - Topic нагрузка.
 * [Transfer](../../../workload-transfer.md) - Transfer нагрузка.
+* [Query](../../../workload-query.md) - Пользовательская нагрузка.

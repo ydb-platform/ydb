@@ -146,12 +146,7 @@ std::vector<TResultItem> SearchItems(
         ORDER BY score
         {3}
         LIMIT {4};
-    )",
-        tableName,
-        viewIndex,
-        strategy,
-        sortOrder,
-        limit);
+    )", tableName, viewIndex, strategy, sortOrder, limit);
 
     NYdb::TParamsBuilder paramsBuilder;
     auto& valueBuilder = paramsBuilder.AddParam("$embedding");

@@ -4829,6 +4829,20 @@
             "uri": "https://{canondata_backend}/1775319/f1fa0c55bf9f13cff57cf1c990c2330caed8eb1b/resource.tar.gz#test_sql2yql.test_params-param_type_mismatch_fail_/sql.yql"
         }
     ],
+    "test_sql2yql.test[params-pg]": [
+        {
+            "checksum": "ed60e4aee8d62dbdac794b4f06546f61",
+            "size": 1373,
+            "uri": "https://{canondata_backend}/1689644/e59269d256e08fb6e6a66f5594df314b1e5a5a5c/resource.tar.gz#test_sql2yql.test_params-pg_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[params-pg_missing]": [
+        {
+            "checksum": "36b1d79d2d772d04f502c948eb4b223d",
+            "size": 1018,
+            "uri": "https://{canondata_backend}/1689644/e59269d256e08fb6e6a66f5594df314b1e5a5a5c/resource.tar.gz#test_sql2yql.test_params-pg_missing_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[params-primitives]": [
         {
             "checksum": "08cb19394a5f09dddaa87867ae8a7981",
@@ -11105,6 +11119,16 @@
     "test_sql_format.test[params-param_type_mismatch_fail]": [
         {
             "uri": "file://test_sql_format.test_params-param_type_mismatch_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[params-pg]": [
+        {
+            "uri": "file://test_sql_format.test_params-pg_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[params-pg_missing]": [
+        {
+            "uri": "file://test_sql_format.test_params-pg_missing_/formatted.sql"
         }
     ],
     "test_sql_format.test[params-primitives]": [

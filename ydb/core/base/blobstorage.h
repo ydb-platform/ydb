@@ -1368,21 +1368,20 @@ struct TEvBlobStorage {
 
         enum EPlacementStatus {
             PS_OK = 1,                      // blob parts are placed according to fail model
-            PS_BLOB_IS_LOST = 2,            // blob is lost/unrecoverable
+            PS_REPLICATION_IN_PROGRESS = 2, // there are missing parts but status may become OK after replication
             PS_UNKNOWN = 3,                 // status is unknown because of missing disks or network problems
-            PS_REPLICATION_IN_PROGRESS = 4, // there are missing parts but status may become OK after replication
-            PS_BLOB_IS_RECOVERABLE = 5,     // blob parts are definitely placed incorrectly or there are missing parts
-                                            // but blob may be recovered
+            PS_BLOB_IS_RECOVERABLE = 4,     // blob parts are definitely placed incorrectly or there are missing parts but blob may be recovered
+            PS_BLOB_IS_LOST = 5,            // blob is lost/unrecoverable
         };
         EPlacementStatus PlacementStatus;
 
         enum EDataStatus {
             DS_OK = 1,      // all data parts contain valid data
-            DS_ERROR = 2,   // some parts definitely contain invalid data
-            DS_UNKNOWN = 3, // status is unknown because of missing disks or network problems
+            DS_UNKNOWN = 2, // status is unknown because of missing disks or network problems
+            DS_ERROR = 3,   // some parts definitely contain invalid data
         };
         EDataStatus DataStatus;
-        TString DataErrorInfo; // textual info about errors in blob data
+        TString DataInfo; // textual info about checks in blob data
 
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
@@ -1398,7 +1397,7 @@ struct TEvBlobStorage {
                 << " ErrorReason# " << ErrorReason
                 << " PlacementStatus# " << (int)PlacementStatus
                 << " DataStatus# " << (int)DataStatus
-                << " DataErrorInfo# " << DataErrorInfo
+                << " DataInfo# " << DataInfo
                 << " }";
             return str.Str();
         }

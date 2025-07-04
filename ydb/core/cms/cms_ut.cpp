@@ -2355,6 +2355,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     }
 
     void ChangePileMap(TEvInterconnect::TEvNodesInfo::TPtr* ev) {
+        if (!(*ev)->Get()->PileMap) return;
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
         auto pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(*(*ev)->Get()->PileMap);
         for (const auto& node : *nodes) {

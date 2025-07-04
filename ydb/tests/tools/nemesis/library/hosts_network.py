@@ -2,6 +2,10 @@
 import random
 import time
 import collections
+import signal
+import sys
+import logging
+import atexit
 
 from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 from ydb.tests.tools.nemesis.library import base
@@ -67,6 +71,9 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
         
         # Планировщик для времени восстановления сервисов
         self._restore_schedule = Schedule.from_tuple_or_int(stop_duration)
+        
+        # Регистрируемся в глобальном реестре DC nemesis
+        _dc_nemesis_registry.register(self)
 
     def next_schedule(self):
         """
@@ -223,6 +230,9 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._stop_time = None
         self._current_dc = None
         
+        # Разрегистрируемся из глобального реестра при нормальном завершении
+        _dc_nemesis_registry.unregister(self)
+        
         self.on_success_extract_fault()
         return True
 
@@ -277,6 +287,9 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
         
         # Планировщик для времени восстановления маршрутов
         self._restore_schedule = Schedule.from_tuple_or_int(block_duration)
+        
+        # Регистрируемся в глобальном реестре DC nemesis
+        _dc_nemesis_registry.register(self)
 
     def next_schedule(self):
         """
@@ -475,6 +488,9 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._block_time = None
         self._current_dc = None
         
+        # Разрегистрируемся из глобального реестра при нормальном завершении
+        _dc_nemesis_registry.unregister(self)
+        
         self.on_success_extract_fault()
         return True
 
@@ -516,6 +532,9 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
             "--ports 2135,2136,8765,19001,31000:32000 -j REJECT"
         )
         self._restore_ports_cmd = "sudo ip6tables --flush YDB_FW"
+        
+        # Регистрируемся в глобальном реестре DC nemesis
+        _dc_nemesis_registry.register(self)
 
     def next_schedule(self):
         """
@@ -709,6 +728,9 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
         self._block_time = None
         self._current_dc = None
         
+        # Разрегистрируемся из глобального реестра при нормальном завершении
+        _dc_nemesis_registry.unregister(self)
+        
         self.on_success_extract_fault()
         return True
 
@@ -726,3 +748,101 @@ def datacenter_nemesis_list(cluster):
         DataCenterRouteUnreachableNemesis(cluster),
         DataCenterIptablesBlockPortsNemesis(cluster)
     ] 
+
+
+# Глобальный реестр для отслеживания активных DC nemesis
+class DataCenterNemesisRegistry:
+    def __init__(self):
+        self._active_nemesis = {}
+        self._logger = logging.getLogger("DataCenterNemesisRegistry")
+        self._signal_handlers_installed = False
+    
+    def register(self, nemesis):
+        """Регистрирует DC nemesis в глобальном реестре"""
+        nemesis_id = id(nemesis)
+        self._active_nemesis[nemesis_id] = nemesis
+        self._logger.info("Registered DC nemesis: %s (ID: %d)", nemesis.__class__.__name__, nemesis_id)
+        
+        # Устанавливаем signal handlers только один раз
+        if not self._signal_handlers_installed:
+            self._install_signal_handlers()
+            self._signal_handlers_installed = True
+    
+    def unregister(self, nemesis):
+        """Удаляет DC nemesis из реестра"""
+        nemesis_id = id(nemesis)
+        if nemesis_id in self._active_nemesis:
+            del self._active_nemesis[nemesis_id]
+            self._logger.info("Unregistered DC nemesis: %s (ID: %d)", nemesis.__class__.__name__, nemesis_id)
+    
+    def _install_signal_handlers(self):
+        """Устанавливает обработчики сигналов"""
+        self._logger.info("Installing signal handlers for DC nemesis cleanup")
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        atexit.register(self._cleanup_all_nemesis)
+    
+    def _signal_handler(self, signum, frame):
+        """Обработчик сигналов SIGTERM/SIGINT"""
+        signal_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+        self._logger.warning("Received %s signal, cleaning up DC nemesis...", signal_name)
+        
+        try:
+            self._cleanup_all_nemesis()
+            self._logger.info("DC nemesis cleanup completed successfully")
+        except Exception as e:
+            self._logger.error("Error during DC nemesis cleanup: %s", str(e))
+        finally:
+            sys.exit(0)
+    
+    def _cleanup_all_nemesis(self):
+        """Очищает состояние всех зарегистрированных DC nemesis"""
+        if not self._active_nemesis:
+            self._logger.info("No active DC nemesis to cleanup")
+            return
+        
+        self._logger.info("Cleaning up %d active DC nemesis", len(self._active_nemesis))
+        
+        for nemesis_id, nemesis in list(self._active_nemesis.items()):
+            try:
+                self._cleanup_single_nemesis(nemesis)
+            except Exception as e:
+                self._logger.error("Failed to cleanup nemesis %s (ID: %d): %s", 
+                                 nemesis.__class__.__name__, nemesis_id, str(e))
+        
+        self._active_nemesis.clear()
+    
+    def _cleanup_single_nemesis(self, nemesis):
+        """Очищает состояние одного nemesis с подробным логированием"""
+        nemesis_name = nemesis.__class__.__name__
+        self._logger.info("Cleaning up %s...", nemesis_name)
+        
+        # Получаем текущее состояние nemesis
+        state_info = self._get_nemesis_state_info(nemesis)
+        self._logger.info("%s current state: %s", nemesis_name, state_info)
+        
+        # Вызываем extract_fault для восстановления
+        try:
+            result = nemesis.extract_fault()
+            if result:
+                self._logger.info("%s cleanup completed successfully", nemesis_name)
+            else:
+                self._logger.info("%s had no active faults to cleanup", nemesis_name)
+        except Exception as e:
+            self._logger.error("%s cleanup failed: %s", nemesis_name, str(e))
+            raise
+    
+    def _get_nemesis_state_info(self, nemesis):
+        """Получает информацию о текущем состоянии nemesis"""
+        if hasattr(nemesis, '_stopped_nodes') and nemesis._stopped_nodes:
+            return f"stopped_nodes={len(nemesis._stopped_nodes)}, current_dc={getattr(nemesis, '_current_dc', 'None')}"
+        elif hasattr(nemesis, '_blocked_routes') and nemesis._blocked_routes:
+            return f"blocked_routes={len(nemesis._blocked_routes)}, current_dc={getattr(nemesis, '_current_dc', 'None')}"
+        elif hasattr(nemesis, '_blocked_hosts') and nemesis._blocked_hosts:
+            return f"blocked_hosts={len(nemesis._blocked_hosts)}, current_dc={getattr(nemesis, '_current_dc', 'None')}"
+        else:
+            return "no_active_faults"
+
+
+# Глобальный экземпляр реестра
+_dc_nemesis_registry = DataCenterNemesisRegistry() 

@@ -17,6 +17,8 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeA
         return node;
     }
 
+    Y_UNUSED(typesCtx);
+
     auto rowType = node.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
 
     TVector<TCoArgument> args;
@@ -56,33 +58,14 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeA
             .ExplainPrompt(read.ExplainPrompt())
             .Done();
     } else if (auto maybeRead = node.Maybe<TKqpReadOlapTableRanges>()) {
-        auto read = maybeRead.Cast();
-
-        if (typesCtx.IsBlockEngineEnabled()) {
-            wideRead = Build<TCoToFlow>(ctx, node.Pos())
-                .Input<TCoWideFromBlocks>()
-                    .Input<TCoFromFlow>()
-                        .Input<TKqpBlockReadOlapTableRanges>()
-                            .Table(read.Table())
-                            .Ranges(read.Ranges())
-                            .Columns(read.Columns())
-                            .Settings(read.Settings())
-                            .ExplainPrompt(read.ExplainPrompt())
-                            .Process(read.Process())
-                            .Build()
-                        .Build()
+        wideRead = Build<TCoToFlow>(ctx, node.Pos())
+            .Input<TCoWideFromBlocks>()
+                .Input<TCoFromFlow>()
+                    .Input(ctx.RenameNode(*node.Raw(), TKqpBlockReadOlapTableRanges::CallableName()))
                     .Build()
-                .Done();
-        } else {
-            wideRead = Build<TKqpWideReadOlapTableRanges>(ctx, node.Pos())
-                .Table(read.Table())
-                .Ranges(read.Ranges())
-                .Columns(read.Columns())
-                .Settings(read.Settings())
-                .ExplainPrompt(read.ExplainPrompt())
-                .Process(read.Process())
-                .Done();
-        }
+                .Build()
+            .Done()
+            .Ptr();
     } else {
         YQL_ENSURE(false, "Unknown read table operation: " << node.Ptr()->Content());
     }

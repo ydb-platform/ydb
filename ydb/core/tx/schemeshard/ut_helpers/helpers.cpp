@@ -1924,11 +1924,11 @@ namespace NSchemeShardUT_Private {
     }
 
     void TestBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-                              const TString &src, const TString &name, TString column,
+                              const TString &src, const TString &name, TVector<TString> columns,
                               Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, {}
         }, expectedStatus);
     }
 

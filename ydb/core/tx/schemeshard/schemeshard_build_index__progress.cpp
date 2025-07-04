@@ -567,7 +567,7 @@ private:
         ev->Record.AddColumns(buildInfo.IndexColumns.back());
 
         auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        ev->Record.SetSeed(ui64(1337));
         LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -687,7 +687,7 @@ private:
         };
 
         auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        ev->Record.SetSeed(ui64(1337));
         LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -732,7 +732,7 @@ private:
         }
 
         auto shardId = CommonFillScanRequest<false>(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        ev->Record.SetSeed(ui64(1337));
         LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));

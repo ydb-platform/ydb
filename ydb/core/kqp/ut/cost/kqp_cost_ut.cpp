@@ -347,19 +347,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             }
         }
 
-        auto debugPringIndex = [&](const TString& name) {
-            auto query = Q_(Sprintf(R"(
-                SELECT * FROM `/Root/Vectors/%s`
-            )", name.c_str()));
-
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
-        
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-
-            Cout << name << ":" << Endl;
-            Cout << NYdb::FormatResultSetYson(result.GetResultSet(0)) << Endl;
-        };
-
         { // 4a. ADD INDEX ON (Embedding) --- vector_idx
             auto result = session.ExecuteSchemeQuery(R"(
                 ALTER TABLE `/Root/Vectors`
@@ -370,9 +357,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )").GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-
-            debugPringIndex("vector_idx/indexImplLevelTable");
-            debugPringIndex("vector_idx/indexImplPostingTable");
         }
 
         { // 4b. ADD INDEX ON (Embedding) COVER (Embedding, Value) --- vector_idx_covered
@@ -385,9 +369,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )").GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-
-            debugPringIndex("vector_idx/indexImplLevelTable");
-            debugPringIndex("vector_idx/indexImplPostingTable");
         }
 
         { // 4c. ADD INDEX ON (Embedding) --- vector_idx_prefixed
@@ -400,11 +381,20 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )").GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-
-            debugPringIndex("vector_idx/indexImplPrefixTable");
-            debugPringIndex("vector_idx/indexImplLevelTable");
-            debugPringIndex("vector_idx/indexImplPostingTable");
         }
+
+        auto debugPringTable = [&](const TString& name) {
+            auto query = Q_(Sprintf(R"(
+                SELECT * FROM `%s`
+            )", name.c_str()));
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
+        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            Cerr << name << ":" << Endl;
+            Cerr << NYdb::FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        };
 
         auto checkSelect = [&](auto query, TMap<TString, ui64> expectedReadsByTable) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
@@ -414,10 +404,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             TMap<TString, ui64> readsByTable;
-            for(const auto& queryPhase : stats.query_phases()) {
+            for (const auto& queryPhase : stats.query_phases()) {
                 for(const auto& tableAccess: queryPhase.table_access()) {
                     readsByTable[tableAccess.name()] += tableAccess.reads().rows();
                 }
+            }
+
+            for (const auto& kvp : readsByTable) {
+                debugPringTable(kvp.first);
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(expectedReadsByTable, readsByTable, query);
@@ -474,8 +468,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 32},
-                {"/Root/Vectors", 32}
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 24},
+                {"/Root/Vectors", 24}
             });
         }
 
@@ -509,7 +503,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 32},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 24},
             });
         }
 
@@ -523,8 +517,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
                 {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 2}, // about rows / 10 / clusters^levels = 100 / 10 / 2^3 = 1.25
-                {"/Root/Vectors", 2} // same as posting
+                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 4}, // about rows / 10 / clusters^levels = 100 / 10 / 2^2 = 2.5
+                {"/Root/Vectors", 4} // same as posting
             });
         }
     }

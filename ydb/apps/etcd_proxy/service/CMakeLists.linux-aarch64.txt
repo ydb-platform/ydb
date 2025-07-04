@@ -39,8 +39,10 @@ target_link_libraries(apps-etcd_proxy-service PUBLIC
 
 target_sources(apps-etcd_proxy-service PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_base_init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_gate.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_grpc.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_lease.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_shared.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_watch.cpp
 )
@@ -66,15 +68,19 @@ target_link_libraries(apps-etcd_proxy-service.global PUBLIC
 )
 
 target_sources(apps-etcd_proxy-service.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/apps/etcd_proxy/service/2ec45ab2cd67b7f885cbc8b29d1a20ee.cpp
+  ${PROJECT_BINARY_DIR}/ydb/apps/etcd_proxy/service/1a7d02afaa604f1e97abeff27ebf6647.cpp
 )
 
 
 resources(apps-etcd_proxy-service.global
-  ${PROJECT_BINARY_DIR}/ydb/apps/etcd_proxy/service/2ec45ab2cd67b7f885cbc8b29d1a20ee.cpp
+  ${PROJECT_BINARY_DIR}/ydb/apps/etcd_proxy/service/1a7d02afaa604f1e97abeff27ebf6647.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/create.sql
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/leases.sql
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/revision.sql
   KEYS
   create.sql
+  leases.sql
+  revision.sql
   OPTS
 )

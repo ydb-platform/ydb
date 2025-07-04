@@ -336,5 +336,142 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());        
         }
     }
+
+    Y_UNIT_TEST(TestSnapshotIfInsertRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto upsertSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        
+        {
+            const TString query(Q1_(R"(
+                SELECT Ensure("ok", false, "error") FROM `/Root/KeyValue2` WHERE Key = "10u";
+
+                INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "test");
+            )"));
+
+            std::vector<std::unique_ptr<IEventHandle>> writes;
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (writes.empty() && ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    // Two read phases, so we need to 
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() != 0);
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
+                    writes.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return writes.size() > 0;
+            });
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(writes.size() > 0);
+
+            {
+                const TString upsertQuery(Q1_(R"(
+                    INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "other");
+                    INSERT INTO `/Root/KeyValue2` (Key, Value) VALUES ("10u", "other");
+                )"));
+
+                auto upsertResult = kikimr.RunCall([&]{
+                    auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                    return upsertSession.ExecuteDataQuery(upsertQuery, txc, execSettings).ExtractValueSync();
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL_C(upsertResult.GetStatus(), EStatus::SUCCESS, upsertResult.GetIssues().ToString());    
+            }
+
+
+            for(auto& ev: writes) {
+                runtime.Send(ev.release());
+            }
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());        
+        }
+    }
+
+    Y_UNIT_TEST(TestSecondaryIndexWithoutSnapshot) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto upsertSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        kikimr.RunCall([&]{ CreateSampleTablesWithIndex(session, false /* no need in table data */); return true; });
+        
+        {
+            const TString query(Q1_(R"(
+                INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "test");
+            )"));
+
+            bool hasWrite = false;
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    // Two read phases, so we need to 
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
+                    hasWrite = true;
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return hasWrite;
+            });
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+
+            
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(hasWrite);    
+        }
+    }
 }
 }

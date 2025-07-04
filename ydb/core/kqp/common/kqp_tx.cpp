@@ -174,6 +174,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool hasEffects = false;
     bool hasStreamLookup = false;
     bool hasSinkWrite = false;
+    bool hasSinkInsert = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         switch (tx.GetType()) {
@@ -192,6 +193,18 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
         for (const auto &stage : tx.GetStages()) {
             hasSinkWrite |= !stage.GetSinks().empty();
+
+            for (const auto &sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
+                    && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
+                {
+                    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));
+                    if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                        hasSinkInsert = true;
+                    }
+                }
+            }
 
             for (const auto &input : stage.GetInputs()) {
                 hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
@@ -229,6 +242,12 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
         // ReadOnly transaction here
     } else {
+        if (hasSinkInsert && readPhases > 0) {
+            // Insert operations create another read phases,
+            // so in presence of other reads we have to aquire snapshot.
+            // This is unique to INSERT operation, because it can fail.
+            return true;
+        }
         // We don't want snapshot when there are effects at the moment,
         // because it hurts performance when there are multiple single-shard
         // reads and a single distributed commit. Taking snapshot costs

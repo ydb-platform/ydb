@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
     test_disk.py
+    test_hosts_network.py
     test_tablet.py
 )
 

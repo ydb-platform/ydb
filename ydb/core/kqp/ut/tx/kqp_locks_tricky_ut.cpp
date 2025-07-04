@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         
         {
             const TString query(Q1_(R"(
-                INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "test");
+                INSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (10, 10, "test");
             )"));
 
             bool hasWrite = false;

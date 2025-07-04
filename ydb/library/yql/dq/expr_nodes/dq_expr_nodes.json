@@ -59,6 +59,11 @@
         ]
     },
     {
+        "Name": "TDqPhyBlockHashJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyBlockHashJoin"}
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}

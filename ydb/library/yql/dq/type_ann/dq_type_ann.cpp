@@ -581,7 +581,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 
     return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabels, *rightStructType,
         rightTableLabels, join.JoinType(), join.JoinKeys(), ctx, isMultiget);
-    }
+}
 
 } // unnamed
 
@@ -1206,6 +1206,64 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+    // DqBlockHashJoin callable has same structure as GraceJoinCore:
+    // leftInput, rightInput, joinType, leftKeys, rightKeys, leftRenames, rightRenames, leftKeyNames, rightKeyNames, flags
+    // But from kqp_mkql_compiler it comes with only 5 args: leftInput, rightInput, joinKind, leftKeys, rightKeys
+    
+    if (!EnsureArgsCount(*input, 5, ctx)) {
+        return TStatus::Error;
+    }
+
+    // Parse arguments - DqBlockHashJoin uses same structure as GraceJoin
+    auto leftInput = input->Child(0);
+    auto rightInput = input->Child(1);
+    auto joinType = input->Child(2);
+    auto leftKeys = input->Child(3);
+    auto rightKeys = input->Child(4);
+
+    if (!EnsureAtom(*joinType, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto joinKind = joinType->Content();
+    if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly" && joinKind != "Cross") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinType->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
+            << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
+        return TStatus::Error;
+    }
+
+    if (!EnsureTuple(*leftKeys, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTuple(*rightKeys, ctx)) {
+        return TStatus::Error;
+    }
+
+    // For DqBlockHashJoin from kqp_mkql_compiler, inputs are already runtime nodes
+    // So we expect them to have return type annotation built by compiler
+    if (!leftInput->GetTypeAnn()) {
+        ctx.AddError(TIssue(ctx.GetPosition(leftInput->Pos()), "Left input should have type annotation"));
+        return TStatus::Error;
+    }
+
+    if (!rightInput->GetTypeAnn()) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput->Pos()), "Right input should have type annotation"));
+        return TStatus::Error;
+    }
+
+    // Use the return type from node annotation (built by kqp_mkql_compiler)
+    if (!input->GetTypeAnn()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "DqBlockHashJoin should have return type annotation"));
+        return TStatus::Error;
+    }
+
+    // The type annotation should already be set by kqp_mkql_compiler
+    return TStatus::Ok;
+}
+
+
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -1216,6 +1274,82 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()),
                     TStringBuilder() << "At function: " << input->Content());
             });
+
+            // Handle DqBlockHashJoin callable
+            if (input->Content() == "DqBlockHashJoin") {
+                return AnnotateDqBlockHashJoin(input, ctx);
+            }
+
+            // Handle BlockHashJoin callable (from peephole)
+            if (input->Content() == "BlockHashJoin") {
+                // BlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
+                if (!EnsureArgsCount(*input, 5, ctx)) {
+                    return IGraphTransformer::TStatus(TStatus::Error);
+                }
+
+                if (!EnsureAtom(*input->Child(2), ctx)) {
+                    return IGraphTransformer::TStatus(TStatus::Error);
+                }
+                const auto joinKind = input->Child(2)->Content();
+                if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly" && joinKind != "Cross") {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
+                        << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
+                    return IGraphTransformer::TStatus(TStatus::Error);
+                }
+
+                TTypeAnnotationNode::TListType leftItemTypes;
+                if (!EnsureWideStreamBlockType(input->Head(), leftItemTypes, ctx)) {
+                    return IGraphTransformer::TStatus(TStatus::Error);
+                }
+                leftItemTypes.pop_back(); // Remove length column
+
+                TTypeAnnotationNode::TListType rightItemTypes;
+                if (!EnsureWideStreamBlockType(*input->Child(1), rightItemTypes, ctx)) {
+                    return IGraphTransformer::TStatus(TStatus::Error);
+                }
+                rightItemTypes.pop_back(); // Remove length column
+
+                if (!EnsureTupleOfAtoms(*input->Child(3), ctx)) {
+                    return IGraphTransformer::TStatus(TStatus::Error);
+                }
+                if (!EnsureTupleOfAtoms(*input->Child(4), ctx)) {
+                    return IGraphTransformer::TStatus(TStatus::Error);
+                }
+
+                if (input->Child(3)->ChildrenSize() != input->Child(4)->ChildrenSize()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Child(4)->Pos()), TStringBuilder() << "Mismatch of key column count"));
+                    return IGraphTransformer::TStatus(TStatus::Error);
+                }
+
+                // Build result types based on join semantics
+                std::vector<const TTypeAnnotationNode*> resultItems;
+                
+                // Add left side columns
+                for (auto itemType : leftItemTypes) {
+                    if (joinKind == "Right" && !itemType->IsOptionalOrNull()) {
+                        itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                    }
+                    resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+                }
+
+                // Add right side columns (except for semi/only joins)
+                if (joinKind != "LeftSemi" && joinKind != "LeftOnly") {
+                    for (auto itemType : rightItemTypes) {
+                        if (joinKind == "Left" && !itemType->IsOptionalOrNull()) {
+                            itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                        }
+                        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+                    }
+                }
+
+                // Add scalar length column at the end (required for wide block streams)
+                resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+                input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+                return IGraphTransformer::TStatus(TStatus::Ok);
+            }
+
+
 
             if (TDqStage::Match(input.Get())) {
                 return AnnotateDqStage(input, ctx);
@@ -1269,6 +1403,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             }
 
             if (TDqPhyGraceJoin::Match(input.Get())) {
+                return AnnotateDqMapOrDictJoin(input, ctx);
+            }
+
+            if (TDqPhyBlockHashJoin::Match(input.Get())) {
                 return AnnotateDqMapOrDictJoin(input, ctx);
             }
 

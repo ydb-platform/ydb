@@ -1317,10 +1317,15 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 
 }
 
-TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap) {
+TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
 
+    // Check if we should use block hash join
+//     if (useBlockHashJoin && joinType == "Inner"sv) {
+//         return DqBuildBlockHashJoin(join, ctx);
+//     }
+// 
     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();
 
@@ -1561,6 +1566,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     auto leftWideFlow = ExpandJoinInput(*leftStructType, leftInputArg.Ptr(), ctx);
     auto rightWideFlow = ExpandJoinInput(*rightStructType, rightInputArg.Ptr(), ctx);
 
+    // For block hash join, leave flows as-is - peephole will handle conversion
+
     const auto leftFullWidth = leftNames.size();
     const auto rightFullWidth = rightNames.size();
 
@@ -1580,55 +1587,70 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     switch (mode) {
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
-            hashJoin = ctx.Builder(join.Pos())
-                .Callable(callableName)
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        parent.Add(0, std::move(leftWideFlow));
-                        if (selfJoin == false) {
-                            parent.Add(1, std::move(rightWideFlow));
-                        }
-                        return parent;
-                    })
-                    .Add(shift, join.JoinType().Ptr())
-                    .List(shift + 1)
+            if (useBlockHashJoin) {
+                // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
+                // Pass the original structured inputs, not wide flows
+                hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
+                    .LeftInput(leftInputArg)
+                    .RightInput(rightInputArg)
+                    .LeftLabel(join.LeftLabel())
+                    .RightLabel(join.RightLabel())
+                    .JoinType(join.JoinType())
+                    .JoinKeys(join.JoinKeys())
+                    .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                    .RightJoinKeyNames(join.RightJoinKeyNames())
+                    .Done().Ptr();
+            } else {
+                hashJoin = ctx.Builder(join.Pos())
+                    .Callable(callableName)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < leftKeys.size(); ++i) {
-                                parent.Atom(i, ctx.GetIndexAsString(leftKeys[i]), TNodeFlags::Default);
+                            parent.Add(0, std::move(leftWideFlow));
+                            if (selfJoin == false) {
+                                parent.Add(1, std::move(rightWideFlow));
                             }
                             return parent;
                         })
+                        .Add(shift, join.JoinType().Ptr())
+                        .List(shift + 1)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0U; i < leftKeys.size(); ++i) {
+                                    parent.Atom(i, ctx.GetIndexAsString(leftKeys[i]), TNodeFlags::Default);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .List(shift + 2)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0U; i < rightKeys.size(); ++i) {
+                                    parent.Atom(i, ctx.GetIndexAsString(rightKeys[i]), TNodeFlags::Default);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .List(shift + 3)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0U; i < leftNames.size(); ++i) {
+                                    parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
+                                    parent.Atom(2*i + 1, ctx.GetIndexAsString(i), TNodeFlags::Default);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .List(shift + 4)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0U; i < rightNames.size(); ++i) {
+                                    parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
+                                    parent.Atom(2*i + 1, ctx.GetIndexAsString(leftNames.size() + i), TNodeFlags::Default);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .List(shift + 5).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                        .List(shift + 6).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
+                        .List(shift + 7).Add(std::move(flags)).Seal()
                     .Seal()
-                    .List(shift + 2)
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < rightKeys.size(); ++i) {
-                                parent.Atom(i, ctx.GetIndexAsString(rightKeys[i]), TNodeFlags::Default);
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                    .List(shift + 3)
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < leftNames.size(); ++i) {
-                                parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                                parent.Atom(2*i + 1, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                    .List(shift + 4)
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < rightNames.size(); ++i) {
-                                parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                                parent.Atom(2*i + 1, ctx.GetIndexAsString(leftNames.size() + i), TNodeFlags::Default);
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                    .List(shift + 5).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
-                    .List(shift + 6).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
-                    .List(shift + 7).Add(std::move(flags)).Seal()
-                .Seal()
-                .Build();
+                    .Build();
+            }
             break;
         case EHashJoinMode::Map:
             if (leftKind || joinType == "Inner"sv) {
@@ -1711,7 +1733,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                         for (ui32 i = 0U; i < rightNames.size(); ++i) {
                                             parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                                            parent.Atom(2*i + 1, ctx.GetIndexAsString(i + leftNames.size()), TNodeFlags::Default);
+                                            parent.Atom(2*i + 1, ctx.GetIndexAsString(i), TNodeFlags::Default);
                                         }
                                         return parent;
                                     })
@@ -1811,44 +1833,47 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             ythrow yexception() << "Invalid hash join mode: " << mode;
     }
 
-    std::vector<TString> fullColNames;
-    for (const auto& v: leftNames) {
-        if (leftTableName.empty()) {
-            fullColNames.emplace_back(v.first);
-        } else {
-            fullColNames.emplace_back(FullColumnName(leftTableName, v.first));
+    // For block hash join, peephole handles everything - don't apply NarrowMap
+    if (!useBlockHashJoin) {
+        std::vector<TString> fullColNames;
+        for (const auto& v: leftNames) {
+            if (leftTableName.empty()) {
+                fullColNames.emplace_back(v.first);
+            } else {
+                fullColNames.emplace_back(FullColumnName(leftTableName, v.first));
+            }
         }
-    }
 
-    for (const auto& v: rightNames ) {
-        if (rightTableName.empty()) {
-            fullColNames.emplace_back(v.first);
-        } else {
-            fullColNames.emplace_back(FullColumnName(rightTableName, v.first));
+        for (const auto& v: rightNames ) {
+            if (rightTableName.empty()) {
+                fullColNames.emplace_back(v.first);
+            } else {
+                fullColNames.emplace_back(FullColumnName(rightTableName, v.first));
+            }
         }
-    }
 
-    hashJoin = ctx.Builder(join.Pos())
-        .Callable("NarrowMap")
-            .Add(0, std::move(hashJoin))
-            .Lambda(1)
-                .Params("output", fullColNames.size())
-                .Callable("AsStruct")
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 i = 0U;
-                        for (const auto& colName : fullColNames) {
-                            parent.List(i)
-                                .Atom(0, colName)
-                                .Arg(1, "output", i)
-                            .Seal();
-                            i++;
-                        }
-                        return parent;
-                    })
+        hashJoin = ctx.Builder(join.Pos())
+            .Callable("NarrowMap")
+                .Add(0, std::move(hashJoin))
+                .Lambda(1)
+                    .Params("output", fullColNames.size())
+                    .Callable("AsStruct")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            ui32 i = 0U;
+                            for (const auto& colName : fullColNames) {
+                                parent.List(i)
+                                    .Atom(0, colName)
+                                    .Arg(1, "output", i)
+                                .Seal();
+                                i++;
+                            }
+                            return parent;
+                        })
+                    .Seal()
                 .Seal()
             .Seal()
-        .Seal()
-        .Build();
+            .Build();
+    }
 
     // this func add join to the stage and add connection to it. we do this instead of map connection to reduce data network interacting
     auto addJoinToStage =
@@ -1942,5 +1967,161 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             .Build()
         .Done();
 }
+
+// TExprBase DqBuildBlockHashJoin(const TDqJoin& join, TExprContext& ctx) {
+//     const auto joinType = join.JoinType().Value();
+//     YQL_ENSURE(joinType != "Cross"sv);
+//     YQL_ENSURE(joinType == "Inner"sv, "Only inner join is supported for block hash join");
+// 
+//     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
+//     auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();
+// 
+//     const auto leftStructType = GetSequenceItemType(leftIn, false, ctx)->Cast<TStructExprType>();
+//     const auto rightStructType = GetSequenceItemType(rightIn, false, ctx)->Cast<TStructExprType>();
+// 
+//     const auto& leftItems = leftStructType->GetItems();
+//     const auto& rightItems = rightStructType->GetItems();
+// 
+//     std::map<std::string_view, ui32> leftNames;
+//     for (ui32 i = 0; i < leftItems.size(); i++) {
+//         leftNames.emplace(leftItems[i]->GetName(), i);
+//     }
+// 
+//     std::map<std::string_view, ui32> rightNames;
+//     for (ui32 i = 0; i < rightItems.size(); i++) {
+//         rightNames.emplace(rightItems[i]->GetName(), i);
+//     }
+// 
+//     const auto [leftJoinKeys, rightJoinKeys] = GetJoinKeys(join, ctx);
+//     YQL_ENSURE(leftJoinKeys.size() == rightJoinKeys.size());
+// 
+//     std::vector<ui32> leftKeys, rightKeys;
+//     std::transform(leftJoinKeys.cbegin(), leftJoinKeys.cend(), std::back_inserter(leftKeys), 
+//                    [&](const std::string_view& name) { return leftNames[name]; });
+//     std::transform(rightJoinKeys.cbegin(), rightJoinKeys.cend(), std::back_inserter(rightKeys), 
+//                    [&](const std::string_view& name) { return rightNames[name]; });
+// 
+//     // Convert to wide streams for block processing
+//     TCoArgument leftInputArg{ctx.NewArgument(join.LeftInput().Pos(), "_dq_block_join_left")};
+//     TCoArgument rightInputArg{ctx.NewArgument(join.RightInput().Pos(), "_dq_block_join_right")};
+// 
+//     // Expand to wide flows
+//     auto leftWideFlow = ExpandJoinInput(*leftStructType, leftInputArg.Ptr(), ctx);
+//     auto rightWideFlow = ExpandJoinInput(*rightStructType, rightInputArg.Ptr(), ctx);
+// 
+//     // Convert wide flows to block format using FromFlow pattern
+//     auto leftWideStream = ctx.Builder(join.Pos())
+//         .Callable("FromFlow")
+//             .Add(0, std::move(leftWideFlow))
+//         .Seal()
+//         .Build();
+//         
+//     auto rightWideStream = ctx.Builder(join.Pos())
+//         .Callable("FromFlow")
+//             .Add(0, std::move(rightWideFlow))
+//         .Seal()
+//         .Build();
+// 
+//     auto leftBlockStream = ctx.Builder(join.Pos())
+//         .Callable("WideToBlocks")
+//             .Add(0, std::move(leftWideStream))
+//         .Seal()
+//         .Build();
+// 
+//     auto rightBlockStream = ctx.Builder(join.Pos())
+//         .Callable("WideToBlocks")
+//             .Add(0, std::move(rightWideStream))
+//         .Seal()
+//         .Build();
+// 
+//     // Build left key columns list
+//     TVector<TCoAtom> leftKeyColumns;
+//     for (ui32 key : leftKeys) {
+//         leftKeyColumns.push_back(Build<TCoAtom>(ctx, join.Pos())
+//             .Value(ToString(key))
+//             .Done());
+//     }
+// 
+//     // Build right key columns list
+//     TVector<TCoAtom> rightKeyColumns;
+//     for (ui32 key : rightKeys) {
+//         rightKeyColumns.push_back(Build<TCoAtom>(ctx, join.Pos())
+//             .Value(ToString(key))
+//             .Done());
+//     }
+// 
+//     // Create block hash join
+//     auto blockHashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
+//         .LeftInput(leftBlockStream)
+//         .RightInput(rightBlockStream)
+//         .JoinKind(join.JoinType())
+//         .LeftKeyColumns()
+//             .Add(leftKeyColumns)
+//             .Build()
+//         .RightKeyColumns()
+//             .Add(rightKeyColumns)
+//             .Build()
+//         .Done();
+// 
+//     // Convert back from blocks to flow
+//     auto flowResult = ctx.Builder(join.Pos())
+//         .Callable("ToFlow")
+//             .Callable(0, "WideFromBlocks")
+//                 .Add(0, blockHashJoin.Ptr())
+//             .Seal()
+//         .Seal()
+//         .Build();
+// 
+//     // Convert back to structured format 
+//     std::vector<TString> fullColNames;
+//     for (const auto& item : leftStructType->GetItems()) {
+//         fullColNames.emplace_back(item->GetName());
+//     }
+//     for (const auto& item : rightStructType->GetItems()) {
+//         fullColNames.emplace_back(item->GetName());
+//     }
+// 
+//     auto result = ctx.Builder(join.Pos())
+//         .Callable("NarrowMap")
+//             .Add(0, flowResult)
+//             .Lambda(1)
+//                 .Params("output", fullColNames.size())
+//                 .Callable("AsStruct")
+//                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+//                         ui32 i = 0U;
+//                         for (const auto& colName : fullColNames) {
+//                             parent.List(i)
+//                                 .Atom(0, colName)
+//                                 .Arg(1, "output", i)
+//                             .Seal();
+//                             i++;
+//                         }
+//                         return parent;
+//                     })
+//                 .Seal()
+//             .Seal()
+//         .Seal()
+//         .Build();
+// 
+//     // Build the stage properly
+//     auto stage = Build<TDqStage>(ctx, join.Pos())
+//         .Inputs()
+//             .Add(join.LeftInput())
+//             .Add(join.RightInput())
+//             .Build()
+//         .Program()
+//             .Args({leftInputArg, rightInputArg})
+//             .Body(result)
+//             .Build()
+//         .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
+//         .Done();
+// 
+//     return Build<TDqCnUnionAll>(ctx, join.Pos())
+//         .Output()
+//             .Stage(stage)
+//             .Index().Build("0")
+//             .Build()
+//         .Done();
+// }
 
 } // namespace NYql::NDq

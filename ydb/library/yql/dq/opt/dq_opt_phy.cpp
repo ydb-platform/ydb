@@ -2737,6 +2737,7 @@ TExprBase DqBuildJoin(
     EHashJoinMode hashJoin,
     bool shuffleMapJoin,
     bool useGraceCoreForMap,
+    bool useBlockHashJoin,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool buildCollectStage
@@ -2778,7 +2779,7 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

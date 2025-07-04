@@ -565,6 +565,12 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
+    
+    if (options.IsBridgeMode) {
+        for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {
+            runtime.GetAppData().BridgeConfig->AddPiles()->SetName("r" + ToString(pileId));
+        }
+    }
 
     NKikimrCms::TCmsConfig cmsConfig;
     cmsConfig.MutableSentinelConfig()->SetEnable(options.EnableSentinel);
@@ -622,7 +628,12 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     mallocInfo.SetParam("FillMemoryOnAllocation", "false");
     SetupLogging();
 
+    auto setuper = CreateCustomStateStorageSetupper({{.State = PRIMARY}, {.State = SYNCHRONIZED}}, 3);
     for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+        if (options.IsBridgeMode) {
+            setuper(*this, nodeIndex);
+            continue;
+        }
         if (options.NRings > 1) {
             SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize);
         } else {

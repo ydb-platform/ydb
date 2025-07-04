@@ -6,6 +6,7 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/svnversion/svnversion.h>
@@ -42,7 +43,8 @@ void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
 Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(CollectInfo)
     {
-        TCmsTestEnv env(8);
+        TTestEnvOpts opts(8);
+        TCmsTestEnv env(opts.WithBridgeMode());
 
         auto before = env.GetCurrentTime();
         env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));
@@ -2352,6 +2354,49 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Wall-E soft maintainance task can continue
         env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(2));
+    }
+
+    void ChangePileMap(TEvInterconnect::TEvNodesInfo::TPtr* ev) {
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
+        auto pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(*(*ev)->Get()->PileMap);
+        for (const auto& node : *nodes) {
+            pileMap->at(node.NodeId % pileMap->size()).push_back(node.NodeId);
+        }
+
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes, pileMap))
+        );
+        ev->Swap(newEv);
+    }
+
+    Y_UNIT_TEST(BridgeModeCollectInfo)
+    {
+        TTestEnvOpts opts(8);
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        env.SetObserverFunc(observerFunc);
+
+        env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto reply = env.GrabEdgeEventRethrow<TCms::TEvPrivate::TEvClusterInfo>(handle);
+        UNIT_ASSERT(reply);
+        const auto &info = *reply->Info;
+        UNIT_ASSERT(info.IsBridgeMode);
+        UNIT_ASSERT(info.NodeIdToPileId.size() == 8);
+
+        for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
+            UNIT_ASSERT(nodeId % opts.PileCount == pileId);
+        }
+
     }
 }
 

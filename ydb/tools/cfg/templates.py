@@ -145,6 +145,10 @@ if [ -f "${kikimr_key_file}" ]; then
 else
     echo "Key file not found!"
 fi
+
+if [ -s ${tenant_main_dir}/bridge-pile ]; then
+    kikimr_arg="${kikimr_arg} --bridge-pile-name $(cat ${tenant_main_dir}/bridge-pile)"
+fi
 """
 
 DYNAMIC_CFG_V2 = """kikimr_grpc_port="${kikimr_grpc_port:? expected not empty var}"
@@ -190,6 +194,10 @@ if [ -f "${kikimr_key_file}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_key_file:+ --key-file ${kikimr_key_file}}"
 else
     echo "Key file not found!"
+fi
+
+if [ -s ${tenant_main_dir}/bridge-pile ]; then
+    kikimr_arg="${kikimr_arg} --bridge-pile-name $(cat ${tenant_main_dir}/bridge-pile)"
 fi
 """
 
@@ -439,22 +447,34 @@ def mbus_arguments(enable_mbus=False):
     )
 
 
+def ydbd_extra_args(extra_args: str = ""):
+    if not extra_args:
+        return []
+
+    return [f'kikimr_arg="${{kikimr_arg}} {extra_args}"',]
+
+
 def dynamic_cfg_new_style(
     enable_cores=False,
+    extra_args="",
 ):
     return "\n".join(
         [
             "kikimr_coregen=\"--core\"" if enable_cores else "",
             NEW_STYLE_DYNAMIC_CFG,
         ]
+        + ydbd_extra_args(extra_args)
     )
 
 
-def dynamic_cfg_new_style_v2():
+def dynamic_cfg_new_style_v2(
+    extra_args="",
+):
     return "\n".join(
         [
             DYNAMIC_CFG_V2,
         ]
+        + ydbd_extra_args(extra_args)
     )
 
 

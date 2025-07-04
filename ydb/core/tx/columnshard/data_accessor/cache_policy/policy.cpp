@@ -22,7 +22,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 AFL_VERIFY(RequestedAddresses.erase(address));
                 objects.emplace(address, std::move(i));
             }
-            Callback->OnReceiveData(std::move(objects), std::move(RequestedAddresses), {});
+            Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), {});
         }
 
     public:
@@ -39,6 +39,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
     private:
         using TAddress = TGlobalPortionAddress;
         using TObject = TPortionDataAccessor;
+        using TSourceId = NActors::TActorId;
         using EConsumer = TPortionsMetadataCachePolicy::EConsumer;
         using TSelf = NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>;
 
@@ -63,8 +64,8 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
             }
         };
 
-        virtual void DoAskData(
-            const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr) const override {
+        virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
+            const ui64 cookie) const override {
             THashMap<NActors::TActorId, TActorRequestData> requests;
             for (auto&& [c, addresses] : objectAddressesByConsumer) {
                 for (auto&& a : addresses) {
@@ -72,16 +73,17 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
             }
             for (auto&& i : requests) {
-                NActors::TActivationContext::Send(
-                    i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
-                                 std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())));
+                NActors::TActivationContext::Send(i.first,
+                    std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(
+                        i.second.ExtractRequest(), std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())),
+                    0, cookie);
             }
         }
-        virtual void DoOnReceiveData(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
+        virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
             THashMap<TAddress, TString>&& errors) const override {
             NActors::TActivationContext::Send(
                 ServiceActorId, std::make_unique<NKikimr::NGeneralCache::NSource::TEvents<TPortionsMetadataCachePolicy>::TEvObjectsInfo>(
-                                    std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));
+                                    sourceId, std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));
         }
 
     public:

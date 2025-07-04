@@ -472,7 +472,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
-    DataCleanupLogic = MakeHolder<TDataCleanupLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
+    VacuumLogic = MakeHolder<TVacuumLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
     LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
@@ -693,7 +693,8 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView)
 void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info)
 {
     PrivatePageCache->RegisterPageCollection(info);
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection));
+    // TODO: handle different cache modes
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, ECacheMode::Regular));
 
     StickyPagesMemory += info->GetStickySize();
 
@@ -811,7 +812,7 @@ TExecutorCaches TExecutor::CleanupState() {
     Y_ENSURE(!LogicAlter);
     Y_ENSURE(!CompactionLogic);
     BorrowLogic.Destroy();
-    DataCleanupLogic.Destroy();
+    VacuumLogic.Destroy();
 
     return caches;
 }
@@ -995,7 +996,7 @@ void TExecutor::CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier) {
                 Owner->CompletedLoansChanged(OwnerCtx());
             }
         }
-        if (DataCleanupLogic->NeedGC()) {
+        if (VacuumLogic->NeedGC()) {
             GcLogic->SendCollectGarbage(ActorContext());
         }
     }
@@ -1417,7 +1418,7 @@ void TExecutor::Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev) {
         return;
     }
 
-    DataCleanupLogic->OnGcForStepAckResponse(Generation(), ev->Get()->Step, OwnerCtx());
+    VacuumLogic->OnGcForStepAckResponse(Generation(), ev->Get()->Step, OwnerCtx());
 }
 
 void TExecutor::AdvancePendingPartSwitches() {
@@ -1432,8 +1433,8 @@ void TExecutor::AdvancePendingPartSwitches() {
         PlanTransactionActivation();
         MaybeRelaxRejectProbability();
 
-        // Note: followers don't have DataCleanupLogic
-        if (NeedFollowerSnapshot || DataCleanupLogic && DataCleanupLogic->NeedLogSnaphot()) {
+        // Note: followers don't have VacuumLogic
+        if (NeedFollowerSnapshot || VacuumLogic && VacuumLogic->NeedLogSnaphot()) {
             MakeLogSnapshot();
         }
     }
@@ -2871,7 +2872,7 @@ void TExecutor::MakeLogSnapshot() {
     BorrowLogic->SnapToLog(snap, *commit);
     GcLogic->SnapToLog(snap, commit->Step);
     LogicSnap->MakeSnap(snap, *commit, Logger.Get());
-    DataCleanupLogic->OnMakeLogSnapshot(Generation(), commit->Step);
+    VacuumLogic->OnMakeLogSnapshot(Generation(), commit->Step);
 
     AttachLeaseCommit(commit.Get(), /* force */ true);
     CommitManager->Commit(commit);
@@ -3186,8 +3187,8 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
 
-        DataCleanupLogic->OnSnapshotCommited(Generation(), step);
-        if (NeedFollowerSnapshot || DataCleanupLogic->NeedLogSnaphot())
+        VacuumLogic->OnSnapshotCommited(Generation(), step);
+        if (NeedFollowerSnapshot || VacuumLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
         break;
@@ -3226,7 +3227,7 @@ void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev)) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
-    DataCleanupLogic->OnCollectedGarbage(OwnerCtx());
+    VacuumLogic->OnCollectedGarbage(OwnerCtx());
 }
 
 void TExecutor::Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx) {
@@ -3746,7 +3747,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     Y_ENSURE(InFlyCompactionGcBarriers.emplace(commit->Step, ops->Barrier).second);
 
-    DataCleanupLogic->OnCompleteCompaction(tableId, CompactionLogic->GetFinishedCompactionInfo(tableId));
+    VacuumLogic->OnCompleteCompaction(tableId, CompactionLogic->GetFinishedCompactionInfo(tableId));
 
     AttachLeaseCommit(commit.Get());
     CommitManager->Commit(commit);
@@ -3779,7 +3780,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     activeTransaction.Done();
 
-    if (LogicSnap->MayFlush(false) || DataCleanupLogic->NeedLogSnaphot()) {
+    if (LogicSnap->MayFlush(false) || VacuumLogic->NeedLogSnaphot()) {
         MakeLogSnapshot();
     }
 }
@@ -4142,14 +4143,14 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::CleanupData(ui64 dataCleanupGeneration) {
-    if (DataCleanupLogic->TryStartCleanup(dataCleanupGeneration, OwnerCtx())) {
+void TExecutor::StartVacuum(ui64 vacuumGeneration) {
+    if (VacuumLogic->TryStartVacuum(vacuumGeneration, OwnerCtx())) {
         for (const auto& [tableId, _] : Scheme().Tables) {
             auto compactionId = CompactionLogic->PrepareForceCompaction(tableId);
-            DataCleanupLogic->OnCompactionPrepared(tableId, compactionId);
+            VacuumLogic->OnCompactionPrepared(tableId, compactionId);
         }
-        DataCleanupLogic->WaitCompaction();
-        if (DataCleanupLogic->NeedLogSnaphot()) {
+        VacuumLogic->WaitCompaction();
+        if (VacuumLogic->NeedLogSnaphot()) {
             MakeLogSnapshot();
         }
     }

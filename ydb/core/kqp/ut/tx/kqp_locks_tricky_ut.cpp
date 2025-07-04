@@ -17,6 +17,7 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/printf.h>
+#include <util/generic/scope.h>
 
 
 namespace NKikimr::NKqp {
@@ -62,7 +63,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             bool blockResponses = true;
 
             auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
-                if (blockResponses && ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType) {
+                if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType && blockResponses) {
                     auto* msg = ev->Get<TEvKqpExecuter::TEvTxResponse>();
                     UNIT_ASSERT_C(msg->Snapshot.IsValid(), "unexpected tx response reply without the snapshot");
                     executerResponses.emplace_back(ev.Release());
@@ -77,7 +78,10 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
                 return executerResponses.size() > 0;
             });
 
-            runtime.SetObserverFunc(grab);
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER {
+                runtime.SetObserverFunc(saveObserver);
+            };
 
             auto future = kikimr.RunInThreadPool([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
@@ -181,9 +185,12 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             };
 
-            runtime.SetObserverFunc(grab);
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER {
+                runtime.SetObserverFunc(saveObserver);
+            };
 
-            std::optional<TTransaction> tx;
+            std::optional<NYdb::NTable::TTransaction> tx;
 
             auto result = kikimr.RunCall([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW());
@@ -279,7 +286,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             bool blockWrites = true;
 
             auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
-                if (blockWrites && ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType && blockWrites) {
                     auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
                     UNIT_ASSERT(evWrite->Record.OperationsSize() == 0);
                     UNIT_ASSERT(evWrite->Record.GetLocks().GetLocks().size() != 0);
@@ -295,7 +302,10 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
                 return writes.size() > 0;
             });
 
-            runtime.SetObserverFunc(grab);
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER {
+                runtime.SetObserverFunc(saveObserver);
+            };
 
             auto future = kikimr.RunInThreadPool([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();

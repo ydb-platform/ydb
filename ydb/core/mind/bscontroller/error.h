@@ -235,4 +235,10 @@ namespace NKikimr::NBsController {
         }
     };
 
+    struct TExReassignNotViable : TExError {
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kReassignNotViable;
+        }
+    };
+
 } // NKikimr::NBsController

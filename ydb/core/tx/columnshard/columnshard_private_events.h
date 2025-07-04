@@ -47,8 +47,6 @@ struct TEvPrivate {
         EvStartResourceUsageTask,
         EvNormalizerResult,
 
-        EvWritingAddDataToBuffer,
-        EvWritingFlushBuffer,
         EvWritingPortionsAddDataToBuffer,
         EvWritingPortionsFlushBuffer,
 

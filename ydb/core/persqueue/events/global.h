@@ -34,14 +34,14 @@ namespace TEvPersQueue {
         EvLockPartition,
         EvReleasePartition,
         EvPartitionReleased,
-        EvDescribe,
-        EvDescribeResponse,
+        EvDescribe, // deprecated
+        EvDescribeResponse, // deprecated
         EvGetReadSessionsInfo,
         EvReadSessionsInfoResponse,
         EvWakeupClient, // deprecated
-        EvUpdateACL,
-        EvCheckACL,
-        EvCheckACLResponse,
+        EvUpdateACL, // deprecated
+        EvCheckACL, // deprecated
+        EvCheckACLResponse, // deprecated
         EvError,
         EvGetPartitionIdForWrite,
         EvGetPartitionIdForWriteResponse,
@@ -202,31 +202,6 @@ namespace TEvPersQueue {
 
     struct TEvPartitionClientInfoResponse : TEventPB<TEvPartitionClientInfoResponse, NKikimrPQ::TClientInfoResponse, EvPartitionClientInfoResponse> {
         TEvPartitionClientInfoResponse() = default;
-    };
-
-    struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
-        TEvDescribe()
-        {}
-    };
-
-    struct TEvDescribeResponse : public TEventPB<TEvDescribeResponse, NKikimrPQ::TDescribeResponse, EvDescribeResponse> {
-        TEvDescribeResponse()
-        {}
-    };
-
-    struct TEvUpdateACL : public TEventLocal<TEvUpdateACL, EvUpdateACL> {
-        TEvUpdateACL()
-        {}
-    };
-
-    struct TEvCheckACL : public TEventPB<TEvCheckACL, NKikimrPQ::TCheckACL, EvCheckACL> {
-        TEvCheckACL()
-        {}
-    };
-
-    struct TEvCheckACLResponse : public TEventPB<TEvCheckACLResponse, NKikimrPQ::TCheckACLResponse, EvCheckACLResponse> {
-        TEvCheckACLResponse()
-        {};
     };
 
     struct TEvError : public TEventPB<TEvError,

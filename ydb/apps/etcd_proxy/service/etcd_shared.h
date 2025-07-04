@@ -11,15 +11,19 @@ constexpr bool NotifyWatchtower = true;
 
 constexpr auto Endless = "\0"sv;
 
+constexpr auto DataSizeLimit = 59999999ULL;
+
 struct TSharedStuff {
     using TPtr = std::shared_ptr<TSharedStuff>;
     using TWeakPtr = std::weak_ptr<TSharedStuff>;
 
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
-    std::atomic<i64> Revision = 0LL, Lease = 0LL;
+    std::atomic<i64> Revision = 0LL;
     NActors::TActorSystem* ActorSystem = nullptr;
-    NActors::TActorId Watchtower;
+    NActors::TActorId Watchtower, MainGate, HolderHouse;
     std::string TablePrefix;
+
+    void UpdateRevision(i64 revision);
 };
 
 std::string IncrementKey(std::string key);

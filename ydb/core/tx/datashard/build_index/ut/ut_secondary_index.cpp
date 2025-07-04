@@ -1,17 +1,13 @@
 #include "defs.h"
+#include "ut_helpers.h"
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
-#include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/protos/index_builder.pb.h>
-
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 
@@ -22,53 +18,39 @@ using namespace Tests;
 static const TString kMainTable = "/Root/table-1";
 static const TString kIndexTable = "/Root/table-2";
 
+static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
+    std::function<void(NKikimrTxDataShard::TEvBuildIndexCreateRequest&)> setupRequest,
+    TString expectedError, bool expectedErrorSubstring = false)
+{
+    auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
+    TVector<ui64> datashards = GetTableShards(server, sender, kMainTable);
+    TTableId tableId = ResolveTableId(server, sender, kMainTable);
+
+    TStringBuilder data;
+    TString err;
+    UNIT_ASSERT(datashards.size() == 1);
+
+    auto ev = std::make_unique<TEvDataShard::TEvBuildIndexCreateRequest>();
+    NKikimrTxDataShard::TEvBuildIndexCreateRequest& rec = ev->Record;
+    rec.SetId(1);
+
+    rec.SetTabletId(datashards[0]);
+    rec.SetOwnerId(tableId.PathId.OwnerId);
+    rec.SetPathId(tableId.PathId.LocalPathId);
+
+    rec.SetTargetName(kIndexTable);
+    rec.AddIndexColumns("value");
+    rec.AddIndexColumns("key");
+
+    rec.SetSnapshotTxId(snapshot.TxId);
+    rec.SetSnapshotStep(snapshot.Step);
+
+    setupRequest(rec);
+
+    DoBadRequest<TEvDataShard::TEvBuildIndexProgressResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
+}
+
 Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
-
-    static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
-        std::function<void(NKikimrTxDataShard::TEvBuildIndexCreateRequest&)> setupRequest,
-        TString expectedError, bool expectedErrorSubstring = false) 
-    {
-        auto &runtime = *server->GetRuntime();
-        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
-        TVector<ui64> datashards = GetTableShards(server, sender, kMainTable);
-        TTableId tableId = ResolveTableId(server, sender, kMainTable);
-
-        TStringBuilder data;
-        TString err;
-        UNIT_ASSERT(datashards.size() == 1);
-
-        auto ev = new TEvDataShard::TEvBuildIndexCreateRequest;
-        NKikimrTxDataShard::TEvBuildIndexCreateRequest& rec = ev->Record;
-        rec.SetId(1);
-
-        rec.SetTabletId(datashards[0]);
-        rec.SetOwnerId(tableId.PathId.OwnerId);
-        rec.SetPathId(tableId.PathId.LocalPathId);
-
-        rec.SetTargetName(kIndexTable);
-        rec.AddIndexColumns("value");
-        rec.AddIndexColumns("key");
-
-        rec.SetSnapshotTxId(snapshot.TxId);
-        rec.SetSnapshotStep(snapshot.Step);
-
-        setupRequest(rec);
-
-        runtime.SendToPipe(datashards[0], sender, ev, 0, GetPipeConfigWithRetries());
-
-        TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildIndexProgressResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-        
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
-        if (expectedErrorSubstring) {
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToOneLineString(), expectedError);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToOneLineString(), expectedError);
-        }
-    }
-
     static void DoBuildIndex(Tests::TServer::TPtr server, TActorId sender,
                              const TString& tableFrom, const TString& tableTo,
                              const TRowVersion& snapshot,
@@ -173,6 +155,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildIndexCreateRequest& request) {
             request.ClearTargetName();
+        }, "{ <main>: Error: Empty target table name }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildIndexCreateRequest& request) {
+            request.SetTargetName("");
         }, "{ <main>: Error: Empty target table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildIndexCreateRequest& request) {
@@ -298,7 +283,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
             THashSet<ui64> owners(stats.GetUserTablePartOwners().begin(), stats.GetUserTablePartOwners().end());
             // Note: datashard always adds current shard to part owners, even if there are no parts
             UNIT_ASSERT_VALUES_EQUAL(owners, (THashSet<ui64>{shards1.at(0), shards2.at(shardIndex)}));
-            
+
             auto tableId = ResolveTableId(server, sender, kIndexTable);
             auto result = CompactBorrowed(runtime, shards2.at(shardIndex), tableId);
             // Cerr << "Compact result " << result.DebugString() << Endl;

@@ -27,7 +27,7 @@ TSimpleSerializationStat::TSimpleSerializationStat(const ui64 bytes, const ui64 
     : SerializedBytes(bytes)
     , RecordsCount(recordsCount)
     , RawBytes(rawBytes) {
-    Y_ABORT_UNLESS(SerializedBytes);
+//    Y_ABORT_UNLESS(SerializedBytes);
     Y_ABORT_UNLESS(RecordsCount);
     //    Y_ABORT_UNLESS(RawBytes);
 }

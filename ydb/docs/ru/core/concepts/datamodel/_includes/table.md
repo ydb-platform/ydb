@@ -269,6 +269,6 @@ AUTO_PARTITIONING_MIN_PARTITIONS_COUNT определяет минимально
 
 ### Импорт и экспорт данных в S3
 
-{{ ydb-short-name }} поддерживает экспорт данных из колоночных таблиц в объектное хранилище S3, а также импорт из S3 в новые колоночные таблицы с помощью синтаксиса [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). Это позволяет быстро переносить большие объемы данных между хранилищами и {{ ydb-short-name }}.
+{{ ydb-short-name }} поддерживает экспорт данных из колоночных таблиц в объектное хранилище S3, а также импорт из S3 в новые колоночные таблицы с помощью синтаксиса [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). Это позволяет быстро переносить большие объёмы данных между хранилищами и {{ ydb-short-name }}.
 
 Подробнее см. в статьях [{#T}](../../federated_query/s3/external_table.md#import-from-s3) и [{#T}](../../federated_query/s3/write_data.md#export-to-s3).

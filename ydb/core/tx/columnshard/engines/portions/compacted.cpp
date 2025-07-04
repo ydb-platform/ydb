@@ -34,6 +34,10 @@ std::unique_ptr<TPortionInfoConstructor> TCompactedPortionInfo::BuildConstructor
     return std::make_unique<TCompactedPortionInfoConstructor>(*this, withMetadata);
 }
 
+std::optional<TSnapshot> TCompactedPortionInfo::GetDataSnapshot(const std::optional<TSnapshot>& /*snapshotDefault*/) const {
+    return std::nullopt;
+}
+
 NSplitter::TEntityGroups TCompactedPortionInfo::GetEntityGroupsByStorageId(
     const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
     return indexInfo.GetEntityGroupsByStorageId(specialTier, storages);

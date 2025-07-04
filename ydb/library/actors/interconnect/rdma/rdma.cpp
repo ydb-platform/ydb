@@ -10,7 +10,6 @@
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
 #include <thread>
-#include <mutex>
 
 namespace NInterconnect::NRdma {
 

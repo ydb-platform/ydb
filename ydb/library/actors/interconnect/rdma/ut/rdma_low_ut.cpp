@@ -67,7 +67,6 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
         auto cqPtr = GetCqHandle(actorSystem.Get(), ctx, cqActorId);
 
         auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
-        //auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
 
         TQueuePair qp1;
         {

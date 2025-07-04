@@ -17,6 +17,9 @@
 
 #include <sys/mman.h>
 
+static constexpr size_t CacheLineSz = 64;
+static constexpr size_t HPageSz = (1 << 21);
+
 namespace NInterconnect::NRdma {
 
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
@@ -33,6 +36,7 @@ namespace NInterconnect::NRdma {
         if (auto memPool = MemPool.lock()) {
             memPool->NotifyDealocated();
         }
+        std::free(AuxData);
         if (Empty()) {
             return;
         }
@@ -162,8 +166,6 @@ namespace NInterconnect::NRdma {
         );
     }
 
-    #define HPAGE_SIZE (1 << 21)
-
     void* allocateMemory(size_t size, size_t alignment) {
         if (size % alignment != 0) {
             return nullptr;
@@ -173,7 +175,8 @@ namespace NInterconnect::NRdma {
             fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
                 strerror(errno), errno);
         }
-        for (size_t i = 0; i < size; i += HPAGE_SIZE) {
+        for (size_t i = 0; i < size; i += HPageSz) {
+            // We use THP right now. We need to touch each page to promote it to HUGE.
             ((char*)buf)[i] = 0;
         }
         return buf;
@@ -229,13 +232,15 @@ namespace NInterconnect::NRdma {
     protected:
         template<typename TAuxData>
         TChunkPtr AllocNewChunk(size_t size) noexcept {
+            static_assert(sizeof(TAuxData) < CacheLineSz, "AuxData too big");
+
             const std::lock_guard<std::mutex> lock(Mutex);
             Y_ABORT_UNLESS(AllocatedChunks <= MaxChunk);
+
             if (AllocatedChunks == MaxChunk) {
                 return nullptr;
             }
 
-            size += sizeof(TAuxData);
             size = AlignUp(size, Alignment);
 
             void* ptr = allocateMemory(size, Alignment);
@@ -243,7 +248,8 @@ namespace NInterconnect::NRdma {
                 return nullptr;
             }
 
-            void* auxPtr = new((char*)ptr + (size - sizeof(TAuxData))) TAuxData;
+            void* auxPtr = std::aligned_alloc(CacheLineSz, CacheLineSz);
+            auxPtr = new (auxPtr)TAuxData; 
             auto mrs = registerMemory(ptr, size, Ctxs);
             if (mrs.empty()) {
                 Y_ABORT_UNLESS(false, "UNABLE TO REGISTER MEMORY");
@@ -262,7 +268,7 @@ namespace NInterconnect::NRdma {
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
         const size_t MaxChunk;
-        size_t Alignment;
+        const size_t Alignment;
         size_t AllocatedChunks = 0;
         std::mutex Mutex;
     };
@@ -419,7 +425,6 @@ namespace NInterconnect::NRdma {
     private:
         static constexpr size_t ChunkSize = 32 << 20;
         static constexpr size_t MaxChunks = 1 << 5; //must be power of two
-        static constexpr size_t CacheLineSz = 64;
         static constexpr size_t ChunkGap = CacheLineSz / sizeof(TChunk*); // Distance between elemets to prevent cache line sharing
         static_assert(MaxChunks % ChunkGap == 0);
 
@@ -505,7 +510,7 @@ namespace NInterconnect::NRdma {
                         aux->InactivePos.store(-1);
                         
                         while (PushChunk(0, ActiveAndFree, p) == -1) {
-                            std::this_thread::yield();
+                            TChunkPtr(p)->UnRef();
                         }
                     }
                 }

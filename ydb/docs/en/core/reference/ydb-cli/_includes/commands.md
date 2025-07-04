@@ -68,6 +68,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [table ttl reset](../table-ttl-reset.md) | Resetting TTL parameters |
 | [tools copy](../tools-copy.md) | Copying tables |
 | [tools dump](../export-import/tools-dump.md) | Dumping a directory or table to the file system |
+| [tools infer csv](../tools-infer.md) | Generate a `CREATE TABLE` SQL query from a CSV file |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |
 | [tools restore](../export-import/tools-restore.md) | Restoring data from the file system |
 | [topic create](../topic-create.md) | Creating a topic |

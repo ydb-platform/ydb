@@ -114,6 +114,10 @@ namespace NKikimr::NSharedCache::NTest {
             Y_ENSURE(Map.size() == count);
             return result;
         }
+
+        ui64 GetLimit() const {
+            return Limit;
+        }
     
     private:
         ui64 Limit = 0;

@@ -471,7 +471,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (doTraceLog) {
                     pagesFromCacheTraceLog.push_back(pageId);
                 }
-                TryMoveAndTouchPage(page, cacheTier);
+                Evict(Cache.Touch(page));
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -724,7 +724,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 droppedPages[pageCollectionId].insert(touchedPages.begin(), touchedPages.end());
                 continue;
             }
-            ECacheTier cacheTier = collection->GetCacheTier();
 
             for (auto pageId : touchedPages) {
                 Y_ENSURE(pageId < collection->PageMap.size());
@@ -744,7 +743,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 case PageStatePending:
                     break;
                 case PageStateLoaded:
-                    TryMoveAndTouchPage(page, cacheTier);
+                    Evict(Cache.Touch(page));
                     break;
                 default:
                     Y_TABLET_ERROR("unknown load state");
@@ -859,7 +858,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (msg->Status != NKikimrProto::OK) {
             DropCollection(*collection, msg->Status);
         } else {
-            ECacheTier cacheTier = collection->GetCacheTier();
             for (auto &paged : msg->Blocks) {
                 Y_ENSURE(paged.PageId < collection->PageMap.size());
                 auto* page = collection->PageMap[paged.PageId].Get();
@@ -869,7 +867,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->Initialize(std::move(paged.Data));
                 BodyProvided(*collection, page);
-                TryMoveAndTouchPage(page, cacheTier);
+                Evict(Cache.Touch(page));
             }
         }
 
@@ -1168,7 +1166,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (const auto& kv : collection.PageMap) {
             auto* page = kv.second.Get();
             if (page->State == PageStateLoaded) {
-                TryMoveAndTouchPage(page, ECacheTier::Regular);
+                MoveActivePage(page, ECacheTier::Regular);
             }
         }
     }
@@ -1196,7 +1194,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             TryLoadEvictedPage(page);
             switch (page->State) {
             case PageStateLoaded:
-                TryMoveAndTouchPage(page, ECacheTier::TryKeepInMemory);
+                MoveActivePage(page, ECacheTier::TryKeepInMemory);
                 break;
             case PageStateNo:
                 page->State = PageStateRequested;
@@ -1216,12 +1214,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void TryMoveAndTouchPage(TPage* page, ECacheTier targetTier) {
+    void MoveActivePage(TPage* page, ECacheTier targetTier) {
         if (page->CacheTier != targetTier) {
-            RemoveActivePage(page);
             Cache.Erase(page);
+            page->EnsureNoCacheFlags();
             page->CacheTier = targetTier;
-            AddActivePage(page);
         }
         Evict(Cache.Touch(page));
     }
@@ -1304,8 +1301,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         StatActiveBytes += sizeof(TPage) + page->Size;
         Counters.ActivePages->Inc();
         Counters.ActiveBytes->Add(sizeof(TPage) + page->Size);
-        Counters.ActivePagesTier(page->CacheTier)->Inc();
-        Counters.ActiveBytesTier(page->CacheTier)->Add(sizeof(TPage) + page->Size);;
     }
 
     inline void RemoveActivePage(const TPage* page) {
@@ -1313,8 +1308,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         StatActiveBytes -= sizeof(TPage) + page->Size;
         Counters.ActivePages->Dec();
         Counters.ActiveBytes->Sub(sizeof(TPage) + page->Size);
-        Counters.ActivePagesTier(page->CacheTier)->Dec();
-        Counters.ActiveBytesTier(page->CacheTier)->Sub(sizeof(TPage) + page->Size);;
     }
 
     inline void AddPassivePage(const TPage* page) {

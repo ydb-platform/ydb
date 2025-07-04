@@ -10,34 +10,17 @@ namespace NKikimr::NSharedCache {
     class TTieredCache {
         using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
         using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
-
-        struct TCacheTier {
-            template <typename TCacheBuilder>
-            TCacheTier(ui64 limit, TCacheBuilder createCache, ECacheTier tier, TReplacementPolicy policy, TSharedPageCacheCounters& cacheCounters)
-                : Cache(TSwitchableCache<TPage, TPageTraits>(limit, createCache(), cacheCounters.ReplacementPolicySize(policy)))
-                , LimitBytesCounter(cacheCounters.LimitBytesTier(tier))
-            {
-                LimitBytesCounter->Set(limit);
-            }
-
-            void UpdateLimit(ui64 limit) {
-                Cache.UpdateLimit(limit);
-                LimitBytesCounter->Set(limit);
-            }
-
-            TSwitchableCache<TPage, TPageTraits> Cache;
-            TCounterPtr LimitBytesCounter;
-        };
+        using TCache = TSwitchableCache<TPage, TPageTraits>;
 
     public:
         template <typename TCacheBuilder>
         TTieredCache(ui64 limit, TCacheBuilder createCache, TReplacementPolicy policy, TSharedPageCacheCounters& cacheCounters)
             : CacheTiers(::Reserve(2))
         {
-            CacheTiers.emplace_back(limit, createCache, ECacheTier::Regular, policy, cacheCounters);
+            CacheTiers.emplace_back(limit, createCache(), cacheCounters.ReplacementPolicySize(policy));
             RegularTier = &CacheTiers.back();
 
-            CacheTiers.emplace_back(0, createCache, ECacheTier::TryKeepInMemory, policy, cacheCounters);
+            CacheTiers.emplace_back(0, createCache(), cacheCounters.ReplacementPolicySize(policy));
             TryInMemoryTier = &CacheTiers.back();
         }
 
@@ -46,28 +29,28 @@ namespace NKikimr::NSharedCache {
             TIntrusiveList<TPage> evictedList;
 
             for (auto& cacheTier : CacheTiers) {
-                evictedList.Append(cacheTier.Cache.Switch(createCache(), sizeCounter));
+                evictedList.Append(cacheTier.Switch(createCache(), sizeCounter));
             }
 
             return evictedList;
         }
 
         TIntrusiveList<TPage> EvictNext() Y_WARN_UNUSED_RESULT {
-            if (auto evicted = RegularTier->Cache.EvictNext(); evicted) {
+            if (auto evicted = RegularTier->EvictNext(); evicted) {
                 return std::move(evicted);
             } else {
-                return TryInMemoryTier->Cache.EvictNext();
+                return TryInMemoryTier->EvictNext();
             }
         }
 
         TIntrusiveList<TPage> Touch(TPage *page) Y_WARN_UNUSED_RESULT {
             ECacheTier tier = TPageTraits::GetTier(page);
-            return CacheTiers[static_cast<size_t>(tier)].Cache.Touch(page);
+            return CacheTiers[static_cast<size_t>(tier)].Touch(page);
         }
 
         void Erase(TPage *page) {
             ECacheTier tier = TPageTraits::GetTier(page);
-            CacheTiers[static_cast<size_t>(tier)].Cache.Erase(page);
+            CacheTiers[static_cast<size_t>(tier)].Erase(page);
         }
 
         void UpdateLimit(ui64 limit, ui64 tryKeepInMemoryBytes) {
@@ -79,7 +62,7 @@ namespace NKikimr::NSharedCache {
         ui64 GetSize() const {
             ui64 result = 0;
             for (const auto& cacheTier : CacheTiers) {
-                result += cacheTier.Cache.GetSize();
+                result += cacheTier.GetSize();
             }
             return result;
         }
@@ -94,16 +77,16 @@ namespace NKikimr::NSharedCache {
                 } else {
                     result << "; ";
                 }
-                result << static_cast<ECacheTier>(i) << "Tier: " << CacheTiers[i].Cache.Dump();
+                result << static_cast<ECacheTier>(i) << "Tier: " << CacheTiers[i].Dump();
             }
         
             return result;
         }
 
     private:
-        TVector<TCacheTier> CacheTiers;
-        TCacheTier* RegularTier;
-        TCacheTier* TryInMemoryTier;
+        TVector<TCache> CacheTiers;
+        TCache* RegularTier;
+        TCache* TryInMemoryTier;
     };
 
 } // namespace NKikimr::NSharedCache

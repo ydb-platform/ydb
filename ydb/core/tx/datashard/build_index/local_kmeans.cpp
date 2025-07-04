@@ -634,10 +634,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             lead.Until(range.To, true);
         }
 
-        if (!request.HasLevelName()) {
+        if (!request.GetLevelName()) {
             badRequest(TStringBuilder() << "Empty level table name");
         }
-        if (!request.HasOutputName()) {
+        if (!request.GetOutputName()) {
             badRequest(TStringBuilder() << "Empty output table name");
         }
 

@@ -312,6 +312,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableVectorIndex(true);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_INFO);
 
         { // 1. CREATE TABLE
             auto result = session.ExecuteSchemeQuery(R"(
@@ -346,6 +347,19 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             }
         }
 
+        auto debugPringIndex = [&](const TString& name) {
+            auto query = Q_(Sprintf(R"(
+                SELECT * FROM `/Root/Vectors/%s`
+            )", name.c_str()));
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
+        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            Cout << name << ":" << Endl;
+            Cout << NYdb::FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        };
+
         { // 4a. ADD INDEX ON (Embedding) --- vector_idx
             auto result = session.ExecuteSchemeQuery(R"(
                 ALTER TABLE `/Root/Vectors`
@@ -356,6 +370,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )").GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            debugPringIndex("vector_idx/indexImplLevelTable");
+            debugPringIndex("vector_idx/indexImplPostingTable");
         }
 
         { // 4b. ADD INDEX ON (Embedding) COVER (Embedding, Value) --- vector_idx_covered
@@ -368,6 +385,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )").GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            debugPringIndex("vector_idx/indexImplLevelTable");
+            debugPringIndex("vector_idx/indexImplPostingTable");
         }
 
         { // 4c. ADD INDEX ON (Embedding) --- vector_idx_prefixed
@@ -380,6 +400,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )").GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            debugPringIndex("vector_idx/indexImplPrefixTable");
+            debugPringIndex("vector_idx/indexImplLevelTable");
+            debugPringIndex("vector_idx/indexImplPostingTable");
         }
 
         auto checkSelect = [&](auto query, TMap<TString, ui64> expectedReadsByTable) {

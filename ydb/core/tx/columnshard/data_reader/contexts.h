@@ -41,6 +41,7 @@ private:
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryProcessGroupGuard;
     TFetcherMemoryProcessInfo MemoryProcessInfo;
     std::optional<NBlobOperations::NRead::TCompositeReadBlobs> Blobs;
+    std::optional<std::vector<NArrow::TGeneralContainer>> AssembledData;
 
 public:
     ui64 GetMemoryProcessId() const {
@@ -78,6 +79,18 @@ public:
         Blobs.reset();
     }
 
+    void SetAssembledData(std::vector<NArrow::TGeneralContainer>&& data) {
+        AFL_VERIFY(!AssembledData);
+        AssembledData = std::move(data);
+    }
+
+    std::vector<NArrow::TGeneralContainer> ExtractAssembledData() {
+        AFL_VERIFY(!!AssembledData);
+        auto result = std::move(*AssembledData);
+        AssembledData.reset();
+        return result;
+    }
+
     TCurrentContext(const TFetcherMemoryProcessInfo& memoryProcessInfo)
         : MemoryProcessInfo(memoryProcessInfo)
     {
@@ -94,7 +107,7 @@ public:
         Accessors = std::move(acc);
     }
 
-    const std::vector<TPortionDataAccessor> GetPortionAccessors() const {
+    const std::vector<TPortionDataAccessor>& GetPortionAccessors() const {
         AFL_VERIFY(Accessors);
         return *Accessors;
     }
@@ -120,17 +133,9 @@ private:
 public:
     virtual ~IFetchCallback() = default;
 
-    virtual ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const {
-        ui64 memory = 0;
-        for (auto&& a : acc) {
-            if (columnIds) {
-                memory += a.GetColumnBlobBytes(columnIds->GetColumnIds());
-            } else {
-                memory += a.GetPortionInfo().GetTotalBlobBytes();
-            }
-        }
-        return memory;
+    virtual std::optional<ui64> GetNecessaryDataMemory(
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/, const std::vector<TPortionDataAccessor>& /*acc*/) const {
+        return 0;
     }
 
     virtual bool IsAborted() const = 0;

@@ -68,7 +68,7 @@ public:
             CurrentContext.GetMemoryProcessId(), CurrentContext.GetMemoryScopeId(), CurrentContext.GetMemoryGroupId(), { task }, 0);
     }
 
-    ui64 GetNecessaryDataMemory(
+    std::optional<ui64> GetNecessaryDataMemory(
         const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const {
         return Callback->GetNecessaryDataMemory(columnIds, acc);
     }
@@ -100,6 +100,10 @@ public:
         const std::shared_ptr<TEnvironment>& environment, const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
 
     static void StartColumnsFetching(TRequestInput&& input, const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
+        std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
+        const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
+
+    static void StartAssembledColumnsFetching(TRequestInput&& input, const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
         std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
         const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
 

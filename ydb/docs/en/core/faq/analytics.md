@@ -2,7 +2,7 @@
 
 ## Can {{ ydb-short-name }} be used for analytical workloads (OLAP)?
 
-Yes, it can. If this is the primary type of workload for a given table, make sure it is [column-oriented](../concepts/datamodel/table.md#column-oriented-tables).
+Yes, it can. If this is the primary type of workload for a given table, make sure it is [column-oriented](../concepts/datamodel/table.md#column-oriented-tables). {{ ydb-short-name }} is designed as a [HTAP DBMS](../concepts/htap.md), capable of handling both OLTP and OLAP workloads efficiently.
 
 ## How to choose between row-oriented and column-oriented tables?
 
@@ -12,4 +12,4 @@ Similarly to choosing between transactional (OLTP) and analytical (OLAP) databas
 * **How is the table modified?** As a rule of thumb, row-oriented tables work better when data is frequently modified in place, while column-oriented tables work better when data is mostly appended by adding new rows. Thus, row-oriented tables usually reflect the current state of a dataset, while column-oriented tables often store a history of some sort of immutable events.
 * **Which features are needed?** Even though {{ ydb-short-name }} strives for feature parity between row-oriented and column-oriented tables, there might be current limitations to consider. Check the documentation for details on specific features intended to be used with a given table.
 
-Unlike most other database management systems, {{ ydb-short-name }} supports both row-oriented and column-oriented tables in the same [database](../concepts/glossary.md#database). However, keep in mind that transactional and analytical workloads have different resource consumption patterns and might affect each other when the cluster is overloaded.
+Unlike most other database management systems, {{ ydb-short-name }} supports both row-oriented and column-oriented tables in the same [database](../concepts/glossary.md#database) as part of its [{#T}](../concepts/universal-database.md) approach. However, keep in mind that transactional and analytical workloads have different resource consumption patterns and might affect each other when the cluster is overloaded.

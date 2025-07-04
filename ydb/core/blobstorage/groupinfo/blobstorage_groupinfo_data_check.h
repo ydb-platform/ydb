@@ -88,7 +88,7 @@ public:
             partsState.IsOk = false;
             layoutReport << "ERROR: There are unequal parts" << Endl;
         }
-        partsState.DataErrorInfo = layoutReport.Str();
+        partsState.DataInfo = layoutReport.Str();
 
         // checking erasure
         TStringStream erasureReport;
@@ -170,7 +170,7 @@ public:
         if (!hasUnequalParts) {
             checkCombination();
             if (!erasureError) {
-                partsState.DataErrorInfo += erasureReport.Str();
+                partsState.DataInfo += erasureReport.Str();
                 return partsState;
             }
         }
@@ -202,7 +202,7 @@ public:
             erasureReport << "ERROR: There are erasure restore fails" << Endl;
         }
 
-        partsState.DataErrorInfo += erasureReport.Str();
+        partsState.DataInfo += erasureReport.Str();
         return partsState;
     }
 };
@@ -267,7 +267,7 @@ public:
             partsState.IsOk = false;
             layoutReport << "ERROR: There are unequal parts" << Endl;
         }
-        partsState.DataErrorInfo = layoutReport.Str();
+        partsState.DataInfo = layoutReport.Str();
 
         return partsState;
     }

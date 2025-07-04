@@ -216,15 +216,23 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
     return result;
 }
 
-THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
+THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddressesImpl(
     NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
     THashMap<TChunkAddress, TString> result;
 
-    for (auto&& record : GetRecordsVerified()) {
-        std::optional<TString> blob =
-            blobs.ExtractOptional(PortionInfo->GetColumnStorageId(record.GetColumnId(), indexInfo), RestoreBlobRange(record.GetBlobRange()));
-        if (blob) {
-            result.emplace(record.GetAddress(), std::move(*blob));
+    {
+        TString storageId;
+        ui64 columnId = 0;
+        for (auto&& record : GetRecordsVerified()) {
+            if (record.GetColumnId() != columnId) {
+                AFL_VERIFY(record.GetColumnId() > columnId);
+                columnId = record.GetColumnId();
+                storageId = PortionInfo->GetColumnStorageId(columnId, indexInfo);
+            }
+            std::optional<TString> blob = blobs.ExtractOptional(storageId, RestoreBlobRange(record.GetBlobRange()));
+            if (blob) {
+                result.emplace(record.GetAddress(), std::move(*blob));
+            }
         }
     }
 
@@ -239,6 +247,24 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
         }
     }
 
+    return result;
+}
+
+THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
+    NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const {
+    THashMap<TChunkAddress, TString> result = DecodeBlobAddressesImpl(blobs, indexInfo);
+    AFL_VERIFY(blobs.IsEmpty())("blobs", blobs.DebugString());
+    return result;
+}
+
+std::vector<THashMap<TChunkAddress, TString>> TPortionDataAccessor::DecodeBlobAddresses(const std::vector<TPortionDataAccessor>& accessors,
+    const std::vector<std::shared_ptr<TIndexInfo>>& info, NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
+    std::vector<THashMap<TChunkAddress, TString>> result;
+    AFL_VERIFY(accessors.size() == info.size());
+    for (ui64 i = 0; i < accessors.size(); ++i) {
+        result.emplace_back(accessors[i].DecodeBlobAddressesImpl(blobs, *info[i]));
+    }
+    AFL_VERIFY(blobs.IsEmpty())("blobs", blobs.DebugString());
     return result;
 }
 

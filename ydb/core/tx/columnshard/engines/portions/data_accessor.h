@@ -232,6 +232,10 @@ private:
     void FullValidation() const;
     TPortionDataAccessor() = default;
 
+private:
+    THashMap<TChunkAddress, TString> DecodeBlobAddressesImpl(
+        NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
+
 public:
     using TColumnAssemblingInfo = NAssembling::TColumnAssemblingInfo;
     using TAssembleBlobInfo = NAssembling::TAssembleBlobInfo;
@@ -445,7 +449,9 @@ public:
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
     std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
 
-    THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
+    THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+    static std::vector<THashMap<TChunkAddress, TString>> DecodeBlobAddresses(const std::vector<TPortionDataAccessor>& accessors,
+        const std::vector<std::shared_ptr<TIndexInfo>>& info, NBlobOperations::NRead::TCompositeReadBlobs&& blobs);
 
     THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
         THashMap<TString, THashSet<TUnifiedBlobId>> result;

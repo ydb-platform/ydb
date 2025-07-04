@@ -13,6 +13,7 @@ void TPortionsDataFetcher::StartAssembledColumnsFetching(TRequestInput&& input,
         steps.emplace_back(std::make_shared<TAskRawDataResourceStep>(entityIds));
         steps.emplace_back(std::make_shared<TAskDataStep>(entityIds));
         steps.emplace_back(std::make_shared<TAssembleDataStep>());
+        steps.emplace_back(std::make_shared<TAskUsageResourceStep>(entityIds));
         return std::make_shared<TScript>(std::move(steps), "ASSEMBLED_PARTIAL_PORTIONS_FETCHING::" + ::ToString(input.GetConsumer()));
     }();
     auto fetcher = std::make_shared<TPortionsDataFetcher>(std::move(input), std::move(callback), environment, script, conveyorCategory);
@@ -28,6 +29,7 @@ void TPortionsDataFetcher::StartColumnsFetching(TRequestInput&& input, const std
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
         steps.emplace_back(std::make_shared<TAskBlobDataResourceStep>(entityIds));
         steps.emplace_back(std::make_shared<TAskDataStep>(entityIds));
+        steps.emplace_back(std::make_shared<TAskUsageResourceStep>(entityIds));
         return std::make_shared<TScript>(std::move(steps), "PARTIAL_PORTIONS_FETCHING::" + ::ToString(input.GetConsumer()));
     }();
     auto fetcher = std::make_shared<TPortionsDataFetcher>(std::move(input), std::move(callback), environment, script, conveyorCategory);
@@ -42,6 +44,7 @@ void TPortionsDataFetcher::StartFullPortionsFetching(TRequestInput&& input, std:
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
         steps.emplace_back(std::make_shared<TAskBlobDataResourceStep>(nullptr));
         steps.emplace_back(std::make_shared<TAskDataStep>(nullptr));
+        steps.emplace_back(std::make_shared<TAskUsageResourceStep>(nullptr));
         return std::make_shared<TScript>(std::move(steps), "FULL_PORTIONS_FETCHING::" + ::ToString(input.GetConsumer()));
     }();
     auto fetcher = std::make_shared<TPortionsDataFetcher>(std::move(input), std::move(callback), environment, script, conveyorCategory);
@@ -54,6 +57,7 @@ void TPortionsDataFetcher::StartAccessorPortionsFetching(TRequestInput&& input, 
         std::vector<std::shared_ptr<IFetchingStep>> steps;
         steps.emplace_back(std::make_shared<TAskAccessorResourcesStep>());
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
+        steps.emplace_back(std::make_shared<TAskUsageResourceStep>(nullptr));
         return std::make_shared<TScript>(std::move(steps), "ACCESSOR_PORTIONS_FETCHING::" + ::ToString(input.GetConsumer()));
     }();
     auto fetcher = std::make_shared<TPortionsDataFetcher>(std::move(input), std::move(callback), environment, script, conveyorCategory);

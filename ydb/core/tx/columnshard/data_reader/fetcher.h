@@ -68,7 +68,7 @@ public:
             CurrentContext.GetMemoryProcessId(), CurrentContext.GetMemoryScopeId(), CurrentContext.GetMemoryGroupId(), { task }, 0);
     }
 
-    std::optional<ui64> GetNecessaryDataMemory(
+    ui64 GetNecessaryDataMemory(
         const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const {
         return Callback->GetNecessaryDataMemory(columnIds, acc);
     }

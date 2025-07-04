@@ -133,7 +133,7 @@ private:
 public:
     virtual ~IFetchCallback() = default;
 
-    virtual std::optional<ui64> GetNecessaryDataMemory(
+    virtual ui64 GetNecessaryDataMemory(
         const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/, const std::vector<TPortionDataAccessor>& /*acc*/) const {
         return 0;
     }

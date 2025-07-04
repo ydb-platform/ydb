@@ -130,19 +130,16 @@ private:
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskDataResources);
         const std::vector<TPortionDataAccessor>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
-        std::optional<ui64> memory = fetchingContext->GetNecessaryDataMemory(ColumnIds, accessors);
+        ui64 memory = GetNecessaryDataMemory(fetchingContext, ColumnIds, accessors);
         if (!memory) {
-            memory = GetNecessaryDataMemory(ColumnIds, accessors);
-        }
-        if (!*memory) {
             return IFetchingStep::EStepResult::Continue;
         }
-        fetchingContext->AskMemoryAllocation(std::make_shared<TSubscriber>(*memory, fetchingContext));
+        fetchingContext->AskMemoryAllocation(std::make_shared<TSubscriber>(memory, fetchingContext));
         return IFetchingStep::EStepResult::Detached;
     }
 
 protected:
-    virtual ui64 GetNecessaryDataMemory(
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext,
         const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const = 0;
 
 public:
@@ -154,7 +151,7 @@ public:
 
 class TAskBlobDataResourceStep: public TAskDataResourceStep {
 private:
-    virtual ui64 GetNecessaryDataMemory(
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& /*fetchingContext*/,
         const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
         ui64 memory = 0;
         for (auto&& a : acc) {
@@ -173,7 +170,7 @@ public:
 
 class TAskRawDataResourceStep: public TAskDataResourceStep {
 private:
-    virtual ui64 GetNecessaryDataMemory(
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& /*fetchingContext*/,
         const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
         ui64 memory = 0;
         for (auto&& a : acc) {
@@ -184,6 +181,17 @@ private:
             }
         }
         return memory;
+    }
+
+public:
+    using TAskDataResourceStep::TAskDataResourceStep;
+};
+
+class TAskUsageResourceStep: public TAskDataResourceStep {
+private:
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
+        return fetchingContext->GetNecessaryDataMemory(columnIds, acc);
     }
 
 public:
@@ -301,19 +309,24 @@ private:
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         auto& context = fetchingContext->MutableCurrentContext();
         std::vector<NArrow::TGeneralContainer> result;
-        auto rawBlobs = context.ExtractBlobs();
+        std::vector<std::shared_ptr<TIndexInfo>> info;
+        for (const auto& portion : fetchingContext->GetInput().GetPortions()) {
+            info.emplace_back(portion->GetSchema()->GetIndexInfo());
+        }
+        std::vector<TPortionDataAccessor> accessors = context.ExtractPortionAccessors();
+        auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, info, context.ExtractBlobs());
         for (ui64 i = 0; i < fetchingContext->GetInput().GetPortions().size(); ++i) {
             AFL_VERIFY(i < context.GetPortionAccessors().size());
-            const auto& accessor = context.GetPortionAccessors()[i];
+            const auto& accessor = accessors[i];
             const auto& portion = fetchingContext->GetInput().GetPortions()[i];
             AFL_VERIFY(accessor.GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
 
-            auto blobs = accessor.DecodeBlobAddresses(rawBlobs, portion->GetSchema()->GetIndexInfo());
             std::shared_ptr<NArrow::TGeneralContainer> container =
-                accessor.PrepareForAssemble(*portion->GetSchema(), *portion->GetSchema(), blobs).AssembleToGeneralContainer({}).DetachResult();
+                accessor.PrepareForAssemble(*portion->GetSchema(), *portion->GetSchema(), blobs[i])
+                    .AssembleToGeneralContainer({})
+                    .DetachResult();
             result.emplace_back(std::move(*container));
         }
-        AFL_VERIFY(rawBlobs.IsEmpty())("blobs", rawBlobs.DebugString());
         context.SetAssembledData(std::move(result));
         return EStepResult::Continue;
     }

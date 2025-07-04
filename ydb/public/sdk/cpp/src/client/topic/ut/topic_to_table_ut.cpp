@@ -396,7 +396,7 @@ private:
     std::unordered_map<std::pair<std::string, std::string>, TTopicWriteSessionContext> TopicWriteSessions;
     std::unordered_map<std::string, TTopicReadSessionPtr> TopicReadSessions;
 
-    std::uint64_t SchemaTxId = 1000;
+    ui64 SchemaTxId = 1000;
 };
 
 class TFixtureTable : public TFixture {

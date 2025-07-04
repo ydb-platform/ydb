@@ -32,6 +32,7 @@ struct TEvSolomonProvider {
         // read actor events
         EvPointsCountBatch,
         EvNewDataBatch,
+        EvRetryDataRequest,
 
         EvEnd
     };
@@ -96,6 +97,13 @@ struct TEvSolomonProvider {
         explicit TEvNewDataBatch(NSo::TGetDataResponse&& response, TMetricTimeRange&& request)
             : Response(std::move(response))
             , Request(std::move(request))
+        {}
+    };
+
+    struct TEvRetryDataRequest: public NActors::TEventLocal<TEvRetryDataRequest, EvRetryDataRequest> {
+        TMetricTimeRange Request;
+        explicit TEvRetryDataRequest(TMetricTimeRange&& request)
+            : Request(std::move(request))
         {}
     };
 };

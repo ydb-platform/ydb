@@ -165,6 +165,7 @@ public:
         hFunc(TEvSolomonProvider::TEvMetricsReadError, HandleMetricsReadError);
         hFunc(TEvSolomonProvider::TEvPointsCountBatch, HandlePointsCountBatch);
         hFunc(TEvSolomonProvider::TEvNewDataBatch, HandleNewDataBatch);
+        hFunc(TEvSolomonProvider::TEvRetryDataRequest, HandleRetryDataRequest);
         hFunc(TEvSolomonProvider::TEvAck, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -249,7 +250,7 @@ public:
 
         if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response); batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR && delay) {
             SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
-            RetryDataRequest(std::move(batch), *delay);
+            Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
             return;
         } else if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
@@ -269,6 +270,28 @@ public:
         if (MetricsData.size() >= ComputeActorBatchSize || LastMetricProcessed()) {
             NotifyComputeActorWithData();
         }
+    }
+
+    void HandleRetryDataRequest(TEvSolomonProvider::TEvRetryDataRequest::TPtr& retryDataRequest) {
+        auto& retryDataEvent = *retryDataRequest->Get();
+        NThreading::TFuture<NSo::TGetDataResponse> dataRequestFuture;
+        
+        auto request = retryDataEvent.Request;
+        if (UseMetricsQueue) {
+            dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
+        } else {
+            dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+        }
+
+        auto actorSystem = TActivationContext::ActorSystem();
+        dataRequestFuture.Subscribe([request, actorSystem, selfId = SelfId()](
+            NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
+        {
+            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
+                response.ExtractValue(),
+                std::move(request)
+            ));
+        });
     }
 
     void Handle(TEvSolomonProvider::TEvAck::TPtr& ev) {
@@ -304,7 +327,7 @@ public:
 
         if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response); batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR && delay) {
             SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
-            RetryDataRequest(std::move(batch), *delay);
+            Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
             return;
         } else if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
@@ -476,29 +499,6 @@ private:
         }
 
         PendingDataRequests_[request] = RetryPolicy->CreateRetryState();
-
-        auto actorSystem = TActivationContext::ActorSystem();
-        dataRequestFuture.Subscribe([request, actorSystem, selfId = SelfId()](
-            NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
-        {
-            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
-                response.ExtractValue(),
-                std::move(request)
-            ));
-        });
-    }
-
-    void RetryDataRequest(TEvSolomonProvider::TEvNewDataBatch&& batch, TDuration delay) {
-        Sleep(delay);
-        
-        NThreading::TFuture<NSo::TGetDataResponse> dataRequestFuture;
-        
-        auto request = batch.Request;
-        if (UseMetricsQueue) {
-            dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
-        } else {
-            dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
-        }
 
         auto actorSystem = TActivationContext::ActorSystem();
         dataRequestFuture.Subscribe([request, actorSystem, selfId = SelfId()](

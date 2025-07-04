@@ -55,12 +55,9 @@ namespace NSQLComplete {
     public:
         using TPtr = THolder<ISqlCompletionEngine>;
 
-        // TODO(YQL-19747): Deprecated, Migrate YDB CLI to `TConfiguration`
-        using TConfiguration = NSQLComplete::TConfiguration;
-
         virtual ~ISqlCompletionEngine() = default;
 
-        virtual TCompletion
+        virtual NThreading::TFuture<TCompletion>
         Complete(TCompletionInput input, TEnvironment env = {}) = 0;
 
         virtual NThreading::TFuture<TCompletion> // TODO(YQL-19747): Migrate YDB CLI to `Complete` method

@@ -21,7 +21,7 @@ namespace NSQLComplete {
                 Schema_ = MakeSimpleSchema(MakeStaticSimpleSchema(std::move(data)));
             }
 
-            NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+            NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
                 if (!request.Constraints.Column) {
                     return NThreading::MakeFuture<TNameResponse>({});
                 }
@@ -29,10 +29,15 @@ namespace NSQLComplete {
                 TNameResponse response;
 
                 for (const TString& tableName : Tables_) {
-                    THashSet<TString> without =
-                        request.Constraints.Column->WithoutByTableAlias[tableName];
-                    without.insert(request.Constraints.Column->WithoutByTableAlias[""].begin(),
-                                   request.Constraints.Column->WithoutByTableAlias[""].end());
+                    const auto& withoutByTableAlias = request.Constraints.Column->WithoutByTableAlias;
+
+                    THashSet<TString> without;
+                    if (auto it = withoutByTableAlias.find(tableName); it != withoutByTableAlias.end()) {
+                        without.insert(begin(it->second), end(it->second));
+                    }
+                    if (auto it = withoutByTableAlias.find(""); it != withoutByTableAlias.end()) {
+                        without.insert(begin(it->second), end(it->second));
+                    }
 
                     TDescribeTableRequest describeRequest = {
                         .TableCluster = "",
@@ -54,7 +59,7 @@ namespace NSQLComplete {
 
                         TColumnName name;
                         name.TableAlias = tableName;
-                        name.Indentifier = std::move(column);
+                        name.Identifier = std::move(column);
 
                         response.RankedNames.emplace_back(std::move(name));
                     }

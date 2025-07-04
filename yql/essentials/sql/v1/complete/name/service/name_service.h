@@ -12,9 +12,8 @@
 
 namespace NSQLComplete {
 
-    // TODO(YQL-19747): Rename to Identifier
-    struct TIndentifier {
-        TString Indentifier;
+    struct TIdentifier {
+        TString Identifier;
     };
 
     struct TNamespaced {
@@ -25,11 +24,11 @@ namespace NSQLComplete {
         TString Content;
     };
 
-    struct TPragmaName: TIndentifier {
+    struct TPragmaName: TIdentifier {
         struct TConstraints: TNamespaced {};
     };
 
-    struct TTypeName: TIndentifier {
+    struct TTypeName: TIdentifier {
         struct TConstraints {};
 
         enum class EKind {
@@ -41,11 +40,11 @@ namespace NSQLComplete {
         EKind Kind = EKind::Simple;
     };
 
-    struct TFunctionName: TIndentifier {
+    struct TFunctionName: TIdentifier {
         struct TConstraints: TNamespaced {};
     };
 
-    struct THintName: TIndentifier {
+    struct THintName: TIdentifier {
         struct TConstraints {
             EStatementKind Statement;
         };
@@ -57,17 +56,17 @@ namespace NSQLComplete {
         THashSet<EObjectKind> Kinds;
     };
 
-    struct TFolderName: TIndentifier {
+    struct TFolderName: TIdentifier {
     };
 
-    struct TTableName: TIndentifier {
+    struct TTableName: TIdentifier {
     };
 
-    struct TClusterName: TIndentifier {
+    struct TClusterName: TIdentifier {
         struct TConstraints: TNamespaced {};
     };
 
-    struct TColumnName: TIndentifier {
+    struct TColumnName: TIdentifier {
         struct TConstraints {
             TVector<TAliased<TTableId>> Tables;
             THashMap<TString, THashSet<TString>> WithoutByTableAlias;
@@ -76,7 +75,7 @@ namespace NSQLComplete {
         TString TableAlias;
     };
 
-    struct TBindingName: TIndentifier {
+    struct TBindingName: TIdentifier {
     };
 
     struct TUnknownName {
@@ -146,8 +145,7 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<INameService>;
 
-        ~INameService() override = default; // TODO(YQL-19747): receive as const ref
-        virtual NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const = 0;
+        virtual NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const = 0;
     };
 
     TString NormalizeName(TStringBuf name);

@@ -6,16 +6,16 @@ namespace NSQLComplete {
 
     namespace {
 
-        TString ToIdentifier(TString content, const TLocalSyntaxContext& context) {
-            if (IsPlain(content) && !context.IsQuoted.AtLhs && !context.IsQuoted.AtRhs) {
+        TString ToIdentifier(TString content, const TLocalSyntaxContext& local) {
+            if (IsPlain(content) && !local.IsQuoted.AtLhs && !local.IsQuoted.AtRhs) {
                 return content;
             }
 
             SubstGlobal(content, "`", "``");
-            if (!context.IsQuoted.AtLhs) {
+            if (!local.IsQuoted.AtLhs) {
                 content.prepend('`');
             }
-            if (!context.IsQuoted.AtRhs) {
+            if (!local.IsQuoted.AtRhs) {
                 content.append('`');
             }
             return content;
@@ -23,8 +23,8 @@ namespace NSQLComplete {
 
     } // namespace
 
-    TCandidate ToCandidate(TKeyword name, TLocalSyntaxContext& context) {
-        TVector<TString>& seq = context.Keywords[name.Content];
+    TCandidate ToCandidate(TKeyword name, TLocalSyntaxContext& local) {
+        TVector<TString>& seq = local.Keywords[name.Content];
         seq.insert(std::begin(seq), name.Content);
 
         TCandidate candidate = {
@@ -41,13 +41,13 @@ namespace NSQLComplete {
     }
 
     TCandidate ToCandidate(TPragmaName name) {
-        return {ECandidateKind::PragmaName, std::move(name.Indentifier)};
+        return {ECandidateKind::PragmaName, std::move(name.Identifier)};
     }
 
     TCandidate ToCandidate(TTypeName name) {
         TCandidate candidate = {
             .Kind = ECandidateKind::TypeName,
-            .Content = std::move(name.Indentifier),
+            .Content = std::move(name.Identifier),
         };
 
         switch (name.Kind) {
@@ -69,7 +69,7 @@ namespace NSQLComplete {
     TCandidate ToCandidate(TFunctionName name) {
         TCandidate candidate = {
             .Kind = ECandidateKind::FunctionName,
-            .Content = std::move(name.Indentifier),
+            .Content = std::move(name.Identifier),
         };
 
         candidate.Content += "()";
@@ -79,22 +79,22 @@ namespace NSQLComplete {
     }
 
     TCandidate ToCandidate(THintName name) {
-        return {ECandidateKind::HintName, std::move(name.Indentifier)};
+        return {ECandidateKind::HintName, std::move(name.Identifier)};
     }
 
-    TCandidate ToCandidate(TFolderName name, TLocalSyntaxContext& context) {
+    TCandidate ToCandidate(TFolderName name, TLocalSyntaxContext& local) {
         TCandidate candidate = {
             .Kind = ECandidateKind::FolderName,
-            .Content = std::move(name.Indentifier),
+            .Content = std::move(name.Identifier),
         };
 
-        if (!context.IsQuoted.AtLhs) {
+        if (!local.IsQuoted.AtLhs) {
             candidate.Content.prepend('`');
         }
 
         candidate.Content.append('/');
 
-        if (!context.IsQuoted.AtRhs) {
+        if (!local.IsQuoted.AtRhs) {
             candidate.Content.append('`');
             candidate.CursorShift = 1;
         }
@@ -102,45 +102,45 @@ namespace NSQLComplete {
         return candidate;
     }
 
-    TCandidate ToCandidate(TTableName name, TLocalSyntaxContext& context) {
-        if (!context.IsQuoted.AtLhs) {
-            name.Indentifier.prepend('`');
+    TCandidate ToCandidate(TTableName name, TLocalSyntaxContext& local) {
+        if (!local.IsQuoted.AtLhs) {
+            name.Identifier.prepend('`');
         }
-        if (!context.IsQuoted.AtRhs) {
-            name.Indentifier.append('`');
+        if (!local.IsQuoted.AtRhs) {
+            name.Identifier.append('`');
         }
-        return {ECandidateKind::TableName, std::move(name.Indentifier)};
+        return {ECandidateKind::TableName, std::move(name.Identifier)};
     }
 
     TCandidate ToCandidate(TClusterName name) {
-        return {ECandidateKind::ClusterName, std::move(name.Indentifier)};
+        return {ECandidateKind::ClusterName, std::move(name.Identifier)};
     }
 
-    TCandidate ToCandidate(TColumnName name, TLocalSyntaxContext& context) {
-        name.Indentifier = ToIdentifier(std::move(name.Indentifier), context);
+    TCandidate ToCandidate(TColumnName name, TLocalSyntaxContext& local) {
+        name.Identifier = ToIdentifier(std::move(name.Identifier), local);
 
-        if (context.Column->Table.empty() && !name.TableAlias.empty()) {
-            name.Indentifier.prepend('.');
-            name.Indentifier.prepend(name.TableAlias);
+        if (local.Column->Table.empty() && !name.TableAlias.empty()) {
+            name.Identifier.prepend('.');
+            name.Identifier.prepend(name.TableAlias);
         }
 
-        return {ECandidateKind::ColumnName, std::move(name.Indentifier)};
+        return {ECandidateKind::ColumnName, std::move(name.Identifier)};
     }
 
-    TCandidate ToCandidate(TBindingName name, TLocalSyntaxContext& context) {
-        if (!context.Binding) {
-            name.Indentifier.prepend('$');
+    TCandidate ToCandidate(TBindingName name, TLocalSyntaxContext& local) {
+        if (!local.Binding) {
+            name.Identifier.prepend('$');
         }
-        return {ECandidateKind::BindingName, std::move(name.Indentifier)};
+        return {ECandidateKind::BindingName, std::move(name.Identifier)};
     }
 
-    TCandidate ToCandidate(TUnknownName name, TLocalSyntaxContext& context) {
-        name.Content = ToIdentifier(std::move(name.Content), context);
+    TCandidate ToCandidate(TUnknownName name, TLocalSyntaxContext& local) {
+        name.Content = ToIdentifier(std::move(name.Content), local);
 
         return {ECandidateKind::UnknownName, std::move(name.Content)};
     }
 
-    TCandidate ToCandidate(TGenericName generic, TLocalSyntaxContext& context) {
+    TCandidate ToCandidate(TGenericName generic, TLocalSyntaxContext& local) {
         return std::visit([&](auto&& name) -> TCandidate {
             using T = std::decay_t<decltype(name)>;
             constexpr bool IsContextSensitive =
@@ -152,18 +152,18 @@ namespace NSQLComplete {
                 std::is_same_v<T, TUnknownName>;
 
             if constexpr (IsContextSensitive) {
-                return ToCandidate(std::move(name), context);
+                return ToCandidate(std::move(name), local);
             } else {
                 return ToCandidate(std::move(name));
             }
         }, std::move(generic));
     }
 
-    TVector<TCandidate> ToCandidate(TVector<TGenericName> names, TLocalSyntaxContext context) {
+    TVector<TCandidate> ToCandidate(TVector<TGenericName> names, TLocalSyntaxContext local) {
         TVector<TCandidate> candidates;
         candidates.reserve(names.size());
         for (auto& name : names) {
-            candidates.emplace_back(ToCandidate(std::move(name), context));
+            candidates.emplace_back(ToCandidate(std::move(name), local));
         }
         return candidates;
     }

@@ -14,7 +14,7 @@ namespace NSQLComplete {
             {
             }
 
-            NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+            NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
                 if (request.Constraints.Object) {
                     return Schema_
                         ->List(ToListRequest(std::move(request)))
@@ -76,7 +76,7 @@ namespace NSQLComplete {
                                     }
 
                                     TColumnName name;
-                                    name.Indentifier = column;
+                                    name.Identifier = column;
                                     name.TableAlias = alias;
 
                                     response.RankedNames.emplace_back(std::move(name));
@@ -88,7 +88,7 @@ namespace NSQLComplete {
                     });
             }
 
-            static TListRequest ToListRequest(TNameRequest request) {
+            static TListRequest ToListRequest(const TNameRequest& request) {
                 return {
                     .Cluster = ClusterName(*request.Constraints.Object),
                     .Path = request.Prefix,
@@ -134,11 +134,11 @@ namespace NSQLComplete {
                 TGenericName name;
                 if (entry.Type == TFolderEntry::Folder) {
                     TFolderName local;
-                    local.Indentifier = std::move(entry.Name);
+                    local.Identifier = std::move(entry.Name);
                     name = std::move(local);
                 } else if (entry.Type == TFolderEntry::Table) {
                     TTableName local;
-                    local.Indentifier = std::move(entry.Name);
+                    local.Identifier = std::move(entry.Name);
                     name = std::move(local);
                 } else {
                     TUnknownName local;

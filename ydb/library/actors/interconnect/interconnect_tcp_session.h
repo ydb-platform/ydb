@@ -24,6 +24,7 @@
 #include "poller_tcp.h"
 #include "poller_actor.h"
 #include "rdma/events.h"
+#include "rdma/mem_pool.h"
 #include "interconnect_channel.h"
 #include "logging.h"
 #include "watchdog_timer.h"

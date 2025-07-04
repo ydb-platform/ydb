@@ -79,7 +79,6 @@ namespace NActors {
 
             size_t before = left->fetch_sub(size, std::memory_order_relaxed);
             Y_ABORT_UNLESS(before >= size);
-            Cerr << "SendRdmaReadRequest cb: " << before << " " << size << Endl;
             if (before == size) {
                 reply(as, ioDone);
             } else {
@@ -276,7 +275,6 @@ namespace NActors {
     }
 
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
-        Cerr << "TInputSessionTCP::Handle RdmaReadDone" << Endl;
         if (!ev->Get()->Event->IsSuccess()) {
             LOG_ERROR_IC_SESSION("ICIS14", "Rdma IO failed");
             throw TExDestroySession({TDisconnectReason::RdmaError()});
@@ -662,12 +660,6 @@ namespace NActors {
                     auto& packet = InboundPacketQ.back();
                     packet.XdcUnreadBytes += size;
 
-                    Cerr << "XDC command PUSH_DATA channel# " << channel
-                        << " size# " << size
-                        << " packet.XdcUnreadBytes# " << packet.XdcUnreadBytes
-                        << " IgnorePayload# " << IgnorePayload
-                        << Endl;
-
                     if (IgnorePayload) {
                         // this packet was already marked as 'processed', all commands had been executed, but we must
                         // parse XDC stream from this packet correctly
@@ -686,7 +678,7 @@ namespace NActors {
                 }
 
                 case NActors::EXdcCommand::RDMA_READ: {
-                    if (!RdmaQp) {
+                    if (!RdmaQp || !RdmaCq) {
                         LOG_CRIT_IC_SESSION("ICIS16", "unexpected XDC RDMA_READ command without RDMA QP");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
@@ -700,11 +692,6 @@ namespace NActors {
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
                     context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel);
-                    for (const auto& cred: creds.GetCreds()) {
-                        Y_UNUSED(cred);
-                        // Common->RdmaMemPool
-                        // RdmaQp->SendRdmaReadWr(ui64 wrId, void *mrAddr, ui32 mrlKey, cred.GetAddress(), cred.GetRkey(), cred.GetSize());
-                    }
                     continue;
                 }
             }
@@ -795,7 +782,6 @@ namespace NActors {
                 ev.reset();
             }
             if (ev) {
-                Cerr << "IC received event " << ev->GetTypeName() << Endl;
                 TActivationContext::Send(ev.release());
             }
         }
@@ -937,7 +923,6 @@ namespace NActors {
     }
 
     bool TInputSessionTCP::ReadXdcCatchStream(ui64 *numDataBytes) {
-        // Cerr << "ReadXdcCatchStream " << XdcCatchStream.BytesPending << Endl;
         bool progress = false;
 
         while (XdcCatchStream.BytesPending) {
@@ -998,7 +983,6 @@ namespace NActors {
 
     void TInputSessionTCP::ApplyXdcCatchStream() {
         if (!XdcCatchStream.Applied && XdcCatchStream.Ready && !XdcCatchStream.BytesPending) {
-            // Cerr << "ApplyXdcCatchStream" << Endl;
             Y_DEBUG_ABORT_UNLESS(XdcCatchStream.Markup.empty());
 
             auto process = [&](auto& context) {
@@ -1020,7 +1004,6 @@ namespace NActors {
     }
 
     bool TInputSessionTCP::ReadXdc(ui64 *numDataBytes) {
-        // Cerr << "ReadXdc" << Endl;
         bool progress = ReadXdcCatchStream(numDataBytes);
 
         // exit if we have no work to do

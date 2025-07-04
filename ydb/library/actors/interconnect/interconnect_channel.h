@@ -9,8 +9,6 @@
 #include <util/generic/map.h>
 #include <util/stream/walk.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/library/actors/protos/interconnect.pb.h>
-#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include "interconnect_common.h"
 #include "interconnect_counters.h"
@@ -19,6 +17,13 @@
 
 namespace NInterconnect {
     class IZcGuard;
+    namespace NRdma {
+        class IMemPool;
+    }
+}
+
+namespace NActorsInterconnect {
+    class TRdmaCreds;
 }
 
 namespace NActors {
@@ -151,7 +156,7 @@ namespace NActors {
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
-        std::optional<NActorsInterconnect::TRdmaCreds> SerializeEventRdma(TEventHolder& event);
+        bool SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds);
 
         bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event);
         std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event);

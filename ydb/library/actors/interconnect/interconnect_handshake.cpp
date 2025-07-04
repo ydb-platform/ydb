@@ -907,7 +907,7 @@ namespace NActors {
                 request.SetRequestExtendedTraceFmt(true);
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
-                request.SetRequestXdcShuffle(false);
+                request.SetRequestXdcShuffle(true);
                 request.SetHandshakeId(*HandshakeId);
 
                 if (RdmaQp) {

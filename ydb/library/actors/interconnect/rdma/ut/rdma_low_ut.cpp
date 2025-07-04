@@ -98,6 +98,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                     if (ioDone->IsCqError()) {
                         wasOverflow.store(true, std::memory_order_relaxed);
                     }
+                    delete ioDone; // Clean up the event
                 };
                 while (wr == nullptr) {
                     auto allocResult = cqPtr->AllocWr(cb);

@@ -13,7 +13,7 @@ using namespace NActors;
 
 struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnectTest::TEvTestSerialization, 123> {};
 
-Y_UNIT_TEST_SUITE(RdmaSerialization) {
+Y_UNIT_TEST_SUITE(RdmaXdc) {
 
     TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool = nullptr) {
         auto ev = new TEvTestSerialization();
@@ -221,7 +221,6 @@ Y_UNIT_TEST_SUITE(RdmaSerialization) {
 
         void Bootstrap() {
             Send(Recipient, Event);
-            Cerr << "Sent event to " << Recipient.ToString() << Endl;
             PassAway();
         }
 

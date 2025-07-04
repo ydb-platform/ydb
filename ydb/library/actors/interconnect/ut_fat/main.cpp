@@ -25,11 +25,12 @@ namespace {
         std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool = nullptr;
 
     public:
-        TSenderActor(const TActorId& recipientActorId, ui16 sendFlags, bool useRope)
+        TSenderActor(const TActorId& recipientActorId, ui16 sendFlags, bool useRope,
+            std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool = nullptr)
             : TSenderBaseActor(recipientActorId, 32)
             , SendFlags(sendFlags)
             , UseRope(useRope)
-            , MemPool(NInterconnect::NRdma::CreateDummyMemPool())
+            , MemPool(memPool)
         {
         }
 
@@ -47,10 +48,13 @@ namespace {
             ev->Record.SetDataCrc(Crc32c(payload.data(), payload.size()));
 
             if (UseRope) {
-                auto buf = MemPool->AllocRcBuf(payload.size());
-                std::memcpy(buf.GetDataMut(), payload.data(), payload.size());
-                ev->Record.SetPayloadId(ev->AddPayload(TRope(std::move(buf))));
-                // ev->Record.SetPayloadId(ev->AddPayload(TRope(payload)));
+                if (MemPool) {
+                    auto buf = MemPool->AllocRcBuf(payload.size());
+                    std::memcpy(buf.GetDataMut(), payload.data(), payload.size());
+                    ev->Record.SetPayloadId(ev->AddPayload(TRope(std::move(buf))));
+                } else {
+                    ev->Record.SetPayloadId(ev->AddPayload(TRope(payload)));
+                }
             } else {
                 ev->Record.SetPayload(payload);
             }
@@ -155,7 +159,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         NanoSleep(30ULL * 1000 * 1000 * 1000);
     }
 
-    Y_UNIT_TEST(InterconnectTestWithProxyUnsureUndeliveredWithRopeXdc) {
+    void InterconnectTestWithProxyUnsureUndelivered(std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool) {
         ui32 numNodes = 2;
         double bandWidth = 1000000;
         ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
@@ -165,10 +169,18 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
-        TSenderActor* senderActor = new TSenderActor(recipient, flags, true);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, true, memPool);
         testCluster.RegisterActor(senderActor, 1);
 
         NanoSleep(30ULL * 1000 * 1000 * 1000);
+    }
+
+    Y_UNIT_TEST(InterconnectTestWithProxyUnsureUndeliveredWithRopeXdc) {
+        InterconnectTestWithProxyUnsureUndelivered(nullptr);
+    }
+
+    Y_UNIT_TEST(InterconnectTestWithProxyUnsureUndeliveredWithRopeRdma) {
+        InterconnectTestWithProxyUnsureUndelivered(NInterconnect::NRdma::CreateDummyMemPool());
     }
 
     Y_UNIT_TEST(InterconnectTestWithProxy) {

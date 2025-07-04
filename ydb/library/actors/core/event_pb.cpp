@@ -1,6 +1,7 @@
 #include "event_pb.h"
 
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
 
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr) {
@@ -177,8 +178,8 @@ namespace NActors {
         AbortFlag = false;
     }
 
-    void TCoroutineChunkSerializer::DropEvent() {
-        Event = nullptr; // TODO: fix
+    void TCoroutineChunkSerializer::DiscardEvent() {
+        Event = nullptr;
     }
 
     void TCoroutineChunkSerializer::Abort() {
@@ -342,11 +343,9 @@ namespace NActors {
 
     TRope SerializeToRopeImpl(std::function<TRcBuf(ui32 size)> alloc, const TVector<TRope> &payload) {
         TRope result;
-        Cerr << "Header size: " << CalculateSerilizedHeaderSizeImpl(payload) << Endl;
         TRcBuf headerBuf = alloc(CalculateSerilizedHeaderSizeImpl(payload));
         char* data = headerBuf.GetDataMut();
         auto append = [&](const char *p, size_t len) {
-            Cerr << "Appending " << len << " bytes to header" << Endl;
             std::memcpy(data, p, len);
             data += len;
             return true;

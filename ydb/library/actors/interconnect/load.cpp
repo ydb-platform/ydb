@@ -198,8 +198,8 @@ namespace NInterconnect {
                 THolder<TEvLoadMessage> ev;
                 if (Params.UseProtobufWithPayload && size) {
                     if (Params.RdmaMode) {
-                        auto& allocator = ctx.ActorSystem()->GetRcBufAllocator();
-                        TRcBuf buffer = allocator(size, 0, 0);
+                        auto allocator = ctx.ActorSystem()->GetRcBufAllocator();
+                        TRcBuf buffer = allocator->AllocRcBuf(size, 0, 0);
                         memset(buffer.GetDataMut(), '*', size);
                         ev.Reset(new TEvLoadMessage(Hops, id, TRope(std::move(buffer))));
                     } else {

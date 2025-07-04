@@ -19,14 +19,12 @@ inline ResultContainer GenDataForLZ4(const ui64 size, const ui64 seed = 0) {
     }();
     for (ui32 i = 0; i < data.size(); ++i) {
         const ui32 j = i + seed;
-        buffer[i] = 0xff & (j % short_step + j / long_step);
-    }
+        buffer[i] = 0xff & (j % short_step + j / long_step);    }
     return data;
 }
 
-template <class ResultContainer = TString>
-inline ResultContainer FastGenDataForLZ4(size_t size, ui64 seed = 0) {
-    ResultContainer data = ResultContainer::Uninitialized(size);
+template <class ResultContainer>
+inline void FastGenDataForLZ4(size_t size, ui64 seed, ResultContainer& data) {
     char *ptr = [&]() -> char * {
         if constexpr(std::is_same<ResultContainer, TString>::value) {
             return data.Detach();
@@ -111,7 +109,12 @@ inline ResultContainer FastGenDataForLZ4(size_t size, ui64 seed = 0) {
         case 64: UNROLL(64); break;
         default: Y_ABORT();
     }
+}
 
+template <class ResultContainer = TString>
+inline ResultContainer FastGenDataForLZ4(size_t size, ui64 seed = 0) {
+    ResultContainer data = ResultContainer::Uninitialized(size);
+    FastGenDataForLZ4<ResultContainer>(size, seed, data);
     return data;
 }
 

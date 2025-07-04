@@ -47,11 +47,13 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self.__ssh_username = ssh_username
         self.__deploy_cluster = deploy_cluster
 
-        if self.__yaml_config is None:
+        if self.__yaml_config is not None:
+            with open(self.__yaml_config, 'r') as r:
+                config_v2 = yaml.safe_load(r.read())
+                self.__hosts = [host.get('name', host.get('host')) for host in config_v2.get('config', {}).get('hosts')]
+        else:
             # Backward compatibility for cluster.yaml
             self.__hosts = [host.get('name', host.get('host')) for host in self.__cluster_config.get('hosts')]
-        else:
-            self.__hosts = [host.get('name', host.get('host')) for host in self.__yaml_config.get('config', {}).get('hosts')]
 
         self.__slot_count = 0
         for domain in self.__cluster_config['domains']:

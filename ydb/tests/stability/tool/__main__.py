@@ -257,6 +257,7 @@ class StabilityCluster:
         else:
             self.kikimr_cluster = ExternalKiKiMRCluster(
                 config_path=self.slice_directory,
+                kikimr_configure_binary_path=None,
                 kikimr_path=self.ydbd_path,
                 kikimr_next_path=self.ydbd_next_path,
                 ssh_username=self.ssh_username,

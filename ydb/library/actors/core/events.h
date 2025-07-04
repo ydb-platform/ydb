@@ -12,6 +12,8 @@ namespace NActorsProto {
 } // NActorsProto
 
 namespace NActors {
+    class TActorRunnableItem;
+
     struct TEvents {
         enum EEventSpace {
             ES_HELLOWORLD = 0,
@@ -107,6 +109,7 @@ namespace NActors {
                 InvokeQuery,
                 Wilson,
                 Preemption,
+                ResumeRunnable,
                 End,
 
                 // Compatibility section
@@ -216,6 +219,24 @@ namespace NActors {
 
         using TEvPoisonPill = TEvPoison; // Legacy name, deprecated
         using TEvActorDied = TEvGone;
+
+        /**
+         * Special system event used to resume runnable items.
+         *
+         * Caller must guarantee item remains valid until this event is handled
+         * by the target actor. It is possible to cancel this event by changing
+         * item to nullptr while the event is still inflight, but only in the
+         * context of the target actor.
+         *
+         * When event is destroyed before it could be handled the runnable will
+         * be executed with the actor argument equal to nullptr.
+         */
+        struct TEvResumeRunnable: public TEventLocal<TEvResumeRunnable, TSystem::ResumeRunnable> {
+            TActorRunnableItem* Item; // or nullptr
+
+            TEvResumeRunnable(TActorRunnableItem* item) : Item(item) {}
+            ~TEvResumeRunnable();
+        };
     };
 }
 

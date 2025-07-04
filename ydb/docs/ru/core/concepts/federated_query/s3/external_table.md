@@ -63,7 +63,7 @@ WHERE
 
 ## Импорт данных из S3 в таблицу {#import-from-s3}
 
-{{ ydb-short-name }} поддерживает загрузку данных из S3 в таблицу {{ ydb-short-name }} с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). Параметры для создаваемой таблицы могут быть перечиленны в секции `WITH`, подробнее см. в статье [{#T}](../../../yql/reference/syntax/create_table/with.md).
+{{ ydb-short-name }} поддерживает загрузку данных из S3 в таблицу {{ ydb-short-name }} с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). Параметры для создаваемой таблицы могут быть перечислены в секции `WITH`, подробнее см. в статье [{#T}](../../../yql/reference/syntax/create_table/with.md).
 
 ```yql
 CREATE TABLE column_table (

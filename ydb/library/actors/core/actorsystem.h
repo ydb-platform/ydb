@@ -16,6 +16,10 @@
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>
 
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
+
 namespace NActors {
     class IActor;
     class TActorSystem;
@@ -85,6 +89,13 @@ namespace NActors {
     };
 
     using TRcBufAllocator = std::function<TRcBuf(size_t size, size_t headRoom, size_t tailRoom)>;
+    class TRdmaAllocatorWithFallback {
+    public:
+        TRdmaAllocatorWithFallback(TRcBufAllocator cb) noexcept;
+        TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept;
+    private:
+        TRcBufAllocator Allocator;
+    };
 
     struct TActorSystemSetup {
         ui32 NodeId = 0;
@@ -156,7 +167,7 @@ namespace NActors {
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         mutable TTicketLock ScheduleLock;
 
-        const TRcBufAllocator RcBufAllocator;
+        mutable TRdmaAllocatorWithFallback RcBufAllocator;
 
         friend class TExecutorThread;
 
@@ -314,8 +325,8 @@ namespace NActors {
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
-        const TRcBufAllocator& GetRcBufAllocator() const {
-            return RcBufAllocator;
+        TRdmaAllocatorWithFallback* GetRcBufAllocator() const {
+            return &RcBufAllocator;
         }
     };
 }

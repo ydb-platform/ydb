@@ -77,6 +77,18 @@ namespace NActors {
         return buf;
     };
 
+    TRdmaAllocatorWithFallback::TRdmaAllocatorWithFallback(TRcBufAllocator cb) noexcept
+        : Allocator(cb)
+    {}
+
+    TRcBuf TRdmaAllocatorWithFallback::AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
+        auto buf = Allocator(size, headRoom, tailRoom);
+        if (!buf) {
+            return DefaultRcBufAllocator(size, headRoom, tailRoom);
+        }
+        return buf;
+    }
+
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)

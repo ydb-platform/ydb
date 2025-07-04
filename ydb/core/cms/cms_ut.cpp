@@ -2374,7 +2374,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(opts.WithBridgeMode());
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            Y_UNUSED(ev);
             if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
                 auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
                 ChangePileMap(x);

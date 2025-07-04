@@ -629,13 +629,13 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     SetupLogging();
 
     if (options.IsBridgeMode) {
-        TVector<TStateStorageInfo::TRingGroup> ringGroups = {{.State = PRIMARY}};
+        TVector<TStateStorageInfo::TRingGroup> ringGroups = {{.State = PRIMARY, .NToSelect = options.NToSelect}};
         std::fill_n(
             std::back_inserter(ringGroups),
             options.PileCount - 1,
-            TStateStorageInfo::TRingGroup{.State = SYNCHRONIZED}
+            TStateStorageInfo::TRingGroup{.State = SYNCHRONIZED, .NToSelect = options.NToSelect}
         );
-        auto setuper = CreateCustomStateStorageSetupper(ringGroups, 3);
+        auto setuper = CreateCustomStateStorageSetupper(ringGroups, options.NRings * options.RingSize);
 
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             setuper(*this, nodeIndex);

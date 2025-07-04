@@ -22,6 +22,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+ui64 gVectorIndexSeed = 0;
+
 // return count, parts, step
 static std::tuple<NTableIndex::TClusterId, NTableIndex::TClusterId, NTableIndex::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
@@ -512,7 +514,7 @@ private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
     template <bool WithSnapshot = true, typename TRequest>
-    TTabletId CommonFillScanRequest(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+    TTabletId FillScanRequestCommon(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
         request.SetTabletId(ui64(shardId));
 
@@ -543,6 +545,13 @@ private:
         return shardId;
     }
 
+    template <typename TRequest>
+    void FillScanRequestSeed(TRequest& request) {
+        request.SetSeed(gVectorIndexSeed
+            ? gVectorIndexSeed
+            : request.GetTabletId());
+    }
+
     void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
@@ -566,8 +575,8 @@ private:
 
         ev->Record.AddColumns(buildInfo.IndexColumns.back());
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+        FillScanRequestSeed(ev->Record);
         LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -606,7 +615,7 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -638,7 +647,7 @@ private:
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         LOG_N("TTxBuildProgress: TEvRecomputeKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -686,8 +695,8 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+        FillScanRequestSeed(ev->Record);
         LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -731,8 +740,8 @@ private:
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);
         }
 
-        auto shardId = CommonFillScanRequest<false>(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
+        FillScanRequestSeed(ev->Record);
         LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -780,7 +789,7 @@ private:
 
         ev->Record.SetTargetName(buildInfo.TargetName);
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 
         LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
 

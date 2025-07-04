@@ -220,8 +220,8 @@ namespace NSQLComplete {
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(antlr4::TokenStream* tokens, size_t cursorPosition)
-                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
+            TVisitor(const TParsedInput& input)
+                : TSQLv1NarrowingVisitor(input)
             {
             }
 
@@ -247,12 +247,9 @@ namespace NSQLComplete {
 
     } // namespace
 
-    TMaybe<TColumnContext> InferColumnContext(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition) {
+    TMaybe<TColumnContext> InferColumnContext(TParsedInput input) {
         // TODO: add utility `auto ToMaybe<T>(std::any any) -> TMaybe<T>`
-        std::any result = TVisitor(tokens, cursorPosition).visit(ctx);
+        std::any result = TVisitor(input).visit(input.SqlQuery);
         if (!result.has_value()) {
             return Nothing();
         }

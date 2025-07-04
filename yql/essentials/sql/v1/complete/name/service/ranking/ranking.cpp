@@ -118,7 +118,7 @@ namespace NSQLComplete {
                 if constexpr (std::is_base_of_v<TIndentifier, T>) {
                     return name.Indentifier;
                 }
-                if constexpr (std::is_base_of_v<TUnkownName, T>) {
+                if constexpr (std::is_base_of_v<TUnknownName, T>) {
                     return name.Content;
                 }
             }, name);

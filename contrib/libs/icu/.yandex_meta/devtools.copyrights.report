@@ -336,6 +336,17 @@ BELONGS ya.make
     Files with this license:
         readme.html [7:10]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 15a10786a52ce6e33763c52348c47981
+BELONGS ya.make
+    License text:
+        Copyright © 2016-2025 Unicode, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 15d83207399227b14a1044b1cba00a64
 BELONGS ya.make
     License text:
@@ -760,17 +771,6 @@ BELONGS ya.make
         include/unicode/format.h [5:6]
         include/unicode/selfmt.h [4:6]
         include/unicode/umsg.h [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 2a4e27e8d5d46fb305aaa9ee946c9903
-BELONGS ya.make
-    License text:
-        Copyright © 2016-2024 Unicode, Inc.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2b694c7444010b1b84ed2710400fe3ef
 BELONGS ya.make
@@ -3450,7 +3450,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        i18n/messageformat2.cpp [523:525]
+        i18n/messageformat2.cpp [505:507]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a021d3bd6d6cbb97cbccc0ab1586c491
 BELONGS ya.make
@@ -3840,7 +3840,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        APIChangeReport.html [1173:1175]
+        APIChangeReport.html [566:568]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c1b7297fc443f46a1d1de36f8b788822
 BELONGS ya.make
@@ -4354,7 +4354,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        i18n/messageformat2.cpp [581:591]
+        i18n/messageformat2.cpp [563:573]
 
 KEEP     COPYRIGHT_SERVICE_LABEL eed7e8b3d80757822970ac3a50dd6716
 BELONGS ya.make

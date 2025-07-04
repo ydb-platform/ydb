@@ -20,7 +20,6 @@ get_built_tool_path(
 )
 
 add_subdirectory(simple)
-add_subdirectory(batch)
 add_subdirectory(compilation)
 add_subdirectory(events)
 add_subdirectory(shutdown)
@@ -38,9 +37,10 @@ target_link_libraries(core-kqp-common PUBLIC
   yutil
   ydb-core-base
   ydb-core-engine
+  ydb-core-protos
+  ydb-core-scheme
   core-kqp-expr_nodes
   kqp-common-simple
-  kqp-common-batch
   kqp-common-compilation
   kqp-common-events
   kqp-common-shutdown
@@ -64,6 +64,7 @@ target_link_libraries(core-kqp-common PUBLIC
 
 target_sources(core-kqp-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/control.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_batch_operations.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_event_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_lwtrace_probes.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_resolve.cpp

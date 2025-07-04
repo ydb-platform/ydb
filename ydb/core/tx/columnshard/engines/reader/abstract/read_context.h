@@ -5,6 +5,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
@@ -53,10 +54,12 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(NKqp::NScheduler::TSchedulableTaskPtr, SchedulableTask);
     const NColumnShard::TConcreteScanCounters Counters;
+    YDB_READONLY_DEF(NColumnShard::TDuplicateFilteringCounters, DuplicateFilteringCounters);
     TReadMetadataBase::TConstPtr ReadMetadata;
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
     const ui64 ScanId;
     const TActorId ScanActorId;
+    YDB_READONLY_DEF(TActorId, ColumnShardActorId);
     const TActorId ResourceSubscribeActorId;
     const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
@@ -151,7 +154,8 @@ public:
 
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
+        const NColumnShard::TConcreteScanCounters& counters, const NColumnShard::TDuplicateFilteringCounters& duplicateFilteringCounters,
+        const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& columnShardActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
         const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask);
 };

@@ -1,0 +1,1604 @@
+<?xml version="1.0" ?>
+<testsuites>
+	<testsuite name="ydb/public/sdk/cpp/tests/integration/sessions_pool" tests="1" time="10.055" failures="0" skipped="0">
+		<testcase name="[0/10] chunk chunk" time="0.0"/>
+		<testcase name="YdbSdkSessionsPool.StressTestSync/1" time="10.055"/>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/bridge" tests="6" time="178.26312827199763" failures="0" skipped="0">
+		<testcase name="[test_bridge.py 0/10] chunk chunk" time="0.0"/>
+		<testcase name="test_bridge.py.TestBridgeBasic.test_update_and_get_cluster_state" time="34.90852188599911"/>
+		<testcase name="[test_bridge.py 1/10] chunk chunk" time="0.0"/>
+		<testcase name="test_bridge.py.TestBridgeValidation.test_invalid_updates[updates0-no_updates]" time="26.283922296001037"/>
+		<testcase name="[test_bridge.py 2/10] chunk chunk" time="0.0"/>
+		<testcase name="test_bridge.py.TestBridgeValidation.test_invalid_updates[updates1-multiple_primary_piles_in_request]" time="29.54911965500014"/>
+		<testcase name="[test_bridge.py 3/10] chunk chunk" time="0.0"/>
+		<testcase name="test_bridge.py.TestBridgeValidation.test_invalid_updates[updates2-no_primary_pile_in_result]" time="30.247728161999476"/>
+		<testcase name="[test_bridge.py 4/10] chunk chunk" time="0.0"/>
+		<testcase name="test_bridge.py.TestBridgeValidation.test_invalid_updates[updates3-duplicate_pile_update]" time="28.439871545999267"/>
+		<testcase name="[test_bridge.py 5/10] chunk chunk" time="0.0"/>
+		<testcase name="test_bridge.py.TestBridgeValidation.test_invalid_updates[updates4-invalid_pile_id]" time="28.8339647269986"/>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/clickbench" tests="1" time="27.8259570299997" failures="0" skipped="0">
+		<testcase name="[test.py 0/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test_run_benchmark[column]" time="27.8259570299997"/>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/hive" tests="1" time="22.208550878001006" failures="1" skipped="0">
+		<testcase name="[test_drain.py 0/20] chunk chunk" time="0.0"/>
+		<testcase name="test_drain.py.TestHive.test_drain_on_stop" time="22.208550878001006">
+			<failure>ydb/tests/functional/hive/test_drain.py:93: in test_drain_on_stop
+    wait_tablets_are_active(
+ydb/tests/library/common/delayed.py:151: in wait_tablets_are_active
+    predicate(raise_error=True)
+ydb/tests/library/common/delayed.py:141: in predicate
+    raise AssertionError(
+E   AssertionError: 
+E   ##############################
+E   0 seconds passed, 85 tablet(s) are not active. Inactive tablets are (first 10 entries): (72075186224037893: 6) (72075186224037900: 6) (72075186224037901: 6) (72075186224037916: 6) (72075186224037950: 6) (72075186224037965: 6) (72075186224037968: 6) (72075186224037986: 6) (72075186224038031: 6) (72075186224038053: 6). Additional info is empty
+E   ##############################
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/hive/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/hive/test-results/py3test/testing_out_stuff/test_drain.py.TestHive.test_drain_on_stop.log</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/serverless" tests="2" time="236.58863607900184" failures="2" skipped="0">
+		<testcase name="[test_serverless.py 0/10] chunk chunk" time="0.0"/>
+		<testcase name="test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]" time="127.89384164100102">
+			<failure>ydb/tests/functional/serverless/test_serverless.py:452: in test_database_with_disk_quotas
+    IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
+contrib/python/tornado/tornado-4/tornado/ioloop.py:458: in run_sync
+    return future_cell[0].result()
+contrib/python/tornado/tornado-4/tornado/concurrent.py:238: in result
+    raise_exc_info(self._exc_info)
+&amp;lt;string&amp;gt;:4: in raise_exc_info
+    ???
+contrib/python/tornado/tornado-4/tornado/gen.py:1064: in run
+    yielded = self.gen.throw(*exc_info)
+ydb/tests/functional/serverless/test_serverless.py:349: in wrapped
+    res = yield func(*args, **kwargs)
+contrib/python/tornado/tornado-4/tornado/gen.py:1056: in run
+    value = future.result()
+contrib/python/tornado/tornado-4/tornado/concurrent.py:238: in result
+    raise_exc_info(self._exc_info)
+&amp;lt;string&amp;gt;:4: in raise_exc_info
+    ???
+contrib/python/tornado/tornado-4/tornado/gen.py:1064: in run
+    yielded = self.gen.throw(*exc_info)
+ydb/tests/functional/serverless/test_serverless.py:369: in async_write_key
+    yield tx.async_execute(
+contrib/python/tornado/tornado-4/tornado/gen.py:1056: in run
+    value = future.result()
+contrib/tools/python3/Lib/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+contrib/tools/python3/Lib/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+contrib/python/ydb/py3/ydb/connection.py:105: in _on_response_callback
+    response = response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+contrib/python/ydb/py3/ydb/_session_impl.py:20: in decorator
+    return func(rpc_state, response_pb, session_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:9: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:22: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:165: in wrap_result_and_tx_id
+    issues._process_response(response_pb.operation)
+contrib/python/ydb/py3/ydb/issues.py:229: in _process_response
+    raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.Unavailable: message: &quot;Disk space exhausted. Table `/Root/quoted_serverless/test_database_with_disk_quotas_enable_alter_database_create_hive_first--false_/dirA0/table`.&quot; issue_code: 2033 severity: 1 issues { message: &quot;Cannot perform writes: database is out of disk space&quot; issue_code: 2033 severity: 1 } (server_code: 400050)
+
+During handling of the above exception, another exception occurred:
+ydb/tests/functional/serverless/test_serverless.py:451: in test_database_with_disk_quotas
+    with pytest.raises(ydb.Unavailable, match=r'.*DISK_SPACE_EXHAUSTED.*'):
+E   AssertionError: Regex pattern did not match.
+E    Regex: '.*DISK_SPACE_EXHAUSTED.*'
+E    Input: 'message: &quot;Disk space exhausted. Table `/Root/quoted_serverless/test_database_with_disk_quotas_enable_alter_database_create_hive_first--false_/dirA0/table`.&quot; issue_code: 2033 severity: 1 issues { message: &quot;Cannot perform writes: database is out of disk space&quot; issue_code: 2033 severity: 1 } (server_code: 400050)'
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/serverless/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/serverless/test-results/py3test/testing_out_stuff/test_serverless.py.test_database_with_disk_quotas.enable_alter_database_create_hive_first--false.log</failure>
+		</testcase>
+		<testcase name="[test_serverless.py 1/10] chunk chunk" time="0.0"/>
+		<testcase name="test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]" time="108.69479443800083">
+			<failure>ydb/tests/functional/serverless/test_serverless.py:452: in test_database_with_disk_quotas
+    IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
+contrib/python/tornado/tornado-4/tornado/ioloop.py:458: in run_sync
+    return future_cell[0].result()
+contrib/python/tornado/tornado-4/tornado/concurrent.py:238: in result
+    raise_exc_info(self._exc_info)
+&amp;lt;string&amp;gt;:4: in raise_exc_info
+    ???
+contrib/python/tornado/tornado-4/tornado/gen.py:1064: in run
+    yielded = self.gen.throw(*exc_info)
+ydb/tests/functional/serverless/test_serverless.py:349: in wrapped
+    res = yield func(*args, **kwargs)
+contrib/python/tornado/tornado-4/tornado/gen.py:1056: in run
+    value = future.result()
+contrib/python/tornado/tornado-4/tornado/concurrent.py:238: in result
+    raise_exc_info(self._exc_info)
+&amp;lt;string&amp;gt;:4: in raise_exc_info
+    ???
+contrib/python/tornado/tornado-4/tornado/gen.py:1064: in run
+    yielded = self.gen.throw(*exc_info)
+ydb/tests/functional/serverless/test_serverless.py:369: in async_write_key
+    yield tx.async_execute(
+contrib/python/tornado/tornado-4/tornado/gen.py:1056: in run
+    value = future.result()
+contrib/tools/python3/Lib/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+contrib/tools/python3/Lib/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+contrib/python/ydb/py3/ydb/connection.py:105: in _on_response_callback
+    response = response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+contrib/python/ydb/py3/ydb/_session_impl.py:20: in decorator
+    return func(rpc_state, response_pb, session_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:9: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:22: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:165: in wrap_result_and_tx_id
+    issues._process_response(response_pb.operation)
+contrib/python/ydb/py3/ydb/issues.py:229: in _process_response
+    raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.Unavailable: message: &quot;Disk space exhausted. Table `/Root/quoted_serverless/test_database_with_disk_quotas_enable_alter_database_create_hive_first--true_/dirA0/table`.&quot; issue_code: 2033 severity: 1 issues { message: &quot;Cannot perform writes: database is out of disk space&quot; issue_code: 2033 severity: 1 } (server_code: 400050)
+
+During handling of the above exception, another exception occurred:
+ydb/tests/functional/serverless/test_serverless.py:451: in test_database_with_disk_quotas
+    with pytest.raises(ydb.Unavailable, match=r'.*DISK_SPACE_EXHAUSTED.*'):
+E   AssertionError: Regex pattern did not match.
+E    Regex: '.*DISK_SPACE_EXHAUSTED.*'
+E    Input: 'message: &quot;Disk space exhausted. Table `/Root/quoted_serverless/test_database_with_disk_quotas_enable_alter_database_create_hive_first--true_/dirA0/table`.&quot; issue_code: 2033 severity: 1 issues { message: &quot;Cannot perform writes: database is out of disk space&quot; issue_code: 2033 severity: 1 } (server_code: 400050)'
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/serverless/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/serverless/test-results/py3test/testing_out_stuff/test_serverless.py.test_database_with_disk_quotas.enable_alter_database_create_hive_first--true.log</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/sqs/multinode" tests="1" time="46.59682739500022" failures="0" skipped="0">
+		<testcase name="[0/60] chunk chunk" time="0.0"/>
+		<testcase name="test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[stop_node-std]" time="46.59682739500022"/>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/tenants" tests="6" time="216.37443822899968" failures="6" skipped="0">
+		<testcase name="[0/20] chunk chunk" time="0.0"/>
+		<testcase name="test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]" time="19.657784041000014">
+			<failure>ydb/tests/functional/tenants/test_dynamic_tenants.py:350: in test_create_and_drop_the_same_tenant2
+    pool.retry_operation_sync(write_some_data, None, &quot;table&quot;, &quot;table_for_rm&quot;, value)
+contrib/python/ydb/py3/ydb/table.py:2655: in retry_operation_sync
+    return retry_operation_sync(wrapped_callee, retry_settings)
+contrib/python/ydb/py3/ydb/retries.py:133: in retry_operation_sync
+    for next_opt in opt_generator:
+contrib/python/ydb/py3/ydb/retries.py:94: in retry_operation_impl
+    result = YdbRetryOperationFinalResult(callee(*args, **kwargs))
+contrib/python/ydb/py3/ydb/table.py:2653: in wrapped_callee
+    return callee(session, *args, **kwargs)
+ydb/tests/functional/tenants/test_dynamic_tenants.py:340: in write_some_data
+    session.transaction().execute(
+contrib/python/ydb/py3/ydb/table.py:2392: in execute
+    return self._driver(
+contrib/python/ydb/py3/ydb/tracing.py:70: in wrapper
+    return f(self, *args, **kwargs)
+contrib/python/ydb/py3/ydb/pool.py:464: in __call__
+    res = connection(
+contrib/python/ydb/py3/ydb/connection.py:465: in __call__
+    return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+contrib/python/ydb/py3/ydb/_session_impl.py:20: in decorator
+    return func(rpc_state, response_pb, session_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:9: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:22: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:165: in wrap_result_and_tx_id
+    issues._process_response(response_pb.operation)
+contrib/python/ydb/py3/ydb/issues.py:229: in _process_response
+    raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.SchemeError: message: &quot;Failed to create default pool in database /Root/users/database&quot; severity: 1 issues { message: &quot;Failed to create resource pool: StatusPathDoesNotExist&quot; severity: 1 issues { message: &quot;Path does not exist&quot; issue_code: 200200 severity: 1 } } ,message: &quot;Query failed during adding/waiting in workload pool &quot; severity: 1 (server_code: 400070)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2.enable_alter_database_create_hive_first--false.log</failure>
+		</testcase>
+		<testcase name="[1/20] chunk chunk" time="0.0"/>
+		<testcase name="test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--true]" time="19.87799292499949">
+			<failure>ydb/tests/functional/tenants/test_dynamic_tenants.py:350: in test_create_and_drop_the_same_tenant2
+    pool.retry_operation_sync(write_some_data, None, &quot;table&quot;, &quot;table_for_rm&quot;, value)
+contrib/python/ydb/py3/ydb/table.py:2655: in retry_operation_sync
+    return retry_operation_sync(wrapped_callee, retry_settings)
+contrib/python/ydb/py3/ydb/retries.py:133: in retry_operation_sync
+    for next_opt in opt_generator:
+contrib/python/ydb/py3/ydb/retries.py:94: in retry_operation_impl
+    result = YdbRetryOperationFinalResult(callee(*args, **kwargs))
+contrib/python/ydb/py3/ydb/table.py:2653: in wrapped_callee
+    return callee(session, *args, **kwargs)
+ydb/tests/functional/tenants/test_dynamic_tenants.py:340: in write_some_data
+    session.transaction().execute(
+contrib/python/ydb/py3/ydb/table.py:2392: in execute
+    return self._driver(
+contrib/python/ydb/py3/ydb/tracing.py:70: in wrapper
+    return f(self, *args, **kwargs)
+contrib/python/ydb/py3/ydb/pool.py:464: in __call__
+    res = connection(
+contrib/python/ydb/py3/ydb/connection.py:465: in __call__
+    return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+contrib/python/ydb/py3/ydb/_session_impl.py:20: in decorator
+    return func(rpc_state, response_pb, session_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:9: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:22: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:165: in wrap_result_and_tx_id
+    issues._process_response(response_pb.operation)
+contrib/python/ydb/py3/ydb/issues.py:229: in _process_response
+    raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.SchemeError: message: &quot;Failed to create default pool in database /Root/users/database&quot; severity: 1 issues { message: &quot;Failed to create resource pool: StatusPathDoesNotExist&quot; severity: 1 issues { message: &quot;Path does not exist&quot; issue_code: 200200 severity: 1 } } ,message: &quot;Query failed during adding/waiting in workload pool &quot; severity: 1 (server_code: 400070)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2.enable_alter_database_create_hive_first--true.log</failure>
+		</testcase>
+		<testcase name="[2/20] chunk chunk" time="0.0"/>
+		<testcase name="test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--false]" time="14.36136134500157">
+			<failure>ydb/tests/functional/tenants/test_tenants.py:433: in test_list_database_above
+    assert result.children[0].name == &quot;.sys&quot;
+E   AssertionError: assert '.metadata' == '.sys'
+E     
+E     - .sys
+E     + .metadata
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_tenants.py.TestTenants.test_list_database_above.enable_alter_database_create_hive_first--false.log</failure>
+		</testcase>
+		<testcase name="[3/20] chunk chunk" time="0.0"/>
+		<testcase name="test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--true]" time="14.82535575699967">
+			<failure>ydb/tests/functional/tenants/test_tenants.py:433: in test_list_database_above
+    assert result.children[0].name == &quot;.sys&quot;
+E   AssertionError: assert '.metadata' == '.sys'
+E     
+E     - .sys
+E     + .metadata
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_tenants.py.TestTenants.test_list_database_above.enable_alter_database_create_hive_first--true.log</failure>
+		</testcase>
+		<testcase name="[4/20] chunk chunk" time="0.0"/>
+		<testcase name="test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]" time="79.59934231999887">
+			<failure>ydb/tests/functional/tenants/test_tenants.py:297: in test_stop_start
+    with ydb_database_ctx(ydb_cluster, database_path):
+contrib/tools/python3/Lib/contextlib.py:137: in __enter__
+    return next(self.gen)
+ydb/tests/library/fixtures/__init__.py:88: in ydb_database_ctx
+    ydb_cluster.create_database(database_path, storage_pool_units_count=storage_pools, timeout_seconds=timeout_seconds, token=token)
+ydb/tests/library/harness/kikimr_cluster_interface.py:230: in create_database
+    raise RuntimeError('create_database failed: %s, %s' % (operation.status, ydb.issues._format_issues(operation.issues)))
+E   RuntimeError: create_database failed: 400080, message: &quot;Group fit error BoxId# 1 StoragePoolId# 5 Error# failed to allocate group: no group options PDisks# {[(1:1-S)]}&quot; severity: 1
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_tenants.py.TestTenants.test_stop_start.enable_alter_database_create_hive_first--false.log</failure>
+		</testcase>
+		<testcase name="[5/20] chunk chunk" time="0.0"/>
+		<testcase name="test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]" time="68.05260184100007">
+			<failure>ydb/tests/functional/tenants/test_tenants.py:297: in test_stop_start
+    with ydb_database_ctx(ydb_cluster, database_path):
+contrib/tools/python3/Lib/contextlib.py:137: in __enter__
+    return next(self.gen)
+ydb/tests/library/fixtures/__init__.py:88: in ydb_database_ctx
+    ydb_cluster.create_database(database_path, storage_pool_units_count=storage_pools, timeout_seconds=timeout_seconds, token=token)
+ydb/tests/library/harness/kikimr_cluster_interface.py:230: in create_database
+    raise RuntimeError('create_database failed: %s, %s' % (operation.status, ydb.issues._format_issues(operation.issues)))
+E   RuntimeError: create_database failed: 400080, message: &quot;Group fit error BoxId# 1 StoragePoolId# 5 Error# failed to allocate group: no group options PDisks# {[(1:1-S)]}&quot; severity: 1
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_tenants.py.TestTenants.test_stop_start.enable_alter_database_create_hive_first--true.log</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/tpc/medium" tests="171" time="1039.3665198620029" failures="2" skipped="3">
+		<testcase name="[test_clean.py] chunk chunk" time="0.0"/>
+		<testcase name="test_clean.py.TestClean.test" time="38.7895504220005"/>
+		<testcase name="[test_clickbench.py] chunk chunk" time="0.0"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query00]" time="20.0771682780005"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query01]" time="0.6986606220007161"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query02]" time="0.7225591939995866"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query03]" time="0.6410240529994553"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query04]" time="0.7078255779997562"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query05]" time="0.7060322200013616"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query06]" time="0.5991198230003647"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query07]" time="0.9143881380005041"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query08]" time="0.6461984069992468"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query09]" time="1.1438565999997081"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query10]" time="0.658275264000622"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query11]" time="0.7775163759988573"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query12]" time="0.6970714220005902"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query13]" time="0.8184871090015804"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query14]" time="1.1870737860008376"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query15]" time="0.7012853559999712"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query16]" time="0.8128607749995354"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query17]" time="0.8462180199994691"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query18]" time="0.8405636540001069"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query19]" time="0.5645999650005251"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query20]" time="0.6973014209988833"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query21]" time="0.7859764319991882"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query22]" time="1.077093314999729"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query23]" time="2.7598091039999417"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query24]" time="0.6780217020004784"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query25]" time="0.6924730809996618"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query26]" time="0.746134551999603"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query27]" time="0.9211701749991335"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query28]" time="1.042428322001797"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query29]" time="3.577640081000027"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query30]" time="1.3764285690003817"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query31]" time="1.0971921709997332"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query32]" time="1.0613680739998017"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query33]" time="0.8602875300011874"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query34]" time="0.8429994839998471"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query35]" time="0.9821797600006903"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query36]" time="0.7211484510007722"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query37]" time="0.678106769999431"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query38]" time="0.6113460909991772"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query39]" time="0.8402834280004754"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query40]" time="0.778312256999925"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query41]" time="0.6338381739997203"/>
+		<testcase name="test_clickbench.py.TestClickbench.test_clickbench[Query42]" time="0.8578465440004948"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query00]" time="58.15638825199858"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query01]" time="0.03593568099950062"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query02]" time="0.03435040100066544"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query03]" time="0.030907748001482105"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query04]" time="0.034677388000091014"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query05]" time="0.035658653000609775"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query06]" time="0.02822980800010555"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query07]" time="0.03225310199923115"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query08]" time="0.03263633599908644"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query09]" time="0.03725827400103299"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query10]" time="0.03471287899992603"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query11]" time="0.03376573599962285"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query12]" time="0.0316889120003907"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query13]" time="0.030009718000655994"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query14]" time="0.03365922899956786"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query15]" time="0.031328220999967016"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query16]" time="0.033105924000665254"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query17]" time="0.03350583800147433"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query18]" time="0.03183393799918122"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query19]" time="0.028798198999538727"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query20]" time="0.031597766000231786"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query21]" time="0.03173071000037453"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query22]" time="0.03715602099964599"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query23]" time="0.0322762240011798"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query24]" time="0.03357080500063603"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query25]" time="0.03703825200045685"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query26]" time="0.03707838900027127"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query27]" time="0.03227383499961434"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query28]" time="0.03352193899900158"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query29]" time="0.031174691999694915"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query30]" time="0.03364691099886841"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query31]" time="0.03343361699990055"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query32]" time="0.033455599999797414"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query33]" time="0.033290642999418196"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query34]" time="0.03358029199898738"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query35]" time="0.03255790000093839"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query36]" time="0.031240831000104663"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query37]" time="0.03115112599971326"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query38]" time="0.03098426700125856"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query39]" time="0.03077947400015546"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query40]" time="0.030772772999625886"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query41]" time="0.030771302999710315"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Query42]" time="0.029236600000331237"/>
+		<testcase name="test_clickbench.py.TestClickbenchParallel.test[Sum]" time="0.03955006100022729"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query00]" time="19.276609861999532"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query01]" time="0.7140987749990018"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query02]" time="0.7510842459996638"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query03]" time="0.7196693040004902"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query04]" time="0.952371389000291"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query05]" time="0.9107471809993513"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query06]" time="0.8184050390000266"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query07]" time="0.7367135750009766"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query08]" time="1.0132147149997763"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query09]" time="1.9240463549995184"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query10]" time="1.0569786050000403"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query11]" time="0.9892306499996266"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query12]" time="0.7970447540010355"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query13]" time="0.9070838659999936"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query14]" time="0.7063902840000083"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query15]" time="0.7106810870009213"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query16]" time="0.9702704989995254"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query17]" time="0.7776088840000739"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query18]" time="0.0054857579998497386">
+			<skipped>reason: https://github.com/ydb-platform/ydb/issues/8630</skipped>
+		</testcase>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query19]" time="0.563425246999941"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query20]" time="0.6595789689990852"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query21]" time="0.7205009929994048"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query22]" time="1.3803009619996374"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query23]" time="3.4027741520003474"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query24]" time="0.6164260390005438"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query25]" time="0.6689104099996257"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query26]" time="0.7064408260002892"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query27]" time="0.8108584079991488"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query28]" time="0.007203895999737142">
+			<skipped>reason: https://github.com/ydb-platform/ydb/issues/8630</skipped>
+		</testcase>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query29]" time="3.6761104130000604"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query30]" time="0.8671668039996803"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query31]" time="0.9066602800003238"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query32]" time="1.5428382210002383"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query33]" time="0.7346299159999035"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query34]" time="0.8242435569991358"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query35]" time="0.8270216769997205"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query36]" time="0.9042300510000132"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query37]" time="0.9188755519999177"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query38]" time="0.906531706998976"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query39]" time="0.007258649999130284">
+			<skipped>reason: https://github.com/ydb-platform/ydb/issues/8630</skipped>
+		</testcase>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query40]" time="0.9707044130000213"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query41]" time="0.9795443359989804"/>
+		<testcase name="test_clickbench.py.TestClickbenchPg.test_clickbench[Query42]" time="0.96158017200014"/>
+		<testcase name="[test_diff_processing.py] chunk chunk" time="0.0"/>
+		<testcase name="test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.NO]" time="19.746583946999635"/>
+		<testcase name="test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.WARNING]" time="0.3898449279995475"/>
+		<testcase name="test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.ERROR]" time="0.40799447300014435"/>
+		<testcase name="test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.NO]" time="22.043131054000696"/>
+		<testcase name="test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.WARNING]" time="2.1083473050002794"/>
+		<testcase name="test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.ERROR]" time="1.965034451000065"/>
+		<testcase name="test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.NO]" time="18.980714039000304"/>
+		<testcase name="test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.WARNING]" time="0.4627782319994367"/>
+		<testcase name="test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.ERROR]" time="0.3350081409989798"/>
+		<testcase name="[test_external.py] chunk chunk" time="0.0"/>
+		<testcase name="test_external.py.TestExternalE1.test[first_query_set.1.sql]" time="19.95572506099961"/>
+		<testcase name="test_external.py.TestExternalE1.test[first_query_set.2.yql]" time="0.3161528829987219"/>
+		<testcase name="test_external.py.TestExternalE1.test[second_query_set.join.sql]" time="0.8153920459999426"/>
+		<testcase name="[test_import_csv.py] chunk chunk" time="0.0"/>
+		<testcase name="test_import_csv.py.TestExternalImportCsv.test" time="19.95646655500059"/>
+		<testcase name="test_import_csv.py.TestExternalImportCsvArrow.test" time="19.71045033199971"/>
+		<testcase name="[test_tpch.py] chunk chunk" time="0.0"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[1]" time="128.5333280499999"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[2]" time="5.352633980000064"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[3]" time="15.62141117200099"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[4]" time="13.226751485000023"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[5]" time="69.47648660399955"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[6]" time="5.1315842840003825"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[7]" time="9.067541389001235"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[8]" time="10.662629907999872"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[9]" time="10.997347962998901"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[10]" time="10.526011772000857"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[11]" time="4.309219511001174"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[12]" time="8.169034153999746"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[13]" time="5.274957722999716"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[14]" time="5.154344246999244"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[15]" time="9.31571729100051"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[16]" time="2.353300174000651"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[17]" time="16.52764648199991"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[18]" time="8.2361654740007"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[19]" time="6.569261980001102"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[20]" time="11.057923480999307"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[21]" time="26.76990517900049"/>
+		<testcase name="test_tpch.py.TestTpchS1.test_tpch[22]" time="2.7845920270001443"/>
+		<testcase name="[test_upload.py] chunk chunk" time="0.0"/>
+		<testcase name="test_upload.py.TestUploadTpchS1.test" time="146.63449734700043"/>
+		<testcase name="[test_workload_oltp.py] chunk chunk" time="0.0"/>
+		<testcase name="test_workload_oltp.py.TestWorkloadSimpleQueue.test_workload_oltp" time="23.872189400001844">
+			<failure>ydb/tests/olap/load/lib/workload_oltp.py:29: in test_workload_oltp
+    self.execute_workload_test(
+ydb/tests/olap/load/lib/workload_executor.py:224: in execute_workload_test
+    return self._execute_workload_with_deployment(
+ydb/tests/olap/load/lib/workload_executor.py:251: in _execute_workload_with_deployment
+    final_result = self._finalize_workload_results(
+ydb/tests/olap/load/lib/workload_executor.py:358: in _finalize_workload_results
+    self.process_workload_result_with_diagnostics(overall_result, workload_name, False)
+ydb/tests/olap/load/lib/conftest.py:756: in process_workload_result_with_diagnostics
+    raise exc
+E   Failed: WORKLOAD EXECUTION FAILED: OltpWorkload
+E   Main error: All 1 runs failed to execute successfully
+E   
+E   Execution details:
+E   Total iterations attempted: 1
+E   
+E   FAILED ITERATIONS (1):
+E     - Iteration 1: Workload execution failed. stderr: FATAL: message: &quot;Execution&quot; issue_code: 1060 severity: 1 issues { position { row: 4 column: 21 } message: &quot;Vector index support is disabled&quot; end_position { row: 4 column: 21 } severity: 1 } (server_code: 400080)
+E   Traceback (most recent call last):
+E     File &quot;ydb/tests/stress/common/common.py&quot;, line 91, in wrapper
+E       f()
+E     File &quot;ydb/tests/stress/oltp_workload/workload/type/vector_index.py&quot;, line 259, in _loop
+E       raise ex
+E     File &quot;ydb/tests/stress/oltp_workload/workload/type/vector_index.py&quot;, line 238, in _loop
+E       self._check_loop(
+E     File &quot;ydb/tests/stress/oltp_workload/workload/type/vector_index.py&quot;, line 184, in _check_loop
+E       self._create_index(
+E     File &quot;ydb/tests/stress/oltp_workload/workload/type/vector_index.py&quot;, line 93, in _create_index
+E       self.client.query(create_index_sql, True)
+E     File &quot;ydb/tests/stress/common/common.py&quot;, line 24, in query
+E       return self.session_pool.execute_with_retries(statement)
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File &quot;contrib/python/ydb/py3/ydb/query/pool.py&quot;, line 204, in execute_with_retries
+E       return retry_operation_sync(wrapped_callee, retry_settings)
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File &quot;contrib/python/ydb/py3/ydb/retries.py&quot;, line 133, in retry_operation_sync
+E       for next_opt in opt_generator:
+E                       ^^^^^^^^^^^^^
+E     File &quot;contrib/python/ydb/py3/ydb/retries.py&quot;, line 94, in retry_operation_impl
+E       result = YdbRetryOperationFinalResult(callee(*args, **kwargs))
+E                                             ^^^^^^^^^^^^^^^^^^^^^^^
+E     File &quot;contrib/python/ydb/py3/ydb/query/pool.py&quot;, line 202, in wrapped_callee
+E       return [result_set for result_set in it]
+E                                            ^^
+E     File &quot;contrib/python/ydb/py3/ydb/_utilities.py&quot;, line 173, in __next__
+E       return self._next()
+E              ^^^^^^^^^^^^
+E     File &quot;contrib/python/ydb/py3/ydb/_utilities.py&quot;, line 164, in _next
+E       res = self.wrapper(next(self.it))
+E             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File &quot;contrib/python/ydb/py3/ydb/query/session.py&quot;, line 368, in &amp;lt;lambda&amp;gt;
+E       lambda resp: base.wrap_execute_query_response(
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File &quot;contrib/python/ydb/py3/ydb/query/base.py&quot;, line 180, in decorator
+E       return func(rpc_state, response_pb, session_state, *args, **kwargs)
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File &quot;contrib/python/ydb/py3/ydb/query/base.py&quot;, line 198, in wrap_execute_query_response
+E       issues._process_response(response_pb)
+E     File &quot;contrib/python/ydb/py3/ydb/issues.py&quot;, line 229, in _process_response
+E       raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.GenericError: message: &quot;Execution&quot; issue_code: 1060 severity: 1 issues { position { row: 4 column: 21 } message: &quot;Vector index support is disabled&quot; end_position { row: 4 column: 21 } severity: 1 } (server_code: 400080)
+E    (time: 3.1s)
+E   
+E   STDERR (last 500 chars):
+E   ...python/ydb/py3/ydb/query/base.py&quot;, line 198, in wrap_execute_query_response
+E       issues._process_response(response_pb)
+E     File &quot;contrib/python/ydb/py3/ydb/issues.py&quot;, line 229, in _process_response
+E       raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.GenericError: message: &quot;Execution&quot; issue_code: 1060 severity: 1 issues { position { row: 4 column: 21 } message: &quot;Vector index support is disabled&quot; end_position { row: 4 column: 21 } severity: 1 } (server_code: 400080)
+E   
+E   RUN STATISTICS:
+E     Successful runs: 0/1
+E     Failed runs: 1
+E     Success rate: 0.0%
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tpc/medium/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tpc/medium/test-results/py3test/testing_out_stuff/test_workload_oltp.py.TestWorkloadSimpleQueue.test_workload_oltp.log</failure>
+		</testcase>
+		<testcase name="[test_workload_simple_queue.py] chunk chunk" time="0.0"/>
+		<testcase name="test_workload_simple_queue.py.TestWorkloadSimpleQueue.test_workload_simple_queue[row]" time="26.42546999499973">
+			<failure>ydb/tests/olap/load/lib/workload_simple_queue.py:38: in test_workload_simple_queue
+    self.execute_workload_test(
+ydb/tests/olap/load/lib/workload_executor.py:224: in execute_workload_test
+    return self._execute_workload_with_deployment(
+ydb/tests/olap/load/lib/workload_executor.py:251: in _execute_workload_with_deployment
+    final_result = self._finalize_workload_results(
+ydb/tests/olap/load/lib/workload_executor.py:358: in _finalize_workload_results
+    self.process_workload_result_with_diagnostics(overall_result, workload_name, False)
+ydb/tests/olap/load/lib/conftest.py:756: in process_workload_result_with_diagnostics
+    raise exc
+E   Failed: WORKLOAD EXECUTION FAILED: SimpleQueue_row
+E   Main error: All 1 runs failed to execute successfully
+E   
+E   Execution details:
+E   Total iterations attempted: 1
+E   
+E   FAILED ITERATIONS (1):
+E     - Iteration 1: Workload execution failed. stderr: Command failed with exit code -15, but stderr is empty (time: 7.0s)
+E   
+E   STDERR (last 500 chars):
+E   === Run 1 stderr ===
+E   Command failed with exit code -15, but stderr is empty
+E   
+E   RUN STATISTICS:
+E     Successful runs: 0/1
+E     Failed runs: 1
+E     Success rate: 0.0%
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tpc/medium/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tpc/medium/test-results/py3test/testing_out_stuff/test_workload_simple_queue.py.TestWorkloadSimpleQueue.test_workload_simple_queue.row.log</failure>
+		</testcase>
+		<testcase name="test_workload_simple_queue.py.TestWorkloadSimpleQueue.test_workload_simple_queue[column]" time="113.37910004599962"/>
+	</testsuite>
+	<testsuite name="ydb/tests/olap/s3_import" tests="1" time="283.2674850399999" failures="0" skipped="0">
+		<testcase name="sole chunk chunk" time="0.0"/>
+		<testcase name="test_tpch_import.py.TestS3TpchImport.test_import_and_export" time="283.2674850399999"/>
+	</testsuite>
+	<testsuite name="ydb/tests/stress/olap_workload/tests" tests="1" time="231.02665456000068" failures="0" skipped="0">
+		<testcase name="sole chunk chunk" time="0.0"/>
+		<testcase name="test_workload.py.TestYdbWorkload.test" time="231.02665456000068"/>
+	</testsuite>
+	<testsuite name="ydb/tests/stress/reconfig_state_storage_workload/tests" tests="3" time="0" failures="2" skipped="2">
+		<testcase name="sole chunk chunk" time="0.0">
+			<failure>Test failed with 1 exit code. See logs for more info
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase name="test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage" time="0">
+			<failure>Test crashed
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/testing_out_stuff/test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage.log</failure>
+		</testcase>
+		<testcase name="test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board" time="0">
+			<skipped>[Error message is missing or not found]</skipped>
+		</testcase>
+		<testcase name="test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board" time="0">
+			<skipped>[Error message is missing or not found]</skipped>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/stress/simple_queue/tests" tests="2" time="190.79730793700037" failures="0" skipped="0">
+		<testcase name="sole chunk chunk" time="0.0"/>
+		<testcase name="test_workload.py.TestYdbWorkload.test[row]" time="91.77445021700078"/>
+		<testcase name="test_workload.py.TestYdbWorkload.test[column]" time="99.02285771999959"/>
+	</testsuite>
+	<testsuite name="ydb/library/yql/tests/sql/dq_file/part11" tests="212" time="1042.4003942012787" failures="2" skipped="27">
+		<testcase name="[0/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[action-action_eval_cluster_table_for--ForceBlocks]" time="5.291218042373657"/>
+		<testcase name="test.py.test[action-action_eval_cluster_table_for--Results]" time="1.3382978439331055"/>
+		<testcase name="test.py.test[action-action_nested_query-default.txt-ForceBlocks]" time="3.120912790298462"/>
+		<testcase name="test.py.test[action-action_nested_query-default.txt-Results]" time="0.9859068393707275"/>
+		<testcase name="test.py.test[action-insert_each_from_folder--ForceBlocks]" time="3.913473129272461"/>
+		<testcase name="test.py.test[action-insert_each_from_folder--Results]" time="1.3324720859527588"/>
+		<testcase name="test.py.test[action-subquery-default.txt-ForceBlocks]" time="3.101654291152954"/>
+		<testcase name="test.py.test[action-subquery-default.txt-Results]" time="1.1331079006195068"/>
+		<testcase name="test.py.test[aggr_factory-avg_distinct_expr-default.txt-ForceBlocks]" time="3.2056758403778076"/>
+		<testcase name="test.py.test[aggr_factory-avg_distinct_expr-default.txt-Results]" time="1.8269891738891602"/>
+		<testcase name="test.py.test[aggr_factory-bitand-default.txt-ForceBlocks]" time="3.292262077331543"/>
+		<testcase name="test.py.test[aggr_factory-bitand-default.txt-Results]" time="1.7175700664520264"/>
+		<testcase name="test.py.test[aggregate-agg_filter_pushdown--ForceBlocks]" time="2.588982105255127"/>
+		<testcase name="test.py.test[aggregate-agg_filter_pushdown--Results]" time="1.2032949924468994"/>
+		<testcase name="test.py.test[aggregate-aggregate_with_default_yson_options-default.txt-ForceBlocks]" time="2.3961589336395264"/>
+		<testcase name="test.py.test[aggregate-aggregate_with_default_yson_options-default.txt-Results]" time="1.1201839447021484"/>
+		<testcase name="test.py.test[aggregate-group_by_expr_only_join--ForceBlocks]" time="2.6278021335601807"/>
+		<testcase name="test.py.test[aggregate-group_by_expr_only_join--Results]" time="1.7256419658660889"/>
+		<testcase name="test.py.test[aggregate-group_by_gs_few_empty--ForceBlocks]" time="3.4947891235351562"/>
+		<testcase name="test.py.test[aggregate-group_by_gs_few_empty--Results]" time="2.4216909408569336"/>
+		<testcase name="test.py.test[aggregate-group_by_gs_simp--ForceBlocks]" time="3.8566112518310547"/>
+		<testcase name="test.py.test[aggregate-group_by_gs_simp--Results]" time="2.458916187286377"/>
+		<testcase name="[1/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[aggregate-group_by_rollup_grouping--ForceBlocks]" time="7.196527004241943"/>
+		<testcase name="test.py.test[aggregate-group_by_rollup_grouping--Results]" time="3.0010571479797363"/>
+		<testcase name="test.py.test[aggregate-having_distinct_expr--ForceBlocks]" time="3.139441967010498"/>
+		<testcase name="test.py.test[aggregate-having_distinct_expr--Results]" time="1.6474287509918213"/>
+		<testcase name="test.py.test[blocks-combine_all_decimal--ForceBlocks]" time="3.6692068576812744"/>
+		<testcase name="test.py.test[blocks-combine_all_decimal--Results]" time="1.5635838508605957"/>
+		<testcase name="test.py.test[blocks-combine_all_some_filter--ForceBlocks]" time="2.8931663036346436"/>
+		<testcase name="test.py.test[blocks-combine_all_some_filter--Results]" time="1.1006758213043213"/>
+		<testcase name="test.py.test[blocks-combine_all_sum--ForceBlocks]" time="2.7757320404052734"/>
+		<testcase name="test.py.test[blocks-combine_all_sum--Results]" time="1.1672451496124268"/>
+		<testcase name="test.py.test[blocks-distinct_opt_state_keys--ForceBlocks]" time="3.3767826557159424"/>
+		<testcase name="test.py.test[blocks-distinct_opt_state_keys--Results]" time="2.675739049911499"/>
+		<testcase name="test.py.test[blocks-filter_by_column_with_drop--ForceBlocks]" time="2.0206339359283447"/>
+		<testcase name="test.py.test[blocks-filter_by_column_with_drop--Results]" time="0.8003501892089844"/>
+		<testcase name="test.py.test[blocks-filter_direct_col--ForceBlocks]" time="2.278214931488037"/>
+		<testcase name="test.py.test[blocks-filter_direct_col--Results]" time="0.972498893737793"/>
+		<testcase name="test.py.test[blocks-interval_mul_scalar--ForceBlocks]" time="4.201977252960205"/>
+		<testcase name="test.py.test[blocks-interval_mul_scalar--Results]" time="1.613879919052124"/>
+		<testcase name="test.py.test[blocks-lazy_nonstrict_nested--ForceBlocks]" time="2.596407890319824"/>
+		<testcase name="test.py.test[blocks-lazy_nonstrict_nested--Results]" time="1.0727317333221436"/>
+		<testcase name="test.py.test[blocks-member--ForceBlocks]" time="2.7303662300109863"/>
+		<testcase name="test.py.test[blocks-member--Results]" time="1.232975959777832"/>
+		<testcase name="[2/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[blocks-pg_to_dates--ForceBlocks]" time="3.938214063644409"/>
+		<testcase name="test.py.test[blocks-pg_to_dates--Results]" time="1.327125072479248"/>
+		<testcase name="test.py.test[blocks-sort_two_mix--ForceBlocks]" time="3.0939743518829346"/>
+		<testcase name="test.py.test[blocks-sort_two_mix--Results]" time="1.0194740295410156"/>
+		<testcase name="test.py.test[column_group-hint-disable-ForceBlocks]" time="0.007807254791259766">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[column_group-hint-disable-Results]" time="0.005063533782958984">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[column_group-hint_diff_grp_fail3--ForceBlocks]" time="0.006733894348144531">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[column_group-hint_diff_grp_fail3--Results]" time="0.004826068878173828">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[column_group-many_inserts--ForceBlocks]" time="0.00536799430847168">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[column_group-many_inserts--Results]" time="0.007231950759887695">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[column_order-winfunc-default.txt-ForceBlocks]" time="3.705697774887085"/>
+		<testcase name="test.py.test[column_order-winfunc-default.txt-Results]" time="1.6868982315063477"/>
+		<testcase name="test.py.test[distinct-distinct_and_join--ForceBlocks]" time="3.0159859657287598"/>
+		<testcase name="test.py.test[distinct-distinct_and_join--Results]" time="1.6117539405822754"/>
+		<testcase name="test.py.test[distinct-distinct_by_tuple-default.txt-ForceBlocks]" time="2.7034780979156494"/>
+		<testcase name="test.py.test[distinct-distinct_by_tuple-default.txt-Results]" time="1.4944958686828613"/>
+		<testcase name="test.py.test[dq-blacklisted_pragmas1--ForceBlocks]" time="2.732225179672241"/>
+		<testcase name="test.py.test[dq-blacklisted_pragmas1--Results]" time="0.005476951599121094">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="test.py.test[hor_join-group_ranges--ForceBlocks]" time="2.6313161849975586"/>
+		<testcase name="test.py.test[hor_join-group_ranges--Results]" time="0.9891929626464844"/>
+		<testcase name="test.py.test[hor_join-skip_yamr--ForceBlocks]" time="2.555464744567871"/>
+		<testcase name="[3/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[hor_join-skip_yamr--Results]" time="4.15437388420105"/>
+		<testcase name="test.py.test[insert-select_after_insert_relabeled-default.txt-ForceBlocks]" time="3.7731268405914307"/>
+		<testcase name="test.py.test[insert-select_after_insert_relabeled-default.txt-Results]" time="1.0815258026123047"/>
+		<testcase name="test.py.test[insert-trivial_literals_multirow-default.txt-ForceBlocks]" time="2.48738694190979"/>
+		<testcase name="test.py.test[insert-trivial_literals_multirow-default.txt-Results]" time="0.991657018661499"/>
+		<testcase name="test.py.test[insert-yql-13083--ForceBlocks]" time="4.319475173950195"/>
+		<testcase name="test.py.test[insert-yql-13083--Results]" time="1.3571078777313232"/>
+		<testcase name="test.py.test[insert_monotonic-keep_meta-default.txt-ForceBlocks]" time="2.909670829772949"/>
+		<testcase name="test.py.test[insert_monotonic-keep_meta-default.txt-Results]" time="0.7823836803436279"/>
+		<testcase name="test.py.test[join-bush_dis_in--ForceBlocks]" time="3.5280637741088867"/>
+		<testcase name="test.py.test[join-bush_dis_in--Results]" time="2.4284322261810303"/>
+		<testcase name="test.py.test[join-bush_dis_in-off-ForceBlocks]" time="3.036101818084717"/>
+		<testcase name="test.py.test[join-bush_dis_in-off-Results]" time="0.004441022872924805">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="test.py.test[join-bush_in_in-off-ForceBlocks]" time="2.5857460498809814"/>
+		<testcase name="test.py.test[join-bush_in_in-off-Results]" time="0.005045890808105469">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="test.py.test[join-count_bans-off-ForceBlocks]" time="3.119128704071045"/>
+		<testcase name="test.py.test[join-count_bans-off-Results]" time="0.0028471946716308594">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="test.py.test[join-flatten_columns2--ForceBlocks]" time="2.0909600257873535"/>
+		<testcase name="test.py.test[join-flatten_columns2--Results]" time="1.5624332427978516"/>
+		<testcase name="test.py.test[join-grace_join1-grace-ForceBlocks]" time="2.4739990234375"/>
+		<testcase name="test.py.test[join-grace_join1-grace-Results]" time="0.4796898365020752">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="[4/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[join-inner_all_right--ForceBlocks]" time="4.879758834838867"/>
+		<testcase name="test.py.test[join-inner_all_right--Results]" time="1.8131458759307861"/>
+		<testcase name="test.py.test[join-inner_grouped_by_expr-off-ForceBlocks]" time="7.496822834014893"/>
+		<testcase name="test.py.test[join-inner_grouped_by_expr-off-Results]" time="0.10263609886169434">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="test.py.test[join-left_only_with_other--ForceBlocks]" time="6.422765016555786"/>
+		<testcase name="test.py.test[join-left_only_with_other--Results]" time="2.8983399868011475"/>
+		<testcase name="test.py.test[join-mapjoin_early_rewrite_star--ForceBlocks]" time="3.4116950035095215"/>
+		<testcase name="test.py.test[join-mapjoin_early_rewrite_star--Results]" time="1.3665730953216553"/>
+		<testcase name="test.py.test[join-mapjoin_with_empty_struct--ForceBlocks]" time="2.8227992057800293"/>
+		<testcase name="test.py.test[join-mapjoin_with_empty_struct--Results]" time="1.1803503036499023"/>
+		<testcase name="test.py.test[join-mergejoin_saves_output_sort_cross--ForceBlocks]" time="3.486701250076294"/>
+		<testcase name="test.py.test[join-mergejoin_saves_output_sort_cross--Results]" time="2.0501022338867188"/>
+		<testcase name="test.py.test[join-mergejoin_saves_output_sort_nested--ForceBlocks]" time="2.9686508178710938"/>
+		<testcase name="test.py.test[join-mergejoin_saves_output_sort_nested--Results]" time="1.9971492290496826"/>
+		<testcase name="test.py.test[join-premap_common_multiparents-off-ForceBlocks]" time="2.80153489112854"/>
+		<testcase name="test.py.test[join-premap_common_multiparents-off-Results]" time="0.006305217742919922">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="test.py.test[join-premap_common_semi--ForceBlocks]" time="2.399545669555664"/>
+		<testcase name="test.py.test[join-premap_common_semi--Results]" time="1.2606780529022217"/>
+		<testcase name="test.py.test[join-premap_common_semi-off-ForceBlocks]" time="2.189039945602417"/>
+		<testcase name="test.py.test[join-premap_common_semi-off-Results]" time="0.0049591064453125">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="test.py.test[join-pullup_extend--ForceBlocks]" time="2.6058449745178223"/>
+		<testcase name="[5/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[join-pullup_extend--Results]" time="4.2663750648498535"/>
+		<testcase name="test.py.test[join-selfjoin_on_sorted--ForceBlocks]" time="3.141282081604004"/>
+		<testcase name="test.py.test[join-selfjoin_on_sorted--Results]" time="1.1584596633911133"/>
+		<testcase name="test.py.test[join-star_join_inners_premap--ForceBlocks]" time="3.1093950271606445"/>
+		<testcase name="test.py.test[join-star_join_inners_premap--Results]" time="2.2117831707000732"/>
+		<testcase name="test.py.test[join-star_join_inners_premap-off-ForceBlocks]" time="4.0668110847473145"/>
+		<testcase name="test.py.test[join-star_join_inners_premap-off-Results]" time="0.0076351165771484375">
+			<skipped>Skipped: yqlrun is not supported</skipped>
+		</testcase>
+		<testcase name="test.py.test[limit-empty_sort_calc_after_limit-default.txt-ForceBlocks]" time="2.690221071243286"/>
+		<testcase name="test.py.test[limit-empty_sort_calc_after_limit-default.txt-Results]" time="1.2276160717010498"/>
+		<testcase name="test.py.test[limit-limit--ForceBlocks]" time="2.481736183166504"/>
+		<testcase name="test.py.test[limit-limit--Results]" time="0.8134200572967529"/>
+		<testcase name="test.py.test[lineage-if_struct-default.txt-ForceBlocks]" time="0.0070497989654541016">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[lineage-if_struct-default.txt-Results]" time="0.00518798828125">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[optimizers-combinebykey_fields_subset_range--ForceBlocks]" time="2.6535418033599854"/>
+		<testcase name="test.py.test[optimizers-combinebykey_fields_subset_range--Results]" time="1.1247031688690186"/>
+		<testcase name="test.py.test[optimizers-flatmap_with_non_struct_out--ForceBlocks]" time="0.005991935729980469">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[optimizers-flatmap_with_non_struct_out--Results]" time="0.004769086837768555">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[optimizers-yql-7532_wrong_field_subset_for_calcoverwindow-default.txt-ForceBlocks]" time="3.1526520252227783"/>
+		<testcase name="test.py.test[optimizers-yql-7532_wrong_field_subset_for_calcoverwindow-default.txt-Results]" time="1.2283530235290527"/>
+		<testcase name="test.py.test[order_by-assume_over_input_desc--ForceBlocks]" time="2.60990309715271"/>
+		<testcase name="test.py.test[order_by-assume_over_input_desc--Results]" time="1.1517062187194824"/>
+		<testcase name="[6/10] chunk chunk" time="0.0">
+			<failure>Chunk exceeded 600s timeout, failed to shutdown gracefully in 30s and was terminated using SIGQUIT signal
+List of the tests involved in the launch:
+test.py::test[pg-tpch-q02-default.txt-ForceBlocks] (timeout) duration: 589.95s
+test.py::test[pg-select_common_type_unionall--ForceBlocks] (good) duration: 6.55s
+test.py::test[pg-select_subquery2-default.txt-ForceBlocks] (good) duration: 3.08s
+test.py::test[pg-tpcds-q66-default.txt-ForceBlocks] (good) duration: 3.05s
+test.py::test[pg-select_common_type_unionall--Results] (good) duration: 2.93s
+test.py::test[pg-tpcds-q08-default.txt-ForceBlocks] (good) duration: 2.72s
+test.py::test[pg-tpcds-q88-default.txt-ForceBlocks] (good) duration: 2.68s
+test.py::test[pg-tpcds-q97-default.txt-ForceBlocks] (good) duration: 2.37s
+test.py::test[pg-tpcds-q71-default.txt-ForceBlocks] (good) duration: 2.25s
+test.py::test[pg-tpcds-q31-default.txt-ForceBlocks] (good) duration: 2.08s
+9 more tests with 7.27s total duration are not listed.
+2 tests were not launched inside chunk.
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/library/yql/tests/sql/dq_file/part11/test-results/pytest/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/library/yql/tests/sql/dq_file/part11/test-results/pytest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/library/yql/tests/sql/dq_file/part11/test-results/pytest/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase name="test.py.test[order_by-native_desc_publish--ForceBlocks]" time="0.05787515640258789">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[order_by-native_desc_publish--Results]" time="0.050002098083496094">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[pg-select_common_type_unionall--ForceBlocks]" time="6.545647382736206"/>
+		<testcase name="test.py.test[pg-select_common_type_unionall--Results]" time="2.9274706840515137"/>
+		<testcase name="test.py.test[pg-select_subquery2-default.txt-ForceBlocks]" time="3.0769410133361816"/>
+		<testcase name="test.py.test[pg-select_subquery2-default.txt-Results]" time="1.5140609741210938"/>
+		<testcase name="test.py.test[pg-tpcds-q08-default.txt-ForceBlocks]" time="2.7153236865997314"/>
+		<testcase name="test.py.test[pg-tpcds-q08-default.txt-Results]" time="0.934380054473877"/>
+		<testcase name="test.py.test[pg-tpcds-q31-default.txt-ForceBlocks]" time="2.083306074142456"/>
+		<testcase name="test.py.test[pg-tpcds-q31-default.txt-Results]" time="0.9610188007354736"/>
+		<testcase name="test.py.test[pg-tpcds-q66-default.txt-ForceBlocks]" time="3.0494160652160645"/>
+		<testcase name="test.py.test[pg-tpcds-q66-default.txt-Results]" time="1.1946618556976318"/>
+		<testcase name="test.py.test[pg-tpcds-q71-default.txt-ForceBlocks]" time="2.2454073429107666"/>
+		<testcase name="test.py.test[pg-tpcds-q71-default.txt-Results]" time="0.6893970966339111"/>
+		<testcase name="test.py.test[pg-tpcds-q88-default.txt-ForceBlocks]" time="2.681472063064575"/>
+		<testcase name="test.py.test[pg-tpcds-q88-default.txt-Results]" time="0.9899370670318604"/>
+		<testcase name="test.py.test[pg-tpcds-q97-default.txt-ForceBlocks]" time="2.370095729827881"/>
+		<testcase name="test.py.test[pg-tpcds-q97-default.txt-Results]" time="0.8829159736633301"/>
+		<testcase name="test.py.test[pg-tpch-q02-default.txt-ForceBlocks]" time="589.9498019218445">
+			<failure>Killed by timeout (600 s)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/library/yql/tests/sql/dq_file/part11/test-results/pytest/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/library/yql/tests/sql/dq_file/part11/test-results/pytest/testing_out_stuff/test.py.test.pg-tpch-q02-default.txt-ForceBlocks.log</failure>
+		</testcase>
+		<testcase name="test.py.test[pg-tpch-q02-default.txt-Results]" time="0">
+			<skipped>Test was not launched, because other tests have used all allotted time (600 s)</skipped>
+		</testcase>
+		<testcase name="test.py.test[pg-tpch-q19-default.txt-ForceBlocks]" time="0">
+			<skipped>Test was not launched, because other tests have used all allotted time (600 s)</skipped>
+		</testcase>
+		<testcase name="[7/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[pg-tpch-q19-default.txt-Results]" time="6.279539108276367"/>
+		<testcase name="test.py.test[produce-process_with_lambda-default.txt-ForceBlocks]" time="5.531489133834839"/>
+		<testcase name="test.py.test[produce-process_with_lambda-default.txt-Results]" time="1.765775203704834"/>
+		<testcase name="test.py.test[produce-process_with_python_as_struct-default.txt-ForceBlocks]" time="5.190903186798096"/>
+		<testcase name="test.py.test[produce-process_with_python_as_struct-default.txt-Results]" time="2.3160958290100098"/>
+		<testcase name="test.py.test[produce-reduce_lambda_presort_twin_list--ForceBlocks]" time="0.010986804962158203">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[produce-reduce_lambda_presort_twin_list--Results]" time="0.009384870529174805">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[sampling-map--ForceBlocks]" time="3.6900336742401123"/>
+		<testcase name="test.py.test[sampling-map--Results]" time="1.2798597812652588"/>
+		<testcase name="test.py.test[sampling-reduce-with_premap-ForceBlocks]" time="0.005798816680908203">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[sampling-reduce-with_premap-Results]" time="0.0041790008544921875">
+			<skipped>Skipped: dq provider is not supported here</skipped>
+		</testcase>
+		<testcase name="test.py.test[sampling-yql-14664_deps-default.txt-ForceBlocks]" time="3.9391911029815674"/>
+		<testcase name="test.py.test[sampling-yql-14664_deps-default.txt-Results]" time="1.3139309883117676"/>
+		<testcase name="test.py.test[schema-fake_column-default.txt-ForceBlocks]" time="2.794152021408081"/>
+		<testcase name="test.py.test[schema-fake_column-default.txt-Results]" time="0.9917187690734863"/>
+		<testcase name="test.py.test[schema-select_all-read_schema-ForceBlocks]" time="2.558306932449341"/>
+		<testcase name="test.py.test[schema-select_all-read_schema-Results]" time="0.7745811939239502"/>
+		<testcase name="test.py.test[schema-select_all_inferschema2--ForceBlocks]" time="2.7788848876953125"/>
+		<testcase name="test.py.test[schema-select_all_inferschema2--Results]" time="1.2736148834228516"/>
+		<testcase name="test.py.test[schema-select_reordered-default.txt-ForceBlocks]" time="2.6273951530456543"/>
+		<testcase name="test.py.test[schema-select_reordered-default.txt-Results]" time="1.444720983505249"/>
+		<testcase name="[8/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[schema-user_schema_mix3--ForceBlocks]" time="4.064418792724609"/>
+		<testcase name="test.py.test[schema-user_schema_mix3--Results]" time="1.1424968242645264"/>
+		<testcase name="test.py.test[select-calculated_values-default.txt-ForceBlocks]" time="3.0520401000976562"/>
+		<testcase name="test.py.test[select-calculated_values-default.txt-Results]" time="1.1538782119750977"/>
+		<testcase name="test.py.test[select-from_in_front_sub-default.txt-ForceBlocks]" time="3.073935031890869"/>
+		<testcase name="test.py.test[select-from_in_front_sub-default.txt-Results]" time="1.8127191066741943"/>
+		<testcase name="test.py.test[select-one_unlabeled_column-default.txt-ForceBlocks]" time="2.579483985900879"/>
+		<testcase name="test.py.test[select-one_unlabeled_column-default.txt-Results]" time="0.9306249618530273"/>
+		<testcase name="test.py.test[simple_columns-simple_columns_join_coalesce_without_left_semi_2-default.txt-ForceBlocks]" time="2.7071409225463867"/>
+		<testcase name="test.py.test[simple_columns-simple_columns_join_coalesce_without_left_semi_2-default.txt-Results]" time="1.4256608486175537"/>
+		<testcase name="test.py.test[simple_columns-simple_columns_join_fail--ForceBlocks]" time="1.317275047302246"/>
+		<testcase name="test.py.test[simple_columns-simple_columns_join_fail--Results]" time="0.006659746170043945"/>
+		<testcase name="test.py.test[simple_columns-simple_columns_join_without_resolve_dublicates_mult-default.txt-ForceBlocks]" time="2.752870798110962"/>
+		<testcase name="test.py.test[simple_columns-simple_columns_join_without_resolve_dublicates_mult-default.txt-Results]" time="1.8268139362335205"/>
+		<testcase name="test.py.test[simple_columns-simple_columns_tablerow-default.txt-ForceBlocks]" time="3.0140268802642822"/>
+		<testcase name="test.py.test[simple_columns-simple_columns_tablerow-default.txt-Results]" time="1.0843172073364258"/>
+		<testcase name="test.py.test[table_range-tablepath_with_non_existing--ForceBlocks]" time="2.1782820224761963"/>
+		<testcase name="test.py.test[table_range-tablepath_with_non_existing--Results]" time="0.7975459098815918"/>
+		<testcase name="test.py.test[tpch-q4-default.txt-ForceBlocks]" time="2.5863678455352783"/>
+		<testcase name="test.py.test[tpch-q4-default.txt-Results]" time="1.3260071277618408"/>
+		<testcase name="test.py.test[type_v3-append_diff_layout1--ForceBlocks]" time="2.754951238632202"/>
+		<testcase name="[9/10] chunk chunk" time="0.0"/>
+		<testcase name="test.py.test[type_v3-append_diff_layout1--Results]" time="4.466891765594482"/>
+		<testcase name="test.py.test[udf-udaf_distinct--ForceBlocks]" time="3.8618462085723877"/>
+		<testcase name="test.py.test[udf-udaf_distinct--Results]" time="1.7945160865783691"/>
+		<testcase name="test.py.test[view-file_inner--ForceBlocks]" time="2.5451972484588623"/>
+		<testcase name="test.py.test[view-file_inner--Results]" time="0.9746298789978027"/>
+		<testcase name="test.py.test[weak_field-optimize_weak_fields_map_combine--ForceBlocks]" time="3.016684055328369"/>
+		<testcase name="test.py.test[weak_field-optimize_weak_fields_map_combine--Results]" time="1.4129226207733154"/>
+		<testcase name="test.py.test[weak_field-weak_field_join_where--ForceBlocks]" time="3.123318910598755"/>
+		<testcase name="test.py.test[weak_field-weak_field_join_where--Results]" time="2.0462558269500732"/>
+		<testcase name="test.py.test[window-current/ansi_current_with_win--ForceBlocks]" time="5.0961267948150635"/>
+		<testcase name="test.py.test[window-current/ansi_current_with_win--Results]" time="1.9140360355377197"/>
+		<testcase name="test.py.test[window-generic/aggregations_mixed_leadlag--ForceBlocks]" time="4.201742887496948"/>
+		<testcase name="test.py.test[window-generic/aggregations_mixed_leadlag--Results]" time="1.6190521717071533"/>
+		<testcase name="test.py.test[window-win_func_aggr_4func_sort_desc--ForceBlocks]" time="3.3315329551696777"/>
+		<testcase name="test.py.test[window-win_func_aggr_4func_sort_desc--Results]" time="1.4870080947875977"/>
+		<testcase name="test.py.test[window-win_func_aggr_with_qualified_all_no_simple_columns--ForceBlocks]" time="3.442966938018799"/>
+		<testcase name="test.py.test[window-win_func_aggr_with_qualified_all_no_simple_columns--Results]" time="1.379607915878296"/>
+		<testcase name="test.py.test[window-win_multiaggr_list-default.txt-ForceBlocks]" time="3.2443430423736572"/>
+		<testcase name="test.py.test[window-win_multiaggr_list-default.txt-Results]" time="1.5715389251708984"/>
+		<testcase name="test.py.test[ypath-direct_read_from_dynamic--ForceBlocks]" time="2.571431875228882"/>
+		<testcase name="test.py.test[ypath-direct_read_from_dynamic--Results]" time="1.325927495956421"/>
+	</testsuite>
+	<testsuite name="ydb/apps/ydb/ut" tests="41" time="227.614341" failures="0" skipped="0">
+		<testcase name="sole chunk chunk" time="0.0"/>
+		<testcase name="YdbWorkloadTransferTopicToTable.Default_Run" time="30.331536"/>
+		<testcase name="YdbWorkloadTopic.Write_Statistics" time="4.85418"/>
+		<testcase name="ParseOptionsTest.SaKeyFile" time="1.039665"/>
+		<testcase name="ParseOptionsTest.YdbToken" time="0.6066"/>
+		<testcase name="YdbWorkloadTopic.Default_RunFull" time="13.985537"/>
+		<testcase name="YdbWorkloadTopic.Clean_Without_Init" time="0.264334"/>
+		<testcase name="YdbTopic.SupportedCodecs_TopicConsumerAdd_DefaultValue" time="0.658722"/>
+		<testcase name="YdbWorkloadTransferTopicToTable.Statistics" time="26.624558"/>
+		<testcase name="YdbWorkloadTransferTopicToTable.Default_Init_Clean" time="30.640786"/>
+		<testcase name="ParseOptionsTest.ParseClientCertFromEnv" time="0.867425"/>
+		<testcase name="ParseOptionsTest.ParseClientCertFileFromProfile" time="0.879257"/>
+		<testcase name="YdbWorkloadTopic.Double_Init" time="0.83912"/>
+		<testcase name="ParseOptionsTest.PrintConnectionParams" time="0.852265"/>
+		<testcase name="YdbWorkloadTopic.Full_Statistics_UseTx" time="5.089159"/>
+		<testcase name="ParseOptionsTest.IamToken" time="0.783264"/>
+		<testcase name="ParseOptionsTest.StaticCredentials" time="1.31062"/>
+		<testcase name="ParseOptionsTest.ParseCAFile" time="0.97192"/>
+		<testcase name="ParseOptionsTest.ParseCAFileFromProfile" time="0.726374"/>
+		<testcase name="ParseOptionsTest.Oauth2KeyFile" time="0.558667"/>
+		<testcase name="YdbTopic.SupportedCodecs_TopicCreate_DefaultValue" time="0.377063"/>
+		<testcase name="YdbWorkloadTransferTopicToTable.Double_Init" time="12.898682"/>
+		<testcase name="ParseOptionsTest.AnonymousCredentials" time="0.599891"/>
+		<testcase name="ParseOptionsTest.ParseClientCertFile" time="0.720658"/>
+		<testcase name="YdbTopic.SupportedCodecs_TopicAlter" time="1.345207"/>
+		<testcase name="YdbWorkloadTransferTopicToTable.Specific_Init_Clean" time="27.941758"/>
+		<testcase name="YdbDump.NotNullTypeDump" time="0.432885"/>
+		<testcase name="YdbWorkloadTransferTopicToTable.Clean_Without_Init" time="14.06694"/>
+		<testcase name="ParseOptionsTest.ParseCAFileFromEnv" time="0.703791"/>
+		<testcase name="ParseOptionsTest.NoDiscoveryCommandLine" time="0.119009"/>
+		<testcase name="ParseOptionsTest.EnvPriority" time="0.123888"/>
+		<testcase name="ParseOptionsTest.EndpointAndDatabaseFromExplicitProfile" time="0.129486"/>
+		<testcase name="YdbWorkloadTopic.Write_Statistics_UseTx" time="4.988187"/>
+		<testcase name="ParseOptionsTest.EndpointAndDatabaseFromCommandLine" time="0.141776"/>
+		<testcase name="YdbTopic.SupportedCodecs_TopicCreate_UserValue" time="0.351578"/>
+		<testcase name="YdbWorkloadTopic.Init_Clean" time="1.233094"/>
+		<testcase name="YdbWorkloadTopic.ReadWrite_Statistics" time="4.832992"/>
+		<testcase name="YdbWorkloadTopic.WriteInTx" time="15.349879"/>
+		<testcase name="YdbWorkloadTopic.Read_Statistics" time="4.88666"/>
+		<testcase name="YdbWorkloadTopic.WriteProducesToAllPartitionsEvenly" time="13.046402"/>
+		<testcase name="YdbTopic.SupportedCodecs_TopicConsumerAdd_UserValue" time="1.319057"/>
+		<testcase name="ParseOptionsTest.EndpointAndDatabaseFromActiveProfile" time="0.121469"/>
+	</testsuite>
+	<testsuite name="ydb/core/blobstorage/ut_blobstorage/ut_balancing" tests="9" time="50.443591" failures="0" skipped="0">
+		<testcase name="[0/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TestDontSendToReadOnlyTest_Block42" time="0.739717"/>
+		<testcase name="[1/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TestRandom_Block42" time="29.811372"/>
+		<testcase name="[2/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TestRandom_Mirror3dc" time="16.423657"/>
+		<testcase name="[3/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TestStopOneNode_Block42" time="0.503463"/>
+		<testcase name="[4/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TestStopOneNode_Block42_HugeBlob" time="0.641737"/>
+		<testcase name="[5/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TestStopOneNode_Mirror3dc" time="0.608576"/>
+		<testcase name="[6/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TestStopOneNode_Mirror3dc_HugeBlob" time="0.635328"/>
+		<testcase name="[7/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TwoPartsOnOneNodeTest_Block42" time="0.53734"/>
+		<testcase name="[8/10] chunk chunk" time="0.0"/>
+		<testcase name="VDiskBalancing.TwoPartsOnOneNodeTest_Block42_HugeBlob" time="0.542401"/>
+	</testsuite>
+	<testsuite name="ydb/core/blobstorage/ut_blobstorage/ut_huge" tests="1" time="548.697205" failures="0" skipped="0">
+		<testcase name="[0/10] chunk chunk" time="0.0"/>
+		<testcase name="HugeBlobOnlineSizeChange.Compaction" time="548.697205"/>
+	</testsuite>
+	<testsuite name="ydb/core/keyvalue/ut_trace" tests="4" time="7.703953" failures="4" skipped="0">
+		<testcase name="[0/5] chunk chunk" time="0.0"/>
+		<testcase name="TKeyValueTracingTest.ReadHuge" time="1.928742">
+			<failure>equal assertion failed at ydb/core/keyvalue/keyvalue_ut_trace.cpp:124, void TestOneRead(TString, TString): env.WilsonUploader-&amp;gt;Traces.size() == 1 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+UnRef at /-S/util/generic/ptr.h:640:13
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTKeyValueTracingTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/keyvalue/keyvalue_ut_trace.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.ReadHuge.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.ReadHuge.out</failure>
+		</testcase>
+		<testcase name="[1/5] chunk chunk" time="0.0"/>
+		<testcase name="TKeyValueTracingTest.ReadSmall" time="1.921096">
+			<failure>equal assertion failed at ydb/core/keyvalue/keyvalue_ut_trace.cpp:124, void TestOneRead(TString, TString): env.WilsonUploader-&amp;gt;Traces.size() == 1 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+UnRef at /-S/util/generic/ptr.h:640:13
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTKeyValueTracingTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/keyvalue/keyvalue_ut_trace.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.ReadSmall.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.ReadSmall.out</failure>
+		</testcase>
+		<testcase name="[2/5] chunk chunk" time="0.0"/>
+		<testcase name="TKeyValueTracingTest.WriteHuge" time="1.920371">
+			<failure>assertion failed at ydb/core/keyvalue/keyvalue_ut_trace.cpp:103, void TestOneWrite(TString, TVector&amp;lt;TString&amp;gt; &amp;amp;&amp;amp;): (env.WilsonUploader-&amp;gt;Traces.size() == 1) failed: (2 != 1) 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTKeyValueTracingTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/keyvalue/keyvalue_ut_trace.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.WriteHuge.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.WriteHuge.out</failure>
+		</testcase>
+		<testcase name="[3/5] chunk chunk" time="0.0"/>
+		<testcase name="TKeyValueTracingTest.WriteSmall" time="1.933744">
+			<failure>assertion failed at ydb/core/keyvalue/keyvalue_ut_trace.cpp:103, void TestOneWrite(TString, TVector&amp;lt;TString&amp;gt; &amp;amp;&amp;amp;): (env.WilsonUploader-&amp;gt;Traces.size() == 1) failed: (2 != 1) 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTKeyValueTracingTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/keyvalue/keyvalue_ut_trace.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.WriteSmall.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.WriteSmall.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/kqp/ut/data_integrity" tests="1" time="1.874055" failures="0" skipped="0">
+		<testcase name="[0/50] chunk chunk" time="0.0"/>
+		<testcase name="KqpDataIntegrityTrails.UpsertEvWriteQueryService+isOlap-useOltpSink" time="1.874055"/>
+	</testsuite>
+	<testsuite name="ydb/core/kqp/ut/federated_query/large_results" tests="2" time="152.001858" failures="0" skipped="0">
+		<testcase name="sole chunk chunk" time="0.0"/>
+		<testcase name="KqpScriptExecResults.ExecuteScriptWithThinFile" time="75.750849"/>
+		<testcase name="KqpScriptExecResults.ExecuteScriptWithLargeFile" time="76.251009"/>
+	</testsuite>
+	<testsuite name="ydb/core/kqp/ut/indexes" tests="1" time="9.156446" failures="0" skipped="0">
+		<testcase name="[0/50] chunk chunk" time="0.0"/>
+		<testcase name="KqpMultishardIndex.WriteIntoRenamingSyncIndex" time="9.156446"/>
+	</testsuite>
+	<testsuite name="ydb/core/kqp/ut/opt" tests="1" time="10.433071" failures="0" skipped="0">
+		<testcase name="[0/50] chunk chunk" time="0.0"/>
+		<testcase name="KqpKv.ReadRows_TimeoutCancelsReads" time="10.433071"/>
+	</testsuite>
+	<testsuite name="ydb/core/kqp/ut/query" tests="2" time="148.640018" failures="2" skipped="0">
+		<testcase name="[0/50] chunk chunk" time="0.0"/>
+		<testcase name="KqpAnalyze.AnalyzeTable+ColumnStore" time="126.463395">
+			<failure>assertion failed at ydb/core/kqp/ut/query/kqp_analyze_ut.cpp:103, virtual void NKikimr::NKqp::NTestSuiteKqpAnalyze::TTestCaseAnalyzeTable&amp;lt;true&amp;gt;::Execute_(NUnitTest::TTestContext &amp;amp;) [ColumnStore = true]: (stat &amp;gt;= 1500) 0
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NKikimr::NKqp::NTestSuiteKqpAnalyze::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/kqp/ut/query/kqp_analyze_ut.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff/KqpAnalyze.AnalyzeTable.ColumnStore.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff/KqpAnalyze.AnalyzeTable.ColumnStore.out</failure>
+		</testcase>
+		<testcase name="[1/50] chunk chunk" time="0.0"/>
+		<testcase name="KqpStats.SysViewClientLost" time="22.176623">
+			<failure>assertion failed at ydb/core/kqp/ut/query/kqp_stats_ut.cpp:591, virtual void NKikimr::NKqp::NTestSuiteKqpStats::TTestCaseSysViewClientLost::Execute_(NUnitTest::TTestContext &amp;amp;): (timeoutedCount == 1) 
+0. /-S/util/system/backtrace.cpp:284: ?? @ 0x14093FBB
+1. /tmp//-S/library/cpp/testing/unittest/registar.cpp:46: RaiseError @ 0x14250718
+2. /tmp//-S/ydb/core/kqp/ut/query/kqp_stats_ut.cpp:591: Execute_ @ 0x13F3BC24
+3. /tmp//-S/ydb/core/kqp/ut/query/kqp_stats_ut.cpp:18: operator() @ 0x13F442B6
+4. /tmp//-S/library/cpp/testing/unittest/registar.cpp:373: Run @ 0x142525CD
+5. /tmp//-S/ydb/core/kqp/ut/query/kqp_stats_ut.cpp:18: Execute @ 0x13F43C75
+6. /tmp//-S/library/cpp/testing/unittest/registar.cpp:494: Execute @ 0x14252D42
+7. /tmp//-S/library/cpp/testing/unittest/utmain.cpp:872: RunMain @ 0x142648EC
+8. ??:0: ?? @ 0x7F08BE4EFD8F
+9. ??:0: ?? @ 0x7F08BE4EFE3F
+10. ??:0: ?? @ 0x12D35028
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff/KqpStats.SysViewClientLost.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff/KqpStats.SysViewClientLost.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/quoter/ut" tests="1" time="1.4097" failures="0" skipped="0">
+		<testcase name="sole chunk chunk" time="0.0"/>
+		<testcase name="QuoterWithKesusTest.PrefetchCoefficient" time="1.4097"/>
+	</testsuite>
+	<testsuite name="ydb/core/statistics/aggregator/ut" tests="1" time="487.984239" failures="1" skipped="0">
+		<testcase name="[0/60] chunk chunk" time="0.0"/>
+		<testcase name="AnalyzeColumnshard.AnalyzeRebootColumnShard" time="487.984239">
+			<failure>(TWithBackTrace&amp;lt;yexception&amp;gt;) ydb/library/actors/testlib/test_runtime.h:579: Exception occured while waiting for NKikimr::NStat::TEvStatistics::TEvAnalyzeResponse: (NActors::TSchedulingLimitReachedException) TestActorRuntime Processed over 100000 events.ydb/library/actors/testlib/test_runtime.cpp:716: 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+TWithBackTrace&amp;lt;yexception&amp;gt;::TWithBackTrace&amp;lt;&amp;gt;() at /-S/util/generic/yexception.h:146:5
+NKikimr::NStat::TEvStatistics::TEvAnalyzeResponse::TPtr NActors::TTestActorRuntimeBase::GrabEdgeEventRethrow&amp;lt;NKikimr::NStat::TEvStatistics::TEvAnalyzeResponse&amp;gt;(NActors::TActorId const&amp;amp;, TDuration) at /-S/ydb/library/actors/testlib/test_runtime.h:0:24
+DoDestroy at /-S/util/generic/ptr.h:253:13
+NKikimr::NStat::NTestSuiteAnalyzeColumnshard::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/statistics/aggregator/ut/ut_analyze_columnshard.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/statistics/aggregator/ut/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/statistics/aggregator/ut/test-results/unittest/testing_out_stuff/AnalyzeColumnshard.AnalyzeRebootColumnShard.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/statistics/aggregator/ut/test-results/unittest/testing_out_stuff/AnalyzeColumnshard.AnalyzeRebootColumnShard.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/tx/datashard/ut_incremental_backup" tests="4" time="10.490123" failures="4" skipped="0">
+		<testcase name="[0/4] chunk chunk" time="0.0"/>
+		<testcase name="IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental" time="4.623582">
+			<failure>assertion failed at ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:829, virtual void NKikimr::NTestSuiteIncrementalBackup::TTestCaseComplexRestoreBackupCollection&amp;lt;true&amp;gt;::Execute_(NUnitTest::TTestContext &amp;amp;) [WithIncremental = true]: (KqpSimpleExec(runtime, R&quot;(
+                    SELECT key, value FROM `/Root/Table`
+                    ORDER BY key
+                    )&quot;) == &quot;{ items { uint32_value: 2 } items { uint32_value: 2000 } }, &quot; &quot;{ items { uint32_value: 3 } items { uint32_value: 30 } }, &quot; &quot;{ items { uint32_value: 4 } items { uint32_value: 40 } }&quot;) failed: (&quot;{ items { uint32_value: 1 } items { uint32_value: 10 } }, { items { uint32_value: 2 } items { uint32_value: 20 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }, { items { uint32_value: 5 } items { uint32_value: 50 } }&quot; != { items { uint32_value: 2 } items { uint32_value: 2000 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }) , with diff:
+(&quot;|){ items { uint32_value: (1 } items { uint3|)2(_value:|) (10 |)} (}, { |)items { uint32_value: 2( } items { uint32_value: 2|00)0 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }(, { items { uint32_value: 5 } items { uint32_value: 50 } }&quot;|)
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+NKikimr::NTestSuiteIncrementalBackup::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.ComplexRestoreBackupCollection.WithIncremental.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.ComplexRestoreBackupCollection.WithIncremental.out</failure>
+		</testcase>
+		<testcase name="[1/4] chunk chunk" time="0.0"/>
+		<testcase name="IncrementalBackup.E2EBackupCollection" time="3.344951">
+			<failure>assertion failed at ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:925, virtual void NKikimr::NTestSuiteIncrementalBackup::TTestCaseE2EBackupCollection::Execute_(NUnitTest::TTestContext &amp;amp;): (expected == actual) failed: (&quot;{ items { uint32_value: 2 } items { uint32_value: 200 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }&quot; != &quot;{ items { uint32_value: 1 } items { uint32_value: 10 } }, { items { uint32_value: 2 } items { uint32_value: 20 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }&quot;) , with diff:
+&quot;{ items { uint32_value: (|1 } items { uint3)2(|_value:) (|10 )} (|}, { )items { uint32_value: 2(0| } items { uint32_value: 2)0 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }&quot;
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+NKikimr::NTestSuiteIncrementalBackup::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.E2EBackupCollection.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.E2EBackupCollection.out</failure>
+		</testcase>
+		<testcase name="[2/4] chunk chunk" time="0.0"/>
+		<testcase name="IncrementalBackup.MultiRestore" time="0">
+			<failure>Test crashed (return code: -6)
+See logs for more info
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.MultiRestore.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.MultiRestore.out</failure>
+		</testcase>
+		<testcase name="[3/4] chunk chunk" time="0.0"/>
+		<testcase name="IncrementalBackup.SimpleRestoreBackupCollection+WithIncremental" time="2.52159">
+			<failure>assertion failed at ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:623, virtual void NKikimr::NTestSuiteIncrementalBackup::TTestCaseSimpleRestoreBackupCollection&amp;lt;true&amp;gt;::Execute_(NUnitTest::TTestContext &amp;amp;) [WithIncremental = true]: (KqpSimpleExec(runtime, R&quot;(
+                    SELECT key, value FROM `/Root/Table`
+                    ORDER BY key
+                    )&quot;) == &quot;{ items { uint32_value: 2 } items { uint32_value: 2000 } }, &quot; &quot;{ items { uint32_value: 3 } items { uint32_value: 30 } }, &quot; &quot;{ items { uint32_value: 4 } items { uint32_value: 40 } }&quot;) failed: (&quot;{ items { uint32_value: 1 } items { uint32_value: 10 } }, { items { uint32_value: 2 } items { uint32_value: 20 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }, { items { uint32_value: 5 } items { uint32_value: 50 } }&quot; != { items { uint32_value: 2 } items { uint32_value: 2000 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }) , with diff:
+(&quot;|){ items { uint32_value: (1 } items { uint3|)2(_value:|) (10 |)} (}, { |)items { uint32_value: 2( } items { uint32_value: 2|00)0 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }(, { items { uint32_value: 5 } items { uint32_value: 50 } }&quot;|)
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+NKikimr::NTestSuiteIncrementalBackup::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.SimpleRestoreBackupCollection.WithIncremental.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.SimpleRestoreBackupCollection.WithIncremental.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/tx/schemeshard/ut_background_cleaning" tests="1" time="12.272627" failures="1" skipped="0">
+		<testcase name="[0/3] chunk chunk" time="0.0"/>
+		<testcase name="TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables" time="12.272627">
+			<failure>assertion failed at ydb/core/tx/schemeshard/ut_background_cleaning/ut_background_cleaning.cpp:127, void (anonymous namespace)::CheckTable(TTestActorRuntime &amp;amp;, const char *, ui64, bool): (description.GetStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist) 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTSchemeshardBackgroundCleaningTest::TTestCaseSchemeshardBackgroundCleaningTestCreateCleanManyTables::Execute_(NUnitTest::TTestContext&amp;amp;) at /-S/ydb/core/tx/schemeshard/ut_background_cleaning/ut_background_cleaning.cpp:311:9
+NTestSuiteTSchemeshardBackgroundCleaningTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/tx/schemeshard/ut_background_cleaning/ut_background_cleaning.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/schemeshard/ut_background_cleaning/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/schemeshard/ut_background_cleaning/test-results/unittest/testing_out_stuff/TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/schemeshard/ut_background_cleaning/test-results/unittest/testing_out_stuff/TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/tx/tiering/ut" tests="1" time="0" failures="1" skipped="0">
+		<testcase name="[0/60] chunk chunk" time="0.0"/>
+		<testcase name="ColumnShardTiers.TTLUsage" time="0">
+			<failure>Test crashed (return code: -6)
+See logs for more info
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/tiering/ut/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/tiering/ut/test-results/unittest/testing_out_stuff/ColumnShardTiers.TTLUsage.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/tiering/ut/test-results/unittest/testing_out_stuff/ColumnShardTiers.TTLUsage.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/public/sdk/cpp/src/client/topic/ut" tests="1" time="9.909693" failures="0" skipped="0">
+		<testcase name="[0/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_26_Query" time="9.909693"/>
+	</testsuite>
+	<testsuite name="ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut" tests="192" time="2113.252779" failures="1" skipped="0">
+		<testcase name="[0/10] chunk chunk" time="0.0"/>
+		<testcase name="BasicUsage.ReadWithoutConsumerWithRestarts" time="0.000146"/>
+		<testcase name="LocalPartition.WithoutPartitionWithRestart" time="7.939489"/>
+		<testcase name="DirectReadWithServer.KillPQRBTablet" time="0.000111"/>
+		<testcase name="TxUsage.SessionAbort_Table" time="6.079118"/>
+		<testcase name="Describe.DescribePartitionPermissions" time="5.920966"/>
+		<testcase name="LocalPartition.WithoutPartitionPartitionRelocation" time="10.182944"/>
+		<testcase name="TxUsage.Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction_Table" time="6.225883"/>
+		<testcase name="BasicUsage.ReadWithRestarts" time="6.842221"/>
+		<testcase name="TxUsage.ReadRuleGeneration" time="10.025422"/>
+		<testcase name="LocalPartition.WithoutPartitionWithSplit" time="9.212217"/>
+		<testcase name="TxUsage.SessionAbort_Query" time="6.44564"/>
+		<testcase name="TxUsage.Sinks_Olap_WriteToTopicAndTable_1_Query" time="8.70039"/>
+		<testcase name="TxUsage.Sinks_Olap_WriteToTopicAndTable_1_Table" time="8.805036"/>
+		<testcase name="LocalPartition.DirectWriteWithoutDescribeResourcesPermission" time="5.961025"/>
+		<testcase name="TxUsage.Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction_Query" time="6.256282"/>
+		<testcase name="Describe.LocationWithKillTablets" time="9.190491"/>
+		<testcase name="LocalPartition.WithoutPartitionUnknownEndpoint" time="8.185164"/>
+		<testcase name="DirectReadWithServer.KillPQTablet" time="7.137939"/>
+		<testcase name="LocalPartition.Restarts" time="16.377841"/>
+		<testcase name="BasicUsage.ConflictingWrites" time="17.003496"/>
+		<testcase name="[1/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_5_Table" time="6.260832"/>
+		<testcase name="TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table" time="11.573755"/>
+		<testcase name="TxUsage.Sinks_Olap_WriteToTopicAndTable_2_Table" time="11.016447"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_4_Table" time="6.481314"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_3_Query" time="10.279841"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_1_Query" time="8.083246"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_2_Query" time="10.349987"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_1_Table" time="8.127812"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table" time="10.1949"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_5_Query" time="6.251844"/>
+		<testcase name="TxUsage.Sinks_Olap_WriteToTopicAndTable_2_Query" time="10.943312"/>
+		<testcase name="TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query" time="11.252518"/>
+		<testcase name="TxUsage.Sinks_Olap_WriteToTopicAndTable_3_Query" time="6.993992"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_2_Table" time="10.015228"/>
+		<testcase name="TxUsage.Sinks_Olap_WriteToTopicAndTable_3_Table" time="6.89608"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_1_Query" time="9.926662"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_3_Table" time="10.523544"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_4_Query" time="6.20849"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_1_Table" time="9.862247"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query" time="6.423442">
+			<failure>assertion failed at ydb/public/sdk/cpp/src/client/topic/ut/topic_to_table_ut.cpp:653, virtual std::vector&amp;lt;TResultSet&amp;gt; NYdb::NTopic::NTests::NTestSuiteTxUsage::TFixture::TQuerySession::Execute(const std::string &amp;amp;, TTransactionBase *, bool, const TParams &amp;amp;): (result.IsSuccess()) &amp;lt;main&amp;gt;: Error: Pending previous query completion
+
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+UnRef at /-S/util/generic/ptr.h:640:13
+operator() at /-S/contrib/libs/cxxsupp/libcxx/include/vector:546:18
+NYdb::NTopic::NTests::NTestSuiteTxUsage::TFixtureSinks::TestSinksOltpWriteToTopicAndTable6() at /-S/ydb/public/sdk/cpp/src/client/topic/ut/topic_to_table_ut.cpp:0:5
+NYdb::NTopic::NTests::NTestSuiteTxUsage::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/public/sdk/cpp/src/client/topic/ut/topic_to_table_ut.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/test-results/unittest/testing_out_stuff/TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/test-results/unittest/testing_out_stuff/TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query.out</failure>
+		</testcase>
+		<testcase name="[2/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_2_Query" time="8.294318"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_4_Table" time="10.169124"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopics_3_Query" time="36.440945"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopics_1_Query" time="14.130051"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_5_Query" time="5.749154"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopics_1_Table" time="13.935273"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_5_Table" time="5.810575"/>
+		<testcase name="TxUsage.The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other" time="10.943505"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_3_Table" time="10.818573"/>
+		<testcase name="TxUsage.TestRetentionOnLongTxAndBigMessages" time="5.965845"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_3_Query" time="10.139206"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopics_4_Table" time="14.187257"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopics_3_Table" time="36.408796"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopics_2_Query" time="18.272669"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_4_Query" time="9.903399"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopic_2_Table" time="8.207879"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopics_4_Query" time="13.98555"/>
+		<testcase name="TxUsage.Transactions_Conflict_On_SeqNo_Query" time="15.489244"/>
+		<testcase name="TxUsage.Sinks_Oltp_WriteToTopics_2_Table" time="18.231759"/>
+		<testcase name="[3/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_15_Query" time="8.368995"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_13_Table" time="6.218405"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_10_Table" time="7.841611"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_12_Table" time="6.046314"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_16_Table" time="10.268809"/>
+		<testcase name="TxUsage.TwoSessionOneConsumer_Table" time="5.910441"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_16_Query" time="10.106339"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_11_Query" time="36.36481"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_13_Query" time="6.253667"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_17_Query" time="5.904312"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_17_Table" time="6.038407"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_15_Table" time="8.287492"/>
+		<testcase name="TxUsage.TwoSessionOneConsumer_Query" time="5.992688"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_12_Query" time="6.1053"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_10_Query" time="7.949413"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_14_Query" time="6.202644"/>
+		<testcase name="TxUsage.Transactions_Conflict_On_SeqNo_Table" time="15.093705"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_11_Table" time="36.215948"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_14_Table" time="6.075139"/>
+		<testcase name="[4/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_18_RestartBeforeCommit_Query" time="9.926584"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_18_RestartBeforeCommit_Table" time="9.95454"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_19_RestartAfterCommit_Query" time="10.348662"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_20_RestartAfterCommit_Query" time="10.369484"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_20_RestartNo_Query" time="8.218577"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_18_RestartAfterCommit_Query" time="9.935046"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_19_RestartBeforeCommit_Table" time="10.229164"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_1_Query" time="14.603774"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_1_Table" time="14.180442"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_18_RestartAfterCommit_Table" time="10.053457"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_18_RestartNo_Query" time="8.174977"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_20_RestartAfterCommit_Table" time="10.21914"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_19_RestartBeforeCommit_Query" time="9.981554"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_18_RestartNo_Table" time="8.200915"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_20_RestartBeforeCommit_Query" time="10.065475"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_19_RestartNo_Query" time="8.303675"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_20_RestartBeforeCommit_Table" time="10.023202"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_19_RestartNo_Table" time="8.078584"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_19_RestartAfterCommit_Table" time="10.095466"/>
+		<testcase name="[5/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_21_RestartNo_Query" time="16.003172"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_22_RestartAfterCommit_Query" time="10.236588"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_23_RestartAfterCommit_Query" time="10.167533"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_22_RestartNo_Query" time="7.821745"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_22_RestartBeforeCommit_Table" time="10.085162"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_21_RestartBeforeCommit_Query" time="10.24435"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_22_RestartBeforeCommit_Query" time="10.089519"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_21_RestartNo_Table" time="8.410942"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_23_RestartNo_Table" time="8.168744"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_22_RestartAfterCommit_Table" time="10.261433"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_23_RestartNo_Query" time="8.193396"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_22_RestartNo_Table" time="8.034885"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_23_RestartAfterCommit_Table" time="10.236693"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_20_RestartNo_Table" time="8.214619"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_21_RestartAfterCommit_Table" time="9.971572"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_23_RestartBeforeCommit_Table" time="10.090614"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_21_RestartBeforeCommit_Table" time="9.970706"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_23_RestartBeforeCommit_Query" time="10.264918"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_21_RestartAfterCommit_Query" time="9.994222"/>
+		<testcase name="[6/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_29_Query" time="6.319052"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_24_Table" time="8.119594"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_31_Table" time="6.101721"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_30_Query" time="5.961573"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_2_Table" time="13.773176"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_28_Query" time="8.383595"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_29_Table" time="6.394191"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_26_Table" time="10.195652"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_25_Table" time="10.514817"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_32_Query" time="6.036251"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_30_Table" time="5.965096"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_27_Query" time="18.12475"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_31_Query" time="6.008368"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_27_Table" time="18.273959"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_25_Query" time="10.31811"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_28_Table" time="8.140031"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_26_Query" time="10.053702"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_2_Query" time="13.964283"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_24_Query" time="8.074776"/>
+		<testcase name="[7/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_33_Query" time="6.116329"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_35_Query" time="5.929631"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_39_Table" time="8.133592"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_34_Table" time="6.117024"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_35_Table" time="5.921235"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_36_Query" time="5.920122"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_38_Query" time="6.778186"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_32_Table" time="6.566013"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_38_Table" time="6.702259"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_3_Table" time="12.129158"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_34_Query" time="5.942174"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_37_Query" time="6.217212"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_33_Table" time="6.17761"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_37_Table" time="6.037155"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_36_Table" time="5.938696"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_3_Query" time="12.56627"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_40_Query" time="8.319487"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_39_Query" time="8.338269"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_40_Table" time="8.48266"/>
+		<testcase name="[8/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_42_Table" time="8.449617"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_48_Table" time="36.091613"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_44_Query" time="68.490468"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_50_Query" time="5.716069"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_47_Query" time="11.905825"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_45_Query" time="5.910613"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_47_Table" time="11.945554"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_43_Table" time="8.092303"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_45_Table" time="6.150663"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_41_Table" time="6.347198"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_44_Table" time="68.20271"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_4_Query" time="14.694469"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_46_Query" time="7.913187"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_41_Query" time="6.416338"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_42_Query" time="8.159966"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_46_Table" time="7.948073"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_48_Query" time="35.846384"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_4_Table" time="14.26145"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_43_Query" time="8.208973"/>
+		<testcase name="[9/10] chunk chunk" time="0.0"/>
+		<testcase name="TxUsage.WriteToTopic_Two_WriteSession_Query" time="6.419663"/>
+		<testcase name="TxUsage.Write_Random_Sized_Messages_In_Wide_Transactions_Query" time="11.81107"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_6_Query" time="9.942353"/>
+		<testcase name="TxUsage.WriteToTopic_Invalid_Session_Query" time="6.157343"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_5_Query" time="10.025142"/>
+		<testcase name="TxUsage.WriteToTopic_Two_WriteSession_Table" time="6.294414"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_6_Table" time="9.883431"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_7_Table" time="10.063099"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_5_Table" time="10.419052"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_9_Table" time="10.291691"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_9_Query" time="10.121432"/>
+		<testcase name="TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Table" time="61.409164"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_50_Table" time="5.993184"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_7_Query" time="9.935948"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_8_Table" time="10.069352"/>
+		<testcase name="TxUsage.WriteToTopic_Invalid_Session_Table" time="6.042213"/>
+		<testcase name="TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query" time="56.385742"/>
+		<testcase name="TxUsage.WriteToTopic_Demo_8_Query" time="10.25026"/>
+		<testcase name="TxUsage.Write_Random_Sized_Messages_In_Wide_Transactions_Table" time="12.022568"/>
+	</testsuite>
+	<testsuite name="ydb/services/ydb/ut" tests="1" time="1.159676" failures="1" skipped="0">
+		<testcase name="[0/60] chunk chunk" time="0.0"/>
+		<testcase name="YdbLogStore.AlterLogTable" time="1.159676">
+			<failure>assertion failed at ydb/services/ydb/ydb_logstore_ut.cpp:435, virtual void NTestSuiteYdbLogStore::TTestCaseAlterLogTable::Execute_(NUnitTest::TTestContext &amp;amp;): (res.GetStatus() == EStatus::SUCCESS) failed: (PRECONDITION_FAILED != SUCCESS) &amp;lt;main&amp;gt;: Error: Column stores are not supported
+, with diff:
+(PRE|SUC)C(ONDITION_FAIL|)E(D|SS)
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+NTestSuiteYdbLogStore::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/services/ydb/ydb_logstore_ut.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/services/ydb/ut/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/services/ydb/ut/test-results/unittest/testing_out_stuff/YdbLogStore.AlterLogTable.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/services/ydb/ut/test-results/unittest/testing_out_stuff/YdbLogStore.AlterLogTable.out</failure>
+		</testcase>
+	</testsuite>
+</testsuites>

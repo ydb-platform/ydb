@@ -28,7 +28,7 @@
 # FILE_IGNORE - ignore file (do nothing)
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
-IGNORE_FILES icudt76_dat.rodata
+IGNORE_FILES icudt77_dat.rodata
 
 KEEP     Unicode              0285f1da3a441f34fd441c30fe7aa87e
 BELONGS ya.make
@@ -111,7 +111,7 @@ BELONGS ya.make
         Match type      : INTRO
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
     Files with this license:
-        i18n/messageformat2_parser.cpp [338:338]
+        i18n/messageformat2_parser.cpp [585:585]
 
 KEEP     MIT                  399584035c417b91040964779555dfac
 BELONGS ya.make
@@ -1217,7 +1217,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
-        APIChangeReport.html [1175:1175]
+        APIChangeReport.html [568:568]
 
 KEEP     BSD-3-Clause         8324f1990c82a65667a0b4767115a5fa
 BELONGS ya.make

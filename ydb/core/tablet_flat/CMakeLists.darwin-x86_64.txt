@@ -92,13 +92,13 @@ target_sources(ydb-core-tablet_flat PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_borrowlogic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_data_cleanup_logic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_db_mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_bio_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_snapshot.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_tx_env.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_txloglogic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_vacuum_logic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_fwd_misc.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_load_blob_queue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_mem_warm.cpp

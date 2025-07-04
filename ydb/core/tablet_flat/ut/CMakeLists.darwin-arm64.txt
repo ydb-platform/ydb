@@ -78,7 +78,6 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_comp_gen.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction_multi.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_data_cleanup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_datetime.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_decimal.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_charge.cpp
@@ -96,6 +95,7 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice_loader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_vacuum.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_versions.cpp
   ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/ut/3f63c6c5c2279df5eb07e7ad1d95f1b4.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.h

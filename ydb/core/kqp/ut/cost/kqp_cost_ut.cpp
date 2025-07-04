@@ -2,6 +2,7 @@
 
 #include <format>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -313,6 +314,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableVectorIndex(true);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_INFO);
+        NSchemeShard::gVectorIndexSeed = 1337;
 
         { // 1. CREATE TABLE
             auto result = session.ExecuteSchemeQuery(R"(

@@ -3,7 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/dynamic_control_board_impl.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/random/fast.h>
@@ -360,7 +360,7 @@ public:
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Bootstrap, Workers.size# " << Workers.size());
         if (IsWardenlessTest) {
             for (auto& worker : Workers) {
-                AppData(ctx)->Icb->RegisterLocalControl(worker->MaxInFlight,
+                AppData(ctx)->Dcb->RegisterLocalControl(worker->MaxInFlight,
                         Sprintf("PDiskWriteLoadActor_MaxInFlight_%04" PRIu64 "_%04" PRIu32, Tag, worker->Idx));
                 SendRequest(ctx, worker->GetYardInit(PDiskGuid));
             }

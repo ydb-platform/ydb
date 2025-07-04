@@ -1,5 +1,6 @@
 #include "ydb_clickhouse_internal.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/service_chinternal.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -19,10 +20,19 @@ TGRpcYdbClickhouseInternalService::TGRpcYdbClickhouseInternalService(NActors::TA
 void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     auto getLimiter = CreateLimiterCb(LimiterRegistry_);
+    auto& icb = *ActorSystem_->AppData<TAppData>()->Icb;
 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
+
+#ifdef GET_LIMITER_BY_PATH
+#error GET_LIMITER_BY_PATH macro already defined
+#endif
+
+#define GET_LIMITER_BY_PATH(ICB_PATH)\
+    getLimiter(#ICB_PATH, icb.ICB_PATH, DEFAULT_MAX_IN_FLIGHT)
+
 #define ADD_REQUEST(NAME, IN, OUT, CB) \
     MakeIntrusive<TGRpcRequest<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT, TGRpcYdbClickhouseInternalService>>(this, &Service_, CQ_, \
         [this](NYdbGrpc::IRequestContextBase *ctx) { \
@@ -31,7 +41,8 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT> \
                     (ctx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(NGRpcService::TRateLimiterMode::Rps), nullptr})); \
         }, &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), getLimiter("ClickhouseInternal", #NAME, DEFAULT_MAX_IN_FLIGHT))->Run();
+        #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), \
+        GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.ClickhouseInternal_##NAME.MaxInFlight))->Run();
 
     ADD_REQUEST(Scan, ScanRequest, ScanResponse, DoReadColumnsRequest);
     ADD_REQUEST(GetShardLocations, GetShardLocationsRequest, GetShardLocationsResponse, DoGetShardLocationsRequest);
@@ -39,6 +50,7 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
     ADD_REQUEST(CreateSnapshot, CreateSnapshotRequest, CreateSnapshotResponse, DoKikhouseCreateSnapshotRequest);
     ADD_REQUEST(RefreshSnapshot, RefreshSnapshotRequest, RefreshSnapshotResponse, DoKikhouseRefreshSnapshotRequest);
     ADD_REQUEST(DiscardSnapshot, DiscardSnapshotRequest, DiscardSnapshotResponse, DoKikhouseDiscardSnapshotRequest);
+#undef GET_LIMITER_BY_PATH
 #undef ADD_REQUEST
 }
 

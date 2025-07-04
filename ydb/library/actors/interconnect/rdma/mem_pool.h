@@ -13,25 +13,13 @@ namespace NInterconnect::NRdma {
 
     class IMemPool;
     class TMemRegion;
+    class TChunk;
 
-    class TChunk: public NNonCopyable::TMoveOnly {
-    public:
-        TChunk(std::vector<ibv_mr*>&& mrs, std::weak_ptr<IMemPool> pool) noexcept;
-        ~TChunk();
-
-        ibv_mr* GetMr(size_t deviceIndex);
-        void Free(TMemRegion&& mr) noexcept;
-        bool Empty() const;
-    private:
-        std::vector<ibv_mr*> MRs;
-        std::weak_ptr<IMemPool> MemPool;
-    };
-
-    using TChunkPtr = std::shared_ptr<TChunk>;
+    using TChunkPtr = TIntrusivePtr<TChunk>;
 
     class TMemRegion: public NNonCopyable::TMoveOnly, public IContiguousChunk {
     public:
-        TMemRegion(TChunkPtr chunk, uint32_t size, uint32_t offset) noexcept;
+        TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept;
         ~TMemRegion();
 
         void*    GetAddr() const;
@@ -46,9 +34,9 @@ namespace NInterconnect::NRdma {
         size_t GetOccupiedMemorySize() const override;
         EInnerType GetInnerType() const noexcept override;
     protected:
-        TChunkPtr Chunk;
-        uint32_t Offset;
-        uint32_t Size;
+        const TChunkPtr Chunk;
+        const uint32_t Offset;
+        const uint32_t Size;
     };
 
     class TMemRegionSlice {
@@ -80,14 +68,16 @@ namespace NInterconnect::NRdma {
 
         virtual ~IMemPool() = default;
 
-        TMemRegionPtr Alloc(int size);
-        TRcBuf AllocRcBuf(int size);
+        TMemRegionPtr Alloc(int size) noexcept;
+        TRcBuf AllocRcBuf(int size) noexcept;
+        virtual int GetMaxAllocSz() const noexcept = 0;
 
     protected:
-        virtual TMemRegion* AllocImpl(int size) = 0;
+        virtual TMemRegion* AllocImpl(int size) noexcept = 0;
         virtual void Free(TMemRegion&& mr, TChunk& chunk) noexcept = 0;
+        virtual void NotifyDealocated() noexcept = 0;
     };
 
-    std::shared_ptr<IMemPool> CreateDummyMemPool();
-
+    std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;
+    std::shared_ptr<IMemPool> CreateIncrementalMemPool() noexcept;
 }

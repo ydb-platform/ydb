@@ -1757,7 +1757,7 @@ namespace NActors {
         }
 
         if (UseRdmaAllocator) {
-            auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+            auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
             setup->RcBufAllocator = [memPool](ui32 size, ui32 headRoom, ui32 tailRoom) -> TRcBuf {
                 TRcBuf buf = memPool->AllocRcBuf(size + headRoom + tailRoom);
                 buf.TrimFront(size + tailRoom);

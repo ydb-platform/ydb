@@ -255,7 +255,7 @@
 
 using NInterconnect::NRdma::CreateCqActor;
 using NInterconnect::NRdma::MakeCqActorId;
-using NInterconnect::NRdma::CreateDummyMemPool;
+using NInterconnect::NRdma::CreateIncrementalMemPool;
 
 namespace NKikimr::NKikimrServicesInitializers {
 
@@ -619,7 +619,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
             icCommon.Reset(new TInterconnectProxyCommon);
             if (Config.GetInterconnectConfig().GetUseRdma()) {
-                icCommon->RdmaMemPool = CreateDummyMemPool();
+                icCommon->RdmaMemPool = CreateIncrementalMemPool();
                 auto pool = icCommon->RdmaMemPool;
                 setup->RcBufAllocator = [pool](size_t size, size_t headRoom, size_t tailRoom) mutable {
                     auto buf = pool->AllocRcBuf(size + headRoom + tailRoom);

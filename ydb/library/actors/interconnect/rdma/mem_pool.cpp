@@ -10,15 +10,33 @@
 
 #include <vector>
 
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <mutex>
+#include <thread>
+
+#include <sys/mman.h>
+
+static constexpr size_t CacheLineSz = 64;
+static constexpr size_t HPageSz = (1 << 21);
 
 namespace NInterconnect::NRdma {
-    TChunk::TChunk(std::vector<ibv_mr*>&& mrs, std::weak_ptr<IMemPool> pool) noexcept
+
+    class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
+    public:
+
+    TChunk(std::vector<ibv_mr*>&& mrs, std::weak_ptr<IMemPool> pool, void* auxData) noexcept
         : MRs(std::move(mrs))
         , MemPool(pool)
+        , AuxData(auxData)
     {
     }
 
-    TChunk::~TChunk() {
+    ~TChunk() {
+        if (auto memPool = MemPool.lock()) {
+            memPool->NotifyDealocated();
+        }
+        std::free(AuxData);
         if (Empty()) {
             return;
         }
@@ -30,23 +48,32 @@ namespace NInterconnect::NRdma {
         MRs.clear();
     }
 
-    ibv_mr* TChunk::GetMr(size_t deviceIndex) {
+    ibv_mr* GetMr(size_t deviceIndex) noexcept {
         if (Y_UNLIKELY(deviceIndex >= MRs.size())) {
             return nullptr;
         }
         return MRs[deviceIndex];
     }
 
-    void TChunk::Free(TMemRegion&& mr) noexcept {
+    void Free(TMemRegion&& mr) noexcept {
         if (auto memPool = MemPool.lock()) {
             memPool->Free(std::move(mr), *this);
         }
     }
 
-    bool TChunk::Empty() const {
+    bool Empty() const noexcept {
         return MRs.empty();
     }
+    
+    void* GetAuxData() noexcept {
+        return AuxData;
+    }
 
+    private:
+        std::vector<ibv_mr*> MRs;
+        std::weak_ptr<IMemPool> MemPool;
+        void* AuxData;
+    };
 
     TMemRegion::TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept 
         : Chunk(std::move(chunk))
@@ -139,11 +166,22 @@ namespace NInterconnect::NRdma {
         );
     }
 
-    void* allocateMemory(size_t size, size_t alignment) {
+    void* allocateMemory(size_t size, size_t alignment, bool hp) {
         if (size % alignment != 0) {
             return nullptr;
         }
-        return std::aligned_alloc(alignment, size);
+        void* buf = std::aligned_alloc(alignment, size);
+        if (hp) {
+            if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
+                fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
+                    strerror(errno), errno);
+            }
+            for (size_t i = 0; i < size; i += HPageSz) {
+                // We use THP right now. We need to touch each page to promote it to HUGE.
+                ((char*)buf)[i] = 0;
+            }
+        }
+        return buf;
     }
 
     std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {
@@ -163,50 +201,337 @@ namespace NInterconnect::NRdma {
         return res;
     }
 
-    TMemRegionPtr IMemPool::Alloc(int size) {
-        TMemRegion* region = AllocImpl(size);
+    TMemRegionPtr IMemPool::Alloc(int size) noexcept {
+        TMemRegion* region = nullptr;
+        while (!region) {
+            region = AllocImpl(size);
+            if (!region) {
+                std::this_thread::yield();
+            } 
+        }
         return TMemRegionPtr(region);
     }
 
-    TRcBuf IMemPool::AllocRcBuf(int size) {
-        return TRcBuf(IContiguousChunk::TPtr(AllocImpl(size)));
+    TRcBuf IMemPool::AllocRcBuf(int size) noexcept {
+        TMemRegion* region = nullptr;
+        while (!region) {
+            region = AllocImpl(size);
+            if (!region) {
+                std::this_thread::yield();
+            } 
+        }
+        return TRcBuf(IContiguousChunk::TPtr(region));
     }
 
     class TMemPoolBase: public IMemPool, public std::enable_shared_from_this<TMemPoolBase> {
     public:
-        TMemPoolBase()
+        TMemPoolBase(size_t maxChunk)
             : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
+            , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
         }
     protected:
-        TMemRegion* AllocNewPage(size_t size) {
+        template<typename TAuxData>
+        TChunkPtr AllocNewChunk(size_t size, bool hp) noexcept {
+            static_assert(sizeof(TAuxData) < CacheLineSz, "AuxData too big");
+
+            const std::lock_guard<std::mutex> lock(Mutex);
+            Y_ABORT_UNLESS(AllocatedChunks <= MaxChunk);
+
+            if (AllocatedChunks == MaxChunk) {
+                return nullptr;
+            }
+
             size = AlignUp(size, Alignment);
-            void* ptr = allocateMemory(size, Alignment);
+
+            void* ptr = allocateMemory(size, Alignment, hp);
             if (!ptr) {
                 return nullptr;
             }
+
             auto mrs = registerMemory(ptr, size, Ctxs);
-            TChunkPtr chunk = std::make_shared<TChunk>(std::move(mrs), shared_from_this());
-            return new TMemRegion(chunk, 0, size);
+            if (mrs.empty()) {
+                Y_ABORT_UNLESS(false, "UNABLE TO REGISTER MEMORY");
+                return nullptr;
+            }
+
+            void* auxPtr = std::aligned_alloc(CacheLineSz, CacheLineSz);
+            auxPtr = new (auxPtr)TAuxData;
+
+            AllocatedChunks++;
+
+            return MakeIntrusive<TChunk>(std::move(mrs), shared_from_this(), auxPtr);
+        }
+
+        void NotifyDealocated() noexcept {
+            const std::lock_guard<std::mutex> lock(Mutex);
+            AllocatedChunks--;
         }
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
-        size_t Alignment;
+        const size_t MaxChunk;
+        const size_t Alignment;
+        size_t AllocatedChunks = 0;
+        std::mutex Mutex;
     };
 
     class TDummyMemPool: public TMemPoolBase {
     public:
-        using TMemPoolBase::TMemPoolBase;
+        TDummyMemPool()
+            : TMemPoolBase(-1)
+        {}
 
-        TMemRegion* AllocImpl(int size) override {
-            return AllocNewPage(size);
+        TMemRegion* AllocImpl(int size) noexcept override {
+            struct TDummy {};
+            auto chunk = AllocNewChunk<TDummy>(size, false);
+            if (!chunk) {
+                return nullptr; 
+            }
+            return new TMemRegion(chunk , 0, size);
         }
 
         void Free(TMemRegion&&, TChunk&) noexcept override {}
+
+        int GetMaxAllocSz() const noexcept override {
+            return 2048 << 20;
+        }
     };
 
-    std::shared_ptr<IMemPool> CreateDummyMemPool() {
+    class TIncrementalMemPool: public TMemPoolBase {
+    public:
+        TIncrementalMemPool()
+            : TMemPoolBase(MaxChunks)
+        {
+            for (auto& x : ActiveAndFree) {
+                x.store(nullptr);
+            }
+            for (auto& x : Inactive) {
+                x.store(nullptr);
+            }
+        }
+
+        ~TIncrementalMemPool()
+        {
+#if defined(__clang__)
+            #pragma nounroll
+#endif
+            for (size_t i = 0; i < MaxChunks; i++) {
+                {
+                    TChunk* p = ActiveAndFree[i].exchange(nullptr);
+                    if (p) {
+                        TChunkPtr(p)->DecRef();
+
+                    }
+                }
+                {
+                    TChunk* p = Inactive[i].exchange(nullptr);
+                    if (p) {
+                        TChunkPtr(p)->DecRef();
+                    }
+                }
+            }
+        }
+
+        struct TAuxChunkData {
+            std::atomic<ui32> Allocated = 0; //not atomic modified only from alloc while not in shared array
+            std::atomic<int> Freed;
+            std::atomic<int> InactivePos = -1;
+            bool IsInactive() const noexcept {
+                return InactivePos.load(std::memory_order_acquire) >= 0;
+            }
+            //static TChunk* MarkActive(TChunk* chunk) {
+            //    return reinterpret_cast<TChunk*>(reinterpret_cast<ui64>(chunk) | (((1ul << 15) - 1) << 48));
+            //}
+        };
+
+        TMemRegion* AllocImpl(int size) noexcept override {
+            if (size > (int)ChunkSize)
+                return nullptr;
+
+            size_t startPos = GetStartPos();
+            constexpr size_t maxAttempts = 7;
+            size_t attempt = maxAttempts;
+            TChunkPtr chunk;
+            do {
+                TChunk* cur = PopChunk(startPos, ActiveAndFree);
+                if (!cur) {
+                    if (attempt == maxAttempts) {
+                        // May be all chunks are inactive 
+                        ReclaimInactive();
+                        continue;
+                    } else {
+                        // No chunks - try to alloc new one
+                        break;
+                    }
+                }
+
+                TAuxChunkData* aux = CastToAuxChunkData(cur);
+
+                // We have chunk, check can we use it to allock region
+                if (aux->Allocated.load() + (size_t)size > ChunkSize) {
+                    Y_ABORT_UNLESS(!aux->IsInactive());
+                    // No more space - put chunk in to inactive to wait deallocation regions
+                    int pos = -1;
+                    do {
+                        pos = PushChunk(startPos, Inactive, cur);
+                        if (pos == -1) {
+                            ReclaimInactive();
+                        }
+                    } while (pos == -1);
+                    aux->InactivePos.store(pos);
+                } else {
+                    Y_ABORT_UNLESS(!aux->IsInactive());
+                    chunk = cur;
+                    Y_ABORT_UNLESS(!CastToAuxChunkData(chunk.Get())->IsInactive());
+                    break;
+                }
+            } while (attempt--);
+
+            if (!chunk) {
+                chunk = AllocNewChunk<TAuxChunkData>(ChunkSize, true);
+                if (!chunk) {
+                    return nullptr; 
+                }
+                chunk->Ref();
+            }
+
+            size_t offset = CastToAuxChunkData(chunk.Get())->Allocated.fetch_add(size);
+            Y_ABORT_UNLESS(!CastToAuxChunkData(chunk.Get())->IsInactive());
+
+            while (PushChunk(startPos, ActiveAndFree, chunk.Get()) == -1) {
+                std::this_thread::yield();
+            }
+            return new TMemRegion(chunk, offset, size);
+        }
+
+        void Free(TMemRegion&&, TChunk& chunk) noexcept override {
+            TAuxChunkData* auxData = CastToAuxChunkData(&chunk);
+            if (auxData->IsInactive() && chunk.RefCount() == (1 + 1)) { // last MemRegion for chunk: 1 ref from TMemRegion and 1 is "manual" during allocation 
+                Y_ABORT_UNLESS(auxData->InactivePos < (int)Inactive.size());
+                Y_ABORT_UNLESS(Inactive[auxData->InactivePos].load() == &chunk, "chunk: %p, expected: %p",
+                    (void*)&chunk, Inactive[auxData->InactivePos].load());
+                Inactive[auxData->InactivePos].store(nullptr);
+                auxData->Allocated.store(0);
+                auxData->InactivePos.store(-1);
+                int ret = PushChunk(0, ActiveAndFree, &chunk);
+                if (ret == -1) {
+                    chunk.UnRef();
+                }
+            }
+        }
+
+        int GetMaxAllocSz() const noexcept override {
+            return ChunkSize;
+        }
+
+    private:
+        static constexpr size_t ChunkSize = 32 << 20;
+        static constexpr size_t MaxChunks = 1 << 5; //must be power of two
+        static constexpr size_t ChunkGap = CacheLineSz / sizeof(TChunk*); // Distance between elemets to prevent cache line sharing
+        static_assert(MaxChunks % ChunkGap == 0);
+
+        using TChunkContainer = std::array<std::atomic<TChunk*>, MaxChunks>; 
+
+        static size_t WrapPos(size_t x) noexcept {
+            return x % MaxChunks;
+        }
+
+        static size_t GetStartPos() noexcept {
+            static thread_local size_t id = ((size_t)syscall(SYS_gettid)) * ChunkGap % MaxChunks;
+            return id;
+        }
+
+        static TAuxChunkData* CastToAuxChunkData(TChunk* chunk) noexcept {
+            return reinterpret_cast<TAuxChunkData*>(chunk->GetAuxData());
+        }
+
+        static TChunk* PopChunk(size_t startPos, TChunkContainer& cont) noexcept {
+#if defined(__clang__)
+            #pragma nounroll
+#endif
+            for (size_t i = 0, j = startPos; i < MaxChunks; i++, j++) {
+                size_t pos = WrapPos(j);
+                TChunk* p = cont[pos].exchange(nullptr, std::memory_order_seq_cst);
+                if (p) {
+                    return p;
+                }
+
+               /*
+                TChunk* p = cont[pos].load(std::memory_order_relaxed);
+                if (p == nullptr) {
+                    continue;
+                }
+                if (cont[pos].compare_exchange_strong(p, nullptr, std::memory_order_seq_cst)) {
+                    return p;
+                }
+                */
+            }
+            return nullptr;
+        }
+
+        static int PushChunk(size_t startPos, TChunkContainer& cont, TChunk* chunk) noexcept {
+#if defined(__clang__)
+            #pragma nounroll
+#endif
+            for (size_t i = 0, j = startPos; i < MaxChunks; i++, j++) {
+                size_t pos = WrapPos(j);
+                TChunk* p = cont[pos].load(std::memory_order_relaxed);
+                if (p != nullptr) {
+                    continue;
+                }
+                if (cont[pos].compare_exchange_strong(p, chunk, std::memory_order_seq_cst)) {
+                    return pos;
+                }
+            }
+            return -1;
+        }
+
+        void ReclaimInactive() noexcept {
+            if (!ReclaimMutex.try_lock()) {
+                return;
+            }
+#if defined(__clang__)
+            #pragma nounroll
+#endif
+            for (size_t i = 0; i < MaxChunks; i++) {
+                TChunk* p = Inactive[i].load(std::memory_order_seq_cst);
+                if (p == nullptr || !CastToAuxChunkData(p)->IsInactive()) {
+                    continue;
+                }
+                if (p->RefCount() == 1) {
+                    if (Inactive[i].compare_exchange_strong(p, nullptr, std::memory_order_seq_cst)) {
+                        Y_ABORT_UNLESS(CastToAuxChunkData(p)->IsInactive());
+                        Y_ABORT_UNLESS(p->RefCount() == 1);
+                        //if (!CastToAuxChunkData(p)->IsInactive()) {
+                        //    //if (PushChunk(0, Inactive, p) == -1) {
+                        //    //    Y_ABORT_UNLESS(expr, ...)
+                        //   // }
+                        //    continue;
+                        //}
+                        auto aux = CastToAuxChunkData(p);
+                        aux->Allocated.store(0);
+                        aux->InactivePos.store(-1);
+                        
+                        if (PushChunk(0, ActiveAndFree, p) == -1) {
+                            TChunkPtr(p)->UnRef();
+                        }
+                    }
+                }
+            }
+            ReclaimMutex.unlock();
+        }
+        
+        alignas(64) TChunkContainer ActiveAndFree;
+        alignas(64) TChunkContainer Inactive; 
+        std::mutex ReclaimMutex;
+    };
+
+    std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept {
         return std::make_shared<TDummyMemPool>();
+    }
+
+    std::shared_ptr<IMemPool> CreateIncrementalMemPool() noexcept {
+        return std::make_shared<TIncrementalMemPool>();
     }
 }

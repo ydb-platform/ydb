@@ -28,3 +28,10 @@
 * 18077:The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives. Added a re-calculation of the values. [#18077](https://github.com/ydb-platform/ydb/pull/18077) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19057:Fixed "Failed to set up listener on port 9092 errno# 98 (Address already in use)" [#19057](https://github.com/ydb-platform/ydb/pull/19057) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 19115:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19083) in stream lookup join [#19115](https://github.com/ydb-platform/ydb/pull/19115) ([Vitalii Gridnev](https://github.com/gridnevvvit))
+* 20240:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20240](https://github.com/ydb-platform/ydb/pull/20240) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20072:Changes from #20020
+
+There was a T1 transaction in the EXECUTED queue. She is waiting for the signal to continue working. The T2 transaction was queued and its state was saved to disk. Transaction T1 was running at that moment. As a result, the T2 transaction continued to run when its state had not yet been saved to disk. She sent TEvReadSetAck to her "colleagues" and they deleted the T2 transaction. If the tablet restarts at this moment, the T2 transaction will be in the PLANNED state and will never receive a TEvReadSet from "colleagues".
+
+Before continuing to execute a transaction, you need to make sure that its state is saved to disk. Added a check. [#20072](https://github.com/ydb-platform/ydb/pull/20072) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+

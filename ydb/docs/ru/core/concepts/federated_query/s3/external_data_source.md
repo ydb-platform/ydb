@@ -25,7 +25,7 @@ CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
 CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
 ```
 
-Следующим шагом создаётся внешний источник данных с именем `object_storage`, который будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого заполняются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше.
+Следующим шагом создаётся внешний источник данных с именем `object_storage`, который будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого задаются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше.
 
 ```yql
 CREATE EXTERNAL DATA SOURCE object_storage WITH (

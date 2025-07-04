@@ -52,6 +52,8 @@ public:
             Self->Committed.ReleaseSlotIndex(Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId()));
         }
         ctx.Send(Event->Sender, Response.Release());
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

@@ -261,6 +261,8 @@ private:
     void OnPipeDestroyed(ui32 domain,
                          const TActorContext &ctx);
 
+    void UpdateCounters();
+
     void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvListNodes::TPtr &ev, const TActorContext &ctx);
@@ -305,6 +307,11 @@ private:
     bool SyncInProgress = false;
     ui64 SyncCookie = 0;
     ui64 SeqNo = 0;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr StaticNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveDynamicNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ExpiredDynamicNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EpochVersionCounter;
 };
 
 } // NNodeBroker

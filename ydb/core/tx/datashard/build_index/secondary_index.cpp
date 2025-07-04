@@ -595,7 +595,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                 << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
         }
 
-        if (!request.HasTargetName()) {
+        if (!request.GetTargetName()) {
             badRequest(TStringBuilder() << "Empty target table name");
         }
 

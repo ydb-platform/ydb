@@ -156,6 +156,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildIndexCreateRequest& request) {
             request.ClearTargetName();
         }, "{ <main>: Error: Empty target table name }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildIndexCreateRequest& request) {
+            request.SetTargetName("");
+        }, "{ <main>: Error: Empty target table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildIndexCreateRequest& request) {
             request.AddIndexColumns("some");

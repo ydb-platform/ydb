@@ -628,16 +628,25 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     mallocInfo.SetParam("FillMemoryOnAllocation", "false");
     SetupLogging();
 
-    auto setuper = CreateCustomStateStorageSetupper({{.State = PRIMARY}, {.State = SYNCHRONIZED}}, 3);
-    for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
-        if (options.IsBridgeMode) {
+    if (options.IsBridgeMode) {
+        TVector<TStateStorageInfo::TRingGroup> ringGroups = {{.State = PRIMARY}};
+        std::fill_n(
+            std::back_inserter(ringGroups),
+            options.PileCount - 1,
+            TStateStorageInfo::TRingGroup{.State = SYNCHRONIZED}
+        );
+        auto setuper = CreateCustomStateStorageSetupper(ringGroups, 3);
+
+        for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             setuper(*this, nodeIndex);
-            continue;
         }
-        if (options.NRings > 1) {
-            SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize);
-        } else {
-            SetupStateStorage(*this, nodeIndex);
+    } else {
+        for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+            if (options.NRings > 1) {
+                SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize);
+            } else {
+                SetupStateStorage(*this, nodeIndex);
+            }
         }
     }
     SetupServices(*this, options);

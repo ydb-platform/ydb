@@ -564,6 +564,8 @@ namespace NKikimr::NStorage {
 
             UnsubscribeQueue.insert(nodeId);
 
+            OnSyncerUnboundNode(nodeId);
+
             CheckRootNodeStatus();
         }
     }

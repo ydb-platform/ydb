@@ -44,6 +44,8 @@ public:
 
     void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
 
+    void AddCluster(const NYql::TPqClusterConfig& cluster) override;
+
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) override;
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
@@ -81,8 +83,7 @@ TPqNativeGateway::TPqNativeGateway(const TPqGatewayServices& services)
 void TPqNativeGateway::UpdateClusterConfigs(const TPqGatewayConfigPtr& config) {
     ClusterConfigs = std::make_shared<TPqClusterConfigsMap>();
     for (const auto& cfg : config->GetClusterMapping()) {
-        auto& config = (*ClusterConfigs)[cfg.GetName()];
-        config = cfg;
+        AddCluster(cfg);
     }
 }
 
@@ -100,6 +101,10 @@ void TPqNativeGateway::UpdateClusterConfigs(
         cluster.SetDatabase(database);
         cluster.SetUseSsl(secure);
     }
+}
+
+void TPqNativeGateway::AddCluster(const NYql::TPqClusterConfig& cluster) {
+    (*ClusterConfigs)[cluster.GetName()] = cluster;
 }
 
 NThreading::TFuture<void> TPqNativeGateway::OpenSession(const TString& sessionId, const TString& username) {

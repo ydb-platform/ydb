@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/background_controller.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
@@ -345,7 +346,10 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->StartEmergency();
     {
-        auto request = changes->ExtractDataAccessorsRequest();
+        auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::GENERAL_COMPACTION);
+        for (const auto& portion : changes->GetPortionsToAccess()) {
+            request->AddPortion(portion);
+        }
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
         engine.FetchDataAccessors(request);
@@ -435,7 +439,10 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
 
     changes->StartEmergency();
     {
-        auto request = changes->ExtractDataAccessorsRequest();
+        auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::GENERAL_COMPACTION);
+        for (const auto& portion : changes->GetPortionsToAccess()) {
+            request->AddPortion(portion);
+        }
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
         engine.FetchDataAccessors(request);

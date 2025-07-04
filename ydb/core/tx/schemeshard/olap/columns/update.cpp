@@ -13,6 +13,23 @@ extern "C" {
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+bool IsValidColumnNameForColumnTable(const TString& name) {
+    if (IsValidColumnName(name, false)) {
+        return true;
+    }
+
+    if (!AppDataVerified().ColumnShardConfig.GetAllowExtraSymbolsForColumnTableColumns()) {
+        return false;
+    }
+
+    return std::all_of(name.begin(), name.end(),
+            [](char c) { return std::isalnum(c) || c == '_' || c == '-' || c == '@'; });
+}
+
+}
+
 bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
     Name = columnSchema.GetName();
     if (!!columnSchema.GetStorageId()) {
@@ -54,7 +71,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
     Name = columnSchema.GetName();
-    if (!IsValidColumnName(Name, false)) {
+    if (!IsValidColumnNameForColumnTable(Name)) {
         errors.AddError(Sprintf("Invalid name for column '%s'", Name.data()));
         return false;
     }

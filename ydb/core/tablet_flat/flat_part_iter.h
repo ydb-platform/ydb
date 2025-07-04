@@ -268,6 +268,12 @@ namespace NTable {
                 // The row we seek is on the prev page
 
                 RowId = Index.GetRowId() - 1;
+
+                if (RowId < BeginRowId) {
+                    // Row is outside of bounds
+                    return Exhausted();
+                }
+                
                 if (auto ready = Index.Prev(); ready != EReady::Data) {
                     return Terminate(ready);
                 }

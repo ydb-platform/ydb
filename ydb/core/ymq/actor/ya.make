@@ -6,7 +6,6 @@ SRCS(
     auth_mocks.cpp
     auth_multi_factory.cpp
     attributes_md5.cpp
-    cfg.cpp
     change_visibility.cpp
     count_queues.cpp
     cleanup_queue_data.cpp
@@ -96,6 +95,7 @@ PEERDIR(
     yql/essentials/minikql
     ydb/public/lib/deprecated/client
     ydb/core/ymq/actor/cloud_events
+    ydb/core/ymq/actor/cfg
 )
 
 YQL_LAST_ABI_VERSION()
@@ -111,6 +111,7 @@ GENERATE_ENUM_SERIALIZATION(queue_schema.h)
 END()
 
 RECURSE(
+    cfg
     cloud_events
 )
 

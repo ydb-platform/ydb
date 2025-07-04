@@ -10,9 +10,8 @@ namespace NKikimr::NOlap {
 class TPortionInfoConstructor;
 struct TIndexInfo;
 
-class TPortionMetaConstructor: public TPortionMetaBase {
+class TPortionMetaConstructor {
 private:
-    using TBase = TPortionMetaBase;
     std::optional<NArrow::TFirstLastSpecialKeys> FirstAndLastPK;
     std::optional<TString> TierName;
     std::optional<TSnapshot> RecordSnapshotMin;
@@ -34,7 +33,7 @@ private:
 
 public:
     TPortionMetaConstructor() = default;
-    TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
+    TPortionMetaConstructor(const TPortionMeta& meta);
 
     const NArrow::TFirstLastSpecialKeys& GetFirstAndLastPK() const {
         AFL_VERIFY(FirstAndLastPK);
@@ -45,23 +44,6 @@ public:
         AFL_VERIFY(ColumnBlobBytes);
         AFL_VERIFY(IndexBlobBytes);
         return *ColumnBlobBytes + *IndexBlobBytes;
-    }
-
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
-    }
-
-    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
-        AFL_VERIFY(blobId.IsValid());
-        TBlobRangeLink16::TLinkId idx = 0;
-        for (auto&& i : BlobIds) {
-            if (i == blobId) {
-                return idx;
-            }
-            ++idx;
-        }
-        BlobIds.emplace_back(blobId);
-        return idx;
     }
 
     void SetCompactionLevel(const ui64 level) {

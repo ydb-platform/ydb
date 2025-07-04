@@ -543,6 +543,8 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
+    tableDesc.SetTemporary(metadata->Temporary);
+
     return true;
 }
 

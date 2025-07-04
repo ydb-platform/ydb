@@ -82,8 +82,9 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<TBatchOperationSettings> batchOperationSettings)
+    TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -91,7 +92,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             std::move(request), database, userToken, counters, false, executerConfig,
             std::move(asyncIoFactory), creator,
             userRequestContext, statementResultIndex,
-            federatedQuerySetup, /*GUCSettings*/nullptr,
+            federatedQuerySetup, /*GUCSettings*/nullptr, std::move(partitionPrunerConfig),
             shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings)
         );
     }
@@ -115,7 +116,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 std::move(request), database, userToken, counters, false, executerConfig,
                 std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
-                federatedQuerySetup, /*GUCSettings*/nullptr,
+                federatedQuerySetup, /*GUCSettings*/nullptr, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings)
             );
 
@@ -131,7 +132,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 std::move(request), database, userToken, counters, true,
                 executerConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
-                federatedQuerySetup, GUCSettings,
+                federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings)
             );
 

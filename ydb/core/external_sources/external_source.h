@@ -10,6 +10,8 @@
 
 namespace NKikimr::NExternalSource {
 
+constexpr TStringBuf YdbTopicsType = "YdbTopics";
+
 struct TExternalSourceException: public yexception {
 };
 

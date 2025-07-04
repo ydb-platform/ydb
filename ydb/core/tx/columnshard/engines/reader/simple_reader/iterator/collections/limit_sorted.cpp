@@ -42,6 +42,9 @@ TScanWithLimitCollection::TScanWithLimitCollection(
             }
             if (usage) {
                 HeapSources.front().SetIsStartedByCursor();
+            } else {
+                std::pop_heap(HeapSources.begin(), HeapSources.end());
+                HeapSources.pop_back();
             }
             break;
         }

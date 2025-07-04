@@ -8,6 +8,8 @@ message TTableServiceConfig {
         optional uint32 ScanLimit = 3 [default = 16];
         optional bool ParallelScanningAvailable = 4 [default = false];
         optional uint32 ShardSplitFactor = 5 [default = 1];
+        optional uint32 CriticalTotalRetriesCount = 6 [default = 20];
+        optional uint32 ReaskShardRetriesCount = 7 [default = 5];
     }
 
     message TResourceManager {
@@ -276,13 +278,7 @@ message TTableServiceConfig {
 
     optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
 
-    enum EIndexAutoChooseMode {
-        DISABLED = 0;
-        ONLY_FULL_KEY = 1; // Accepts iff point prefix includes all key columns
-        ONLY_POINTS = 2; // Accepts iff point prefix len > 0
-        MAX_USED_PREFIX = 3;
-    }
-    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
+    reserved 50; // optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
 
     reserved 51; // optional bool EnableColumnsWithDefault = 51 [default = true];
 

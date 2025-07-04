@@ -54,6 +54,11 @@ TString TTopicOperationsScenario::GetWriteOnlyTableName() const
     return TableName;
 }
 
+ui32 TTopicOperationsScenario::GetTopicMaxPartitionCount() const
+{
+    return TopicMaxPartitionCount >= TopicPartitionCount ? TopicMaxPartitionCount : (TopicPartitionCount << 3);
+}
+
 THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(TConfig::EVerbosityLevel level)
 {
     return CreateLogBackend("cerr",

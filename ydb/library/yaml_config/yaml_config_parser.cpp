@@ -368,7 +368,7 @@ namespace NKikimr::NYaml {
 
         auto* asConfig = config.MutableActorSystemConfig();
 
-        if (asConfig->GetUseAutoConfig()) {
+        if (asConfig->GetUseAutoConfig() || asConfig->HasCpuCount() || asConfig->HasNodeType()) {
             return; // do nothing for auto config
         }
 

@@ -29,7 +29,6 @@ private:
     void ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
     void ApplyOnComplete(const TActorContext& ctx);
     void ApplySchedule(const TActorContext& ctx);
-    ui64 RequestUnits(const TBillingStats& stats);
     void RoundPeriod(TInstant& start, TInstant& end);
     void ApplyBill(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
     bool OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& exc);

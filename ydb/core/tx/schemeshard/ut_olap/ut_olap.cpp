@@ -1212,6 +1212,20 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(CreateColumnTableExtraSymbolsOk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetAllowExtraSymbolsForColumnTableColumns(true);
+        ui64 txId = 100;
+
+        TString allowedChars = "@_-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), allowedChars.c_str());
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(CreateColumnTableFailed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -109,7 +109,8 @@ private:
                         tagsJson,
                         UserSID_,
                         MaskedToken_,
-                        AuthType_
+                        AuthType_,
+                        Request().GetSourceAddress()
                     )
                 );
             }

@@ -7,32 +7,46 @@ using NDqHashOperatorCommon::IterateInputNodes;
 using NDqHashOperatorCommon::NodesFromInputTuple;
 using NDqHashOperatorCommon::ExternalNodesFromInputTuple;
 
+namespace {
+
+TType* UnwrapBlockType(TType* type)
+{
+    if (type->GetKind() == TType::EKind::Block) {
+        return static_cast<const TBlockType*>(type)->GetItemType();
+    }
+    return type;
+}
+
+}
+
 TDqHashOperatorParams ParseCommonDqHashOperatorParams(TCallable& callable, const TComputationNodeFactoryContext& ctx)
 {
     MKQL_ENSURE(callable.GetInputsCount() >= 11U, "Expected more arguments.");
 
-    const auto inputType = AS_TYPE(TFlowType, callable.GetInput(NDqHashOperatorParams::Flow).GetStaticType());
+    TDqHashOperatorParams result;
+
+    const auto inputType = AS_TYPE(TStreamType, callable.GetInput(NDqHashOperatorParams::Input).GetStaticType());
     const auto inputWidth = GetWideComponentsCount(inputType);
-    const auto outputWidth = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
+    const auto outputWidth = GetWideComponentsCount(AS_TYPE(TStreamType, callable.GetType()->GetReturnType()));
 
     const auto keysSize = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::KeyArgs))->GetValuesCount();
     const auto stateSize = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::StateArgs))->GetValuesCount();
 
-    TDqHashOperatorParams result;
-
+    result.InputWidth = inputWidth;
     result.KeyTypes.reserve(keysSize);
-    result.KeyAndStateItemTypes.reserve(keysSize + stateSize);
+    result.KeyItemTypes.reserve(keysSize);
+    result.StateItemTypes.reserve(stateSize);
 
     // extract types of the getKey and getInitialState lambdas
     IterateInputNodes(callable, NDqHashOperatorParams::GetKey, [&](TRuntimeNode rtNode) {
         TType *type = rtNode.GetStaticType();
-        result.KeyAndStateItemTypes.push_back(type);
+        result.KeyItemTypes.push_back(type);
         bool optional;
-        result.KeyTypes.emplace_back(*UnpackOptionalData(rtNode.GetStaticType(), optional)->GetDataSlot(), optional);
+        result.KeyTypes.emplace_back(*UnpackOptionalData(UnwrapBlockType(rtNode.GetStaticType()), optional)->GetDataSlot(), optional);
     });
     IterateInputNodes(callable, NDqHashOperatorParams::InitState, [&](TRuntimeNode rtNode) {
         TType *type = rtNode.GetStaticType();
-        result.KeyAndStateItemTypes.push_back(type);
+        result.StateItemTypes.push_back(type);
     });
 
     NDqHashOperatorCommon::TCombinerNodes& nodes = result.Nodes;
@@ -60,9 +74,11 @@ TDqHashOperatorParams ParseCommonDqHashOperatorParams(TCallable& callable, const
     nodes.ItemNodes.reserve(inputWidth);
     ExternalNodesFromInputTuple(ctx, callable, NDqHashOperatorParams::ItemArgs, nodes.ItemNodes);
 
-    nodes.FinishNodes.reserve(keysSize + stateSize);
-    ExternalNodesFromInputTuple(ctx, callable, NDqHashOperatorParams::FinishKeyArgs, nodes.FinishNodes);
-    ExternalNodesFromInputTuple(ctx, callable, NDqHashOperatorParams::FinishStateArgs, nodes.FinishNodes);
+    nodes.FinishKeyNodes.reserve(keysSize);
+    ExternalNodesFromInputTuple(ctx, callable, NDqHashOperatorParams::FinishKeyArgs, nodes.FinishKeyNodes);
+
+    nodes.FinishStateNodes.reserve(keysSize);
+    ExternalNodesFromInputTuple(ctx, callable, NDqHashOperatorParams::FinishStateArgs, nodes.FinishStateNodes);
 
     nodes.BuildMaps();
 

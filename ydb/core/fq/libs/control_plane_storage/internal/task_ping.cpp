@@ -54,7 +54,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
     auto query_id = request.query_id().value();
     auto counters = Counters.Counters->GetSubgroup("scope", scope)->GetSubgroup("query_id", query_id);
 
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "HardPingTask(read) / " + query_id);
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "HardPingTask(read)");
     readQueryBuilder.AddString("tenant", request.tenant());
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("query_id", query_id);
@@ -133,7 +133,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
         TInstant expireAt = TInstant::Now() + Config->AutomaticQueriesTtl;
         UpdateTaskInfo(actorSystem, request, finalStatus, query, internal, job, owner, retryLimiter, backoff, expireAt);
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "HardPingTask(write) / " + request.query_id().value());
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "HardPingTask(write)");
         writeQueryBuilder.AddString("tenant", request.tenant());
         writeQueryBuilder.AddString("scope", request.scope());
         writeQueryBuilder.AddString("job_id", jobId);
@@ -247,7 +247,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
 TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::ConstructSoftPingTask(
     const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
     const TRequestCommonCountersPtr& commonCounters) const {
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "SoftPingTask(read) / " + request.query_id().value());
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "SoftPingTask(read)");
     readQueryBuilder.AddString("tenant", request.tenant());
     readQueryBuilder.AddString("scope", request.scope());
     readQueryBuilder.AddString("query_id", request.query_id().value());
@@ -295,7 +295,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
         response->set_action(internal.action());
         *response->mutable_expired_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(ttl.MilliSeconds());
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "SoftPingTask(write) / " + request.query_id().value());
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "SoftPingTask(write)");
         writeQueryBuilder.AddTimestamp("now", TInstant::Now());
         writeQueryBuilder.AddTimestamp("ttl", ttl);
         writeQueryBuilder.AddString("tenant", request.tenant());

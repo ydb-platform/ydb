@@ -57,11 +57,11 @@ TDataShard::TPromotePostExecuteEdges TFinishProposeUnit::PromoteImmediatePostExe
         } else {
             return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
         }
-    } else if (op->MvccReadWriteVersion) {
+    } else if (op->CachedMvccVersion) {
         if (op->IsReadOnly() || op->LockTxId()) {
-            return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
+            return DataShard.PromoteImmediatePostExecuteEdges(*op->CachedMvccVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
         } else {
-            return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+            return DataShard.PromoteImmediatePostExecuteEdges(*op->CachedMvccVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
         }
     } else {
         return { };
@@ -198,8 +198,8 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
             LWTRACK(ProposeTransactionSendResult, op->Orbit);
             res->Orbit = std::move(op->Orbit);
         }
-        if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
-            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
+        if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->CachedMvccVersion) {
+            DataShard.SendImmediateWriteResult(*op->CachedMvccVersion, op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
         } else if (op->IsImmediate() && op->IsReadOnly() && !op->IsAborted()) {
             // TODO: we should actually measure a read timestamp and use it here
             DataShard.SendImmediateReadResult(op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());

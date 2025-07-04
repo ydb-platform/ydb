@@ -7,8 +7,11 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 
-    library/cpp/testing/unittest
     ydb/core/kqp/runtime
+
+    library/cpp/testing/unittest
+    library/cpp/dwarf_backtrace
+    library/cpp/dwarf_backtrace/registry
 )
 
 YQL_LAST_ABI_VERSION()
@@ -16,7 +19,8 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     dq_factories.cpp
 
+    dq_hash_combine_ut.cpp
     dq_block_hash_join_ut.cpp
 )
 
-END() 
+END()

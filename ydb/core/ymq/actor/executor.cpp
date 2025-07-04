@@ -1,6 +1,6 @@
 #include "executor.h"
 #include "log.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>

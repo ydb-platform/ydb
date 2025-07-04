@@ -189,13 +189,13 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const auto &record = ev->Record;
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
-        if (Info->ClusterStateGeneration < clusterStateGeneration || 
+        if (Info->ClusterStateGeneration < clusterStateGeneration ||
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             BLOG_D("StateStorageProxy TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " clusterStateGeneration=" << clusterStateGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " clusterStateGuid=" << clusterStateGuid);
             if (NotifyRingGroupProxy) {
                 Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
             }
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), clusterStateGeneration, clusterStateGuid));
             ReplyAndDie(NKikimrProto::ERROR);
             return false;
@@ -484,7 +484,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
         if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || !Signature.HasReplicaSignature(replicaId)) {
-            Signature.SetReplicaSignature(replicaId, sig);
+            if (sig != Max<ui64>()) {
+                Signature.SetReplicaSignature(replicaId, sig);
+            }
             ++RepliesAfterReply;
             ++SignaturesMerged;
 
@@ -742,7 +744,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
         TEvStateStorage::TEvConfigVersionInfo *msg = ev->Get();
-        if (Info->ClusterStateGeneration < msg->ClusterStateGeneration || 
+        if (Info->ClusterStateGeneration < msg->ClusterStateGeneration ||
             (Info->ClusterStateGeneration == msg->ClusterStateGeneration && Info->ClusterStateGuid != msg->ClusterStateGuid)) {
             Reply(NKikimrProto::ERROR);
             PassAway();
@@ -920,9 +922,9 @@ public:
         auto &record = ev->Get()->Record;
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
-        if (Info->ClusterStateGeneration < clusterStateGeneration || 
+        if (Info->ClusterStateGeneration < clusterStateGeneration ||
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), clusterStateGeneration, clusterStateGuid));
             SendResponse();
             return;
@@ -1052,7 +1054,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     }
 
     void Handle(TEvStateStorage::TEvRingGroupPassAway::TPtr& /*ev*/) {
-        // Do nothng 
+        // Do nothng
     }
 
     template<typename TEventPtr>

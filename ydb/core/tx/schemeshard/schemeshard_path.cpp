@@ -1844,9 +1844,13 @@ bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explai
         // Compatibility case.
         // If system names protection is disabled, only `.sys` remains forbidden to create,
         // preserving behavior that existed before the introduction of system names protection.
-        explain += TStringBuilder()
-            << "path part '" << leaf << "', name is reserved by the system: '" << leaf << "'";
-        return false;
+        if (!AppData()->FeatureFlags.GetEnableRealSystemViewPaths()
+            || !CheckReservedName(leaf, AppData(), userToken, explain))
+        {
+            explain += TStringBuilder()
+                << "path part '" << leaf << "', name is reserved by the system: '" << leaf << "'";
+            return false;
+        }
     } else if (IsPathPartContainsOnlyDots(leaf)) {
         // Compatibility case.
         // If system names protection is disabled, only-dots check should be executed explicitly.

@@ -35,9 +35,10 @@ namespace NCloudEvents {
             AUDIT_PART("created_at", ::ToString(evInfo.CreatedAt))
             AUDIT_PART("cloud_id", (!evInfo.CloudId.empty() ? evInfo.CloudId : emptyValue))
             AUDIT_PART("folder_id", (!evInfo.FolderId.empty() ? evInfo.FolderId : emptyValue))
+            AUDIT_PART("resource_id", (!evInfo.ResourceId.empty() ? evInfo.ResourceId : emptyValue))
             AUDIT_PART("request_id", evInfo.RequestId)
             AUDIT_PART("idempotency_id", (!evInfo.IdempotencyId.empty() ? evInfo.IdempotencyId : emptyValue))
-            AUDIT_PART("queue", evInfo.QueueName)
+            AUDIT_PART("queue", (!evInfo.QueueName.empty() ? evInfo.QueueName : emptyValue))
             AUDIT_PART("labels", evInfo.Labels)
         );
     }
@@ -60,12 +61,12 @@ namespace NCloudEvents {
             << "Type,"
             << "CloudId,"
             << "FolderId,"
+            << "ResourceId,"
             << "UserSID,"
             << "MaskedToken,"
             << "AuthType,"
             << "PeerName,"
             << "RequestId,"
-            << "IdempotencyId,"
             << "Labels" << "\n"
             << "FROM `" << GetFullTablePath() << "`;\n";
     }
@@ -210,16 +211,17 @@ namespace NCloudEvents {
                 cloudEvent.Permission = "ymq.queues.delete";
             }
 
-            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
+            cloudEvent.IdempotencyId = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
+            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, TInstant::Now().MilliSeconds());
 
             cloudEvent.CloudId = *parser.ColumnParser(4).GetOptionalUtf8();
             cloudEvent.FolderId = *parser.ColumnParser(5).GetOptionalUtf8();
-            cloudEvent.UserSID = *parser.ColumnParser(6).GetOptionalUtf8();
-            cloudEvent.MaskedToken = *parser.ColumnParser(7).GetOptionalUtf8();
-            cloudEvent.AuthType = *parser.ColumnParser(8).GetOptionalUtf8();
-            cloudEvent.RemoteAddress = *parser.ColumnParser(9).GetOptionalUtf8();
-            cloudEvent.RequestId = *parser.ColumnParser(10).GetOptionalUtf8();
-            cloudEvent.IdempotencyId = *parser.ColumnParser(11).GetOptionalUtf8();
+            cloudEvent.ResourceId = *parser.ColumnParser(6).GetOptionalUtf8();
+            cloudEvent.UserSID = *parser.ColumnParser(7).GetOptionalUtf8();
+            cloudEvent.MaskedToken = *parser.ColumnParser(8).GetOptionalUtf8();
+            cloudEvent.AuthType = *parser.ColumnParser(9).GetOptionalUtf8();
+            cloudEvent.RemoteAddress = *parser.ColumnParser(10).GetOptionalUtf8();
+            cloudEvent.RequestId = *parser.ColumnParser(11).GetOptionalUtf8();
             cloudEvent.Labels = *parser.ColumnParser(12).GetOptionalUtf8();
         }
 

@@ -96,6 +96,15 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
         return WrapWithBearerIfNeeded(factory->Create(id, signature), addBearerToToken);
     }
 
+    if (parser.HasBasicAuth()) {
+        TString login;
+        TString password;
+        parser.GetBasicAuth(login, password);
+        return NYdb::CreateLoginCredentialsProviderFactory({
+            .User = login,
+            .Password = password});
+    }
+
     if (parser.IsNoAuth()) {
         return NYdb::CreateInsecureCredentialsProviderFactory();
     }

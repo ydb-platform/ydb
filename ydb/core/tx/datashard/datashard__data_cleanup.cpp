@@ -69,7 +69,7 @@ public:
         }
         Self->OutReadSets.Cleanup(db, ctx);
 
-        Self->Executor()->CleanupData(Ev->Get()->Record.GetDataCleanupGeneration());
+        Self->Executor()->StartVacuum(Ev->Get()->Record.GetDataCleanupGeneration());
         Self->DataCleanupWaiters.insert({Ev->Get()->Record.GetDataCleanupGeneration(), Ev->Sender});
         return true;
     }
@@ -120,7 +120,7 @@ void TDataShard::Handle(TEvDataShard::TEvForceDataCleanup::TPtr& ev, const TActo
     Executor()->Execute(new TTxDataCleanup(this, ev), ctx);
 }
 
-void TDataShard::DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext& ctx) {
+void TDataShard::VacuumComplete(ui64 dataCleanupGeneration, const TActorContext& ctx) {
     Executor()->Execute(new TTxCompleteDataCleanup(this, dataCleanupGeneration), ctx);
 }
 

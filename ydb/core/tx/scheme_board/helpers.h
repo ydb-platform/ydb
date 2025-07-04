@@ -1,10 +1,9 @@
 #pragma once
 
-#include "defs.h"
-#include <ydb/core/scheme/scheme_pathid.h>
-
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/scheme_board.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -64,5 +63,23 @@ NKikimrScheme::TEvDescribeSchemeResult DeserializeDescribeSchemeResult(const TSt
 NKikimrScheme::TEvDescribeSchemeResult* DeserializeDescribeSchemeResult(const TString& serialized, google::protobuf::Arena* arena);
 TString JsonFromDescribeSchemeResult(const TString& serialized);
 
+struct TClusterState {
+    ui64 Generation = 0;
+    ui64 Guid = 0;
+
+    TClusterState() = default;
+    explicit TClusterState(const TStateStorageInfo* info);
+    explicit TClusterState(const NKikimrSchemeBoard::TClusterState& proto);
+    void ToProto(NKikimrSchemeBoard::TClusterState& proto) const;
+
+    explicit operator bool() const;
+    bool operator==(const TClusterState& other) const;
+    void Out(IOutputStream& out) const;
+};
+
 } // NSchemeBoard
 } // NKikimr
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeBoard::TClusterState, o, x) {
+    return x.Out(o);
+}

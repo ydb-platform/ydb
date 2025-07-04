@@ -88,9 +88,9 @@ public:
             }
         }
 
-        if (MvccReadWriteVersion) {
-            Self->PromoteImmediatePostExecuteEdges(*MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
-            Pipeline.AddCommittingOp(*MvccReadWriteVersion);
+        if (MvccVersion) {
+            Self->PromoteImmediatePostExecuteEdges(*MvccVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+            Pipeline.AddCommittingOp(*MvccVersion);
         }
 
         if (!Result) {
@@ -195,14 +195,12 @@ public:
             txc.DB.UpdateTx(userTable.LocalTid, rop, key, update, writeTxId);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
-            if (!MvccReadWriteVersion) {
-                auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
-                Y_DEBUG_ABORT_UNLESS(readVersion == writeVersion);
-                MvccReadWriteVersion = writeVersion;
+            if (!MvccVersion) {
+                MvccVersion = Self->GetMvccVersion();
             }
 
             Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
-            txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccReadWriteVersion);
+            txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccVersion);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
         }
 
@@ -254,9 +252,9 @@ public:
         Y_ENSURE(Ev);
         Y_ENSURE(Result);
 
-        if (MvccReadWriteVersion) {
-            Pipeline.RemoveCommittingOp(*MvccReadWriteVersion);
-            Self->SendImmediateWriteResult(*MvccReadWriteVersion, Ev->Sender, Result.Release(), Ev->Cookie);
+        if (MvccVersion) {
+            Pipeline.RemoveCommittingOp(*MvccVersion);
+            Self->SendImmediateWriteResult(*MvccVersion, Ev->Sender, Result.Release(), Ev->Cookie);
         } else {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
         }
@@ -266,7 +264,7 @@ private:
     TPipeline& Pipeline;
     TEvDataShard::TEvApplyReplicationChanges::TPtr Ev;
     THolder<TEvDataShard::TEvApplyReplicationChangesResult> Result;
-    std::optional<TRowVersion> MvccReadWriteVersion;
+    std::optional<TRowVersion> MvccVersion;
 }; // TTxApplyReplicationChanges
 
 void TDataShard::Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx) {

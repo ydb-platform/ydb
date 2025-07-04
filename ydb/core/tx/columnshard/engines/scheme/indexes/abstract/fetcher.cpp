@@ -13,7 +13,7 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
                 StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         } else {
             TChunkOriginalData originalData(
-                context.GetSource()->GetStageData().GetPortionAccessor().GetPortionInfo().RestoreBlobRange(i->GetBlobRangeVerified()));
+                context.GetSource()->GetStageData().GetPortionAccessor().RestoreBlobRange(i->GetBlobRangeVerified()));
             Fetching.emplace_back(TIndexChunkFetching(
                 StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         }

@@ -147,7 +147,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             auto rows = CollectRows(it);
             for (auto&& i : rows) {
-                Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT_DEFAULT")) << "/" << GetUint64(i.at("RECORDS_COUNT_SLICE")) << Endl;
+                Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT_DEFAULT")) << "/"
+                     << GetUint64(i.at("RECORDS_COUNT_SLICE")) << Endl;
             }
             AFL_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
             AFL_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT_DEFAULT")) == 0);
@@ -227,7 +228,20 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
                 ++levelIdx;
             }
         }
+
+        {
+            auto alterQuery =
+                TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20000, "portions_size_limit" : 100000, "portions_count_available" : 1},
+                             {"class_name" : "Zero"}]}`);
+            )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
     }
+
     Y_UNIT_TEST(OptimizationByTime) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

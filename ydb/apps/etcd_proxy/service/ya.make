@@ -2,8 +2,10 @@ LIBRARY()
 
 SRCS(
     etcd_base_init.cpp
+    etcd_gate.cpp
     etcd_grpc.cpp
     etcd_impl.cpp
+    etcd_lease.cpp
     etcd_shared.cpp
     etcd_watch.cpp
 )
@@ -21,6 +23,8 @@ PEERDIR(
 
 RESOURCE(
     ydb/apps/etcd_proxy/service/create.sql create.sql
+    ydb/apps/etcd_proxy/service/leases.sql leases.sql
+    ydb/apps/etcd_proxy/service/revision.sql revision.sql
 )
 
 END()

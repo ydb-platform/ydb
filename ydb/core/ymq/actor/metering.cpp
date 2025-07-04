@@ -1,6 +1,6 @@
 #include "metering.h"
 
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "serviceid.h"
 #include "proxy_actor.h"
 

@@ -45,7 +45,7 @@ public:
             << " Uploader: " << UploaderId.ToString()
             << " Sender: " << ev->Sender.ToString());
         Y_ENSURE(Uploading);
-        
+
         UploaderId = {};
 
         UploadStatus.StatusCode = ev->Get()->Status;
@@ -53,7 +53,7 @@ public:
         if (!UploadStatus.IsSuccess()) {
             return;
         }
-        
+
         UploadRows += Uploading.Buffer.GetRows();
         UploadBytes += Uploading.Buffer.GetRowCellBytes();
         Uploading.Buffer.Clear();
@@ -134,15 +134,16 @@ public:
             << "Scan failed " << exc.what()));
     }
 
-    template<typename TResponse> 
+    template<typename TResponse>
     void Finish(TResponse& response, NTable::EStatus status) {
         if (UploaderId) {
             TlsActivationContext->Send(new IEventHandle(UploaderId, TActorId(), new TEvents::TEvPoison));
             UploaderId = {};
         }
 
-        response.SetUploadRows(UploadRows);
-        response.SetUploadBytes(UploadBytes);
+        response.MutableMeteringStats()->SetUploadRows(UploadRows);
+        response.MutableMeteringStats()->SetUploadBytes(UploadBytes);
+
         if (status == NTable::EStatus::Exception) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else if (status != NTable::EStatus::Done) {
@@ -190,7 +191,7 @@ private:
 
         if (!destination.Buffer.IsEmpty() && (!byLimit || destination.Buffer.HasReachedLimits(ScanSettings))) {
             Uploading.Table = destination.Table;
-            Uploading.Types = destination.Types; 
+            Uploading.Types = destination.Types;
             destination.Buffer.FlushTo(Uploading.Buffer);
             StartUploadRowsInternal();
             return true;
@@ -228,8 +229,8 @@ private:
     ui32 RetryCount = 0;
 };
 
-inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id, 
-    TScanRecord::TSeqNo seqNo, TRowVersion rowVersion, ui32 tableId)
+inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id,
+    TScanRecord::TSeqNo seqNo, std::optional<TRowVersion> rowVersion, ui32 tableId)
 {
     auto& scanManager = dataShard->GetScanManager();
 
@@ -246,29 +247,38 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
     }
 
     TScanOptions scanOpts;
-    scanOpts.SetSnapshotRowVersion(rowVersion);
+    if (rowVersion) {
+        scanOpts.SetSnapshotRowVersion(*rowVersion);
+    }
     scanOpts.SetResourceBroker("build_index", 10);
     const auto scanId = dataShard->QueueScan(tableId, std::move(scan), 0, scanOpts);
     scanManager.Set(id, seqNo).push_back(scanId);
 }
 
-template<typename TResponse> 
+template<typename TResponse>
+void FillScanResponseCommonFields(TResponse& response, ui64 scanId, ui64 tabletId, TScanRecord::TSeqNo seqNo)
+{
+    auto& rec = response.Record;
+    rec.SetId(scanId);
+    rec.SetTabletId(tabletId);
+    rec.SetRequestSeqNoGeneration(seqNo.Generation);
+    rec.SetRequestSeqNoRound(seqNo.Round);
+}
+
+template<typename TResponse>
 inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc, const TString& logScanType)
 {
-    LOG_E("Unhandled exception " << logScanType << " TabletId: " << tabletId 
+    LOG_E("Unhandled exception " << logScanType << " TabletId: " << tabletId
         << " " << TypeName(exc) << ": " << exc.what() << Endl
         << TBackTrace::FromCurrentException().PrintToString());
 
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
 
     auto response = MakeHolder<TResponse>();
-    response->Record.SetId(scanId);
-    response->Record.SetTabletId(tabletId);
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
+    FillScanResponseCommonFields(*response, scanId, tabletId, seqNo);
     response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
 
-    auto issue = response->Record.AddIssues();
+    auto* issue = response->Record.AddIssues();
     issue->set_severity(NYql::TSeverityIds::S_ERROR);
     issue->set_message(TStringBuilder() << "Scan failed " << exc.what());
 

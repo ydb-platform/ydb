@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/service_scheme.h>
 #include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 namespace NKikimr::NReplication {
 
@@ -117,11 +118,25 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
     NGRpcService::DoDescribePathRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
 }
 
+void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
+    LOG_E("Handle " << ev->Get()->ToString());
+
+    auto [table, settings] = std::move(ev->Get()->GetArgs());
+
+    NYdb::NIssue::TIssues issues;
+    issues.AddIssue(TStringBuilder() << "Table '" << table << "' not found");
+    NYdb::TStatus status(NYdb::EStatus::NOT_FOUND, std::move(issues));
+    Ydb::Table::DescribeTableResult desc;
+
+    Send(ev->Sender, new TEvYdbProxy::TEvDescribeTableResponse(std::move(status), std::move(desc), settings), 0, ev->Cookie);
+}
+
 STATEFN(TLocalProxyActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvYdbProxy::TEvCreateTopicReaderRequest, Handle);
         hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);
         hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
+        hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);
         sFunc(TEvents::TEvPoison, PassAway);

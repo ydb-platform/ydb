@@ -373,13 +373,15 @@ public:
                 break;
             }
 
-            NUdf::TUnboxedValue key;
+            NUdf::TUnboxedValuePod key;
             NativeToUnboxed<false>(nextTuple->first, key);
             builders[0]->Add(key);
+            key.DeleteUnreferenced();
 
-            NUdf::TUnboxedValue value;
+            NUdf::TUnboxedValuePod value;
             NativeToUnboxed<false>(nextTuple->second, value);
             builders[1]->Add(value);
+            value.DeleteUnreferenced();
         }
 
         if (count > 0) {

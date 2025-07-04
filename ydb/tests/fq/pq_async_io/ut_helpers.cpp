@@ -106,10 +106,12 @@ void TPqIoTestFixture::InitSource(
             0,
             secureParams,
             taskParams,
+            {},
             Driver,
             nullptr,
             actor.SelfId(),
             actor.GetHolderFactory(),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(std::move(pqServices)),
             freeSpace);

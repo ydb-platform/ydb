@@ -59,6 +59,11 @@ message StreamingDisposition {
     }
 }
 
+message TTaskSensorLabel {
+    string Label = 1;
+    string Value = 2;
+}
+
 message TDqPqTopicSource {
     string TopicPath = 1;
     string ConsumerName = 2;
@@ -82,6 +87,7 @@ message TDqPqTopicSource {
     string RowType = 20; // Final row type with metadata columns
     repeated TDqPqFederatedCluster FederatedClusters = 21;
     StreamingDisposition Disposition = 22;
+    repeated TTaskSensorLabel TaskSensorLabel = 23;
 }
 
 message TDqPqTopicSink {

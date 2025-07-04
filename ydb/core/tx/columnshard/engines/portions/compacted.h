@@ -7,7 +7,7 @@ class TCompactedPortionInfo: public TPortionInfo {
 private:
     using TBase = TPortionInfo;
     friend class TPortionInfoConstructor;
-    virtual void DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const override;
+    virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const override;
 
     virtual bool DoIsVisible(const TSnapshot& snapshot, const bool /*checkCommitSnapshot*/) const override {
         return RecordSnapshotMin(std::nullopt) <= snapshot;
@@ -37,7 +37,7 @@ public:
     virtual const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override;
     virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override;
     virtual const TString& GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const override;
-    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const override;
+    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& /*snapshotDefault*/) const override;
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& /*snapshotDefault*/) const override;
 };

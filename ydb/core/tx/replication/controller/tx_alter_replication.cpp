@@ -71,15 +71,20 @@ public:
                 }
         }
 
+        auto issue = Replication->GetIssue();
         if (alter) {
             Replication->SetDesiredState(desiredState);
+            if (desiredState == TReplication::EState::Ready) {
+                issue = "";
+            }
         }
 
         Replication->SetConfig(std::move(*record.MutableConfig()));
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
-            NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState)
+            NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState),
+            NIceDb::TUpdate<Schema::Replications::Issue>(issue)
         );
 
         if (!alter) {

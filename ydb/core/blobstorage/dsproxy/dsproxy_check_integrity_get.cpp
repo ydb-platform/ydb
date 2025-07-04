@@ -188,8 +188,8 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
             str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort) << Endl;
         }
 
-        PendingResult->DataErrorInfo = str.Str();
-        PendingResult->DataErrorInfo += partsState.DataErrorInfo;
+        PendingResult->DataInfo = str.Str();
+        PendingResult->DataInfo += partsState.DataInfo;
 
         ReplyAndDie(NKikimrProto::OK);
     }

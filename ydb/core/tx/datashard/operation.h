@@ -965,7 +965,7 @@ private:
     std::optional<TRowVersion> CommittingOpsVersion;
 
 public:
-    std::optional<TRowVersion> MvccReadWriteVersion;
+    std::optional<TRowVersion> CachedMvccVersion;
 
 public:
     // Orbit used for tracking operation progress

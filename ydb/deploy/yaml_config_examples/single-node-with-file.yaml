@@ -3,25 +3,12 @@ metadata:
   cluster: ""
   version: 0
 config:
-  yaml_config_enabled: true
   self_management_config:
     enabled: true
-  erasure: none
-  fail_domain_type: none
-  default_disk_type: SSD
-  host_configs:
-  - drive:
-    - path: /tmp/pdisk.data
-      type: SSD
-    host_config_id: 1
   hosts:
   - host: localhost
-    host_config_id: 1
-    port: 19001
-    location:
-      body: 1
-      data_center: '1'
-      rack: '1'
+    drive:
+    - path: /tmp/pdisk.data 
   actor_system_config:
     use_auto_config: true
     cpu_count: 8

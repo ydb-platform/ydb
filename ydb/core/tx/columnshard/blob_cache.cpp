@@ -340,7 +340,7 @@ private:
             return;
         }
 
-        LOG_S_INFO("Update max cache data size: " << newMaxCacheDataSize);
+        LOG_S_DEBUG("Updating max cache data size: " << newMaxCacheDataSize);
 
         MaxCacheDataSize = newMaxCacheDataSize;
     }

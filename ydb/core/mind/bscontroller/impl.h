@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "bsc.h"
+#include "cluster_balancing.h"
 #include "scheme.h"
 #include "mood.h"
 #include "types.h"
@@ -9,6 +10,8 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/generic/hash_multi_map.h>
 
@@ -1624,6 +1627,8 @@ private:
     NKikimrBlobStorage::TPDiskSpaceColor::E PDiskSpaceColorBorder
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
+    TClusterBalancingSettings ClusterBalancingSettings;
+
     TActorId SystemViewsCollectorId;
 
     // a set of VSlots with LastSeenReady != TInstant::Zero()
@@ -1635,6 +1640,9 @@ private:
 
     class TConsoleInteraction;
     std::unique_ptr<TConsoleInteraction> ConsoleInteraction;
+
+    TBackoffTimer InvokeOnRootTimer{10, 3000};
+    std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot> InvokeOnRootCmd;
 
     struct TEvPrivate {
         enum EEv {
@@ -1847,6 +1855,7 @@ private:
     bool HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const;
     void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
     void ApplyStorageConfig(bool ignoreDistconf = false);
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
 
@@ -1889,6 +1898,8 @@ public:
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
+
+    TActorId ClusterBalanceActorId;
 
     bool IsGroupLayoutSanitizerEnabled() const {
         return GroupLayoutSanitizerEnabled;

@@ -15,6 +15,7 @@ namespace NKikimr::NStorage {
         const TActorId RequestSessionId;
 
         bool IsScepterlessOperation = false;
+        bool CheckSyncersAfterCommit = false;
 
         TActorId ParentId;
         ui32 WaitingReplyFromNode = 0;
@@ -27,6 +28,9 @@ namespace NKikimr::NStorage {
         THashMap<ui64, TGatherCallback> ScatterTasks;
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
+
+        THashSet<TBridgePileId> SpecificBridgePileIds;
+        std::optional<NKikimrBlobStorage::TStorageConfig> SwitchBridgeNewConfig;
 
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
@@ -88,7 +92,7 @@ namespace NKikimr::NStorage {
 
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
         void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
-        void GetStateStorageConfig();
+        void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
@@ -125,9 +129,11 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge mode
 
-        void SwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        std::optional<TString> ValidateSwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        void SwitchBridgeClusterState();
         NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
-        bool CheckSwitchBridgeCommand();
+
+        void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition

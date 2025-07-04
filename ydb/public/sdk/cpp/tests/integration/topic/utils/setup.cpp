@@ -41,7 +41,7 @@ TTopicDescription ITopicTestSetup::DescribeTopic(const std::string& name) {
     settings.IncludeLocation(true);
 
     auto status = client.DescribeTopic(GetTopicPath(name), settings).GetValueSync();
-    Y_ENSURE_BT(status.IsSuccess());
+    Y_ENSURE_BT(status.IsSuccess(), status);
 
     return status.GetTopicDescription();
 }

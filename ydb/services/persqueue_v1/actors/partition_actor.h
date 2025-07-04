@@ -76,7 +76,7 @@ public:
                      const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
                      const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
-                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const std::set<NPQ::TPartitionGraph::Node*>& parents,
+                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
                      const std::unordered_set<ui64>& notCommitedToFinishParents);
     ~TPartitionActor();
 
@@ -163,6 +163,7 @@ private:
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
                                                                       ui64 directReadId, ui64 sizeEstimate = 0) const;
 
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents() const;
 
 private:
     const TActorId ParentId;
@@ -229,7 +230,7 @@ private:
     std::deque<std::pair<ui64, TCommitInfo>> CommitsInfly; //ReadId, Offset
     std::unordered_map<ui64, std::shared_ptr<TDistributedCommitHelper>> Kqps;
 
-    std::set<NPQ::TPartitionGraph::Node*> Parents;
+    const TTopicHolder::TPtr TopicHolder;
 
     TTopicCounters Counters;
 

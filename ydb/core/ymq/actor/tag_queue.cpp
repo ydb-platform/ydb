@@ -37,7 +37,8 @@ public:
             map.emplace(t.GetKey(), t.GetValue());
         }
 
-        IsCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
+        SourceAddress_ = Request().GetSourceAddress();
+        IsCloudEventsEnabled_ = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 
 private:
@@ -66,19 +67,52 @@ private:
     void DoAction() override {
         Become(&TThis::StateFunc);
         TExecutorBuilder builder(SelfId(), RequestId_);
-        builder
-            .User(UserName_)
-            .Queue(GetQueueName())
-            .TablesFormat(TablesFormat())
-            .QueueLeader(QueueLeader_)
-            .QueryId(TAG_QUEUE_ID)
-            .Counters(QueueCounters_)
-            .RetryOnTimeout()
-            .Params()
-                .Utf8("NAME", GetQueueName())
-                .Utf8("USER_NAME", UserName_)
-                .Utf8("TAGS", TagsJson_)
-                .Utf8("OLD_TAGS", TagsToJson(*QueueTags_));
+
+        if (IsCloudEventsEnabled_) {
+            const auto& cloudEvCfg = Cfg().GetCloudEventsConfig();
+            TString database = (cloudEvCfg.HasTenantMode() && cloudEvCfg.GetTenantMode()? Cfg().GetRoot() : "");
+
+            auto evId = NCloudEvents::TEventIdGenerator::Generate();
+            auto createdAt = TInstant::Now().MilliSeconds();
+
+            builder
+                .User(UserName_)
+                .Queue(GetQueueName())
+                .TablesFormat(TablesFormat())
+                .QueueLeader(QueueLeader_)
+                .QueryId(TAG_QUEUE_ID)
+                .Counters(QueueCounters_)
+                .RetryOnTimeout()
+                .Params()
+                    .Utf8("NAME", GetQueueName())
+                    .Utf8("USER_NAME", UserName_)
+                    .Utf8("TAGS", TagsJson_)
+                    .Utf8("OLD_TAGS", TagsToJson(*QueueTags_))
+                    .Uint64("CLOUD_EVENT_ID", evId)
+                    .Uint64("CLOUD_EVENT_NOW", createdAt)
+                    .Utf8("CLOUD_EVENT_TYPE", "UpdateMessageQueue")
+                    .Utf8("CLOUD_EVENT_CLOUD_ID", UserName_)
+                    .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
+                    .Utf8("CLOUD_EVENT_USER_SID", UserSID_)
+                    .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
+                    .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
+                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
+                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
+        } else {
+            builder
+                .User(UserName_)
+                .Queue(GetQueueName())
+                .TablesFormat(TablesFormat())
+                .QueueLeader(QueueLeader_)
+                .QueryId(TAG_QUEUE_ID)
+                .Counters(QueueCounters_)
+                .RetryOnTimeout()
+                .Params()
+                    .Utf8("NAME", GetQueueName())
+                    .Utf8("USER_NAME", UserName_)
+                    .Utf8("TAGS", TagsJson_)
+                    .Utf8("OLD_TAGS", TagsToJson(*QueueTags_));
+        }
 
         builder.Start();
     }
@@ -102,66 +136,6 @@ private:
         }
     }
 
-    void AddCloudEventLog() const {
-        Y_ABORT_UNLESS(IsCloudEventsEnabled);
-        const auto& cloudEvCfg = Cfg().GetCloudEventsConfig();
-        TString database = (cloudEvCfg.HasTenantMode() && cloudEvCfg.GetTenantMode()? Cfg().GetRoot() : "");
-
-        auto evId = NCloudEvents::TEventIdGenerator::Generate();
-        auto createdAt = TInstant::Now().MilliSeconds();
-
-        TString query = TStringBuilder()
-            << "UPSERT INTO `" << GetFullCloudEventsTablePath() << "`\n"
-            << "("
-                << "CreatedAt,"
-                << "Id,"
-                << "QueueName,"
-                << "Type,"
-                << "CloudId,"
-                << "FolderId,"
-                << "UserSID,"
-                << "MaskedToken,"
-                << "AuthType,"
-                << "PeerName,"
-                << "RequestId,"
-                << "IdempotencyId,"
-                << "Labels"
-            << ")" << "\n"
-            << "VALUES" << "\n"
-            << "("
-                << createdAt << ","
-                << evId << ","
-                << "\"" << GetQueueName() << "\"" << ","
-                << "\"" << "UpdateMessageQueue" << "\"" << ","
-                << "\"" << UserName_ << "\"" << ","
-                << "\"" << FolderId_ << "\"" << ","
-                << "\"" << UserSID_ << "\"" << ","
-                << "\"" << MaskedToken_ << "\"" << ","
-                << "\"" << AuthType_ << "\"" << ","
-                << "\"" << "" << "\"" << ","
-                << "\"" << RequestId_ << "\"" << ","
-                << "\"" << "" << "\"" << ","
-                << "\"" << TagsToJson(*QueueTags_) << "\""
-            << ");" << "\n";
-
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        auto* request = ev->Record.MutableRequest();
-
-        if (!database.empty()) {
-            request->SetDatabase(database);
-        }
-
-        request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->SetQuery(query);
-
-        request->MutableQueryCachePolicy()->set_keep_in_cache(true);
-        request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-        request->MutableTxControl()->set_commit_tx(true);
-
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
-    }
-
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui32 status = record.GetStatus();
@@ -171,10 +145,6 @@ private:
             const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
             bool updated = val["updated"];
             if (updated) {
-                if (IsCloudEventsEnabled) {
-                    AddCloudEventLog();
-                }
-
                 RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
                 Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
             } else {
@@ -196,7 +166,9 @@ private:
 private:
     NJson::TJsonMap Tags_;
     TString TagsJson_;
-    bool IsCloudEventsEnabled;
+    bool IsCloudEventsEnabled_;
+    TString CustomQueueName_ = "";
+    TString SourceAddress_ = "";
 };
 
 IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

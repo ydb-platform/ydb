@@ -53,10 +53,6 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
 };
 
-// ! WARNING: Experimental API
-// ! This API is currently in experimental state and is a subject for changes.
-// ! No backward and/or forward compatibility guarantees are provided.
-// ! DO NOT USE for production workloads.
 class TQueryClient {
     friend class TSession;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;

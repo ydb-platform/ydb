@@ -780,7 +780,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
     auto shuffleLeftSideBestJoin = PickBestJoin(left, right, edge, true, false, maybeCardHint, maybeAlgoHint);
-    if (reversedMapJoinStatistics.Cost < shuffleLeftSideBestJoin.Stats.Cost) {
+    if (reversedMapJoinStatistics.Cost <= shuffleLeftSideBestJoin.Stats.Cost) {
         tree = MakeJoinInternal(std::move(reversedMapJoinStatistics), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
     } else {
@@ -824,7 +824,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
     auto shuffleRightSideBestJoin = PickBestJoin(left, right, edge, false, true, maybeCardHint, maybeAlgoHint);
-    if (mapJoinStatistics.Cost < shuffleRightSideBestJoin.Stats.Cost) {
+    if (mapJoinStatistics.Cost <= shuffleRightSideBestJoin.Stats.Cost) {
         tree = MakeJoinInternal(std::move(mapJoinStatistics), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
         tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
     } else {

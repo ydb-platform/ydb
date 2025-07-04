@@ -207,7 +207,11 @@ public:
         newClusterState.SetGeneration(currentClusterState.GetGeneration() + 1);
 
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(newClusterState);
+        auto *cmd = request->Record.MutableSwitchBridgeClusterState();
+        cmd->MutableNewClusterState()->CopyFrom(newClusterState);
+        for (ui32 specificBridgePileId : GetProtoRequest()->specific_pile_ids()) {
+            cmd->AddSpecificBridgePileIds(specificBridgePileId);
+        }
 
         self->ActorContext().Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), request.release());
         self->Become(&TThis::StateWaitForPropose);

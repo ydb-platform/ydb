@@ -23,6 +23,7 @@ DEPENDS(
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/clients
+    ydb/tests/library/stress
     ydb/tests/stress/common
     ydb/tests/stress/reconfig_state_storage_workload/workload
 )

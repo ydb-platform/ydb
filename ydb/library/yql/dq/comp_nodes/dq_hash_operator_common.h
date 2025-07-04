@@ -21,7 +21,7 @@ using TDependsOn = std::function<void(IComputationNode*)>;
 using TOwn = std::function<void(IComputationExternalNode*)>;
 
 struct TCombinerNodes {
-    TComputationExternalNodePtrVector ItemNodes, KeyNodes, StateNodes, FinishNodes;
+    TComputationExternalNodePtrVector ItemNodes, KeyNodes, StateNodes, FinishKeyNodes, FinishStateNodes;
     TComputationNodePtrVector KeyResultNodes, InitResultNodes, UpdateResultNodes, FinishResultNodes;
 
     std::vector<bool> PasstroughtItems;
@@ -45,61 +45,12 @@ struct TCombinerNodes {
                nullptr;
     }
 
-    void ExtractKey(TComputationContext& ctx, NUdf::TUnboxedValue** values, NUdf::TUnboxedValue* keys) const {
-        std::for_each(ItemNodes.cbegin(), ItemNodes.cend(), [&](IComputationExternalNode* item) {
-            if (const auto pointer = *values++)
-                item->SetValue(ctx, std::move(*pointer));
-        });
-        for (ui32 i = 0U; i < KeyNodes.size(); ++i) {
-            auto& key = KeyNodes[i]->RefValue(ctx);
-            *keys++ = key = KeyResultNodes[i]->GetValue(ctx);
-        }
-    }
-
-    void ConsumeRawData(TComputationContext& /*ctx*/, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** from, NUdf::TUnboxedValue* to) const {
-        std::fill_n(keys, KeyResultNodes.size(), NUdf::TUnboxedValuePod());
-        for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
-            if (from[i] && IsInputItemNodeUsed(i)) {
-                to[i] = std::move(*(from[i]));
-            }
-        }
-    }
-
-    void ExtractRawData(TComputationContext& ctx, NUdf::TUnboxedValue* from, NUdf::TUnboxedValue* keys) const {
-        for (ui32 i = 0U; i != ItemNodes.size(); ++i) {
-            if (IsInputItemNodeUsed(i)) {
-                ItemNodes[i]->SetValue(ctx, std::move(from[i]));
-            }
-        }
-        for (ui32 i = 0U; i < KeyNodes.size(); ++i) {
-            auto& key = KeyNodes[i]->RefValue(ctx);
-            *keys++ = key = KeyResultNodes[i]->GetValue(ctx);
-        }
-    }
-
-    void ProcessItem(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* state) const {
-        if (keys) {
-            std::fill_n(keys, KeyResultNodes.size(), NUdf::TUnboxedValuePod());
-            auto source = state;
-            std::for_each(StateNodes.cbegin(), StateNodes.cend(), [&](IComputationExternalNode* item){ item->SetValue(ctx, std::move(*source++)); });
-            std::transform(UpdateResultNodes.cbegin(), UpdateResultNodes.cend(), state, [&](IComputationNode* node) { return node->GetValue(ctx); });
-        } else {
-            std::transform(InitResultNodes.cbegin(), InitResultNodes.cend(), state, [&](IComputationNode* node) { return node->GetValue(ctx); });
-        }
-    }
-
-    void FinishItem(TComputationContext& ctx, NUdf::TUnboxedValue* state, NUdf::TUnboxedValue*const* output) const {
-        std::for_each(FinishNodes.cbegin(), FinishNodes.cend(), [&](IComputationExternalNode* item) { item->SetValue(ctx, std::move(*state++)); });
-        for (const auto node : FinishResultNodes)
-            if (const auto out = *output++)
-                *out = node->GetValue(ctx);
-    }
-
     void RegisterDependencies(const TDependsOn& dependsOn, const TOwn& own) const {
         std::for_each(ItemNodes.cbegin(), ItemNodes.cend(), own);
         std::for_each(KeyNodes.cbegin(), KeyNodes.cend(), own);
         std::for_each(StateNodes.cbegin(), StateNodes.cend(), own);
-        std::for_each(FinishNodes.cbegin(), FinishNodes.cend(), own);
+        std::for_each(FinishKeyNodes.cbegin(), FinishKeyNodes.cend(), own);
+        std::for_each(FinishStateNodes.cbegin(), FinishStateNodes.cend(), own);
 
         std::for_each(KeyResultNodes.cbegin(), KeyResultNodes.cend(), dependsOn);
         std::for_each(InitResultNodes.cbegin(), InitResultNodes.cend(), dependsOn);

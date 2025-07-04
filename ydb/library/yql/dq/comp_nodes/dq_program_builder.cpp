@@ -1,10 +1,12 @@
 #include "dq_program_builder.h"
+#include "type_utils.h"
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
+
 
 TDqProgramBuilder::TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
     : TProgramBuilder(env, functionRegistry) {}
@@ -18,13 +20,19 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
     const TProgramBuilder::TTernaryWideLambda& update,
     const TProgramBuilder::TBinaryWideLambda& finish)
 {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, flow.GetStaticType()));
+
+    std::vector<TType*> unblockedWideComponents;
+    bool hasBlocks = UnwrapBlockTypes(wideComponents, unblockedWideComponents);
+    if (hasBlocks) {
+        unblockedWideComponents.pop_back(); // Block height parameter
+    }
 
     TRuntimeNode::TList itemArgs;
-    itemArgs.reserve(wideComponents.size());
+    itemArgs.reserve(unblockedWideComponents.size());
 
     auto i = 0U;
-    std::generate_n(std::back_inserter(itemArgs), wideComponents.size(), [&](){ return Arg(wideComponents[i++]); });
+    std::generate_n(std::back_inserter(itemArgs), unblockedWideComponents.size(), [&](){ return Arg(unblockedWideComponents[i++]); });
 
     const auto keys = keyExtractor(itemArgs);
 
@@ -51,11 +59,17 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
 
     const auto output = finish(finishKeyArgs, finishStateArgs);
 
-    std::vector<TType*> tupleItems;
-    tupleItems.reserve(output.size());
-    std::transform(output.cbegin(), output.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
+    std::vector<TType*> outputWideComponents;
+    outputWideComponents.reserve(output.size() + hasBlocks ? 1 : 0);
+    std::transform(output.cbegin(), output.cend(), std::back_inserter(outputWideComponents), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
+    if (hasBlocks) {
+        WrapArrayBlockTypes(outputWideComponents, *this);
+        auto blockSizeType = NewDataType(NUdf::TDataType<ui64>::Id);
+        auto blockSizeBlockType = NewBlockType(blockSizeType, TBlockType::EShape::Scalar);
+        outputWideComponents.push_back(blockSizeBlockType);
+    }
 
-    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewFlowType(NewMultiType(tupleItems)));
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewStreamType(NewMultiType(outputWideComponents)));
 
     callableBuilder.Add(flow);
     callableBuilder.Add(operatorParams);

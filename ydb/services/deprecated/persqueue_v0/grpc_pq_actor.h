@@ -804,7 +804,7 @@ private:
     THashMap<std::pair<TString, ui32>, TPartitionActorInfo> Partitions; //topic[ClientSideName!]:partition -> info
 
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
-    THashMap<TString, TTopicHolder> Topics; // PrimaryName ->topic info
+    THashMap<TString, TTopicHolder::TPtr> Topics; // PrimaryName ->topic info
 
     TVector<ui32> Groups;
     bool ReadOnlyLocal;

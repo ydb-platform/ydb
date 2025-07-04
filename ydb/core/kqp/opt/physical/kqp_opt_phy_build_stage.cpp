@@ -691,21 +691,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(
     auto unionAll = idxLookupJoin.Input().Cast<TDqCnUnionAll>();
     auto inputStats = typeCtx.GetStats(unionAll.Output().Raw());
     auto sortedByOrderingIdx = inputStats->SortingOrderings.GetInitOrderingIdx();
-{
-    auto stage = unionAll
-        .Output().Maybe<TDqOutput>()
-        .Stage().Maybe<TDqStageBase>();
 
-    auto streamLookup = unionAll
-        .Output().Maybe<TDqOutput>()
-        .Stage().Maybe<TDqStageBase>()
-        .Inputs().Item(0).Maybe<TKqpCnStreamLookup>();
-
-    YQL_CLOG(TRACE, CoreDq) << "sperm stage:" << typeCtx.GetStats(unionAll.Output().Maybe<TDqOutput>().Stage().Raw())->ToString();
-    YQL_CLOG(TRACE, CoreDq) << "sperm streamlookup:" << typeCtx.GetStats(streamLookup.Cast().Raw())->ToString();
-    YQL_CLOG(TRACE, CoreDq) << "sperm2: Output of unionall" << inputStats->ToString();
-}
-    Cout << "sperm : " << sortedByOrderingIdx << Endl;
     if (!inputStats || !typeCtx.SortingsFSM || sortedByOrderingIdx == -1) {
         return node;
     }

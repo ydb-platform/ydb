@@ -41,6 +41,8 @@ message UpdateClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // List of desired pile states to update
     repeated PileStateUpdate updates = 2;
+    // If set, acquire quorum only for specific pile(s)
+    repeated uint32 specific_pile_ids = 3;
 }
 
 message UpdateClusterStateResponse {

@@ -134,14 +134,14 @@ void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
     UserDb.SetLockNodeId(lockNodeId);
 }
 
-void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) {
-    UserDb.SetReadVersion(readVersion);
+void TKqpDatashardComputeContext::SetMvccVersion(TRowVersion mvccVersion) {
+    UserDb.SetMvccVersion(mvccVersion);
 }
 
-TRowVersion TKqpDatashardComputeContext::GetReadVersion() const {
-    Y_ENSURE(!UserDb.GetReadVersion().IsMin(), "Cannot perform reads without ReadVersion set");
+TRowVersion TKqpDatashardComputeContext::GetMvccVersion() const {
+    Y_ENSURE(!UserDb.GetMvccVersion().IsMin(), "Cannot perform reads without ReadVersion set");
 
-    return UserDb.GetReadVersion();
+    return UserDb.GetMvccVersion();
 }
 
 TEngineHostCounters& TKqpDatashardComputeContext::GetDatashardCounters() {
@@ -240,7 +240,7 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          adjustLimit(key.RangeLimits.ItemsLimit),
                                          adjustLimit(key.RangeLimits.BytesLimit),
                                          key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
-                                         GetReadVersion());
+                                         GetMvccVersion());
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name
             << ", columns: [" << JoinSeq(", ", columnTags) << "]"

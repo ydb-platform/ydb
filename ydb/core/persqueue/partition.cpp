@@ -3347,9 +3347,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
         userInfo.Offset = offset;
         userInfo.CommittedMetadata = committedMetadata;
-        if (userInfo.Offset <= (i64)BlobEncoder.StartOffset) {
-            userInfo.AnyCommits = false;
-        }
+        userInfo.AnyCommits = userInfo.Offset > (i64)BlobEncoder.StartOffset;
 
         if (LastOffsetHasBeenCommited(userInfo)) {
             SendReadingFinished(user);

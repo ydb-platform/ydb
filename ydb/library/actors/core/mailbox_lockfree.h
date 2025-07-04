@@ -186,6 +186,14 @@ namespace NActors {
          */
         void Unlock(IExecutorPool* pool, NHPTimer::STime now, ui64& revolvingCounter);
 
+        /**
+         * Returns true when a free mailbox can be reclaimed
+         */
+        bool CanReclaim() const {
+            Y_DEBUG_ABORT_UNLESS(IsFree());
+            return !EventHead;
+        }
+
     private:
         void EnsureActorMap();
         void OnPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;

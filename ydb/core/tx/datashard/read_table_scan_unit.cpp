@@ -133,7 +133,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
         } else {
             // Note: this mode is only used in legacy tests and may not work with volatile transactions
             // With mvcc we have to mark all preceding transactions as logically complete
-            auto readVersion = DataShard.GetReadWriteVersions(tx).ReadVersion;
+            auto readVersion = DataShard.GetMvccVersion(tx);
             hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(readVersion, txc);
             if (op->IsMvccSnapshotRepeatable() || !op->IsImmediate()) {
                 hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc);

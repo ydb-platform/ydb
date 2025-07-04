@@ -1,0 +1,1004 @@
+<?xml version="1.0" ?>
+<testsuites>
+	<testsuite name="ydb/tests/functional/bridge" tests="6" time="393.9247612953186" failures="12" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="py3test"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="py3test" name="[test_bridge.py 0/10] chunk" time="0.0">
+			<failure>Chunk exceeded 60s timeout and was killed
+List of the tests involved in the launch:
+test_bridge.py::TestBridgeBasic::test_update_and_get_cluster_state (timeout) duration: 69.04s
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase classname="test_bridge.py.TestBridgeBasic" name="test_update_and_get_cluster_state" time="69.03650546073914">
+			<failure>Killed by timeout (60 s)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/test_bridge.py.TestBridgeBasic.test_update_and_get_cluster_state.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[test_bridge.py 1/10] chunk" time="0.0">
+			<failure>Chunk exceeded 60s timeout and was killed
+List of the tests involved in the launch:
+test_bridge.py::TestBridgeValidation::test_invalid_updates[updates0-no_updates] (timeout) duration: 64.98s
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase classname="test_bridge.py.TestBridgeValidation" name="test_invalid_updates[updates0-no_updates]" time="64.98314690589905">
+			<failure>Killed by timeout (60 s)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/test_bridge.py.TestBridgeValidation.test_invalid_updates.updates0-no_updates.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[test_bridge.py 2/10] chunk" time="0.0">
+			<failure>Chunk exceeded 60s timeout and was killed
+List of the tests involved in the launch:
+test_bridge.py::TestBridgeValidation::test_invalid_updates[updates1-multiple_primary_piles_in_request] (timeout) duration: 64.42s
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase classname="test_bridge.py.TestBridgeValidation" name="test_invalid_updates[updates1-multiple_primary_piles_in_request]" time="64.41884851455688">
+			<failure>Killed by timeout (60 s)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/test_bridge.py.TestBridgeValidation.test_invalid_updates.updates1-multiple_primary_piles_in_request.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[test_bridge.py 3/10] chunk" time="0.0">
+			<failure>Chunk exceeded 60s timeout and was killed
+List of the tests involved in the launch:
+test_bridge.py::TestBridgeValidation::test_invalid_updates[updates2-no_primary_pile_in_result] (timeout) duration: 65.12s
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase classname="test_bridge.py.TestBridgeValidation" name="test_invalid_updates[updates2-no_primary_pile_in_result]" time="65.12493395805359">
+			<failure>Killed by timeout (60 s)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/test_bridge.py.TestBridgeValidation.test_invalid_updates.updates2-no_primary_pile_in_result.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[test_bridge.py 4/10] chunk" time="0.0">
+			<failure>Chunk exceeded 60s timeout and was killed
+List of the tests involved in the launch:
+test_bridge.py::TestBridgeValidation::test_invalid_updates[updates3-duplicate_pile_update] (timeout) duration: 64.92s
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase classname="test_bridge.py.TestBridgeValidation" name="test_invalid_updates[updates3-duplicate_pile_update]" time="64.91612553596497">
+			<failure>Killed by timeout (60 s)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/test_bridge.py.TestBridgeValidation.test_invalid_updates.updates3-duplicate_pile_update.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[test_bridge.py 5/10] chunk" time="0.0">
+			<failure>Chunk exceeded 60s timeout and was killed
+List of the tests involved in the launch:
+test_bridge.py::TestBridgeValidation::test_invalid_updates[updates4-invalid_pile_id] (timeout) duration: 65.45s
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase classname="test_bridge.py.TestBridgeValidation" name="test_invalid_updates[updates4-invalid_pile_id]" time="65.44520092010498">
+			<failure>Killed by timeout (60 s)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/bridge/test-results/py3test/testing_out_stuff/test_bridge.py.TestBridgeValidation.test_invalid_updates.updates4-invalid_pile_id.log</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/hive" tests="1" time="15.020802433999961" failures="1" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="py3test"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="py3test" name="[test_drain.py 0/20] chunk" time="0.0"/>
+		<testcase classname="test_drain.py.TestHive" name="test_drain_on_stop" time="15.020802433999961">
+			<failure>ydb/tests/functional/hive/test_drain.py:93: in test_drain_on_stop
+    wait_tablets_are_active(
+ydb/tests/library/common/delayed.py:151: in wait_tablets_are_active
+    predicate(raise_error=True)
+ydb/tests/library/common/delayed.py:141: in predicate
+    raise AssertionError(
+E   AssertionError: 
+E   ##############################
+E   0 seconds passed, 91 tablet(s) are not active. Inactive tablets are (first 10 entries): (72075186224037888: 4) (72075186224038023: 6) (72075186224038167: 4) (72075186224038218: 6) (72075186224038265: None) (72075186224038273: 3) (72075186224038274: 5) (72075186224038281: None) (72075186224038354: 4) (72075186224038370: 4). Additional info is empty
+E   ##############################
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/hive/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/hive/test-results/py3test/testing_out_stuff/test_drain.py.TestHive.test_drain_on_stop.log</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/serverless" tests="2" time="217.68624929599991" failures="2" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="py3test"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="py3test" name="[test_serverless.py 0/10] chunk" time="0.0"/>
+		<testcase classname="test_serverless.py" name="test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]" time="100.13348159699854">
+			<failure>ydb/tests/functional/serverless/test_serverless.py:452: in test_database_with_disk_quotas
+    IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
+contrib/python/tornado/tornado-4/tornado/ioloop.py:458: in run_sync
+    return future_cell[0].result()
+contrib/python/tornado/tornado-4/tornado/concurrent.py:238: in result
+    raise_exc_info(self._exc_info)
+&amp;lt;string&amp;gt;:4: in raise_exc_info
+    ???
+contrib/python/tornado/tornado-4/tornado/gen.py:1064: in run
+    yielded = self.gen.throw(*exc_info)
+ydb/tests/functional/serverless/test_serverless.py:349: in wrapped
+    res = yield func(*args, **kwargs)
+contrib/python/tornado/tornado-4/tornado/gen.py:1056: in run
+    value = future.result()
+contrib/python/tornado/tornado-4/tornado/concurrent.py:238: in result
+    raise_exc_info(self._exc_info)
+&amp;lt;string&amp;gt;:4: in raise_exc_info
+    ???
+contrib/python/tornado/tornado-4/tornado/gen.py:1064: in run
+    yielded = self.gen.throw(*exc_info)
+ydb/tests/functional/serverless/test_serverless.py:369: in async_write_key
+    yield tx.async_execute(
+contrib/python/tornado/tornado-4/tornado/gen.py:1056: in run
+    value = future.result()
+contrib/tools/python3/Lib/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+contrib/tools/python3/Lib/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+contrib/python/ydb/py3/ydb/connection.py:105: in _on_response_callback
+    response = response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+contrib/python/ydb/py3/ydb/_session_impl.py:20: in decorator
+    return func(rpc_state, response_pb, session_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:9: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:22: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:165: in wrap_result_and_tx_id
+    issues._process_response(response_pb.operation)
+contrib/python/ydb/py3/ydb/issues.py:229: in _process_response
+    raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.Unavailable: message: &quot;Disk space exhausted. Table `/Root/quoted_serverless/test_database_with_disk_quotas_enable_alter_database_create_hive_first--false_/dirA0/table`.&quot; issue_code: 2033 severity: 1 issues { message: &quot;Cannot perform writes: database is out of disk space&quot; issue_code: 2033 severity: 1 } (server_code: 400050)
+
+During handling of the above exception, another exception occurred:
+ydb/tests/functional/serverless/test_serverless.py:451: in test_database_with_disk_quotas
+    with pytest.raises(ydb.Unavailable, match=r'.*DISK_SPACE_EXHAUSTED.*'):
+E   AssertionError: Regex pattern did not match.
+E    Regex: '.*DISK_SPACE_EXHAUSTED.*'
+E    Input: 'message: &quot;Disk space exhausted. Table `/Root/quoted_serverless/test_database_with_disk_quotas_enable_alter_database_create_hive_first--false_/dirA0/table`.&quot; issue_code: 2033 severity: 1 issues { message: &quot;Cannot perform writes: database is out of disk space&quot; issue_code: 2033 severity: 1 } (server_code: 400050)'
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/serverless/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/serverless/test-results/py3test/testing_out_stuff/test_serverless.py.test_database_with_disk_quotas.enable_alter_database_create_hive_first--false.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[test_serverless.py 1/10] chunk" time="0.0"/>
+		<testcase classname="test_serverless.py" name="test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]" time="117.55276769900138">
+			<failure>ydb/tests/functional/serverless/test_serverless.py:452: in test_database_with_disk_quotas
+    IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
+contrib/python/tornado/tornado-4/tornado/ioloop.py:458: in run_sync
+    return future_cell[0].result()
+contrib/python/tornado/tornado-4/tornado/concurrent.py:238: in result
+    raise_exc_info(self._exc_info)
+&amp;lt;string&amp;gt;:4: in raise_exc_info
+    ???
+contrib/python/tornado/tornado-4/tornado/gen.py:1064: in run
+    yielded = self.gen.throw(*exc_info)
+ydb/tests/functional/serverless/test_serverless.py:349: in wrapped
+    res = yield func(*args, **kwargs)
+contrib/python/tornado/tornado-4/tornado/gen.py:1056: in run
+    value = future.result()
+contrib/python/tornado/tornado-4/tornado/concurrent.py:238: in result
+    raise_exc_info(self._exc_info)
+&amp;lt;string&amp;gt;:4: in raise_exc_info
+    ???
+contrib/python/tornado/tornado-4/tornado/gen.py:1064: in run
+    yielded = self.gen.throw(*exc_info)
+ydb/tests/functional/serverless/test_serverless.py:369: in async_write_key
+    yield tx.async_execute(
+contrib/python/tornado/tornado-4/tornado/gen.py:1056: in run
+    value = future.result()
+contrib/tools/python3/Lib/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+contrib/tools/python3/Lib/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+contrib/python/ydb/py3/ydb/connection.py:105: in _on_response_callback
+    response = response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+contrib/python/ydb/py3/ydb/_session_impl.py:20: in decorator
+    return func(rpc_state, response_pb, session_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:9: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:22: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:165: in wrap_result_and_tx_id
+    issues._process_response(response_pb.operation)
+contrib/python/ydb/py3/ydb/issues.py:229: in _process_response
+    raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.Unavailable: message: &quot;Disk space exhausted. Table `/Root/quoted_serverless/test_database_with_disk_quotas_enable_alter_database_create_hive_first--true_/dirA0/table`.&quot; issue_code: 2033 severity: 1 issues { message: &quot;Cannot perform writes: database is out of disk space&quot; issue_code: 2033 severity: 1 } (server_code: 400050)
+
+During handling of the above exception, another exception occurred:
+ydb/tests/functional/serverless/test_serverless.py:451: in test_database_with_disk_quotas
+    with pytest.raises(ydb.Unavailable, match=r'.*DISK_SPACE_EXHAUSTED.*'):
+E   AssertionError: Regex pattern did not match.
+E    Regex: '.*DISK_SPACE_EXHAUSTED.*'
+E    Input: 'message: &quot;Disk space exhausted. Table `/Root/quoted_serverless/test_database_with_disk_quotas_enable_alter_database_create_hive_first--true_/dirA0/table`.&quot; issue_code: 2033 severity: 1 issues { message: &quot;Cannot perform writes: database is out of disk space&quot; issue_code: 2033 severity: 1 } (server_code: 400050)'
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/serverless/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/serverless/test-results/py3test/testing_out_stuff/test_serverless.py.test_database_with_disk_quotas.enable_alter_database_create_hive_first--true.log</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/functional/tenants" tests="6" time="229.31207995800196" failures="6" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="py3test"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="py3test" name="[0/20] chunk" time="0.0"/>
+		<testcase classname="test_dynamic_tenants.py" name="test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]" time="19.70041540300008">
+			<failure>ydb/tests/functional/tenants/test_dynamic_tenants.py:350: in test_create_and_drop_the_same_tenant2
+    pool.retry_operation_sync(write_some_data, None, &quot;table&quot;, &quot;table_for_rm&quot;, value)
+contrib/python/ydb/py3/ydb/table.py:2655: in retry_operation_sync
+    return retry_operation_sync(wrapped_callee, retry_settings)
+contrib/python/ydb/py3/ydb/retries.py:133: in retry_operation_sync
+    for next_opt in opt_generator:
+contrib/python/ydb/py3/ydb/retries.py:94: in retry_operation_impl
+    result = YdbRetryOperationFinalResult(callee(*args, **kwargs))
+contrib/python/ydb/py3/ydb/table.py:2653: in wrapped_callee
+    return callee(session, *args, **kwargs)
+ydb/tests/functional/tenants/test_dynamic_tenants.py:340: in write_some_data
+    session.transaction().execute(
+contrib/python/ydb/py3/ydb/table.py:2392: in execute
+    return self._driver(
+contrib/python/ydb/py3/ydb/tracing.py:70: in wrapper
+    return f(self, *args, **kwargs)
+contrib/python/ydb/py3/ydb/pool.py:464: in __call__
+    res = connection(
+contrib/python/ydb/py3/ydb/connection.py:465: in __call__
+    return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+contrib/python/ydb/py3/ydb/_session_impl.py:20: in decorator
+    return func(rpc_state, response_pb, session_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:9: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:22: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:165: in wrap_result_and_tx_id
+    issues._process_response(response_pb.operation)
+contrib/python/ydb/py3/ydb/issues.py:229: in _process_response
+    raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.SchemeError: message: &quot;Failed to create default pool in database /Root/users/database&quot; severity: 1 issues { message: &quot;Failed to create resource pool: StatusPathDoesNotExist&quot; severity: 1 issues { message: &quot;Path does not exist&quot; issue_code: 200200 severity: 1 } } ,message: &quot;Query failed during adding/waiting in workload pool &quot; severity: 1 (server_code: 400070)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2.enable_alter_database_create_hive_first--false.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[1/20] chunk" time="0.0"/>
+		<testcase classname="test_dynamic_tenants.py" name="test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--true]" time="14.688828975000433">
+			<failure>ydb/tests/functional/tenants/test_dynamic_tenants.py:350: in test_create_and_drop_the_same_tenant2
+    pool.retry_operation_sync(write_some_data, None, &quot;table&quot;, &quot;table_for_rm&quot;, value)
+contrib/python/ydb/py3/ydb/table.py:2655: in retry_operation_sync
+    return retry_operation_sync(wrapped_callee, retry_settings)
+contrib/python/ydb/py3/ydb/retries.py:133: in retry_operation_sync
+    for next_opt in opt_generator:
+contrib/python/ydb/py3/ydb/retries.py:94: in retry_operation_impl
+    result = YdbRetryOperationFinalResult(callee(*args, **kwargs))
+contrib/python/ydb/py3/ydb/table.py:2653: in wrapped_callee
+    return callee(session, *args, **kwargs)
+ydb/tests/functional/tenants/test_dynamic_tenants.py:340: in write_some_data
+    session.transaction().execute(
+contrib/python/ydb/py3/ydb/table.py:2392: in execute
+    return self._driver(
+contrib/python/ydb/py3/ydb/tracing.py:70: in wrapper
+    return f(self, *args, **kwargs)
+contrib/python/ydb/py3/ydb/pool.py:464: in __call__
+    res = connection(
+contrib/python/ydb/py3/ydb/connection.py:465: in __call__
+    return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+contrib/python/ydb/py3/ydb/_session_impl.py:20: in decorator
+    return func(rpc_state, response_pb, session_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:9: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:22: in decorator
+    return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
+contrib/python/ydb/py3/ydb/_tx_ctx_impl.py:165: in wrap_result_and_tx_id
+    issues._process_response(response_pb.operation)
+contrib/python/ydb/py3/ydb/issues.py:229: in _process_response
+    raise exc_obj(_format_response(response_proto), response_proto.issues)
+E   ydb.issues.SchemeError: message: &quot;Failed to create default pool in database /Root/users/database&quot; severity: 1 issues { message: &quot;Failed to create resource pool: StatusPathDoesNotExist&quot; severity: 1 issues { message: &quot;Path does not exist&quot; issue_code: 200200 severity: 1 } } ,message: &quot;Query failed during adding/waiting in workload pool &quot; severity: 1 (server_code: 400070)
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2.enable_alter_database_create_hive_first--true.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[2/20] chunk" time="0.0"/>
+		<testcase classname="test_tenants.py.TestTenants" name="test_list_database_above[enable_alter_database_create_hive_first--false]" time="15.647357438000654">
+			<failure>ydb/tests/functional/tenants/test_tenants.py:433: in test_list_database_above
+    assert result.children[0].name == &quot;.sys&quot;
+E   AssertionError: assert '.metadata' == '.sys'
+E     
+E     - .sys
+E     + .metadata
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_tenants.py.TestTenants.test_list_database_above.enable_alter_database_create_hive_first--false.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[3/20] chunk" time="0.0"/>
+		<testcase classname="test_tenants.py.TestTenants" name="test_list_database_above[enable_alter_database_create_hive_first--true]" time="15.201598820000982">
+			<failure>ydb/tests/functional/tenants/test_tenants.py:433: in test_list_database_above
+    assert result.children[0].name == &quot;.sys&quot;
+E   AssertionError: assert '.metadata' == '.sys'
+E     
+E     - .sys
+E     + .metadata
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_tenants.py.TestTenants.test_list_database_above.enable_alter_database_create_hive_first--true.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[4/20] chunk" time="0.0"/>
+		<testcase classname="test_tenants.py.TestTenants" name="test_stop_start[enable_alter_database_create_hive_first--false]" time="79.28075399199952">
+			<failure>ydb/tests/functional/tenants/test_tenants.py:297: in test_stop_start
+    with ydb_database_ctx(ydb_cluster, database_path):
+contrib/tools/python3/Lib/contextlib.py:137: in __enter__
+    return next(self.gen)
+ydb/tests/library/fixtures/__init__.py:88: in ydb_database_ctx
+    ydb_cluster.create_database(database_path, storage_pool_units_count=storage_pools, timeout_seconds=timeout_seconds, token=token)
+ydb/tests/library/harness/kikimr_cluster_interface.py:230: in create_database
+    raise RuntimeError('create_database failed: %s, %s' % (operation.status, ydb.issues._format_issues(operation.issues)))
+E   RuntimeError: create_database failed: 400080, message: &quot;Group fit error BoxId# 1 StoragePoolId# 5 Error# failed to allocate group: no group options PDisks# {[(1:1-S)]}&quot; severity: 1
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_tenants.py.TestTenants.test_stop_start.enable_alter_database_create_hive_first--false.log</failure>
+		</testcase>
+		<testcase classname="py3test" name="[5/20] chunk" time="0.0"/>
+		<testcase classname="test_tenants.py.TestTenants" name="test_stop_start[enable_alter_database_create_hive_first--true]" time="84.7931253300003">
+			<failure>ydb/tests/functional/tenants/test_tenants.py:297: in test_stop_start
+    with ydb_database_ctx(ydb_cluster, database_path):
+contrib/tools/python3/Lib/contextlib.py:137: in __enter__
+    return next(self.gen)
+ydb/tests/library/fixtures/__init__.py:88: in ydb_database_ctx
+    ydb_cluster.create_database(database_path, storage_pool_units_count=storage_pools, timeout_seconds=timeout_seconds, token=token)
+ydb/tests/library/harness/kikimr_cluster_interface.py:230: in create_database
+    raise RuntimeError('create_database failed: %s, %s' % (operation.status, ydb.issues._format_issues(operation.issues)))
+E   RuntimeError: create_database failed: 400080, message: &quot;Group fit error BoxId# 1 StoragePoolId# 5 Error# failed to allocate group: no group options PDisks# {[(1:1-S)]}&quot; severity: 1
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/functional/tenants/test-results/py3test/testing_out_stuff/test_tenants.py.TestTenants.test_stop_start.enable_alter_database_create_hive_first--true.log</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/olap/s3_import" tests="1" time="219.34354518700002" failures="0" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="py3test"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="py3test" name="sole chunk" time="0.0"/>
+		<testcase classname="test_tpch_import.py.TestS3TpchImport" name="test_import_and_export" time="219.34354518700002"/>
+	</testsuite>
+	<testsuite name="ydb/tests/stress/log/tests" tests="1" time="7.251107892001528" failures="1" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="py3test"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="py3test" name="sole chunk" time="0.0"/>
+		<testcase classname="test_workload.py.TestYdbLogWorkload" name="test[column]" time="7.251107892001528">
+			<failure>ydb/tests/stress/log/tests/test_workload.py:67: in test
+    yatest.common.execute(command, wait=True)
+library/python/testing/yatest_common/yatest/common/process.py:656: in execute
+    res.wait(check_exit_code, timeout, on_timeout)
+library/python/testing/yatest_common/yatest/common/process.py:411: in wait
+    self._finalise(check_exit_code)
+library/python/testing/yatest_common/yatest/common/process.py:422: in _finalise
+    raise ExecutionError(self)
+E   yatest.common.process.ExecutionError: Command '/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/apps/ydb/ydb --verbose --endpoint grpc://localhost:11310 --database=/Root workload log import --bulk-size 1000 -t 1 generator --path column --int-cols 2 --str-cols 5 --key-cols 4 --len 200 --rows 100000' has failed with code 1.
+E   Errors:
+E   ...-efo5a2oc3a.auto.internal:11310
+E   
+E   Bulk upset to /Root/column failed, TRANSPORT_UNAVAILABLE, &amp;lt;main&amp;gt;: Error: GRpc error: (14): recvmsg:Connection reset by peer
+E   &amp;lt;main&amp;gt;: Error: Grpc error response on endpoint ghrun-efo5a2oc3a.auto.internal:11310
+E   
+E   Bulk upset to /Root/column failed, TRANSPORT_UNAVAILABLE, &amp;lt;main&amp;gt;: Error: GRpc error: (14): recvmsg:Connection reset by peer
+E   &amp;lt;main&amp;gt;: Error: Grpc error response on endpoint ghrun-efo5a2oc3a.auto.internal:11310
+E   
+E   Bulk upset to /Root/column failed, TRANSPORT_UNAVAILABLE, &amp;lt;main&amp;gt;: Error: GRpc error: (14): recvmsg:Connection reset by peer
+E   &amp;lt;main&amp;gt;: Error: Grpc error response on endpoint ghrun-efo5a2oc3a.auto.internal:11310
+E   
+E   Bulk upset to /Root/column failed, TRANSPORT_UNAVAILABLE, &amp;lt;main&amp;gt;: Error: GRpc error: (14): recvmsg:Connection reset by peer
+E   &amp;lt;main&amp;gt;: Error: Grpc error response on endpoint ghrun-efo5a2oc3a.auto.internal:11310
+E   
+E   Bulk upset to /Root/column failed, TRANSPORT_UNAVAILABLE, &amp;lt;main&amp;gt;: Error: GRpc error: (14): recvmsg:Connection reset by peer
+E   &amp;lt;main&amp;gt;: Error: Grpc error response on endpoint ghrun-efo5a2oc3a.auto.internal:11310
+E   
+E   Bulk upset to /Root/column failed, TRANSPORT_UNAVAILABLE, &amp;lt;main&amp;gt;: Error: GRpc error: (14): recvmsg:Connection reset by peer
+E   &amp;lt;main&amp;gt;: Error: Grpc error response on endpoint ghrun-efo5a2oc3a.auto.internal:11310
+E   
+E   Bulk upset to /Root/column failed, TRANSPORT_UNAVAILABLE, &amp;lt;main&amp;gt;: Error: GRpc error: (14): recvmsg:Connection reset by peer
+E   &amp;lt;main&amp;gt;: Error: Grpc error response on endpoint ghrun-efo5a2oc3a.auto.internal:11310teardown failed:
+ydb/tests/stress/log/tests/test_workload.py:12: in setup
+    yield from self.setup_cluster()
+ydb/tests/library/stress/fixtures.py:33: in setup_cluster
+    self.cluster.stop()
+ydb/tests/library/harness/kikimr_runner.py:616: in stop
+    raise daemon.SeveralDaemonErrors(saved_exceptions)
+E   ydb.tests.library.harness.daemon.SeveralDaemonErrors: Daemon failed with message: Unexpectedly finished before stop.
+E   Process exit_code = -6.
+E   Stdout file name: 
+E   /home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/log/tests/test-results/py3test/testing_out_stuff/test_workload.py.TestYdbLogWorkload.test.column/cluster/node_1/stdout
+E   Stderr file name: 
+E   /home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/log/tests/test-results/py3test/testing_out_stuff/test_workload.py.TestYdbLogWorkload.test.column/cluster/node_1/stderr
+E   Stderr content:
+E   
+E   GRpc memory quota was set but disabled due to issues with grpc quoter, to enable it use EnableGRpcMemoryQuota option
+E   VERIFY failed (2025-06-30T17:04:47.882463Z): tablet_id=72075186224037899;self_id=[1:7521789482262358129:2488];ev=NKikimr::TEvDataShard::TEvKqpScan;tx_id=281474976715680;scan_id=18;gen=1;table=/Root/column;snapshot={1751303087690:max};tablet=72075186224037899;timeout=0.000000s;cpu_limits=Disabled;;verification=sortedNodes.size() == Nodes.size();fline=graph_execute.cpp:148;debug=digraph program {N0[shape=box, label=&quot;N0(0):{\&quot;p\&quot;:{\&quot;v\&quot;:\&quot;service1\&quot;},\&quot;o\&quot;:\&quot;17\&quot;,\&quot;t\&quot;:\&quot;Const\&quot;}\n&quot;];
+E   N30[shape=box, label=&quot;N8(6):{\&quot;i\&quot;:\&quot;8\&quot;,\&quot;p\&quot;:{\&quot;address\&quot;:{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;sub\&quot;:\&quot;url_hash\&quot;,\&quot;id\&quot;:8}},\&quot;o\&quot;:\&quot;8\&quot;,\&quot;t\&quot;:\&quot;AssembleOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N35 -&amp;gt; N30[label=&quot;1&quot;];
+E   N1[shape=box, label=&quot;N12(14):{\&quot;i\&quot;:\&quot;4,17\&quot;,\&quot;p\&quot;:{\&quot;kernel\&quot;:{\&quot;class_name\&quot;:\&quot;EQUALS\&quot;}},\&quot;o\&quot;:\&quot;37\&quot;,\&quot;t\&quot;:\&quot;Calculation\&quot;}\n&quot;];
+E   N0 -&amp;gt; N1[label=&quot;1&quot;];
+E   N3 -&amp;gt; N1[label=&quot;2&quot;];
+E   N31[shape=box, label=&quot;N20(1):{\&quot;i\&quot;:\&quot;0\&quot;,\&quot;p\&quot;:{\&quot;data\&quot;:[{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;sub\&quot;:\&quot;window_client_height\&quot;,\&quot;id\&quot;:8}]},\&quot;o\&quot;:\&quot;8\&quot;,\&quot;t\&quot;:\&quot;FetchOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N38 -&amp;gt; N31[label=&quot;1&quot;];
+E   N32[shape=box, label=&quot;N21(3):{\&quot;i\&quot;:\&quot;8\&quot;,\&quot;p\&quot;:{\&quot;address\&quot;:{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;sub\&quot;:\&quot;window_client_height\&quot;,\&quot;id\&quot;:8}},\&quot;o\&quot;:\&quot;8\&quot;,\&quot;t\&quot;:\&quot;AssembleOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N31 -&amp;gt; N32[label=&quot;1&quot;];
+E   N3[shape=box, label=&quot;N11(9):{\&quot;i\&quot;:\&quot;4\&quot;,\&quot;p\&quot;:{\&quot;address\&quot;:{\&quot;name\&quot;:\&quot;service_name\&quot;,\&quot;id\&quot;:4}},\&quot;o\&quot;:\&quot;4\&quot;,\&quot;t\&quot;:\&quot;AssembleOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N35 -&amp;gt; N3[label=&quot;1&quot;];
+E   N33[shape=box, label=&quot;N-1(1):{\&quot;p\&quot;:{\&quot;data\&quot;:[{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;sub\&quot;:\&quot;window_client_width\&quot;,\&quot;id\&quot;:8}]},\&quot;o\&quot;:\&quot;8\&quot;,\&quot;t\&quot;:\&quot;FetchOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N4[shape=box, label=&quot;N5(0):{\&quot;p\&quot;:{\&quot;v\&quot;:\&quot;$.url_hash\&quot;},\&quot;o\&quot;:\&quot;19\&quot;,\&quot;t\&quot;:\&quot;Const\&quot;}\n&quot;];
+E   N34[shape=box, label=&quot;N-1(3):{\&quot;i\&quot;:\&quot;8\&quot;,\&quot;p\&quot;:{\&quot;address\&quot;:{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;sub\&quot;:\&quot;window_client_width\&quot;,\&quot;id\&quot;:8}},\&quot;o\&quot;:\&quot;8\&quot;,\&quot;t\&quot;:\&quot;AssembleOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N33 -&amp;gt; N34[label=&quot;1&quot;];
+E   N5[shape=box, label=&quot;N9(7):{\&quot;i\&quot;:\&quot;8,19\&quot;,\&quot;p\&quot;:{\&quot;kernel\&quot;:{\&quot;class_name\&quot;:\&quot;JsonValue\&quot;}},\&quot;o\&quot;:\&quot;20\&quot;,\&quot;t\&quot;:\&quot;Calculation\&quot;}\n&quot;];
+E   N4 -&amp;gt; N5[label=&quot;1&quot;];
+E   N30 -&amp;gt; N5[label=&quot;2&quot;];
+E   N35[shape=box, label=&quot;N7(4):{\&quot;i\&quot;:\&quot;0\&quot;,\&quot;p\&quot;:{\&quot;data\&quot;:[{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;id\&quot;:8},{\&quot;name\&quot;:\&quot;service_name\&quot;,\&quot;id\&quot;:4}]},\&quot;o\&quot;:\&quot;8,4\&quot;,\&quot;t\&quot;:\&quot;FetchOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N36 -&amp;gt; N35[label=&quot;1&quot;];
+E   N36[shape=box, label=&quot;N6(0):{\&quot;p\&quot;:{\&quot;data\&quot;:[{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;id\&quot;:8},{\&quot;name\&quot;:\&quot;service_name\&quot;,\&quot;id\&quot;:4}]},\&quot;o\&quot;:\&quot;0\&quot;,\&quot;t\&quot;:\&quot;ReserveMemory\&quot;}\n&quot;];
+E   N7[shape=box, label=&quot;N13(9):{\&quot;i\&quot;:\&quot;8\&quot;,\&quot;p\&quot;:{\&quot;address\&quot;:{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;id\&quot;:8}},\&quot;o\&quot;:\&quot;8\&quot;,\&quot;t\&quot;:\&quot;AssembleOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N35 -&amp;gt; N7[label=&quot;1&quot;];
+E   N37[shape=box, label=&quot;N1(3):{\&quot;p\&quot;:{\&quot;indexes\&quot;:[{\&quot;url_hash\&quot;:[\&quot;{Equals,1}\&quot;],\&quot;cid\&quot;:8},{\&quot;cid\&quot;:4,\&quot;\&quot;:[\&quot;{Equals,1}\&quot;]}]},\&quot;o\&quot;:\&quot;35,38\&quot;,\&quot;t\&quot;:\&quot;FetchOriginalData\&quot;}\n&quot;,style=filled,color=&quot;#FFFF88&quot;];
+E   N8[shape=box, label=&quot;N3(0):{\&quot;p\&quot;:{\&quot;v\&quot;:\&quot;2868770270353813622\&quot;},\&quot;o\&quot;:\&quot;21\&quot;,\&quot;t\&quot;:\&quot;Const\&quot;}\n&quot;];
+E   N38[shape=box, label=&quot;N19(0):{\&quot;p\&quot;:{\&quot;data\&quot;:[{\&quot;name\&quot;:\&quot;metadata\&quot;,\&quot;sub\&quot;:\&quot;window_client_height\&quot;,\&quot;id\&quot;:8}]},\&quot;o\&quot;:\&quot;0\&quot;,\&quot;t\&quot;:\&quot;ReserveMemory\&quot;}\n&quot;];
+E   N9[shape=box, label=&quot;N10(12):{\&quot;i\&quot;:\&quot;20,21\&quot;,\&quot;p\&quot;:{\&quot;kernel\&quot;:{\&quot;class_name\&quot;:\&quot;EQUALS\&quot;}},\&quot;o\&quot;:\&quot;40\&quot;,\&quot;t\&quot;:\&quot;Calculation\&quot;}\n&quot;];
+E   N8 -&amp;gt; N9[label=&quot;1&quot;];
+E   N5 -&amp;gt; N9[label=&quot;2&quot;];
+E   N13[shape=box, label=&quot;N14(17):{\&quot;i\&quot;:\&quot;8\&quot;,\&quot;p\&quot;:{\&quot;kernel\&quot;:{\&quot;class_name\&quot;:\&quot;SIMPLE\&quot;}},\&quot;o\&quot;:\&quot;26\&quot;,\&quot;t\&quot;:\&quot;Calculation\&quot;}\n&quot;];
+E   N7 -&amp;gt; N13[label=&quot;1&quot;];
+E   N14[shape=box, label=&quot;N15(17):{\&quot;i\&quot;:\&quot;8\&quot;,\&quot;p\&quot;:{\&quot;kernel\&quot;:{\&quot;class_name\&quot;:\&quot;SIMPLE\&quot;}},\&quot;o\&quot;:\&quot;27\&quot;,\&quot;t\&quot;:\&quot;Calculation\&quot;}\n&quot;];
+E   N7 -&amp;gt; N14[label=&quot;1&quot;];
+E   N16[shape=box, label=&quot;N16(71):{\&quot;i\&quot;:\&quot;40,27,37,26,36,39\&quot;,\&quot;p\&quot;:{\&quot;op\&quot;:\&quot;And\&quot;},\&quot;o\&quot;:\&quot;29\&quot;,\&quot;t\&quot;:\&quot;StreamLogic\&quot;}\n&quot;];
+E   N24 -&amp;gt; N16[label=&quot;1&quot;];
+E   N27 -&amp;gt; N16[label=&quot;2&quot;];
+E   N9 -&amp;gt; N16[label=&quot;3&quot;];
+E   N1 -&amp;gt; N16[label=&quot;4&quot;];
+E   N13 -&amp;gt; N16[label=&quot;5&quot;];
+E   N14 -&amp;gt; N16[label=&quot;6&quot;];
+E   N17[shape=box, label=&quot;N17(71):{\&quot;i\&quot;:\&quot;29\&quot;,\&quot;t\&quot;:\&quot;Filter\&quot;}\n&quot;,style=filled,color=&quot;#FFAAAA&quot;];
+E   N16 -&amp;gt; N17[label=&quot;1&quot;];
+E   N18[shape=box, label=&quot;N18(0):{\&quot;p\&quot;:{\&quot;v\&quot;:\&quot;$.window_client_height\&quot;},\&quot;o\&quot;:\&quot;30\&quot;,\&quot;t\&quot;:\&quot;Const\&quot;}\n&quot;];
+E   N19[shape=box, label=&quot;N22(4):{\&quot;i\&quot;:\&quot;8,30\&quot;,\&quot;p\&quot;:{\&quot;kernel\&quot;:{\&quot;class_name\&quot;:\&quot;JsonValue\&quot;}},\&quot;o\&quot;:\&quot;31\&quot;,\&quot;t\&quot;:\&quot;Calculation\&quot;}\n&quot;];
+E   N18 -&amp;gt; N19[label=&quot;1&quot;];
+E   N32 -&amp;gt; N19[label=&quot;2&quot;];
+E   N20[shape=box, label=&quot;N-1(0):{\&quot;p\&quot;:{\&quot;v\&quot;:\&quot;$.window_client_width\&quot;},\&quot;o\&quot;:\&quot;32\&quot;,\&quot;t\&quot;:\&quot;Const\&quot;}\n&quot;];
+E   N22[shape=box, label=&quot;N23(4):{\&quot;i\&quot;:\&quot;31\&quot;,\&quot;t\&quot;:\&quot;Projection\&quot;}\n&quot;,style=filled,color=&quot;#FFAAAA&quot;];
+E   N19 -&amp;gt; N22[label=&quot;1&quot;];
+E   N24[shape=box, label=&quot;N2(5):{\&quot;i\&quot;:\&quot;35,17\&quot;,\&quot;o\&quot;:\&quot;36\&quot;,\&quot;t\&quot;:\&quot;CheckIndexData\&quot;}\n&quot;];
+E   N0 -&amp;gt; N24[label=&quot;1&quot;];
+E   N37 -&amp;gt; N24[label=&quot;2&quot;];
+E   N27[shape=box, label=&quot;N4(5):{\&quot;i\&quot;:\&quot;38,21\&quot;,\&quot;o\&quot;:\&quot;39\&quot;,\&quot;t\&quot;:\&quot;CheckIndexData\&quot;}\n&quot;];
+E   N8 -&amp;gt; N27[label=&quot;1&quot;];
+E   N37 -&amp;gt; N27[label=&quot;2&quot;];
+E   N0-&amp;gt;N37-&amp;gt;N24-&amp;gt;N8-&amp;gt;N27-&amp;gt;N4-&amp;gt;N36-&amp;gt;N35-&amp;gt;N30-&amp;gt;N5-&amp;gt;N9-&amp;gt;N3-&amp;gt;N1-&amp;gt;N7-&amp;gt;N13-&amp;gt;N14-&amp;gt;N16-&amp;gt;N17-&amp;gt;N18-&amp;gt;N38-&amp;gt;N31-&amp;gt;N32-&amp;gt;N19-&amp;gt;N22[color=red];
+E   };
+E   ydb/library/actors/core/log.cpp:800
+E   ~TVerifyFormattedRecordWriter(): requirement false failed
+E   0. /-S/util/system/yassert.cpp:83: InternalPanicImpl @ 0xA5422F5
+E   1. /-S/util/system/yassert.cpp:55: Panic @ 0xA53ABE6
+E   2. /tmp//-S/ydb/library/actors/core/log.cpp:800: ~TVerifyFormattedRecordWriter @ 0xB41B283
+E   3. /tmp//-S/ydb/core/formats/arrow/program/graph_execute.cpp:148: TCompiledGraph @ 0x149A8963
+E   4. /-S/contrib/libs/cxxsupp/libcxx/include/__memory/allocator.h:151: construct&amp;lt;NKikimr::NArrow::NSSA::NGraph::NExecution::TCompiledGraph, NKikimr::NArrow::NSSA::NGraph::NOptimization::TGraph &amp;amp;, const NKikimr::NArrow::NSSA::IColumnResolver &amp;amp;&amp;gt; @ 0x14AB20DA
+E   5. /-S/contrib/libs/cxxsupp/libcxx/include/__memory/allocator_traits.h:320: construct&amp;lt;NKikimr::NArrow::NSSA::NGraph::NExecution::TCompiledGraph, NKikimr::NArrow::NSSA::NGraph::NOptimization::TGraph &amp;amp;, const NKikimr::NArrow::NSSA::IColumnResolver &amp;amp;, 0&amp;gt; @ 0x14AB20DA
+E   6. /-S/contrib/libs/cxxsupp/libcxx/include/__memory/shared_ptr.h:298: __shared_ptr_emplace&amp;lt;NKikimr::NArrow::NSSA::NGraph::NOptimization::TGraph &amp;amp;, const NKikimr::NArrow::NSSA::IColumnResolver &amp;amp;, std::__y1::allocator&amp;lt;NKikimr::NArrow::NSSA::NGraph::NExecution::TCompiledGraph&amp;gt;, 0&amp;gt; @ 0x14AB20DA
+E   7. /-S/contrib/libs/cxxsupp/libcxx/include/__memory/shared_ptr.h:869: allocate_shared&amp;lt;NKikimr::NArrow::NSSA::NGraph::NExecution::TCompiledGraph, std::__y1::allocator&amp;lt;NKikimr::NArrow::NSSA::NGraph::NExecution::TCompiledGraph&amp;gt;, NKikimr::NArrow::NSSA::NGraph::NOptimization::TGraph &amp;amp;, const NKikimr::NArrow::NSSA::IColumnResolver &amp;amp;, 0&amp;gt; @ 0x14AB20DA
+E   8. /-S/contrib/libs/cxxsupp/libcxx/include/__memory/shared_ptr.h:877: make_shared&amp;lt;NKikimr::NArrow::NSSA::NGraph::NExecution::TCompiledGraph, NKikimr::NArrow:...
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/log/tests/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/log/tests/test-results/py3test/testing_out_stuff/test_workload.py.TestYdbLogWorkload.test.column.log</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/stress/reconfig_state_storage_workload/tests" tests="3" time="0" failures="2" skipped="2">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="py3test"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="py3test" name="sole chunk" time="0.0">
+			<failure>Test failed with 1 exit code. See logs for more info
+
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/run_test.log
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase classname="test_board_workload.py.TestReconfigStateStorageBoardWorkload" name="test_state_storage_board" time="0">
+			<failure>Test crashed
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/testing_out_stuff
+log:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/tests/stress/reconfig_state_storage_workload/tests/test-results/py3test/testing_out_stuff/test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board.log</failure>
+		</testcase>
+		<testcase classname="test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload" name="test_scheme_board" time="0">
+			<skipped>[Error message is missing or not found]</skipped>
+		</testcase>
+		<testcase classname="test_state_storage_workload.py.TestReconfigStateStorageWorkload" name="test_state_storage" time="0">
+			<skipped>[Error message is missing or not found]</skipped>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/blobstorage/ut_blobstorage" tests="1" time="0.450294" failures="0" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/10] chunk" time="0.0"/>
+		<testcase classname="GroupReconfiguration" name="BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks" time="0.450294"/>
+	</testsuite>
+	<testsuite name="ydb/core/blobstorage/ut_blobstorage/ut_balancing" tests="9" time="60.316775" failures="0" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TestDontSendToReadOnlyTest_Block42" time="1.071706"/>
+		<testcase classname="unittest" name="[1/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TestRandom_Block42" time="34.760838"/>
+		<testcase classname="unittest" name="[2/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TestRandom_Mirror3dc" time="20.461813"/>
+		<testcase classname="unittest" name="[3/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TestStopOneNode_Block42" time="0.622631"/>
+		<testcase classname="unittest" name="[4/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TestStopOneNode_Block42_HugeBlob" time="0.651189"/>
+		<testcase classname="unittest" name="[5/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TestStopOneNode_Mirror3dc" time="0.81191"/>
+		<testcase classname="unittest" name="[6/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TestStopOneNode_Mirror3dc_HugeBlob" time="0.688694"/>
+		<testcase classname="unittest" name="[7/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TwoPartsOnOneNodeTest_Block42" time="0.626414"/>
+		<testcase classname="unittest" name="[8/10] chunk" time="0.0"/>
+		<testcase classname="VDiskBalancing" name="TwoPartsOnOneNodeTest_Block42_HugeBlob" time="0.62158"/>
+	</testsuite>
+	<testsuite name="ydb/core/keyvalue/ut_trace" tests="4" time="6.370776" failures="4" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/5] chunk" time="0.0"/>
+		<testcase classname="TKeyValueTracingTest" name="ReadHuge" time="1.481398">
+			<failure>equal assertion failed at ydb/core/keyvalue/keyvalue_ut_trace.cpp:124, void TestOneRead(TString, TString): env.WilsonUploader-&amp;gt;Traces.size() == 1 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+UnRef at /-S/util/generic/ptr.h:640:13
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTKeyValueTracingTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/keyvalue/keyvalue_ut_trace.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.ReadHuge.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.ReadHuge.out</failure>
+		</testcase>
+		<testcase classname="unittest" name="[1/5] chunk" time="0.0"/>
+		<testcase classname="TKeyValueTracingTest" name="ReadSmall" time="1.699988">
+			<failure>equal assertion failed at ydb/core/keyvalue/keyvalue_ut_trace.cpp:124, void TestOneRead(TString, TString): env.WilsonUploader-&amp;gt;Traces.size() == 1 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+UnRef at /-S/util/generic/ptr.h:640:13
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTKeyValueTracingTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/keyvalue/keyvalue_ut_trace.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.ReadSmall.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.ReadSmall.out</failure>
+		</testcase>
+		<testcase classname="unittest" name="[2/5] chunk" time="0.0"/>
+		<testcase classname="TKeyValueTracingTest" name="WriteHuge" time="1.685083">
+			<failure>assertion failed at ydb/core/keyvalue/keyvalue_ut_trace.cpp:103, void TestOneWrite(TString, TVector&amp;lt;TString&amp;gt; &amp;amp;&amp;amp;): (env.WilsonUploader-&amp;gt;Traces.size() == 1) failed: (2 != 1) 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTKeyValueTracingTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/keyvalue/keyvalue_ut_trace.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.WriteHuge.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.WriteHuge.out</failure>
+		</testcase>
+		<testcase classname="unittest" name="[3/5] chunk" time="0.0"/>
+		<testcase classname="TKeyValueTracingTest" name="WriteSmall" time="1.504307">
+			<failure>assertion failed at ydb/core/keyvalue/keyvalue_ut_trace.cpp:103, void TestOneWrite(TString, TVector&amp;lt;TString&amp;gt; &amp;amp;&amp;amp;): (env.WilsonUploader-&amp;gt;Traces.size() == 1) failed: (2 != 1) 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+UnRef at /-S/util/generic/ptr.h:640:13
+NTestSuiteTKeyValueTracingTest::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/keyvalue/keyvalue_ut_trace.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.WriteSmall.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/keyvalue/ut_trace/test-results/unittest/testing_out_stuff/TKeyValueTracingTest.WriteSmall.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/kqp/ut/query" tests="2" time="141.883489" failures="2" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/50] chunk" time="0.0"/>
+		<testcase classname="KqpAnalyze" name="AnalyzeTable+ColumnStore" time="125.011897">
+			<failure>assertion failed at ydb/core/kqp/ut/query/kqp_analyze_ut.cpp:103, virtual void NKikimr::NKqp::NTestSuiteKqpAnalyze::TTestCaseAnalyzeTable&amp;lt;true&amp;gt;::Execute_(NUnitTest::TTestContext &amp;amp;) [ColumnStore = true]: (stat &amp;gt;= 1500) 0
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NKikimr::NKqp::NTestSuiteKqpAnalyze::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/kqp/ut/query/kqp_analyze_ut.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff/KqpAnalyze.AnalyzeTable.ColumnStore.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff/KqpAnalyze.AnalyzeTable.ColumnStore.out</failure>
+		</testcase>
+		<testcase classname="unittest" name="[1/50] chunk" time="0.0"/>
+		<testcase classname="KqpStats" name="SysViewClientLost" time="16.871592">
+			<failure>assertion failed at ydb/core/kqp/ut/query/kqp_stats_ut.cpp:591, virtual void NKikimr::NKqp::NTestSuiteKqpStats::TTestCaseSysViewClientLost::Execute_(NUnitTest::TTestContext &amp;amp;): (timeoutedCount == 1) 
+0. /-S/util/system/backtrace.cpp:284: ?? @ 0x140C1B9B
+1. /tmp//-S/library/cpp/testing/unittest/registar.cpp:46: RaiseError @ 0x1427E2F8
+2. /tmp//-S/ydb/core/kqp/ut/query/kqp_stats_ut.cpp:591: Execute_ @ 0x13F69564
+3. /tmp//-S/ydb/core/kqp/ut/query/kqp_stats_ut.cpp:18: operator() @ 0x13F71D46
+4. /tmp//-S/library/cpp/testing/unittest/registar.cpp:373: Run @ 0x142801AD
+5. /tmp//-S/ydb/core/kqp/ut/query/kqp_stats_ut.cpp:18: Execute @ 0x13F71705
+6. /tmp//-S/library/cpp/testing/unittest/registar.cpp:494: Execute @ 0x14280922
+7. /tmp//-S/library/cpp/testing/unittest/utmain.cpp:872: RunMain @ 0x142924CC
+8. ??:0: ?? @ 0x7FC8AD054D8F
+9. ??:0: ?? @ 0x7FC8AD054E3F
+10. ??:0: ?? @ 0x12D5C028
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff/KqpStats.SysViewClientLost.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/kqp/ut/query/test-results/unittest/testing_out_stuff/KqpStats.SysViewClientLost.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/statistics/aggregator/ut" tests="1" time="507.633467" failures="1" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/60] chunk" time="0.0"/>
+		<testcase classname="AnalyzeColumnshard" name="AnalyzeRebootColumnShard" time="507.633467">
+			<failure>(TWithBackTrace&amp;lt;yexception&amp;gt;) ydb/library/actors/testlib/test_runtime.h:579: Exception occured while waiting for NKikimr::NStat::TEvStatistics::TEvAnalyzeResponse: (NActors::TSchedulingLimitReachedException) TestActorRuntime Processed over 100000 events.ydb/library/actors/testlib/test_runtime.cpp:716: 
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+TWithBackTrace&amp;lt;yexception&amp;gt;::TWithBackTrace&amp;lt;&amp;gt;() at /-S/util/generic/yexception.h:146:5
+NKikimr::NStat::TEvStatistics::TEvAnalyzeResponse::TPtr NActors::TTestActorRuntimeBase::GrabEdgeEventRethrow&amp;lt;NKikimr::NStat::TEvStatistics::TEvAnalyzeResponse&amp;gt;(NActors::TActorId const&amp;amp;, TDuration) at /-S/ydb/library/actors/testlib/test_runtime.h:0:24
+DoDestroy at /-S/util/generic/ptr.h:253:13
+NKikimr::NStat::NTestSuiteAnalyzeColumnshard::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/statistics/aggregator/ut/ut_analyze_columnshard.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/statistics/aggregator/ut/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/statistics/aggregator/ut/test-results/unittest/testing_out_stuff/AnalyzeColumnshard.AnalyzeRebootColumnShard.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/statistics/aggregator/ut/test-results/unittest/testing_out_stuff/AnalyzeColumnshard.AnalyzeRebootColumnShard.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/tablet_flat/ut_large" tests="7" time="126.951489" failures="0" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="sole chunk" time="0.0"/>
+		<testcase classname="TBtreeIndexTPartLarge" name="BigKeys1GB" time="5.434688"/>
+		<testcase classname="TBtreeIndexTPartLarge" name="History" time="12.384515"/>
+		<testcase classname="TBtreeIndexTPartLarge" name="Group" time="19.588037"/>
+		<testcase classname="TBtreeIndexTPartLarge" name="SmallKeys1GB" time="33.020188"/>
+		<testcase classname="TFlatTableLongTxLarge" name="LargeDeltaChain" time="32.876497"/>
+		<testcase classname="TBtreeIndexTPartLarge" name="CutKeys" time="14.747756"/>
+		<testcase classname="TBtreeIndexTPartLarge" name="MiddleKeys1GB" time="8.899808"/>
+	</testsuite>
+	<testsuite name="ydb/core/tx/datashard/ut_incremental_backup" tests="4" time="11.846607" failures="4" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/4] chunk" time="0.0"/>
+		<testcase classname="IncrementalBackup" name="ComplexRestoreBackupCollection+WithIncremental" time="5.213837">
+			<failure>assertion failed at ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:829, virtual void NKikimr::NTestSuiteIncrementalBackup::TTestCaseComplexRestoreBackupCollection&amp;lt;true&amp;gt;::Execute_(NUnitTest::TTestContext &amp;amp;) [WithIncremental = true]: (KqpSimpleExec(runtime, R&quot;(
+                    SELECT key, value FROM `/Root/Table`
+                    ORDER BY key
+                    )&quot;) == &quot;{ items { uint32_value: 2 } items { uint32_value: 2000 } }, &quot; &quot;{ items { uint32_value: 3 } items { uint32_value: 30 } }, &quot; &quot;{ items { uint32_value: 4 } items { uint32_value: 40 } }&quot;) failed: (&quot;{ items { uint32_value: 1 } items { uint32_value: 10 } }, { items { uint32_value: 2 } items { uint32_value: 20 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }, { items { uint32_value: 5 } items { uint32_value: 50 } }&quot; != { items { uint32_value: 2 } items { uint32_value: 2000 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }) , with diff:
+(&quot;|){ items { uint32_value: (1 } items { uint3|)2(_value:|) (10 |)} (}, { |)items { uint32_value: 2( } items { uint32_value: 2|00)0 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }(, { items { uint32_value: 5 } items { uint32_value: 50 } }&quot;|)
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+NKikimr::NTestSuiteIncrementalBackup::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.ComplexRestoreBackupCollection.WithIncremental.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.ComplexRestoreBackupCollection.WithIncremental.out</failure>
+		</testcase>
+		<testcase classname="unittest" name="[1/4] chunk" time="0.0"/>
+		<testcase classname="IncrementalBackup" name="E2EBackupCollection" time="3.82791">
+			<failure>assertion failed at ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:925, virtual void NKikimr::NTestSuiteIncrementalBackup::TTestCaseE2EBackupCollection::Execute_(NUnitTest::TTestContext &amp;amp;): (expected == actual) failed: (&quot;{ items { uint32_value: 2 } items { uint32_value: 200 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }&quot; != &quot;{ items { uint32_value: 1 } items { uint32_value: 10 } }, { items { uint32_value: 2 } items { uint32_value: 20 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }&quot;) , with diff:
+&quot;{ items { uint32_value: (|1 } items { uint3)2(|_value:) (|10 )} (|}, { )items { uint32_value: 2(0| } items { uint32_value: 2)0 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }&quot;
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+NKikimr::NTestSuiteIncrementalBackup::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.E2EBackupCollection.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.E2EBackupCollection.out</failure>
+		</testcase>
+		<testcase classname="unittest" name="[2/4] chunk" time="0.0"/>
+		<testcase classname="IncrementalBackup" name="MultiRestore" time="0">
+			<failure>Test crashed (return code: -6)
+See logs for more info
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.MultiRestore.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.MultiRestore.out</failure>
+		</testcase>
+		<testcase classname="unittest" name="[3/4] chunk" time="0.0"/>
+		<testcase classname="IncrementalBackup" name="SimpleRestoreBackupCollection+WithIncremental" time="2.80486">
+			<failure>assertion failed at ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:623, virtual void NKikimr::NTestSuiteIncrementalBackup::TTestCaseSimpleRestoreBackupCollection&amp;lt;true&amp;gt;::Execute_(NUnitTest::TTestContext &amp;amp;) [WithIncremental = true]: (KqpSimpleExec(runtime, R&quot;(
+                    SELECT key, value FROM `/Root/Table`
+                    ORDER BY key
+                    )&quot;) == &quot;{ items { uint32_value: 2 } items { uint32_value: 2000 } }, &quot; &quot;{ items { uint32_value: 3 } items { uint32_value: 30 } }, &quot; &quot;{ items { uint32_value: 4 } items { uint32_value: 40 } }&quot;) failed: (&quot;{ items { uint32_value: 1 } items { uint32_value: 10 } }, { items { uint32_value: 2 } items { uint32_value: 20 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }, { items { uint32_value: 5 } items { uint32_value: 50 } }&quot; != { items { uint32_value: 2 } items { uint32_value: 2000 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }) , with diff:
+(&quot;|){ items { uint32_value: (1 } items { uint3|)2(_value:|) (10 |)} (}, { |)items { uint32_value: 2( } items { uint32_value: 2|00)0 } }, { items { uint32_value: 3 } items { uint32_value: 30 } }, { items { uint32_value: 4 } items { uint32_value: 40 } }(, { items { uint32_value: 5 } items { uint32_value: 50 } }&quot;|)
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+NKikimr::NTestSuiteIncrementalBackup::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.SimpleRestoreBackupCollection.WithIncremental.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/datashard/ut_incremental_backup/test-results/unittest/testing_out_stuff/IncrementalBackup.SimpleRestoreBackupCollection.WithIncremental.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/core/tx/tiering/ut" tests="1" time="0" failures="1" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/60] chunk" time="0.0"/>
+		<testcase classname="ColumnShardTiers" name="TTLUsage" time="0">
+			<failure>Test crashed (return code: -6)
+See logs for more info
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/tiering/ut/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/tiering/ut/test-results/unittest/testing_out_stuff/ColumnShardTiers.TTLUsage.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/core/tx/tiering/ut/test-results/unittest/testing_out_stuff/ColumnShardTiers.TTLUsage.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/public/sdk/cpp/src/client/federated_topic/ut" tests="1" time="8.437145" failures="0" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/10] chunk" time="0.0"/>
+		<testcase classname="BasicUsage" name="PropagateSessionClosed" time="8.437145"/>
+	</testsuite>
+	<testsuite name="ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut" tests="1" time="0" failures="1" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/10] chunk" time="0.0"/>
+		<testcase classname="TxUsage" name="Sinks_Oltp_WriteToTopic_3_Query" time="0">
+			<failure>Test crashed (return code: -6)
+See logs for more info
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/test-results/unittest/testing_out_stuff/TxUsage.Sinks_Oltp_WriteToTopic_3_Query.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/test-results/unittest/testing_out_stuff/TxUsage.Sinks_Oltp_WriteToTopic_3_Query.out</failure>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/services/ydb/ut" tests="1" time="1.614543" failures="1" skipped="0">
+		<properties>
+			<property name="result-type" value="test"/>
+			<property name="test-type" value="unittest"/>
+			<property name="test-size" value="medium"/>
+		</properties>
+		<testcase classname="unittest" name="[0/60] chunk" time="0.0"/>
+		<testcase classname="YdbLogStore" name="AlterLogTable" time="1.614543">
+			<failure>assertion failed at ydb/services/ydb/ydb_logstore_ut.cpp:435, virtual void NTestSuiteYdbLogStore::TTestCaseAlterLogTable::Execute_(NUnitTest::TTestContext &amp;amp;): (res.GetStatus() == EStatus::SUCCESS) failed: (PRECONDITION_FAILED != SUCCESS) &amp;lt;main&amp;gt;: Error: Column stores are not supported
+, with diff:
+(PRE|SUC)C(ONDITION_FAIL|)E(D|SS)
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+Get at /-S/util/generic/ptr.h:595:16
+~TStringBuilder at /-S/util/string/builder.h:8:11
+NTestSuiteYdbLogStore::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/services/ydb/ydb_logstore_ut.cpp:0:1
+~__value_func at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:398:16
+UnRef at /-S/util/generic/ptr.h:640:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+
+logsdir:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/services/ydb/ut/test-results/unittest/testing_out_stuff
+stderr:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/services/ydb/ut/test-results/unittest/testing_out_stuff/YdbLogStore.AlterLogTable.err
+stdout:
+/home/runner/actions_runner/_work/ydb/ydb/tmp/out/ydb/services/ydb/ut/test-results/unittest/testing_out_stuff/YdbLogStore.AlterLogTable.out</failure>
+		</testcase>
+	</testsuite>
+</testsuites>

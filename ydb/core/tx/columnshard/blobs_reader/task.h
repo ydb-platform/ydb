@@ -77,7 +77,7 @@ public:
         }
         return result;
     }
-    TString Extract(const TString& storageId, const TBlobRange& range) {
+    TString ExtractVerified(const TString& storageId, const TBlobRange& range) {
         auto result = ExtractOptional(storageId, range);
         AFL_VERIFY(result)("range", range.ToString())("storage_id", storageId);
         return std::move(*result);

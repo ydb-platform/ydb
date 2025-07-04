@@ -80,7 +80,7 @@ public:
         return result;
     }
 
-    TString Extract(const TBlobRange& bRange) {
+    TString ExtractVerified(const TBlobRange& bRange) {
         auto result = ExtractOptional(bRange);
         AFL_VERIFY(result)("range", bRange.ToString());
         return std::move(*result);

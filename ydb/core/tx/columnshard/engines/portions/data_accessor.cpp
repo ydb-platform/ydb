@@ -192,7 +192,7 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
     for (auto&& c : GetRecordsVerified()) {
         const TString& storageId = PortionInfo->GetColumnStorageId(c.GetColumnId(), indexInfo);
         auto chunk = std::make_shared<NChunks::TChunkPreparation>(
-            blobs.Extract(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId()));
+            blobs.ExtractVerified(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId()));
         chunk->SetChunkIdx(c.GetChunkIdx());
         AFL_VERIFY(result[storageId].emplace(c.GetAddress(), chunk).second);
     }
@@ -200,7 +200,7 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
         const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
         const TString blobData = [&]() -> TString {
             if (auto bRange = c.GetBlobRangeOptional()) {
-                return blobs.Extract(storageId, RestoreBlobRange(*bRange));
+                return blobs.ExtractVerified(storageId, RestoreBlobRange(*bRange));
             } else if (auto data = c.GetBlobDataOptional()) {
                 return *data;
             } else {

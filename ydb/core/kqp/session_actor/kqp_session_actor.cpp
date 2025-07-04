@@ -51,6 +51,8 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 LWTRACE_USING(KQP_PROVIDER);
 
 namespace NKikimr {
@@ -368,7 +370,7 @@ public:
     }
 
     void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
-        LOG_D("Got ClientLost event, send AbortExecution to executor: "
+        LOG_D("Got ClientLost event, send AbortExecution to executer: "
             << ExecuterId);
 
         if (ExecuterId) {
@@ -1590,6 +1592,30 @@ public:
             txCtx->TxManager->AddTopicsToShards();
         }
 
+        bool enableCheckpointCoordinator = true;
+        ui64 dqGraphIndex = 0;
+        ui64 generation = 0;
+        NFq::NConfig::TCheckpointCoordinatorConfig config;
+        //auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto stateLoadMode = FederatedQuery::StateLoadMode::EMPTY;
+        FederatedQuery::StreamingDisposition streamingDisposition;
+        NFq::NProto::TGraphParams dqGraphParams;
+
+        if (enableCheckpointCoordinator) {
+            CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
+                ::NFq::TCoordinatorId(request.UserTraceId + "-" + ToString(dqGraphIndex), generation),
+                NYql::NDq::MakeCheckpointStorageID(),
+                SelfId(),
+                config,
+                Counters->GetKqpCounters(),
+                dqGraphParams,
+                stateLoadMode,
+                streamingDisposition).Release());
+
+                LOG_D("Created new CheckpointCoordinatorId: " << CheckpointCoordinatorId);
+        }
+
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
@@ -1598,7 +1624,9 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr,
-            txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
+            txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId,
+            CheckpointCoordinatorId
+            );
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1608,6 +1636,8 @@ public:
             YQL_ENSURE(!ExecuterId);
         }
         ExecuterId = exId;
+
+
     }
 
     void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& literalRequest,
@@ -3018,6 +3048,7 @@ private:
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
     TActorId ExecuterId;
+    TActorId CheckpointCoordinatorId;
     NWilson::TSpan AcquireSnapshotSpan;
 
     std::shared_ptr<TKqpQueryState> QueryState;

@@ -105,10 +105,11 @@ public:
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId,
+        const TActorId checkpointCoordinatorId,
         TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, counters, executerConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
-            "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
+            "DataExecuter", streamResult, bufferActorId, txManager, checkpointCoordinatorId, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
         , AllowOlapDataQuery(executerConfig.TableServiceConfig.GetAllowOlapDataQuery())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
@@ -2710,6 +2711,9 @@ private:
     }
 
     void ExecuteTasks() {
+
+        LOG_D("ExecuteTasks");
+
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
@@ -2802,7 +2806,7 @@ private:
             << ", topicTxs: " << Request.TopicOperations.GetSize()
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
-            << ", pending compute tasks" << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
+            << ", pending compute tasks: " << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
             << ", useFollowers: " << GetUseFollowers());
 
         // error
@@ -3059,11 +3063,12 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
+    const TActorId checkpointCoordinatorId,
     TMaybe<TBatchOperationSettings> batchOperationSettings)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings));
+        shardIdToTableInfo, txManager, bufferActorId, checkpointCoordinatorId, std::move(batchOperationSettings));
 }
 
 } // namespace NKqp

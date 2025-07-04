@@ -178,6 +178,7 @@ namespace Tests {
         bool Verbose = true;
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
+        bool EnableStorageProxy = false;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -279,6 +280,8 @@ namespace Tests {
             ProxyDSMocks = proxyDSMocks;
             return *this;
         }
+        TServerSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; }
+
 
         template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(

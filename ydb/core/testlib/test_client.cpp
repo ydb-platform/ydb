@@ -146,6 +146,9 @@
 #include <util/system/valgrind.h>
 #include <util/system/env.h>
 
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+
 namespace NKikimr {
 
 class TTestMkqlInvoker {
@@ -1473,6 +1476,32 @@ namespace Tests {
             IActor* netClassifier = NNetClassifier::CreateNetClassifier();
             TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx, userPoolId);
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
+        }
+
+        if (Settings->EnableStorageProxy) {
+            NFq::NConfig::TConfig protoConfig;
+            NFq::NConfig::TCommonConfig commonConfig;
+            commonConfig.SetIdsPrefix("ut");
+            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto yqSharedResources = NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
+
+            NFq::NConfig::TCheckpointCoordinatorConfig config;
+            config.SetEnabled(true);
+            auto& checkpointConfig = *config.MutableStorage();
+            checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+            checkpointConfig.SetDatabase(GetEnv("YDB_DATABASE"));
+            checkpointConfig.SetToken("");
+            checkpointConfig.SetTablePrefix("tablePrefix");
+
+            auto actor = NFq::NewCheckpointStorageService(
+                config,
+                commonConfig,
+                ydbCredFactory,
+                NFq::TYqSharedResources::Cast(yqSharedResources),
+                counters);
+            TActorId netClassifierId = Runtime->Register(actor.release(), nodeIdx, userPoolId);
+            Runtime->RegisterService(NYql::NDq::MakeCheckpointStorageID(), netClassifierId, nodeIdx);
         }
 
         {

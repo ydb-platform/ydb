@@ -144,6 +144,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
+    ServerSettings->SetEnableStorageProxy(settings.EnableStorageProxy);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -575,7 +576,9 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
     SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
+    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR);
 
+    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CONTROL_PLANE_SERVICE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);

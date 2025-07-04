@@ -143,6 +143,7 @@ public:
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
+        const TActorId checkpointCoordinatorId = {},
         TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
@@ -164,6 +165,7 @@ public:
         , BlockTrackingMode(executerConfig.TableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
+        , CheckpointCoordinatorId(checkpointCoordinatorId)
     {
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -1708,6 +1710,7 @@ protected:
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
+            .CheckpointCoordinator = CheckpointCoordinatorId
         });
 
         auto err = Planner->PlanExecution();
@@ -2327,6 +2330,7 @@ protected:
     TMaybe<TBatchOperationSettings> BatchOperationSettings;
 
     bool EnableParallelPointReadConsolidation = false;
+    TActorId CheckpointCoordinatorId;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
@@ -2340,6 +2344,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
+    const TActorId checkpointCoordinatorId,
     TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing());
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,

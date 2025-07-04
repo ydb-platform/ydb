@@ -250,13 +250,14 @@ namespace NInterconnect::NRdma {
                 return nullptr;
             }
 
-            void* auxPtr = std::aligned_alloc(CacheLineSz, CacheLineSz);
-            auxPtr = new (auxPtr)TAuxData; 
             auto mrs = registerMemory(ptr, size, Ctxs);
             if (mrs.empty()) {
                 Y_ABORT_UNLESS(false, "UNABLE TO REGISTER MEMORY");
                 return nullptr;
             }
+
+            void* auxPtr = std::aligned_alloc(CacheLineSz, CacheLineSz);
+            auxPtr = new (auxPtr)TAuxData;
 
             AllocatedChunks++;
 

@@ -790,44 +790,90 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // Session is on node 1, read task is for node 2 -> TotalSingleNodeReqCount does not increase
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = session.ExecuteDataQuery(R"(
             UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // If UseSink is enabled, compute is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            // If UseSink is disabled, the execution is on node 2 -> TotalSingleNodeReqCount increases
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount += (UseSink) ? 0 : 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // Session is on node 1, read task is for node 2 -> TotalSingleNodeReqCount does not increase
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
             UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // If UseSink is enabled, compute is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            // If UseSink is disabled, the execution is on node 2 -> TotalSingleNodeReqCount increases
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount += (UseSink) ? 0 : 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = session.ExecuteDataQuery(R"(
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // Read is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // Read is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
-    expectedNonLocalSingleNodeReqCount += 6;
+
+    if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+        // If UseSink is enabled, all requests are local or with two nodes -> NonLocalSingleNodeReqCount does not increase
+        // If UseSink is disabled, UPSERT queries are non-local and for the single node -> NonLocalSingleNodeReqCount increases
+        expectedNonLocalSingleNodeReqCount += (UseSink) ? 0 : 2;
+    } else {
+        expectedNonLocalSingleNodeReqCount += 6;
+    }
+
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), expectedNonLocalSingleNodeReqCount);
 
     // Now resume node 1 and move all tablets on the node1
@@ -878,7 +924,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
-        {
+    {
         auto result = session.ExecuteDataQuery(R"(
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;

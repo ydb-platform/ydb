@@ -939,6 +939,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 [[1u];[-1]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] == 0);
+
             // using followers resolver.
             UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
         }

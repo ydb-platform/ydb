@@ -156,7 +156,7 @@ CREATE EXTERNAL TABLE `objectstorage_data` (
 );
 ```
 
-Приведённая внешняя таблица задаёт расширенное партицирование также, как внешний источник данных, описанный [выше](#syntax-external-data-source). Далее вы можете читать данные таблицы `objectstorage_data` с фильтрациеё по колонкам `year` и `month`, аналогично случаю с [обычным партицированием](partitioning.md#syntax-external-table):
+Приведённая внешняя таблица задаёт расширенное партицирование так же, как внешний источник данных, описанный [выше](#syntax-external-data-source). Далее вы можете читать данные таблицы `objectstorage_data` с фильтрацией по колонкам `year` и `month`, аналогично случаю с [обычным партицированием](partitioning.md#syntax-external-table):
 
 ```yql
 SELECT

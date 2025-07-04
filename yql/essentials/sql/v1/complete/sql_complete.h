@@ -39,6 +39,7 @@ namespace NSQLComplete {
         ECandidateKind Kind;
         TString Content;
         size_t CursorShift = 0;
+        TMaybe<TString> Documentation = Nothing();
 
         friend bool operator==(const TCandidate& lhs, const TCandidate& rhs) = default;
 

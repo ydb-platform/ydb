@@ -20,6 +20,10 @@ namespace NSQLComplete {
         TString Namespace;
     };
 
+    struct TDescribed {
+        TMaybe<TString> Description;
+    };
+
     struct TKeyword {
         TString Content;
     };
@@ -40,7 +44,7 @@ namespace NSQLComplete {
         EKind Kind = EKind::Simple;
     };
 
-    struct TFunctionName: TIdentifier {
+    struct TFunctionName: TIdentifier, TDescribed {
         struct TConstraints: TNamespaced {};
     };
 

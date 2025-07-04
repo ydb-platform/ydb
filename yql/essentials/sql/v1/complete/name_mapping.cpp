@@ -143,6 +143,7 @@ namespace NSQLComplete {
     TCandidate ToCandidate(TGenericName generic, TLocalSyntaxContext& local) {
         return std::visit([&](auto&& name) -> TCandidate {
             using T = std::decay_t<decltype(name)>;
+
             constexpr bool IsContextSensitive =
                 std::is_same_v<T, TKeyword> ||
                 std::is_same_v<T, TFolderName> ||
@@ -151,11 +152,24 @@ namespace NSQLComplete {
                 std::is_same_v<T, TBindingName> ||
                 std::is_same_v<T, TUnknownName>;
 
-            if constexpr (IsContextSensitive) {
-                return ToCandidate(std::move(name), local);
-            } else {
-                return ToCandidate(std::move(name));
+            constexpr bool IsDocumented =
+                std::is_base_of_v<TDescribed, T>;
+
+            TMaybe<TString> documentation;
+            if constexpr (IsDocumented) {
+                documentation = std::move(name.Description);
             }
+
+            TCandidate candidate;
+            if constexpr (IsContextSensitive) {
+                candidate = ToCandidate(std::move(name), local);
+            } else {
+                candidate = ToCandidate(std::move(name));
+            }
+
+            candidate.Documentation = std::move(documentation);
+
+            return candidate;
         }, std::move(generic));
     }
 

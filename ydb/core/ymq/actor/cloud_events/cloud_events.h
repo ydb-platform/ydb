@@ -6,7 +6,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/aclib/aclib.h>
 #include <util/random/mersenne64.h>
 #include <util/random/entropy.h>

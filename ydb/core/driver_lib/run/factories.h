@@ -22,7 +22,6 @@
 
 #include <ydb/library/yaml_config/yaml_config.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 
 #include <functional>

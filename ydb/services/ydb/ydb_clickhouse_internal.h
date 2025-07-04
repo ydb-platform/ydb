@@ -5,7 +5,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <ydb/core/grpc_services/base/base_service.h>
 

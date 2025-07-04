@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h>
 

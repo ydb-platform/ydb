@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
-
 #include <ydb/library/grpc/server/grpc_server.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
 
 
 namespace NKikimr::NGRpcService {

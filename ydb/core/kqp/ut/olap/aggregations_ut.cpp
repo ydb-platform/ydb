@@ -37,6 +37,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
@@ -99,7 +101,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson(result, R"([[23000u;]])");
+            CompareYson(result, R"([[25000u;]])");
         }
     }
 

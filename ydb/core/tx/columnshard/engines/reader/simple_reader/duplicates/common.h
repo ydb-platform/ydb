@@ -11,10 +11,10 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 class TColumnsData {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, MemoryGuard);
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TCompositeAllocationGuard>, MemoryGuard);
 
 public:
-    TColumnsData(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& memory)
+    TColumnsData(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NGroupedMemoryManager::TCompositeAllocationGuard>& memory)
         : Data(data)
         , MemoryGuard(memory) {
         AFL_VERIFY(MemoryGuard);

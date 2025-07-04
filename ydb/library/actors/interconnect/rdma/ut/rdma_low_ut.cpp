@@ -1,14 +1,9 @@
+#include "utils.h"
+
 #include <string.h>
 
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/actors/testlib/test_runtime.h>
-
-#include <ydb/library/actors/interconnect/rdma/ctx.h>
-#include <ydb/library/actors/interconnect/rdma/events.h>
-#include <ydb/library/actors/interconnect/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
-#include <ydb/library/actors/interconnect/rdma/link_manager.h>
 #include <ydb/library/actors/interconnect/interconnect_address.h>
 #include <ydb/library/actors/interconnect/poller_actor.h>
 
@@ -17,40 +12,6 @@ using namespace NActors;
 
 static const size_t MEM_REG_SZ = 4096;
 
-static ICq::TPtr GetCqHandle(NActors::TTestActorRuntimeBase* actorSystem, TRdmaCtx* ctx, TActorId cqActorId) {
-
-    const TActorId edge = actorSystem->AllocateEdgeActor(0);
-    auto ev = std::make_unique<TEvGetCqHandle>(ctx);
-
-    actorSystem->Send(new IEventHandle(cqActorId, edge, ev.release()), 0);
-
-    TAutoPtr<IEventHandle> handle;
-    actorSystem->GrabEdgeEvent<TEvGetCqHandle>(handle);
-
-    TEvGetCqHandle* cqHandle = handle->Get<TEvGetCqHandle>();
-    UNIT_ASSERT(cqHandle->CqPtr);
-    return cqHandle->CqPtr;
-}
-
-static std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntime(TString defIp) {
-    auto actorSystem = MakeHolder<NActors::TTestActorRuntimeBase>(1, 1, true);
-    actorSystem->Initialize();
-
-    TDispatchOptions opts;
-    opts.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
-    actorSystem->DispatchEvents(opts);
-
-    auto env = std::getenv("IP_TO_BIND_RDMA_TEST");
-
-    TString ip = env ?: defIp;
-
-    NInterconnect::TAddress address(ip, 7777);
-    auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
-    UNIT_ASSERT(ctx);
-    Cerr << "Using verbs context: " << *ctx << ", on addr: " << ip << Endl;
-
-    return {std::move(actorSystem), ctx};
-}
 
 static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMemPool> memPool) {
     auto reg = memPool->Alloc(MEM_REG_SZ);
@@ -62,54 +23,13 @@ static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMe
 
 Y_UNIT_TEST_SUITE(RdmaLow) {
     void DoReadInOneProcess(TString bindTo) {
-        auto [actorSystem, ctx] = PrepareTestRuntime(bindTo);
-        auto cqActorId = actorSystem->Register(CreateCqActor(1));
-        auto cqPtr = GetCqHandle(actorSystem.Get(), ctx, cqActorId);
+        auto rdma = InitLocalRdmaStuff(bindTo);
+        
+        auto reg1 = AllocSourceRegion(rdma->MemPool);
+        auto reg2 = rdma->MemPool->Alloc(MEM_REG_SZ);
 
-        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        ReadOneMemRegion(rdma, rdma->Qp2, reg1->GetAddr(), reg1->GetRKey(rdma->Ctx->GetDeviceIndex()), MEM_REG_SZ, reg2);
 
-        TQueuePair qp1;
-        {
-            int err = qp1.Init(ctx, cqPtr.get(), 16);
-            UNIT_ASSERT_C(err == 0, strerror(err));
-        }
-
-        auto reg1 = AllocSourceRegion(memPool);
-
-        auto qp1num = qp1.GetQpNum();
-
-        TQueuePair qp2;
-        {
-            int err = qp2.Init(ctx, cqPtr.get(), 16);
-            UNIT_ASSERT(err == 0);
-            err = qp2.ToRtsState(ctx, qp1num, ctx->GetGid(), ctx->GetPortAttr().active_mtu);
-            UNIT_ASSERT(err == 0);
-        }
-
-        {
-            int err = qp1.ToRtsState(ctx, qp2.GetQpNum(), ctx->GetGid(), ctx->GetPortAttr().active_mtu);
-            UNIT_ASSERT(err == 0);
-        }
-
-        auto reg2 = memPool->Alloc(MEM_REG_SZ);
-
-        NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
-        auto future = promise.GetFuture();
-
-        auto asptr = actorSystem->GetActorSystem(0);
-        auto cb = [promise, asptr](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) mutable {
-            Y_ABORT_UNLESS(as == asptr);
-            promise.SetValue(ioDone->IsSuccess());
-        };
-
-        auto allocResult = cqPtr->AllocWr(cb);
-        ICq::IWr* wr = (allocResult.index() == 0) ? std::get<0>(allocResult) : nullptr;
-
-        UNIT_ASSERT(wr);
-
-        qp2.SendRdmaReadWr(wr->GetId(), reg2->GetAddr(), reg2->GetLKey(ctx->GetDeviceIndex()), reg1->GetAddr(), reg1->GetRKey(ctx->GetDeviceIndex()), MEM_REG_SZ);
-
-        UNIT_ASSERT(future.GetValueSync());
         UNIT_ASSERT(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
     }
 
@@ -178,6 +98,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                     if (ioDone->IsCqError()) {
                         wasOverflow.store(true, std::memory_order_relaxed);
                     }
+                    delete ioDone; // Clean up the event
                 };
                 while (wr == nullptr) {
                     auto allocResult = cqPtr->AllocWr(cb);

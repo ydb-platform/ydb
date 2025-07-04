@@ -82,6 +82,7 @@ namespace NActors {
         ~TCoroutineChunkSerializer();
 
         void SetSerializingEvent(const IEventBase *event);
+        void DiscardEvent();
         void Abort();
         std::span<TChunk> FeedBuf(void* data, size_t size);
         bool IsComplete() const {
@@ -150,6 +151,8 @@ namespace NActors {
 
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
+    TRope SerializeToRopeImpl(std::function<TRcBuf(ui32 size)> alloc, const TVector<TRope> &payload);
+    ui32 CalculateSerilizedHeaderSizeImpl(const TVector<TRope> &payload);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize);
 
@@ -200,6 +203,15 @@ namespace NActors {
 
         ui32 CalculateSerializedSize() const override {
             return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
+        }
+
+        std::optional<TRope> SerializeToRope(std::function<TRcBuf(ui32 size)> alloc) const override {
+            TRope result = SerializeToRopeImpl(alloc, Payload);
+            ui32 size = Record.ByteSizeLong();
+            TRcBuf recordsSerializedBuf = alloc(size);
+            Y_ABORT_UNLESS(Record.SerializePartialToArray(recordsSerializedBuf.GetDataMut(), size));
+            result.Insert(result.End(), std::move(recordsSerializedBuf));
+            return result;
         }
 
         static TEv* Load(const TEventSerializedData *input) {

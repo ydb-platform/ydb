@@ -241,6 +241,7 @@ TQueuePair::~TQueuePair() {
 }
 
 int TQueuePair::Init(TRdmaCtx* ctx, ICq* icq, int maxWr) noexcept {
+    Ctx = ctx;
     ibv_cq* cq = icq->GetCq();
     Y_ABORT_UNLESS(cq);
     const ibv_device_attr& attr = ctx->GetDevAttr();
@@ -368,6 +369,10 @@ void TQueuePair::Output(IOutputStream& os) const noexcept {
     } else {
         os << attr.qp_state;
     }
+}
+
+TRdmaCtx* TQueuePair::GetCtx() const noexcept {
+    return Ctx;
 }
 
 }

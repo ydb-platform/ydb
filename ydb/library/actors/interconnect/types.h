@@ -36,6 +36,7 @@ namespace NActors {
         static TDisconnectReason FormatError()            { return TDisconnectReason("FormatError"); }
         static TDisconnectReason EventTooLarge()          { return TDisconnectReason("EventTooLarge"); }
         static TDisconnectReason QueueOverload()          { return TDisconnectReason("QueueOverload"); }
+        static TDisconnectReason RdmaError()              { return TDisconnectReason("RdmaError"); }
 
         TString ToString() const {
             return Text;
@@ -60,6 +61,7 @@ namespace NActors {
         bool UseXdcShuffle = {};
         TString AuthCN;
         NActors::TScopeId PeerScopeId;
+        bool UseRdma = {};
     };
 
 } // NActors

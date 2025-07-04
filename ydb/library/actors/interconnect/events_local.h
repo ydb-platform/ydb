@@ -183,7 +183,8 @@ namespace NActors {
                 TAutoPtr<TProgramInfo>&& programInfo,
                 TSessionParams params,
                 TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket,
-                std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp)
+                std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp,
+                NInterconnect::NRdma::ICq::TPtr cqPtr)
             : Socket(std::move(socket))
             , Peer(peer)
             , Self(self)
@@ -192,6 +193,7 @@ namespace NActors {
             , Params(std::move(params))
             , XdcSocket(std::move(xdcSocket))
             , Qp(std::move(qp))
+            , CqPtr(std::move(cqPtr))
         {
         }
 
@@ -203,6 +205,7 @@ namespace NActors {
         const TSessionParams Params;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
         std::unique_ptr<NInterconnect::NRdma::TQueuePair> Qp;
+        NInterconnect::NRdma::ICq::TPtr CqPtr;
     };
 
     struct TEvHandshakeFail: public TEventLocal<TEvHandshakeFail, ui32(ENetwork::HandshakeFail)> {

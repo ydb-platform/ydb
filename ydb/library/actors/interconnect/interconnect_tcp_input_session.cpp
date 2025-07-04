@@ -1,5 +1,7 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_proxy.h"
+#include "rdma/events.h"
+#include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/util/datetime.h>
 
@@ -59,6 +61,59 @@ namespace NActors {
         }
     }
 
+    static void SendRdmaReadRequest(NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq,
+        const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
+        std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel
+    ) {
+        Y_DEBUG_ABORT_UNLESS(memReg.GetSize() >= offset + cred.GetSize());
+        auto reply = [notify, channel](NActors::TActorSystem* as, NInterconnect::NRdma::TEvRdmaIoDone* ioDone) {
+            NInterconnect::NRdma::TEvRdmaReadDone* rdmaReadDone = new NInterconnect::NRdma::TEvRdmaReadDone(
+                    std::unique_ptr<NInterconnect::NRdma::TEvRdmaIoDone>(ioDone), channel);
+                as->Send(new IEventHandle(notify, TActorId(), rdmaReadDone));
+        };
+
+        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply](NActors::TActorSystem* as, NInterconnect::NRdma::TEvRdmaIoDone* ioDone) {
+            if (!ioDone->IsSuccess()) {
+                reply(as, ioDone);
+            }
+
+            size_t before = left->fetch_sub(size, std::memory_order_relaxed);
+            Y_ABORT_UNLESS(before >= size);
+            if (before == size) {
+                reply(as, ioDone);
+            } else {
+                delete ioDone; // Clean up the event
+            }
+        };
+        auto allocResult = cq->AllocWr(cb);
+        auto* wr = (allocResult.index() == 0) ? std::get<0>(allocResult) : nullptr;
+        Y_ABORT_UNLESS(wr);
+
+        void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
+        qp.SendRdmaReadWr(wr->GetId(),
+            addr, memReg.GetLKey(qp.GetCtx()->GetDeviceIndex()),
+            reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
+        );
+    }
+
+    void TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel) {
+        auto& pendingEvent = PendingEvents.back();
+
+        ui32 curOffset = 0;
+        for (const auto& cred : creds.GetCreds()) {
+            auto curMemReg = pendingEvent.RdmaBuffers.front();
+
+            SendRdmaReadRequest(qp, cq, cred, curMemReg, curOffset, pendingEvent.RdmaSizeLeft, notify, channel);
+
+            curOffset += cred.GetSize();
+
+            if (curOffset == curMemReg.GetSize()) {  // section finished
+                pendingEvent.RdmaBuffers.pop_front();
+                curOffset = 0;
+            }
+        }
+    }
+
     void TReceiveContext::TPerChannelContext::DropFront(TRope *from, size_t numBytes) {
         Y_DEBUG_ABORT_UNLESS(from || !XdcCatchBuffer);
 
@@ -97,7 +152,8 @@ namespace NActors {
     TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
             TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
             TInterconnectProxyCommon::TPtr common, std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId,
-            ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params, std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp)
+            ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params,
+            std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp, NInterconnect::NRdma::ICq::TPtr cq)
         : SessionId(sessionId)
         , Socket(std::move(socket))
         , XdcSocket(std::move(xdcSocket))
@@ -106,6 +162,7 @@ namespace NActors {
         , NodeId(nodeId)
         , Params(std::move(params))
         , RdmaQp(std::move(qp))
+        , RdmaCq(std::move(cq))
         , ConfirmedByInput(lastConfirmed)
         , Metrics(std::move(metrics))
         , DeadPeerTimeout(deadPeerTimeout)
@@ -215,6 +272,14 @@ namespace NActors {
             XdcPollerToken = std::move(msg->PollerToken);
         }
         ReceiveData();
+    }
+
+    void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
+        if (!ev->Get()->Event->IsSuccess()) {
+            LOG_ERROR_IC_SESSION("ICIS14", "Rdma IO failed");
+            throw TExDestroySession({TDisconnectReason::RdmaError()});
+        }
+        ProcessEvents(GetPerChannelContext(ev->Get()->Channel));
     }
 
     void TInputSessionTCP::ReceiveData() {
@@ -511,13 +576,26 @@ namespace NActors {
         }
     }
 
+    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
+        if (isRdma) {
+            Y_ABORT_UNLESS(Common->RdmaMemPool, "RdmaMemPool is not initialized");
+            auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom);
+            buffer.TrimFront(size + tailroom);
+            buffer.TrimBack(size);
+            return buffer;
+        } else {
+            return TRcBuf::Uninitialized(size, headroom, tailroom);
+        }
+    }
+
     void TInputSessionTCP::ProcessXdcCommand(ui16 channel, TReceiveContext::TPerChannelContext& context) {
         const char *ptr = XdcCommands.data();
         const char *end = ptr + XdcCommands.size();
         while (ptr != end) {
             switch (const auto cmd = static_cast<EXdcCommand>(*ptr++)) {
                 case EXdcCommand::DECLARE_SECTION:
-                case EXdcCommand::DECLARE_SECTION_INLINE: {
+                case EXdcCommand::DECLARE_SECTION_INLINE:
+                case EXdcCommand::DECLARE_SECTION_RDMA: {
                     // extract and validate command parameters
                     const ui64 headroom = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     const ui64 size = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
@@ -537,13 +615,24 @@ namespace NActors {
                         Y_ABORT_UNLESS(!isInline || Params.UseXdcShuffle);
                         if (!isInline) {
                             // allocate buffer and push it into the payload
-                            auto buffer = TRcBuf::Uninitialized(size, headroom, tailroom);
-                            if (size) {
-                                context.XdcBuffers.push_back(buffer.GetContiguousSpanMut());
+                            const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
+                            auto buffer = AllocateRcBuf(size, headroom, tailroom, isRdma);
+                            if (isRdma) {
+                                if (size) {
+                                    pendingEvent.RdmaBuffers.push_back(NInterconnect::NRdma::TryExtractFromRcBuf(buffer));
+                                }
+                                if (!pendingEvent.RdmaSizeLeft) {
+                                    pendingEvent.RdmaSizeLeft = std::make_shared<std::atomic<size_t>>(0);
+                                }
+                                *pendingEvent.RdmaSizeLeft += size;
+                            } else {
+                                if (size) {
+                                    context.XdcBuffers.push_back(buffer.GetContiguousSpanMut());
+                                }
+                                pendingEvent.XdcSizeLeft += size;
+                                ++XdcSections;
                             }
                             pendingEvent.ExternalPayload.Insert(pendingEvent.ExternalPayload.End(), TRope(std::move(buffer)));
-                            pendingEvent.XdcSizeLeft += size;
-                            ++XdcSections;
                         }
                     }
                     continue;
@@ -587,6 +676,24 @@ namespace NActors {
                     ++XdcRefs;
                     continue;
                 }
+
+                case NActors::EXdcCommand::RDMA_READ: {
+                    if (!RdmaQp || !RdmaCq) {
+                        LOG_CRIT_IC_SESSION("ICIS16", "unexpected XDC RDMA_READ command without RDMA QP");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
+                    const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
+                    ptr += sizeof(ui16);
+                    if (!credsSerializedSize) {
+                        LOG_CRIT_IC_SESSION("ICIS02", "XDC RDMA_READ command with zero size");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
+                    NActorsInterconnect::TRdmaCreds creds;
+                    Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
+                    ptr += credsSerializedSize;
+                    context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel);
+                    continue;
+                }
             }
 
             LOG_CRIT_IC_SESSION("ICIS15", "unexpected XDC command");
@@ -597,7 +704,8 @@ namespace NActors {
     void TInputSessionTCP::ProcessEvents(TReceiveContext::TPerChannelContext& context) {
         for (; !context.PendingEvents.empty(); context.PendingEvents.pop_front()) {
             auto& pendingEvent = context.PendingEvents.front();
-            if (!pendingEvent.EventData || pendingEvent.XdcSizeLeft) {
+            size_t rdmaSizeLeft = pendingEvent.RdmaSizeLeft ? pendingEvent.RdmaSizeLeft->load() : 0;
+            if (!pendingEvent.EventData || pendingEvent.XdcSizeLeft || rdmaSizeLeft) {
                 break; // event is not ready yet
             }
             auto& descr = *pendingEvent.EventData;

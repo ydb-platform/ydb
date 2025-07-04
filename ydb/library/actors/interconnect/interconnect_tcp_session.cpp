@@ -61,7 +61,7 @@ namespace NActors {
         };
         Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
         ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics,
-            Proxy->Common->Settings.MaxSerializedEventSize, Params);
+            Proxy->Common->Settings.MaxSerializedEventSize, Params, Proxy->Common->RdmaMemPool);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
@@ -266,6 +266,7 @@ namespace NActors {
         XdcSocket = std::move(ev->Get()->XdcSocket);
 
         auto qp = std::move(ev->Get()->Qp);
+        auto cq = std::move(ev->Get()->CqPtr);
 
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);
@@ -292,7 +293,7 @@ namespace NActors {
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, std::move(qp));
+            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, std::move(qp), std::move(cq));
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor

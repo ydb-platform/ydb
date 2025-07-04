@@ -221,6 +221,10 @@ private:
         }
     }
 
+    static void ConvertStats(NKikimrReplication::TReplicationState&, Ydb::Replication::DescribeTransferResult&) {
+        // nop
+    }
+
     template<typename T>
     static void ConvertState(NKikimrReplication::TReplicationState& from, T& to) {
         switch (from.GetStateCase()) {
@@ -240,10 +244,6 @@ private:
         default:
             break;
         }
-    }
-
-    static void ConvertStats(NKikimrReplication::TReplicationState&, Ydb::Replication::DescribeTransferResult&) {
-        // nop
     }
 
     static void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeReplicationResult& result) {

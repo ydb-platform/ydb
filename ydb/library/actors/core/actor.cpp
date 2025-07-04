@@ -46,7 +46,7 @@ namespace NActors {
         return *this;
     }
 
-    thread_local TActorRunnableQueue* TlsActorRunnableQueue = nullptr;
+    static thread_local TActorRunnableQueue* TlsActorRunnableQueue = nullptr;
 
     TActorRunnableQueue::TActorRunnableQueue(IActor* actor) noexcept {
         Actor_ = actor;

@@ -1,6 +1,7 @@
 #include <benchmark/benchmark.h>
 #include <ydb/library/actors/async/async.h>
 #include <ydb/library/actors/async/wait_for_event.h>
+#include <ydb/library/actors/async/yield.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -111,7 +112,7 @@ private:
 };
 
 template<class TDriver>
-void BM_Actor(benchmark::State& state) {
+void BM_PingActor(benchmark::State& state) {
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
@@ -133,17 +134,119 @@ void BM_Actor(benchmark::State& state) {
     actorSystem.Stop();
 }
 
-void BM_ManualActor(benchmark::State& state) {
-    BM_Actor<TPingDriverManualActor>(state);
+void BM_ManualPingActor(benchmark::State& state) {
+    BM_PingActor<TPingDriverManualActor>(state);
 }
 
-BENCHMARK(BM_ManualActor)->MeasureProcessCPUTime();
-
-void BM_AsyncActor(benchmark::State& state) {
-    BM_Actor<TPingDriverAsyncActor>(state);
+void BM_AsyncPingActor(benchmark::State& state) {
+    BM_PingActor<TPingDriverAsyncActor>(state);
 }
 
-BENCHMARK(BM_AsyncActor)->MeasureProcessCPUTime();
+BENCHMARK(BM_ManualPingActor)->MeasureProcessCPUTime();
+BENCHMARK(BM_AsyncPingActor)->MeasureProcessCPUTime();
+
+class TManualYieldActor : public TActorBootstrapped<TManualYieldActor> {
+public:
+    TManualYieldActor(benchmark::State& state, TPromise<void> promise)
+        : State(state)
+        , Promise(std::move(promise))
+    {}
+
+    ~TManualYieldActor() {
+        Promise.SetValue();
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+
+        Step();
+    }
+
+    void Step() {
+        if (State.KeepRunning()) {
+            Send(SelfId(), new TEvents::TEvWakeup);
+            return;
+        }
+        PassAway();
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvWakeup, Handle);
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        Step();
+    }
+
+    private:
+    benchmark::State& State;
+    TPromise<void> Promise;
+};
+
+class TAsyncYieldActor : public TActorBootstrapped<TAsyncYieldActor> {
+public:
+    TAsyncYieldActor(benchmark::State& state, TPromise<void> promise)
+        : State(state)
+        , Promise(std::move(promise))
+    {}
+
+    ~TAsyncYieldActor() {
+        Promise.SetValue();
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+
+        for (auto _ : State) {
+            co_await AsyncYield();
+        }
+
+        PassAway();
+    }
+
+    STFUNC(StateWork) {
+        Y_UNUSED(ev);
+    }
+
+private:
+    benchmark::State& State;
+    TPromise<void> Promise;
+};
+
+template<class TDriver>
+void BM_YieldActor(benchmark::State& state) {
+    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    setup->NodeId = 0;
+    setup->ExecutorsCount = 1;
+    setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
+    for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
+        setup->Executors[i] = new TBasicExecutorPool(i, 1, 1, "basic");
+    }
+    setup->Scheduler = new TBasicSchedulerThread;
+
+    TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    auto promise = NewPromise<void>();
+    auto future = promise.GetFuture();
+    actorSystem.Register(new TDriver(state, std::move(promise)));
+    future.GetValueSync();
+
+    actorSystem.Stop();
+}
+
+void BM_ManualYieldActor(benchmark::State& state) {
+    BM_YieldActor<TManualYieldActor>(state);
+}
+
+void BM_AsyncYieldActor(benchmark::State& state) {
+    BM_YieldActor<TAsyncYieldActor>(state);
+}
+
+BENCHMARK(BM_ManualYieldActor)->MeasureProcessCPUTime();
+BENCHMARK(BM_AsyncYieldActor)->MeasureProcessCPUTime();
 
 class TAsyncLoopActor : public TActorBootstrapped<TAsyncLoopActor> {
 public:

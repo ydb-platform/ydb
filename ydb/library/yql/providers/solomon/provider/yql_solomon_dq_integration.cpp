@@ -358,6 +358,9 @@ public:
         auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(1000);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
+        auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(300);
+        sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
+
         if (!selectors.empty()) {
             ui64 totalMetricsCount;
             YQL_ENSURE(TryFromString(settings.TotalMetricsCount(), totalMetricsCount));

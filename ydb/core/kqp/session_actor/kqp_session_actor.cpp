@@ -770,8 +770,6 @@ public:
             return ReplyPrepareResult();
         }
 
-        Cerr << "COMPILED " << QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst() << Endl;
-
         if (!PrepareQueryContext()) {
             return;
         }
@@ -784,11 +782,9 @@ public:
             AcquirePersistentSnapshot();
             return;
         } else if (QueryState->NeedSnapshot(*Config)) {
-            Cerr << "TEST >>> " << "GET SNAPSHOT" << Endl;
             AcquireMvccSnapshot();
             return;
         }
-        Cerr << "TEST >>> " << "NO SNAPSHOT" << Endl;
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();

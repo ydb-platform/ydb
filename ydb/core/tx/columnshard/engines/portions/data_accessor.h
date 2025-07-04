@@ -445,7 +445,7 @@ public:
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
     std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
 
-    THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+    THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
         THashMap<TString, THashSet<TUnifiedBlobId>> result;

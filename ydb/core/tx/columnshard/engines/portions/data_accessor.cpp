@@ -217,48 +217,28 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
 }
 
 THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
-    NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const {
+    NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
     THashMap<TChunkAddress, TString> result;
-    for (auto&& i : blobs) {
-        for (auto&& b : i.second) {
-            bool found = false;
-            TString columnStorageId;
-            ui32 columnId = 0;
-            for (auto&& record : GetRecordsVerified()) {
-                if (RestoreBlobRange(record.GetBlobRange()) == b.first) {
-                    if (columnId != record.GetColumnId()) {
-                        columnStorageId = PortionInfo->GetColumnStorageId(record.GetColumnId(), indexInfo);
-                    }
-                    if (columnStorageId != i.first) {
-                        continue;
-                    }
-                    result.emplace(record.GetAddress(), std::move(b.second));
-                    found = true;
-                    break;
-                }
-            }
-            if (found) {
-                continue;
-            }
-            for (auto&& record : GetIndexesVerified()) {
-                if (!record.HasBlobRange()) {
-                    continue;
-                }
-                if (RestoreBlobRange(record.GetBlobRangeVerified()) == b.first) {
-                    if (columnId != record.GetIndexId()) {
-                        columnStorageId = indexInfo.GetIndexStorageId(record.GetIndexId());
-                    }
-                    if (columnStorageId != i.first) {
-                        continue;
-                    }
-                    result.emplace(record.GetAddress(), std::move(b.second));
-                    found = true;
-                    break;
-                }
-            }
-            AFL_VERIFY(found)("blobs", blobs.DebugString())("records", DebugString())("problem", b.first);
+
+    for (auto&& record : GetRecordsVerified()) {
+        std::optional<TString> blob =
+            blobs.ExtractOptional(PortionInfo->GetColumnStorageId(record.GetColumnId(), indexInfo), RestoreBlobRange(record.GetBlobRange()));
+        if (blob) {
+            result.emplace(record.GetAddress(), std::move(*blob));
         }
     }
+
+    for (auto&& record : GetIndexesVerified()) {
+        if (!record.HasBlobRange()) {
+            continue;
+        }
+        std::optional<TString> blob =
+            blobs.ExtractOptional(indexInfo.GetIndexStorageId(record.GetIndexId()), RestoreBlobRange(record.GetBlobRangeVerified()));
+        if (blob) {
+            result.emplace(record.GetAddress(), std::move(*blob));
+        }
+    }
+
     return result;
 }
 

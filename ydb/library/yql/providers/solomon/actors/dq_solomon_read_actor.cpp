@@ -248,19 +248,23 @@ public:
         auto& batch = *newDataBatch->Get();
         auto request = batch.Request;
 
-        if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response); batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR && delay) {
-            SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
-            Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
-            return;
-        } else if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
-            TIssues issues { TIssue(batch.Response.Error) };
-            SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
-            PendingDataRequests_.erase(request);
-            return;
+        if (batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
+            if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response)) {
+                SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
+                Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
+                return;
+            }
         }
 
         PendingDataRequests_.erase(request);
+        
+        if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
+            TIssues issues { TIssue(batch.Response.Error) };
+            SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            return;
+        }
+
         MetricsData.insert(MetricsData.end(), batch.Response.Result.Timeseries.begin(), batch.Response.Result.Timeseries.end());
         CompletedTimeRanges++;
 
@@ -284,7 +288,7 @@ public:
         }
 
         auto actorSystem = TActivationContext::ActorSystem();
-        dataRequestFuture.Subscribe([request, actorSystem, selfId = SelfId()](
+        dataRequestFuture.Subscribe([request = std::move(request), actorSystem, selfId = SelfId()](
             NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
         {
             actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
@@ -325,19 +329,23 @@ public:
         auto& batch = *newDataBatch->Get();
         auto request = batch.Request;
 
-        if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response); batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR && delay) {
-            SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
-            Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
-            return;
-        } else if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
-            TIssues issues { TIssue(batch.Response.Error) };
-            SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
-            PendingDataRequests_.erase(request);
-            return;
+        if (batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
+            if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response)) {
+                SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
+                Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
+                return;
+            }
         }
 
         PendingDataRequests_.erase(request);
+        
+        if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
+            TIssues issues { TIssue(batch.Response.Error) };
+            SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            return;
+        }
+
         MetricsData.insert(MetricsData.end(), batch.Response.Result.Timeseries.begin(), batch.Response.Result.Timeseries.end());
         CompletedTimeRanges++;
 
@@ -501,8 +509,8 @@ private:
         PendingDataRequests_[request] = RetryPolicy->CreateRetryState();
 
         auto actorSystem = TActivationContext::ActorSystem();
-        dataRequestFuture.Subscribe([request, actorSystem, selfId = SelfId()](
-            NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
+        dataRequestFuture.Subscribe([request = std::move(request), actorSystem, selfId = SelfId()](
+        NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
         {
             actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
                 response.ExtractValue(),

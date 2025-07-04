@@ -300,7 +300,7 @@ public:
             sendTask->Info->IncPending();
             UndefinedShardTaskData.emplace_back(std::move(sendTask));
         } else {
-            AFL_ENSURE (*computeShardId < ComputeActors.size())("compute_shard_id", *computeShardId);
+            AFL_ENSURE(*computeShardId < ComputeActors.size())("compute_shard_id", *computeShardId);
             ComputeActors[*computeShardId].AddDataToSend(std::move(sendTask));
         }
     }
@@ -408,7 +408,7 @@ public:
             it->second->Stop(true, "");
             ShardScanners.erase(it);
         } else {
-            AFL_VERIFY(!state->ActorId);
+            AFL_ENSURE(!state->ActorId);
         }
 
         if (stopShard) {

@@ -366,7 +366,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
                 if (writes.empty() && ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
                     auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
-                    // Two read phases, so we need to 
                     UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() != 0);
                     UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
                     writes.emplace_back(ev.Release());
@@ -444,7 +443,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
                 if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
                     auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
-                    // Two read phases, so we need to 
                     UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
                     UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
                     hasWrite = true;

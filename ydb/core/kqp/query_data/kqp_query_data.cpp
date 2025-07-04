@@ -149,8 +149,9 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSet::Ty
                 }
 
                 for (size_t i = 0; i < arrowSchema.size(); ++i) {
+                    ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? i : (*ColumnOrder)[i];
                     const auto& [name, type] = arrowSchema[i];
-                    rowBuilder.AddCell(i, type, row.GetElement(i), type.GetPgTypeMod(name));
+                    rowBuilder.AddCell(i, type, row.GetElement(memberIndex), type.GetPgTypeMod(name));
                 }
 
                 auto cells = rowBuilder.BuildCells();

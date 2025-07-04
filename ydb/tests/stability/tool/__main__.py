@@ -224,13 +224,14 @@ class bcolors:
 
 
 class StabilityCluster:
-    def __init__(self, ssh_username, cluster_path, ydbd_path=None, ydbd_next_path=None):
+    def __init__(self, ssh_username, cluster_path, ydbd_path=None, ydbd_next_path=None, yaml_config=None):
         self.working_dir = os.path.join(tempfile.gettempdir(), "ydb_stability")
         os.makedirs(self.working_dir, exist_ok=True)
         self.ssh_username = ssh_username
         self.slice_directory = cluster_path
         self.ydbd_path = ydbd_path
         self.ydbd_next_path = ydbd_next_path
+        self.yaml_config = yaml_config
 
         self.artifacts = (
             self._unpack_resource('nemesis'),
@@ -244,14 +245,23 @@ class StabilityCluster:
             self._unpack_resource('ydb_cli'),
         )
 
-        self.kikimr_cluster = ExternalKiKiMRCluster(
-            config_path=self.slice_directory,
-            kikimr_configure_binary_path=self._unpack_resource("cfg"),
-            kikimr_path=self.ydbd_path,
-            kikimr_next_path=self.ydbd_next_path,
-            ssh_username=self.ssh_username,
-            deploy_cluster=True,
-        )
+        if yaml_config is None:
+            self.kikimr_cluster = ExternalKiKiMRCluster(
+                config_path=self.slice_directory,
+                kikimr_configure_binary_path=self._unpack_resource("cfg"),
+                kikimr_path=self.ydbd_path,
+                kikimr_next_path=self.ydbd_next_path,
+                ssh_username=self.ssh_username,
+                deploy_cluster=True,
+            )
+        else:
+            self.kikimr_cluster = ExternalKiKiMRCluster(
+                config_path=self.slice_directory,
+                kikimr_path=self.ydbd_path,
+                kikimr_next_path=self.ydbd_next_path,
+                ssh_username=self.ssh_username,
+                yaml_config=self.yaml_config,
+            )
 
     def _unpack_resource(self, name):
         res = resource.find(name)
@@ -1041,6 +1051,12 @@ Common usage scenarios:
         help="Path to next ydbd version binary (for cross-version testing)",
     )
     parser.add_argument(
+        "--yaml_config",
+        required=False,
+        type=path_type,
+        help="Path to Yandex DB configuration v2",
+    )
+    parser.add_argument(
         "--ssh_user",
         required=False,
         default=getpass.getuser(),
@@ -1190,6 +1206,7 @@ def main():
         cluster_path=args.cluster_path,
         ydbd_path=args.ydbd_path,
         ydbd_next_path=args.next_ydbd_path,
+        yaml_config=args.yaml_config,
     )
 
     for action in args.actions:

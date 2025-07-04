@@ -35,20 +35,26 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             kikimr_next_path=None,
             ssh_username=None,
             deploy_cluster=False,
-            ):
+            yaml_config=None):
         self.__config_path = config_path
         with open(config_path, 'r') as r:
-            self.__yaml_config = yaml.safe_load(r.read())
+            self.__cluster_config = yaml.safe_load(r.read())
+        self.__yaml_config = yaml_config
         self.__kikimr_configure_binary_path = kikimr_configure_binary_path
-        self.__hosts = [host.get('name', host.get('host')) for host in self.__yaml_config.get('hosts', [])]
         self._slots = None
         self.__kikimr_path = kikimr_path
         self.__kikimr_next_path = kikimr_next_path
         self.__ssh_username = ssh_username
         self.__deploy_cluster = deploy_cluster
-        self.__slot_count = 0
 
-        for domain in self.__yaml_config['domains']:
+        if self.__yaml_config is None:
+            # Backward compatibility for cluster.yaml
+            self.__hosts = [host.get('name', host.get('host')) for host in self.__cluster_config.get('hosts')]
+        else:
+            self.__hosts = [host.get('name', host.get('host')) for host in self.__yaml_config.get('config', {}).get('hosts')]
+
+        self.__slot_count = 0
+        for domain in self.__cluster_config['domains']:
             self.__slot_count = max(self.__slot_count, domain['dynamic_slots'])
 
         super(ExternalKiKiMRCluster, self).__init__()

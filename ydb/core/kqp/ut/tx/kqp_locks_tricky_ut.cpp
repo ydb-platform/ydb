@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
                 runtime.SetObserverFunc(saveObserver);
             };
 
-            std::optional<TTransaction> tx;
+            std::optional<NYdb::NTable::TTransaction> tx;
 
             auto result = kikimr.RunCall([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW());

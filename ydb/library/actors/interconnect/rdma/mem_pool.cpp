@@ -166,18 +166,20 @@ namespace NInterconnect::NRdma {
         );
     }
 
-    void* allocateMemory(size_t size, size_t alignment) {
+    void* allocateMemory(size_t size, size_t alignment, bool hp) {
         if (size % alignment != 0) {
             return nullptr;
         }
         void* buf = std::aligned_alloc(alignment, size);
-        if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
-            fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
-                strerror(errno), errno);
-        }
-        for (size_t i = 0; i < size; i += HPageSz) {
-            // We use THP right now. We need to touch each page to promote it to HUGE.
-            ((char*)buf)[i] = 0;
+        if (hp) {
+            if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
+                fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
+                    strerror(errno), errno);
+            }
+            for (size_t i = 0; i < size; i += HPageSz) {
+                // We use THP right now. We need to touch each page to promote it to HUGE.
+                ((char*)buf)[i] = 0;
+            }
         }
         return buf;
     }
@@ -231,7 +233,7 @@ namespace NInterconnect::NRdma {
         }
     protected:
         template<typename TAuxData>
-        TChunkPtr AllocNewChunk(size_t size) noexcept {
+        TChunkPtr AllocNewChunk(size_t size, bool hp) noexcept {
             static_assert(sizeof(TAuxData) < CacheLineSz, "AuxData too big");
 
             const std::lock_guard<std::mutex> lock(Mutex);
@@ -243,7 +245,7 @@ namespace NInterconnect::NRdma {
 
             size = AlignUp(size, Alignment);
 
-            void* ptr = allocateMemory(size, Alignment);
+            void* ptr = allocateMemory(size, Alignment, hp);
             if (!ptr) {
                 return nullptr;
             }
@@ -281,7 +283,7 @@ namespace NInterconnect::NRdma {
 
         TMemRegion* AllocImpl(int size) noexcept override {
             struct TDummy {};
-            auto chunk = AllocNewChunk<TDummy>(size);
+            auto chunk = AllocNewChunk<TDummy>(size, false);
             if (!chunk) {
                 return nullptr; 
             }
@@ -386,7 +388,7 @@ namespace NInterconnect::NRdma {
             } while (attempt--);
 
             if (!chunk) {
-                chunk = AllocNewChunk<TAuxChunkData>(ChunkSize);
+                chunk = AllocNewChunk<TAuxChunkData>(ChunkSize, true);
                 if (!chunk) {
                     return nullptr; 
                 }
@@ -499,6 +501,7 @@ namespace NInterconnect::NRdma {
                 if (p->RefCount() == 1) {
                     if (Inactive[i].compare_exchange_strong(p, nullptr, std::memory_order_seq_cst)) {
                         Y_ABORT_UNLESS(CastToAuxChunkData(p)->IsInactive());
+                        Y_ABORT_UNLESS(p->RefCount() == 1);
                         //if (!CastToAuxChunkData(p)->IsInactive()) {
                         //    //if (PushChunk(0, Inactive, p) == -1) {
                         //    //    Y_ABORT_UNLESS(expr, ...)
@@ -509,7 +512,7 @@ namespace NInterconnect::NRdma {
                         aux->Allocated.store(0);
                         aux->InactivePos.store(-1);
                         
-                        while (PushChunk(0, ActiveAndFree, p) == -1) {
+                        if (PushChunk(0, ActiveAndFree, p) == -1) {
                             TChunkPtr(p)->UnRef();
                         }
                     }

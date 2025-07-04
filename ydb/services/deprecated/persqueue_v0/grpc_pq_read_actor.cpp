@@ -979,6 +979,9 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
 
         for (auto& [name, t] : ev->Get()->TopicAndTablets) {
             auto& topicHolder = Topics[t.TopicNameConverter->GetInternalName()];
+            if (!topicHolder) {
+                topicHolder = std::make_shared<TTopicHolder>();
+            }
             topicHolder->TabletID = t.TabletID;
             topicHolder->CloudId = t.CloudId;
             topicHolder->DbId = t.DbId;

@@ -6,7 +6,6 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/svnversion/svnversion.h>
@@ -43,8 +42,7 @@ void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
 Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(CollectInfo)
     {
-        TTestEnvOpts opts(8);
-        TCmsTestEnv env(opts.WithBridgeMode());
+        TCmsTestEnv env(8);
 
         auto before = env.GetCurrentTime();
         env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));

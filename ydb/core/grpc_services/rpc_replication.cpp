@@ -150,15 +150,6 @@ private:
             << "/?database=" << params.GetDatabase();
     }
 
-    static void ConvertStaticCredentials(const NKikimrReplication::TStaticCredentials& from, Ydb::Replication::ConnectionParams::StaticCredentials& to) {
-        to.set_user(from.GetUser());
-        to.set_password_secret_name(from.GetPasswordSecretName());
-    }
-
-    static void ConvertOAuth(const NKikimrReplication::TOAuthToken& from, Ydb::Replication::ConnectionParams::OAuth& to) {
-        to.set_token_secret_name(from.GetTokenSecretName());
-    }
-
     static void ConvertConnectionParams(const NKikimrReplication::TConnectionParams& from, Ydb::Replication::ConnectionParams& to) {
         to.set_endpoint(from.GetEndpoint());
         to.set_database(from.GetDatabase());
@@ -175,13 +166,13 @@ private:
         }
     }
 
-    static void ConvertRowConsistencySettings(const NKikimrReplication::TConsistencySettings::TRowConsistency&, Ydb::Replication::ConsistencyLevelRow&) {
-        // nop
+    static void ConvertStaticCredentials(const NKikimrReplication::TStaticCredentials& from, Ydb::Replication::ConnectionParams::StaticCredentials& to) {
+        to.set_user(from.GetUser());
+        to.set_password_secret_name(from.GetPasswordSecretName());
     }
 
-    static void ConvertGlobalConsistencySettings(const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from, Ydb::Replication::ConsistencyLevelGlobal& to) {
-        *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
-            from.GetCommitIntervalMilliSeconds());
+    static void ConvertOAuth(const NKikimrReplication::TOAuthToken& from, Ydb::Replication::ConnectionParams::OAuth& to) {
+        to.set_token_secret_name(from.GetTokenSecretName());
     }
 
     static void ConvertConsistencySettings(const NKikimrReplication::TConsistencySettings& from, Ydb::Replication::DescribeReplicationResult& to) {
@@ -193,6 +184,15 @@ private:
         default:
             break;
         }
+    }
+
+    static void ConvertRowConsistencySettings(const NKikimrReplication::TConsistencySettings::TRowConsistency&, Ydb::Replication::ConsistencyLevelRow&) {
+        // nop
+    }
+
+    static void ConvertGlobalConsistencySettings(const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from, Ydb::Replication::ConsistencyLevelGlobal& to) {
+        *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+            from.GetCommitIntervalMilliSeconds());
     }
 
     static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {
@@ -221,10 +221,6 @@ private:
         }
     }
 
-    static void ConvertStats(NKikimrReplication::TReplicationState&, Ydb::Replication::DescribeTransferResult&) {
-        // nop
-    }
-
     template<typename T>
     static void ConvertState(NKikimrReplication::TReplicationState& from, T& to) {
         switch (from.GetStateCase()) {
@@ -244,6 +240,10 @@ private:
         default:
             break;
         }
+    }
+
+    static void ConvertStats(NKikimrReplication::TReplicationState&, Ydb::Replication::DescribeTransferResult&) {
+        // nop
     }
 
     static void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeReplicationResult& result) {

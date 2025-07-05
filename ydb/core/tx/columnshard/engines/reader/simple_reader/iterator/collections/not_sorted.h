@@ -29,8 +29,7 @@ private:
         return SourcesConstructor->IsFinished();
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override {
-        AFL_VERIFY(Sources.size());
-        auto result = SourcesConstructor->ExtractNext(Context);
+        auto result = static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
         InFlightCount.Inc();
         return result;
     }

@@ -29,7 +29,7 @@ private:
             std::make_shared<NArrow::TSimpleRow>(source->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override {
-        auto result = SourcesConstructor->ExtractNext(Context);
+        auto result = static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
         InFlightCount.Inc();
         return result;
     }

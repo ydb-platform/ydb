@@ -1,13 +1,15 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+
 #include <ydb/library/accessor/positive_integer.h>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
 }
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NCommon {
 
 class TSourceConstructor: public ICursorEntity {
 private:
@@ -59,7 +61,7 @@ public:
     }
 };
 
-class TNotSortedPortionsSources: public ISourcesConstructor {
+class TNotSortedPortionsSources: public NCommon::ISourcesConstructor {
 private:
     std::deque<TSourceConstructor> Sources;
     ui32 SourceIdx = 0;
@@ -103,7 +105,7 @@ public:
     }
 };
 
-class TSortedPortionsSources: public ISourcesConstructor {
+class TSortedPortionsSources: public NCommon::ISourcesConstructor {
 private:
     std::deque<TSourceConstructor> HeapSources;
     ui32 SourceIdx = 0;

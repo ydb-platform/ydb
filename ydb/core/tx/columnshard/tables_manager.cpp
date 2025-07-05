@@ -2,6 +2,7 @@
 #include "tables_manager.h"
 
 #include "engines/column_engine_logs.h"
+#include "engines/metadata_accessor.h"
 #include "transactions/transactions/tx_add_sharding_info.h"
 
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -525,6 +526,37 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
         MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().MutableVersionedIndex().EraseVersion(i);
     }
     return chains;
+}
+
+TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
+    const TString& tableName, const std::optional<ui64> externalPathId, const std::optional<ui64> extInternalPathId) {
+    if (extInternalPathId) {
+        const auto& externalPathIdResolved = ResolveSchemeShardLocalPathId(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId));
+        AFL_VERIFY(!!externalPathIdResolved);
+        return std::make_shared<NOlap::TUserTableAccessor>(
+            tableName, NColumnShard::TUnifiedPathId{ NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId), *externalPathIdResolved });
+    }
+    AFL_VERIFY(externalPathId);
+    const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*externalPathId);
+    const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
+    if (extInternalPathId) {
+        AFL_VERIFY(internalPathId);
+        AFL_VERIFY(extInternalPathId == internalPathId->GetRawValue());
+    }
+    if (tableName.find(".sys/") != TString::npos) {
+        return std::make_shared<NOlap::TSysViewTableAccessor>(
+            tableName, NColumnShard::TUnifiedPathId{ internalPathId.value_or(NColumnShard::TInternalPathId::FromRawValue(0)), schemeShardLocalPathId });
+    } else if (!internalPathId) {
+        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
+    } else {
+        if (!HasTable(*internalPathId)) {
+            return std::make_shared<NOlap::TAbsentTableAccessor>(
+                tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+        } else {
+            return std::make_shared<NOlap::TUserTableAccessor>(
+                tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+        }
+    }
 }
 
 }   // namespace NKikimr::NColumnShard

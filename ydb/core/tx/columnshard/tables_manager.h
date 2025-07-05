@@ -5,6 +5,7 @@
 #include "blobs_action/abstract/storages_manager.h"
 #include "data_accessor/manager.h"
 #include "engines/column_engine.h"
+#include "engines/metadata_accessor.h"
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -234,6 +235,9 @@ public:
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
         const ui64 tabletId);
+
+    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
+        const TString& tableName, const std::optional<ui64> externalPathId, const std::optional<ui64> internalPathId);
 
     class TSchemaAddress {
     private:

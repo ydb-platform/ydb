@@ -17,15 +17,6 @@ namespace NKikimr::NOlap::NReader {
 class TScanIteratorBase;
 class TReadContext;
 
-class TDataStorageAccessor {
-private:
-    const std::unique_ptr<NOlap::IColumnEngine>& Index;
-
-public:
-    TDataStorageAccessor(const std::unique_ptr<IColumnEngine>& index);
-    std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription, const bool withUncommitted) const;
-};
-
 // Holds all metadata that is needed to perform read/scan
 class TReadMetadataBase {
 public:
@@ -177,9 +168,9 @@ public:
         return ResultIndexSchema->GetIndexInfo();
     }
 
-    void InitShardingInfo(const TInternalPathId pathId) {
+    void InitShardingInfo(const std::shared_ptr<ITableMetadataAccessor>& metadataAccessor) {
         AFL_VERIFY(!RequestShardingInfo);
-        RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
+        RequestShardingInfo = metadataAccessor->GetShardingInfo(IndexVersionsPointer, RequestSnapshot);
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,

@@ -44,12 +44,12 @@ NKikimr::TConclusionStatus TMetadataFromTable::DoFillMetadata(const NColumnShard
         return TConclusionStatus::Success();
     }
     AFL_VERIFY(read.PKRangesFilter);
-    const auto& schemeShardLocalPathId = read.PathId.SchemeShardLocalPathId;
+    const auto& schemeShardLocalPathId = read.TableMetadataAccessor->GetPathId().SchemeShardLocalPathId;
     for (auto&& filter : *read.PKRangesFilter) {
         const auto fromPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
         const auto toPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
         if ((fromPathId <= schemeShardLocalPathId) && (schemeShardLocalPathId <= toPathId)) {
-            auto pathInfo = logsIndex->GetGranuleOptional(read.PathId.InternalPathId);
+            auto pathInfo = logsIndex->GetGranuleOptional(read.TableMetadataAccessor->GetPathId().InternalPathId);
             if (!pathInfo) {
                 continue;
             }

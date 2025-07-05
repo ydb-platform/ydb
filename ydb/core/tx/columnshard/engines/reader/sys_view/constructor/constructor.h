@@ -37,9 +37,9 @@ private:
         out->ReadColumnIds.assign(readColumnIds.begin(), readColumnIds.end());
         out->ResultColumnIds = read.ColumnIds;
 
-        auto policy = NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
+        auto policy = NAbstract::ISysViewPolicy::BuildByPath(read.TableMetadataAccessor->GetTablePath());
         if (!policy) {
-            return TConclusionStatus::Fail("undefined table name: " + TFsPath(read.TableName).GetName());
+            return TConclusionStatus::Fail("undefined table name: " + read.TableMetadataAccessor->GetTableName());
         }
         auto filler = policy->CreateMetadataFiller();
 

@@ -18,7 +18,7 @@ class ISourcesConstructor {
 private:
     virtual void DoClear() = 0;
     virtual void DoAbort() = 0;
-    virtual bool DoIsFinished() = 0;
+    virtual bool DoIsFinished() const = 0;
     virtual std::shared_ptr<IDataSource> DoExtractNext(const std::shared_ptr<TSpecialReadContext>& context) = 0;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
     virtual TString DoDebugString() const = 0;
@@ -36,7 +36,7 @@ public:
     void Abort() {
         return DoAbort();
     }
-    bool IsFinished() {
+    bool IsFinished() const {
         return DoIsFinished();
     }
     std::shared_ptr<IDataSource> ExtractNext(const std::shared_ptr<TSpecialReadContext>& context) {

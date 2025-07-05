@@ -7,7 +7,6 @@ namespace NKikimr::NOlap::NReader::NSimple {
 TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
-    ui32 sourceIdx = 0;
     Scanner = std::make_shared<TScanHead>(SpecialReadContext->GetReadMetadata()->ExtractSelectInfo(), SpecialReadContext);
 }
 

@@ -9,7 +9,7 @@ namespace NKikimr::NOlap {
 class TPortionInfo;
 }
 
-namespace NKikimr::NOlap::NReader::NCommon {
+namespace NKikimr::NOlap::NReader::NSimple {
 
 class TSourceConstructor: public ICursorEntity {
 private:
@@ -51,14 +51,7 @@ public:
         return item.Start < Start;
     }
 
-    std::shared_ptr<TPortionDataSource> Construct(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const {
-        auto result = std::make_shared<TPortionDataSource>(sourceIdx, Portion, context);
-        if (IsStartedByCursorFlag) {
-            result->SetIsStartedByCursor();
-        }
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, result->AddEvent("s"));
-        return result;
-    }
+    std::shared_ptr<TPortionDataSource> Construct(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const;
 };
 
 class TNotSortedPortionsSources: public NCommon::ISourcesConstructor {
@@ -71,16 +64,16 @@ private:
     }
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {
-        while (sources.size()) {
+        while (Sources.size()) {
             bool usage = false;
-            if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(sources.front(), usage)) {
-                sources.pop_front();
+            if (!cursor->CheckEntityIsBorder(Sources.front(), usage)) {
+                Sources.pop_front();
                 continue;
             }
             if (usage) {
-                sources.front().SetIsStartedByCursor();
+                Sources.front().SetIsStartedByCursor();
             } else {
-                sources.pop_front();
+                Sources.pop_front();
             }
             break;
         }
@@ -92,11 +85,11 @@ private:
     virtual void DoAbort() override {
         Sources.clear();
     }
-    virtual void DoIsFinished() override {
+    virtual bool DoIsFinished() const override {
         return Sources.empty();
     }
-    virtual std::shared_ptr<IDataSource> DoExtractNext(const std::shared_ptr<TSpecialReadContext>& context) override {
-        return Sources.front().Construct(SourceIdx++, context);
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
+        return Sources.front().Construct(SourceIdx++, static_pointer_cast<TSpecialReadContext>(context));
     }
 
 public:
@@ -122,14 +115,15 @@ private:
     virtual void DoAbort() override {
         HeapSources.clear();
     }
-    virtual void DoIsFinished() override {
+    virtual bool DoIsFinished() const override {
         return HeapSources.empty();
     }
-    virtual std::shared_ptr<IDataSource> DoExtractNext(const std::shared_ptr<TSpecialReadContext>& context) override {
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
         AFL_VERIFY(HeapSources.size());
         std::pop_heap(HeapSources.begin(), HeapSources.end());
-        auto result = NextSource ? NextSource : HeapSources.back().Construct(SourceIdx++, Context);
+        auto result = HeapSources.back().Construct(SourceIdx++, static_pointer_cast<TSpecialReadContext>(context));
         HeapSources.pop_back();
+        return result;
     }
 
 public:

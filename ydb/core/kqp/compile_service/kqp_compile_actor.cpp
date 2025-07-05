@@ -654,6 +654,8 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
     kqpConfig.EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
     kqpConfig.EnableSpillingInHashJoinShuffleConnections = serviceConfig.GetEnableSpillingInHashJoinShuffleConnections();
+    kqpConfig.EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
+    kqpConfig.EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));

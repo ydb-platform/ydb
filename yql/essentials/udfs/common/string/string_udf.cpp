@@ -151,18 +151,16 @@ namespace {
         }                                                              \
     }
 
-#define STRING_TWO_ARGS_UDF_DEPRECATED_2025_02(udfName, function)        \
-    SIMPLE_STRICT_UDF_OPTIONS(T##udfName, bool(TOptional<char*>, char*), \
-        builder.SetMaxLangVer(NYql::MakeLangVersion(2025, 1)))           \
-    {                                                                    \
-        Y_UNUSED(valueBuilder);                                          \
-        if (args[0]) {                                                   \
-            const TString haystack(args[0].AsStringRef());               \
-            const TString needle(args[1].AsStringRef());                 \
-            return TUnboxedValuePod(function(haystack, needle));         \
-        } else {                                                         \
-            return TUnboxedValuePod(false);                              \
-        }                                                                \
+#define STRING_TWO_ARGS_UDF(udfName, function)                          \
+    SIMPLE_STRICT_UDF(T##udfName, bool(TOptional<char*>, char*)) {      \
+        Y_UNUSED(valueBuilder);                                         \
+        if (args[0]) {                                                  \
+            const TString haystack(args[0].AsStringRef());              \
+            const TString needle(args[1].AsStringRef());                \
+            return TUnboxedValuePod(function(haystack, needle));        \
+        } else {                                                        \
+            return TUnboxedValuePod(false);                             \
+        }                                                               \
     }
 
 #define STRING_ASCII_CMP_IGNORE_CASE_UDF(udfName, function)                    \
@@ -193,9 +191,8 @@ namespace {
         }                                                                      \
     };                                                                         \
                                                                                \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(T##udfName,                          \
-        bool(TOptional<char*>, char*),                                         \
-        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))                 \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName,                                  \
+        bool(TOptional<char*>, char*))                            \
     {                                                                          \
         Y_UNUSED(valueBuilder);                                                \
         return udfName##Impl(args);                                            \
@@ -212,7 +209,7 @@ namespace {
                                                                                \
     END_SIMPLE_ARROW_UDF(T_yql_##udfName, T##udfName##KernelExec::Do)
 
-#define IS_ASCII_UDF(function)                                                          \
+#define IS_ASCII_UDF(function)                                                           \
     BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, bool(TOptional<char*>)) {                \
         Y_UNUSED(valueBuilder);                                                         \
         if (args[0]) {                                                                  \
@@ -409,9 +406,9 @@ namespace {
     XX(HasSuffix, EndsWith)
 
 // NOTE: The functions below are marked as deprecated, so block implementation
-// is not required for them. Hence, STRING_TWO_ARGS_UDF_DEPRECATED_2025_02
-// provides only the scalar one at the moment.
-#define STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(XX) \
+// is not required for them. Hence, STRING_TWO_ARGS_UDF provides only the
+// scalar one at the moment.
+#define STRING_TWO_ARGS_UDF_MAP(XX)                    \
     XX(StartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \
     XX(EndsWithIgnoreCase, AsciiHasSuffixIgnoreCase)   \
     XX(HasPrefixIgnoreCase, AsciiHasPrefixIgnoreCase)  \
@@ -426,6 +423,7 @@ namespace {
 // is not required for them. Hence, STROKA_UDF provides only the scalar one at
 // the moment.
 #define STROKA_UDF_MAP(XX) \
+    XX(Reverse, ReverseInPlace)
 
 #define IS_ASCII_UDF_MAP(XX) \
     XX(IsAscii)              \
@@ -541,8 +539,7 @@ namespace {
         return TUnboxedValuePod(found != haystack.cend());
     }
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(TAsciiContainsIgnoreCase, bool(TOptional<char*>, char*),
-        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TAsciiContainsIgnoreCase, bool(TOptional<char*>, char*))
     {
         Y_UNUSED(valueBuilder);
         return AsciiContainsIgnoreCaseImpl(args);
@@ -990,7 +987,7 @@ namespace {
     STROKA_CASE_UDF_MAP(STROKA_CASE_UDF)
     STROKA_ASCII_CASE_UDF_MAP(STROKA_ASCII_CASE_UDF)
     STROKA_FIND_UDF_MAP(STROKA_FIND_UDF)
-    STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(STRING_TWO_ARGS_UDF_DEPRECATED_2025_02)
+    STRING_TWO_ARGS_UDF_MAP(STRING_TWO_ARGS_UDF)
     STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_ASCII_CMP_IGNORE_CASE_UDF)
     IS_ASCII_UDF_MAP(IS_ASCII_UDF)
 
@@ -1007,8 +1004,8 @@ namespace {
         STROKA_CASE_UDF_MAP(STRING_REGISTER_UDF)
         STROKA_ASCII_CASE_UDF_MAP(STRING_REGISTER_UDF)
         STROKA_FIND_UDF_MAP(STRING_REGISTER_UDF)
-        STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(STRING_REGISTER_UDF)
-        STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_TWO_ARGS_UDF_MAP(STRING_REGISTER_UDF)
+        // STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_REGISTER_UDF) not going to be expoesed until 2025.2
         STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_OPT_REGISTER_UDF)
         IS_ASCII_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_PAD_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
@@ -1023,7 +1020,7 @@ namespace {
         TRemoveFirst,
         TRemoveLast,
         TContains,
-        TAsciiContainsIgnoreCase,
+        //TAsciiContainsIgnoreCase, not going to be expoesed until 2025.2
         T_yql_AsciiContainsIgnoreCase,
         TFind,
         TReverseFind,

@@ -1,0 +1,50 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:6:13: Error: At function: Apply, At function: Udf, At String.AsciiContainsIgnoreCase
+            	    String::AsciiContainsIgnoreCase(value, "AS") AS iccontains,
+	            ^
+                <tmp_path>/program.sql:<main>:6:13: Error: Failed to find UDF function: String.AsciiContainsIgnoreCase, reason: Error: Module: String, function: AsciiContainsIgnoreCase, error: Unknown function: AsciiContainsIgnoreCase
+                	    String::AsciiContainsIgnoreCase(value, "AS") AS iccontains,
+	            ^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:8:13: Error: At function: Apply, At function: Udf, At String.AsciiContainsIgnoreCase
+            	    String::AsciiContainsIgnoreCase(value, "") AS icempty,
+	            ^
+                <tmp_path>/program.sql:<main>:8:13: Error: Failed to find UDF function: String.AsciiContainsIgnoreCase, reason: Error: Module: String, function: AsciiContainsIgnoreCase, error: Unknown function: AsciiContainsIgnoreCase
+                	    String::AsciiContainsIgnoreCase(value, "") AS icempty,
+	            ^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:10:13: Error: At function: Apply, At function: Udf, At String.AsciiStartsWithIgnoreCase
+            	    String::AsciiStartsWithIgnoreCase(value, "AS") AS icstarts,
+	            ^
+                <tmp_path>/program.sql:<main>:10:13: Error: Failed to find UDF function: String.AsciiStartsWithIgnoreCase, reason: Error: Module: String, function: AsciiStartsWithIgnoreCase, error: Unknown function: AsciiStartsWithIgnoreCase
+                	    String::AsciiStartsWithIgnoreCase(value, "AS") AS icstarts,
+	            ^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:12:13: Error: At function: Apply, At function: Udf, At String.AsciiEndsWithIgnoreCase
+            	    String::AsciiEndsWithIgnoreCase(value, "AS") AS icends,
+	            ^
+                <tmp_path>/program.sql:<main>:12:13: Error: Failed to find UDF function: String.AsciiEndsWithIgnoreCase, reason: Error: Module: String, function: AsciiEndsWithIgnoreCase, error: Unknown function: AsciiEndsWithIgnoreCase
+                	    String::AsciiEndsWithIgnoreCase(value, "AS") AS icends,
+	            ^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:14:13: Error: At function: Apply, At function: Udf, At String.AsciiEqualsIgnoreCase
+            	    String::AsciiEqualsIgnoreCase(value, "FDSA") AS icequals,
+	            ^
+                <tmp_path>/program.sql:<main>:14:13: Error: Failed to find UDF function: String.AsciiEqualsIgnoreCase, reason: Error: Module: String, function: AsciiEqualsIgnoreCase, error: Unknown function: AsciiEqualsIgnoreCase
+                	    String::AsciiEqualsIgnoreCase(value, "FDSA") AS icequals,
+	            ^

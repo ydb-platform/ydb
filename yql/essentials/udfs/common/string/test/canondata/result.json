@@ -6,12 +6,7 @@
     ],
     "test.test[AsciiCmpIgnoreCase]": [
         {
-            "uri": "file://test.test_AsciiCmpIgnoreCase_/results.txt"
-        }
-    ],
-    "test.test[AsciiCmpIgnoreCase_2025_02]": [
-        {
-            "uri": "file://test.test_AsciiCmpIgnoreCase_2025_02_/extracted"
+            "uri": "file://test.test_AsciiCmpIgnoreCase_/extracted"
         }
     ],
     "test.test[Base32Decode]": [
@@ -27,11 +22,6 @@
     "test.test[BlockAsciiChecks]": [
         {
             "uri": "file://test.test_BlockAsciiChecks_/results.txt"
-        }
-    ],
-    "test.test[BlockAsciiCmpIgnoreCase]": [
-        {
-            "uri": "file://test.test_BlockAsciiCmpIgnoreCase_/results.txt"
         }
     ],
     "test.test[BlockFind]": [

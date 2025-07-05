@@ -170,7 +170,8 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
             std::optional<TString> mainConfig,
             std::optional<TString> storageConfig,
             std::optional<bool> switchDedicatedStorageSection,
-            bool dedicatedConfigMode) {
+            bool dedicatedConfigMode,
+            bool expectError = false) {
 
         std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
         stub = Ydb::Config::V1::ConfigService::NewStub(channel);
@@ -211,7 +212,11 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         grpc::ClientContext replaceConfigCtx;
         AdjustCtxForDB(replaceConfigCtx);
         stub->ReplaceConfig(&replaceConfigCtx, request, &response);
-        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        if (expectError) {
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::INTERNAL_ERROR);
+        } else {
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        }
         Cerr << "response: " << response.operation().result().DebugString() << Endl;
         response.operation().result().UnpackTo(&result);
     }
@@ -305,6 +310,31 @@ config:
         UNIT_ASSERT_VALUES_EQUAL(yamlConfig, *yamlConfigFetched);
     }
 
+    Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {
+        TKikimrWithGrpcAndRootSchema server;
+        TString yamlConfig = R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: SectorMap:1:64
+      type: SSD
+      expected_slot_count: 9
+    - path: SectorMap:1:64
+      type: SSD
+      expected_slot_count: 9
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)";
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false, true);
+        std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
+    }
     Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;

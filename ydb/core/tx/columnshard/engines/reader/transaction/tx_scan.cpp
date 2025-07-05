@@ -118,6 +118,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 return SendError("cannot build scanner cursor", cursorConclusion.GetErrorMessage(), ctx);
             }
             read.SetScanCursor(cursorConclusion.DetachResult());
+        } else {
+            read.SetScanCursor(nullptr);
         }
         read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
         read.StatsMode = request.GetStatsMode();

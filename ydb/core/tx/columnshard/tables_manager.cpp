@@ -543,7 +543,12 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
         AFL_VERIFY(internalPathId);
         AFL_VERIFY(extInternalPathId == internalPathId->GetRawValue());
     }
-    if (internalPathId) {
+    if (!internalPathId) {
+        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
+    } else if (tableName.find(".sys/") != TString::npos) {
+        return std::make_shared<NOlap::TSysViewTableAccessor>(
+            tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+    } else {
         if (!HasTable(*internalPathId)) {
             return std::make_shared<NOlap::TAbsentTableAccessor>(
                 tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
@@ -551,11 +556,6 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
             return std::make_shared<NOlap::TUserTableAccessor>(
                 tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
         }
-    } else if (tableName.find(".sys/") != TString::npos) {
-        return std::make_shared<NOlap::TSysViewTableAccessor>(
-            tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
-    } else {
-        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
     }
 }
 

@@ -10,4 +10,17 @@ std::shared_ptr<NKikimr::NOlap::NReader::NCommon::IDataSource> NKikimr::NOlap::N
     return result;
 }
 
+
+std::vector<TInsertWriteId> TPortionSources::GetUncommittedWriteIds() const {
+    std::vector<TInsertWriteId> result;
+    for (auto&& i : Sources) {
+        if (!i->IsCommitted()) {
+            AFL_VERIFY(i->GetPortionType() == EPortionType::Written);
+            auto* written = static_cast<const TWrittenPortionInfo*>(i.get());
+            result.emplace_back(written->GetInsertWriteId());
+        }
+    }
+    return result;
+}
+
 }   // namespace NKikimr::NOlap::NReader::NPlain

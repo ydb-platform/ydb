@@ -48,7 +48,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         read.SetScanIdentifier(request.TaskIdentifier);
         {
             auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor("internal_request",
-                request.GetPathId().GetInternalPathId().GetRawValue(), request.GetPathId().GetSchemeShardLocalPathId().GetRawValue());
+                request.GetPathId().GetSchemeShardLocalPathId().GetRawValue(), request.GetPathId().GetInternalPathId().GetRawValue());
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
@@ -60,6 +60,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
+        read.SetScanCursor(nullptr);
         if (request.RangesFilter) {
             read.PKRangesFilter = request.RangesFilter;
         }

@@ -2,6 +2,7 @@
 
 #include "reader/common/description.h"
 #include "reader/common_reader/constructor/read_metadata.h"
+#include "reader/plain_reader/iterator/constructors.h"
 #include "reader/simple_reader/iterator/collections/constructors.h"
 
 #include <ydb/library/actors/core/log.h>

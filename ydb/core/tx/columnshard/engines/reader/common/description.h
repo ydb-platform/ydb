@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 #include <ydb/core/tx/program/program.h>
 

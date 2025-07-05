@@ -133,8 +133,8 @@ private:
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
-    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
+    virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
     bool NeedFullAnswerFlag = true;

@@ -18,6 +18,56 @@ enum class EDeduplicationPolicy {
     PREVENT_DUPLICATES,
 };
 
+class ITableMetadataAccessor {
+private:
+    YDB_READONLY_DEF(TString, TablePath);
+
+public:
+    ITableMetadataAccessor(const TString& tablePath)
+        : TablePath(tablePath) {
+        AFL_VERIFY(!!TablePath);
+    }
+
+    TString GetTableName() const {
+        return TFsPath(TablePath).Fix().GetName();
+    }
+};
+
+class TSysViewTableAccessor: public ITableMetadataAccessor {
+private:
+    using TBase = ITableMetadataAccessor;
+
+public:
+    TSysViewTableAccessor(const TString& tableName)
+        : TBase(tableName) {
+        AFL_VERIFY(GetTablePath().find(".sys") != TString::npos);
+    }
+};
+
+class TUserTableAccessor: public ITableMetadataAccessor {
+private:
+    using TBase = ITableMetadataAccessor;
+    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
+
+public:
+    TSysViewTableAccessor(const TString& tableName, const TUnifiedPathId& pathId)
+        : TBase(tableName)
+        , PathId(pathId) {
+        AFL_VERIFY(GetTablePath().find(".sys") == TString::npos);
+    }
+};
+
+class TAbsentTableAccessor: public ITableMetadataAccessor {
+private:
+    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
+
+public:
+    TAbsentTableAccessor(const TString& tableName, const TUnifiedPathId& pathId)
+        : TBase(tableName)
+        , PathId(pathId) {
+    }
+};
+
 // Describes read/scan request
 struct TReadDescription {
 private:
@@ -32,8 +82,7 @@ public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
-    NColumnShard::TUnifiedPathId PathId;
-    TString TableName;
+    std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     bool ReadNothing = false;
     // Less[OrEqual], Greater[OrEqual] or both
     // There's complex logic in NKikimr::TTableRange comparison that could be emulated only with separated compare

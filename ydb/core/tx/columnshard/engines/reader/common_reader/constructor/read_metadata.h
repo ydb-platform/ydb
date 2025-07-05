@@ -12,6 +12,39 @@ class TLockSharingInfo;
 }
 
 namespace NKikimr::NOlap::NReader::NCommon {
+class TSpecialReadContext;
+class ISourcesConstructor {
+private:
+    virtual void DoClear() = 0;
+    virtual void DoAbort() = 0;
+    virtual void DoIsFinished() = 0;
+    virtual std::shared_ptr<IDataSource> DoExtractNext(const std::shared_ptr<TSpecialReadContext>& context) = 0;
+    virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
+    bool InitCursorFlag = false;
+
+public:
+    void Clear() {
+        return DoClear();
+    }
+    void Abort() {
+        return DoAbort();
+    }
+    void IsFinished() {
+        return DoIsFinished();
+    }
+    std::shared_ptr<IDataSource> ExtractNext(const std::shared_ptr<TSpecialReadContext>& context) {
+        AFL_VERIFY(!IsFinished());
+        AFL_VERIFY(InitCursorFlag);
+        return DoExtractNext(context);
+    }
+    void InitCursor(const std::shared_ptr<IScanCursor>& cursor) {
+        AFL_VERIFY(!InitCursorFlag);
+        InitCursorFlag = true;
+        if (cursor && cursor->IsInitialized()) {
+            return DoInitCursor(cursor);
+        }
+    }
+};
 
 class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
@@ -55,8 +88,20 @@ private:
     virtual TConclusionStatus DoInitCustom(
         const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) = 0;
 
+    std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
+
+    void SetSelectInfo(std::unique_ptr<ISourcesConstructor>&& value) {
+        AFL_VERIFY(!SourcesConstructor);
+        SourcesConstructor = std::move(value);
+    }
+
+    std::unique_ptr<ISourcesConstructor> ExtractSelectInfo() {
+        AFL_VERIFY(!!SourcesConstructor);
+        return std::move(SourcesConstructor);
+    }
 
     bool GetBrokenWithCommitted() const {
         return BrokenWithCommitted->Val();
@@ -114,7 +159,6 @@ public:
         return PathId;
     }
 
-    std::shared_ptr<TSelectInfo> SelectInfo;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<TReadStats> ReadStats;
 
@@ -131,11 +175,6 @@ public:
     std::set<ui32> GetPKColumnIds() const;
 
     virtual bool Empty() const = 0;
-
-    size_t NumIndexedBlobs() const {
-        Y_ABORT_UNLESS(SelectInfo);
-        return SelectInfo->Stats().Blobs;
-    }
 
     virtual TString DebugString() const override {
         TStringBuilder result;

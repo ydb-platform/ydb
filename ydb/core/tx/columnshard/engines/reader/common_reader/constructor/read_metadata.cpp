@@ -18,15 +18,7 @@ TConclusionStatus TReadMetadata::Init(
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
     }
 
-    if (readDescription.ReadNothing) {
-        SelectInfo = std::make_shared<TSelectInfo>();
-    } else {
-        AFL_VERIFY(readDescription.PKRangesFilter);
-        SelectInfo =
-            Index->Select(readDescription.PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, !!LockId);
-
-        SelectInfo = dataAccessor.Select(readDescription, !!LockId);
-    }
+    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(Index, readDescription, !!LockId);
     if (LockId) {
         for (auto&& i : SelectInfo->Portions) {
             if (!i->IsCommitted()) {

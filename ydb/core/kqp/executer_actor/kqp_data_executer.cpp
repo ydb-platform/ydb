@@ -164,10 +164,9 @@ public:
             ReadOnlyTx &&
             !ImmediateTx &&
             !HasPersistentChannels &&
+            !HasOlapTable &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
-
-        YQL_ENSURE(!ReadOnlyTx || !forceSnapshot || !HasOlapTable);
 
         return forceSnapshot;
     }

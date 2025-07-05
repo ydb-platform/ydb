@@ -15,7 +15,7 @@ class TSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TCompareKeyForScanSequence Start;
     YDB_READONLY(ui32, SourceId, 0);
-    std::shared_ptr<TPortionInfo> Portion;
+    YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
 
@@ -94,6 +94,19 @@ private:
 
 public:
     TNotSortedPortionsSources() = default;
+
+    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override {
+        std::vector<TInsertWriteId> result;
+        for (auto&& i : Sources) {
+            if (!i.GetPortion()->IsCommitted()) {
+                AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
+                auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
+                result.emplace_back(written->GetInsertWriteId());
+            }
+        }
+        return result;
+    }
+
     TNotSortedPortionsSources(std::deque<TSourceConstructor>&& sources)
         : Sources(std::move(sources)) {
     }
@@ -109,6 +122,18 @@ private:
     }
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override;
+
+    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override {
+        std::vector<TInsertWriteId> result;
+        for (auto&& i : HeapSources) {
+            if (!i.GetPortion()->IsCommitted()) {
+                AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
+                auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
+                result.emplace_back(written->GetInsertWriteId());
+            }
+        }
+        return result;
+    }
 
     virtual void DoClear() override {
         HeapSources.clear();

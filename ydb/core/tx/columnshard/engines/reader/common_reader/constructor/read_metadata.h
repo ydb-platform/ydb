@@ -27,6 +27,10 @@ private:
 public:
     virtual ~ISourcesConstructor() = default;
 
+    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const {
+        return std::vector<TInsertWriteId>();
+    }
+
     TString DebugString() const {
         return DoDebugString();
     }

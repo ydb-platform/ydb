@@ -1,9 +1,10 @@
 #pragma once
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
 
@@ -17,19 +18,23 @@ class ISourcesConstructor {
 private:
     virtual void DoClear() = 0;
     virtual void DoAbort() = 0;
-    virtual void DoIsFinished() = 0;
+    virtual bool DoIsFinished() = 0;
     virtual std::shared_ptr<IDataSource> DoExtractNext(const std::shared_ptr<TSpecialReadContext>& context) = 0;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
+    virtual TString DoDebugString() const = 0;
     bool InitCursorFlag = false;
 
 public:
+    TString DebugString() const {
+        return DoDebugString();
+    }
     void Clear() {
         return DoClear();
     }
     void Abort() {
         return DoAbort();
     }
-    void IsFinished() {
+    bool IsFinished() {
         return DoIsFinished();
     }
     std::shared_ptr<IDataSource> ExtractNext(const std::shared_ptr<TSpecialReadContext>& context) {
@@ -179,11 +184,10 @@ public:
     virtual TString DebugString() const override {
         TStringBuilder result;
 
-        result << TBase::DebugString() << ";" << " index blobs: " << NumIndexedBlobs() << " committed blobs: "
-               << " at snapshot: " << GetRequestSnapshot().DebugString();
+        result << TBase::DebugString() << " at snapshot: " << GetRequestSnapshot().DebugString();
 
-        if (SelectInfo) {
-            result << ", " << SelectInfo->DebugString();
+        if (SourcesConstructor) {
+            result << ", " << SourcesConstructor->DebugString();
         }
         return result;
     }

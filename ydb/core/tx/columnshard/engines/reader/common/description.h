@@ -20,7 +20,7 @@ enum class EDeduplicationPolicy {
 };
 
 // Describes read/scan request
-struct TReadDescription {
+class TReadDescription {
 private:
     TSnapshot Snapshot;
     TProgramContainer Program;

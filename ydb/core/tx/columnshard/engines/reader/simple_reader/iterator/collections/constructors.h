@@ -10,6 +10,10 @@ private:
     std::deque<TSourceConstructor> Sources;
     ui32 SourceIdx = 0;
 
+    virtual TString DoDebugString() const override {
+        return "{" + ::ToString(Sources.size()) + "}";
+    }
+
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {
         while (sources.size()) {
             bool usage = false;
@@ -49,6 +53,10 @@ class TSortedPortionsSources: public ISourcesConstructor {
 private:
     std::deque<TSourceConstructor> HeapSources;
     ui32 SourceIdx = 0;
+
+    virtual TString DoDebugString() const override {
+        return "{" + ::ToString(HeapSources.size()) + "}";
+    }
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override;
 

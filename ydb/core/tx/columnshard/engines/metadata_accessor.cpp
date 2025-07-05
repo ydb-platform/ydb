@@ -1,5 +1,8 @@
 #include "metadata_accessor.h"
 
+#include "reader/common/description.h"
+#include "reader/common_reader/constructor/read_metadata.h"
+
 #include <ydb/library/actors/core/log.h>
 
 #include <util/folder/path.h>
@@ -26,7 +29,7 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
 }
 
 std::unique_ptr<NKikimr::NOlap::NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
-    const IColumnEngine& engine, const TReadDescription& readDescription, const bool withUncommitted) {
+    const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) {
     AFL_VERIFY(readDescription.PKRangesFilter);
     std::vector<std::shared_ptr<TPortionInfo>> portions =
         Index->Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
@@ -40,6 +43,11 @@ std::unique_ptr<NKikimr::NOlap::NReader::NCommon::ISourcesConstructor> TUserTabl
     } else {
         return std::make_unique<TNotSortedPortionsSources>(std::move(sources));
     }
+}
+
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(
+    const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const {
+    return std::make_unique<TNotSortedPortionsSources>({});
 }
 
 }   // namespace NKikimr::NOlap

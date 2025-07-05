@@ -541,7 +541,8 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
                 tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
         }
     } else if (tableName.find(".sys/") != TString::npos) {
-        return std::make_shared<NOlap::TSysViewTableAccessor>(tableName);
+        return std::make_shared<NOlap::TSysViewTableAccessor>(
+            tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
     } else {
         return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
     }

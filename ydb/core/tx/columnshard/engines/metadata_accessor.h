@@ -1,5 +1,8 @@
 #pragma once
+#include "scheme/versions/versioned_index.h"
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -34,9 +37,14 @@ public:
 class TSysViewTableAccessor: public ITableMetadataAccessor {
 private:
     using TBase = ITableMetadataAccessor;
+    const NColumnShard::TUnifiedPathId PathId;
+
+    virtual NColumnShard::TUnifiedPathId GetPathId() const override {
+        return PathId;
+    }
 
 public:
-    TSysViewTableAccessor(const TString& tableName);
+    TSysViewTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId);
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(

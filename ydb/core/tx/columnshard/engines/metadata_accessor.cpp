@@ -18,8 +18,9 @@ TString ITableMetadataAccessor::GetTableName() const {
     return TFsPath(TablePath).Fix().GetName();
 }
 
-TSysViewTableAccessor::TSysViewTableAccessor(const TString& tableName)
-    : TBase(tableName) {
+TSysViewTableAccessor::TSysViewTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
+    : TBase(tableName)
+    , PathId(pathId) {
     AFL_VERIFY(GetTablePath().find(".sys") != TString::npos);
 }
 

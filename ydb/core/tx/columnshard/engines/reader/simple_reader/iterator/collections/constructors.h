@@ -135,7 +135,6 @@ private:
 public:
     TSortedPortionsSources(std::deque<TSourceConstructor>&& sources)
         : HeapSources(std::move(sources)) {
-        HeapSources = std::move(sources);
         std::make_heap(HeapSources.begin(), HeapSources.end());
     }
 };

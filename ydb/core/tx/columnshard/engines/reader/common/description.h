@@ -34,7 +34,6 @@ public:
     ui64 TxId = 0;
     std::optional<ui64> LockId;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
-    bool ReadNothing = false;
     // Less[OrEqual], Greater[OrEqual] or both
     // There's complex logic in NKikimr::TTableRange comparison that could be emulated only with separated compare
     // operations with potentially different columns. We have to remove columns to support -Inf (Null) and +Inf.

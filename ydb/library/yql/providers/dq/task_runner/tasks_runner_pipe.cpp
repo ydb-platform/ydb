@@ -1012,10 +1012,13 @@ public:
     }
 
     // <| producer methods
-    [[nodiscard]]
-    bool IsFull() const override {
+    EDqFillLevel UpdateFillLevel() override {
         ythrow yexception() << "unimplemented";
     };
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
+        Y_ABORT("Unimplemented");
+    }
 
     // can throw TDqChannelStorageException
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -1249,7 +1252,11 @@ public:
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsFull() const override {
+    EDqFillLevel UpdateFillLevel() override {
+        Y_ABORT("Unimplemented");
+    }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
         Y_ABORT("Unimplemented");
     }
 
@@ -1673,6 +1680,10 @@ public:
     }
 
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
+    }
+
+    TString GetOutputDebugString() override {
+        return "";
     }
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,

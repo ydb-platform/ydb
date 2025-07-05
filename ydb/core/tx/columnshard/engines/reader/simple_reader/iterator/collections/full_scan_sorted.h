@@ -10,7 +10,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSortedFullScanCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
-    std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
     TPositiveControlInteger InFlightCount;
     virtual void DoClear() override {
         SourcesConstructor->Clear();
@@ -41,7 +41,8 @@ private:
     }
 
 public:
-    TSortedFullScanCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<ISourcesConstructor>&& sourcesConstructor)
+    TSortedFullScanCollection(
+        const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
         : TBase(context)
         , SourcesConstructor(std::move(sourcesConstructor)) {
     }

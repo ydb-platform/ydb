@@ -8,9 +8,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
     ui32 sourceIdx = 0;
-    std::deque<TSourceConstructor> sources;
-    const auto& portions = GetReadMetadata()->SelectInfo->Portions;
-    Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
+    Scanner = std::make_shared<TScanHead>(SpecialReadContext->GetReadMetadata()->ExtractSelectInfo(), SpecialReadContext);
 }
 
 std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {

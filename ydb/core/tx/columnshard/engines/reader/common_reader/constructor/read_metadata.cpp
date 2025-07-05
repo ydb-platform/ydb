@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_finished.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 

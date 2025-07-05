@@ -18,7 +18,7 @@ TConclusionStatus TScanHead::Start() {
     return TConclusionStatus::Success();
 }
 
-TScanHead::TScanHead(std::unique_ptr<ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
+TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     if (Context->GetReadMetadata()->IsSorted()) {
         if (Context->GetReadMetadata()->HasLimit()) {

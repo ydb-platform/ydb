@@ -4,7 +4,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
 
@@ -14,6 +13,7 @@ class TLockSharingInfo;
 
 namespace NKikimr::NOlap::NReader::NCommon {
 class TSpecialReadContext;
+class IDataSource;
 class ISourcesConstructor {
 private:
     virtual void DoClear() = 0;
@@ -95,7 +95,7 @@ private:
     virtual TConclusionStatus DoInitCustom(
         const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) = 0;
 
-    std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+    mutable std::unique_ptr<ISourcesConstructor> SourcesConstructor;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
@@ -105,7 +105,7 @@ public:
         SourcesConstructor = std::move(value);
     }
 
-    std::unique_ptr<ISourcesConstructor> ExtractSelectInfo() {
+    std::unique_ptr<ISourcesConstructor> ExtractSelectInfo() const {
         AFL_VERIFY(!!SourcesConstructor);
         return std::move(SourcesConstructor);
     }

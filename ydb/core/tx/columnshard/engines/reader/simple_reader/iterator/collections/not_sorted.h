@@ -10,7 +10,7 @@ private:
     using TBase = ISourcesCollection;
     std::optional<ui32> Limit;
     ui32 InFlightLimit = 1;
-    std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
     TPositiveControlInteger InFlightCount;
     ui32 FetchedCount = 0;
     ui32 SourceIdx = 0;
@@ -50,7 +50,7 @@ private:
     }
 
 public:
-    TNotSortedCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<ISourcesConstructor>&& sourcesConstructor,
+    TNotSortedCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor,
         const std::optional<ui32> limit)
         : TBase(context)
         , Limit(limit)

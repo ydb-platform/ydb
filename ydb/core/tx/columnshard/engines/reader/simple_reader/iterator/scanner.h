@@ -66,7 +66,7 @@ public:
 
     TConclusionStatus Start();
 
-    TScanHead(std::unique_ptr<ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context);
+    TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context);
 
     [[nodiscard]] TConclusion<bool> BuildNextInterval();
 };

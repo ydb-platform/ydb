@@ -431,9 +431,9 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     }
 }
 
-std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
+std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
     TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const {
-    auto out = std::make_shared<TSelectInfo>();
+    std::vector<std::shared_ptr<TPortionInfo>> out;
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
     if (!spg) {
         return out;
@@ -449,7 +449,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
         if (skipPortion) {
             continue;
         }
-        out->Portions.emplace_back(portionInfo);
+        out.emplace_back(portionInfo);
     }
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
         if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
@@ -461,7 +461,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
         if (skipPortion) {
             continue;
         }
-        out->Portions.emplace_back(portionInfo);
+        out.emplace_back(portionInfo);
     }
 
     return out;

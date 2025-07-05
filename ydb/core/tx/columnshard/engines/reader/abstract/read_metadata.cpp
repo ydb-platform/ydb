@@ -13,8 +13,7 @@ std::shared_ptr<TSelectInfo> TDataStorageAccessor::Select(const TReadDescription
         return std::make_shared<TSelectInfo>();
     }
     AFL_VERIFY(readDescription.PKRangesFilter);
-    return Index->Select(readDescription.PathId.InternalPathId, readDescription.GetSnapshot(),
-         *readDescription.PKRangesFilter, withUncommitted);
+    return Index->Select(readDescription.PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
 }
 
 ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInfo& portion) const {

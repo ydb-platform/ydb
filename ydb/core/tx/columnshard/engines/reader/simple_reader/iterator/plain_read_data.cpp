@@ -28,7 +28,6 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
 
     auto& stats = GetReadMetadata()->ReadStats;
     stats->IndexPortions = GetReadMetadata()->SelectInfo->Portions.size();
-    stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
     stats->InsertedPortionsBytes = insertedPortionsBytes;
     stats->CompactedPortionsBytes = compactedPortionsBytes;

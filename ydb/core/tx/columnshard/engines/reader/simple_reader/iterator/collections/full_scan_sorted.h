@@ -8,29 +8,25 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSortedFullScanCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
-    std::deque<TSourceConstructor> HeapSources;
+    std::unique_ptr<ISourcesConstructor> SourcesConstructor;
     TPositiveControlInteger InFlightCount;
-    ui32 SourceIdx = 0;
     virtual void DoClear() override {
-        HeapSources.clear();
+        SourcesConstructor->Clear();
     }
     virtual bool DoHasData() const override {
-        return HeapSources.size();
+        return !SourcesConstructor->IsFinished();
     }
     virtual void DoAbort() override {
-        HeapSources.clear();
+        SourcesConstructor->Abort();
     }
     virtual bool DoIsFinished() const override {
-        return HeapSources.empty();
+        return SourcesConstructor->IsFinished();
     }
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(std::make_shared<NArrow::TSimpleRow>(source->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override {
-        AFL_VERIFY(HeapSources.size());
-        auto result = HeapSources.front().Construct(SourceIdx++, Context);
-        std::pop_heap(HeapSources.begin(), HeapSources.end());
-        HeapSources.pop_back();
+        auto result = SourcesConstructor->ExtractNext(Context);
         InFlightCount.Inc();
         return result;
     }
@@ -42,28 +38,10 @@ private:
     }
 
 public:
-    TSortedFullScanCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources,
-        const std::shared_ptr<IScanCursor>& cursor)
-        : TBase(context) {
-        HeapSources = std::move(sources);
-        std::make_heap(HeapSources.begin(), HeapSources.end());
-        if (cursor && cursor->IsInitialized()) {
-            while (HeapSources.size()) {
-                bool usage = false;
-                if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(HeapSources.front(), usage)) {
-                    std::pop_heap(HeapSources.begin(), HeapSources.end());
-                    HeapSources.pop_back();
-                    continue;
-                }
-                if (usage) {
-                    HeapSources.front().SetIsStartedByCursor();
-                } else {
-                    std::pop_heap(HeapSources.begin(), HeapSources.end());
-                    HeapSources.pop_back();
-                }
-                break;
-            }
-        }
+    TSortedFullScanCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<ISourcesConstructor>&& sourcesConstructor)
+        : TBase(context)
+        , SourcesConstructor(std::move(sourcesConstructor))
+    {
     }
 };
 

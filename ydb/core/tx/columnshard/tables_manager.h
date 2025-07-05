@@ -235,6 +235,23 @@ public:
         const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
         const ui64 tabletId);
 
+    TConclusion<std::shared_ptr<ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tableName, const ui64 externalPathId) {
+        const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(externalPathId);
+        const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
+        if (internalPathId) {
+            if (!HasTable(*internalPathId)) {
+                return std::make_shared<TAbsentTableAccessor>(
+                    tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+            } else {
+                return std::make_shared<TUserTableAccessor>(tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+            }
+        } else if (tableName.find(".sys/") != TString::npos) {
+            return std::make_shared<TSysViewTableAccessor>(tableName);
+        } else {
+            return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
+        }
+    }
+
     class TSchemaAddress {
     private:
         YDB_READONLY(ui32, PresetId, 0);

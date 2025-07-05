@@ -72,11 +72,15 @@ void TTxScan::Complete(const TActorContext& ctx) {
             read.LockId = request.GetLockTxId();
         }
 
-        const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
-        const auto& internalPathId = Self->TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
-        read.PathId = NColumnShard::TUnifiedPathId{ internalPathId ? *internalPathId : TInternalPathId{}, schemeShardLocalPathId };
-        read.ReadNothing = !Self->TablesManager.HasTable(read.PathId.InternalPathId);
-        read.TableName = table;
+        {
+            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath(), request.GetTableId());
+            if (accConclusion.IsFail()) {
+                return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
+                    AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
+            } else {
+                read.TableMetadataAccessor = accConclusion.DetachResult();
+            }
+        }
 
         const TString defaultReader = [&]() {
             const TString defGlobal =
@@ -93,7 +97,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
             }
         }();
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
-            auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
+            auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableMetadataAccessor->GetTablePath());
             if (!sysViewPolicy) {
                 auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(
                     request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader, context);

@@ -1,6 +1,6 @@
-#include "limit_sorted.h"
+#include "constructors.h"
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NCommon {
 
 void TSortedPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) {
     while (HeapSources.size()) {

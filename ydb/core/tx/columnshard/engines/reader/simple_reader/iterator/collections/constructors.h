@@ -95,17 +95,7 @@ private:
 public:
     TNotSortedPortionsSources() = default;
 
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override {
-        std::vector<TInsertWriteId> result;
-        for (auto&& i : Sources) {
-            if (!i.GetPortion()->IsCommitted()) {
-                AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
-                auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
-                result.emplace_back(written->GetInsertWriteId());
-            }
-        }
-        return result;
-    }
+    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
 
     TNotSortedPortionsSources(std::deque<TSourceConstructor>&& sources)
         : Sources(std::move(sources)) {
@@ -123,17 +113,7 @@ private:
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override;
 
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override {
-        std::vector<TInsertWriteId> result;
-        for (auto&& i : HeapSources) {
-            if (!i.GetPortion()->IsCommitted()) {
-                AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
-                auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
-                result.emplace_back(written->GetInsertWriteId());
-            }
-        }
-        return result;
-    }
+    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
 
     virtual void DoClear() override {
         HeapSources.clear();

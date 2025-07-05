@@ -1,7 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import glob
 import hashlib
+import io
 import os
 import re
 import shutil
@@ -11,6 +12,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+
 
 def create_cmakelists(zoneinfo_dir):
     tz_to_hash = {}
@@ -53,12 +55,16 @@ def create_cmakelists(zoneinfo_dir):
     with open('ya.make.resources', 'w') as f:
         print(yamake_template.format(resources), file=f)
 
-def get_latest_iana_version():
+
+def get_latest_version():
+    # Temporary here for the purposes of reimport
+    return "2024a"
     index_html = urllib.request.urlopen('http://www.iana.org/time-zones').read()
     version_match = re.search('<a href="[^"]*">tzdata(.*).tar.gz</a>', index_html.decode())
     if not version_match:
         raise Exception('Failed to determine the latest tzdata version')
     return version_match.group(1)
+
 
 def get_current_version():
     try:
@@ -67,48 +73,56 @@ def get_current_version():
     except:
         return 0
 
+
 def prepare_tzdata(version):
-    temp_dir = tempfile.mkdtemp()
+    temp_dir = "tmp"
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+    EXCLUDE = [
+        "iso3166.tab",
+        "zone.tab",
+        "zonenow.tab",
+    ]
+
     try:
-        for file_type in ('data', 'code'):
-            file_name = 'tz{}{}.tar.gz'.format(file_type, version)
-            full_url = 'http://www.iana.org/time-zones/repository/releases/{}'.format(file_name)
-            print('Downloading {}'.format(full_url))
+        for type in ('data', 'code'):
+            filename = f'tz{type}{version}.tar.gz'
+            url = f'http://www.iana.org/time-zones/repository/releases/{filename}'
+            print(f'Downloading {url}')
 
-            local_file_name = os.path.join(temp_dir, file_name)
-            with open(local_file_name, 'wb') as f:
-                f.write(urllib.request.urlopen(full_url).read())
-
-            print('Extracting {}'.format(local_file_name))
-            with tarfile.open(local_file_name) as f:
+            bytestream = io.BytesIO(urllib.request.urlopen(url).read())
+            print(f'Extracting {filename}')
+            with tarfile.open(fileobj=bytestream, mode="r:gz") as f:
                 f.extractall(path=temp_dir)
-
+        
         print('Converting tzdata to binary format')
-        subprocess.check_call(['make', '-s', '-C', temp_dir, 'TOPDIR={}'.format(temp_dir), 'install'])
+        subprocess.check_call(
+            ['make', "--silent", "TOPDIR=.", 'install'],
+            cwd=temp_dir,
+        )
+        
+        shutil.rmtree(f"{temp_dir}/usr/share/zoneinfo/etc")
+        for path in EXCLUDE:
+            os.remove(f"{temp_dir}/usr/share/zoneinfo/{path}")
+
+        # keep posixrules for now
+        shutil.copyfile(
+            "generated/58543f30ac34b6510b552b9b3e82b772",
+            f"{temp_dir}/usr/share/zoneinfo/posixrules",
+        )
 
         print('Preparing ya.make.resources')
-        zoneinfo_dir = os.path.join(temp_dir, 'usr', 'share', 'zoneinfo')
-        create_cmakelists(zoneinfo_dir)
+        create_cmakelists(f"{temp_dir}/usr/share/zoneinfo")
     finally:
         shutil.rmtree(temp_dir)
 
+
 def main():
-    current_version, latest_version = get_current_version(), get_latest_iana_version()
-    print('The current version of tzdata is {}'.format(current_version))
-    print('The latest version of tzdata on the IANA site is {}'.format(latest_version))
-    if current_version == latest_version:
-        print('You already have the latest version')
-        return
-    print('Updating from {} to {}'.format(current_version, latest_version))
-    prepare_tzdata(latest_version)
-
-    with open('VERSION', 'w') as f:
-        f.write(latest_version)
-
-    print('All good! Now make sure the tests pass, and run this:')
-    print('arc add VERSION update_tzdata.py ya.make.resources')
-    print('arc co -b tzdata.{}'.format(latest_version))
-    print('arc ci . -m "Updated tzdata from {} to {}"'.format(current_version, latest_version))
+    version_current = get_current_version()
+    version_latest = get_latest_version()
+    print(f'Updating from {version_current} to {version_latest}')
+    prepare_tzdata(version_latest)
 
 if __name__ == '__main__':
+    
     main()

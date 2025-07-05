@@ -25,6 +25,8 @@ private:
     bool InitCursorFlag = false;
 
 public:
+    virtual ~ISourcesConstructor() = default;
+
     TString DebugString() const {
         return DoDebugString();
     }
@@ -178,8 +180,6 @@ public:
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;
-
-    virtual bool Empty() const = 0;
 
     virtual TString DebugString() const override {
         TStringBuilder result;

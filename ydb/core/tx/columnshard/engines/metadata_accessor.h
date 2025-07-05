@@ -7,8 +7,11 @@ namespace NKikimr::NOlap::NReader {
 class TReadDescription;
 }
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap::NReader::NCommon {
 class ISourcesConstructor;
+}
+
+namespace NKikimr::NOlap {
 class IColumnEngine;
 class ITableMetadataAccessor {
 private:
@@ -19,7 +22,7 @@ public:
     virtual ~ITableMetadataAccessor() = default;
 
     TString GetTableName() const;
-    virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const = 0;
 };
 
@@ -29,7 +32,7 @@ private:
 
 public:
     TSysViewTableAccessor(const TString& tableName);
-    virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
 };
 
@@ -41,7 +44,7 @@ private:
 public:
     TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId);
 
-    virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const override;
 };
 
@@ -56,7 +59,7 @@ public:
         , PathId(pathId) {
     }
 
-    virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
 };
 

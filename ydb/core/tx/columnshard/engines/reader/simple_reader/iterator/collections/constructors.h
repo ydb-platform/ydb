@@ -11,7 +11,7 @@ class TPortionInfo;
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-class TSourceConstructor: public ICursorEntity {
+class TSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TCompareKeyForScanSequence Start;
     YDB_READONLY(ui32, SourceId, 0);
@@ -93,8 +93,9 @@ private:
     }
 
 public:
+    TNotSortedPortionsSources() = default;
     TNotSortedPortionsSources(std::deque<TSourceConstructor>&& sources)
-        : Sources(sources) {
+        : Sources(std::move(sources)) {
     }
 };
 
@@ -128,7 +129,7 @@ private:
 
 public:
     TSortedPortionsSources(std::deque<TSourceConstructor>&& sources)
-        : Sources(sources) {
+        : HeapSources(std::move(sources)) {
         HeapSources = std::move(sources);
         std::make_heap(HeapSources.begin(), HeapSources.end());
     }

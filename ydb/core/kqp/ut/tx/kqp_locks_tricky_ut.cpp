@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -290,6 +291,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
                     auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
                     UNIT_ASSERT(evWrite->Record.OperationsSize() == 0);
                     UNIT_ASSERT(evWrite->Record.GetLocks().GetLocks().size() != 0);
+                    UNIT_ASSERT(evWrite->Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback);
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
                     writes.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -329,6 +333,252 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             UNIT_ASSERT(deleteResult.IsSuccess());
 
             for(auto& ev: writes) {
+                runtime.Send(ev.release());
+            }
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());        
+        }
+    }
+
+    Y_UNIT_TEST(TestSnapshotIfInsertRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto upsertSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        
+        {
+            const TString query(Q1_(R"(
+                SELECT Ensure("ok", false, "error") FROM `/Root/KeyValue2` WHERE Key = "10u";
+
+                INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "test");
+            )"));
+
+            std::vector<std::unique_ptr<IEventHandle>> writes;
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (writes.empty() && ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() != 0);
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
+                    writes.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return writes.size() > 0;
+            });
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(writes.size() > 0);
+
+            {
+                const TString upsertQuery(Q1_(R"(
+                    INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "other");
+                    INSERT INTO `/Root/KeyValue2` (Key, Value) VALUES ("10u", "other");
+                )"));
+
+                auto upsertResult = kikimr.RunCall([&]{
+                    auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                    return upsertSession.ExecuteDataQuery(upsertQuery, txc, execSettings).ExtractValueSync();
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL_C(upsertResult.GetStatus(), EStatus::SUCCESS, upsertResult.GetIssues().ToString());    
+            }
+
+
+            for(auto& ev: writes) {
+                runtime.Send(ev.release());
+            }
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());        
+        }
+    }
+
+    Y_UNIT_TEST(TestSecondaryIndexWithoutSnapshot) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto upsertSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        kikimr.RunCall([&]{ CreateSampleTablesWithIndex(session, false /* no need in table data */); return true; });
+        
+        {
+            const TString query(Q1_(R"(
+                INSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (10, 10, "test");
+            )"));
+
+            bool hasWrite = false;
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
+                    hasWrite = true;
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return hasWrite;
+            });
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+
+            
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(hasWrite);    
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TestSnapshotWithDependentReads, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto upsertSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+                const TString upsertQuery(Q1_(R"(
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1u, "One");
+                    UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES ("One", "expected");
+                )"));
+
+                auto upsertResult = kikimr.RunCall([&]{
+                    auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                    return upsertSession.ExecuteDataQuery(upsertQuery, txc, execSettings).ExtractValueSync();
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL_C(upsertResult.GetStatus(), EStatus::SUCCESS, upsertResult.GetIssues().ToString());    
+        }
+        
+        {
+            const TString query(Q1_(R"(
+                $cnt1 = SELECT Value FROM `/Root/KeyValue` WHERE Key = 1u;
+                SELECT Ensure("ok", $cnt1="One", "first error");
+
+                $cnt2 = SELECT Value FROM `/Root/KeyValue2` WHERE Key = $cnt1;
+                SELECT Ensure("ok", $cnt2="expected", "second error");
+
+                UPSERT INTO KeyValueLargePartition (Key, Value) VALUES
+                    (1000u, "test");
+            )"));
+
+            std::vector<std::unique_ptr<IEventHandle>> reads;
+            bool hasRead = false;
+            bool allowAllReads = false;
+            bool hasResult = false;
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    auto* evRead = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    UNIT_ASSERT(evRead->Record.GetSnapshot().GetStep() != 0);
+                    UNIT_ASSERT(evRead->Record.GetSnapshot().GetTxId() != 0);
+                }
+                if (!allowAllReads && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    // Block second read
+                    if (hasRead) {
+                        reads.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    } else {
+                        hasRead = true;
+                    }
+                } else if (!allowAllReads && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
+                    hasResult = true;
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return reads.size() > 0 && hasResult;
+            });
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(reads.size() > 0 && hasResult);
+
+            {
+                const TString upsertQuery(Q1_(R"(
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1u, "not expected");
+                    UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES ("One", "not expected");
+                )"));
+
+                auto upsertResult = kikimr.RunCall([&]{
+                    auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                    return upsertSession.ExecuteDataQuery(upsertQuery, txc, execSettings).ExtractValueSync();
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL_C(upsertResult.GetStatus(), EStatus::SUCCESS, upsertResult.GetIssues().ToString());    
+            }
+
+            allowAllReads = true;
+
+            for(auto& ev: reads) {
                 runtime.Send(ev.release());
             }
 

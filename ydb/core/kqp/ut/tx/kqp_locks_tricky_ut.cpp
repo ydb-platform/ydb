@@ -291,6 +291,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
                     auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
                     UNIT_ASSERT(evWrite->Record.OperationsSize() == 0);
                     UNIT_ASSERT(evWrite->Record.GetLocks().GetLocks().size() != 0);
+                    UNIT_ASSERT(evWrite->Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback);
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
+                    UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
                     writes.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -334,7 +337,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             }
 
             auto result = runtime.WaitFuture(future);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());        
         }
     }
 

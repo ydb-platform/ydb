@@ -134,6 +134,7 @@ ydb/tests/compatibility [test_transfer.py */*] chunk chunk
 ydb/tests/compatibility sole chunk chunk
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_24-4_to_25-1]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-24-4_to_stable-25-1-2]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-25-1-2_to_current]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_24-4_to_25-1]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_25-1_to_current]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-24-4_to_stable-25-1-2]
@@ -251,6 +252,7 @@ ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_upd
 ydb/tests/functional/bridge test_bridge.py.flake8
 ydb/tests/functional/config [test_distconf.py */*] chunk chunk
 ydb/tests/functional/config [test_distconf_generate_config.py */*] chunk chunk
+ydb/tests/functional/config [test_distconf_reassign_state_storage.py */*] chunk chunk
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationToV2.test_migration_to_v2
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_distconf
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes

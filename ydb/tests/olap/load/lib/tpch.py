@@ -39,8 +39,7 @@ class TpchSuiteBase(LoadSuiteBase):
 
     @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
     def test_tpch(self, query_num: int):
-        # if query_num in self.skip_tests:
-        if query_num != 21:
+        if query_num in self.skip_tests:
             return
         self.run_workload_test(self._get_path(), query_num)
 
@@ -72,7 +71,6 @@ class TestTpch1000(TpchSuiteBase):
         'lineitem': 5999989709,
     }
     scale: int = 1000
-    iterations: int = 40
     timeout = max(TpchSuiteBase.timeout, 3600.)
 
 

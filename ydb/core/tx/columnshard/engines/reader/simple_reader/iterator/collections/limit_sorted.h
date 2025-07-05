@@ -1,6 +1,8 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+
 #include <ydb/library/accessor/positive_integer.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -33,7 +35,7 @@ private:
         return !SourcesConstructor->IsFinished();
     }
     std::shared_ptr<IDataSource> NextSource;
-    std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
     ui64 Limit = 0;
     ui64 InFlightLimit = 1;
     std::set<ui32> FetchingInFlightSources;
@@ -71,7 +73,8 @@ public:
         return NextSource;
     }
 
-    TScanWithLimitCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<ISourcesConstructor>&& sourcesConstructor);
+    TScanWithLimitCollection(
+        const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

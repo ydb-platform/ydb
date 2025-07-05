@@ -24,7 +24,7 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<IDataSou
 }
 
 TScanWithLimitCollection::TScanWithLimitCollection(
-    const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<ISourcesConstructor>&& sourcesConstructor)
+    const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : TBase(context)
     , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())
     , SourcesConstructor(std::move(sourcesConstructor)) {

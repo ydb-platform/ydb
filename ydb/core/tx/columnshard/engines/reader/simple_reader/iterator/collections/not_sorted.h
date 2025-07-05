@@ -1,6 +1,8 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class TNotSortedCollection: public ISourcesCollection {

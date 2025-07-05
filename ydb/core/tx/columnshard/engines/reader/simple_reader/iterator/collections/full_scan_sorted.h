@@ -1,6 +1,8 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+
 #include <ydb/library/accessor/positive_integer.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -23,7 +25,8 @@ private:
         return SourcesConstructor->IsFinished();
     }
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
-        return std::make_shared<TSimpleScanCursor>(std::make_shared<NArrow::TSimpleRow>(source->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
+        return std::make_shared<TSimpleScanCursor>(
+            std::make_shared<NArrow::TSimpleRow>(source->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override {
         auto result = SourcesConstructor->ExtractNext(Context);
@@ -40,8 +43,7 @@ private:
 public:
     TSortedFullScanCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<ISourcesConstructor>&& sourcesConstructor)
         : TBase(context)
-        , SourcesConstructor(std::move(sourcesConstructor))
-    {
+        , SourcesConstructor(std::move(sourcesConstructor)) {
     }
 };
 

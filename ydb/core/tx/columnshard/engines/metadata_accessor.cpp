@@ -36,7 +36,7 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
-    const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) {
+    const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
     std::vector<std::shared_ptr<TPortionInfo>> portions =
         engine.Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);

@@ -8,4 +8,5 @@ RECURSE(
     topic_writer/transaction
     ttl
     vector_index
+    vector_index_builtin
 )

@@ -32,6 +32,7 @@ private:
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
+    std::shared_ptr<IScanCursor> ScanCursor;
     const ui64 TabletId;
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }

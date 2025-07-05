@@ -33,10 +33,6 @@ private:
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override;
 
 public:
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override {
-        return {};
-    }
-
     TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources)
         : Sources(sources.begin(), sources.end()) {
     }

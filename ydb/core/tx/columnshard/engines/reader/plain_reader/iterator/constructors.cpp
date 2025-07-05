@@ -1,6 +1,8 @@
 #include "constructors.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
+
 namespace NKikimr::NOlap::NReader::NPlain {
 
 std::shared_ptr<NKikimr::NOlap::NReader::NCommon::IDataSource> NKikimr::NOlap::NReader::NPlain::TPortionSources::DoExtractNext(
@@ -9,7 +11,6 @@ std::shared_ptr<NKikimr::NOlap::NReader::NCommon::IDataSource> NKikimr::NOlap::N
     Sources.pop_front();
     return result;
 }
-
 
 std::vector<TInsertWriteId> TPortionSources::GetUncommittedWriteIds() const {
     std::vector<TInsertWriteId> result;

@@ -543,11 +543,11 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
         AFL_VERIFY(internalPathId);
         AFL_VERIFY(extInternalPathId == internalPathId->GetRawValue());
     }
-    if (!internalPathId) {
-        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
-    } else if (tableName.find(".sys/") != TString::npos) {
+    if (tableName.find(".sys/") != TString::npos) {
         return std::make_shared<NOlap::TSysViewTableAccessor>(
-            tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+            tableName, NColumnShard::TUnifiedPathId{ internalPathId.value_or(NColumnShard::TInternalPathId::FromRawValue(0)), schemeShardLocalPathId });
+    } else if (!internalPathId) {
+        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
     } else {
         if (!HasTable(*internalPathId)) {
             return std::make_shared<NOlap::TAbsentTableAccessor>(

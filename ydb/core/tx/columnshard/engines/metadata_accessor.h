@@ -20,7 +20,10 @@ private:
 public:
     ITableMetadataAccessor(const TString& tablePath);
     virtual ~ITableMetadataAccessor() = default;
-
+    virtual NColumnShard::TUnifiedPathId GetPathId() const {
+        AFL_VERIFY(false);
+        return NColumnShard::TUnifiedPathId();
+    }
     TString GetTableName() const;
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const = 0;
@@ -40,6 +43,11 @@ class TUserTableAccessor: public ITableMetadataAccessor {
 private:
     using TBase = ITableMetadataAccessor;
     YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
+
+    virtual NColumnShard::TUnifiedPathId GetPathId() const override {
+        AFL_VERIFY(false);
+        return PathId;
+    }
 
 public:
     TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId);

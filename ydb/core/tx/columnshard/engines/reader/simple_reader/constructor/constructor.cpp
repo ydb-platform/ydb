@@ -31,7 +31,6 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
                                                         << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
     }
 
-    AFL_VERIFY(read.PathId);
     auto readMetadata = std::make_shared<TReadMetadata>(index->CopyVersionedIndexPtr(), read);
 
     auto initResult = readMetadata->Init(self, read);

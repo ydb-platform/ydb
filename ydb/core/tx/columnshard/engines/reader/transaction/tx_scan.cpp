@@ -73,7 +73,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }
 
         {
-            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath(), request.GetTableId());
+            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath(), request.GetLocalPathId());
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);

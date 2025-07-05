@@ -5,6 +5,7 @@
 #include "blobs_action/abstract/storages_manager.h"
 #include "data_accessor/manager.h"
 #include "engines/column_engine.h"
+#include "engines/metadata_accessor.h"
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>

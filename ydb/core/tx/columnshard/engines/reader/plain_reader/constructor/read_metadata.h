@@ -11,8 +11,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 class TReadMetadata: public NCommon::TReadMetadata {
 private:
     using TBase = NCommon::TReadMetadata;
-    virtual TConclusionStatus DoInitCustom(
-        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) override;
+    virtual TConclusionStatus DoInitCustom(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) override;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;

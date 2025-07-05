@@ -92,8 +92,7 @@ private:
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const override;
     virtual void DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const override;
 
-    virtual TConclusionStatus DoInitCustom(
-        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) = 0;
+    virtual TConclusionStatus DoInitCustom(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) = 0;
 
     mutable std::unique_ptr<ISourcesConstructor> SourcesConstructor;
 
@@ -176,7 +175,7 @@ public:
     }
 
     TConclusionStatus Init(
-        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor);
+        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription);
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;

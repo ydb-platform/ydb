@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap::NReader::NCommon {
 
 TConclusionStatus TReadMetadata::Init(
-    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
+    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
     InitShardingInfo(readDescription.PathId.InternalPathId);
     TxId = readDescription.TxId;
@@ -32,7 +32,7 @@ TConclusionStatus TReadMetadata::Init(
     }
 
     {
-        auto customConclusion = DoInitCustom(owner, readDescription, dataAccessor);
+        auto customConclusion = DoInitCustom(owner, readDescription);
         if (customConclusion.IsFail()) {
             return customConclusion;
         }

@@ -54,6 +54,7 @@ public:
     static const Ydb::Import::ListObjectsInS3ExportResult& GetProto(const NYdb::NImport::TListObjectsInS3ExportResult& result);
 #ifdef YDB_SDK_INTERNAL_CLIENTS
     static const Ydb::Replication::DescribeReplicationResult& GetProto(const NYdb::NReplication::TDescribeReplicationResult& desc);
+    static const Ydb::Replication::DescribeTransferResult& GetProto(const NYdb::NReplication::TDescribeTransferResult& desc);
     static const Ydb::View::DescribeViewResult& GetProto(const NYdb::NView::TDescribeViewResult& desc);
 #endif
 

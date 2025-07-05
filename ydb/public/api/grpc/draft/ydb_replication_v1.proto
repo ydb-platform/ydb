@@ -7,4 +7,5 @@ option java_package = "com.yandex.ydb.replication.v1";
 
 service ReplicationService {
     rpc DescribeReplication(Replication.DescribeReplicationRequest) returns (Replication.DescribeReplicationResponse);
+    rpc DescribeTransfer(Replication.DescribeTransferRequest) returns (Replication.DescribeTransferResponse);
 }

@@ -3,6 +3,10 @@
 
 #include <ydb/library/accessor/positive_integer.h>
 
+namespace NKikimr::NOlap {
+class TPortionInfo;
+}
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class TSourceConstructor: public ICursorEntity {

@@ -30,10 +30,7 @@ private:
 public:
     TSysViewTableAccessor(const TString& tableName);
     virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
-        const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override {
-        AFL_VERIFY(false);
-        return {};
-    }
+        const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
 };
 
 class TUserTableAccessor: public ITableMetadataAccessor {

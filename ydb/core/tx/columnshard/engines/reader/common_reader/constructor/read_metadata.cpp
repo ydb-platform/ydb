@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap::NReader::NCommon {
 
 TConclusionStatus TReadMetadata::Init(
-    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) {
+    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const bool isPlain) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
     InitShardingInfo(readDescription.TableMetadataAccessor);
     TxId = readDescription.TxId;
@@ -19,13 +19,14 @@ TConclusionStatus TReadMetadata::Init(
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
     }
 
-    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(owner->GetIndexVerified(), readDescription, !!LockId);
+    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(owner->GetIndexVerified(), readDescription, !!LockId, isPlain);
     if (LockId) {
         for (auto&& i : SourcesConstructor->GetUncommittedWriteIds()) {
             auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i);
             AddWriteIdToCheck(i, op->GetLockId());
         }
     }
+    SourcesConstructor->InitCursor(readDescription.GetScanCursorVerified());
 
     {
         auto customConclusion = DoInitCustom(owner, readDescription);

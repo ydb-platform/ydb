@@ -175,7 +175,7 @@ public:
     }
 
     TConclusionStatus Init(
-        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription);
+        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const bool isPlain);
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;

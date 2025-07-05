@@ -16,6 +16,7 @@ private:
 
 public:
     ITableMetadataAccessor(const TString& tablePath);
+    virtual ~ITableMetadataAccessor() = default;
 
     TString GetTableName() const;
     virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(

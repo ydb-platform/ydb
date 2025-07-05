@@ -27,6 +27,8 @@ public:
     TString GetTableName() const;
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const = 0;
+    virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
+        const std::shared_ptr<TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
 };
 
 class TSysViewTableAccessor: public ITableMetadataAccessor {
@@ -37,15 +39,18 @@ public:
     TSysViewTableAccessor(const TString& tableName);
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
+    virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
+        const std::shared_ptr<TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
+        return std::nullopt;
+    }
 };
 
 class TUserTableAccessor: public ITableMetadataAccessor {
 private:
     using TBase = ITableMetadataAccessor;
-    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
+    const NColumnShard::TUnifiedPathId PathId;
 
     virtual NColumnShard::TUnifiedPathId GetPathId() const override {
-        AFL_VERIFY(false);
         return PathId;
     }
 
@@ -54,12 +59,16 @@ public:
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const override;
+    virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
+        const std::shared_ptr<TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
+        return indexVersionsPointer->GetShardingInfoOptional(PathId.GetInternalPathId(), ss);
+    }
 };
 
 class TAbsentTableAccessor: public ITableMetadataAccessor {
 private:
     using TBase = ITableMetadataAccessor;
-    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
+    const NColumnShard::TUnifiedPathId PathId;
 
 public:
     TAbsentTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
@@ -67,6 +76,14 @@ public:
         , PathId(pathId) {
     }
 
+    virtual NColumnShard::TUnifiedPathId GetPathId() const override {
+        return PathId;
+    }
+
+    virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
+        const std::shared_ptr<TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
+        return std::nullopt;
+    }
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
         const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
 };

@@ -21,13 +21,9 @@ TConclusionStatus TReadMetadata::Init(
 
     SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(owner->GetIndexVerified(), readDescription, !!LockId);
     if (LockId) {
-        for (auto&& i : SourcesConstructor->GetPortions()) {
-            if (!i->IsCommitted()) {
-                AFL_VERIFY(i->GetPortionType() == EPortionType::Written);
-                auto* written = static_cast<const TWrittenPortionInfo*>(i.get());
-                auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(written->GetInsertWriteId());
-                AddWriteIdToCheck(written->GetInsertWriteId(), op->GetLockId());
-            }
+        for (auto&& i : SourcesConstructor->GetUncommittedWriteIds()) {
+            auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i);
+            AddWriteIdToCheck(i, op->GetLockId());
         }
     }
 

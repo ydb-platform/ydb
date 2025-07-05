@@ -113,6 +113,10 @@ public:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }
     }
+private:
+    int AcquireManager(ui64 externalProcessId);
+    int ReleaseManager(ui64 externalProcessId);
+    int GetManager(ui64 externalProcessId);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

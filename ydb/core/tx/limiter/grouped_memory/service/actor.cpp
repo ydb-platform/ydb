@@ -13,79 +13,52 @@ void TMemoryLimiterActor::Bootstrap() {
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    AFL_VERIFY(it != ProcessMapping.end());
+    const int index = AcquireManager(ev->Get()->GetExternalProcessId());
     for (auto&& i : ev->Get()->GetAllocations()) {
-        Managers[it->second.ManagerIndex]->RegisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId(), i,
+        Managers[index]->RegisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId(), i,
             ev->Get()->GetStageFeaturesIdx());
     }
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    AFL_VERIFY(it != ProcessMapping.end());
-    Managers[it->second.ManagerIndex]->UnregisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetAllocationId());
+    const int index = ReleaseManager(ev->Get()->GetExternalProcessId());
+    Managers[index]->UnregisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetAllocationId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvUpdateTask::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    AFL_VERIFY(it != ProcessMapping.end());
-    Managers[it->second.ManagerIndex]->UpdateAllocation(
+    const int index = GetManager(ev->Get()->GetExternalProcessId());
+    Managers[index]->UpdateAllocation(
         ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetAllocationId(), ev->Get()->GetVolume());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    AFL_VERIFY(it != ProcessMapping.end());
-    Managers[it->second.ManagerIndex]->UnregisterGroup(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId());
+    const int index = ReleaseManager(ev->Get()->GetExternalProcessId());
+    Managers[index]->UnregisterGroup(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartGroup::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    AFL_VERIFY(it != ProcessMapping.end());
-    Managers[it->second.ManagerIndex]->RegisterGroup(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId());
+    const int index = AcquireManager(ev->Get()->GetExternalProcessId());
+    Managers[index]->RegisterGroup(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    AFL_VERIFY(it != ProcessMapping.end());
-    size_t id = it->second.ManagerIndex;
-    it->second.Counter--;
-    if (it->second.Counter == 0) {
-        LoadQueue.ChangeLoad(id, -1);
-        ProcessMapping.erase(it);
-    }
-    Managers[id]->UnregisterProcess(ev->Get()->GetExternalProcessId());
+    const int index = ReleaseManager(ev->Get()->GetExternalProcessId());
+    Managers[index]->UnregisterProcess(ev->Get()->GetExternalProcessId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    ui64 index = 0;
-    if (it == ProcessMapping.end()) {
-        index = LoadQueue.Top();
-        LoadQueue.ChangeLoad(index, +1);
-        auto& stats = ProcessMapping[ev->Get()->GetExternalProcessId()];
-        stats.ManagerIndex = index;
-        stats.Counter++;
-    } else {
-        auto& stats = it->second;
-        index = stats.ManagerIndex;
-        stats.Counter++;
-    }
-
+    const int index = AcquireManager(ev->Get()->GetExternalProcessId());
     Managers[index]->RegisterProcess(ev->Get()->GetExternalProcessId(), ev->Get()->GetStages());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcessScope::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    AFL_VERIFY(it != ProcessMapping.end());
-    Managers[it->second.ManagerIndex]->UnregisterProcessScope(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId());
+    const int index = ReleaseManager(ev->Get()->GetExternalProcessId());
+    Managers[index]->UnregisterProcessScope(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcessScope::TPtr& ev) {
-    auto it = ProcessMapping.find(ev->Get()->GetExternalProcessId());
-    AFL_VERIFY(it != ProcessMapping.end());
-    Managers[it->second.ManagerIndex]->RegisterProcessScope(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId());
+    const int index = AcquireManager(ev->Get()->GetExternalProcessId());
+    Managers[index]->RegisterProcessScope(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId());
 }
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerRegistered::TPtr& ev) {
@@ -99,5 +72,41 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
         manager->UpdateMemoryLimits(ev->Get()->LimitBytes / Config.GetCountBuckets(), ev->Get()->HardLimitBytes ? *ev->Get()->HardLimitBytes / Config.GetCountBuckets() : ev->Get()->HardLimitBytes);
     }
 }
+
+int TMemoryLimiterActor::AcquireManager(ui64 externalProcessId) {
+    auto it = ProcessMapping.find(externalProcessId);
+    if (it == ProcessMapping.end()) {
+        ui64 index = LoadQueue.Top();
+        LoadQueue.ChangeLoad(index, +1);
+        auto& stats = ProcessMapping[externalProcessId];
+        stats.Counter++;
+        stats.ManagerIndex = index;
+        return index;
+    }
+
+    auto& stats = it->second;
+    stats.Counter++;
+    return stats.ManagerIndex;
+}
+
+int TMemoryLimiterActor::ReleaseManager(ui64 externalProcessId) {
+    auto it = ProcessMapping.find(externalProcessId);
+    AFL_VERIFY(it != ProcessMapping.end());
+    size_t id = it->second.ManagerIndex;
+    it->second.Counter--;
+    if (it->second.Counter == 0) {
+        LoadQueue.ChangeLoad(id, -1);
+        ProcessMapping.erase(it);
+    }
+    return id;
+}
+
+int TMemoryLimiterActor::GetManager(ui64 externalProcessId) {
+    auto it = ProcessMapping.find(externalProcessId);
+    AFL_VERIFY(it != ProcessMapping.end());
+    return it->second.ManagerIndex;
+}
+
+
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

@@ -11,7 +11,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 TConclusionStatus TReadMetadata::Init(
     const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
-    InitShardingInfo(readDescription.PathId.InternalPathId);
+    InitShardingInfo(readDescription.TableMetadataAccessor);
     TxId = readDescription.TxId;
     LockId = readDescription.LockId;
     if (LockId) {
@@ -19,9 +19,9 @@ TConclusionStatus TReadMetadata::Init(
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
     }
 
-    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(Index, readDescription, !!LockId);
+    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(owner->GetIndexVerified(), readDescription, !!LockId);
     if (LockId) {
-        for (auto&& i : SelectInfo->Portions) {
+        for (auto&& i : SourcesConstructor->GetPortions()) {
             if (!i->IsCommitted()) {
                 AFL_VERIFY(i->GetPortionType() == EPortionType::Written);
                 auto* written = static_cast<const TWrittenPortionInfo*>(i.get());
@@ -46,7 +46,7 @@ TConclusionStatus TReadMetadata::Init(
 TReadMetadata::TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read)
     : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorOptional(), read.GetTabletId())
-    , PathId(read.PathId)
+    , TableMetadataAccessor(read.TableMetadataAccessor)
     , ReadStats(std::make_shared<TReadStats>()) {
 }
 
@@ -86,8 +86,11 @@ void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
         for (auto&& i : GetConflictableLockIds()) {
             conflicts.Add(i, lock);
         }
-        auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(PathId.InternalPathId, conflicts);
-        owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
+        if (!conflicts.IsEmpty()) {
+            auto writer =
+                std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(TableMetadataAccessor->GetPathId().InternalPathId, conflicts);
+            owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
+        }
     }
 }
 
@@ -95,8 +98,8 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
     if (!LockId) {
         return;
     }
-    auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(
-        PathId.InternalPathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
+    auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(TableMetadataAccessor->GetPathId().InternalPathId,
+        GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
 }
 
@@ -107,7 +110,7 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
         lockInfo.SetGeneration(LockSharingInfo->GetGeneration());
         lockInfo.SetDataShard(tabletId);
         lockInfo.SetCounter(LockSharingInfo->GetInternalGenerationCounter());
-        PathId.SchemeShardLocalPathId.ToProto(lockInfo);
+        TableMetadataAccessor->GetPathId().SchemeShardLocalPathId.ToProto(lockInfo);
         lockInfo.SetHasWrites(LockSharingInfo->HasWrites());
         if (LockSharingInfo->IsBroken()) {
             scanData.LocksInfo.BrokenLocks.emplace_back(std::move(lockInfo));

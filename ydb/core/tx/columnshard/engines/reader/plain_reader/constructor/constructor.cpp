@@ -32,7 +32,6 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
                                                         << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
     }
 
-    AFL_VERIFY(read.PathId);
     auto readCopy = read;
     if (readCopy.GetSorting() == ERequestSorting::NONE) {
         readCopy.SetSorting(ERequestSorting::ASC);

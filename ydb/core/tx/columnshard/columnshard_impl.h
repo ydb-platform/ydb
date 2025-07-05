@@ -616,6 +616,11 @@ public:
         return TablesManager.GetPrimaryIndex() ? TablesManager.GetPrimaryIndex().get() : nullptr;
     }
 
+    const NOlap::IColumnEngine& GetIndexVerified() const {
+        AFL_VERIFY(TablesManager.GetPrimaryIndex());
+        return *TablesManager.GetPrimaryIndex();
+    }
+
     template <class T>
     T& MutableIndexAs() {
         return TablesManager.MutablePrimaryIndexAsVerified<T>();

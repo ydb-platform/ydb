@@ -168,9 +168,9 @@ public:
         return ResultIndexSchema->GetIndexInfo();
     }
 
-    void InitShardingInfo(const TInternalPathId pathId) {
+    void InitShardingInfo(const std::shared_ptr<ITableMetadataAccessor>& metadataAccessor) {
         AFL_VERIFY(!RequestShardingInfo);
-        RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
+        RequestShardingInfo = metadataAccessor->GetShardingInfo(IndexVersionsPointer, RequestSnapshot);
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,

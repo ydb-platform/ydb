@@ -57,7 +57,6 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    const NColumnShard::TUnifiedPathId PathId;
     std::shared_ptr<TAtomicCounter> BrokenWithCommitted = std::make_shared<TAtomicCounter>();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
 
@@ -161,11 +160,8 @@ public:
         return GetProgram().HasProcessingColumnIds();
     }
 
-    NColumnShard::TUnifiedPathId GetPathId() const {
-        return PathId;
-    }
-
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
+    std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read);

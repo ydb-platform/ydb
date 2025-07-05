@@ -2,6 +2,7 @@
 #include "tables_manager.h"
 
 #include "engines/column_engine_logs.h"
+#include "engines/metadata_accessor.h"
 #include "transactions/transactions/tx_add_sharding_info.h"
 
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -525,6 +526,25 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
         MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().MutableVersionedIndex().EraseVersion(i);
     }
     return chains;
+}
+
+TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
+    const TString& tableName, const ui64 externalPathId) {
+    const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(externalPathId);
+    const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
+    if (internalPathId) {
+        if (!HasTable(*internalPathId)) {
+            return std::make_shared<NOlap::TAbsentTableAccessor>(
+                tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+        } else {
+            return std::make_shared<NOlap::TUserTableAccessor>(
+                tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+        }
+    } else if (tableName.find(".sys/") != TString::npos) {
+        return std::make_shared<NOlap::TSysViewTableAccessor>(tableName);
+    } else {
+        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
+    }
 }
 
 }   // namespace NKikimr::NColumnShard

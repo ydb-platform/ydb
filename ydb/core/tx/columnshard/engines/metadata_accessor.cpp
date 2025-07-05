@@ -36,7 +36,7 @@ std::unique_ptr<NKikimr::NOlap::NReader::NCommon::ISourcesConstructor> TUserTabl
     std::deque<TSourceConstructor> sources;
     sources.reserve(portions.size());
     for (auto&& i : portions) {
-        sources.emplace_back(TSourceConstructor(sources.size(), i, readDescription.GetSorting()));
+        sources.emplace_back(TSourceConstructor(sources.size(), std::move(i), readDescription.GetSorting()));
     }
     if (readDescription.GetSorting() != ERequestSorting::NONE) {
         return std::make_unique<TSortedPortionsSources>(std::move(sources));

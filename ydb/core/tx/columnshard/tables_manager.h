@@ -236,7 +236,8 @@ public:
         const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
         const ui64 tabletId);
 
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tableName, const ui64 externalPathId);
+    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
+        const TString& tableName, const std::optional<ui64> externalPathId, const std::optional<ui64> internalPathId);
 
     class TSchemaAddress {
     private:

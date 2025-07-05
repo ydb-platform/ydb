@@ -35,26 +35,25 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
     AFL_VERIFY(GetTablePath().find(".sys") == TString::npos);
 }
 
-std::unique_ptr<NKikimr::NOlap::NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
     const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) {
     AFL_VERIFY(readDescription.PKRangesFilter);
     std::vector<std::shared_ptr<TPortionInfo>> portions =
-        Index->Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
+        engine.Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
     std::deque<NReader::NSimple::TSourceConstructor> sources;
-    sources.reserve(portions.size());
     for (auto&& i : portions) {
-        sources.emplace_back(NReader::NSimple::TSourceConstructor(sources.size(), std::move(i), readDescription.GetSorting()));
+        sources.emplace_back(NReader::NSimple::TSourceConstructor(std::move(i), readDescription.GetSorting()));
     }
     if (readDescription.GetSorting() != NReader::ERequestSorting::NONE) {
-        return std::make_unique<TSortedPortionsSources>(std::move(sources));
+        return std::make_unique<NReader::NSimple::TSortedPortionsSources>(std::move(sources));
     } else {
-        return std::make_unique<TNotSortedPortionsSources>(std::move(sources));
+        return std::make_unique<NReader::NSimple::TNotSortedPortionsSources>(std::move(sources));
     }
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(
     const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const {
-    return std::make_unique<TNotSortedPortionsSources>({});
+    return std::make_unique<NReader::NSimple::TNotSortedPortionsSources>();
 }
 
 }   // namespace NKikimr::NOlap

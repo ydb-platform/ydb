@@ -202,56 +202,6 @@ public:
     }
 };
 
-class ITableMetadataAccessor {
-private:
-    YDB_READONLY_DEF(TString, TablePath);
-
-public:
-    ITableMetadataAccessor(const TString& tablePath)
-        : TablePath(tablePath) {
-        AFL_VERIFY(!!TablePath);
-    }
-
-    TString GetTableName() const {
-        return TFsPath(TablePath).Fix().GetName();
-    }
-};
-
-class TSysViewTableAccessor: public ITableMetadataAccessor {
-private:
-    using TBase = ITableMetadataAccessor;
-
-public:
-    TSysViewTableAccessor(const TString& tableName)
-        : TBase(tableName) {
-        AFL_VERIFY(GetTablePath().find(".sys") != TString::npos);
-    }
-};
-
-class TUserTableAccessor: public ITableMetadataAccessor {
-private:
-    using TBase = ITableMetadataAccessor;
-    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
-
-public:
-    TUserTableAccessor(const TString& tableName, const TUnifiedPathId& pathId)
-        : TBase(tableName)
-        , PathId(pathId) {
-        AFL_VERIFY(GetTablePath().find(".sys") == TString::npos);
-    }
-};
-
-class TAbsentTableAccessor: public ITableMetadataAccessor {
-private:
-    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
-
-public:
-    TAbsentTableAccessor(const TString& tableName, const TUnifiedPathId& pathId)
-        : TBase(tableName)
-        , PathId(pathId) {
-    }
-};
-
 class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;

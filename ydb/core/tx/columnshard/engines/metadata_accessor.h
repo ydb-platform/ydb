@@ -3,8 +3,13 @@
 
 #include <ydb/library/accessor/accessor.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap::NReader {
+class TReadDescription;
+}
 
+namespace NKikimr::NOlap {
+class ISourcesConstructor;
+class IColumnEngine;
 class ITableMetadataAccessor {
 private:
     YDB_READONLY_DEF(TString, TablePath);
@@ -13,19 +18,8 @@ public:
     ITableMetadataAccessor(const TString& tablePath);
 
     TString GetTableName() const;
-    std::unique_ptr<ISourcesConstructor> SelectMetadata() {
-        if (readDescription.ReadNothing) {
-            SelectInfo = std::make_shared<TSelectInfo>();
-        } else {
-            AFL_VERIFY(readDescription.PKRangesFilter);
-            SelectInfo = readDescription.TableMetadataAccessor->SelectMetadata(Index);
-            SelectInfo =
-                Index->Select(readDescription.PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, !!LockId);
-
-            SelectInfo = dataAccessor.Select(readDescription, !!LockId);
-        }
-    }
-
+    virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
+        const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const = 0;
 };
 
 class TSysViewTableAccessor: public ITableMetadataAccessor {
@@ -35,7 +29,7 @@ private:
 public:
     TSysViewTableAccessor(const TString& tableName);
     virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
-        const IColumnEngine& /*engine*/, const TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) override {
+        const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override {
         AFL_VERIFY(false);
         return {};
     }
@@ -50,7 +44,7 @@ public:
     TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId);
 
     virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
-        const IColumnEngine& engine, const TReadDescription& readDescription, const bool withUncommitted) override;
+        const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const override;
 };
 
 class TAbsentTableAccessor: public ITableMetadataAccessor {
@@ -64,9 +58,8 @@ public:
         , PathId(pathId) {
     }
 
-    std::unique_ptr<ISourcesConstructor> SelectMetadata(const IColumnEngine& /*engine*/, const TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) {
-        return std::make_unique<TNotSortedPortionsSources>({});
-    }
+    virtual std::unique_ptr<ISourcesConstructor> SelectMetadata(
+        const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
 };
 
 }   // namespace NKikimr::NOlap

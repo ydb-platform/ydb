@@ -1,11 +1,13 @@
 #include "constructors.h"
 
-namespace NKikimr::NOlap::NReader::NCommon {
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
+
+namespace NKikimr::NOlap::NReader::NSimple {
 
 void TSortedPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) {
     while (HeapSources.size()) {
         bool usage = false;
-        if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(HeapSources.front(), usage)) {
+        if (!cursor->CheckEntityIsBorder(HeapSources.front(), usage)) {
             std::pop_heap(HeapSources.begin(), HeapSources.end());
             HeapSources.pop_back();
             continue;
@@ -18,6 +20,16 @@ void TSortedPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cu
         }
         break;
     }
+}
+
+std::shared_ptr<TPortionDataSource> TSourceConstructor::Construct(
+    const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const {
+    auto result = std::make_shared<TPortionDataSource>(sourceIdx, Portion, context);
+    if (IsStartedByCursorFlag) {
+        result->SetIsStartedByCursor();
+    }
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, result->AddEvent("s"));
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

@@ -35,8 +35,8 @@ private:
         return !SourcesConstructor->IsFinished();
     }
     std::shared_ptr<IDataSource> NextSource;
-    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
     ui64 Limit = 0;
+    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
     ui64 InFlightLimit = 1;
     std::set<ui32> FetchingInFlightSources;
     bool Aborted = false;

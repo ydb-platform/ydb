@@ -13,7 +13,6 @@ private:
     std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
     TPositiveControlInteger InFlightCount;
     ui32 FetchedCount = 0;
-    ui32 SourceIdx = 0;
     virtual bool DoHasData() const override {
         return !SourcesConstructor->IsFinished();
     }

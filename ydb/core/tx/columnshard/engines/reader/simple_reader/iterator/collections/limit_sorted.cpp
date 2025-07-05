@@ -3,11 +3,11 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 std::shared_ptr<IDataSource> TScanWithLimitCollection::DoExtractNext() {
-    auto result = NextSource ? NextSource : SourcesConstructor->ExtractNext(Context);
+    auto result = NextSource ? NextSource : static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
     AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNext")("source_id", result->GetSourceId());
     if (!SourcesConstructor->IsFinished()) {
-        NextSource = SourcesConstructor->ExtractNext(Context);
+        NextSource = static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
     } else {
         NextSource = nullptr;
     }

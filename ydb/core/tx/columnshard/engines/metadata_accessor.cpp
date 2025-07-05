@@ -2,6 +2,7 @@
 
 #include "reader/common/description.h"
 #include "reader/common_reader/constructor/read_metadata.h"
+#include "reader/simple_reader/iterator/collections/constructors.h"
 
 #include <ydb/library/actors/core/log.h>
 
@@ -22,6 +23,12 @@ TSysViewTableAccessor::TSysViewTableAccessor(const TString& tableName)
     AFL_VERIFY(GetTablePath().find(".sys") != TString::npos);
 }
 
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TSysViewTableAccessor::SelectMetadata(
+    const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const {
+    AFL_VERIFY(false);
+    return {};
+}
+
 TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
     : TBase(tableName)
     , PathId(pathId) {
@@ -33,12 +40,12 @@ std::unique_ptr<NKikimr::NOlap::NReader::NCommon::ISourcesConstructor> TUserTabl
     AFL_VERIFY(readDescription.PKRangesFilter);
     std::vector<std::shared_ptr<TPortionInfo>> portions =
         Index->Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
-    std::deque<TSourceConstructor> sources;
+    std::deque<NReader::NSimple::TSourceConstructor> sources;
     sources.reserve(portions.size());
     for (auto&& i : portions) {
-        sources.emplace_back(TSourceConstructor(sources.size(), std::move(i), readDescription.GetSorting()));
+        sources.emplace_back(NReader::NSimple::TSourceConstructor(sources.size(), std::move(i), readDescription.GetSorting()));
     }
-    if (readDescription.GetSorting() != ERequestSorting::NONE) {
+    if (readDescription.GetSorting() != NReader::ERequestSorting::NONE) {
         return std::make_unique<TSortedPortionsSources>(std::move(sources));
     } else {
         return std::make_unique<TNotSortedPortionsSources>(std::move(sources));

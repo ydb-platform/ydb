@@ -47,7 +47,8 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.SetScanIdentifier(request.TaskIdentifier);
         {
-            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath(), std::nullopt, request.GetPathId());
+            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor("internal_request",
+                request.GetPathId().GetInternalPathId().GetRawValue(), request.GetPathId().GetSchemeShardLocalPathId().GetRawValue());
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
@@ -56,7 +57,6 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             }
         }
         read.LockId = LockId;
-        read.ReadNothing = !Self->TablesManager.HasTable(read.PathId.InternalPathId);
         read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();

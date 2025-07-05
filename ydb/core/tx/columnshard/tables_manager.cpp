@@ -531,15 +531,17 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
     const TString& tableName, const std::optional<ui64> externalPathId, const std::optional<ui64> extInternalPathId) {
     if (extInternalPathId) {
-        const auto& externalPathIdResolved = ResolveInternalPathId(schemeShardLocalPathId);
+        const auto& externalPathIdResolved = ResolveSchemeShardLocalPathId(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId));
         AFL_VERIFY(!!externalPathIdResolved);
-        return std::make_shared<NOlap::TUserTableAccessor>(tableName, NColumnShard::TUnifiedPathId{ *internalPathId, *externalPathIdResolved });
+        return std::make_shared<NOlap::TUserTableAccessor>(
+            tableName, NColumnShard::TUnifiedPathId{ NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId), *externalPathIdResolved });
     }
     AFL_VERIFY(externalPathId);
-    const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(externalPathId);
+    const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*externalPathId);
     const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
     if (extInternalPathId) {
-        AFL_VERIFY(extInternalPathId == internalPathId);
+        AFL_VERIFY(internalPathId);
+        AFL_VERIFY(extInternalPathId == internalPathId->GetRawValue());
     }
     if (internalPathId) {
         if (!HasTable(*internalPathId)) {

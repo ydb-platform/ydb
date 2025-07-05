@@ -38,9 +38,9 @@ public:
         return Start;
     }
 
-    TSourceConstructor(const std::shared_ptr<TPortionInfo>&& portion, const std::shared_ptr<TReadContext>& context)
-        : Start(TReplaceKeyAdapter(context->GetReadMetadata()->IsDescSorted() ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-                    context->GetReadMetadata()->IsDescSorted()),
+    TSourceConstructor(const std::shared_ptr<TPortionInfo>&& portion, const NReader::ERequestSorting sorting)
+        : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+                    sorting == NReader::ERequestSorting::DESC),
               portion->GetPortionId())
         , SourceId(portion->GetPortionId())
         , Portion(std::move(portion))

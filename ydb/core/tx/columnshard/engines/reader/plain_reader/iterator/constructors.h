@@ -1,6 +1,4 @@
 #pragma once
-#include "abstract.h"
-
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 
 #include <ydb/library/accessor/positive_integer.h>
@@ -39,9 +37,11 @@ public:
         return {};
     }
 
-    TPortionSources(std::deque<std::shared_ptr<TPortionInfo>>&& sources)
-        : Sources(std::move(sources)) {
+    TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources)
+        : Sources(sources.begin(), sources.end()) {
     }
+
+    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

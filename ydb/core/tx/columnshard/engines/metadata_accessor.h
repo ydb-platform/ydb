@@ -29,7 +29,7 @@ public:
     }
     TString GetTableName() const;
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
-        const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const = 0;
+        const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const = 0;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
 };
@@ -45,8 +45,8 @@ private:
 
 public:
     TSysViewTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId);
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
-        const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const IColumnEngine& engine,
+        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;
@@ -65,8 +65,8 @@ private:
 public:
     TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId);
 
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
-        const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted) const override;
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const IColumnEngine& engine,
+        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
         return indexVersionsPointer->GetShardingInfoOptional(PathId.GetInternalPathId(), ss);
@@ -92,8 +92,8 @@ public:
         const std::shared_ptr<TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;
     }
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
-        const IColumnEngine& /*engine*/, const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/) const override;
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const IColumnEngine& engine,
+        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
 };
 
 }   // namespace NKikimr::NOlap

@@ -19,7 +19,7 @@ std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const N
     return indexInfo.GetPrimaryKeyColumns();
 }
 
-NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
+TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto& index = self->TablesManager.GetPrimaryIndex();
     if (!index) {
@@ -33,7 +33,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
 
     auto readMetadata = std::make_shared<TReadMetadata>(index->CopyVersionedIndexPtr(), read);
 
-    auto initResult = readMetadata->Init(self, read);
+    auto initResult = readMetadata->Init(self, read, false);
     if (!initResult) {
         return initResult;
     }

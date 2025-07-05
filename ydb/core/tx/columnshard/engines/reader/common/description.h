@@ -24,7 +24,7 @@ class TReadDescription {
 private:
     TSnapshot Snapshot;
     TProgramContainer Program;
-    std::shared_ptr<IScanCursor> ScanCursor;
+    std::optional<std::shared_ptr<IScanCursor>> ScanCursor;
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
     YDB_READONLY(ui64, TabletId, 0);
@@ -34,9 +34,6 @@ public:
     ui64 TxId = 0;
     std::optional<ui64> LockId;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
-    // Less[OrEqual], Greater[OrEqual] or both
-    // There's complex logic in NKikimr::TTableRange comparison that could be emulated only with separated compare
-    // operations with potentially different columns. We have to remove columns to support -Inf (Null) and +Inf.
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
@@ -44,8 +41,9 @@ public:
     // List of columns
     std::vector<ui32> ColumnIds;
 
-    const std::shared_ptr<IScanCursor>& GetScanCursorOptional() const {
-        return ScanCursor;
+    const std::shared_ptr<IScanCursor>& GetScanCursorVerified() const {
+        AFL_VERIFY(ScanCursor);
+        return *ScanCursor;
     }
 
     void SetScanCursor(const std::shared_ptr<IScanCursor>& cursor) {

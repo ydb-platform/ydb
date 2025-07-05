@@ -89,7 +89,9 @@ private:
         return Sources.empty();
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
-        return Sources.front().Construct(SourceIdx++, static_pointer_cast<TSpecialReadContext>(context));
+        auto result = Sources.front().Construct(SourceIdx++, static_pointer_cast<TSpecialReadContext>(context));
+        Sources.pop_front();
+        return result;
     }
 
 public:

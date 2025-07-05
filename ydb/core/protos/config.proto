@@ -1078,7 +1078,7 @@ message TQueryServiceConfig {
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
-    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];   
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
 }
 
 // Config describes immediate controls and allows
@@ -1851,6 +1851,7 @@ message TColumnShardConfig {
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
+    optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
 }
 
 message TSchemeShardConfig {

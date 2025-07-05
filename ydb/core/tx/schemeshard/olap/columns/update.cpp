@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -12,6 +13,23 @@ extern "C" {
 }
 
 namespace NKikimr::NSchemeShard {
+
+namespace {
+
+bool IsValidColumnNameForColumnTable(const TString& name) {
+    if (IsValidColumnName(name, false)) {
+        return true;
+    }
+
+    if (!AppDataVerified().ColumnShardConfig.GetAllowExtraSymbolsForColumnTableColumns()) {
+        return false;
+    }
+
+    return std::all_of(name.begin(), name.end(),
+            [](char c) { return std::isalnum(c) || c == '_' || c == '-' || c == '@'; });
+}
+
+}
 
 bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
     Name = columnSchema.GetName();
@@ -54,7 +72,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
     Name = columnSchema.GetName();
-    if (!IsValidColumnName(Name, false)) {
+    if (!IsValidColumnNameForColumnTable(Name)) {
         errors.AddError(Sprintf("Invalid name for column '%s'", Name.data()));
         return false;
     }

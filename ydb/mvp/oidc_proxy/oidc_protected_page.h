@@ -50,6 +50,7 @@ public:
 
 protected:
     virtual void StartOidcProcess(const NActors::TActorContext& ctx) = 0;
+    TDuration GetRequestTimeout() const;
     virtual void ForwardUserRequest(TStringBuf authHeader, bool secure = false);
     virtual bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const = 0;
     void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);

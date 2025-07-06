@@ -105,19 +105,28 @@ bool THandlerSessionServiceCheck::IsAuthorizedRequest(TStringBuf authHeader) {
     return to_lower(ToString(authHeader)).StartsWith(IAM_TOKEN_SCHEME_LOWER);
 }
 
+TDuration THandlerSessionServiceCheck::GetRequestTimeout() const {
+    auto path = TStringBuf(ProtectedPage.Url).Before('?');
+    for (const auto& [suffix, timeout] : Settings.TimeoutOverrides) {
+        if (path.EndsWith(suffix)) {
+            return timeout;
+        }
+    }
+    return Settings.RequestTimeout;
+}
+
 void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool secure) {
     BLOG_D("Forward user request bypass OIDC");
 
+    auto timeout = GetRequestTimeout();
     ExtensionManager = MakeHolder<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
+    ExtensionManager->SetExtensionTimeout(timeout);
     ExtensionManager->ArrangeExtensions(Request);
 
     TProxiedRequestParams params(Request, authHeader, secure, ProtectedPage, Settings);
     auto httpRequest = CreateProxiedRequest(params);
 
     auto requestEvent = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
-    auto timeout = ExtensionManager->HasEnrichmentExtension()
-        ? Settings.RequestWithEnrichmentTimeout
-        : Settings.RequestTimeout;
     requestEvent->Timeout = timeout;
     requestEvent->AllowConnectionReuse = !Request->IsConnectionClose();
     requestEvent->StreamContentTypes = {

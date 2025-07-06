@@ -22,7 +22,7 @@ void TExtensionWhoamiWorker::Bootstrap() {
 
     NYdbGrpc::TCallMeta meta;
     SetHeader(meta, "authorization", AuthHeader);
-    meta.Timeout = Settings.RequestWithEnrichmentTimeout;
+    meta.Timeout = Timeout;
 
     connection->DoRequest(request, std::move(responseCb), &nebius::iam::v1::ProfileService::Stub::AsyncGet, meta);
     Become(&TExtensionWhoamiWorker::StateWork);
@@ -163,9 +163,9 @@ void TExtensionWhoamiWorker::ContinueAndPassAway() {
     PassAway();
 }
 
-TExtensionWhoami::TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader)
+TExtensionWhoami::TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout)
 {
-    WhoamiHandlerId = NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoamiWorker(settings, authHeader));
+    WhoamiHandlerId = NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoamiWorker(settings, authHeader, timeout));
 }
 
 void TExtensionWhoami::Execute(TIntrusivePtr<TExtensionContext> ctx) {

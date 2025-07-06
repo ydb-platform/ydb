@@ -17,11 +17,13 @@ class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoa
 
     std::optional<TEvPrivate::TEvGetProfileResponse::TPtr> IamResponse;
     std::optional<TEvPrivate::TEvErrorResponse::TPtr> IamError;
+    TDuration Timeout;
 
 public:
-    TExtensionWhoamiWorker(const TOpenIdConnectSettings& settings, const TString& authHeader)
+    TExtensionWhoamiWorker(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout)
         : AuthHeader(authHeader)
         , Settings(settings)
+        , Timeout(timeout)
     {}
     void Bootstrap();
     void Handle(TEvPrivate::TEvExtensionRequest::TPtr event);
@@ -49,7 +51,7 @@ private:
     TActorId WhoamiHandlerId;
 
 public:
-    TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader);
+    TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout);
     void Execute(TIntrusivePtr<TExtensionContext> ctx) override;
 };
 

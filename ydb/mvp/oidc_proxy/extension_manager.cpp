@@ -16,6 +16,11 @@ TExtensionManager::TExtensionManager(const TActorId sender,
     ExtensionCtx->Params = MakeHolder<TProxiedResponseParams>();
     ExtensionCtx->Params->ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
     ExtensionCtx->Sender = sender;
+    Timeout = settings.RequestTimeout;
+}
+
+void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
+    Timeout = timeout;
 }
 
 void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
@@ -40,8 +45,7 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
 }
 
 void TExtensionManager::AddExtensionWhoami() {
-    EnrichmentExtension = true;
-    auto ext = std::make_unique<TExtensionWhoami>(Settings, AuthHeader);
+    auto ext = std::make_unique<TExtensionWhoami>(Settings, AuthHeader, Timeout);
     AddExtension(std::move(ext));
 }
 
@@ -66,8 +70,7 @@ bool TExtensionManager::NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr
     TCrackedPage page(request);
     auto path = TStringBuf(page.Url).Before('?');
 
-    static constexpr TStringBuf WHOAMI_PATHS[] = { "/viewer/json/whoami", "/viewer/whoami" };
-    for (const auto& whoamiPath : WHOAMI_PATHS) {
+    for (const auto& whoamiPath : Settings.WHOAMI_PATHS) {
         if (path.EndsWith(whoamiPath)) {
             return true;
         }
@@ -80,10 +83,6 @@ void TExtensionManager::ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& 
         AddExtensionWhoami();
     }
     AddExtensionFinal();
-}
-
-bool TExtensionManager::HasEnrichmentExtension() {
-    return EnrichmentExtension;
 }
 
 void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,

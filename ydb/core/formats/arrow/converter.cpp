@@ -53,8 +53,56 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
 static arrow::Status ConvertColumn(
     const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field, const bool allowInfDouble) {
     switch (colType.GetTypeId()) {
-    case NScheme::NTypeIds::Decimal:
+    case NScheme::NTypeIds::Decimal: {
+        const auto id = column->type()->id();
+        if (id != arrow::Type::STRING && id != arrow::Type::BINARY) {
+            return arrow::Status::TypeError("Decimal column must be STRING/BINARY, got ", column->type()->ToString());
+        }
+
+        auto strArr = std::static_pointer_cast<arrow::BinaryArray>(column);
+
+        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16),
+                                            arrow::default_memory_pool());
+        ARROW_RETURN_NOT_OK(builder.Reserve(strArr->length()));
+
+        const ui8 precision = colType.GetDecimalType().GetPrecision();
+        const ui8 scale = colType.GetDecimalType().GetScale();
+
+        auto Int128ToBigEndian = [](NYql::NDecimal::TInt128 v, ui8 out[16]) {
+            for (int i = 15; i >= 0; --i) {
+                out[i] = static_cast<ui8>(v & 0xff);
+                v >>= 8;
+            }
+        };
+
+        for (int64_t i = 0; i < strArr->length(); ++i) {
+            if (strArr->IsNull(i)) {
+                ARROW_RETURN_NOT_OK(builder.AppendNull());
+                continue;
+            }
+
+            arrow::util::string_view sv = strArr->GetView(i);
+            TStringBuf sbuf(sv.data(), sv.size());
+
+            NYql::NDecimal::TInt128 dec;
+            try {
+                dec = NYql::NDecimal::FromString(sbuf, precision, scale);
+            } catch (const std::exception& e) {
+                return arrow::Status::Invalid("Bad decimal literal: ", sbuf);
+            }
+
+            ui8 buf[16];
+            Int128ToBigEndian(dec, buf);
+            ARROW_RETURN_NOT_OK(builder.Append(buf));
+        }
+
+        std::shared_ptr<arrow::Array> out;
+        ARROW_RETURN_NOT_OK(builder.Finish(&out));
+
+        column = std::move(out);
+        field = arrow::field(field->name(), arrow::fixed_size_binary(16));
         return arrow::Status::OK();
+    }
     case NScheme::NTypeIds::JsonDocument: {
         const static TSet<arrow::Type::type> jsonDocArrowTypes{ arrow::Type::BINARY, arrow::Type::STRING };
         if (!jsonDocArrowTypes.contains(column->type()->id())) {
@@ -266,6 +314,8 @@ bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeI
 
 bool TArrowToYdbConverter::NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
     switch (expectedType.GetTypeId()) {
+        case NScheme::NTypeIds::Decimal:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
         case NScheme::NTypeIds::JsonDocument:
             return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
         default:

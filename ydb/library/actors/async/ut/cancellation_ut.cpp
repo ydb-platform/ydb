@@ -17,7 +17,7 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { sequence.push_back("finished"); };
 
-                int value = co_await source.WithCancellation([&]() -> async<int> {
+                auto result = co_await source.WithCancellation([&]() -> async<int> {
                     sequence.push_back("callback started");
                     Y_DEFER { sequence.push_back("callback finished"); };
                     co_await TSuspendAwaiter{ &resume, &cancel };
@@ -25,7 +25,8 @@ namespace NAsyncTest {
                     co_return 42;
                 });
 
-                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+                UNIT_ASSERT(result.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
 
                 sequence.push_back("returning");
             });
@@ -41,7 +42,7 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback resumed", "callback finished", "returning", "finished");
         }
 
-        Y_UNIT_TEST(CancelWithException) {
+        Y_UNIT_TEST(CancelWithNoResult) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
             TAsyncCancellationSource source;
@@ -52,14 +53,15 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { sequence.push_back("finished"); };
 
-                auto callback = [&]() -> async<void> {
+                auto result = co_await source.WithCancellation([&]() -> async<int> {
                     sequence.push_back("callback started");
                     Y_DEFER { sequence.push_back("callback finished"); };
                     co_await TSuspendAwaiter{ &resume, &cancel };
                     sequence.push_back("callback resumed");
-                };
+                    co_return 42;
+                });
 
-                UNIT_ASSERT_EXCEPTION(co_await source.WithCancellation(callback), TAsyncCancellation);
+                UNIT_ASSERT(!result.has_value());
 
                 sequence.push_back("returning");
             });
@@ -95,7 +97,8 @@ namespace NAsyncTest {
 
                 source.Cancel();
 
-                UNIT_ASSERT_EXCEPTION(co_await source.WithCancellation(callback), TAsyncCancellation);
+                auto result = co_await source.WithCancellation(callback);
+                UNIT_ASSERT_VALUES_EQUAL(result, false);
 
                 sequence.push_back("returning");
             });

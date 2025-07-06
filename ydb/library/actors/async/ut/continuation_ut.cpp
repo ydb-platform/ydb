@@ -88,7 +88,7 @@ namespace NAsyncTest {
                 };
 
                 UNIT_ASSERT_EXCEPTION_CONTAINS(co_await WithAsyncContinuation<int>(callback),
-                    TAsyncCancellation, "continuation object was destroyed");
+                    std::logic_error, "continuation object was destroyed");
 
                 sequence.push_back("returning");
             });
@@ -115,7 +115,7 @@ namespace NAsyncTest {
                 };
 
                 UNIT_ASSERT_EXCEPTION_CONTAINS(co_await WithAsyncContinuation<int>(callback),
-                    TAsyncCancellation, "continuation object was destroyed");
+                    std::logic_error, "continuation object was destroyed");
 
                 sequence.push_back("returning");
             });

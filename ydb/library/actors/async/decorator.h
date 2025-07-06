@@ -268,6 +268,13 @@ namespace NActors::NDetail {
             }
         }
 
+        /**
+         * Returns true after async body unwinds
+         */
+        bool DidUnwind() const noexcept {
+            return !Coroutine;
+        }
+
     private:
         std::coroutine_handle<> CreateUnwindProxy() {
             Y_DEBUG_ABORT_UNLESS(!UnwindProxy, "unexpected unwind proxy already allocated");

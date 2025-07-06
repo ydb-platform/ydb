@@ -3,15 +3,6 @@
 #include "decorator.h"
 #include <ydb/library/actors/core/events.h>
 
-namespace NActors {
-
-    /**
-     * Raised when callee times out before it can produce any result
-     */
-    class TAsyncTimeout : public TAsyncCancellation {};
-
-} // namespace NActors
-
 namespace NActors::NDetail {
 
     template<class TWhen, class R>
@@ -85,21 +76,40 @@ namespace NActors::NDetail {
                 // Unwind caller since it is cancelled
                 return this->GetCancellation();
             } else {
-                // We resume normally but need to throw an exception
-                ThrowException = true;
+                // We resume normally to indicate a timeout
                 return this->GetContinuation();
             }
         }
 
-        R Return() {
+        bool Return() requires (std::is_void_v<R>) {
             // Make sure timer is cancelled
             Detach();
 
-            if (ThrowException) {
-                throw TAsyncTimeout() << "operation timed out";
+            if (this->DidUnwind()) {
+                return false;
             }
 
-            return TBase::Return();
+            TBase::Return();
+            return true;
+        }
+
+        std::optional<R> Return() requires (!std::is_void_v<R>) {
+            // Make sure timer is cancelled
+            Detach();
+
+            if (this->DidUnwind()) {
+                return std::nullopt;
+            }
+
+            struct TImplicitConverter {
+                TBase& base;
+
+                operator R() const {
+                    return base.Return();
+                }
+            };
+
+            return TImplicitConverter{ *this };
         }
 
     private:
@@ -157,7 +167,6 @@ namespace NActors::NDetail {
     private:
         const TWhen When;
         TIntrusivePtr<TBridge> Bridge;
-        bool ThrowException = false;
     };
 
 } // namespace NActors::NDetail

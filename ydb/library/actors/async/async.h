@@ -154,11 +154,6 @@ namespace NActors {
     class TAsyncCancellationSource;
 
     /**
-     * Raised when callee produces no result due to cancellation
-     */
-    class TAsyncCancellation : public yexception {};
-
-    /**
      * Abstract interface for tasks which may be dynamically cancelled
      */
     class TAsyncCancellable : private TIntrusiveListItem<TAsyncCancellable> {

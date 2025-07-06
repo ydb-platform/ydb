@@ -111,7 +111,6 @@ namespace NActors {
                 if (!h) {
                     // Caller was not cancelled yet, resume with exception instead
                     h = this->GetContinuation();
-                    ThrowException = true;
                 }
                 if (Scheduled) {
                     // We resume scheduled work now and postpone unwind until later
@@ -120,12 +119,29 @@ namespace NActors {
                 return h;
             }
 
-            decltype(auto) Return() {
-                if (ThrowException) {
-                    throw TAsyncCancellation() << "operation cancelled";
+            bool Return() requires (std::is_void_v<T>) {
+                if (this->DidUnwind()) {
+                    return false;
                 }
 
-                return TBase::Return();
+                TBase::Return();
+                return true;
+            }
+
+            std::optional<T> Return() requires (!std::is_void_v<T>) {
+                if (this->DidUnwind()) {
+                    return std::nullopt;
+                }
+
+                struct TImplicitConverter {
+                    TBase& base;
+
+                    operator T() const {
+                        return base.Return();
+                    }
+                };
+
+                return TImplicitConverter{ *this };
             }
 
             void DoRun(IActor*) noexcept {
@@ -137,7 +153,6 @@ namespace NActors {
             std::coroutine_handle<> Scheduled;
             bool Started = false;
             bool Cancelled = false;
-            bool ThrowException = false;
         };
 
     } // namespace NDetail
@@ -384,12 +399,6 @@ namespace NActors {
                     }
                 } else if (result.HasException()) {
                     Exception = result.ExtractException();
-                    try {
-                        std::rethrow_exception(Exception);
-                    } catch (const TAsyncCancellation&) {
-                        // This is not an error and swallowed
-                        Exception = nullptr;
-                    } catch (...) {}
                     cancel = true;
                 }
                 // We need to free memory and call destructors in case of OnCancel unwind

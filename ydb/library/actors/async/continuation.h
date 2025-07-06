@@ -91,7 +91,7 @@ namespace NActors {
 
         void Detach() {
             if (Awaiter) {
-                Awaiter->Result.SetException(std::make_exception_ptr(TAsyncCancellation() << "continuation object was destroyed"));
+                Awaiter->Result.SetException(std::make_exception_ptr(std::logic_error("continuation object was destroyed")));
                 Awaiter->Resume();
                 Awaiter = nullptr;
             }

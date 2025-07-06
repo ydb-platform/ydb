@@ -17,14 +17,14 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                try {
-                    co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<void> {
-                        sequence.push_back("suspending");
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                    });
-                } catch (const TAsyncTimeout&) {
+                auto success = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<void> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                });
+
+                if (!success) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
                 sequence.push_back("returning");
@@ -54,16 +54,16 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 
@@ -86,16 +86,16 @@ namespace NAsyncTest {
 
                 self->PassAway();
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 
@@ -119,19 +119,19 @@ namespace NAsyncTest {
 
                 self->PassAway();
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        sequence.push_back("suspending");
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                        sequence.push_back("resumed");
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("resumed");
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 
@@ -151,19 +151,19 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        sequence.push_back("suspending");
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                        sequence.push_back("resumed");
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("resumed");
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 
@@ -195,19 +195,19 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        sequence.push_back("suspending");
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                        sequence.push_back("resumed");
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("resumed");
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 
@@ -236,19 +236,19 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        sequence.push_back("suspending");
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                        sequence.push_back("resumed");
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("resumed");
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 
@@ -285,19 +285,19 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        sequence.push_back("suspending");
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                        sequence.push_back("resumed");
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("resumed");
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 
@@ -331,19 +331,19 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        sequence.push_back("suspending");
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                        sequence.push_back("resumed");
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("resumed");
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 
@@ -380,19 +380,19 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                try {
-                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        sequence.push_back("suspending");
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                        sequence.push_back("resumed");
-                        co_return 42;
-                    });
-                    UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TAsyncTimeout&) {
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("resumed");
+                    co_return 42;
+                });
+
+                if (!result) {
                     sequence.push_back("timeout");
-                    throw;
+                    co_return;
                 }
 
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
                 sequence.push_back("returning");
             });
 

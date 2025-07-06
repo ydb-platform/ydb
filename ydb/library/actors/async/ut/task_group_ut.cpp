@@ -411,11 +411,13 @@ namespace NAsyncTest {
                         co_return co_await g.Next();
                     };
                     sequence.push_back("group g.Next() with timeout 1ms");
-                    UNIT_ASSERT_EXCEPTION(co_await WithTimeout(TDuration::MilliSeconds(1), callNext), TAsyncTimeout);
+                    auto result1 = co_await WithTimeout(TDuration::MilliSeconds(1), callNext);
+                    UNIT_ASSERT(!result1);
                     sequence.push_back("group g.Next() with timeout 10ms");
-                    int groupValue = co_await WithTimeout(TDuration::MilliSeconds(10), callNext);
+                    auto result2 = co_await WithTimeout(TDuration::MilliSeconds(10), callNext);
+                    UNIT_ASSERT(result2);
                     sequence.push_back("group returning");
-                    co_return groupValue;
+                    co_return *result2;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);

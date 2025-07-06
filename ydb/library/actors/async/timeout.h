@@ -30,7 +30,7 @@ namespace NActors::NDetail {
 
     private:
         std::coroutine_handle<> Bypass() noexcept {
-            // When source is cancelled already or the timeout is infinite we bypass everything
+            // When caller is cancelled already or the timeout is infinite we bypass everything
             if (this->GetCancellation() || IsInfinite()) {
                 return this->GetAsyncBody();
             }

@@ -151,14 +151,14 @@ namespace NActors {
 
     // Forward declarations, defined below
     class TAsyncCancellable;
-    class TAsyncCancellationSource;
+    class TAsyncCancellationScope;
 
     /**
      * Abstract interface for tasks which may be dynamically cancelled
      */
     class TAsyncCancellable : private TIntrusiveListItem<TAsyncCancellable> {
         friend TIntrusiveListItem<TAsyncCancellable>;
-        friend TAsyncCancellationSource;
+        friend TAsyncCancellationScope;
 
     protected:
         ~TAsyncCancellable() = default;
@@ -170,9 +170,9 @@ namespace NActors {
     };
 
     /**
-     * Abstract cancellation source which may cancel multiple cancellable tasks
+     * Abstract cancellation scope which may cancel multiple cancellable tasks
      */
-    class TAsyncCancellationSource {
+    class TAsyncCancellationScope {
     public:
         void AddSink(TAsyncCancellable& sink) noexcept {
             if (!Cancelled) [[likely]] {
@@ -195,7 +195,7 @@ namespace NActors {
             return Cancelled;
         }
 
-        TAsyncCancellationSource& operator+=(TAsyncCancellationSource&& rhs) noexcept {
+        TAsyncCancellationScope& operator+=(TAsyncCancellationScope&& rhs) noexcept {
             if (this != &rhs) [[likely]] {
                 Sinks.Append(rhs.Sinks);
                 if (Cancelled) {
@@ -206,7 +206,7 @@ namespace NActors {
         }
 
         /**
-         * Returns a new TAsyncCancellationSource with currently running and
+         * Returns a new TAsyncCancellationScope with currently running and
          * non-cancelled handler attached as a sink when awaited. May only be
          * used directly inside an async actor event handler.
          *
@@ -215,24 +215,24 @@ namespace NActors {
         static auto WithCurrentHandler();
 
         /**
-         * Runs the wrapped coroutine attached to this cancellation source when
+         * Runs the wrapped coroutine attached to this cancellation scope when
          * awaited. This allows cancelling this coroutine independently from
          * caller cancellation.
          *
          * Defined in cancellation.h
          */
         template<class T>
-        auto WithCancellation(async<T> wrapped);
+        auto Wrap(async<T> wrapped);
 
         /**
-         * Runs the wrapped coroutine attached to this cancellation source when
+         * Runs the wrapped coroutine attached to this cancellation scope when
          * awaited. This allows cancelling this coroutine independently from
          * caller cancellation.
          *
          * Defined in cancellation.h
          */
         template<class TCallback, class... TArgs>
-        auto WithCancellation(TCallback&& callback, TArgs&&... args)
+        auto Wrap(TCallback&& callback, TArgs&&... args)
             requires IsAsyncCoroutineCallable<TCallback, TArgs...>;
 
     private:
@@ -1207,24 +1207,24 @@ namespace NActors {
                 Actor.UnregisterActorTask(this);
             }
 
-            struct [[nodiscard]] TCreateAttachedCancellationSourceOp {};
+            struct [[nodiscard]] TCreateAttachedCancellationScopeOp {};
 
-            auto await_transform(TCreateAttachedCancellationSourceOp) noexcept {
+            auto await_transform(TCreateAttachedCancellationScopeOp) noexcept {
                 struct TAwaiter {
-                    TAsyncCancellationSource Source;
+                    TAsyncCancellationScope Scope;
 
                     static constexpr bool await_ready() noexcept { return true; }
                     static constexpr void await_suspend(std::coroutine_handle<>) noexcept {}
-                    TAsyncCancellationSource await_resume() noexcept {
-                        return std::move(Source);
+                    TAsyncCancellationScope await_resume() noexcept {
+                        return std::move(Scope);
                     }
                 };
 
                 TAwaiter awaiter;
                 if (this->GetCancellation()) {
-                    awaiter.Source.Cancel();
+                    awaiter.Scope.Cancel();
                 } else {
-                    awaiter.Source.AddSink(*this);
+                    awaiter.Scope.AddSink(*this);
                 }
                 return awaiter;
             }

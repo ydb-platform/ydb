@@ -81,7 +81,7 @@ namespace NAsyncTest {
 
         Y_UNIT_TEST(CancelThenDeliver) {
             TVector<TString> sequence;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -95,17 +95,21 @@ namespace NAsyncTest {
                 sequence.push_back("started");
                 Y_DEFER { sequence.push_back("finished"); };
 
-                co_await source.WithCancellation([&]() -> async<void> {
+                bool success = co_await scope.Wrap([&]() -> async<void> {
                     Y_DEFER { sequence.push_back("callback finished"); };
                     sequence.push_back("waiting");
                     ASYNC_ASSERT_NO_RETURN(co_await ActorWaitForEvent<TEvents::TEvWakeup>(123));
                 });
+
+                if (!success) {
+                    sequence.push_back("callback was cancelled");
+                }
             }, handler);
 
             ASYNC_ASSERT_SEQUENCE(sequence, "started", "waiting");
 
-            actor.RunSync([&]{ source.Cancel(); });
-            ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "finished");
+            actor.RunSync([&]{ scope.Cancel(); });
+            ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "callback was cancelled", "finished");
 
             actor.Receive(new TEvents::TEvWakeup, 123);
             ASYNC_ASSERT_SEQUENCE(sequence, "received event 0x00010002");

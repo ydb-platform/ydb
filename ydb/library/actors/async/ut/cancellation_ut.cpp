@@ -9,7 +9,7 @@ namespace NAsyncTest {
         Y_UNIT_TEST(CancelWithResult) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -17,7 +17,7 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { sequence.push_back("finished"); };
 
-                auto result = co_await source.WithCancellation([&]() -> async<int> {
+                auto result = co_await scope.Wrap([&]() -> async<int> {
                     sequence.push_back("callback started");
                     Y_DEFER { sequence.push_back("callback finished"); };
                     co_await TSuspendAwaiter{ &resume, &cancel };
@@ -34,7 +34,7 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback started");
             UNIT_ASSERT(resume && !cancel);
 
-            actor.RunSync([&]{ source.Cancel(); });
+            actor.RunSync([&]{ scope.Cancel(); });
             ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
             UNIT_ASSERT(cancel);
 
@@ -45,7 +45,7 @@ namespace NAsyncTest {
         Y_UNIT_TEST(CancelWithNoResult) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -53,7 +53,7 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { sequence.push_back("finished"); };
 
-                auto result = co_await source.WithCancellation([&]() -> async<int> {
+                auto result = co_await scope.Wrap([&]() -> async<int> {
                     sequence.push_back("callback started");
                     Y_DEFER { sequence.push_back("callback finished"); };
                     co_await TSuspendAwaiter{ &resume, &cancel };
@@ -69,7 +69,7 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback started");
             UNIT_ASSERT(resume && !cancel);
 
-            actor.RunSync([&]{ source.Cancel(); });
+            actor.RunSync([&]{ scope.Cancel(); });
             ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
             UNIT_ASSERT(cancel);
 
@@ -77,10 +77,10 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "returning", "finished");
         }
 
-        Y_UNIT_TEST(AlreadyCancelledSource) {
+        Y_UNIT_TEST(AlreadyCancelledScope) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -95,9 +95,9 @@ namespace NAsyncTest {
                     sequence.push_back("callback resumed");
                 };
 
-                source.Cancel();
+                scope.Cancel();
 
-                auto result = co_await source.WithCancellation(callback);
+                auto result = co_await scope.Wrap(callback);
                 UNIT_ASSERT_VALUES_EQUAL(result, false);
 
                 sequence.push_back("returning");
@@ -110,7 +110,7 @@ namespace NAsyncTest {
         Y_UNIT_TEST(AlreadyCancelledCaller) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -127,17 +127,17 @@ namespace NAsyncTest {
 
                 self->PassAway();
 
-                ASYNC_ASSERT_NO_RETURN(co_await source.WithCancellation(callback));
+                ASYNC_ASSERT_NO_RETURN(co_await scope.Wrap(callback));
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "callback started", "callback finished", "finished");
             UNIT_ASSERT(!resume && !cancel);
         }
 
-        Y_UNIT_TEST(CancelSourceThenCaller) {
+        Y_UNIT_TEST(CancelScopeThenCaller) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel, cancelCopy;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -152,13 +152,13 @@ namespace NAsyncTest {
                     sequence.push_back("callback resumed");
                 };
 
-                ASYNC_ASSERT_NO_RETURN(co_await source.WithCancellation(callback));
+                ASYNC_ASSERT_NO_RETURN(co_await scope.Wrap(callback));
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "callback started");
             UNIT_ASSERT(resume && !cancel);
 
-            actor.RunSync([&]{ source.Cancel(); });
+            actor.RunSync([&]{ scope.Cancel(); });
             ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
             UNIT_ASSERT(cancel);
 
@@ -172,10 +172,10 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "finished");
         }
 
-        Y_UNIT_TEST(CancelCallerThenSource) {
+        Y_UNIT_TEST(CancelCallerThenScope) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel, cancelCopy;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -190,7 +190,7 @@ namespace NAsyncTest {
                     sequence.push_back("callback resumed");
                 };
 
-                ASYNC_ASSERT_NO_RETURN(co_await source.WithCancellation(callback));
+                ASYNC_ASSERT_NO_RETURN(co_await scope.Wrap(callback));
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "callback started");
@@ -202,7 +202,7 @@ namespace NAsyncTest {
 
             std::swap(cancel, cancelCopy);
 
-            actor.RunSync([&]{ source.Cancel(); });
+            actor.RunSync([&]{ scope.Cancel(); });
             ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
             UNIT_ASSERT(!cancel);
 
@@ -210,10 +210,10 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "finished");
         }
 
-        Y_UNIT_TEST(SuspendedSourceTearDown) {
+        Y_UNIT_TEST(SuspendedScopeTearDown) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -228,7 +228,7 @@ namespace NAsyncTest {
                     sequence.push_back("callback resumed");
                 };
 
-                ASYNC_ASSERT_NO_RETURN(co_await source.WithCancellation(callback));
+                ASYNC_ASSERT_NO_RETURN(co_await scope.Wrap(callback));
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "callback started");
@@ -238,10 +238,10 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "finished");
         }
 
-        Y_UNIT_TEST(CancelledSourceTearDown) {
+        Y_UNIT_TEST(CancelledScopeTearDown) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -256,14 +256,14 @@ namespace NAsyncTest {
                     sequence.push_back("callback resumed");
                 };
 
-                ASYNC_ASSERT_NO_RETURN(co_await source.WithCancellation(callback));
+                ASYNC_ASSERT_NO_RETURN(co_await scope.Wrap(callback));
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "callback started");
             UNIT_ASSERT(resume && !cancel);
 
             actor.RunSync([&]{
-                source.Cancel();
+                scope.Cancel();
             });
             UNIT_ASSERT(cancel);
 
@@ -777,7 +777,7 @@ namespace NAsyncTest {
         Y_UNIT_TEST(InterceptCancellationAsyncVoidThrowsOnCall) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -798,7 +798,7 @@ namespace NAsyncTest {
                     throw std::runtime_error("on cancel exception");
                 };
 
-                co_await source.WithCancellation([&]() -> async<void> {
+                co_await scope.Wrap([&]() -> async<void> {
                     UNIT_ASSERT_EXCEPTION_CONTAINS(
                         co_await InterceptCancellation(callback, onCancel),
                         std::runtime_error, "on cancel exception");
@@ -812,7 +812,7 @@ namespace NAsyncTest {
 
             actor.RunSync([&]{
                 sequence.push_back("before cancel");
-                source.Cancel();
+                scope.Cancel();
                 sequence.push_back("after cancel");
                 // We must be cancelled already
                 ASYNC_ASSERT_SEQUENCE(sequence, "before cancel", "on cancel", "after cancel");
@@ -828,7 +828,7 @@ namespace NAsyncTest {
         Y_UNIT_TEST(InterceptCancellationAsyncVoidThrowsOnStart) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -855,7 +855,7 @@ namespace NAsyncTest {
                     return onCancelReal();
                 };
 
-                co_await source.WithCancellation([&]() -> async<void> {
+                co_await scope.Wrap([&]() -> async<void> {
                     UNIT_ASSERT_EXCEPTION_CONTAINS(
                         co_await InterceptCancellation(callback, onCancel),
                         std::runtime_error, "on cancel exception");
@@ -869,7 +869,7 @@ namespace NAsyncTest {
 
             actor.RunSync([&]{
                 sequence.push_back("before cancel");
-                source.Cancel();
+                scope.Cancel();
                 sequence.push_back("after cancel");
 
                 // We must not be cancelled yet (on cancel start scheduled)
@@ -888,7 +888,7 @@ namespace NAsyncTest {
         Y_UNIT_TEST(InterceptCancellationAsyncVoidThrowsResumeBeforeStart) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -915,7 +915,7 @@ namespace NAsyncTest {
                     return onCancelReal();
                 };
 
-                co_await source.WithCancellation([&]() -> async<void> {
+                co_await scope.Wrap([&]() -> async<void> {
                     UNIT_ASSERT_EXCEPTION_CONTAINS(
                         co_await InterceptCancellation(callback, onCancel),
                         std::runtime_error, "on cancel exception");
@@ -929,7 +929,7 @@ namespace NAsyncTest {
 
             actor.RunSync([&]{
                 sequence.push_back("before cancel");
-                source.Cancel();
+                scope.Cancel();
                 sequence.push_back("after cancel");
                 // We must not be cancelled yet (on cancel start scheduled)
                 ASYNC_ASSERT_SEQUENCE(sequence, "before cancel", "on cancel", "after cancel");
@@ -947,7 +947,7 @@ namespace NAsyncTest {
         Y_UNIT_TEST(InterceptCancellationAsyncTrue) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -969,7 +969,7 @@ namespace NAsyncTest {
                     co_return true; // should cancel (like void)
                 };
 
-                co_await source.WithCancellation([&]() -> async<void> {
+                co_await scope.Wrap([&]() -> async<void> {
                     int value = co_await InterceptCancellation(callback, onCancel);
 
                     UNIT_ASSERT_VALUES_EQUAL(value, 42);
@@ -983,7 +983,7 @@ namespace NAsyncTest {
 
             actor.RunSync([&]{
                 sequence.push_back("before cancel");
-                source.Cancel();
+                scope.Cancel();
                 sequence.push_back("after cancel");
                 // We must not be cancelled yet (on cancel start scheduled)
                 ASYNC_ASSERT_SEQUENCE(sequence, "before cancel", "after cancel");
@@ -1001,7 +1001,7 @@ namespace NAsyncTest {
         Y_UNIT_TEST(InterceptCancellationAsyncFalse) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
-            TAsyncCancellationSource source;
+            TAsyncCancellationScope scope;
 
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
@@ -1023,7 +1023,7 @@ namespace NAsyncTest {
                     co_return false; // should not cancel
                 };
 
-                co_await source.WithCancellation([&]() -> async<void> {
+                co_await scope.Wrap([&]() -> async<void> {
                     int value = co_await InterceptCancellation(callback, onCancel);
 
                     UNIT_ASSERT_VALUES_EQUAL(value, 42);
@@ -1037,7 +1037,7 @@ namespace NAsyncTest {
 
             actor.RunSync([&]{
                 sequence.push_back("before cancel");
-                source.Cancel();
+                scope.Cancel();
                 sequence.push_back("after cancel");
 
                 // We must not be cancelled yet (on cancel start scheduled)

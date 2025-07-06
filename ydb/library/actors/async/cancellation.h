@@ -5,38 +5,38 @@
 namespace NActors {
 
     /**
-     * Returns a new TAsyncCancellationSource with currently running and
+     * Returns a new TAsyncCancellationScope with currently running and
      * non-cancelled handler attached as a sink when awaited. May only be
      * used directly inside an async actor event handler.
      */
-    inline auto TAsyncCancellationSource::WithCurrentHandler() {
-        return NDetail::TActorAsyncHandlerPromise::TCreateAttachedCancellationSourceOp{};
+    inline auto TAsyncCancellationScope::WithCurrentHandler() {
+        return NDetail::TActorAsyncHandlerPromise::TCreateAttachedCancellationScopeOp{};
     }
 
     namespace NDetail {
 
-        template<class T>
-        class [[nodiscard]] TWithCancellationSourceAwaiter
+        template<class T, bool Shielded = false>
+        class [[nodiscard]] TWrapCancellationScopeAwaiter
             : private TAsyncCancellable
-            , private TActorRunnableItem::TImpl<TWithCancellationSourceAwaiter<T>>
-            , public TAsyncDecoratorAwaiter<T, TWithCancellationSourceAwaiter<T>>
+            , private TActorRunnableItem::TImpl<TWrapCancellationScopeAwaiter<T>>
+            , public TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T>>
         {
-            friend TActorRunnableItem::TImpl<TWithCancellationSourceAwaiter<T>>;
-            friend TAsyncDecoratorAwaiter<T, TWithCancellationSourceAwaiter<T>>;
-            using TBase = TAsyncDecoratorAwaiter<T, TWithCancellationSourceAwaiter<T>>;
+            friend TActorRunnableItem::TImpl<TWrapCancellationScopeAwaiter<T>>;
+            friend TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T>>;
+            using TBase = TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T>>;
 
         public:
             template<class TCallback, class... TArgs>
-            TWithCancellationSourceAwaiter(TAsyncCancellationSource& source, TCallback&& callback, TArgs&&... args)
+            TWrapCancellationScopeAwaiter(TAsyncCancellationScope& scope, TCallback&& callback, TArgs&&... args)
                 : TBase(std::forward<TCallback>(callback), std::forward<TArgs>(args)...)
             {
-                Cancelled = source.IsCancelled();
+                Cancelled = scope.IsCancelled();
                 if (!Cancelled) {
-                    source.AddSink(*this);
+                    scope.AddSink(*this);
                 }
             }
 
-            TWithCancellationSourceAwaiter& CoAwaitByValue() && noexcept {
+            TWrapCancellationScopeAwaiter& CoAwaitByValue() && noexcept {
                 return *this;
             }
 
@@ -54,20 +54,27 @@ namespace NActors {
             }
 
             std::coroutine_handle<> Bypass() noexcept {
-                if (this->GetCancellation()) {
-                    if (!Cancelled) {
-                        // Don't want unexpected Cancel() calls in the future
-                        TAsyncCancellable::Unlink();
+                if constexpr (!Shielded) {
+                    if (this->GetCancellation()) {
+                        if (!Cancelled) {
+                            // Don't want unexpected Cancel() calls in the future
+                            TAsyncCancellable::Unlink();
+                        }
+                        // Bypass everything when already cancelled by the caller
+                        return this->GetAsyncBody();
                     }
-                    // Bypass everything when already cancelled by the caller
-                    return this->GetAsyncBody();
                 }
                 return nullptr;
             }
 
             std::coroutine_handle<> StartCancelled() noexcept {
-                // We should have bypassed everything
-                Y_ABORT("should never be called");
+                if constexpr (!Shielded) {
+                    // We should have bypassed everything
+                    Y_ABORT("should never be called");
+                } else {
+                    // We shield wrapped coroutine from caller's cancellation
+                    return Start();
+                }
             }
 
             std::coroutine_handle<> Start() noexcept {
@@ -81,12 +88,14 @@ namespace NActors {
             }
 
             std::coroutine_handle<> OnCancel() noexcept {
-                if (!Cancelled) {
-                    Cancelled = true;
-                    // Don't want unexpected Cancel() calls in the future
-                    TAsyncCancellable::Unlink();
-                    // We don't need to intercept unwind from now on
-                    return TBase::CancelWithBypass();
+                if constexpr (!Shielded) {
+                    if (!Cancelled) {
+                        Cancelled = true;
+                        // Don't want unexpected Cancel() calls in the future
+                        TAsyncCancellable::Unlink();
+                        // We don't need to intercept unwind from now on
+                        return TBase::CancelWithBypass();
+                    }
                 }
                 return nullptr;
             }
@@ -108,8 +117,13 @@ namespace NActors {
                     // Don't want unexpected Cancel() calls in the future
                     TAsyncCancellable::Unlink();
                 }
-                if (!h) {
-                    // Caller was not cancelled yet, resume with exception instead
+                if constexpr (!Shielded) {
+                    if (!h) {
+                        // Caller was not cancelled yet, resume with exception instead
+                        h = this->GetContinuation();
+                    }
+                } else {
+                    // We shield wrapped coroutine from caller's cancellation
                     h = this->GetContinuation();
                 }
                 if (Scheduled) {
@@ -151,34 +165,34 @@ namespace NActors {
 
         private:
             std::coroutine_handle<> Scheduled;
-            bool Started = false;
             bool Cancelled = false;
+            bool Started = false;
         };
 
     } // namespace NDetail
 
     /**
-     * Runs the wrapped coroutine attached to this cancellation source when
+     * Runs the wrapped coroutine attached to this cancellation scope when
      * awaited. This allows cancelling this coroutine independently from
      * caller cancellation.
      */
     template<class T>
-    inline auto TAsyncCancellationSource::WithCancellation(async<T> wrapped) {
-        return NDetail::TWithCancellationSourceAwaiter<T>(*this, [&wrapped]{ return wrapped.UnsafeMove(); });
+    inline auto TAsyncCancellationScope::Wrap(async<T> wrapped) {
+        return NDetail::TWrapCancellationScopeAwaiter<T>(*this, [&wrapped]{ return wrapped.UnsafeMove(); });
     }
 
     /**
-     * Runs the wrapped coroutine attached to this cancellation source when
+     * Runs the wrapped coroutine attached to this cancellation scope when
      * awaited. This allows cancelling this coroutine independently from
      * caller cancellation.
      */
     template<class TCallback, class... TArgs>
-    inline auto TAsyncCancellationSource::WithCancellation(TCallback&& callback, TArgs&&... args)
+    inline auto TAsyncCancellationScope::Wrap(TCallback&& callback, TArgs&&... args)
         requires IsAsyncCoroutineCallable<TCallback, TArgs...>
     {
         using TCallbackResult = std::invoke_result_t<TCallback, TArgs...>;
         using T = typename TCallbackResult::result_type;
-        return NDetail::TWithCancellationSourceAwaiter<T>(*this, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
+        return NDetail::TWrapCancellationScopeAwaiter<T>(*this, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
     namespace NDetail {

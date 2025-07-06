@@ -15,15 +15,15 @@ namespace NActors {
 
     namespace NDetail {
 
-        template<class T, bool Shielded = false>
+        template<class T, bool Shielded>
         class [[nodiscard]] TWrapCancellationScopeAwaiter
             : private TAsyncCancellable
-            , private TActorRunnableItem::TImpl<TWrapCancellationScopeAwaiter<T>>
-            , public TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T>>
+            , private TActorRunnableItem::TImpl<TWrapCancellationScopeAwaiter<T, Shielded>>
+            , public TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T, Shielded>>
         {
-            friend TActorRunnableItem::TImpl<TWrapCancellationScopeAwaiter<T>>;
-            friend TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T>>;
-            using TBase = TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T>>;
+            friend TActorRunnableItem::TImpl<TWrapCancellationScopeAwaiter<T, Shielded>>;
+            friend TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T, Shielded>>;
+            using TBase = TAsyncDecoratorAwaiter<T, TWrapCancellationScopeAwaiter<T, Shielded>>;
 
         public:
             template<class TCallback, class... TArgs>
@@ -178,7 +178,7 @@ namespace NActors {
      */
     template<class T>
     inline auto TAsyncCancellationScope::Wrap(async<T> wrapped) {
-        return NDetail::TWrapCancellationScopeAwaiter<T>(*this, [&wrapped]{ return wrapped.UnsafeMove(); });
+        return NDetail::TWrapCancellationScopeAwaiter<T, false>(*this, [&wrapped]{ return wrapped.UnsafeMove(); });
     }
 
     /**
@@ -192,66 +192,31 @@ namespace NActors {
     {
         using TCallbackResult = std::invoke_result_t<TCallback, TArgs...>;
         using T = typename TCallbackResult::result_type;
-        return NDetail::TWrapCancellationScopeAwaiter<T>(*this, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
+        return NDetail::TWrapCancellationScopeAwaiter<T, false>(*this, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
-    namespace NDetail {
-
-        template<class T>
-        class [[nodiscard]] TWithoutCancellationAwaiter {
-        public:
-            static constexpr bool IsActorAwareAwaiter = true;
-
-            template<class TCallback, class... TArgs>
-            TWithoutCancellationAwaiter(TCallback&& callback, TArgs&&... args)
-                : Coroutine(std::invoke(std::forward<TCallback>(callback), std::forward<TArgs>(args)...))
-            {}
-
-            TWithoutCancellationAwaiter& CoAwaitByValue() && noexcept {
-                return *this;
-            }
-
-        public:
-            bool await_ready() noexcept {
-                return false;
-            }
-
-            template<class TPromise>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> caller) noexcept {
-                IActor& actor = caller.promise().GetActor();
-                Coroutine.GetHandle().promise().SetContinuation(actor, Source, caller);
-                return Coroutine.GetHandle();
-            }
-
-            T await_resume() {
-                return Coroutine.GetHandle().promise().ExtractValue();
-            }
-
-        private:
-            TAwaitCancelSource Source;
-            async<T> Coroutine;
-        };
-
-    } // namespace NDetail
-
     /**
-     * Runs the wrapped coroutine when awaited, ignoring caller cancellation attempts.
+     * Runs the wrapped coroutine attached to this cancellation scope when
+     * awaited. This allows cancelling this coroutine independently from
+     * caller cancellation. The call is shilded from caller's cancallation.
      */
     template<class T>
-    inline auto WithoutCancellation(async<T> wrapped) {
-        return NDetail::TWithoutCancellationAwaiter<T>([&wrapped]{ return wrapped.UnsafeMove(); });
+    inline auto TAsyncCancellationScope::WrapShielded(async<T> wrapped) {
+        return NDetail::TWrapCancellationScopeAwaiter<T, true>(*this, [&wrapped]{ return wrapped.UnsafeMove(); });
     }
 
     /**
-     * Runs the wrapped coroutine when awaited, ignoring caller cancellation attempts.
+     * Runs the wrapped coroutine attached to this cancellation scope when
+     * awaited. This allows cancelling this coroutine independently from
+     * caller cancellation. The call is shilded from caller's cancallation.
      */
     template<class TCallback, class... TArgs>
-    inline auto WithoutCancellation(TCallback&& callback, TArgs&&... args)
+    inline auto TAsyncCancellationScope::WrapShielded(TCallback&& callback, TArgs&&... args)
         requires IsAsyncCoroutineCallable<TCallback, TArgs...>
     {
         using TCallbackResult = std::invoke_result_t<TCallback, TArgs...>;
         using T = typename TCallbackResult::result_type;
-        return NDetail::TWithoutCancellationAwaiter<T>(std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
+        return NDetail::TWrapCancellationScopeAwaiter<T, true>(*this, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
     namespace NDetail {

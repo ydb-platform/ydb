@@ -271,7 +271,7 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "finished");
         }
 
-        Y_UNIT_TEST(WithoutCancellation) {
+        Y_UNIT_TEST(Shielded) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
 
@@ -289,9 +289,10 @@ namespace NAsyncTest {
                     co_return 42;
                 };
 
-                int value = co_await WithoutCancellation(callback);
+                auto result = co_await TAsyncCancellationScope().WrapShielded(callback);
 
-                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+                UNIT_ASSERT(result.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
 
                 sequence.push_back("returning");
             });
@@ -307,7 +308,7 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback resumed", "callback finished", "returning", "finished");
         }
 
-        Y_UNIT_TEST(WithoutCancellationTearDown) {
+        Y_UNIT_TEST(ShieldedTearDown) {
             TVector<TString> sequence;
             std::coroutine_handle<> resume, cancel;
 
@@ -325,9 +326,10 @@ namespace NAsyncTest {
                     co_return 42;
                 };
 
-                int value = co_await WithoutCancellation(callback);
+                auto result = co_await TAsyncCancellationScope().WrapShielded(callback);
 
-                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+                UNIT_ASSERT(result.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
 
                 sequence.push_back("returning");
             });
@@ -341,6 +343,53 @@ namespace NAsyncTest {
 
             runtime.CleanupNode();
             ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "finished");
+        }
+
+        Y_UNIT_TEST(ShieldedCancel) {
+            TVector<TString> sequence;
+            std::coroutine_handle<> resume, cancel;
+            TAsyncCancellationScope scope;
+
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                Y_DEFER { sequence.push_back("finished"); };
+
+                auto callback = [&]() -> async<int> {
+                    sequence.push_back("callback started");
+                    Y_DEFER { sequence.push_back("callback finished"); };
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("callback resumed");
+                    co_return 42;
+                };
+
+                auto result = co_await scope.WrapShielded(callback);
+
+                if (result.has_value()) {
+                    UNIT_ASSERT_VALUES_EQUAL(*result, 42);
+                } else {
+                    sequence.push_back("cancelled");
+                }
+
+                sequence.push_back("returning");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence, "callback started");
+            UNIT_ASSERT(resume && !cancel);
+
+            actor.Poison();
+            ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
+            UNIT_ASSERT(!cancel);
+
+            actor.RunSync([&]{
+                scope.Cancel();
+            });
+            ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
+            UNIT_ASSERT(cancel);
+
+            actor.ResumeCoroutine(cancel);
+            ASYNC_ASSERT_SEQUENCE(sequence, "callback finished", "cancelled", "returning", "finished");
         }
 
         Y_UNIT_TEST(InterceptCancellationVoidThenResume) {

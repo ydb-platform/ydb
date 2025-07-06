@@ -235,6 +235,27 @@ namespace NActors {
         auto Wrap(TCallback&& callback, TArgs&&... args)
             requires IsAsyncCoroutineCallable<TCallback, TArgs...>;
 
+        /**
+         * Runs the wrapped coroutine attached to this cancellation scope when
+         * awaited. This allows cancelling this coroutine independently from
+         * caller cancellation. The call is shilded from caller's cancallation.
+         *
+         * Defined in cancellation.h
+         */
+        template<class T>
+        auto WrapShielded(async<T> wrapped);
+
+        /**
+         * Runs the wrapped coroutine attached to this cancellation scope when
+         * awaited. This allows cancelling this coroutine independently from
+         * caller cancellation. The call is shilded from caller's cancallation.
+         *
+         * Defined in cancellation.h
+         */
+        template<class TCallback, class... TArgs>
+        auto WrapShielded(TCallback&& callback, TArgs&&... args)
+            requires IsAsyncCoroutineCallable<TCallback, TArgs...>;
+
     private:
         void CancelSinks() noexcept {
             while (!Sinks.Empty()) {

@@ -2111,6 +2111,10 @@ void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr
 void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     TPathElement::TPtr elem = PathsById.at(pathId);
+
+    NActorsProto::TActorId tempDirOwnerActorIdProto;
+    ActorIdToProto(elem->TempDirOwnerActorId, &tempDirOwnerActorIdProto);
+
     if (IsLocalId(pathId)) {
         db.Table<Schema::Paths>().Key(pathId.LocalPathId).Update(
                     NIceDb::TUpdate<Schema::Paths::ParentOwnerId>(elem->ParentPathId.OwnerId),
@@ -2127,7 +2131,8 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::Paths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
                     NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion),
-                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
+                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString()),
+                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorIdProto>(tempDirOwnerActorIdProto.SerializeAsString())
                     );
     } else {
         db.Table<Schema::MigratedPaths>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -2145,7 +2150,8 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::MigratedPaths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion),
-                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
+                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString()),
+                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorIdProto>(tempDirOwnerActorIdProto.SerializeAsString())
                     );
     }
 }

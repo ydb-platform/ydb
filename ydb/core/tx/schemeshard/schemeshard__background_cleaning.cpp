@@ -62,6 +62,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
     auto ctx = ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RunBackgroundCleaning "
         "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
+        << ", pathId# " << pathId
         << ", ownerId# " << info->TempDirOwnerActorId
         << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
         << ", rate# " << BackgroundCleaningQueue->GetRate()
@@ -309,6 +310,13 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
     }
 
     retryState.RetryNumber++;
+    auto ctx = ActorContext();
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Retry node subscribe BackgroundCleaning "
+        "for nodeId# " << nodeId
+        << ", count of retries# " << retryState.RetryNumber
+        << ", retries limit# " << BackgroundCleaningRetrySettings.GetMaxRetryNumber()
+        << ", last retry at# " << retryState.LastRetryAt
+        << " at schemeshard " << TabletID());
 
     if (retryState.RetryNumber > BackgroundCleaningRetrySettings.GetMaxRetryNumber()) {
         for (const auto& ownerActorId: nodeState.Owners) {
@@ -359,6 +367,11 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     auto& currentTempDirs = it->second;
+    auto ctx = ActorContext();
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Owner undelivered for BackgroundCleaning "
+        "for ownerActorId# " << ownerActorId
+        << ", undelivered reason# " << ev->Get()->Reason
+        << " at schemeshard " << TabletID());
 
     for (auto& pathId: currentTempDirs) {
         EnqueueBackgroundCleaning(pathId);

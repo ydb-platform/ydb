@@ -3,11 +3,11 @@
 #include "dictionary_codec.h"
 #include "private.h"
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <library/cpp/yt/system/exit.h>
 
+#include <library/cpp/yt/memory/blob.h>
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 #include <util/system/unaligned_mem.h>

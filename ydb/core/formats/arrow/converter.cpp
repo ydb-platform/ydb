@@ -56,7 +56,7 @@ static arrow::Status ConvertColumn(
     case NScheme::NTypeIds::Decimal: {
         const auto id = column->type()->id();
         if (id != arrow::Type::STRING && id != arrow::Type::BINARY) {
-            return arrow::Status::TypeError("Decimal column must be STRING/BINARY, got ", column->type()->ToString());
+            return arrow::Status::TypeError("Decimal column must be string, but got ", column->type()->ToString());
         }
 
         auto strArr = std::static_pointer_cast<arrow::BinaryArray>(column);
@@ -69,13 +69,13 @@ static arrow::Status ConvertColumn(
         const ui8 scale = colType.GetDecimalType().GetScale();
 
         auto Int128ToBigEndian = [](NYql::NDecimal::TInt128 v, ui8 out[16]) {
-            for (int i = 15; i >= 0; --i) {
+            for (i32 i = 15; i >= 0; --i) {
                 out[i] = static_cast<ui8>(v & 0xff);
                 v >>= 8;
             }
         };
 
-        for (int64_t i = 0; i < strArr->length(); ++i) {
+        for (i64 i = 0; i < strArr->length(); ++i) {
             if (strArr->IsNull(i)) {
                 ARROW_RETURN_NOT_OK(builder.AppendNull());
                 continue;
@@ -85,11 +85,7 @@ static arrow::Status ConvertColumn(
             TStringBuf sbuf(sv.data(), sv.size());
 
             NYql::NDecimal::TInt128 dec;
-            try {
-                dec = NYql::NDecimal::FromString(sbuf, precision, scale);
-            } catch (const std::exception& e) {
-                return arrow::Status::Invalid("Bad decimal literal: ", sbuf);
-            }
+            dec = NYql::NDecimal::FromString(sbuf, precision, scale);
 
             ui8 buf[16];
             Int128ToBigEndian(dec, buf);

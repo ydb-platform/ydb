@@ -247,9 +247,7 @@ public:
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
-        auto result = GetStageData().GetPortionAccessor().DecodeBlobAddresses(blobsOriginal, Schema->GetIndexInfo());
-        AFL_VERIFY(blobsOriginal.IsEmpty())("blobs", blobsOriginal.DebugString());
-        return result;
+        return GetStageData().GetPortionAccessor().DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {

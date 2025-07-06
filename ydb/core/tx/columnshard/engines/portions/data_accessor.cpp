@@ -260,7 +260,7 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
 std::vector<THashMap<TChunkAddress, TString>> TPortionDataAccessor::DecodeBlobAddresses(const std::vector<TPortionDataAccessor>& accessors,
     const std::vector<std::shared_ptr<TIndexInfo>>& info, NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
     std::vector<THashMap<TChunkAddress, TString>> result;
-    AFL_VERIFY(accessors.size() == info.size());
+    AFL_VERIFY(accessors.size() == info.size())("accessors", accessors.size())("info", info.size());
     for (ui64 i = 0; i < accessors.size(); ++i) {
         result.emplace_back(accessors[i].DecodeBlobAddressesImpl(blobs, *info[i]));
     }

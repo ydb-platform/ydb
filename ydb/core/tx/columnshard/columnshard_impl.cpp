@@ -568,7 +568,7 @@ private:
         TActorContext::AsActorContext().Send(ParentActorId, std::move(ev));
     }
 
-    virtual std::optional<ui64> GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
         const std::vector<NOlap::TPortionDataAccessor>& acc) const override {
         AFL_VERIFY(!columnIds);
         THashMap<ui32, ui64> memoryByColumns;

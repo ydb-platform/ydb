@@ -130,7 +130,7 @@ private:
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskDataResources);
         const std::vector<TPortionDataAccessor>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
-        ui64 memory = GetNecessaryDataMemory(fetchingContext, ColumnIds, accessors);
+        const ui64 memory = GetNecessaryDataMemory(fetchingContext, ColumnIds, accessors);
         if (!memory) {
             return IFetchingStep::EStepResult::Continue;
         }

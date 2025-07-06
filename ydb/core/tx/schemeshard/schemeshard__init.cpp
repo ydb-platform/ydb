@@ -9,8 +9,6 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/pb.h>
 
-#include <library/cpp/protobuf/util/pb_io.h>
-
 namespace NKikimr {
 namespace NSchemeShard {
 

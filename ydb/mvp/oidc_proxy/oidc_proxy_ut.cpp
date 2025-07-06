@@ -1726,7 +1726,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
-        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ClientError"], "Timeout while waiting for whoami info");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ClientError"], "Timeout while waiting info");
         UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Iam"));
     }
 

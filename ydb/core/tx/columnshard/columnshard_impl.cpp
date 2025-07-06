@@ -544,9 +544,9 @@ private:
         NActors::TLogContextGuard g(
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         if (NeedBlobs) {
-            AFL_VERIFY(context.GetResourceGuards().size() == 2);
+            AFL_VERIFY(context.GetResourceGuards().size() == 3);
         } else {
-            AFL_VERIFY(context.GetResourceGuards().size() == 1);
+            AFL_VERIFY(context.GetResourceGuards().size() == 2);
         }
         if (NeedBlobs) {
             Changes->Blobs = context.ExtractBlobs();

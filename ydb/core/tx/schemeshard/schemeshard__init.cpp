@@ -9,6 +9,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/pb.h>
 
+#include <library/cpp/protobuf/util/pb_io.h>
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -112,7 +114,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
-            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorIdProto>()
         );
     }
 
@@ -138,7 +140,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
-        TString tempDirOwnerActorId;
+        TString tempDirOwnerActorIdProto;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -154,14 +156,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
             path->ACLVersion,
-            tempDirOwnerActorId) = rec;
+            tempDirOwnerActorIdProto) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
         }
 
-        path->TempDirOwnerActorId.Parse(tempDirOwnerActorId.c_str(), tempDirOwnerActorId.size());
+        if (NActorsProto::TActorId protoId; protoId.ParseFromString(tempDirOwnerActorIdProto)) {
+            path->TempDirOwnerActorId = ActorIdFromProto(protoId);
+        }
 
         return path;
     }

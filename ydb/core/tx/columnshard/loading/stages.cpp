@@ -111,9 +111,6 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo)) {
         return false;
     }
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPathId, Self->OwnerPathId)) {
-        return false;
-    }
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPath, Self->OwnerPath)) {
         return false;
     }
@@ -151,12 +148,10 @@ bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionCon
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
     TTablesManager tablesManagerLocal(Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(),
-        Self->OwnerPathId ? NOlap::TSchemaCachesManager::GetCache(Self->OwnerPathId, Self->Info()->TenantPathId)
-                          : std::shared_ptr<NOlap::TSchemaObjectsCache>(),
         Self->Counters.GetPortionIndexCounters(), Self->TabletID());
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
-        if (!tablesManagerLocal.InitFromDB(db)) {
+        if (!tablesManagerLocal.InitFromDB(db, Self->Info())) {
             return false;
         }
     }

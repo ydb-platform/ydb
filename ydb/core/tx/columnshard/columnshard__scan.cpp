@@ -31,12 +31,8 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         WaitPlanStep(readVersion.GetPlanStep());
         return;
     }
-
-    const auto schemeShardLocalPath = TSchemeShardLocalPathId::FromProto(record);
-    auto internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPath);
-    if (!internalPathId && NOlap::NReader::NSysView::NAbstract::ISysViewPolicy::BuildByPath(record.GetTablePath())) {
-        internalPathId = TInternalPathId::FromRawValue(schemeShardLocalPath.GetRawValue());  //TODO register ColumnStore in tablesmanager
-    }
+    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record);
+    const auto internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     if (!internalPathId) {
         const auto& request = ev->Get()->Record;
         auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(request.GetGeneration(), TabletID());

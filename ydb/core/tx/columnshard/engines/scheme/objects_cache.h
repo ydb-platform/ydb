@@ -82,17 +82,17 @@ private:
     class TColumnOwnerId {
     private:
         TPathId Tenant;
-        TLocalPathId Owner;
+        NColumnShard::TSchemeShardLocalPathId Owner;
 
     public:
-        TColumnOwnerId(const TPathId& tenant, const TLocalPathId owner)
+        TColumnOwnerId(const TPathId& tenant, const NColumnShard::TSchemeShardLocalPathId owner)
             : Tenant(tenant)
             , Owner(owner) {
             AFL_VERIFY(!!Owner);
         }
 
         operator size_t() const {
-            return CombineHashes(Owner, Tenant.Hash());
+            return CombineHashes(Owner.GetRawValue(), Tenant.Hash());
         }
         bool operator==(const TColumnOwnerId& other) const {
             return Tenant == other.Tenant && Owner == other.Owner;
@@ -117,7 +117,7 @@ private:
     }
 
 public:
-    static std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId, const TPathId& tenantPathId) {
+    static std::shared_ptr<TSchemaObjectsCache> GetCache(const NColumnShard::TSchemeShardLocalPathId ownerPathId, const TPathId& tenantPathId) {
         return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
     }
 

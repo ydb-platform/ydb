@@ -134,7 +134,13 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<b>LastSchemaSeqNoGeneration :</b> " << Self->LastSchemaSeqNo.Generation << "<br />";
     html << "<b>LastSchemaSeqNoRound :</b> " << Self->LastSchemaSeqNo.Round << "<br />";
     html << "<b>LastExportNumber :</b> " << Self->LastExportNo << "<br />";
-    html << "<b>OwnerPathId :</b> " << Self->OwnerPathId << "<br />";
+    if (const auto& tabletPathId = Self->TablesManager.GetTabletPathId()) {
+        html << "<b>PathId :</b> " << tabletPathId->SchemeShardLocalPathId << "<br />";
+        html << "<b>InternalPathId :</b> " << tabletPathId->InternalPathId << "<br />";
+    } else {
+        html << "<b>PathId :</b> " << "None" << "<br />";
+        html << "<b>InternalPathId :</b> " << "None"<< "<br />";
+    }
     html << "<b>Table/Store Path :</b> " << Self->OwnerPath << "<br />";
     html << "<b>LastCompletedStep :</b> " << Self->LastCompletedTx.GetPlanStep() << "<br />";
     html << "<b>LastCompletedTxId :</b> " << Self->LastCompletedTx.GetTxId() << "<br />";

@@ -219,6 +219,7 @@ private:
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
     bool GenerateInternalPathId;
+    std::optional<TUnifiedPathId> TabletPathId;
     TInternalPathId MaxInternalPathId;
 
     friend class TTxInit;
@@ -232,7 +233,7 @@ public:   //IPathIdTranslator
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
+        const std::shared_ptr<TPortionIndexStats>& portionsStats,
         const ui64 tabletId);
 
     class TSchemaAddress {
@@ -288,6 +289,10 @@ public:
     };
 
     std::vector<TSchemasChain> ExtractSchemasToClean() const;
+
+    std::optional<TUnifiedPathId> GetTabletPathId() const {
+        return TabletPathId;
+    }
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;
@@ -389,7 +394,8 @@ public:
         return result;
     }
 
-    bool InitFromDB(NIceDb::TNiceDb& db);
+    void Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tabletSchemeShardLocalPathId, const TTabletStorageInfo* info);
+    bool InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info);
 
     const TTableInfo& GetTable(const TInternalPathId pathId) const;
     ui64 GetMemoryUsage() const;
@@ -419,11 +425,6 @@ public:
         const NColumnShard::TSchemeShardLocalPathId pathId, const ui64 versionId,
         const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
 
-    void SetSchemaObjectsCache(const std::shared_ptr<NOlap::TSchemaObjectsCache>& cache) {
-        AFL_VERIFY(cache);
-        AFL_VERIFY(!SchemaObjectsCache);
-        SchemaObjectsCache = cache;
-    }
 };
 
 }   // namespace NKikimr::NColumnShard

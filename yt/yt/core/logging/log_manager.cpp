@@ -609,25 +609,59 @@ private:
         return EmplaceOrCrash(KeyToCachedWriter_, cacheKey, writers)->second;
     }
 
-    std::unique_ptr<TInotifyWatch> CreateNotificationWatch(
+    TInotifyHandle* TryGetNotificationHandle()
+    {
+        if (!NotificationHandle_ && !NotificationHandleCreationFailed_) {
+            try {
+                NotificationHandle_ = std::make_unique<TInotifyHandle>();
+            } catch (const std::exception& ex) {
+                YT_LOG_ERROR(ex, "Error creating inotify handle, watching disabled");
+                NotificationHandleCreationFailed_ = true;
+            }
+        }
+        return NotificationHandle_.get();
+    }
+
+    std::unique_ptr<TInotifyWatch> TryCreateNotificationWatch(
         const TLogManagerConfigPtr& config,
         const IFileLogWriterPtr& writer)
     {
 #ifdef _linux_
         if (config->WatchPeriod) {
-            if (!NotificationHandle_) {
-                NotificationHandle_ = std::make_unique<TInotifyHandle>();
+            auto* notifcationHandle = TryGetNotificationHandle();
+            if (!notifcationHandle) {
+                return nullptr;
             }
-            return std::make_unique<TInotifyWatch>(
-                NotificationHandle_.get(),
-                writer->GetFileName(),
-                EInotifyWatchEvents::DeleteSelf | EInotifyWatchEvents::MoveSelf,
-                BIND(&ILogWriter::Reload, writer));
+
+            try {
+                return std::make_unique<TInotifyWatch>(
+                    notifcationHandle,
+                    writer->GetFileName(),
+                    EInotifyWatchEvents::DeleteSelf | EInotifyWatchEvents::MoveSelf);
+            } catch (const std::exception& ex) {
+                // Watch can fail to initialize if the writer is disabled
+                // e.g. due to the lack of space.
+                YT_LOG_ERROR(ex, "Error creating inotify watch (Path: %v)",
+                    writer->GetFileName());
+                return nullptr;
+            }
         }
 #else
         Y_UNUSED(config, writer);
 #endif
         return nullptr;
+    }
+
+    void CreateNotificationWatchForWriter(
+        const TLogManagerConfigPtr& config,
+        const IFileLogWriterPtr& writer)
+    {
+        if (auto watch = TryCreateNotificationWatch(config, writer)) {
+            EmplaceOrCrash(NotificationWatchWDToWriter_, watch->GetWD(), writer);
+            EmplaceOrCrash(WriterToNotificationWatch_, writer, std::move(watch));
+        } else {
+            InsertOrCrash(WritersWithFailedNotificationWatches_, writer);
+        }
     }
 
     void UpdateConfig(const TConfigEvent& event)
@@ -709,9 +743,10 @@ private:
 
         NameToWriter_.clear();
         KeyToCachedWriter_.clear();
-        WDToNotificationWatch_.clear();
-        NotificationWatches_.clear();
-        InvalidNotificationWatches_.clear();
+
+        WriterToNotificationWatch_.clear();
+        NotificationWatchWDToWriter_.clear();
+        WritersWithFailedNotificationWatches_.clear();
 
         for (const auto& [name, writerConfig] : config->Writers) {
             auto typedWriterConfig = ConvertTo<TLogWriterConfigPtr>(writerConfig);
@@ -729,11 +764,7 @@ private:
             EmplaceOrCrash(NameToWriter_, name, writer);
 
             if (auto fileWriter = DynamicPointerCast<IFileLogWriter>(writer)) {
-                auto watch = CreateNotificationWatch(config, fileWriter);
-                if (watch) {
-                    RegisterNotificatonWatch(watch.get());
-                    NotificationWatches_.push_back(std::move(watch));
-                }
+                CreateNotificationWatchForWriter(config, fileWriter);
             }
         }
 
@@ -827,56 +858,31 @@ private:
         }
     }
 
-    void RegisterNotificatonWatch(TInotifyWatch* watch)
-    {
-        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
-
-        if (watch->IsValid()) {
-            // Watch can fail to initialize if the writer is disabled
-            // e.g. due to the lack of space.
-            EmplaceOrCrash(WDToNotificationWatch_, watch->GetWD(), watch);
-        } else {
-            InvalidNotificationWatches_.push_back(watch);
-        }
-    }
-
     void WatchWriters()
     {
         YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
-        if (!NotificationHandle_) {
+        auto* notificationHandle = TryGetNotificationHandle();
+        if (!notificationHandle) {
             return;
         }
 
-        int previousWD = -1;
-        while (auto pollResult = NotificationHandle_->Poll()) {
-            if (pollResult->WD == previousWD) {
-                continue;
-            }
-            auto it = WDToNotificationWatch_.find(pollResult->WD);
-            auto jt = WDToNotificationWatch_.end();
-            if (it == jt) {
-                continue;
-            }
+        auto config = Config_.Acquire();
 
-            auto* watch = it->second;
-            watch->Run();
+        // Always reload writers and retry registration for invalid watches.
+        auto writersToReconsider = std::exchange(WritersWithFailedNotificationWatches_, {});
 
-            if (watch->GetWD() != pollResult->WD) {
-                WDToNotificationWatch_.erase(it);
-                RegisterNotificatonWatch(watch);
+        while (auto pollResult = notificationHandle->Poll()) {
+            if (auto writer = GetOrDefault(NotificationWatchWDToWriter_, pollResult->WD)) {
+                EraseOrCrash(NotificationWatchWDToWriter_, pollResult->WD);
+                EraseOrCrash(WriterToNotificationWatch_, writer);
+                InsertOrCrash(writersToReconsider, writer);
             }
-
-            previousWD = pollResult->WD;
         }
-        // Handle invalid watches, try to register they again.
-        {
-            std::vector<TInotifyWatch*> invalidNotificationWatches;
-            invalidNotificationWatches.swap(InvalidNotificationWatches_);
-            for (auto* watch : invalidNotificationWatches) {
-                watch->Run();
-                RegisterNotificatonWatch(watch);
-            }
+
+        for (const auto& writer : writersToReconsider) {
+            writer->Reload();
+            CreateNotificationWatchForWriter(config, writer);
         }
     }
 
@@ -1358,9 +1364,11 @@ private:
     const IThreadPoolPtr CompressionThreadPool_;
 
     std::unique_ptr<TInotifyHandle> NotificationHandle_;
-    std::vector<std::unique_ptr<TInotifyWatch>> NotificationWatches_;
-    THashMap<int, TInotifyWatch*> WDToNotificationWatch_;
-    std::vector<TInotifyWatch*> InvalidNotificationWatches_;
+    bool NotificationHandleCreationFailed_ = false;
+
+    THashMap<IFileLogWriterPtr, std::unique_ptr<TInotifyWatch>> WriterToNotificationWatch_;
+    THashMap<int, IFileLogWriterPtr> NotificationWatchWDToWriter_;
+    THashSet<IFileLogWriterPtr> WritersWithFailedNotificationWatches_;
 
     THashMap<TString, TLoggingAnchor*> AnchorMap_;
     std::atomic<TLoggingAnchor*> FirstAnchor_ = nullptr;

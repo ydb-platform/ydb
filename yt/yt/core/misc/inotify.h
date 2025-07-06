@@ -58,13 +58,8 @@ public:
     TInotifyWatch(
         TInotifyHandle* handle,
         std::string path,
-        EInotifyWatchEvents mask,
-        TClosure callback);
+        EInotifyWatchEvents mask);
     ~TInotifyWatch();
-
-    bool IsValid() const;
-
-    void Run();
 
     DEFINE_BYVAL_RO_PROPERTY(int, FD, -1);
     DEFINE_BYVAL_RO_PROPERTY(int, WD, -1);
@@ -72,10 +67,6 @@ public:
 private:
     const std::string Path_;
     const EInotifyWatchEvents Mask_;
-    const TClosure Callback_;
-
-    void CreateWatch();
-    void DropWatch();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -77,64 +77,30 @@ std::optional<TInotifyHandle::TPollResult> TInotifyHandle::Poll()
 TInotifyWatch::TInotifyWatch(
     TInotifyHandle* handle,
     std::string path,
-    EInotifyWatchEvents mask,
-    TClosure callback)
+    EInotifyWatchEvents mask)
     : FD_(handle->GetFD())
     , Path_(std::move(path))
     , Mask_(mask)
-    , Callback_(std::move(callback))
 {
-    YT_VERIFY(FD_ >= 0);
-    CreateWatch();
-}
-
-TInotifyWatch::~TInotifyWatch()
-{
-    DropWatch();
-}
-
-bool TInotifyWatch::IsValid() const
-{
-    return WD_ >= 0;
-}
-
-void TInotifyWatch::Run()
-{
-    // Unregister before create a new file.
-    DropWatch();
-    Callback_();
-    // Register the newly created file.
-    CreateWatch();
-}
-
-void TInotifyWatch::CreateWatch()
-{
-    YT_VERIFY(WD_ < 0);
 #ifdef _linux_
+    YT_VERIFY(FD_ >= 0);
     WD_ = inotify_add_watch(
         FD_,
         Path_.c_str(),
         ToUnderlying(Mask_));
-
     if (WD_ < 0) {
-        YT_LOG_ERROR(
-            TError::FromSystem(errno),
-            "Error registering watch (Path: %v)",
-            Path_);
         WD_ = -1;
-    } else if (WD_ > 0) {
-        YT_LOG_DEBUG("Watch registered (WD: %v, Path: %v)",
-            WD_,
-            Path_);
-    } else {
-        YT_ABORT();
+        THROW_ERROR_EXCEPTION("Error registering watch for %v",
+            Path_)
+            << TError::FromSystem();
     }
-#else
-    WD_ = -1;
+    YT_LOG_DEBUG("Watch registered (WD: %v, Path: %v)",
+        WD_,
+        Path_);
 #endif
 }
 
-void TInotifyWatch::DropWatch()
+TInotifyWatch::~TInotifyWatch()
 {
 #ifdef _linux_
     if (WD_ > 0) {
@@ -144,7 +110,6 @@ void TInotifyWatch::DropWatch()
         inotify_rm_watch(FD_, WD_);
     }
 #endif
-    WD_ = -1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

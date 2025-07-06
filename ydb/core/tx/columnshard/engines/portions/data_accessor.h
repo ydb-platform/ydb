@@ -451,7 +451,7 @@ public:
 
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
     static std::vector<THashMap<TChunkAddress, TString>> DecodeBlobAddresses(const std::vector<TPortionDataAccessor>& accessors,
-        const std::vector<std::shared_ptr<TIndexInfo>>& info, NBlobOperations::NRead::TCompositeReadBlobs&& blobs);
+        const std::vector<ISnapshotSchema::TPtr>& schemas, NBlobOperations::NRead::TCompositeReadBlobs&& blobs);
 
     THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
         THashMap<TString, THashSet<TUnifiedBlobId>> result;

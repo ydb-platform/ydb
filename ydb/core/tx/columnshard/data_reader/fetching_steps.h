@@ -309,12 +309,12 @@ private:
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         auto& context = fetchingContext->MutableCurrentContext();
         std::vector<NArrow::TGeneralContainer> result;
-        std::vector<std::shared_ptr<TIndexInfo>> info;
+        std::vector<ISnapshotSchema::TPtr> schemas;
         for (const auto& portion : fetchingContext->GetInput().GetPortions()) {
-            info.emplace_back(portion->GetSchema()->GetIndexInfo());
+            schemas.emplace_back(portion->GetSchema());
         }
         std::vector<TPortionDataAccessor> accessors = context.ExtractPortionAccessors();
-        auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, info, context.ExtractBlobs());
+        auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, schemas, context.ExtractBlobs());
         for (ui64 i = 0; i < fetchingContext->GetInput().GetPortions().size(); ++i) {
             AFL_VERIFY(i < context.GetPortionAccessors().size());
             const auto& accessor = accessors[i];

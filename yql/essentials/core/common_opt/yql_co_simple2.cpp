@@ -748,8 +748,10 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
                         newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
                     }
                 }
-                auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
-                commonPreds.push_back(restPreds);
+                if (!newGroup.empty()) {
+                    auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
+                    commonPreds.push_back(restPreds);
+                }
                 newChildren.push_back(ctx.NewCallable(node->Pos(), "And", std::move(commonPreds)));
             } else {
                 for (auto& idx : group) {

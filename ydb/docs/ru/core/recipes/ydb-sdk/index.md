@@ -38,6 +38,8 @@
   - [Подключить метрики в Prometheus](debug-prometheus.md)
   - [Подключить трассировку в Jaeger](debug-jaeger.md)
 
+- [Векторный поиск](vector-search.md)
+
 Смотрите также:
 
 - [{#T}](../../dev/index.md)

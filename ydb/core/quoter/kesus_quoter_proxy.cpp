@@ -290,6 +290,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     TInstant DisconnectTime;
     ui64 OfflineAllocationCookie = 0;
     ui64 KesusReconnectCount = 0;
+    static constexpr ui64 KesusReconnectLimit = 5;
 
     TMap<TString, THolder<TResourceState>> Resources; // Map because iterators are needed to remain valid during insertions.
     THashMap<ui64, decltype(Resources)::iterator> ResIndex;
@@ -797,6 +798,7 @@ private:
         if (ev->Get()->Status == NKikimrProto::OK) {
             KESUS_PROXY_LOG_DEBUG("Successfully connected to tablet");
             Connected = true;
+            KesusReconnectCount = 0;
             SubscribeToAllResources();
         } else {
             if (ev->Get()->Dead) {
@@ -804,8 +806,10 @@ private:
                 SendToService(CreateUpdateEvent(TEvQuota::EUpdateState::Broken));
             } else {
                 KESUS_PROXY_LOG_WARN("Failed to connect to tablet. Status: " << ev->Get()->Status);
-                if (!ConnectToKesus(true)) {
-                    KESUS_PROXY_LOG_WARN("Too many reconnect attempts, assuming kesus dead");
+                if (++KesusReconnectCount <= KesusReconnectLimit) {
+                    ConnectToKesus(true);
+                } else {
+                    KESUS_PROXY_LOG_WARN("Too many reconnect attempts in a row, assuming kesus dead");
                     SendToService(CreateUpdateEvent(TEvQuota::EUpdateState::Broken));
                     KesusReconnectCount = 0;
                 }
@@ -1122,7 +1126,7 @@ public:
         return KesusInfo->Description.GetKesusTabletId();
     }
 
-    NTabletPipe::TClientConfig GetPipeConnectionOptions(bool reconnection) {
+    static NTabletPipe::TClientConfig GetPipeConnectionOptions(bool reconnection) {
         NTabletPipe::TClientConfig cfg;
         cfg.RetryPolicy = {
             .RetryLimitCount = 3u,
@@ -1138,13 +1142,9 @@ public:
         CookieToResourcePath.clear(); // we will resend all requests with new cookies
     }
 
-    bool ConnectToKesus(bool reconnection) {
+    void ConnectToKesus(bool reconnection) {
         if (reconnection) {
             KESUS_PROXY_LOG_INFO("Reconnecting to kesus");
-            ++KesusReconnectCount;
-            if (KesusReconnectCount > 5) {
-                return false;
-            }
         } else {
             KESUS_PROXY_LOG_DEBUG("Connecting to kesus");
         }
@@ -1157,7 +1157,6 @@ public:
                     GetKesusTabletId(),
                     GetPipeConnectionOptions(reconnection)));
         Connected = false;
-        return true;
     }
 
     void PassAway() override {

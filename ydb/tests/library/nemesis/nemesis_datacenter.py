@@ -21,12 +21,12 @@ def validate_multiple_datacenters(cluster, min_datacenters=2):
 
 
 class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
-    def __init__(self, cluster, schedule=(300, 600), stop_duration=60):
+    def __init__(self, cluster, schedule=(300, 600), duration=60):
         super(DataCenterNetworkNemesis, self).__init__(schedule=schedule)
         base.AbstractMonitoredNemesis.__init__(self, scope='datacenter')
 
         self._cluster = cluster
-        self._stop_duration = stop_duration
+        self._duration = duration
         self._current_dc = None
         self._stopped_nodes = []
         self._dc_cycle_iterator = None
@@ -34,7 +34,7 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._dc_to_nodes = collections.defaultdict(list)
         self._data_centers = []
 
-        self._restore_schedule = Schedule.from_tuple_or_int(stop_duration)
+        self._restore_schedule = Schedule.from_tuple_or_int(duration)
 
     def next_schedule(self):
         if self._stopped_nodes:
@@ -45,18 +45,18 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self.logger.info("Preparing DataCenterNetworkNemesis state...")
 
         dc_to_nodes, data_centers = validate_multiple_datacenters(self._cluster, min_datacenters=2)
+        self.logger.info("Parsing cluster configuration with %d hosts in %d data centers",
+                         sum(len(hosts) for hosts in self._dc_to_nodes.values()), len(self._data_centers))
+        self.logger.info("Found %d data centers: %s",
+                         len(self._data_centers),
+                         list(self._data_centers))
+
         if dc_to_nodes is None or data_centers is None:
             self.logger.warning("Found insufficient data centers. DataCenter nemesis requires multiple DCs.")
             return
 
         self._dc_to_nodes = dc_to_nodes
         self._data_centers = data_centers
-
-        self.logger.info("Parsing cluster configuration with %d hosts in %d data centers",
-                         sum(len(hosts) for hosts in self._dc_to_nodes.values()), len(self._data_centers))
-        self.logger.info("Found %d data centers: %s",
-                         len(self._data_centers),
-                         list(self._data_centers))
 
         for dc in self._data_centers:
             self.logger.info("Data center '%s' has %d hosts: %s",
@@ -118,9 +118,9 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
             return
 
         elapsed_time = time.time() - self._stop_time
-        if elapsed_time >= self._stop_duration:
-            self.logger.info("Stop duration (%d seconds) elapsed. Restoring services in DC '%s'",
-                             self._stop_duration, self._current_dc)
+        if elapsed_time >= self._duration:
+            self.logger.info("Duration (%d seconds) elapsed. Restoring services in DC '%s'",
+                             self._duration, self._current_dc)
             self.extract_fault()
 
     def extract_fault(self):
@@ -162,57 +162,18 @@ class SingleDataCenterFailureNemesis(DataCenterNetworkNemesis):
             yield random.choice(self._data_centers)
 
 
-class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
-    def __init__(self, cluster, schedule=(1800, 3600), block_duration=120):
-        super(DataCenterRouteUnreachableNemesis, self).__init__(schedule=schedule)
-        base.AbstractMonitoredNemesis.__init__(self, scope='datacenter_routes')
+class DataCenterRouteUnreachableNemesis(DataCenterNetworkNemesis):
+    def __init__(self, cluster, schedule=(1800, 3600), duration=120):
+        super(DataCenterRouteUnreachableNemesis, self).__init__(
+            cluster, schedule=schedule, duration=duration)
 
-        self._cluster = cluster
-        self._block_duration = block_duration
-        self._current_dc = None
-        self._blocked_routes = []  # Список заблокированных маршрутов для восстановления
-        self._dc_cycle_iterator = None
+        self._blocked_routes = []
         self._block_time = None
-        self._dc_to_nodes = collections.defaultdict(list)
-        self._data_centers = []
-
-        self._restore_schedule = Schedule.from_tuple_or_int(block_duration)
 
     def next_schedule(self):
         if self._blocked_routes:
             return next(self._restore_schedule)
         return super(DataCenterRouteUnreachableNemesis, self).next_schedule()
-
-    def prepare_state(self):
-        self.logger.info("Preparing DataCenterRouteUnreachableNemesis state...")
-
-        # Используем общую функцию валидации
-        dc_to_nodes, data_centers = validate_multiple_datacenters(self._cluster, min_datacenters=2)
-
-        if dc_to_nodes is None or data_centers is None:
-            self.logger.warning("Found insufficient data centers. Route unreachable nemesis requires multiple DCs.")
-            return
-
-        self._dc_to_nodes = dc_to_nodes
-        self._data_centers = data_centers
-
-        self.logger.info("Parsing cluster configuration with %d hosts in %d data centers",
-                         sum(len(hosts) for hosts in self._dc_to_nodes.values()), len(self._data_centers))
-
-        self.logger.info("Found %d data centers: %s",
-                         len(self._data_centers),
-                         list(self._data_centers))
-
-        for dc in self._data_centers:
-            self.logger.info("Data center '%s' has %d hosts: %s",
-                             dc, len(self._dc_to_nodes[dc]), self._dc_to_nodes[dc])
-
-        self._dc_cycle_iterator = self._create_dc_cycle()
-
-    def _create_dc_cycle(self):
-        while True:
-            for dc in self._data_centers:
-                yield dc
 
     def inject_fault(self):
         if self._blocked_routes:
@@ -292,9 +253,9 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
 
         elapsed_time = time.time() - self._block_time
 
-        if elapsed_time >= self._block_duration:
+        if elapsed_time >= self._duration:
             self.logger.info("Block duration (%d seconds) elapsed. Restoring routes for DC '%s'",
-                             self._block_duration, self._current_dc)
+                             self._duration, self._current_dc)
             self.extract_fault()
 
     def extract_fault(self):
@@ -334,21 +295,13 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
         return True
 
 
-class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis):
-    def __init__(self, cluster, schedule=(1800, 3600), block_duration=120):
-        super(DataCenterIptablesBlockPortsNemesis, self).__init__(schedule=schedule)
-        base.AbstractMonitoredNemesis.__init__(self, scope='datacenter_iptables')
+class DataCenterIptablesBlockPortsNemesis(DataCenterNetworkNemesis):
+    def __init__(self, cluster, schedule=(1800, 3600), duration=120):
+        super(DataCenterIptablesBlockPortsNemesis, self).__init__(
+            cluster, schedule=schedule, duration=duration)
 
-        self._cluster = cluster
-        self._block_duration = block_duration
-        self._current_dc = None
         self._blocked_hosts = []
-        self._dc_cycle_iterator = None
         self._block_time = None
-        self._restore_schedule = Schedule.from_tuple_or_int(block_duration)
-
-        self._dc_to_nodes = {}
-        self._data_centers = []
 
         self._block_ports_cmd = (
             "sudo /sbin/ip6tables -w -A YDB_FW -p tcp -m multiport "
@@ -360,38 +313,6 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
         if self._blocked_hosts:
             return next(self._restore_schedule)
         return super(DataCenterIptablesBlockPortsNemesis, self).next_schedule()
-
-    def prepare_state(self):
-        self.logger.info("Preparing DataCenterIptablesBlockPortsNemesis state...")
-
-        # Используем общую функцию валидации
-        dc_to_nodes, data_centers = validate_multiple_datacenters(self._cluster, min_datacenters=2)
-
-        if dc_to_nodes is None or data_centers is None:
-            self.logger.warning("Found insufficient data centers. Iptables ports nemesis requires multiple DCs.")
-            return
-
-        self._dc_to_nodes = dc_to_nodes
-        self._data_centers = data_centers
-
-        self.logger.info("Parsing cluster configuration with %d hosts in %d data centers",
-                         sum(len(hosts) for hosts in self._dc_to_nodes.values()), len(self._data_centers))
-
-        self.logger.info("Found %d data centers: %s",
-                         len(self._data_centers),
-                         list(self._data_centers))
-
-        for dc in self._data_centers:
-            self.logger.info("Data center '%s' has %d hosts: %s",
-                             dc, len(self._dc_to_nodes[dc]), self._dc_to_nodes[dc])
-
-        # Создаем циклический итератор по ДЦ
-        self._dc_cycle_iterator = self._create_dc_cycle()
-
-    def _create_dc_cycle(self):
-        while True:
-            for dc in self._data_centers:
-                yield dc
 
     def inject_fault(self):
         # Если есть заблокированные порты, проверяем не пора ли их восстановить
@@ -477,9 +398,9 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
 
         elapsed_time = time.time() - self._block_time
 
-        if elapsed_time >= self._block_duration:
+        if elapsed_time >= self._duration:
             self.logger.info("Block duration (%d seconds) elapsed. Restoring YDB ports in DC '%s'",
-                             self._block_duration, self._current_dc)
+                             self._duration, self._current_dc)
             self.extract_fault()
 
     def extract_fault(self):

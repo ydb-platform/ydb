@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Сетевые nemesis для тестирования отказов на уровне ДЦ.
 
-Этот модуль содержит базовые классы nemesis для тестирования различных 
-сетевых сбоев между датацентрами.
-"""
 import random
 import time
 import collections
@@ -15,14 +10,6 @@ from ydb.tests.tools.nemesis.library.node import StopStartNodeNemesis
 
 
 def validate_multiple_datacenters(cluster, min_datacenters=2):
-    """
-    Валидирует наличие минимального количества ДЦ в конфигурации кластера.
-    Общая функция для всех nemesis модуля dc_nemesis_network.
-    
-    :param cluster: Кластер YDB с конфигурацией
-    :param min_datacenters: Минимальное количество ДЦ
-    :return: (dc_to_nodes, data_centers) если валидация прошла, иначе (None, None)
-    """
     yaml_config = cluster._ExternalKiKiMRCluster__yaml_config
     hosts_config = yaml_config.get('hosts', [])
     
@@ -46,19 +33,7 @@ def validate_multiple_datacenters(cluster, min_datacenters=2):
 
 
 class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
-    """
-    Nemesis для последовательного отключения всех сервисов в одном ДЦ,
-    затем включения через минуту и перехода к следующему ДЦ.
-    """
-    
     def __init__(self, cluster, schedule=(300, 600), stop_duration=60):
-        """
-        Инициализация nemesis для тестирования отключения сервисов по ДЦ.
-        
-        :param cluster: Кластер YDB с конфигурацией
-        :param schedule: Интервал между циклами отключения ДЦ (в секундах)
-        :param stop_duration: Длительность остановки сервисов в ДЦ (в секундах)
-        """
         super(DataCenterNetworkNemesis, self).__init__(schedule=schedule)
         base.AbstractMonitoredNemesis.__init__(self, scope='datacenter')
         
@@ -75,19 +50,11 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._restore_schedule = Schedule.from_tuple_or_int(stop_duration)
 
     def next_schedule(self):
-        """
-        Возвращает время до следующего действия.
-        Если есть остановленные ноды, возвращает время до их восстановления.
-        """
         if self._stopped_nodes:
             return next(self._restore_schedule)
         return super(DataCenterNetworkNemesis, self).next_schedule()
 
     def prepare_state(self):
-        """
-        Подготавливает состояние nemesis: анализирует конфигурацию кластера
-        и группирует ноды по ДЦ.
-        """
         self.logger.info("Preparing DataCenterNetworkNemesis state...")
         
         # Используем общую функцию валидации
@@ -115,16 +82,11 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._dc_cycle_iterator = self._create_dc_cycle()
 
     def _create_dc_cycle(self):
-        """Создает циклический итератор по ДЦ."""
         while True:
             for dc in self._data_centers:
                 yield dc
 
     def inject_fault(self):
-        """
-        Инжектирует сбой: останавливает все сервисы в следующем ДЦ или
-        восстанавливает сервисы если прошло время остановки.
-        """
         # Если есть остановленные ноды, проверяем не пора ли их восстановить
         if self._stopped_nodes:
             self._check_and_restore_nodes()
@@ -151,11 +113,6 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
             self.on_success_inject_fault()
 
     def _stop_datacenter_services(self, datacenter):
-        """
-        Останавливает все сервисы YDB в указанном ДЦ.
-        
-        :param datacenter: Название ДЦ для остановки сервисов
-        """
         dc_hosts = self._dc_to_nodes.get(datacenter, [])
         
         if not dc_hosts:
@@ -185,9 +142,6 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
                         stopped_count, datacenter)
 
     def _check_and_restore_nodes(self):
-        """
-        Проверяет, прошло ли время остановки, и восстанавливает сервисы.
-        """
         if not self._stop_time:
             return
             
@@ -199,9 +153,6 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
             self.extract_fault()
 
     def extract_fault(self):
-        """
-        Восстанавливает все остановленные сервисы.
-        """
         if not self._stopped_nodes:
             return False
             
@@ -233,41 +184,17 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
 
 
 class SingleDataCenterFailureNemesis(DataCenterNetworkNemesis):
-    """
-    Nemesis для тестирования отказа одного ДЦ на более длительное время.
-    """
-    
     def __init__(self, cluster, schedule=(1200, 2400), stop_duration=3600):
-        """
-        :param cluster: Кластер YDB
-        :param schedule: Интервал между отказами ДЦ (по умолчанию 20-40 минут для тестирования)
-        :param stop_duration: Длительность отказа ДЦ (по умолчанию 1 час)
-        """
         super(SingleDataCenterFailureNemesis, self).__init__(
             cluster, schedule=schedule, stop_duration=stop_duration)
 
     def _create_dc_cycle(self):
-        """Создает случайный выбор ДЦ для отказа."""
         while True:
             yield random.choice(self._data_centers)
 
 
 class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
-    """
-    Nemesis для тестирования блокировки сетевых маршрутов между ДЦ.
-    
-    Выбирает один ДЦ как "current", на всех хостах остальных ДЦ ("other") 
-    блокирует маршруты к хостам current ДЦ через ip route unreachable.
-    """
-    
     def __init__(self, cluster, schedule=(1800, 3600), block_duration=120):
-        """
-        Инициализация nemesis для тестирования блокировки маршрутов между ДЦ.
-        
-        :param cluster: Кластер YDB с конфигурацией
-        :param schedule: Интервал между циклами блокировки маршрутов (в секундах) 
-        :param block_duration: Длительность блокировки маршрутов (в секундах)
-        """
         super(DataCenterRouteUnreachableNemesis, self).__init__(schedule=schedule)
         base.AbstractMonitoredNemesis.__init__(self, scope='datacenter_routes')
         
@@ -284,19 +211,11 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._restore_schedule = Schedule.from_tuple_or_int(block_duration)
 
     def next_schedule(self):
-        """
-        Возвращает время до следующего действия.
-        Если есть заблокированные маршруты, возвращает время до их восстановления.
-        """
         if self._blocked_routes:
             return next(self._restore_schedule)
         return super(DataCenterRouteUnreachableNemesis, self).next_schedule()
 
     def prepare_state(self):
-        """
-        Подготавливает состояние nemesis: анализирует конфигурацию кластера
-        и группирует хосты по ДЦ. Проверяет наличие минимум 2 ДЦ.
-        """
         self.logger.info("Preparing DataCenterRouteUnreachableNemesis state...")
         
         # Используем общую функцию валидации
@@ -324,16 +243,11 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._dc_cycle_iterator = self._create_dc_cycle()
 
     def _create_dc_cycle(self):
-        """Создает циклический итератор по ДЦ."""
         while True:
             for dc in self._data_centers:
                 yield dc
 
     def inject_fault(self):
-        """
-        Инжектирует сбой: блокирует маршруты к current ДЦ на хостах other ДЦ
-        или восстанавливает маршруты если прошло время блокировки.
-        """
         # Если есть заблокированные маршруты, проверяем не пора ли их восстановить
         if self._blocked_routes:
             self._check_and_restore_routes()
@@ -360,9 +274,6 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
             self.on_success_inject_fault()
 
     def _block_routes_to_current_dc(self):
-        """
-        Блокирует маршруты к хостам current ДЦ на всех хостах other ДЦ.
-        """
         current_dc_hosts = self._dc_to_nodes.get(self._current_dc, [])
         
         if not current_dc_hosts:
@@ -420,21 +331,12 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
                         len(self._blocked_routes), self._current_dc)
 
     def _find_node_by_host(self, hostname):
-        """
-        Находит ноду кластера по имени хоста.
-        
-        :param hostname: Имя хоста для поиска
-        :return: Объект ноды или None если не найден
-        """
         for node in self._cluster.nodes.values():
             if node.host == hostname:
                 return node
         return None
 
     def _check_and_restore_routes(self):
-        """
-        Проверяет, прошло ли время блокировки, и восстанавливает маршруты.
-        """
         if not self._block_time:
             return
             
@@ -446,9 +348,6 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
             self.extract_fault()
 
     def extract_fault(self):
-        """
-        Восстанавливает все заблокированные маршруты.
-        """
         if not self._blocked_routes:
             return False
             
@@ -491,21 +390,7 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
 
 
 class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis):
-    """
-    Nemesis для тестирования блокировки портов YDB через iptables.
-    
-    Выбирает один ДЦ как "current", на всех хостах current ДЦ 
-    блокирует порты YDB через ip6tables с цепочкой YDB_FW.
-    """
-    
     def __init__(self, cluster, schedule=(1800, 3600), block_duration=120):
-        """
-        Инициализация nemesis для тестирования блокировки портов через iptables.
-        
-        :param cluster: Кластер YDB с конфигурацией
-        :param schedule: Интервал между циклами блокировки портов (в секундах) 
-        :param block_duration: Длительность блокировки портов (в секундах)
-        """
         super(DataCenterIptablesBlockPortsNemesis, self).__init__(schedule=schedule)
         base.AbstractMonitoredNemesis.__init__(self, scope='datacenter_iptables')
         
@@ -529,19 +414,11 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
         self._restore_ports_cmd = "sudo ip6tables --flush YDB_FW"
 
     def next_schedule(self):
-        """
-        Возвращает время до следующего действия.
-        Если есть заблокированные порты, возвращает время до их восстановления.
-        """
         if self._blocked_hosts:
             return next(self._restore_schedule)
         return super(DataCenterIptablesBlockPortsNemesis, self).next_schedule()
 
     def prepare_state(self):
-        """
-        Подготавливает состояние nemesis: анализирует конфигурацию кластера
-        и группирует хосты по ДЦ. Проверяет наличие минимум 2 ДЦ.
-        """
         self.logger.info("Preparing DataCenterIptablesBlockPortsNemesis state...")
         
         # Используем общую функцию валидации
@@ -569,16 +446,11 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
         self._dc_cycle_iterator = self._create_dc_cycle()
 
     def _create_dc_cycle(self):
-        """Создает циклический итератор по ДЦ."""
         while True:
             for dc in self._data_centers:
                 yield dc
 
     def inject_fault(self):
-        """
-        Инжектирует сбой: блокирует порты YDB в следующем ДЦ или
-        восстанавливает порты если прошло время блокировки.
-        """
         # Если есть заблокированные порты, проверяем не пора ли их восстановить
         if self._blocked_hosts:
             self._check_and_restore_ports()
@@ -605,9 +477,6 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
             self.on_success_inject_fault()
 
     def _block_ports_on_current_dc(self):
-        """
-        Блокирует порты YDB на всех хостах current ДЦ через iptables.
-        """
         current_dc_hosts = self._dc_to_nodes.get(self._current_dc, [])
         
         if not current_dc_hosts:
@@ -654,21 +523,12 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
                         blocked_count, len(current_dc_hosts), self._current_dc)
 
     def _find_node_by_host(self, hostname):
-        """
-        Находит ноду кластера по имени хоста.
-        
-        :param hostname: Имя хоста для поиска
-        :return: Объект ноды или None если не найден
-        """
         for node in self._cluster.nodes.values():
             if node.host == hostname:
                 return node
         return None
 
     def _check_and_restore_ports(self):
-        """
-        Проверяет, прошло ли время блокировки, и восстанавливает порты.
-        """
         if not self._block_time:
             return
             

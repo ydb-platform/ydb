@@ -163,7 +163,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 rr->set_service_type(pqConfig.GetDefaultClientServiceType().GetName());
             }
         }
-        if (partConfig.HasMirrorFrom()) {
+        if (NPQ::MirroringEnabled(config)) {
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;
             if (partConfig.GetMirrorFrom().GetUseSecureConnection()) {

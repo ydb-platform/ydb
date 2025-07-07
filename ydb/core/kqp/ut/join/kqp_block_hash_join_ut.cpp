@@ -22,15 +22,15 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 R"(
                     CREATE TABLE `/Root/left_table` (
                         id Int32 NOT NULL,
-                        value String,
-                        PRIMARY KEY (id)
+                        value String NOT NULL,
+                        PRIMARY KEY (id, value)
                     )
                     WITH (STORE = COLUMN);
 
                     CREATE TABLE `/Root/right_table` (
                         id Int32 NOT NULL,
-                        data String,
-                        PRIMARY KEY (id)
+                        data String NOT NULL,
+                        PRIMARY KEY (id, data)
                     )
                     WITH (STORE = COLUMN);
                 )",  NYdb::NQuery::TTxControl::NoTx()
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 SELECT L.*
                 FROM `left_table` AS L
                 INNER JOIN `left_table` AS R
-                ON L.id = R.id;
+                ON L.id = R.id AND L.value = R.value;
             )";
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             auto resultSet = status.GetResultSets()[0];
             // Current Join implementation is simple and returns all the rows
-            auto expectedRowsCount = UseBlockHashJoin ? 3 : 3;
+            auto expectedRowsCount = UseBlockHashJoin ? 6 : 3;
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), expectedRowsCount);
 
             auto explainResult = queryClient.ExecuteQuery(

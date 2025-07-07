@@ -14,9 +14,12 @@ IFetchingStep::EStepResult IFetchingStep::Execute(const std::shared_ptr<TPortion
 }
 
 TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<TVersionedIndex>& versions,
-    const NBlobOperations::EConsumer consumer, const TString& externalTaskId)
+    const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
+    const std::optional<TFetcherMemoryProcessInfo>& memoryProcessInfo)
     : Consumer(consumer)
-    , ExternalTaskId(externalTaskId) {
+    , ExternalTaskId(externalTaskId)
+    , MemoryProcessInfo(memoryProcessInfo ? *memoryProcessInfo : TFetcherMemoryProcessInfo())
+{
     AFL_VERIFY(portions.size());
     ActualSchema = versions->GetLastSchema();
     for (auto&& i : portions) {

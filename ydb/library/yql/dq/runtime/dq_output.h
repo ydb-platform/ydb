@@ -22,11 +22,7 @@ class TUnboxedValue;
 
 namespace NDq {
 
-struct TDqOutputStats : public TDqAsyncStats {
-    // profile stats
-    ui64 MaxMemoryUsage = 0;
-    ui64 MaxRowsInMemory = 0;
-};
+using TDqOutputStats = TDqAsyncStats;
 
 enum EDqFillLevel {
     NoLimit,

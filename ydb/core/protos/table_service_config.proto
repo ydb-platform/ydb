@@ -435,4 +435,10 @@ message TTableServiceConfig {
     optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
+
+    optional uint64 LocalChannelInflightBytes  = 106 [default = 8388608];
+    optional uint64 RemoteChannelInflightBytes = 107 [default = 16777216];
+    optional uint64 NodeSessionIcInflightBytes = 108 [default = 67108864];
+
+    optional bool EnableFastChannels = 109 [ default = true, (InvalidateCompileCache) = true];
 };

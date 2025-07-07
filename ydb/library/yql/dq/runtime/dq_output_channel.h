@@ -74,6 +74,11 @@ public:
     virtual void Terminate() = 0;
 
     virtual void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) = 0;
+
+    // fast channels
+    virtual bool Bind(NActors::TActorId /* outputActorId */, NActors::TActorId /* inputActorId */ ) {
+        return false;
+    }
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {

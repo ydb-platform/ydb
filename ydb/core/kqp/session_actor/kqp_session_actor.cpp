@@ -46,7 +46,6 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/string/printf.h>
-#include <util/string/vector.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -2037,13 +2036,11 @@ public:
                 if (const auto compileResult = QueryState->CompileResult) {
                     if (const auto preparedQuery = compileResult->PreparedQuery) {
                         if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
-                            QueryState->QueryAsts.push_back(queryAst);
+                            QueryState->QueryAst = queryAst;
                         }
                     }
                 }
-                if (QueryState->ProcessingLastStatement() && QueryState->QueryAsts) {
-                    response->SetQueryAst(JoinVectorIntoString(QueryState->QueryAsts, "\n"));
-                }
+                response->SetQueryAst(QueryState->QueryAst);
             }
             response->MutableQueryStats()->Swap(&stats);
         }

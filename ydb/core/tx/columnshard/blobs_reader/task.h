@@ -63,14 +63,24 @@ public:
         }
         return it->second.GetBlobRangeOptional(range);
     }
-    TString Extract(const TString& storageId, const TBlobRange& range) {
+    std::optional<TString> ExtractOptional(const TString& storageId, const TBlobRange& range) {
         auto it = BlobsByStorage.find(storageId);
-        AFL_VERIFY(it != BlobsByStorage.end())("range", range.ToString())("storage_id", storageId);
-        auto result = it->second.Extract(range);
+        if (it == BlobsByStorage.end()) {
+            return std::nullopt;
+        }
+        auto result = it->second.ExtractOptional(range);
+        if (!result) {
+            return std::nullopt;
+        }
         if (it->second.IsEmpty()) {
             BlobsByStorage.erase(it);
         }
         return result;
+    }
+    TString ExtractVerified(const TString& storageId, const TBlobRange& range) {
+        auto result = ExtractOptional(storageId, range);
+        AFL_VERIFY(result)("range", range.ToString())("storage_id", storageId);
+        return std::move(*result);
     }
 
     ui64 GetTotalBlobsSize() const {

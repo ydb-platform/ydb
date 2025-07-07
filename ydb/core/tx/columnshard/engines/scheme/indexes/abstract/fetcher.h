@@ -32,7 +32,7 @@ public:
         AFL_VERIFY(!BlobData);
         AFL_VERIFY(!!BlobRange);
         AFL_VERIFY(!!StorageId);
-        BlobData = blobs.Extract(*StorageId, *BlobRange);
+        BlobData = blobs.ExtractVerified(*StorageId, *BlobRange);
     }
 
     explicit TRangeFetchingState(const TString& storageId, const TBlobRange& range)

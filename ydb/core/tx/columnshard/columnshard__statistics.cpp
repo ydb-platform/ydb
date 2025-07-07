@@ -141,7 +141,7 @@ public:
             for (auto&& [columnId, data] : RangesByColumn) {
                 for (auto&& [storageId, blobs] : data) {
                     for (auto&& b : blobs) {
-                        const TString blob = blobsData.Extract(storageId, b);
+                        const TString blob = blobsData.ExtractVerified(storageId, b);
                         auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(blob.data(), blob.size()));
                         auto it = SketchesByColumns.find(columnId);
                         AFL_VERIFY(it != SketchesByColumns.end());

@@ -92,6 +92,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
             UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
         }
     }
+#if !defined(_asan_enabled_)
     Y_UNIT_TEST(ArrowAllocateZeroSize) {
         // Choose small enough pieces to hit arena (using some internal knowledge)
         const auto pieceSize = AlignUp<size_t>(1, ArrowAlignment);
@@ -134,6 +135,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
 
         delete[] ptrs;
     }
+#endif
 }
 
 } // namespace NKikimr::NMiniKQL

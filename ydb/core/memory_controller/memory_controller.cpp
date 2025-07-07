@@ -16,8 +16,6 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/events.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
@@ -86,6 +84,7 @@ struct TConsumerState {
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
     bool CanZeroLimit = false;
+    std::optional<ui64> exactLimit;
 
     TConsumerState(const TMemoryConsumer& consumer)
         : Kind(consumer.Kind)
@@ -266,9 +265,14 @@ private:
 
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
-            ui64 limitBytes = consumer.GetLimit(coefficient);
-            if (resultingConsumersConsumption + otherConsumption + externalConsumption > softLimitBytes && consumer.CanZeroLimit) {
-                limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + otherConsumption + externalConsumption - softLimitBytes);
+            ui64 limitBytes;
+            if (consumer.exactLimit.has_value()) {
+                limitBytes = consumer.exactLimit.value();
+            } else {
+                limitBytes = consumer.GetLimit(coefficient);
+                if (resultingConsumersConsumption + otherConsumption + externalConsumption > softLimitBytes && consumer.CanZeroLimit) {
+                    limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + otherConsumption + externalConsumption - softLimitBytes);
+                }
             }
             consumersLimitBytes += limitBytes;
 
@@ -289,8 +293,6 @@ private:
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
 
         ProcessResourceBrokerConfig(ctx, memoryStats, hardLimitBytes, activitiesLimitBytes);
-        ProcessGroupedMemoryLimiterConfig(ctx, memoryStats, hardLimitBytes);
-        ProcessCacheConfig(ctx, memoryStats, hardLimitBytes);
 
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), memoryStatsUpdate);
 
@@ -361,10 +363,21 @@ private:
             case EMemoryConsumerKind::MemTable:
                 ApplyMemTableLimit(limitBytes);
                 break;
-            default:
+            case EMemoryConsumerKind::SharedCache:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
-
+            case EMemoryConsumerKind::ScanMemoryLimiter:
+                Send(consumer.ActorId, new TEvConsumerLimit(limitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient, limitBytes));
+                break;
+            case EMemoryConsumerKind::CompMemoryLimiter:
+                Send(consumer.ActorId, new TEvConsumerLimit(limitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient, limitBytes));
+                break;
+            case EMemoryConsumerKind::BlobCache:
+                Send(NKikimr::NBlobCache::MakeBlobCacheServiceId(), new NBlobCache::TEvBlobCache::TEvUpdateMaxCacheDataSize(limitBytes));
+                break;
+            case EMemoryConsumerKind::DataAccessorCache:
+                NKikimr::NOlap::NDataAccessorControl::TGeneralCache::UpdateMaxCacheSize(limitBytes);
+                break;
         }
     }
 
@@ -375,43 +388,6 @@ private:
                 consumer.first->Table << " with " << HumanReadableBytes(consumer.second));
             Send(consumer.first->Owner, new TEvMemTableCompact(consumer.first->Table, consumer.second));
         }
-    }
-
-    void ProcessGroupedMemoryLimiterConfig(const TActorContext& /*ctx*/, NKikimrMemory::TMemoryStats& /*memoryStats*/, ui64 hardLimitBytes) {
-        ui64 columnTablesScanLimitBytes = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes);
-        ui64 columnTablesCompactionLimitBytes = GetColumnTablesCompactionLimitBytes(Config, hardLimitBytes) *
-            NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterCompactionLimitCoefficient;
-
-        ApplyGroupedMemoryLimiterConfig(columnTablesScanLimitBytes, columnTablesCompactionLimitBytes);
-    }
-
-    void ApplyGroupedMemoryLimiterConfig(const ui64 scanHardLimitBytes, const ui64 compactionHardLimitBytes) {
-        namespace NGroupedMemoryManager = ::NKikimr::NOlap::NGroupedMemoryManager;
-        using UpdateMemoryLimitsEv = NGroupedMemoryManager::NEvents::TEvExternal::TEvUpdateMemoryLimits;
-
-        Send(NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(SelfId().NodeId()),
-            new UpdateMemoryLimitsEv(scanHardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient,
-                scanHardLimitBytes));
-
-        Send(NGroupedMemoryManager::TCompMemoryLimiterOperator::MakeServiceId(SelfId().NodeId()),
-            new UpdateMemoryLimitsEv(compactionHardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient,
-                compactionHardLimitBytes));
-    }
-
-    void ProcessCacheConfig(const TActorContext& /*ctx*/, NKikimrMemory::TMemoryStats& /*memoryStats*/, ui64 hardLimitBytes) {
-        ui64 columnTablesBlobCacheLimitBytes = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes);
-
-        ApplyCacheConfig(columnTablesBlobCacheLimitBytes);
-    }
-
-    void ApplyCacheConfig(const ui64 cacheLimitBytes) {
-        using TUpdateMaxBlobCacheDataSizeEv = NBlobCache::TEvBlobCache::TEvUpdateMaxCacheDataSize;
-        using TGeneralCache = NKikimr::NOlap::NDataAccessorControl::TGeneralCache;
-        using TGlobalLimits = NKikimr::NOlap::TGlobalLimits;
-
-        Send(NKikimr::NBlobCache::MakeBlobCacheServiceId(), new TUpdateMaxBlobCacheDataSizeEv(cacheLimitBytes * TGlobalLimits::BlobCacheCoefficient));
-
-        TGeneralCache::UpdateMaxCacheSize(cacheLimitBytes * TGlobalLimits::DataAccessorCoefficient);
     }
 
     void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes,
@@ -497,6 +473,26 @@ private:
                 stats.SetSharedCacheLimit(limitBytes);
                 break;
             }
+            case EMemoryConsumerKind::ScanMemoryLimiter: {
+                stats.SetScanMemoryLimiterConsumption(consumer.Consumption);
+                stats.SetScanMemoryLimiterLimit(limitBytes);
+                break;
+            }
+            case EMemoryConsumerKind::CompMemoryLimiter: {
+                stats.SetCompMemoryLimiterConsumption(consumer.Consumption);
+                stats.SetCompMemoryLimiterLimit(limitBytes);
+                break;
+            }
+            case EMemoryConsumerKind::BlobCache: {
+                stats.SetBlobCacheConsumption(consumer.Consumption);
+                stats.SetBlobCacheLimit(limitBytes);
+                break;
+            }
+            case EMemoryConsumerKind::DataAccessorCache: {
+                stats.SetDataAccessorCacheConsumption(consumer.Consumption);
+                stats.SetDataAccessorCacheLimit(limitBytes);
+                break;
+            }
             default:
                 Y_ABORT("Unhandled consumer");
         }
@@ -515,6 +511,23 @@ private:
                 result.MinBytes = GetSharedCacheMinBytes(Config, hardLimitBytes);
                 result.MaxBytes = GetSharedCacheMaxBytes(Config, hardLimitBytes);
                 result.CanZeroLimit = true;
+                break;
+            }
+            case EMemoryConsumerKind::ScanMemoryLimiter: {
+                result.exactLimit = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes);
+                break;
+            }
+            case EMemoryConsumerKind::CompMemoryLimiter: {
+                result.exactLimit = GetColumnTablesCompactionLimitBytes(Config, hardLimitBytes) *
+                    NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterCompactionLimitCoefficient;
+                break;
+            }
+            case EMemoryConsumerKind::BlobCache: {
+                result.exactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::BlobCacheCoefficient;
+                break;
+            }
+            case EMemoryConsumerKind::DataAccessorCache: {
+                result.exactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DataAccessorCoefficient;
                 break;
             }
             default:

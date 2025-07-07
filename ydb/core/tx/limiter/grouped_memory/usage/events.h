@@ -147,17 +147,5 @@ struct TEvExternal {
             , ExternalScopeId(externalScopeId) {
         }
     };
-
-    class TEvUpdateMemoryLimits: public NActors::TEventLocal<TEvUpdateMemoryLimits, EvUpdateMemoryLimits> {
-    private:
-        YDB_READONLY(ui64, SoftMemoryLimit, 0);
-        YDB_READONLY(ui64, HardMemoryLimit, 0);
-
-    public:
-        explicit TEvUpdateMemoryLimits(const ui64 softMemoryLimit, const ui64 hardMemoryLimit)
-            : SoftMemoryLimit(softMemoryLimit)
-            , HardMemoryLimit(hardMemoryLimit) {
-        }
-    };
 };
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager::NEvents

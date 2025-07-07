@@ -27,4 +27,15 @@ message TMemoryStats {
 
     optional uint64 QueryExecutionConsumption = 18;
     optional uint64 QueryExecutionLimit = 19;
+
+    optional uint64 ScanMemoryLimiterConsumption = 20;
+    optional uint64 ScanMemoryLimiterLimit = 21;
+    optional uint64 CompMemoryLimiterConsumption = 22;
+    optional uint64 CompMemoryLimiterLimit = 23;
+    optional uint64 BlobCacheConsumption = 24;
+    optional uint64 BlobCacheLimit = 25;
+    optional uint64 DataAccessorCacheConsumption = 26;
+    optional uint64 DataAccessorCacheLimit = 27;
+
+
 }

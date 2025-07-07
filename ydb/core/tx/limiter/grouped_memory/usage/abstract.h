@@ -65,6 +65,40 @@ public:
     ~TScopeGuard();
 };
 
+class TProcessGuard {
+private:
+    const NActors::TActorId ActorId;
+    YDB_READONLY(ui64, ProcessId, 0);
+
+public:
+    TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
+
+    std::shared_ptr<TScopeGuard> BuildScopeGuard(const ui32 scopeId) const {
+        return std::make_shared<TScopeGuard>(ActorId, ProcessId, scopeId);
+    }
+
+    ~TProcessGuard();
+};
+
+class TFullGroupGuard : NNonCopyable::TMoveOnly {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TGroupGuard>, GroupGuard);
+    YDB_READONLY_DEF(std::shared_ptr<TScopeGuard>, ScopeGuard);
+    YDB_READONLY_DEF(std::shared_ptr<TProcessGuard>, ProcessGuard);
+
+public:
+    TFullGroupGuard(
+        std::shared_ptr<TGroupGuard> groupGuard, std::shared_ptr<TScopeGuard> scopeGuard, std::shared_ptr<TProcessGuard> processGuard)
+        : GroupGuard(std::move(groupGuard))
+        , ScopeGuard(std::move(scopeGuard))
+        , ProcessGuard(std::move(processGuard))
+    {
+        AFL_VERIFY(GroupGuard);
+        AFL_VERIFY(ScopeGuard);
+        AFL_VERIFY(ProcessGuard);
+    }
+};
+
 class TAllocationGuard {
 private:
     const NActors::TActorId ActorId;

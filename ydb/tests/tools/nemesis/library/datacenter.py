@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.nemesis.dc_nemesis_network import (
+from ydb.tests.library.nemesis.nemesis_datacenter import (
     SingleDataCenterFailureNemesis,
     DataCenterRouteUnreachableNemesis,
     DataCenterIptablesBlockPortsNemesis

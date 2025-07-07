@@ -21,36 +21,36 @@
 #include <string.h> /* for memset() only ! */
 #include <stddef.h>
 #include <limits.h>
-#ifdef HAVE_CTYPE_H
 #include <ctype.h>
-#endif
-#ifdef HAVE_STDLIB_H
 #include <stdlib.h>
-#endif
+
 #ifdef LIBXML_ZLIB_ENABLED
 #include <zlib.h>
 #endif
 
-#include <libxml/xmlmemory.h>
 #include <libxml/tree.h>
+#include <libxml/xmlmemory.h>
 #include <libxml/parser.h>
 #include <libxml/uri.h>
 #include <libxml/entities.h>
-#include <libxml/valid.h>
 #include <libxml/xmlerror.h>
 #include <libxml/parserInternals.h>
-#include <libxml/globals.h>
 #ifdef LIBXML_HTML_ENABLED
 #include <libxml/HTMLtree.h>
 #endif
-#ifdef LIBXML_DEBUG_ENABLED
-#include <libxml/debugXML.h>
-#endif
 
-#include "buf.h"
-#include "save.h"
+#include "private/buf.h"
+#include "private/entities.h"
+#include "private/error.h"
+#include "private/memory.h"
+#include "private/tree.h"
 
-int __xmlRegisterCallbacks = 0;
+/*
+ * Internal variable indicating whether a callback has been registered
+ * for node creation/destruction. This avoids looking up thread-local
+ * data if no callback was ever registered.
+ */
+int xmlRegisterCallbacks = 0;
 
 /************************************************************************
  *									*
@@ -58,58 +58,23 @@ int __xmlRegisterCallbacks = 0;
  *									*
  ************************************************************************/
 
+static xmlNodePtr
+xmlNewEntityRef(xmlDocPtr doc, xmlChar *name);
+
 static xmlNsPtr
-xmlNewReconciledNs(xmlDocPtr doc, xmlNodePtr tree, xmlNsPtr ns);
+xmlNewReconciledNs(xmlNodePtr tree, xmlNsPtr ns);
+
+static xmlAttrPtr
+xmlGetPropNodeInternal(const xmlNode *node, const xmlChar *name,
+		       const xmlChar *nsName, int useDTD);
 
 static xmlChar* xmlGetPropNodeValueInternal(const xmlAttr *prop);
 
-/************************************************************************
- *									*
- *		Tree memory error handler				*
- *									*
- ************************************************************************/
-/**
- * xmlTreeErrMemory:
- * @extra:  extra information
- *
- * Handle an out of memory condition
- */
 static void
-xmlTreeErrMemory(const char *extra)
-{
-    __xmlSimpleError(XML_FROM_TREE, XML_ERR_NO_MEMORY, NULL, NULL, extra);
-}
+xmlBufGetChildContent(xmlBufPtr buf, const xmlNode *tree);
 
-/**
- * xmlTreeErr:
- * @code:  the error number
- * @extra:  extra information
- *
- * Handle an out of memory condition
- */
 static void
-xmlTreeErr(int code, xmlNodePtr node, const char *extra)
-{
-    const char *msg = NULL;
-
-    switch(code) {
-        case XML_TREE_INVALID_HEX:
-	    msg = "invalid hexadecimal character value\n";
-	    break;
-	case XML_TREE_INVALID_DEC:
-	    msg = "invalid decimal character value\n";
-	    break;
-	case XML_TREE_UNTERMINATED_ENTITY:
-	    msg = "unterminated entity reference %15s\n";
-	    break;
-	case XML_TREE_NOT_UTF8:
-	    msg = "string is not in UTF-8\n";
-	    break;
-	default:
-	    msg = "unexpected error number\n";
-    }
-    __xmlSimpleError(XML_FROM_TREE, code, node, msg, extra);
-}
+xmlUnlinkNodeInternal(xmlNodePtr cur);
 
 /************************************************************************
  *									*
@@ -125,26 +90,9 @@ const xmlChar xmlStringTextNoenc[] =
 const xmlChar xmlStringComment[] = { 'c', 'o', 'm', 'm', 'e', 'n', 't', 0 };
 
 static int xmlCompressMode = 0;
-static int xmlCheckDTD = 1;
-
-#define UPDATE_LAST_CHILD_AND_PARENT(n) if ((n) != NULL) {		\
-    xmlNodePtr ulccur = (n)->children;					\
-    if (ulccur == NULL) {						\
-        (n)->last = NULL;						\
-    } else {								\
-        while (ulccur->next != NULL) {					\
-		ulccur->parent = (n);					\
-		ulccur = ulccur->next;					\
-	}								\
-	ulccur->parent = (n);						\
-	(n)->last = ulccur;						\
-}}
 
 #define IS_STR_XML(str) ((str != NULL) && (str[0] == 'x') && \
   (str[1] == 'm') && (str[2] == 'l') && (str[3] == 0))
-
-/* #define DEBUG_BUFFER */
-/* #define DEBUG_TREE */
 
 /************************************************************************
  *									*
@@ -154,7 +102,6 @@ static int xmlCheckDTD = 1;
  ************************************************************************/
 #include <libxml/hash.h>
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlGetEntityFromDtd:
  * @dtd:  A pointer to the DTD to search
@@ -197,7 +144,6 @@ xmlGetParameterEntityFromDtd(const xmlDtd *dtd, const xmlChar *name) {
     }
     return(NULL);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /************************************************************************
  *									*
@@ -222,21 +168,27 @@ xmlGetParameterEntityFromDtd(const xmlDtd *dtd, const xmlChar *name) {
 xmlChar *
 xmlBuildQName(const xmlChar *ncname, const xmlChar *prefix,
 	      xmlChar *memory, int len) {
-    int lenn, lenp;
+    size_t lenn, lenp;
     xmlChar *ret;
 
-    if (ncname == NULL) return(NULL);
+    if ((ncname == NULL) || (len < 0)) return(NULL);
     if (prefix == NULL) return((xmlChar *) ncname);
+
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    /* Make allocation more likely */
+    if (len > 8)
+        len = 8;
+#endif
 
     lenn = strlen((char *) ncname);
     lenp = strlen((char *) prefix);
+    if (lenn >= SIZE_MAX - lenp - 1)
+        return(NULL);
 
-    if ((memory == NULL) || (len < lenn + lenp + 2)) {
-	ret = (xmlChar *) xmlMallocAtomic(lenn + lenp + 2);
-	if (ret == NULL) {
-	    xmlTreeErrMemory("building QName");
+    if ((memory == NULL) || ((size_t) len < lenn + lenp + 2)) {
+	ret = xmlMalloc(lenn + lenp + 2);
+	if (ret == NULL)
 	    return(NULL);
-	}
     } else {
 	ret = memory;
     }
@@ -251,6 +203,8 @@ xmlBuildQName(const xmlChar *ncname, const xmlChar *prefix,
  * xmlSplitQName2:
  * @name:  the full QName
  * @prefix:  a xmlChar **
+ *
+ * DEPRECATED: This function doesn't report malloc failures.
  *
  * parse an XML qualified name string
  *
@@ -273,13 +227,6 @@ xmlSplitQName2(const xmlChar *name, xmlChar **prefix) {
     *prefix = NULL;
     if (name == NULL) return(NULL);
 
-#ifndef XML_XML_NAMESPACE
-    /* xml: prefix is not really a namespace */
-    if ((name[0] == 'x') && (name[1] == 'm') &&
-        (name[2] == 'l') && (name[3] == ':'))
-	return(NULL);
-#endif
-
     /* nasty but valid */
     if (name[0] == ':')
 	return(NULL);
@@ -291,17 +238,14 @@ xmlSplitQName2(const xmlChar *name, xmlChar **prefix) {
     while ((name[len] != 0) && (name[len] != ':'))
 	len++;
 
-    if (name[len] == 0)
+    if ((name[len] == 0) || (name[len+1] == 0))
 	return(NULL);
 
     *prefix = xmlStrndup(name, len);
-    if (*prefix == NULL) {
-	xmlTreeErrMemory("QName split");
+    if (*prefix == NULL)
 	return(NULL);
-    }
     ret = xmlStrdup(&name[len + 1]);
     if (ret == NULL) {
-	xmlTreeErrMemory("QName split");
 	if (*prefix != NULL) {
 	    xmlFree(*prefix);
 	    *prefix = NULL;
@@ -342,11 +286,58 @@ xmlSplitQName3(const xmlChar *name, int *len) {
     while ((name[l] != 0) && (name[l] != ':'))
 	l++;
 
-    if (name[l] == 0)
+    if ((name[l] == 0) || (name[l+1] == 0))
 	return(NULL);
 
     *len = l;
 
+    return(&name[l+1]);
+}
+
+/**
+ * xmlSplitQName4:
+ * @name:  the full QName
+ * @prefixPtr:  pointer to resulting prefix
+ *
+ * Parse a QName. The return value points to the start of the local
+ * name in the input string. If the QName has a prefix, it will be
+ * allocated and stored in @prefixPtr. This string must be freed by
+ * the caller. If there's no prefix, @prefixPtr is set to NULL.
+ *
+ * Returns the local name or NULL if a memory allocation failed.
+ */
+const xmlChar *
+xmlSplitQName4(const xmlChar *name, xmlChar **prefixPtr) {
+    xmlChar *prefix;
+    int l = 0;
+
+    if ((name == NULL) || (prefixPtr == NULL))
+        return(NULL);
+
+    *prefixPtr = NULL;
+
+    /* nasty but valid */
+    if (name[0] == ':')
+	return(name);
+
+    /*
+     * we are not trying to validate but just to cut, and yes it will
+     * work even if this is as set of UTF-8 encoded chars
+     */
+    while ((name[l] != 0) && (name[l] != ':'))
+	l++;
+
+    /*
+     * TODO: What about names with multiple colons?
+     */
+    if ((name[l] == 0) || (name[l+1] == 0))
+	return(name);
+
+    prefix = xmlStrndup(name, l);
+    if (prefix == NULL)
+        return(NULL);
+
+    *prefixPtr = prefix;
     return(&name[l+1]);
 }
 
@@ -358,7 +349,6 @@ xmlSplitQName3(const xmlChar *name, int *len) {
 
 #define CUR_SCHAR(s, l) xmlStringCurrentChar(NULL, s, &l)
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_XPATH_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED) || defined(LIBXML_DEBUG_ENABLED) || defined (LIBXML_HTML_ENABLED) || defined(LIBXML_SAX1_ENABLED) || defined(LIBXML_HTML_ENABLED) || defined(LIBXML_WRITER_ENABLED) || defined(LIBXML_DOCB_ENABLED) || defined(LIBXML_LEGACY_ENABLED)
 /**
  * xmlValidateNCName:
  * @value: the value to check
@@ -430,9 +420,7 @@ try_complex:
 
     return(0);
 }
-#endif
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlValidateQName:
  * @value: the value to check
@@ -671,7 +659,6 @@ try_complex:
 	return(1);
     return(0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /************************************************************************
  *									*
@@ -680,55 +667,22 @@ try_complex:
  ************************************************************************/
 
 /**
- * xmlSetBufferAllocationScheme:
- * @scheme:  allocation method to use
- *
- * Set the buffer allocation method.  Types are
- * XML_BUFFER_ALLOC_EXACT - use exact sizes, keeps memory usage down
- * XML_BUFFER_ALLOC_DOUBLEIT - double buffer when extra needed,
- *                             improves performance
- */
-void
-xmlSetBufferAllocationScheme(xmlBufferAllocationScheme scheme) {
-    if ((scheme == XML_BUFFER_ALLOC_EXACT) ||
-        (scheme == XML_BUFFER_ALLOC_DOUBLEIT) ||
-        (scheme == XML_BUFFER_ALLOC_HYBRID))
-	xmlBufferAllocScheme = scheme;
-}
-
-/**
- * xmlGetBufferAllocationScheme:
- *
- * Types are
- * XML_BUFFER_ALLOC_EXACT - use exact sizes, keeps memory usage down
- * XML_BUFFER_ALLOC_DOUBLEIT - double buffer when extra needed,
- *                             improves performance
- * XML_BUFFER_ALLOC_HYBRID - use exact sizes on small strings to keep memory usage tight
- *                            in normal usage, and doubleit on large strings to avoid
- *                            pathological performance.
- *
- * Returns the current allocation scheme
- */
-xmlBufferAllocationScheme
-xmlGetBufferAllocationScheme(void) {
-    return(xmlBufferAllocScheme);
-}
-
-/**
  * xmlNewNs:
- * @node:  the element carrying the namespace
+ * @node:  the element carrying the namespace (optional)
  * @href:  the URI associated
- * @prefix:  the prefix for the namespace
+ * @prefix:  the prefix for the namespace (optional)
  *
- * Creation of a new Namespace. This function will refuse to create
- * a namespace with a similar prefix than an existing one present on this
- * node.
- * Note that for a default namespace, @prefix should be NULL.
+ * Create a new namespace. For a default namespace, @prefix should be
+ * NULL. The namespace URI in @href is not checked. You should make sure
+ * to pass a valid URI.
  *
- * We use href==NULL in the case of an element creation where the namespace
- * was not defined.
+ * If @node is provided, it must be an element node. The namespace will
+ * be appended to the node's namespace declarations. It is an error if
+ * the node already has a definition for the prefix or default
+ * namespace.
  *
- * Returns a new namespace pointer or NULL
+ * Returns a new namespace pointer or NULL if arguments are invalid,
+ * the prefix is already in use or a memory allocation failed.
  */
 xmlNsPtr
 xmlNewNs(xmlNodePtr node, const xmlChar *href, const xmlChar *prefix) {
@@ -737,35 +691,25 @@ xmlNewNs(xmlNodePtr node, const xmlChar *href, const xmlChar *prefix) {
     if ((node != NULL) && (node->type != XML_ELEMENT_NODE))
 	return(NULL);
 
-    if ((prefix != NULL) && (xmlStrEqual(prefix, BAD_CAST "xml"))) {
-        /* xml namespace is predefined, no need to add it */
-        if (xmlStrEqual(href, XML_XML_NAMESPACE))
-            return(NULL);
-
-        /*
-         * Problem, this is an attempt to bind xml prefix to a wrong
-         * namespace, which breaks
-         * Namespace constraint: Reserved Prefixes and Namespace Names
-         * from XML namespace. But documents authors may not care in
-         * their context so let's proceed.
-         */
-    }
-
     /*
      * Allocate a new Namespace and fill the fields.
      */
     cur = (xmlNsPtr) xmlMalloc(sizeof(xmlNs));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building namespace");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNs));
     cur->type = XML_LOCAL_NAMESPACE;
 
-    if (href != NULL)
+    if (href != NULL) {
 	cur->href = xmlStrdup(href);
-    if (prefix != NULL)
+        if (cur->href == NULL)
+            goto error;
+    }
+    if (prefix != NULL) {
 	cur->prefix = xmlStrdup(prefix);
+        if (cur->prefix == NULL)
+            goto error;
+    }
 
     /*
      * Add it at the end to preserve parsing order ...
@@ -777,39 +721,36 @@ xmlNewNs(xmlNodePtr node, const xmlChar *href, const xmlChar *prefix) {
 	} else {
 	    xmlNsPtr prev = node->nsDef;
 
-	    if (((prev->prefix == NULL) && (cur->prefix == NULL)) ||
-		(xmlStrEqual(prev->prefix, cur->prefix))) {
-		xmlFreeNs(cur);
-		return(NULL);
-	    }
+	    if ((xmlStrEqual(prev->prefix, cur->prefix)) &&
+                (prev->href != NULL))
+                goto error;
 	    while (prev->next != NULL) {
 	        prev = prev->next;
-		if (((prev->prefix == NULL) && (cur->prefix == NULL)) ||
-		    (xmlStrEqual(prev->prefix, cur->prefix))) {
-		    xmlFreeNs(cur);
-		    return(NULL);
-		}
+		if ((xmlStrEqual(prev->prefix, cur->prefix)) &&
+                    (prev->href != NULL))
+                    goto error;
 	    }
 	    prev->next = cur;
 	}
     }
     return(cur);
+
+error:
+    xmlFreeNs(cur);
+    return(NULL);
 }
 
 /**
  * xmlSetNs:
  * @node:  a node in the document
- * @ns:  a namespace pointer
+ * @ns:  a namespace pointer (optional)
  *
- * Associate a namespace to a node, a posteriori.
+ * Set the namespace of an element or attribute node. Passing a NULL
+ * namespace unsets the namespace.
  */
 void
 xmlSetNs(xmlNodePtr node, xmlNsPtr ns) {
     if (node == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlSetNs: node == NULL\n");
-#endif
 	return;
     }
     if ((node->type == XML_ELEMENT_NODE) ||
@@ -821,15 +762,11 @@ xmlSetNs(xmlNodePtr node, xmlNsPtr ns) {
  * xmlFreeNs:
  * @cur:  the namespace pointer
  *
- * Free up the structures associated to a namespace
+ * Free an xmlNs object.
  */
 void
 xmlFreeNs(xmlNsPtr cur) {
     if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlFreeNs : ns == NULL\n");
-#endif
 	return;
     }
     if (cur->href != NULL) xmlFree((char *) cur->href);
@@ -841,16 +778,12 @@ xmlFreeNs(xmlNsPtr cur) {
  * xmlFreeNsList:
  * @cur:  the first namespace pointer
  *
- * Free up all the structures associated to the chained namespaces.
+ * Free a list of xmlNs objects.
  */
 void
 xmlFreeNsList(xmlNsPtr cur) {
     xmlNsPtr next;
     if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlFreeNsList : ns == NULL\n");
-#endif
 	return;
     }
     while (cur != NULL) {
@@ -862,15 +795,21 @@ xmlFreeNsList(xmlNsPtr cur) {
 
 /**
  * xmlNewDtd:
- * @doc:  the document pointer
- * @name:  the DTD name
- * @ExternalID:  the external ID
- * @SystemID:  the system ID
+ * @doc:  the document pointer (optional)
+ * @name:  the DTD name (optional)
+ * @ExternalID:  the external ID (optional)
+ * @SystemID:  the system ID (optional)
  *
- * Creation of a new DTD for the external subset. To create an
- * internal subset, use xmlCreateIntSubset().
+ * Create a DTD node.
  *
- * Returns a pointer to the new DTD structure
+ * If a document is provided, it is an error if it already has an
+ * external subset. If the document has no external subset, it
+ * will be set to the created DTD.
+ *
+ * To create an internal subset, use xmlCreateIntSubset().
+ *
+ * Returns a pointer to the new DTD object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlDtdPtr
 xmlNewDtd(xmlDocPtr doc, const xmlChar *name,
@@ -878,12 +817,6 @@ xmlNewDtd(xmlDocPtr doc, const xmlChar *name,
     xmlDtdPtr cur;
 
     if ((doc != NULL) && (doc->extSubset != NULL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewDtd(%s): document %s already have a DTD %s\n",
-	    /* !!! */ (char *) name, doc->name,
-	    /* !!! */ (char *)doc->extSubset->name);
-#endif
 	return(NULL);
     }
 
@@ -891,36 +824,47 @@ xmlNewDtd(xmlDocPtr doc, const xmlChar *name,
      * Allocate a new DTD and fill the fields.
      */
     cur = (xmlDtdPtr) xmlMalloc(sizeof(xmlDtd));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building DTD");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0 , sizeof(xmlDtd));
     cur->type = XML_DTD_NODE;
 
-    if (name != NULL)
+    if (name != NULL) {
 	cur->name = xmlStrdup(name);
-    if (ExternalID != NULL)
+        if (cur->name == NULL)
+            goto error;
+    }
+    if (ExternalID != NULL) {
 	cur->ExternalID = xmlStrdup(ExternalID);
-    if (SystemID != NULL)
+        if (cur->ExternalID == NULL)
+            goto error;
+    }
+    if (SystemID != NULL) {
 	cur->SystemID = xmlStrdup(SystemID);
+        if (cur->SystemID == NULL)
+            goto error;
+    }
     if (doc != NULL)
 	doc->extSubset = cur;
     cur->doc = doc;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
+
+error:
+    xmlFreeDtd(cur);
+    return(NULL);
 }
 
 /**
  * xmlGetIntSubset:
  * @doc:  the document pointer
  *
- * Get the internal subset of a document
- * Returns a pointer to the DTD structure or NULL if not found
+ * Get the internal subset of a document.
+ *
+ * Returns a pointer to the DTD object or NULL if not found.
  */
-
 xmlDtdPtr
 xmlGetIntSubset(const xmlDoc *doc) {
     xmlNodePtr cur;
@@ -938,69 +882,55 @@ xmlGetIntSubset(const xmlDoc *doc) {
 
 /**
  * xmlCreateIntSubset:
- * @doc:  the document pointer
- * @name:  the DTD name
- * @ExternalID:  the external (PUBLIC) ID
- * @SystemID:  the system ID
+ * @doc:  the document pointer (optional)
+ * @name:  the DTD name (optional)
+ * @ExternalID:  the external (PUBLIC) ID (optional)
+ * @SystemID:  the system ID (optional)
  *
- * Create the internal subset of a document
- * Returns a pointer to the new DTD structure
+ * Create a DTD node.
+ *
+ * If a document is provided and it already has an internal subset,
+ * the existing DTD object is returned without creating a new object.
+ * If the document has no internal subset, it will be set to the
+ * created DTD.
+ *
+ * Returns a pointer to the new or existing DTD object or NULL if
+ * arguments are invalid or a memory allocation failed.
  */
 xmlDtdPtr
 xmlCreateIntSubset(xmlDocPtr doc, const xmlChar *name,
                    const xmlChar *ExternalID, const xmlChar *SystemID) {
     xmlDtdPtr cur;
 
-    if ((doc != NULL) && (xmlGetIntSubset(doc) != NULL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-
-     "xmlCreateIntSubset(): document %s already have an internal subset\n",
-	    doc->name);
-#endif
-	return(NULL);
+    if (doc != NULL) {
+        cur = xmlGetIntSubset(doc);
+        if (cur != NULL)
+            return(cur);
     }
 
     /*
      * Allocate a new DTD and fill the fields.
      */
     cur = (xmlDtdPtr) xmlMalloc(sizeof(xmlDtd));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building internal subset");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlDtd));
     cur->type = XML_DTD_NODE;
 
     if (name != NULL) {
 	cur->name = xmlStrdup(name);
-	if (cur->name == NULL) {
-	    xmlTreeErrMemory("building internal subset");
-	    xmlFree(cur);
-	    return(NULL);
-	}
+	if (cur->name == NULL)
+            goto error;
     }
     if (ExternalID != NULL) {
 	cur->ExternalID = xmlStrdup(ExternalID);
-	if (cur->ExternalID  == NULL) {
-	    xmlTreeErrMemory("building internal subset");
-	    if (cur->name != NULL)
-	        xmlFree((char *)cur->name);
-	    xmlFree(cur);
-	    return(NULL);
-	}
+	if (cur->ExternalID  == NULL)
+            goto error;
     }
     if (SystemID != NULL) {
 	cur->SystemID = xmlStrdup(SystemID);
-	if (cur->SystemID == NULL) {
-	    xmlTreeErrMemory("building internal subset");
-	    if (cur->name != NULL)
-	        xmlFree((char *)cur->name);
-	    if (cur->ExternalID != NULL)
-	        xmlFree((char *)cur->ExternalID);
-	    xmlFree(cur);
-	    return(NULL);
-	}
+	if (cur->SystemID == NULL)
+            goto error;
     }
     if (doc != NULL) {
 	doc->intSubset = cur;
@@ -1041,9 +971,13 @@ xmlCreateIntSubset(xmlDocPtr doc, const xmlChar *name,
 	}
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
+
+error:
+    xmlFreeDtd(cur);
+    return(NULL);
 }
 
 /**
@@ -1057,42 +991,6 @@ xmlCreateIntSubset(xmlDocPtr doc, const xmlChar *name,
 	if ((str) && ((!dict) ||				\
 	    (xmlDictOwns(dict, (const xmlChar *)(str)) == 0)))	\
 	    xmlFree((char *)(str));
-
-
-/**
- * DICT_COPY:
- * @str:  a string
- *
- * Copy a string using a "dict" dictionary in the current scope,
- * if available.
- */
-#define DICT_COPY(str, cpy) \
-    if (str) { \
-	if (dict) { \
-	    if (xmlDictOwns(dict, (const xmlChar *)(str))) \
-		cpy = (xmlChar *) (str); \
-	    else \
-		cpy = (xmlChar *) xmlDictLookup((dict), (const xmlChar *)(str), -1); \
-	} else \
-	    cpy = xmlStrdup((const xmlChar *)(str)); }
-
-/**
- * DICT_CONST_COPY:
- * @str:  a string
- *
- * Copy a string using a "dict" dictionary in the current scope,
- * if available.
- */
-#define DICT_CONST_COPY(str, cpy) \
-    if (str) { \
-	if (dict) { \
-	    if (xmlDictOwns(dict, (const xmlChar *)(str))) \
-		cpy = (const xmlChar *) (str); \
-	    else \
-		cpy = xmlDictLookup((dict), (const xmlChar *)(str), -1); \
-	} else \
-	    cpy = (const xmlChar *) xmlStrdup((const xmlChar *)(str)); }
-
 
 /**
  * xmlFreeDtd:
@@ -1109,7 +1007,7 @@ xmlFreeDtd(xmlDtdPtr cur) {
     }
     if (cur->doc != NULL) dict = cur->doc->dict;
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue((xmlNodePtr)cur);
 
     if (cur->children != NULL) {
@@ -1121,11 +1019,10 @@ xmlFreeDtd(xmlDtdPtr cur) {
 	 */
         while (c != NULL) {
 	    next = c->next;
-	    if ((c->type != XML_NOTATION_NODE) &&
-	        (c->type != XML_ELEMENT_DECL) &&
+	    if ((c->type != XML_ELEMENT_DECL) &&
 		(c->type != XML_ATTRIBUTE_DECL) &&
 		(c->type != XML_ENTITY_DECL)) {
-		xmlUnlinkNode(c);
+		xmlUnlinkNodeInternal(c);
 		xmlFreeNode(c);
 	    }
 	    c = next;
@@ -1152,11 +1049,11 @@ xmlFreeDtd(xmlDtdPtr cur) {
 
 /**
  * xmlNewDoc:
- * @version:  xmlChar string giving the version of XML "1.0"
+ * @version:  XML version string like "1.0" (optional)
  *
- * Creates a new XML document
+ * Creates a new XML document. If version is NULL, "1.0" is used.
  *
- * Returns a new document
+ * Returns a new document or NULL if a memory allocation failed.
  */
 xmlDocPtr
 xmlNewDoc(const xmlChar *version) {
@@ -1169,16 +1066,13 @@ xmlNewDoc(const xmlChar *version) {
      * Allocate a new document and fill the fields.
      */
     cur = (xmlDocPtr) xmlMalloc(sizeof(xmlDoc));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building doc");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlDoc));
     cur->type = XML_DOCUMENT_NODE;
 
     cur->version = xmlStrdup(version);
     if (cur->version == NULL) {
-	xmlTreeErrMemory("building doc");
 	xmlFree(cur);
 	return(NULL);
     }
@@ -1194,7 +1088,7 @@ xmlNewDoc(const xmlChar *version) {
      */
     cur->charset = XML_CHAR_ENCODING_UTF8;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
 }
@@ -1203,7 +1097,7 @@ xmlNewDoc(const xmlChar *version) {
  * xmlFreeDoc:
  * @cur:  pointer to the document
  *
- * Free up all the structures used by a document, tree included.
+ * Free a document including all children and associated DTDs.
  */
 void
 xmlFreeDoc(xmlDocPtr cur) {
@@ -1211,21 +1105,12 @@ xmlFreeDoc(xmlDocPtr cur) {
     xmlDictPtr dict = NULL;
 
     if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlFreeDoc : document == NULL\n");
-#endif
 	return;
     }
-#ifdef LIBXML_DEBUG_RUNTIME
-#ifdef LIBXML_DEBUG_ENABLED
-    xmlDebugCheckDocument(stderr, cur);
-#endif
-#endif
 
-    if (cur != NULL) dict = cur->dict;
+    dict = cur->dict;
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue((xmlNodePtr)cur);
 
     /*
@@ -1240,12 +1125,12 @@ xmlFreeDoc(xmlDocPtr cur) {
     if (intSubset == extSubset)
 	extSubset = NULL;
     if (extSubset != NULL) {
-	xmlUnlinkNode((xmlNodePtr) cur->extSubset);
+	xmlUnlinkNodeInternal((xmlNodePtr) cur->extSubset);
 	cur->extSubset = NULL;
 	xmlFreeDtd(extSubset);
     }
     if (intSubset != NULL) {
-	xmlUnlinkNode((xmlNodePtr) cur->intSubset);
+	xmlUnlinkNodeInternal((xmlNodePtr) cur->intSubset);
 	cur->intSubset = NULL;
 	xmlFreeDtd(intSubset);
     }
@@ -1262,38 +1147,51 @@ xmlFreeDoc(xmlDocPtr cur) {
 }
 
 /**
- * xmlStringLenGetNodeList:
- * @doc:  the document
- * @value:  the value of the text
- * @len:  the length of the string value
+ * xmlNodeParseContentInternal:
+ * @doc:  a document (optional)
+ * @parent:  an element or attribute (optional)
+ * @value:  an attribute value
+ * @len:  maximum length of the attribute value
+ * @listPtr:  pointer to the resulting node list (optional)
  *
- * Parse the value string and build the node list associated. Should
- * produce a flat tree with only TEXTs and ENTITY_REFs.
- * Returns a pointer to the first child
+ * See xmlNodeParseContent.
+ *
+ * Returns 0 on success, -1 if a memory allocation failed.
  */
-xmlNodePtr
-xmlStringLenGetNodeList(const xmlDoc *doc, const xmlChar *value, int len) {
-    xmlNodePtr ret = NULL, last = NULL;
+static int
+xmlNodeParseContentInternal(const xmlDoc *doc, xmlNodePtr parent,
+                            const xmlChar *value, int len,
+                            xmlNodePtr *listPtr) {
+    xmlNodePtr head = NULL, last = NULL;
     xmlNodePtr node;
-    xmlChar *val;
-    const xmlChar *cur, *end;
+    xmlChar *val = NULL;
+    const xmlChar *cur;
     const xmlChar *q;
     xmlEntityPtr ent;
     xmlBufPtr buf;
+    int remaining;
 
-    if (value == NULL) return(NULL);
+    if (listPtr != NULL)
+        *listPtr = NULL;
+
+    if (len < 0)
+        remaining = INT_MAX;
+    else
+        remaining = len;
+
+    if ((value == NULL) || (value[0] == 0))
+        goto done;
+
     cur = value;
-    end = cur + len;
 
-    buf = xmlBufCreateSize(0);
-    if (buf == NULL) return(NULL);
-    xmlBufSetAllocationScheme(buf, XML_BUFFER_ALLOC_HYBRID);
+    buf = xmlBufCreate(50);
+    if (buf == NULL)
+        return(-1);
 
     q = cur;
-    while ((cur < end) && (*cur != 0)) {
+    while ((remaining > 0) && (*cur != 0)) {
 	if (cur[0] == '&') {
 	    int charval = 0;
-	    xmlChar tmp;
 
 	    /*
 	     * Save the current text.
@@ -1301,25 +1199,15 @@ xmlStringLenGetNodeList(const xmlDoc *doc, const xmlChar *value, int len) {
             if (cur != q) {
 		if (xmlBufAdd(buf, q, cur - q))
 		    goto out;
+	        q = cur;
 	    }
-	    q = cur;
-	    if ((cur + 2 < end) && (cur[1] == '#') && (cur[2] == 'x')) {
+
+	    if ((remaining > 2) && (cur[1] == '#') && (cur[2] == 'x')) {
+	        int tmp = 0;
+
 		cur += 3;
-		if (cur < end)
-		    tmp = *cur;
-		else
-		    tmp = 0;
-		while (tmp != ';') { /* Non input consuming loop */
-                    /*
-                     * If you find an integer overflow here when fuzzing,
-                     * the bug is probably elsewhere. This function should
-                     * only receive entities that were already validated by
-                     * the parser, typically by xmlParseAttValueComplex
-                     * calling xmlStringDecodeEntities.
-                     *
-                     * So it's better *not* to check for overflow to
-                     * potentially discover new bugs.
-                     */
+                remaining -= 3;
+		while ((remaining > 0) && ((tmp = *cur) != ';')) {
 		    if ((tmp >= '0') && (tmp <= '9'))
 			charval = charval * 16 + (tmp - '0');
 		    else if ((tmp >= 'a') && (tmp <= 'f'))
@@ -1327,135 +1215,147 @@ xmlStringLenGetNodeList(const xmlDoc *doc, const xmlChar *value, int len) {
 		    else if ((tmp >= 'A') && (tmp <= 'F'))
 			charval = charval * 16 + (tmp - 'A') + 10;
 		    else {
-			xmlTreeErr(XML_TREE_INVALID_HEX, (xmlNodePtr) doc,
-			           NULL);
 			charval = 0;
 			break;
 		    }
+                    if (charval > 0x110000)
+                        charval = 0x110000;
 		    cur++;
-		    if (cur < end)
-			tmp = *cur;
-		    else
-			tmp = 0;
+                    remaining--;
 		}
-		if (tmp == ';')
+		if (tmp == ';') {
 		    cur++;
+                    remaining--;
+                }
 		q = cur;
-	    } else if ((cur + 1 < end) && (cur[1] == '#')) {
+	    } else if ((remaining > 1) && (cur[1] == '#')) {
+	        int tmp = 0;
+
 		cur += 2;
-		if (cur < end)
-		    tmp = *cur;
-		else
-		    tmp = 0;
-		while (tmp != ';') { /* Non input consuming loops */
-                    /* Don't check for integer overflow, see above. */
+                remaining -= 2;
+		while ((remaining > 0) && ((tmp = *cur) != ';')) {
 		    if ((tmp >= '0') && (tmp <= '9'))
 			charval = charval * 10 + (tmp - '0');
 		    else {
-			xmlTreeErr(XML_TREE_INVALID_DEC, (xmlNodePtr) doc,
-			           NULL);
 			charval = 0;
 			break;
 		    }
+                    if (charval > 0x110000)
+                        charval = 0x110000;
 		    cur++;
-		    if (cur < end)
-			tmp = *cur;
-		    else
-			tmp = 0;
+                    remaining--;
 		}
-		if (tmp == ';')
+		if (tmp == ';') {
 		    cur++;
+                    remaining--;
+                }
 		q = cur;
 	    } else {
 		/*
 		 * Read the entity string
 		 */
 		cur++;
+                remaining--;
 		q = cur;
-		while ((cur < end) && (*cur != 0) && (*cur != ';')) cur++;
-		if ((cur >= end) || (*cur == 0)) {
-		    xmlTreeErr(XML_TREE_UNTERMINATED_ENTITY, (xmlNodePtr) doc,
-		               (const char *) q);
-		    goto out;
-		}
+		while ((remaining > 0) && (*cur != 0) && (*cur != ';')) {
+                    cur++;
+                    remaining--;
+                }
+		if ((remaining <= 0) || (*cur == 0))
+		    break;
 		if (cur != q) {
-		    /*
-		     * Predefined entities don't generate nodes
-		     */
 		    val = xmlStrndup(q, cur - q);
+                    if (val == NULL)
+                        goto out;
 		    ent = xmlGetDocEntity(doc, val);
 		    if ((ent != NULL) &&
 			(ent->etype == XML_INTERNAL_PREDEFINED_ENTITY)) {
-
+                        /*
+                         * Predefined entities don't generate nodes
+                         */
 			if (xmlBufCat(buf, ent->content))
 			    goto out;
-
 		    } else {
 			/*
 			 * Flush buffer so far
 			 */
 			if (!xmlBufIsEmpty(buf)) {
 			    node = xmlNewDocText(doc, NULL);
-			    if (node == NULL) {
-				if (val != NULL) xmlFree(val);
+			    if (node == NULL)
 				goto out;
-			    }
 			    node->content = xmlBufDetach(buf);
+                            node->parent = parent;
 
 			    if (last == NULL) {
-				last = ret = node;
+				head = node;
 			    } else {
-				last = xmlAddNextSibling(last, node);
+                                last->next = node;
+                                node->prev = last;
 			    }
+                            last = node;
+			}
+
+			if ((ent != NULL) &&
+                            ((ent->flags & XML_ENT_PARSED) == 0) &&
+                            ((ent->flags & XML_ENT_EXPANDING) == 0) &&
+                            (ent->content != NULL)) {
+                            int res;
+
+                            ent->flags |= XML_ENT_EXPANDING;
+                            res = xmlNodeParseContentInternal(doc,
+                                    (xmlNodePtr) ent, ent->content, -1, NULL);
+                            ent->flags &= ~XML_ENT_EXPANDING;
+                            if (res < 0)
+                                goto out;
+                            ent->flags |= XML_ENT_PARSED;
 			}
 
 			/*
 			 * Create a new REFERENCE_REF node
 			 */
-			node = xmlNewReference(doc, val);
-			if (node == NULL) {
-			    if (val != NULL) xmlFree(val);
+			node = xmlNewEntityRef((xmlDocPtr) doc, val);
+                        val = NULL;
+			if (node == NULL)
 			    goto out;
-			}
-			else if ((ent != NULL) && (ent->children == NULL)) {
-			    xmlNodePtr temp;
+                        node->parent = parent;
+                        node->last = (xmlNodePtr) ent;
+                        if (ent != NULL) {
+                            node->children = (xmlNodePtr) ent;
+                            node->content = ent->content;
+                        }
 
-                            /* Set to non-NULL value to avoid recursion. */
-			    ent->children = (xmlNodePtr) -1;
-			    ent->children = xmlStringGetNodeList(doc,
-				    (const xmlChar*)node->content);
-			    ent->owner = 1;
-			    temp = ent->children;
-			    while (temp) {
-				temp->parent = (xmlNodePtr)ent;
-				ent->last = temp;
-				temp = temp->next;
-			    }
-			}
 			if (last == NULL) {
-			    last = ret = node;
+			    head = node;
 			} else {
-			    last = xmlAddNextSibling(last, node);
+                            last->next = node;
+                            node->prev = last;
 			}
+                        last = node;
 		    }
 		    xmlFree(val);
+                    val = NULL;
 		}
 		cur++;
+                remaining--;
 		q = cur;
 	    }
 	    if (charval != 0) {
 		xmlChar buffer[10];
 		int l;
 
+                if (charval >= 0x110000)
+                    charval = 0xFFFD; /* replacement character */
+
 		l = xmlCopyCharMultiByte(buffer, charval);
 		buffer[l] = 0;
 
 		if (xmlBufCat(buf, buffer))
 		    goto out;
-		charval = 0;
 	    }
-	} else
+	} else {
 	    cur++;
+            remaining--;
+        }
     }
 
     if (cur != q) {
@@ -1468,393 +1368,258 @@ xmlStringLenGetNodeList(const xmlDoc *doc, const xmlChar *value, int len) {
 
     if (!xmlBufIsEmpty(buf)) {
 	node = xmlNewDocText(doc, NULL);
-	if (node == NULL) goto out;
+	if (node == NULL)
+            goto out;
+        node->parent = parent;
 	node->content = xmlBufDetach(buf);
 
 	if (last == NULL) {
-	    ret = node;
+	    head = node;
 	} else {
-	    xmlAddNextSibling(last, node);
+            last->next = node;
+            node->prev = last;
 	}
-    } else if (ret == NULL) {
-        ret = xmlNewDocText(doc, BAD_CAST "");
+        last = node;
+    } else if (head == NULL) {
+        head = xmlNewDocText(doc, BAD_CAST "");
+        if (head == NULL)
+            goto out;
+        head->parent = parent;
+        last = head;
     }
+
+    xmlBufFree(buf);
+
+done:
+    if (parent != NULL) {
+        if (parent->children != NULL)
+            xmlFreeNodeList(parent->children);
+        parent->children = head;
+        parent->last = last;
+    }
+
+    if (listPtr != NULL)
+        *listPtr = head;
+
+    return(0);
 
 out:
     xmlBufFree(buf);
+    if (val != NULL)
+        xmlFree(val);
+    if (head != NULL)
+        xmlFreeNodeList(head);
+    return(-1);
+}
+
+/**
+ * xmlNodeParseContent:
+ * @node:  an element or attribute
+ * @content:  text content with XML references
+ * @len:  maximum length of content
+ *
+ * Parse content and replace the node's children with the resulting
+ * node list.
+ *
+ * @content is expected to be a valid XML attribute value possibly
+ * containing character and entity references. Syntax errors
+ * and references to undeclared entities are ignored silently.
+ * Only references are handled, nested elements, comments or PIs are
+ * not.
+ *
+ * Returns 0 on success, -1 if a memory allocation failed.
+ */
+int
+xmlNodeParseContent(xmlNodePtr node, const xmlChar *content, int len) {
+    return(xmlNodeParseContentInternal(node->doc, node, content, len, NULL));
+}
+
+/**
+ * xmlStringLenGetNodeList:
+ * @doc:  a document (optional)
+ * @value:  an attribute value
+ * @len:  maximum length of the attribute value
+ *
+ * DEPRECATED: Use xmlNodeSetContentLen.
+ *
+ * See xmlStringGetNodeList.
+ *
+ * Returns a pointer to the first child or NULL if the value if empty
+ * or a memory allocation failed.
+ */
+xmlNodePtr
+xmlStringLenGetNodeList(const xmlDoc *doc, const xmlChar *value, int len) {
+    xmlNodePtr ret;
+
+    xmlNodeParseContentInternal(doc, NULL, value, len, &ret);
     return(ret);
 }
 
 /**
  * xmlStringGetNodeList:
- * @doc:  the document
- * @value:  the value of the attribute
+ * @doc:  a document (optional)
+ * @value:  an attribute value
  *
- * Parse the value string and build the node list associated. Should
- * produce a flat tree with only TEXTs and ENTITY_REFs.
- * Returns a pointer to the first child
+ * DEPRECATED: Use xmlNodeSetContent.
+ *
+ * Parse an attribute value and build a node list containing only
+ * text and entity reference nodes. The resulting nodes will be
+ * associated with the document if provided. The document is also
+ * used to look up entities.
+ *
+ * The input is not validated. Syntax errors or references to
+ * undeclared entities will be ignored silently with unspecified
+ * results.
+ *
+ * Returns a pointer to the first child or NULL if the value if empty
+ * or a memory allocation failed.
  */
 xmlNodePtr
 xmlStringGetNodeList(const xmlDoc *doc, const xmlChar *value) {
-    xmlNodePtr ret = NULL, last = NULL;
-    xmlNodePtr node;
-    xmlChar *val;
-    const xmlChar *cur = value;
-    const xmlChar *q;
-    xmlEntityPtr ent;
-    xmlBufPtr buf;
+    xmlNodePtr ret;
 
-    if (value == NULL) return(NULL);
-
-    buf = xmlBufCreateSize(0);
-    if (buf == NULL) return(NULL);
-    xmlBufSetAllocationScheme(buf, XML_BUFFER_ALLOC_HYBRID);
-
-    q = cur;
-    while (*cur != 0) {
-	if (cur[0] == '&') {
-	    int charval = 0;
-	    xmlChar tmp;
-
-	    /*
-	     * Save the current text.
-	     */
-            if (cur != q) {
-		if (xmlBufAdd(buf, q, cur - q))
-		    goto out;
-	    }
-	    q = cur;
-	    if ((cur[1] == '#') && (cur[2] == 'x')) {
-		cur += 3;
-		tmp = *cur;
-		while (tmp != ';') { /* Non input consuming loop */
-                    /* Don't check for integer overflow, see above. */
-		    if ((tmp >= '0') && (tmp <= '9'))
-			charval = charval * 16 + (tmp - '0');
-		    else if ((tmp >= 'a') && (tmp <= 'f'))
-			charval = charval * 16 + (tmp - 'a') + 10;
-		    else if ((tmp >= 'A') && (tmp <= 'F'))
-			charval = charval * 16 + (tmp - 'A') + 10;
-		    else {
-			xmlTreeErr(XML_TREE_INVALID_HEX, (xmlNodePtr) doc,
-			           NULL);
-			charval = 0;
-			break;
-		    }
-		    cur++;
-		    tmp = *cur;
-		}
-		if (tmp == ';')
-		    cur++;
-		q = cur;
-	    } else if  (cur[1] == '#') {
-		cur += 2;
-		tmp = *cur;
-		while (tmp != ';') { /* Non input consuming loops */
-                    /* Don't check for integer overflow, see above. */
-		    if ((tmp >= '0') && (tmp <= '9'))
-			charval = charval * 10 + (tmp - '0');
-		    else {
-			xmlTreeErr(XML_TREE_INVALID_DEC, (xmlNodePtr) doc,
-			           NULL);
-			charval = 0;
-			break;
-		    }
-		    cur++;
-		    tmp = *cur;
-		}
-		if (tmp == ';')
-		    cur++;
-		q = cur;
-	    } else {
-		/*
-		 * Read the entity string
-		 */
-		cur++;
-		q = cur;
-		while ((*cur != 0) && (*cur != ';')) cur++;
-		if (*cur == 0) {
-		    xmlTreeErr(XML_TREE_UNTERMINATED_ENTITY,
-		               (xmlNodePtr) doc, (const char *) q);
-		    goto out;
-		}
-		if (cur != q) {
-		    /*
-		     * Predefined entities don't generate nodes
-		     */
-		    val = xmlStrndup(q, cur - q);
-		    ent = xmlGetDocEntity(doc, val);
-		    if ((ent != NULL) &&
-			(ent->etype == XML_INTERNAL_PREDEFINED_ENTITY)) {
-
-			if (xmlBufCat(buf, ent->content))
-			    goto out;
-
-		    } else {
-			/*
-			 * Flush buffer so far
-			 */
-			if (!xmlBufIsEmpty(buf)) {
-			    node = xmlNewDocText(doc, NULL);
-			    if (node == NULL) {
-				if (val != NULL) xmlFree(val);
-				goto out;
-			    }
-			    node->content = xmlBufDetach(buf);
-
-			    if (last == NULL) {
-				last = ret = node;
-			    } else {
-				last = xmlAddNextSibling(last, node);
-			    }
-			}
-
-			/*
-			 * Create a new REFERENCE_REF node
-			 */
-			node = xmlNewReference(doc, val);
-			if (node == NULL) {
-			    if (val != NULL) xmlFree(val);
-			    goto out;
-			}
-			else if ((ent != NULL) && (ent->children == NULL)) {
-			    xmlNodePtr temp;
-
-                            /* Set to non-NULL value to avoid recursion. */
-			    ent->children = (xmlNodePtr) -1;
-			    ent->children = xmlStringGetNodeList(doc,
-				    (const xmlChar*)node->content);
-			    ent->owner = 1;
-			    temp = ent->children;
-			    while (temp) {
-				temp->parent = (xmlNodePtr)ent;
-				ent->last = temp;
-				temp = temp->next;
-			    }
-			}
-			if (last == NULL) {
-			    last = ret = node;
-			} else {
-			    last = xmlAddNextSibling(last, node);
-			}
-		    }
-		    xmlFree(val);
-		}
-		cur++;
-		q = cur;
-	    }
-	    if (charval != 0) {
-		xmlChar buffer[10];
-		int len;
-
-		len = xmlCopyCharMultiByte(buffer, charval);
-		buffer[len] = 0;
-
-		if (xmlBufCat(buf, buffer))
-		    goto out;
-		charval = 0;
-	    }
-	} else
-	    cur++;
-    }
-    if ((cur != q) || (ret == NULL)) {
-        /*
-	 * Handle the last piece of text.
-	 */
-	xmlBufAdd(buf, q, cur - q);
-    }
-
-    if (!xmlBufIsEmpty(buf)) {
-	node = xmlNewDocText(doc, NULL);
-        if (node == NULL) {
-            xmlBufFree(buf);
-            return(NULL);
-        }
-	node->content = xmlBufDetach(buf);
-
-	if (last == NULL) {
-	    ret = node;
-	} else {
-	    xmlAddNextSibling(last, node);
-	}
-    }
-
-out:
-    xmlBufFree(buf);
+    xmlNodeParseContentInternal(doc, NULL, value, -1, &ret);
     return(ret);
 }
 
 /**
+ * xmlNodeListGetStringInternal:
+ * @doc:  a document (optional)
+ * @node:  a node list
+ * @escMode: escape mode (0 = no, 1 = elem, 2 = attr, 3 = raw)
+ *
+ * Returns a pointer to the string.
+ */
+static xmlChar *
+xmlNodeListGetStringInternal(xmlDocPtr doc, const xmlNode *node, int escMode) {
+    xmlBufPtr buf;
+    xmlChar *ret;
+
+    if (node == NULL)
+        return(xmlStrdup(BAD_CAST ""));
+
+    if ((escMode == 0) &&
+        ((node->type == XML_TEXT_NODE) ||
+         (node->type == XML_CDATA_SECTION_NODE)) &&
+        (node->next == NULL)) {
+        if (node->content == NULL)
+            return(xmlStrdup(BAD_CAST ""));
+        return(xmlStrdup(node->content));
+    }
+
+    buf = xmlBufCreate(50);
+    if (buf == NULL)
+        return(NULL);
+
+    while (node != NULL) {
+        if ((node->type == XML_TEXT_NODE) ||
+            (node->type == XML_CDATA_SECTION_NODE)) {
+            if (node->content != NULL) {
+                if (escMode == 0) {
+                    xmlBufCat(buf, node->content);
+                } else {
+                    xmlChar *encoded;
+
+                    if (escMode == 1)
+                        encoded = xmlEncodeEntitiesInternal(doc, node->content,
+                                                            0);
+                    else if (escMode == 2)
+                        encoded = xmlEncodeEntitiesInternal(doc, node->content,
+                                                            XML_ESCAPE_ATTR);
+                    else
+                        encoded = xmlEncodeSpecialChars(doc, node->content);
+                    if (encoded == NULL)
+                        goto error;
+                    xmlBufCat(buf, encoded);
+                    xmlFree(encoded);
+                }
+            }
+        } else if (node->type == XML_ENTITY_REF_NODE) {
+            if (escMode == 0) {
+                xmlBufGetNodeContent(buf, node);
+            } else {
+                xmlBufAdd(buf, BAD_CAST "&", 1);
+                xmlBufCat(buf, node->name);
+                xmlBufAdd(buf, BAD_CAST ";", 1);
+            }
+        }
+
+        node = node->next;
+    }
+
+    ret = xmlBufDetach(buf);
+    xmlBufFree(buf);
+    return(ret);
+
+error:
+    xmlBufFree(buf);
+    return(NULL);
+}
+
+/**
  * xmlNodeListGetString:
- * @doc:  the document
- * @list:  a Node list
- * @inLine:  should we replace entity contents or show their external form
+ * @doc:  a document (optional)
+ * @list:  a node list of attribute children
+ * @inLine:  whether entity references are substituted
  *
- * Build the string equivalent to the text contained in the Node list
- * made of TEXTs and ENTITY_REFs
+ * Serializes attribute children (text and entity reference nodes)
+ * into a string.
  *
- * Returns a pointer to the string copy, the caller must free it with xmlFree().
+ * If @inLine is true, entity references will be substituted.
+ * Otherwise, entity references will be kept and special characters
+ * like '&' as well as non-ASCII chars will be escaped. See
+ * xmlNodeListGetRawString for an alternative option.
+ *
+ * Returns a string or NULL if a memory allocation failed.
  */
 xmlChar *
 xmlNodeListGetString(xmlDocPtr doc, const xmlNode *list, int inLine)
 {
-    const xmlNode *node = list;
-    xmlChar *ret = NULL;
-    xmlEntityPtr ent;
-    int attr;
+    int escMode;
 
+    /* backward compatibility */
     if (list == NULL)
-        return (NULL);
-    if ((list->parent != NULL) && (list->parent->type == XML_ATTRIBUTE_NODE))
-        attr = 1;
-    else
-        attr = 0;
+        return(NULL);
 
-    while (node != NULL) {
-        if ((node->type == XML_TEXT_NODE) ||
-            (node->type == XML_CDATA_SECTION_NODE)) {
-            if (inLine) {
-                ret = xmlStrcat(ret, node->content);
-            } else {
-                xmlChar *buffer;
-
-		if (attr)
-		    buffer = xmlEncodeAttributeEntities(doc, node->content);
-		else
-		    buffer = xmlEncodeEntitiesReentrant(doc, node->content);
-                if (buffer != NULL) {
-                    ret = xmlStrcat(ret, buffer);
-                    xmlFree(buffer);
-                }
-            }
-        } else if (node->type == XML_ENTITY_REF_NODE) {
-            if (inLine) {
-                ent = xmlGetDocEntity(doc, node->name);
-                if (ent != NULL) {
-                    xmlChar *buffer;
-
-                    /* an entity content can be any "well balanced chunk",
-                     * i.e. the result of the content [43] production:
-                     * http://www.w3.org/TR/REC-xml#NT-content.
-                     * So it can contain text, CDATA section or nested
-                     * entity reference nodes (among others).
-                     * -> we recursive  call xmlNodeListGetString()
-                     * which handles these types */
-                    buffer = xmlNodeListGetString(doc, ent->children, 1);
-                    if (buffer != NULL) {
-                        ret = xmlStrcat(ret, buffer);
-                        xmlFree(buffer);
-                    }
-                } else {
-                    ret = xmlStrcat(ret, node->content);
-                }
-            } else {
-                xmlChar buf[2];
-
-                buf[0] = '&';
-                buf[1] = 0;
-                ret = xmlStrncat(ret, buf, 1);
-                ret = xmlStrcat(ret, node->name);
-                buf[0] = ';';
-                buf[1] = 0;
-                ret = xmlStrncat(ret, buf, 1);
-            }
-        }
-#if 0
-        else {
-            xmlGenericError(xmlGenericErrorContext,
-                            "xmlGetNodeListString : invalid node type %d\n",
-                            node->type);
-        }
-#endif
-        node = node->next;
+    if (inLine) {
+        escMode = 0;
+    } else {
+        if ((list->parent != NULL) &&
+            (list->parent->type == XML_ATTRIBUTE_NODE))
+            escMode = 2;
+        else
+            escMode = 1;
     }
-    return (ret);
+
+    return(xmlNodeListGetStringInternal(doc, list, escMode));
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNodeListGetRawString:
- * @doc:  the document
- * @list:  a Node list
- * @inLine:  should we replace entity contents or show their external form
+ * @doc:  a document (optional)
+ * @list:  a node list of attribute children
+ * @inLine:  whether entity references are substituted
  *
- * Builds the string equivalent to the text contained in the Node list
- * made of TEXTs and ENTITY_REFs, contrary to xmlNodeListGetString()
- * this function doesn't do any character encoding handling.
+ * Serializes attribute children (text and entity reference nodes)
+ * into a string.
  *
- * Returns a pointer to the string copy, the caller must free it with xmlFree().
+ * If @inLine is true, entity references will be substituted.
+ * Otherwise, entity references will be kept and special characters
+ * like '&' will be escaped.
+ *
+ * Returns a string or NULL if a memory allocation failed.
  */
 xmlChar *
 xmlNodeListGetRawString(const xmlDoc *doc, const xmlNode *list, int inLine)
 {
-    const xmlNode *node = list;
-    xmlChar *ret = NULL;
-    xmlEntityPtr ent;
+    int escMode = inLine ? 0 : 3;
 
+    /* backward compatibility */
     if (list == NULL)
-        return (NULL);
+        return(NULL);
 
-    while (node != NULL) {
-        if ((node->type == XML_TEXT_NODE) ||
-            (node->type == XML_CDATA_SECTION_NODE)) {
-            if (inLine) {
-                ret = xmlStrcat(ret, node->content);
-            } else {
-                xmlChar *buffer;
-
-                buffer = xmlEncodeSpecialChars(doc, node->content);
-                if (buffer != NULL) {
-                    ret = xmlStrcat(ret, buffer);
-                    xmlFree(buffer);
-                }
-            }
-        } else if (node->type == XML_ENTITY_REF_NODE) {
-            if (inLine) {
-                ent = xmlGetDocEntity(doc, node->name);
-                if (ent != NULL) {
-                    xmlChar *buffer;
-
-                    /* an entity content can be any "well balanced chunk",
-                     * i.e. the result of the content [43] production:
-                     * http://www.w3.org/TR/REC-xml#NT-content.
-                     * So it can contain text, CDATA section or nested
-                     * entity reference nodes (among others).
-                     * -> we recursive  call xmlNodeListGetRawString()
-                     * which handles these types */
-                    buffer =
-                        xmlNodeListGetRawString(doc, ent->children, 1);
-                    if (buffer != NULL) {
-                        ret = xmlStrcat(ret, buffer);
-                        xmlFree(buffer);
-                    }
-                } else {
-                    ret = xmlStrcat(ret, node->content);
-                }
-            } else {
-                xmlChar buf[2];
-
-                buf[0] = '&';
-                buf[1] = 0;
-                ret = xmlStrncat(ret, buf, 1);
-                ret = xmlStrcat(ret, node->name);
-                buf[0] = ';';
-                buf[1] = 0;
-                ret = xmlStrncat(ret, buf, 1);
-            }
-        }
-#if 0
-        else {
-            xmlGenericError(xmlGenericErrorContext,
-                            "xmlGetNodeListString : invalid node type %d\n",
-                            node->type);
-        }
-#endif
-        node = node->next;
-    }
-    return (ret);
+    return(xmlNodeListGetStringInternal((xmlDocPtr) doc, list, escMode));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 static xmlAttrPtr
 xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
@@ -1866,7 +1631,7 @@ xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
 
     if ((node != NULL) && (node->type != XML_ELEMENT_NODE)) {
         if ((eatname == 1) &&
-	    ((node->doc == NULL) ||
+	    ((node->doc == NULL) || (node->doc->dict == NULL) ||
 	     (!(xmlDictOwns(node->doc->dict, name)))))
             xmlFree((xmlChar *) name);
         return (NULL);
@@ -1879,9 +1644,9 @@ xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
     if (cur == NULL) {
         if ((eatname == 1) &&
 	    ((node == NULL) || (node->doc == NULL) ||
+             (node->doc->dict == NULL) ||
 	     (!(xmlDictOwns(node->doc->dict, name)))))
             xmlFree((xmlChar *) name);
-        xmlTreeErrMemory("building attribute");
         return (NULL);
     }
     memset(cur, 0, sizeof(xmlAttr));
@@ -1899,6 +1664,8 @@ xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
             cur->name = (xmlChar *) xmlDictLookup(doc->dict, name, -1);
         else
             cur->name = xmlStrdup(name);
+        if (cur->name == NULL)
+            goto error;
     } else
         cur->name = name;
 
@@ -1906,6 +1673,8 @@ xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
         xmlNodePtr tmp;
 
         cur->children = xmlNewDocText(doc, value);
+        if (cur->children == NULL)
+            goto error;
         cur->last = NULL;
         tmp = cur->children;
         while (tmp != NULL) {
@@ -1913,6 +1682,15 @@ xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
             if (tmp->next == NULL)
                 cur->last = tmp;
             tmp = tmp->next;
+        }
+
+        if (doc != NULL) {
+            int res = xmlIsID(doc, node, cur);
+
+            if (res < 0)
+                goto error;
+            if ((res == 1) && (xmlAddIDSafe(cur, value) < 0))
+                goto error;
         }
     }
 
@@ -1932,60 +1710,65 @@ xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
         }
     }
 
-    if ((value != NULL) && (node != NULL) &&
-        (xmlIsID(node->doc, node, cur) == 1))
-        xmlAddID(NULL, node->doc, value, cur);
-
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
         xmlRegisterNodeDefaultValue((xmlNodePtr) cur);
     return (cur);
+
+error:
+    xmlFreeProp(cur);
+    return(NULL);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_HTML_ENABLED) || \
-    defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlNewProp:
- * @node:  the holding node
+ * @node:  the parent node (optional)
  * @name:  the name of the attribute
- * @value:  the value of the attribute
+ * @value:  the value of the attribute (optional)
  *
- * Create a new property carried by a node.
- * Returns a pointer to the attribute
+ * Create an attribute node.
+ *
+ * If provided, @value should be a raw, unescaped string.
+ *
+ * If @node is provided, the created attribute will be appended without
+ * checking for duplicate names. It is an error if @node is not an
+ * element.
+ *
+ * Returns a pointer to the attribute or NULL if arguments are invalid
+ * or a memory allocation failed.
  */
 xmlAttrPtr
 xmlNewProp(xmlNodePtr node, const xmlChar *name, const xmlChar *value) {
 
     if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewProp : name == NULL\n");
-#endif
 	return(NULL);
     }
 
 	return xmlNewPropInternal(node, NULL, name, value, 0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNewNsProp:
- * @node:  the holding node
- * @ns:  the namespace
- * @name:  the name of the attribute
- * @value:  the value of the attribute
+ * @node:  the parent node (optional)
+ * @ns:  the namespace (optional)
+ * @name:  the local name of the attribute
+ * @value:  the value of the attribute (optional)
  *
- * Create a new property tagged with a namespace and carried by a node.
- * Returns a pointer to the attribute
+ * Create an attribute object.
+ *
+ * If provided, @value should be a raw, unescaped string.
+ *
+ * If @node is provided, the created attribute will be appended without
+ * checking for duplicate names. It is an error if @node is not an
+ * element.
+ *
+ * Returns a pointer to the attribute or NULL if arguments are invalid
+ * or a memory allocation failed.
  */
 xmlAttrPtr
 xmlNewNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name,
            const xmlChar *value) {
 
     if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewNsProp : name == NULL\n");
-#endif
 	return(NULL);
     }
 
@@ -1994,23 +1777,23 @@ xmlNewNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name,
 
 /**
  * xmlNewNsPropEatName:
- * @node:  the holding node
- * @ns:  the namespace
- * @name:  the name of the attribute
- * @value:  the value of the attribute
+ * @node:  the parent node (optional)
+ * @ns:  the namespace (optional)
+ * @name:  the local name of the attribute
+ * @value:  the value of the attribute (optional)
  *
- * Create a new property tagged with a namespace and carried by a node.
- * Returns a pointer to the attribute
+ * Like xmlNewNsProp, but the @name string will be used directly
+ * without making a copy. Takes ownership of @name which will also
+ * be freed on error.
+ *
+ * Returns a pointer to the attribute or NULL if arguments are invalid
+ * or a memory allocation failed.
  */
 xmlAttrPtr
 xmlNewNsPropEatName(xmlNodePtr node, xmlNsPtr ns, xmlChar *name,
            const xmlChar *value) {
 
     if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewNsPropEatName : name == NULL\n");
-#endif
 	return(NULL);
     }
 
@@ -2019,27 +1802,25 @@ xmlNewNsPropEatName(xmlNodePtr node, xmlNsPtr ns, xmlChar *name,
 
 /**
  * xmlNewDocProp:
- * @doc:  the document
+ * @doc:  the target document (optional)
  * @name:  the name of the attribute
- * @value:  the value of the attribute
+ * @value:  attribute value with XML references (optional)
  *
- * Create a new property carried by a document.
- * NOTE: @value is supposed to be a piece of XML CDATA, so it allows entity
- *       references, but XML special chars need to be escaped first by using
- *       xmlEncodeEntitiesReentrant(). Use xmlNewProp() if you don't need
- *       entities support.
+ * Create an attribute object.
  *
- * Returns a pointer to the attribute
+ * If provided, @value is expected to be a valid XML attribute value
+ * possibly containing character and entity references. Syntax errors
+ * and references to undeclared entities are ignored silently.
+ * If you want to pass a raw string, see xmlNewProp.
+ *
+ * Returns a pointer to the attribute or NULL if arguments are invalid
+ * or a memory allocation failed.
  */
 xmlAttrPtr
 xmlNewDocProp(xmlDocPtr doc, const xmlChar *name, const xmlChar *value) {
     xmlAttrPtr cur;
 
     if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewDocProp : name == NULL\n");
-#endif
 	return(NULL);
     }
 
@@ -2047,10 +1828,8 @@ xmlNewDocProp(xmlDocPtr doc, const xmlChar *name, const xmlChar *value) {
      * Allocate a new property and fill the fields.
      */
     cur = (xmlAttrPtr) xmlMalloc(sizeof(xmlAttr));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building attribute");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlAttr));
     cur->type = XML_ATTRIBUTE_NODE;
 
@@ -2058,32 +1837,28 @@ xmlNewDocProp(xmlDocPtr doc, const xmlChar *name, const xmlChar *value) {
 	cur->name = xmlDictLookup(doc->dict, name, -1);
     else
 	cur->name = xmlStrdup(name);
+    if (cur->name == NULL)
+        goto error;
     cur->doc = doc;
     if (value != NULL) {
-	xmlNodePtr tmp;
-
-	cur->children = xmlStringGetNodeList(doc, value);
-	cur->last = NULL;
-
-	tmp = cur->children;
-	while (tmp != NULL) {
-	    tmp->parent = (xmlNodePtr) cur;
-	    if (tmp->next == NULL)
-		cur->last = tmp;
-	    tmp = tmp->next;
-	}
+	if (xmlNodeParseContent((xmlNodePtr) cur, value, -1) < 0)
+            goto error;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
+
+error:
+    xmlFreeProp(cur);
+    return(NULL);
 }
 
 /**
  * xmlFreePropList:
- * @cur:  the first property in the list
+ * @cur:  the first attribute in the list
  *
- * Free a property and all its siblings, all the children are freed too.
+ * Free an attribute list including all children.
  */
 void
 xmlFreePropList(xmlAttrPtr cur) {
@@ -2100,7 +1875,7 @@ xmlFreePropList(xmlAttrPtr cur) {
  * xmlFreeProp:
  * @cur:  an attribute
  *
- * Free one attribute, all the content is freed too
+ * Free an attribute including all children.
  */
 void
 xmlFreeProp(xmlAttrPtr cur) {
@@ -2109,7 +1884,7 @@ xmlFreeProp(xmlAttrPtr cur) {
 
     if (cur->doc != NULL) dict = cur->doc->dict;
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue((xmlNodePtr)cur);
 
     /* Check for ID removal -> leading to invalid references ! */
@@ -2125,26 +1900,22 @@ xmlFreeProp(xmlAttrPtr cur) {
  * xmlRemoveProp:
  * @cur:  an attribute
  *
- * Unlink and free one attribute, all the content is freed too
- * Note this doesn't work for namespace definition attributes
+ * Unlink and free an attribute including all children.
  *
- * Returns 0 if success and -1 in case of error.
+ * Note this doesn't work for namespace declarations.
+ *
+ * The attribute must have a non-NULL parent pointer.
+ *
+ * Returns 0 on success or -1 if the attribute was not found or
+ * arguments are invalid.
  */
 int
 xmlRemoveProp(xmlAttrPtr cur) {
     xmlAttrPtr tmp;
     if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlRemoveProp : cur == NULL\n");
-#endif
 	return(-1);
     }
     if (cur->parent == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlRemoveProp : cur->parent == NULL\n");
-#endif
 	return(-1);
     }
     tmp = cur->parent->properties;
@@ -2165,31 +1936,25 @@ xmlRemoveProp(xmlAttrPtr cur) {
 	}
         tmp = tmp->next;
     }
-#ifdef DEBUG_TREE
-    xmlGenericError(xmlGenericErrorContext,
-	    "xmlRemoveProp : attribute not owned by its node\n");
-#endif
     return(-1);
 }
 
 /**
  * xmlNewDocPI:
- * @doc:  the target document
- * @name:  the processing instruction name
- * @content:  the PI content
+ * @doc:  the target document (optional)
+ * @name:  the processing instruction target
+ * @content:  the PI content (optional)
  *
- * Creation of a processing instruction element.
- * Returns a pointer to the new node object.
+ * Create a processing instruction object.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewDocPI(xmlDocPtr doc, const xmlChar *name, const xmlChar *content) {
     xmlNodePtr cur;
 
     if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewPI : name == NULL\n");
-#endif
 	return(NULL);
     }
 
@@ -2197,36 +1962,44 @@ xmlNewDocPI(xmlDocPtr doc, const xmlChar *name, const xmlChar *content) {
      * Allocate a new node and fill the fields.
      */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building PI");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNode));
     cur->type = XML_PI_NODE;
+    cur->doc = doc;
 
     if ((doc != NULL) && (doc->dict != NULL))
         cur->name = xmlDictLookup(doc->dict, name, -1);
     else
 	cur->name = xmlStrdup(name);
+    if (cur->name == NULL)
+        goto error;
     if (content != NULL) {
 	cur->content = xmlStrdup(content);
+        if (cur->content == NULL)
+            goto error;
     }
-    cur->doc = doc;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
+
+error:
+    xmlFreeNode(cur);
+    return(NULL);
 }
 
 /**
  * xmlNewPI:
- * @name:  the processing instruction name
- * @content:  the PI content
+ * @name:  the processing instruction target
+ * @content:  the PI content (optional)
  *
- * Creation of a processing instruction element.
- * Use xmlDocNewPI preferably to get string interning
+ * Create a processing instruction node.
  *
- * Returns a pointer to the new node object.
+ * Use of this function is DISCOURAGED in favor of xmlNewDocPI.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewPI(const xmlChar *name, const xmlChar *content) {
@@ -2235,120 +2008,122 @@ xmlNewPI(const xmlChar *name, const xmlChar *content) {
 
 /**
  * xmlNewNode:
- * @ns:  namespace if any
+ * @ns:  namespace (optional)
  * @name:  the node name
  *
- * Creation of a new node element. @ns is optional (NULL).
+ * Create an element node.
  *
- * Returns a pointer to the new node object. Uses xmlStrdup() to make
- * copy of @name.
+ * Use of this function is DISCOURAGED in favor of xmlNewDocNode.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewNode(xmlNsPtr ns, const xmlChar *name) {
-    xmlNodePtr cur;
-
-    if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewNode : name == NULL\n");
-#endif
-	return(NULL);
-    }
-
-    /*
-     * Allocate a new node and fill the fields.
-     */
-    cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building node");
-	return(NULL);
-    }
-    memset(cur, 0, sizeof(xmlNode));
-    cur->type = XML_ELEMENT_NODE;
-
-    cur->name = xmlStrdup(name);
-    cur->ns = ns;
-
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
-	xmlRegisterNodeDefaultValue(cur);
-    return(cur);
+    return(xmlNewDocNode(NULL, ns, name, NULL));
 }
 
 /**
  * xmlNewNodeEatName:
- * @ns:  namespace if any
+ * @ns:  namespace (optional)
  * @name:  the node name
  *
- * Creation of a new node element. @ns is optional (NULL).
+ * Create an element node.
  *
- * Returns a pointer to the new node object, with pointer @name as
- * new node's name. Use xmlNewNode() if a copy of @name string is
- * is needed as new node's name.
+ * Use of this function is DISCOURAGED in favor of xmlNewDocNodeEatName.
+ *
+ * Like xmlNewNode, but the @name string will be used directly
+ * without making a copy. Takes ownership of @name which will also
+ * be freed on error.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewNodeEatName(xmlNsPtr ns, xmlChar *name) {
+    return(xmlNewDocNodeEatName(NULL, ns, name, NULL));
+}
+
+static xmlNodePtr
+xmlNewElem(xmlDocPtr doc, xmlNsPtr ns, const xmlChar *name,
+           const xmlChar *content) {
     xmlNodePtr cur;
 
-    if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewNode : name == NULL\n");
-#endif
-	return(NULL);
-    }
-
-    /*
-     * Allocate a new node and fill the fields.
-     */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building node");
-	/* we can't check here that name comes from the doc dictionary */
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNode));
-    cur->type = XML_ELEMENT_NODE;
 
+    cur->type = XML_ELEMENT_NODE;
+    cur->doc = doc;
     cur->name = name;
     cur->ns = ns;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if (content != NULL) {
+        if (xmlNodeParseContent(cur, content, -1) < 0) {
+            /* Don't free name on error */
+            xmlFree(cur);
+            return(NULL);
+        }
+    }
+
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
+
     return(cur);
 }
 
 /**
  * xmlNewDocNode:
- * @doc:  the document
- * @ns:  namespace if any
+ * @doc:  the target document
+ * @ns:  namespace (optional)
  * @name:  the node name
- * @content:  the XML text content if any
+ * @content:  text content with XML references (optional)
  *
- * Creation of a new node element within a document. @ns and @content
- * are optional (NULL).
- * NOTE: @content is supposed to be a piece of XML CDATA, so it allow entities
- *       references, but XML special chars need to be escaped first by using
- *       xmlEncodeEntitiesReentrant(). Use xmlNewDocRawNode() if you don't
- *       need entities support.
+ * Create an element node.
  *
- * Returns a pointer to the new node object.
+ * If provided, @content is expected to be a valid XML attribute value
+ * possibly containing character and entity references. Syntax errors
+ * and references to undeclared entities are ignored silently.
+ * Only references are handled, nested elements, comments or PIs are
+ * not. See xmlNewDocRawNode for an alternative.
+ *
+ * General notes on object creation:
+ *
+ * Each node and all its children are associated with the same
+ * document. The document should be provided when creating nodes to
+ * avoid a performance penalty when adding the node to a document
+ * tree. Note that a document only owns nodes reachable from the root
+ * node. Unlinked subtrees must be freed manually.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewDocNode(xmlDocPtr doc, xmlNsPtr ns,
               const xmlChar *name, const xmlChar *content) {
     xmlNodePtr cur;
+    xmlChar *copy;
 
-    if ((doc != NULL) && (doc->dict != NULL))
-        cur = xmlNewNodeEatName(ns, (xmlChar *)
-	                        xmlDictLookup(doc->dict, name, -1));
-    else
-	cur = xmlNewNode(ns, name);
-    if (cur != NULL) {
-        cur->doc = doc;
-	if (content != NULL) {
-	    cur->children = xmlStringGetNodeList(doc, content);
-	    UPDATE_LAST_CHILD_AND_PARENT(cur)
-	}
+    if (name == NULL)
+        return(NULL);
+
+    if ((doc != NULL) && (doc->dict != NULL)) {
+        const xmlChar *dictName = xmlDictLookup(doc->dict, name, -1);
+
+        if (dictName == NULL)
+            return(NULL);
+        return(xmlNewElem(doc, ns, dictName, content));
+    }
+
+    copy = xmlStrdup(name);
+    if (copy == NULL)
+        return(NULL);
+
+    cur = xmlNewElem(doc, ns, copy, content);
+    if (cur == NULL) {
+        xmlFree(copy);
+        return(NULL);
     }
 
     return(cur);
@@ -2356,53 +2131,54 @@ xmlNewDocNode(xmlDocPtr doc, xmlNsPtr ns,
 
 /**
  * xmlNewDocNodeEatName:
- * @doc:  the document
- * @ns:  namespace if any
+ * @doc:  the target document
+ * @ns:  namespace (optional)
  * @name:  the node name
- * @content:  the XML text content if any
+ * @content:  text content with XML references (optional)
  *
- * Creation of a new node element within a document. @ns and @content
- * are optional (NULL).
- * NOTE: @content is supposed to be a piece of XML CDATA, so it allow entities
- *       references, but XML special chars need to be escaped first by using
- *       xmlEncodeEntitiesReentrant(). Use xmlNewDocRawNode() if you don't
- *       need entities support.
+ * Create an element node.
  *
- * Returns a pointer to the new node object.
+ * Like xmlNewDocNode, but the @name string will be used directly
+ * without making a copy. Takes ownership of @name which will also
+ * be freed on error.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewDocNodeEatName(xmlDocPtr doc, xmlNsPtr ns,
-              xmlChar *name, const xmlChar *content) {
+                     xmlChar *name, const xmlChar *content) {
     xmlNodePtr cur;
 
-    cur = xmlNewNodeEatName(ns, name);
-    if (cur != NULL) {
-        cur->doc = doc;
-	if (content != NULL) {
-	    cur->children = xmlStringGetNodeList(doc, content);
-	    UPDATE_LAST_CHILD_AND_PARENT(cur)
-	}
-    } else {
-        /* if name don't come from the doc dictionary free it here */
-        if ((name != NULL) && (doc != NULL) &&
-	    (!(xmlDictOwns(doc->dict, name))))
-	    xmlFree(name);
+    if (name == NULL)
+        return(NULL);
+
+    cur = xmlNewElem(doc, ns, name, content);
+    if (cur == NULL) {
+        /* if name doesn't come from the doc dictionary free it here */
+        if ((doc == NULL) ||
+            (doc->dict == NULL) ||
+            (!xmlDictOwns(doc->dict, name)))
+            xmlFree(name);
+        return(NULL);
     }
+
     return(cur);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNewDocRawNode:
- * @doc:  the document
- * @ns:  namespace if any
+ * @doc:  the target document
+ * @ns:  namespace (optional)
  * @name:  the node name
- * @content:  the text content if any
+ * @content:  raw text content (optional)
  *
- * Creation of a new node element within a document. @ns and @content
- * are optional (NULL).
+ * Create an element node.
  *
- * Returns a pointer to the new node object.
+ * If provided, @value should be a raw, unescaped string.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewDocRawNode(xmlDocPtr doc, xmlNsPtr ns,
@@ -2413,8 +2189,17 @@ xmlNewDocRawNode(xmlDocPtr doc, xmlNsPtr ns,
     if (cur != NULL) {
         cur->doc = doc;
 	if (content != NULL) {
-	    cur->children = xmlNewDocText(doc, content);
-	    UPDATE_LAST_CHILD_AND_PARENT(cur)
+            xmlNodePtr text;
+
+	    text = xmlNewDocText(doc, content);
+            if (text == NULL) {
+                xmlFreeNode(cur);
+                return(NULL);
+            }
+
+            cur->children = text;
+            cur->last = text;
+            text->parent = cur;
 	}
     }
     return(cur);
@@ -2422,10 +2207,12 @@ xmlNewDocRawNode(xmlDocPtr doc, xmlNsPtr ns,
 
 /**
  * xmlNewDocFragment:
- * @doc:  the document owning the fragment
+ * @doc:  the target document (optional)
  *
- * Creation of a new Fragment node.
- * Returns a pointer to the new node object.
+ * Create a document fragment node.
+ *
+ * Returns a pointer to the new node object or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlNewDocFragment(xmlDocPtr doc) {
@@ -2435,27 +2222,28 @@ xmlNewDocFragment(xmlDocPtr doc) {
      * Allocate a new DocumentFragment node and fill the fields.
      */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building fragment");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNode));
     cur->type = XML_DOCUMENT_FRAG_NODE;
 
     cur->doc = doc;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNewText:
- * @content:  the text content
+ * @content:  raw text content (optional)
  *
- * Creation of a new text node.
- * Returns a pointer to the new node object.
+ * Create a text node.
+ *
+ * Use of this function is DISCOURAGED in favor of xmlNewDocText.
+ *
+ * Returns a pointer to the new node object or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlNewText(const xmlChar *content) {
@@ -2465,91 +2253,76 @@ xmlNewText(const xmlChar *content) {
      * Allocate a new node and fill the fields.
      */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building text");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNode));
     cur->type = XML_TEXT_NODE;
 
     cur->name = xmlStringText;
     if (content != NULL) {
 	cur->content = xmlStrdup(content);
+        if (cur->content == NULL)
+            goto error;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
+
+error:
+    xmlFreeNode(cur);
+    return(NULL);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNewTextChild:
  * @parent:  the parent node
- * @ns:  a namespace if any
+ * @ns:  a namespace (optional)
  * @name:  the name of the child
- * @content:  the text content of the child if any.
+ * @content:  raw text content of the child (optional)
  *
- * Creation of a new child element, added at the end of @parent children list.
- * @ns and @content parameters are optional (NULL). If @ns is NULL, the newly
- * created element inherits the namespace of @parent. If @content is non NULL,
- * a child TEXT node will be created containing the string @content.
- * NOTE: Use xmlNewChild() if @content will contain entities that need to be
- * preserved. Use this function, xmlNewTextChild(), if you need to ensure that
- * reserved XML chars that might appear in @content, such as the ampersand,
- * greater-than or less-than signs, are automatically replaced by their XML
- * escaped entity representations.
+ * Create a new child element and append it to a parent element.
  *
- * Returns a pointer to the new node object.
+ * If @ns is NULL, the newly created element inherits the namespace
+ * of the parent.
+ *
+ * If @content is provided, a text node will be added to the child
+ * element, see xmlNewDocRawNode.
+ *
+ * Returns a pointer to the new node object or NULL if arguments
+ * are invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewTextChild(xmlNodePtr parent, xmlNsPtr ns,
             const xmlChar *name, const xmlChar *content) {
     xmlNodePtr cur, prev;
 
-    if (parent == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewTextChild : parent == NULL\n");
-#endif
+    if ((parent == NULL) || (name == NULL))
 	return(NULL);
+
+    switch (parent->type) {
+        case XML_DOCUMENT_NODE:
+        case XML_HTML_DOCUMENT_NODE:
+        case XML_DOCUMENT_FRAG_NODE:
+            break;
+
+        case XML_ELEMENT_NODE:
+            if (ns == NULL)
+                ns = parent->ns;
+            break;
+
+        default:
+            return(NULL);
     }
 
-    if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewTextChild : name == NULL\n");
-#endif
-	return(NULL);
-    }
-
-    /*
-     * Allocate a new node
-     */
-    if (parent->type == XML_ELEMENT_NODE) {
-	if (ns == NULL)
-	    cur = xmlNewDocRawNode(parent->doc, parent->ns, name, content);
-	else
-	    cur = xmlNewDocRawNode(parent->doc, ns, name, content);
-    } else if ((parent->type == XML_DOCUMENT_NODE) ||
-	       (parent->type == XML_HTML_DOCUMENT_NODE)) {
-	if (ns == NULL)
-	    cur = xmlNewDocRawNode((xmlDocPtr) parent, NULL, name, content);
-	else
-	    cur = xmlNewDocRawNode((xmlDocPtr) parent, ns, name, content);
-    } else if (parent->type == XML_DOCUMENT_FRAG_NODE) {
-	    cur = xmlNewDocRawNode( parent->doc, ns, name, content);
-    } else {
-	return(NULL);
-    }
-    if (cur == NULL) return(NULL);
+    cur = xmlNewDocRawNode(parent->doc, ns, name, content);
+    if (cur == NULL)
+        return(NULL);
 
     /*
      * add the new element at the end of the children list.
      */
-    cur->type = XML_ELEMENT_NODE;
     cur->parent = parent;
-    cur->doc = parent->doc;
     if (parent->children == NULL) {
         parent->children = cur;
 	parent->last = cur;
@@ -2562,58 +2335,94 @@ xmlNewTextChild(xmlNodePtr parent, xmlNsPtr ns,
 
     return(cur);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
- * xmlNewCharRef:
- * @doc: the document
- * @name:  the char ref string, starting with # or "&# ... ;"
+ * xmlNewEntityRef:
+ * @doc: the target document (optional)
+ * @name:  the entity name
  *
- * Creation of a new character reference node.
- * Returns a pointer to the new node object.
+ * Create an empty entity reference node. This function doesn't attempt
+ * to look up the entity in @doc.
+ *
+ * @name is consumed.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
-xmlNodePtr
-xmlNewCharRef(xmlDocPtr doc, const xmlChar *name) {
+static xmlNodePtr
+xmlNewEntityRef(xmlDocPtr doc, xmlChar *name) {
     xmlNodePtr cur;
-
-    if (name == NULL)
-        return(NULL);
 
     /*
      * Allocate a new node and fill the fields.
      */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
     if (cur == NULL) {
-	xmlTreeErrMemory("building character reference");
+        xmlFree(name);
 	return(NULL);
     }
     memset(cur, 0, sizeof(xmlNode));
     cur->type = XML_ENTITY_REF_NODE;
-
     cur->doc = doc;
+    cur->name = name;
+
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+	xmlRegisterNodeDefaultValue(cur);
+
+    return(cur);
+}
+
+/**
+ * xmlNewCharRef:
+ * @doc: the target document (optional)
+ * @name:  the entity name
+ *
+ * This function is MISNAMED. It doesn't create a character reference
+ * but an entity reference.
+ *
+ * Create an empty entity reference node. This function doesn't attempt
+ * to look up the entity in @doc.
+ *
+ * Entity names like '&entity;' are handled as well.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
+ */
+xmlNodePtr
+xmlNewCharRef(xmlDocPtr doc, const xmlChar *name) {
+    xmlChar *copy;
+
+    if (name == NULL)
+        return(NULL);
+
     if (name[0] == '&') {
         int len;
         name++;
 	len = xmlStrlen(name);
 	if (name[len - 1] == ';')
-	    cur->name = xmlStrndup(name, len - 1);
+	    copy = xmlStrndup(name, len - 1);
 	else
-	    cur->name = xmlStrndup(name, len);
+	    copy = xmlStrndup(name, len);
     } else
-	cur->name = xmlStrdup(name);
+	copy = xmlStrdup(name);
+    if (copy == NULL)
+        return(NULL);
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
-	xmlRegisterNodeDefaultValue(cur);
-    return(cur);
+    return(xmlNewEntityRef(doc, copy));
 }
 
 /**
  * xmlNewReference:
- * @doc: the document
- * @name:  the reference name, or the reference string with & and ;
+ * @doc: the target document (optional)
+ * @name:  the entity name
  *
- * Creation of a new reference node.
- * Returns a pointer to the new node object.
+ * Create a new entity reference node, linking the result with the
+ * entity in @doc if found.
+ *
+ * Entity names like '&entity;' are handled as well.
+ *
+ * Returns a pointer to the new node object or NULL if arguments are
+ * invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewReference(const xmlDoc *doc, const xmlChar *name) {
@@ -2627,10 +2436,8 @@ xmlNewReference(const xmlDoc *doc, const xmlChar *name) {
      * Allocate a new node and fill the fields.
      */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building reference");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNode));
     cur->type = XML_ENTITY_REF_NODE;
 
@@ -2645,6 +2452,8 @@ xmlNewReference(const xmlDoc *doc, const xmlChar *name) {
 	    cur->name = xmlStrndup(name, len);
     } else
 	cur->name = xmlStrdup(name);
+    if (cur->name == NULL)
+        goto error;
 
     ent = xmlGetDocEntity(doc, cur->name);
     if (ent != NULL) {
@@ -2658,18 +2467,24 @@ xmlNewReference(const xmlDoc *doc, const xmlChar *name) {
 	cur->last = (xmlNodePtr) ent;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
+
+error:
+    xmlFreeNode(cur);
+    return(NULL);
 }
 
 /**
  * xmlNewDocText:
- * @doc: the document
- * @content:  the text content
+ * @doc:  the target document
+ * @content:  raw text content (optional)
  *
- * Creation of a new text node within a document.
- * Returns a pointer to the new node object.
+ * Create a new text node.
+ *
+ * Returns a pointer to the new node object or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlNewDocText(const xmlDoc *doc, const xmlChar *content) {
@@ -2682,11 +2497,13 @@ xmlNewDocText(const xmlDoc *doc, const xmlChar *content) {
 
 /**
  * xmlNewTextLen:
- * @content:  the text content
- * @len:  the text len.
+ * @content:  raw text content (optional)
+ * @len:  size of text content
  *
- * Creation of a new text node with an extra parameter for the content's length
- * Returns a pointer to the new node object.
+ * Use of this function is DISCOURAGED in favor of xmlNewDocTextLen.
+ *
+ * Returns a pointer to the new node object or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlNewTextLen(const xmlChar *content, int len) {
@@ -2696,32 +2513,35 @@ xmlNewTextLen(const xmlChar *content, int len) {
      * Allocate a new node and fill the fields.
      */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building text");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNode));
     cur->type = XML_TEXT_NODE;
 
     cur->name = xmlStringText;
     if (content != NULL) {
 	cur->content = xmlStrndup(content, len);
+        if (cur->content == NULL) {
+            xmlFreeNode(cur);
+            return(NULL);
+        }
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 }
 
 /**
  * xmlNewDocTextLen:
- * @doc: the document
- * @content:  the text content
- * @len:  the text len.
+ * @doc:  the target document
+ * @content:  raw text content (optional)
+ * @len:  size of text content
  *
- * Creation of a new text node with an extra content length parameter. The
- * text node pertain to a given document.
- * Returns a pointer to the new node object.
+ * Create a new text node.
+ *
+ * Returns a pointer to the new node object or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlNewDocTextLen(xmlDocPtr doc, const xmlChar *content, int len) {
@@ -2734,10 +2554,14 @@ xmlNewDocTextLen(xmlDocPtr doc, const xmlChar *content, int len) {
 
 /**
  * xmlNewComment:
- * @content:  the comment content
+ * @content:  the comment content (optional)
  *
- * Creation of a new node containing a comment.
- * Returns a pointer to the new node object.
+ * Use of this function is DISCOURAGED in favor of xmlNewDocComment.
+ *
+ * Create a comment node.
+ *
+ * Returns a pointer to the new node object or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlNewComment(const xmlChar *content) {
@@ -2747,31 +2571,37 @@ xmlNewComment(const xmlChar *content) {
      * Allocate a new node and fill the fields.
      */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building comment");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNode));
     cur->type = XML_COMMENT_NODE;
 
     cur->name = xmlStringComment;
     if (content != NULL) {
 	cur->content = xmlStrdup(content);
+        if (cur->content == NULL)
+            goto error;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
+
+error:
+    xmlFreeNode(cur);
+    return(NULL);
 }
 
 /**
  * xmlNewCDataBlock:
- * @doc:  the document
- * @content:  the CDATA block content content
- * @len:  the length of the block
+ * @doc:  the target document (optional)
+ * @content:  raw text content (optional)
+ * @len:  size of text content
  *
- * Creation of a new node containing a CDATA block.
- * Returns a pointer to the new node object.
+ * Create a CDATA section node.
+ *
+ * Returns a pointer to the new node object or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlNewCDataBlock(xmlDocPtr doc, const xmlChar *content, int len) {
@@ -2781,19 +2611,21 @@ xmlNewCDataBlock(xmlDocPtr doc, const xmlChar *content, int len) {
      * Allocate a new node and fill the fields.
      */
     cur = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (cur == NULL) {
-	xmlTreeErrMemory("building CDATA");
+    if (cur == NULL)
 	return(NULL);
-    }
     memset(cur, 0, sizeof(xmlNode));
     cur->type = XML_CDATA_SECTION_NODE;
     cur->doc = doc;
 
     if (content != NULL) {
 	cur->content = xmlStrndup(content, len);
+        if (cur->content == NULL) {
+            xmlFree(cur);
+            return(NULL);
+        }
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 }
@@ -2803,8 +2635,10 @@ xmlNewCDataBlock(xmlDocPtr doc, const xmlChar *content, int len) {
  * @doc:  the document
  * @content:  the comment content
  *
- * Creation of a new node containing a comment within a document.
- * Returns a pointer to the new node object.
+ * Create a comment node.
+ *
+ * Returns a pointer to the new node object or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlNewDocComment(xmlDocPtr doc, const xmlChar *content) {
@@ -2815,147 +2649,292 @@ xmlNewDocComment(xmlDocPtr doc, const xmlChar *content) {
     return(cur);
 }
 
-/**
- * xmlSetTreeDoc:
- * @tree:  the top element
- * @doc:  the document
- *
- * update all nodes under the tree to point to the right document
- */
-void
-xmlSetTreeDoc(xmlNodePtr tree, xmlDocPtr doc) {
-    xmlAttrPtr prop;
+static void
+xmlRemoveEntity(xmlEntityPtr ent) {
+    xmlDocPtr doc = ent->doc;
+    xmlDtdPtr intSubset, extSubset;
 
-    if ((tree == NULL) || (tree->type == XML_NAMESPACE_DECL))
-	return;
-    if (tree->doc != doc) {
-	if(tree->type == XML_ELEMENT_NODE) {
-	    prop = tree->properties;
-	    while (prop != NULL) {
-                if (prop->atype == XML_ATTRIBUTE_ID) {
-                    xmlRemoveID(tree->doc, prop);
-                }
+    if (doc == NULL)
+        return;
+    intSubset = doc->intSubset;
+    extSubset = doc->extSubset;
 
-		prop->doc = doc;
-		xmlSetListDoc(prop->children, doc);
+    if ((ent->etype == XML_INTERNAL_GENERAL_ENTITY) ||
+        (ent->etype == XML_EXTERNAL_GENERAL_PARSED_ENTITY) ||
+        (ent->etype == XML_EXTERNAL_GENERAL_UNPARSED_ENTITY)) {
+        if (intSubset != NULL) {
+            if (xmlHashLookup(intSubset->entities, ent->name) == ent)
+                xmlHashRemoveEntry(intSubset->entities, ent->name, NULL);
+        }
+        if (extSubset != NULL) {
+            if (xmlHashLookup(extSubset->entities, ent->name) == ent)
+                xmlHashRemoveEntry(extSubset->entities, ent->name, NULL);
+        }
+    } else if ((ent->etype == XML_INTERNAL_PARAMETER_ENTITY) ||
+               (ent->etype == XML_EXTERNAL_PARAMETER_ENTITY)) {
+        if (intSubset != NULL) {
+            if (xmlHashLookup(intSubset->pentities, ent->name) == ent)
+                xmlHashRemoveEntry(intSubset->entities, ent->name, NULL);
+        }
+        if (extSubset != NULL) {
+            if (xmlHashLookup(extSubset->pentities, ent->name) == ent)
+                xmlHashRemoveEntry(extSubset->entities, ent->name, NULL);
+        }
+    }
+}
+
+static int
+xmlNodeSetDoc(xmlNodePtr node, xmlDocPtr doc) {
+    xmlDocPtr oldDoc;
+    xmlDictPtr oldDict, newDict;
+    int ret = 0;
+
+    /*
+     * Remove name and content from old dictionary
+     */
+
+    oldDoc = node->doc;
+    oldDict = oldDoc ? oldDoc->dict : NULL;
+    newDict = doc ? doc->dict : NULL;
+
+    if ((oldDict != NULL) && (oldDict != newDict)) {
+        if ((node->name != NULL) &&
+            ((node->type == XML_ELEMENT_NODE) ||
+             (node->type == XML_ATTRIBUTE_NODE) ||
+             (node->type == XML_PI_NODE) ||
+             (node->type == XML_ENTITY_REF_NODE)) &&
+            (xmlDictOwns(oldDict, node->name))) {
+            if (newDict)
+                node->name = xmlDictLookup(newDict, node->name, -1);
+            else
+                node->name = xmlStrdup(node->name);
+            if (node->name == NULL)
+                ret = -1;
+        }
+
+        if ((node->content != NULL) &&
+            ((node->type == XML_TEXT_NODE) ||
+             (node->type == XML_CDATA_SECTION_NODE)) &&
+            (xmlDictOwns(oldDict, node->content))) {
+            node->content = xmlStrdup(node->content);
+            if (node->content == NULL)
+                ret = -1;
+        }
+    }
+
+    switch (node->type) {
+        case XML_ATTRIBUTE_NODE: {
+            xmlAttrPtr attr = (xmlAttrPtr) node;
+
+            /*
+             * Handle IDs
+             *
+             * TODO: ID attributes should also be added to the new
+             * document, but it's not clear how to handle clashes.
+             */
+            if (attr->atype == XML_ATTRIBUTE_ID)
+                xmlRemoveID(oldDoc, attr);
+
+            break;
+        }
+
+        case XML_ENTITY_REF_NODE:
+            /*
+             * Handle entity references
+             */
+            node->children = NULL;
+            node->last = NULL;
+            node->content = NULL;
+
+            if ((doc != NULL) &&
+                ((doc->intSubset != NULL) || (doc->extSubset != NULL))) {
+                xmlEntityPtr ent;
 
                 /*
-                 * TODO: ID attributes should be also added to the new
-                 * document, but this breaks things like xmlReplaceNode.
-                 * The underlying problem is that xmlRemoveID is only called
-                 * if a node is destroyed, not if it's unlinked.
-                 */
-#if 0
-                if (xmlIsID(doc, tree, prop)) {
-                    xmlChar *idVal = xmlNodeListGetString(doc, prop->children,
-                                                          1);
-                    xmlAddID(NULL, doc, idVal, prop);
+                * Assign new entity node if available
+                */
+                ent = xmlGetDocEntity(doc, node->name);
+                if (ent != NULL) {
+                    node->children = (xmlNodePtr) ent;
+                    node->last = (xmlNodePtr) ent;
+                    node->content = ent->content;
                 }
-#endif
+            }
 
-		prop = prop->next;
-	    }
-	}
-        if (tree->type == XML_ENTITY_REF_NODE) {
-            /*
-             * Clear 'children' which points to the entity declaration
-             * from the original document.
-             */
-            tree->children = NULL;
-        } else if (tree->children != NULL) {
-	    xmlSetListDoc(tree->children, doc);
-        }
-	tree->doc = doc;
+            break;
+
+        case XML_DTD_NODE:
+            if (oldDoc != NULL) {
+                if (oldDoc->intSubset == (xmlDtdPtr) node)
+                    oldDoc->intSubset = NULL;
+                if (oldDoc->extSubset == (xmlDtdPtr) node)
+                    oldDoc->extSubset = NULL;
+            }
+
+            break;
+
+        case XML_ENTITY_DECL:
+            xmlRemoveEntity((xmlEntityPtr) node);
+            break;
+
+        /*
+         * TODO:
+         * - Remove element decls from doc->elements
+         * - Remove attribtue decls form doc->attributes
+         */
+
+        default:
+            break;
     }
+
+    /*
+     * Set new document
+     */
+    node->doc = doc;
+
+    return(ret);
+}
+
+/**
+ * xmlSetTreeDoc:
+ * @tree:  root of a subtree
+ * @doc:  new document
+ *
+ * This is an internal function which shouldn't be used. It is
+ * invoked by functions like xmlAddChild, xmlAddSibling or
+ * xmlReplaceNode. @tree must be the root node of an unlinked
+ * subtree.
+ *
+ * Associate all nodes in a tree with a new document.
+ *
+ * Also copy strings from the old document's dictionary and
+ * remove ID attributes from the old ID table.
+ *
+ * Returns 0 on success. If a memory allocation fails, returns -1.
+ * The whole tree will be updated on failure but some strings
+ * may be lost.
+ */
+int
+xmlSetTreeDoc(xmlNodePtr tree, xmlDocPtr doc) {
+    int ret = 0;
+
+    if ((tree == NULL) || (tree->type == XML_NAMESPACE_DECL))
+	return(0);
+    if (tree->doc == doc)
+        return(0);
+
+    if (tree->type == XML_ELEMENT_NODE) {
+        xmlAttrPtr prop = tree->properties;
+
+        while (prop != NULL) {
+            if (prop->children != NULL) {
+                if (xmlSetListDoc(prop->children, doc) < 0)
+                    ret = -1;
+            }
+
+            if (xmlNodeSetDoc((xmlNodePtr) prop, doc) < 0)
+                ret = -1;
+
+            prop = prop->next;
+        }
+    }
+
+    if ((tree->children != NULL) &&
+        (tree->type != XML_ENTITY_REF_NODE)) {
+        if (xmlSetListDoc(tree->children, doc) < 0)
+            ret = -1;
+    }
+
+    if (xmlNodeSetDoc(tree, doc) < 0)
+        ret = -1;
+
+    return(ret);
 }
 
 /**
  * xmlSetListDoc:
- * @list:  the first element
- * @doc:  the document
+ * @list:  a node list
+ * @doc:  new document
  *
- * update all nodes in the list to point to the right document
+ * Associate all subtrees in @list with a new document.
+ *
+ * Internal function, see xmlSetTreeDoc.
+ *
+ * Returns 0 on success. If a memory allocation fails, returns -1.
+ * All subtrees will be updated on failure but some strings
+ * may be lost.
  */
-void
+int
 xmlSetListDoc(xmlNodePtr list, xmlDocPtr doc) {
     xmlNodePtr cur;
+    int ret = 0;
 
     if ((list == NULL) || (list->type == XML_NAMESPACE_DECL))
-	return;
+	return(0);
+
     cur = list;
     while (cur != NULL) {
-	if (cur->doc != doc)
-	    xmlSetTreeDoc(cur, doc);
+	if (cur->doc != doc) {
+	    if (xmlSetTreeDoc(cur, doc) < 0)
+                ret = -1;
+        }
 	cur = cur->next;
     }
+
+    return(ret);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlNewChild:
  * @parent:  the parent node
- * @ns:  a namespace if any
+ * @ns:  a namespace (optional)
  * @name:  the name of the child
- * @content:  the XML content of the child if any.
+ * @content:  text content with XML references (optional)
  *
- * Creation of a new child element, added at the end of @parent children list.
- * @ns and @content parameters are optional (NULL). If @ns is NULL, the newly
- * created element inherits the namespace of @parent. If @content is non NULL,
- * a child list containing the TEXTs and ENTITY_REFs node will be created.
- * NOTE: @content is supposed to be a piece of XML CDATA, so it allows entity
- *       references. XML special chars must be escaped first by using
- *       xmlEncodeEntitiesReentrant(), or xmlNewTextChild() should be used.
+ * Create a new child element and append it to a parent element.
  *
- * Returns a pointer to the new node object.
+ * If @ns is NULL, the newly created element inherits the namespace
+ * of the parent.
+ *
+ * If provided, @content is expected to be a valid XML attribute
+ * value possibly containing character and entity references. Text
+ * and entity reference node will be added to the child element,
+ * see xmlNewDocNode.
+ *
+ * Returns a pointer to the new node object or NULL if arguments
+ * are invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlNewChild(xmlNodePtr parent, xmlNsPtr ns,
             const xmlChar *name, const xmlChar *content) {
     xmlNodePtr cur, prev;
 
-    if (parent == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewChild : parent == NULL\n");
-#endif
+    if ((parent == NULL) || (name == NULL))
 	return(NULL);
+
+    switch (parent->type) {
+        case XML_DOCUMENT_NODE:
+        case XML_HTML_DOCUMENT_NODE:
+        case XML_DOCUMENT_FRAG_NODE:
+            break;
+
+        case XML_ELEMENT_NODE:
+            if (ns == NULL)
+                ns = parent->ns;
+            break;
+
+        default:
+            return(NULL);
     }
 
-    if (name == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewChild : name == NULL\n");
-#endif
-	return(NULL);
-    }
-
-    /*
-     * Allocate a new node
-     */
-    if (parent->type == XML_ELEMENT_NODE) {
-	if (ns == NULL)
-	    cur = xmlNewDocNode(parent->doc, parent->ns, name, content);
-	else
-	    cur = xmlNewDocNode(parent->doc, ns, name, content);
-    } else if ((parent->type == XML_DOCUMENT_NODE) ||
-	       (parent->type == XML_HTML_DOCUMENT_NODE)) {
-	if (ns == NULL)
-	    cur = xmlNewDocNode((xmlDocPtr) parent, NULL, name, content);
-	else
-	    cur = xmlNewDocNode((xmlDocPtr) parent, ns, name, content);
-    } else if (parent->type == XML_DOCUMENT_FRAG_NODE) {
-	    cur = xmlNewDocNode( parent->doc, ns, name, content);
-    } else {
-	return(NULL);
-    }
-    if (cur == NULL) return(NULL);
+    cur = xmlNewDocNode(parent->doc, ns, name, content);
+    if (cur == NULL)
+        return(NULL);
 
     /*
      * add the new element at the end of the children list.
      */
-    cur->type = XML_ELEMENT_NODE;
     cur->parent = parent;
-    cur->doc = parent->doc;
     if (parent->children == NULL) {
         parent->children = cur;
 	parent->last = cur;
@@ -2968,291 +2947,272 @@ xmlNewChild(xmlNodePtr parent, xmlNsPtr ns,
 
     return(cur);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
-/**
- * xmlAddPropSibling:
- * @prev:  the attribute to which @prop is added after
- * @cur:   the base attribute passed to calling function
- * @prop:  the new attribute
- *
- * Add a new attribute after @prev using @cur as base attribute.
- * When inserting before @cur, @prev is passed as @cur->prev.
- * When inserting after @cur, @prev is passed as @cur.
- * If an existing attribute is found it is destroyed prior to adding @prop.
- *
- * Returns the attribute being inserted or NULL in case of error.
- */
+static void
+xmlTextSetContent(xmlNodePtr text, xmlChar *content) {
+    if ((text->content != NULL) &&
+        (text->content != (xmlChar *) &text->properties)) {
+        xmlDocPtr doc = text->doc;
+
+        if ((doc == NULL) ||
+            (doc->dict == NULL) ||
+            (!xmlDictOwns(doc->dict, text->content)))
+            xmlFree(text->content);
+    }
+
+    text->content = content;
+    text->properties = NULL;
+}
+
+static int
+xmlTextAddContent(xmlNodePtr text, const xmlChar *content, int len) {
+    xmlChar *merged;
+
+    if (content == NULL)
+        return(0);
+
+    merged = xmlStrncatNew(text->content, content, len);
+    if (merged == NULL)
+        return(-1);
+
+    xmlTextSetContent(text, merged);
+    return(0);
+}
+
 static xmlNodePtr
-xmlAddPropSibling(xmlNodePtr prev, xmlNodePtr cur, xmlNodePtr prop) {
-	xmlAttrPtr attr;
+xmlInsertProp(xmlDocPtr doc, xmlNodePtr cur, xmlNodePtr parent,
+              xmlNodePtr prev, xmlNodePtr next) {
+    xmlAttrPtr attr;
 
-	if ((cur == NULL) || (cur->type != XML_ATTRIBUTE_NODE) ||
-	    (prop == NULL) || (prop->type != XML_ATTRIBUTE_NODE) ||
-	    ((prev != NULL) && (prev->type != XML_ATTRIBUTE_NODE)))
-		return(NULL);
+    if (((prev != NULL) && (prev->type != XML_ATTRIBUTE_NODE)) ||
+        ((next != NULL) && (next->type != XML_ATTRIBUTE_NODE)))
+        return(NULL);
 
-	/* check if an attribute with the same name exists */
-	if (prop->ns == NULL)
-		attr = xmlHasNsProp(cur->parent, prop->name, NULL);
-	else
-		attr = xmlHasNsProp(cur->parent, prop->name, prop->ns->href);
+    /* check if an attribute with the same name exists */
+    attr = xmlGetPropNodeInternal(parent, cur->name,
+                                  cur->ns ? cur->ns->href : NULL, 0);
 
-	if (prop->doc != cur->doc) {
-		xmlSetTreeDoc(prop, cur->doc);
+    xmlUnlinkNodeInternal(cur);
+
+    if (cur->doc != doc) {
+        if (xmlSetTreeDoc(cur, doc) < 0)
+            return(NULL);
+    }
+
+    cur->parent = parent;
+    cur->prev = prev;
+    cur->next = next;
+
+    if (prev == NULL) {
+        if (parent != NULL)
+            parent->properties = (xmlAttrPtr) cur;
+    } else {
+        prev->next = cur;
+    }
+    if (next != NULL) {
+        next->prev = cur;
+    }
+
+    if ((attr != NULL) && (attr != (xmlAttrPtr) cur)) {
+        /* different instance, destroy it (attributes must be unique) */
+        xmlRemoveProp((xmlAttrPtr) attr);
+    }
+
+    return cur;
+}
+
+static xmlNodePtr
+xmlInsertNode(xmlDocPtr doc, xmlNodePtr cur, xmlNodePtr parent,
+              xmlNodePtr prev, xmlNodePtr next, int coalesce) {
+    xmlNodePtr oldParent;
+
+    if (cur->type == XML_ATTRIBUTE_NODE)
+	return xmlInsertProp(doc, cur, parent, prev, next);
+
+    /*
+     * Coalesce text nodes
+     */
+    if ((coalesce) && (cur->type == XML_TEXT_NODE)) {
+	if ((prev != NULL) && (prev->type == XML_TEXT_NODE) &&
+            (prev->name == cur->name)) {
+            if (xmlTextAddContent(prev, cur->content, -1) < 0)
+                return(NULL);
+            xmlUnlinkNodeInternal(cur);
+	    xmlFreeNode(cur);
+	    return(prev);
 	}
-	prop->parent = cur->parent;
-	prop->prev = prev;
-	if (prev != NULL) {
-		prop->next = prev->next;
-		prev->next = prop;
-		if (prop->next)
-			prop->next->prev = prop;
-	} else {
-		prop->next = cur;
-		cur->prev = prop;
+
+	if ((next != NULL) && (next->type == XML_TEXT_NODE) &&
+            (next->name == cur->name)) {
+            if (cur->content != NULL) {
+	        xmlChar *merged;
+
+                merged = xmlStrncatNew(cur->content, next->content, -1);
+                if (merged == NULL)
+                    return(NULL);
+                xmlTextSetContent(next, merged);
+            }
+
+            xmlUnlinkNodeInternal(cur);
+	    xmlFreeNode(cur);
+	    return(next);
 	}
-	if (prop->prev == NULL && prop->parent != NULL)
-		prop->parent->properties = (xmlAttrPtr) prop;
-	if ((attr != NULL) && (attr->type != XML_ATTRIBUTE_DECL)) {
-		/* different instance, destroy it (attributes must be unique) */
-		xmlRemoveProp((xmlAttrPtr) attr);
-	}
-	return prop;
+    }
+
+    /* Unlink */
+    oldParent = cur->parent;
+    if (oldParent != NULL) {
+        if (oldParent->children == cur)
+            oldParent->children = cur->next;
+        if (oldParent->last == cur)
+            oldParent->last = cur->prev;
+    }
+    if (cur->next != NULL)
+        cur->next->prev = cur->prev;
+    if (cur->prev != NULL)
+        cur->prev->next = cur->next;
+
+    if (cur->doc != doc) {
+	if (xmlSetTreeDoc(cur, doc) < 0) {
+            /*
+             * We shouldn't make any modifications to the inserted
+             * tree if a memory allocation fails, but that's hard to
+             * implement. The tree has been moved to the target
+             * document now but some contents are corrupted.
+             * Unlinking is the best we can do.
+             */
+            cur->parent = NULL;
+            cur->prev = NULL;
+            cur->next = NULL;
+            return(NULL);
+        }
+    }
+
+    cur->parent = parent;
+    cur->prev = prev;
+    cur->next = next;
+
+    if (prev == NULL) {
+        if (parent != NULL)
+            parent->children = cur;
+    } else {
+        prev->next = cur;
+    }
+    if (next == NULL) {
+        if (parent != NULL)
+            parent->last = cur;
+    } else {
+        next->prev = cur;
+    }
+
+    return(cur);
 }
 
 /**
  * xmlAddNextSibling:
- * @cur:  the child node
- * @elem:  the new node
+ * @prev:  the target node
+ * @cur:  the new node
  *
- * Add a new node @elem as the next sibling of @cur
- * If the new node was already inserted in a document it is
- * first unlinked from its existing context.
- * As a result of text merging @elem may be freed.
- * If the new node is ATTRIBUTE, it is added into properties instead of children.
- * If there is an attribute with equal name, it is first destroyed.
+ * Unlinks @cur and inserts it as next sibling after @prev.
  *
- * Returns the new node or NULL in case of error.
+ * Unlike xmlAddChild this function does not merge text nodes.
+ *
+ * If @cur is an attribute node, it is inserted after attribute
+ * @prev. If the attribute list contains an attribute with a name
+ * matching @cur, the old attribute is destroyed.
+ *
+ * See the notes in xmlAddChild.
+ *
+ * Returns @cur or a sibling if @cur was merged. Returns NULL
+ * if arguments are invalid or a memory allocation failed.
  */
 xmlNodePtr
-xmlAddNextSibling(xmlNodePtr cur, xmlNodePtr elem) {
-    if ((cur == NULL) || (cur->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddNextSibling : cur == NULL\n");
-#endif
+xmlAddNextSibling(xmlNodePtr prev, xmlNodePtr cur) {
+    if ((prev == NULL) || (prev->type == XML_NAMESPACE_DECL) ||
+        (cur == NULL) || (cur->type == XML_NAMESPACE_DECL) ||
+        (cur == prev))
 	return(NULL);
-    }
-    if ((elem == NULL) || (elem->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddNextSibling : elem == NULL\n");
-#endif
-	return(NULL);
-    }
 
-    if (cur == elem) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddNextSibling : cur == elem\n");
-#endif
-	return(NULL);
-    }
+    if (cur == prev->next)
+        return(cur);
 
-    xmlUnlinkNode(elem);
-
-    if (elem->type == XML_TEXT_NODE) {
-	if (cur->type == XML_TEXT_NODE) {
-	    xmlNodeAddContent(cur, elem->content);
-	    xmlFreeNode(elem);
-	    return(cur);
-	}
-	if ((cur->next != NULL) && (cur->next->type == XML_TEXT_NODE) &&
-            (cur->name == cur->next->name)) {
-	    xmlChar *tmp;
-
-	    tmp = xmlStrdup(elem->content);
-	    tmp = xmlStrcat(tmp, cur->next->content);
-	    xmlNodeSetContent(cur->next, tmp);
-	    xmlFree(tmp);
-	    xmlFreeNode(elem);
-	    return(cur->next);
-	}
-    } else if (elem->type == XML_ATTRIBUTE_NODE) {
-		return xmlAddPropSibling(cur, cur, elem);
-    }
-
-    if (elem->doc != cur->doc) {
-	xmlSetTreeDoc(elem, cur->doc);
-    }
-    elem->parent = cur->parent;
-    elem->prev = cur;
-    elem->next = cur->next;
-    cur->next = elem;
-    if (elem->next != NULL)
-	elem->next->prev = elem;
-    if ((elem->parent != NULL) && (elem->parent->last == cur))
-	elem->parent->last = elem;
-    return(elem);
+    return(xmlInsertNode(prev->doc, cur, prev->parent, prev, prev->next, 0));
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_HTML_ENABLED) || \
-    defined(LIBXML_SCHEMAS_ENABLED) || defined(LIBXML_XINCLUDE_ENABLED)
 /**
  * xmlAddPrevSibling:
- * @cur:  the child node
- * @elem:  the new node
+ * @next:  the target node
+ * @cur:  the new node
  *
- * Add a new node @elem as the previous sibling of @cur
- * merging adjacent TEXT nodes (@elem may be freed)
- * If the new node was already inserted in a document it is
- * first unlinked from its existing context.
- * If the new node is ATTRIBUTE, it is added into properties instead of children.
- * If there is an attribute with equal name, it is first destroyed.
+ * Unlinks @cur and inserts it as previous sibling before @next.
  *
- * Returns the new node or NULL in case of error.
+ * Unlike xmlAddChild this function does not merge text nodes.
+ *
+ * If @cur is an attribute node, it is inserted before attribute
+ * @next. If the attribute list contains an attribute with a name
+ * matching @cur, the old attribute is destroyed.
+ *
+ * See the notes in xmlAddChild.
+ *
+ * Returns @cur or a sibling if @cur was merged. Returns NULL
+ * if arguments are invalid or a memory allocation failed.
  */
 xmlNodePtr
-xmlAddPrevSibling(xmlNodePtr cur, xmlNodePtr elem) {
-    if ((cur == NULL) || (cur->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddPrevSibling : cur == NULL\n");
-#endif
+xmlAddPrevSibling(xmlNodePtr next, xmlNodePtr cur) {
+    if ((next == NULL) || (next->type == XML_NAMESPACE_DECL) ||
+        (cur == NULL) || (cur->type == XML_NAMESPACE_DECL) ||
+        (cur == next))
 	return(NULL);
-    }
-    if ((elem == NULL) || (elem->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddPrevSibling : elem == NULL\n");
-#endif
-	return(NULL);
-    }
 
-    if (cur == elem) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddPrevSibling : cur == elem\n");
-#endif
-	return(NULL);
-    }
+    if (cur == next->prev)
+        return(cur);
 
-    xmlUnlinkNode(elem);
-
-    if (elem->type == XML_TEXT_NODE) {
-	if (cur->type == XML_TEXT_NODE) {
-	    xmlChar *tmp;
-
-	    tmp = xmlStrdup(elem->content);
-	    tmp = xmlStrcat(tmp, cur->content);
-	    xmlNodeSetContent(cur, tmp);
-	    xmlFree(tmp);
-	    xmlFreeNode(elem);
-	    return(cur);
-	}
-	if ((cur->prev != NULL) && (cur->prev->type == XML_TEXT_NODE) &&
-            (cur->name == cur->prev->name)) {
-	    xmlNodeAddContent(cur->prev, elem->content);
-	    xmlFreeNode(elem);
-	    return(cur->prev);
-	}
-    } else if (elem->type == XML_ATTRIBUTE_NODE) {
-		return xmlAddPropSibling(cur->prev, cur, elem);
-    }
-
-    if (elem->doc != cur->doc) {
-	xmlSetTreeDoc(elem, cur->doc);
-    }
-    elem->parent = cur->parent;
-    elem->next = cur;
-    elem->prev = cur->prev;
-    cur->prev = elem;
-    if (elem->prev != NULL)
-	elem->prev->next = elem;
-    if ((elem->parent != NULL) && (elem->parent->children == cur)) {
-		elem->parent->children = elem;
-    }
-    return(elem);
+    return(xmlInsertNode(next->doc, cur, next->parent, next->prev, next, 0));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlAddSibling:
- * @cur:  the child node
- * @elem:  the new node
+ * @node:  the target node
+ * @cur:  the new node
  *
- * Add a new element @elem to the list of siblings of @cur
- * merging adjacent TEXT nodes (@elem may be freed)
- * If the new element was already inserted in a document it is
- * first unlinked from its existing context.
+ * Unlinks @cur and inserts it as last sibling of @node.
  *
- * Returns the new element or NULL in case of error.
+ * If @cur is a text node, it may be merged with an adjacent text
+ * node and freed. In this case the text node containing the merged
+ * content is returned.
+ *
+ * If @cur is an attribute node, it is appended to the attribute
+ * list containing @node. If the attribute list contains an attribute
+ * with a name matching @cur, the old attribute is destroyed.
+ *
+ * See the notes in xmlAddChild.
+ *
+ * Returns @cur or a sibling if @cur was merged. Returns NULL
+ * if arguments are invalid or a memory allocation failed.
  */
 xmlNodePtr
-xmlAddSibling(xmlNodePtr cur, xmlNodePtr elem) {
-    xmlNodePtr parent;
-
-    if ((cur == NULL) || (cur->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddSibling : cur == NULL\n");
-#endif
+xmlAddSibling(xmlNodePtr node, xmlNodePtr cur) {
+    if ((node == NULL) || (node->type == XML_NAMESPACE_DECL) ||
+        (cur == NULL) || (cur->type == XML_NAMESPACE_DECL) ||
+        (cur == node))
 	return(NULL);
-    }
-
-    if ((elem == NULL) || (elem->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddSibling : elem == NULL\n");
-#endif
-	return(NULL);
-    }
-
-    if (cur == elem) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddSibling : cur == elem\n");
-#endif
-	return(NULL);
-    }
 
     /*
      * Constant time is we can rely on the ->parent->last to find
      * the last sibling.
      */
-    if ((cur->type != XML_ATTRIBUTE_NODE) && (cur->parent != NULL) &&
-	(cur->parent->children != NULL) &&
-	(cur->parent->last != NULL) &&
-	(cur->parent->last->next == NULL)) {
-	cur = cur->parent->last;
+    if ((node->type != XML_ATTRIBUTE_NODE) && (node->parent != NULL)) {
+        if (node->parent->last != NULL)
+	    node = node->parent->last;
     } else {
-	while (cur->next != NULL) cur = cur->next;
+	while (node->next != NULL)
+            node = node->next;
     }
 
-    xmlUnlinkNode(elem);
+    if (cur == node)
+        return(cur);
 
-    if ((cur->type == XML_TEXT_NODE) && (elem->type == XML_TEXT_NODE) &&
-        (cur->name == elem->name)) {
-	xmlNodeAddContent(cur, elem->content);
-	xmlFreeNode(elem);
-	return(cur);
-    } else if (elem->type == XML_ATTRIBUTE_NODE) {
-		return xmlAddPropSibling(cur, cur, elem);
-    }
-
-    if (elem->doc != cur->doc) {
-	xmlSetTreeDoc(elem, cur->doc);
-    }
-    parent = cur->parent;
-    elem->prev = cur;
-    elem->next = NULL;
-    elem->parent = parent;
-    cur->next = elem;
-    if (parent != NULL)
-	parent->last = elem;
-
-    return(elem);
+    return(xmlInsertNode(node->doc, cur, node->parent, node, NULL, 1));
 }
 
 /**
@@ -3260,38 +3220,35 @@ xmlAddSibling(xmlNodePtr cur, xmlNodePtr elem) {
  * @parent:  the parent node
  * @cur:  the first node in the list
  *
- * Add a list of node at the end of the child list of the parent
- * merging adjacent TEXT nodes (@cur may be freed)
+ * Append a node list to another node.
+ *
+ * See xmlAddChild.
  *
  * Returns the last child or NULL in case of error.
  */
 xmlNodePtr
 xmlAddChildList(xmlNodePtr parent, xmlNodePtr cur) {
+    xmlNodePtr iter;
     xmlNodePtr prev;
+    int oom;
 
     if ((parent == NULL) || (parent->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddChildList : parent == NULL\n");
-#endif
 	return(NULL);
     }
 
     if ((cur == NULL) || (cur->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddChildList : child == NULL\n");
-#endif
 	return(NULL);
     }
 
-    if ((cur->doc != NULL) && (parent->doc != NULL) &&
-        (cur->doc != parent->doc)) {
-#ifdef DEBUG_TREE
-	xmlGenericError(xmlGenericErrorContext,
-		"Elements moved to a different document\n");
-#endif
+    oom = 0;
+    for (iter = cur; iter != NULL; iter = iter->next) {
+	if (iter->doc != parent->doc) {
+	    if (xmlSetTreeDoc(iter, parent->doc) < 0)
+                oom = 1;
+	}
     }
+    if (oom)
+        return(NULL);
 
     /*
      * add the first element at the end of the children list.
@@ -3300,40 +3257,36 @@ xmlAddChildList(xmlNodePtr parent, xmlNodePtr cur) {
     if (parent->children == NULL) {
         parent->children = cur;
     } else {
+        prev = parent->last;
+
 	/*
 	 * If cur and parent->last both are TEXT nodes, then merge them.
 	 */
 	if ((cur->type == XML_TEXT_NODE) &&
-	    (parent->last->type == XML_TEXT_NODE) &&
-	    (cur->name == parent->last->name)) {
-	    xmlNodeAddContent(parent->last, cur->content);
+	    (prev->type == XML_TEXT_NODE) &&
+	    (cur->name == prev->name)) {
+            xmlNodePtr next;
+
+            if (xmlTextAddContent(prev, cur->content, -1) < 0)
+                return(NULL);
+            next = cur->next;
+	    xmlFreeNode(cur);
 	    /*
 	     * if it's the only child, nothing more to be done.
 	     */
-	    if (cur->next == NULL) {
-		xmlFreeNode(cur);
-		return(parent->last);
-	    }
-	    prev = cur;
-	    cur = cur->next;
-	    xmlFreeNode(prev);
+	    if (next == NULL)
+		return(prev);
+	    cur = next;
 	}
-        prev = parent->last;
+
 	prev->next = cur;
 	cur->prev = prev;
     }
     while (cur->next != NULL) {
 	cur->parent = parent;
-	if (cur->doc != parent->doc) {
-	    xmlSetTreeDoc(cur, parent->doc);
-	}
         cur = cur->next;
     }
     cur->parent = parent;
-    /* the parent may not be linked to a doc ! */
-    if (cur->doc != parent->doc) {
-        xmlSetTreeDoc(cur, parent->doc);
-    }
     parent->last = cur;
 
     return(cur);
@@ -3344,150 +3297,96 @@ xmlAddChildList(xmlNodePtr parent, xmlNodePtr cur) {
  * @parent:  the parent node
  * @cur:  the child node
  *
- * Add a new node to @parent, at the end of the child (or property) list
- * merging adjacent TEXT nodes (in which case @cur is freed)
- * If the new node is ATTRIBUTE, it is added into properties instead of children.
- * If there is an attribute with equal name, it is first destroyed.
+ * Unlink @cur and append it to the children of @parent.
  *
- * Returns the child or NULL in case of error.
+ * If @cur is a text node, it may be merged with an adjacent text
+ * node and freed. In this case the text node containing the merged
+ * content is returned.
+ *
+ * If @cur is an attribute node, it is appended to the attributes of
+ * @parent. If the attribute list contains an attribute with a name
+ * matching @cur, the old attribute is destroyed.
+ *
+ * General notes:
+ *
+ * Move operations like xmlAddChild can cause element or attribute
+ * nodes to reference namespaces that aren't declared in one of
+ * their ancestors. This can lead to use-after-free errors if the
+ * elements containing the declarations are freed later, especially
+ * when moving nodes from one document to another. You should
+ * consider calling xmlReconciliateNs after a move operation to
+ * normalize namespaces. Another option is to call
+ * xmlDOMWrapAdoptNode with the target parent before moving a node.
+ *
+ * For the most part, move operations don't check whether the
+ * resulting tree structure is valid. Users must make sure that
+ * parent nodes only receive children of valid types. Inserted
+ * child nodes must never be an ancestor of the parent node to
+ * avoid cycles in the tree structure. In general, only
+ * document, document fragments, elements and attributes
+ * should be used as parent nodes.
+ *
+ * When moving a node between documents and a memory allocation
+ * fails, the node's content will be corrupted and it will be
+ * unlinked. In this case, the node must be freed manually.
+ *
+ * Moving DTDs between documents isn't supported.
+ *
+ * Returns @cur or a sibling if @cur was merged. Returns NULL
+ * if arguments are invalid or a memory allocation failed.
  */
 xmlNodePtr
 xmlAddChild(xmlNodePtr parent, xmlNodePtr cur) {
     xmlNodePtr prev;
 
-    if ((parent == NULL) || (parent->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddChild : parent == NULL\n");
-#endif
-	return(NULL);
-    }
-
-    if ((cur == NULL) || (cur->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddChild : child == NULL\n");
-#endif
-	return(NULL);
-    }
-
-    if (parent == cur) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlAddChild : parent == cur\n");
-#endif
-	return(NULL);
-    }
-    /*
-     * If cur is a TEXT node, merge its content with adjacent TEXT nodes
-     * cur is then freed.
-     */
-    if (cur->type == XML_TEXT_NODE) {
-	if ((parent->type == XML_TEXT_NODE) &&
-	    (parent->content != NULL) &&
-	    (parent->name == cur->name)) {
-	    xmlNodeAddContent(parent, cur->content);
-	    xmlFreeNode(cur);
-	    return(parent);
-	}
-	if ((parent->last != NULL) && (parent->last->type == XML_TEXT_NODE) &&
-	    (parent->last->name == cur->name) &&
-	    (parent->last != cur)) {
-	    xmlNodeAddContent(parent->last, cur->content);
-	    xmlFreeNode(cur);
-	    return(parent->last);
-	}
-    }
+    if ((parent == NULL) || (parent->type == XML_NAMESPACE_DECL) ||
+        (cur == NULL) || (cur->type == XML_NAMESPACE_DECL) ||
+        (parent == cur))
+        return(NULL);
 
     /*
-     * add the new element at the end of the children list.
+     * If parent is a text node, call xmlTextAddContent. This
+     * undocumented quirk should probably be removed.
      */
-    prev = cur->parent;
-    cur->parent = parent;
-    if (cur->doc != parent->doc) {
-	xmlSetTreeDoc(cur, parent->doc);
+    if (parent->type == XML_TEXT_NODE) {
+        if (xmlTextAddContent(parent, cur->content, -1) < 0)
+            return(NULL);
+        xmlFreeNode(cur);
+        return(parent);
     }
-    /* this check prevents a loop on tree-traversions if a developer
-     * tries to add a node to its parent multiple times
-     */
-    if (prev == parent)
-	return(cur);
 
-    /*
-     * Coalescing
-     */
-    if ((parent->type == XML_TEXT_NODE) &&
-	(parent->content != NULL) &&
-	(parent != cur)) {
-	xmlNodeAddContent(parent, cur->content);
-	xmlFreeNode(cur);
-	return(parent);
-    }
     if (cur->type == XML_ATTRIBUTE_NODE) {
-		if (parent->type != XML_ELEMENT_NODE)
-			return(NULL);
-	if (parent->properties != NULL) {
-	    /* check if an attribute with the same name exists */
-	    xmlAttrPtr lastattr;
-
-	    if (cur->ns == NULL)
-		lastattr = xmlHasNsProp(parent, cur->name, NULL);
-	    else
-		lastattr = xmlHasNsProp(parent, cur->name, cur->ns->href);
-	    if ((lastattr != NULL) && (lastattr != (xmlAttrPtr) cur) && (lastattr->type != XML_ATTRIBUTE_DECL)) {
-		/* different instance, destroy it (attributes must be unique) */
-			xmlUnlinkNode((xmlNodePtr) lastattr);
-		xmlFreeProp(lastattr);
-	    }
-		if (lastattr == (xmlAttrPtr) cur)
-			return(cur);
-
-	}
-	if (parent->properties == NULL) {
-	    parent->properties = (xmlAttrPtr) cur;
-	} else {
-	    /* find the end */
-	    xmlAttrPtr lastattr = parent->properties;
-	    while (lastattr->next != NULL) {
-		lastattr = lastattr->next;
-	    }
-	    lastattr->next = (xmlAttrPtr) cur;
-	    ((xmlAttrPtr) cur)->prev = lastattr;
-	}
+        prev = (xmlNodePtr) parent->properties;
+        if (prev != NULL) {
+            while (prev->next != NULL)
+                prev = prev->next;
+        }
     } else {
-	if (parent->children == NULL) {
-	    parent->children = cur;
-	    parent->last = cur;
-	} else {
-	    prev = parent->last;
-	    prev->next = cur;
-	    cur->prev = prev;
-	    parent->last = cur;
-	}
+        prev = parent->last;
     }
-    return(cur);
+
+    if (cur == prev)
+        return(cur);
+
+    return(xmlInsertNode(parent->doc, cur, parent, prev, NULL, 1));
 }
 
 /**
  * xmlGetLastChild:
  * @parent:  the parent node
  *
- * Search the last child of a node.
- * Returns the last child or NULL if none.
+ * Find the last child of a node.
+ *
+ * Returns the last child or NULL if parent has no children.
  */
 xmlNodePtr
 xmlGetLastChild(const xmlNode *parent) {
     if ((parent == NULL) || (parent->type == XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlGetLastChild : parent == NULL\n");
-#endif
 	return(NULL);
     }
     return(parent->last);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /*
  * 5 interfaces from DOM ElementTraversal
  */
@@ -3496,13 +3395,12 @@ xmlGetLastChild(const xmlNode *parent) {
  * xmlChildElementCount:
  * @parent: the parent node
  *
- * Finds the current number of child nodes of that element which are
- * element nodes.
- * Note the handling of entities references is different than in
- * the W3C DOM element traversal spec since we don't have back reference
- * from entities content to entities references.
+ * Count the number of child nodes which are elements.
  *
- * Returns the count of element child or 0 if not available
+ * Note that entity references are not expanded.
+ *
+ * Returns the number of element children or 0 if arguments are
+ * invalid.
  */
 unsigned long
 xmlChildElementCount(xmlNodePtr parent) {
@@ -3513,10 +3411,10 @@ xmlChildElementCount(xmlNodePtr parent) {
         return(0);
     switch (parent->type) {
         case XML_ELEMENT_NODE:
-        case XML_ENTITY_NODE:
         case XML_DOCUMENT_NODE:
         case XML_DOCUMENT_FRAG_NODE:
         case XML_HTML_DOCUMENT_NODE:
+        case XML_ENTITY_DECL:
             cur = parent->children;
             break;
         default:
@@ -3534,12 +3432,11 @@ xmlChildElementCount(xmlNodePtr parent) {
  * xmlFirstElementChild:
  * @parent: the parent node
  *
- * Finds the first child node of that element which is a Element node
- * Note the handling of entities references is different than in
- * the W3C DOM element traversal spec since we don't have back reference
- * from entities content to entities references.
+ * Find the first child node which is an element.
  *
- * Returns the first element child or NULL if not available
+ * Note that entity references are not expanded.
+ *
+ * Returns the first element or NULL if parent has no children.
  */
 xmlNodePtr
 xmlFirstElementChild(xmlNodePtr parent) {
@@ -3549,10 +3446,10 @@ xmlFirstElementChild(xmlNodePtr parent) {
         return(NULL);
     switch (parent->type) {
         case XML_ELEMENT_NODE:
-        case XML_ENTITY_NODE:
         case XML_DOCUMENT_NODE:
         case XML_DOCUMENT_FRAG_NODE:
         case XML_HTML_DOCUMENT_NODE:
+        case XML_ENTITY_DECL:
             cur = parent->children;
             break;
         default:
@@ -3570,12 +3467,11 @@ xmlFirstElementChild(xmlNodePtr parent) {
  * xmlLastElementChild:
  * @parent: the parent node
  *
- * Finds the last child node of that element which is a Element node
- * Note the handling of entities references is different than in
- * the W3C DOM element traversal spec since we don't have back reference
- * from entities content to entities references.
+ * Find the last child node which is an element.
  *
- * Returns the last element child or NULL if not available
+ * Note that entity references are not expanded.
+ *
+ * Returns the last element or NULL if parent has no children.
  */
 xmlNodePtr
 xmlLastElementChild(xmlNodePtr parent) {
@@ -3585,10 +3481,10 @@ xmlLastElementChild(xmlNodePtr parent) {
         return(NULL);
     switch (parent->type) {
         case XML_ELEMENT_NODE:
-        case XML_ENTITY_NODE:
         case XML_DOCUMENT_NODE:
         case XML_DOCUMENT_FRAG_NODE:
         case XML_HTML_DOCUMENT_NODE:
+        case XML_ENTITY_DECL:
             cur = parent->last;
             break;
         default:
@@ -3606,13 +3502,11 @@ xmlLastElementChild(xmlNodePtr parent) {
  * xmlPreviousElementSibling:
  * @node: the current node
  *
- * Finds the first closest previous sibling of the node which is an
- * element node.
- * Note the handling of entities references is different than in
- * the W3C DOM element traversal spec since we don't have back reference
- * from entities content to entities references.
+ * Find the closest preceding sibling which is a element.
  *
- * Returns the previous element sibling or NULL if not available
+ * Note that entity references are not expanded.
+ *
+ * Returns the sibling or NULL if no sibling was found.
  */
 xmlNodePtr
 xmlPreviousElementSibling(xmlNodePtr node) {
@@ -3623,7 +3517,6 @@ xmlPreviousElementSibling(xmlNodePtr node) {
         case XML_TEXT_NODE:
         case XML_CDATA_SECTION_NODE:
         case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
         case XML_PI_NODE:
         case XML_COMMENT_NODE:
         case XML_XINCLUDE_START:
@@ -3645,13 +3538,11 @@ xmlPreviousElementSibling(xmlNodePtr node) {
  * xmlNextElementSibling:
  * @node: the current node
  *
- * Finds the first closest next sibling of the node which is an
- * element node.
- * Note the handling of entities references is different than in
- * the W3C DOM element traversal spec since we don't have back reference
- * from entities content to entities references.
+ * Find the closest following sibling which is a element.
  *
- * Returns the next element sibling or NULL if not available
+ * Note that entity references are not expanded.
+ *
+ * Returns the sibling or NULL if no sibling was found.
  */
 xmlNodePtr
 xmlNextElementSibling(xmlNodePtr node) {
@@ -3662,7 +3553,6 @@ xmlNextElementSibling(xmlNodePtr node) {
         case XML_TEXT_NODE:
         case XML_CDATA_SECTION_NODE:
         case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
         case XML_PI_NODE:
         case XML_COMMENT_NODE:
         case XML_DTD_NODE:
@@ -3681,14 +3571,11 @@ xmlNextElementSibling(xmlNodePtr node) {
     return(NULL);
 }
 
-#endif /* LIBXML_TREE_ENABLED */
-
 /**
  * xmlFreeNodeList:
  * @cur:  the first node in the list
  *
- * Free a node and all its siblings, this is a recursive behaviour, all
- * the children are freed too.
+ * Free a node list including all children.
  */
 void
 xmlFreeNodeList(xmlNodePtr cur) {
@@ -3706,9 +3593,6 @@ xmlFreeNodeList(xmlNodePtr cur) {
     while (1) {
         while ((cur->children != NULL) &&
                (cur->type != XML_DOCUMENT_NODE) &&
-#ifdef LIBXML_DOCB_ENABLED
-               (cur->type != XML_DOCB_DOCUMENT_NODE) &&
-#endif
                (cur->type != XML_HTML_DOCUMENT_NODE) &&
                (cur->type != XML_DTD_NODE) &&
                (cur->type != XML_ENTITY_REF_NODE)) {
@@ -3719,14 +3603,17 @@ xmlFreeNodeList(xmlNodePtr cur) {
         next = cur->next;
         parent = cur->parent;
 	if ((cur->type == XML_DOCUMENT_NODE) ||
-#ifdef LIBXML_DOCB_ENABLED
-            (cur->type == XML_DOCB_DOCUMENT_NODE) ||
-#endif
             (cur->type == XML_HTML_DOCUMENT_NODE)) {
             xmlFreeDoc((xmlDocPtr) cur);
-        } else if (cur->type != XML_DTD_NODE) {
-
-	    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+        } else if (cur->type == XML_DTD_NODE) {
+            /*
+             * TODO: We should consider freeing the DTD if it isn't
+             * referenced from doc->intSubset or doc->extSubset.
+             */
+            cur->prev = NULL;
+            cur->next = NULL;
+        } else {
+	    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 		xmlDeregisterNodeDefaultValue(cur);
 
 	    if (((cur->type == XML_ELEMENT_NODE) ||
@@ -3776,8 +3663,10 @@ xmlFreeNodeList(xmlNodePtr cur) {
  * xmlFreeNode:
  * @cur:  the node
  *
- * Free a node, this is a recursive behaviour, all the children are freed too.
- * This doesn't unlink the child from the list, use xmlUnlinkNode() first.
+ * Free a node including all the children.
+ *
+ * This doesn't unlink the node from the tree. Call xmlUnlinkNode first
+ * unless @cur is a root node.
  */
 void
 xmlFreeNode(xmlNodePtr cur) {
@@ -3798,32 +3687,31 @@ xmlFreeNode(xmlNodePtr cur) {
 	xmlFreeProp((xmlAttrPtr) cur);
 	return;
     }
+    if (cur->type == XML_ENTITY_DECL) {
+        xmlFreeEntity((xmlEntityPtr) cur);
+        return;
+    }
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue(cur);
 
     if (cur->doc != NULL) dict = cur->doc->dict;
 
-    if (cur->type == XML_ENTITY_DECL) {
-        xmlEntityPtr ent = (xmlEntityPtr) cur;
-	DICT_FREE(ent->SystemID);
-	DICT_FREE(ent->ExternalID);
-    }
     if ((cur->children != NULL) &&
 	(cur->type != XML_ENTITY_REF_NODE))
 	xmlFreeNodeList(cur->children);
-    if (((cur->type == XML_ELEMENT_NODE) ||
-	 (cur->type == XML_XINCLUDE_START) ||
-	 (cur->type == XML_XINCLUDE_END)) &&
-	(cur->properties != NULL))
-	xmlFreePropList(cur->properties);
-    if ((cur->type != XML_ELEMENT_NODE) &&
-	(cur->content != NULL) &&
-	(cur->type != XML_ENTITY_REF_NODE) &&
-	(cur->type != XML_XINCLUDE_END) &&
-	(cur->type != XML_XINCLUDE_START) &&
-	(cur->content != (xmlChar *) &(cur->properties))) {
-	DICT_FREE(cur->content)
+
+    if ((cur->type == XML_ELEMENT_NODE) ||
+        (cur->type == XML_XINCLUDE_START) ||
+        (cur->type == XML_XINCLUDE_END)) {
+        if (cur->properties != NULL)
+            xmlFreePropList(cur->properties);
+        if (cur->nsDef != NULL)
+            xmlFreeNsList(cur->nsDef);
+    } else if ((cur->content != NULL) &&
+               (cur->type != XML_ENTITY_REF_NODE) &&
+               (cur->content != (xmlChar *) &(cur->properties))) {
+        DICT_FREE(cur->content)
     }
 
     /*
@@ -3836,67 +3724,20 @@ xmlFreeNode(xmlNodePtr cur) {
         (cur->type != XML_COMMENT_NODE))
 	DICT_FREE(cur->name)
 
-    if (((cur->type == XML_ELEMENT_NODE) ||
-	 (cur->type == XML_XINCLUDE_START) ||
-	 (cur->type == XML_XINCLUDE_END)) &&
-	(cur->nsDef != NULL))
-	xmlFreeNsList(cur->nsDef);
     xmlFree(cur);
 }
 
 /**
- * xmlUnlinkNode:
+ * xmlUnlinkNodeInternal:
  * @cur:  the node
  *
- * Unlink a node from it's current context, the node is not freed
- * If one need to free the node, use xmlFreeNode() routine after the
- * unlink to discard it.
- * Note that namespace nodes can't be unlinked as they do not have
- * pointer to their parent.
+ * Unlink a node from its tree.
+ *
+ * This function only unlinks the node from the tree. It doesn't
+ * clear references to DTD nodes.
  */
-void
-xmlUnlinkNode(xmlNodePtr cur) {
-    if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlUnlinkNode : node == NULL\n");
-#endif
-	return;
-    }
-    if (cur->type == XML_NAMESPACE_DECL)
-        return;
-    if (cur->type == XML_DTD_NODE) {
-	xmlDocPtr doc;
-	doc = cur->doc;
-	if (doc != NULL) {
-	    if (doc->intSubset == (xmlDtdPtr) cur)
-		doc->intSubset = NULL;
-	    if (doc->extSubset == (xmlDtdPtr) cur)
-		doc->extSubset = NULL;
-	}
-    }
-    if (cur->type == XML_ENTITY_DECL) {
-        xmlDocPtr doc;
-	doc = cur->doc;
-	if (doc != NULL) {
-	    if (doc->intSubset != NULL) {
-	        if (xmlHashLookup(doc->intSubset->entities, cur->name) == cur)
-		    xmlHashRemoveEntry(doc->intSubset->entities, cur->name,
-		                       NULL);
-	        if (xmlHashLookup(doc->intSubset->pentities, cur->name) == cur)
-		    xmlHashRemoveEntry(doc->intSubset->pentities, cur->name,
-		                       NULL);
-	    }
-	    if (doc->extSubset != NULL) {
-	        if (xmlHashLookup(doc->extSubset->entities, cur->name) == cur)
-		    xmlHashRemoveEntry(doc->extSubset->entities, cur->name,
-		                       NULL);
-	        if (xmlHashLookup(doc->extSubset->pentities, cur->name) == cur)
-		    xmlHashRemoveEntry(doc->extSubset->pentities, cur->name,
-		                       NULL);
-	    }
-	}
-    }
+static void
+xmlUnlinkNodeInternal(xmlNodePtr cur) {
     if (cur->parent != NULL) {
 	xmlNodePtr parent;
 	parent = cur->parent;
@@ -3911,59 +3752,88 @@ xmlUnlinkNode(xmlNodePtr cur) {
 	}
 	cur->parent = NULL;
     }
+
     if (cur->next != NULL)
         cur->next->prev = cur->prev;
     if (cur->prev != NULL)
         cur->prev->next = cur->next;
-    cur->next = cur->prev = NULL;
+    cur->next = NULL;
+    cur->prev = NULL;
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_WRITER_ENABLED)
+/**
+ * xmlUnlinkNode:
+ * @cur:  the node
+ *
+ * Unlink a node from its tree.
+ *
+ * The node is not freed. Unless it is reinserted, it must be managed
+ * manually and freed eventually by calling xmlFreeNode.
+ */
+void
+xmlUnlinkNode(xmlNodePtr cur) {
+    if (cur == NULL)
+	return;
+
+    if (cur->type == XML_NAMESPACE_DECL)
+        return;
+
+    if (cur->type == XML_DTD_NODE) {
+	xmlDocPtr doc = cur->doc;
+
+	if (doc != NULL) {
+	    if (doc->intSubset == (xmlDtdPtr) cur)
+		doc->intSubset = NULL;
+	    if (doc->extSubset == (xmlDtdPtr) cur)
+		doc->extSubset = NULL;
+	}
+    }
+
+    if (cur->type == XML_ENTITY_DECL)
+        xmlRemoveEntity((xmlEntityPtr) cur);
+
+    xmlUnlinkNodeInternal(cur);
+}
+
 /**
  * xmlReplaceNode:
  * @old:  the old node
- * @cur:  the node
+ * @cur:  the node (optional)
  *
- * Unlink the old node from its current context, prune the new one
- * at the same place. If @cur was already inserted in a document it is
- * first unlinked from its existing context.
+ * Unlink the old node. If @cur is provided, it is unlinked and
+ * inserted in place of @old.
  *
- * Returns the @old node
+ * It is an error if @old has no parent.
+ *
+ * Unlike xmlAddChild, this function doesn't merge text nodes or
+ * delete duplicate attributes.
+ *
+ * See the notes in xmlAddChild.
+ *
+ * Returns @old or NULL if arguments are invalid or a memory
+ * allocation failed.
  */
 xmlNodePtr
 xmlReplaceNode(xmlNodePtr old, xmlNodePtr cur) {
     if (old == cur) return(NULL);
     if ((old == NULL) || (old->type == XML_NAMESPACE_DECL) ||
         (old->parent == NULL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlReplaceNode : old == NULL or without parent\n");
-#endif
 	return(NULL);
     }
     if ((cur == NULL) || (cur->type == XML_NAMESPACE_DECL)) {
+        /* Don't call xmlUnlinkNodeInternal to handle DTDs. */
 	xmlUnlinkNode(old);
 	return(old);
     }
-    if (cur == old) {
-	return(old);
-    }
     if ((old->type==XML_ATTRIBUTE_NODE) && (cur->type!=XML_ATTRIBUTE_NODE)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlReplaceNode : Trying to replace attribute node with other node type\n");
-#endif
 	return(old);
     }
     if ((cur->type==XML_ATTRIBUTE_NODE) && (old->type!=XML_ATTRIBUTE_NODE)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlReplaceNode : Trying to replace a non-attribute node with attribute node\n");
-#endif
 	return(old);
     }
-    xmlUnlinkNode(cur);
-    xmlSetTreeDoc(cur, old->doc);
+    xmlUnlinkNodeInternal(cur);
+    if (xmlSetTreeDoc(cur, old->doc) < 0)
+        return(NULL);
     cur->parent = old->parent;
     cur->next = old->next;
     if (cur->next != NULL)
@@ -3986,7 +3856,6 @@ xmlReplaceNode(xmlNodePtr old, xmlNodePtr cur) {
     old->parent = NULL;
     return(old);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /************************************************************************
  *									*
@@ -3998,9 +3867,10 @@ xmlReplaceNode(xmlNodePtr old, xmlNodePtr cur) {
  * xmlCopyNamespace:
  * @cur:  the namespace
  *
- * Do a copy of the namespace.
+ * Copy a namespace.
  *
- * Returns: a new #xmlNsPtr, or NULL in case of error.
+ * Returns the copied namespace or NULL if a memory allocation
+ * failed.
  */
 xmlNsPtr
 xmlCopyNamespace(xmlNsPtr cur) {
@@ -4012,10 +3882,6 @@ xmlCopyNamespace(xmlNsPtr cur) {
 	    ret = xmlNewNs(NULL, cur->href, cur->prefix);
 	    break;
 	default:
-#ifdef DEBUG_TREE
-	    xmlGenericError(xmlGenericErrorContext,
-		    "xmlCopyNamespace: invalid type %d\n", cur->type);
-#endif
 	    return(NULL);
     }
     return(ret);
@@ -4025,9 +3891,10 @@ xmlCopyNamespace(xmlNsPtr cur) {
  * xmlCopyNamespaceList:
  * @cur:  the first namespace
  *
- * Do a copy of an namespace list.
+ * Copy a namespace list.
  *
- * Returns: a new #xmlNsPtr, or NULL in case of error.
+ * Returns the head of the copied list or NULL if a memory
+ * allocation failed.
  */
 xmlNsPtr
 xmlCopyNamespaceList(xmlNsPtr cur) {
@@ -4036,6 +3903,10 @@ xmlCopyNamespaceList(xmlNsPtr cur) {
 
     while (cur != NULL) {
         q = xmlCopyNamespace(cur);
+        if (q == NULL) {
+            xmlFreeNsList(ret);
+            return(NULL);
+        }
 	if (p == NULL) {
 	    ret = p = q;
 	} else {
@@ -4047,12 +3918,9 @@ xmlCopyNamespaceList(xmlNsPtr cur) {
     return(ret);
 }
 
-static xmlNodePtr
-xmlStaticCopyNodeList(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent);
-
 static xmlAttrPtr
 xmlCopyPropInternal(xmlDocPtr doc, xmlNodePtr target, xmlAttrPtr cur) {
-    xmlAttrPtr ret;
+    xmlAttrPtr ret = NULL;
 
     if (cur == NULL) return(NULL);
     if ((target != NULL) && (target->type != XML_ELEMENT_NODE))
@@ -4072,15 +3940,20 @@ xmlCopyPropInternal(xmlDocPtr doc, xmlNodePtr target, xmlAttrPtr cur) {
 
     if ((cur->ns != NULL) && (target != NULL)) {
       xmlNsPtr ns;
+      int res;
 
-      ns = xmlSearchNs(target->doc, target, cur->ns->prefix);
+      res = xmlSearchNsSafe(target, cur->ns->prefix, &ns);
+      if (res < 0)
+          goto error;
       if (ns == NULL) {
         /*
          * Humm, we are copying an element whose namespace is defined
          * out of the new tree scope. Search it in the original tree
          * and add it at the top of the new tree
          */
-        ns = xmlSearchNs(cur->doc, cur->parent, cur->ns->prefix);
+        res = xmlSearchNsSafe(cur->parent, cur->ns->prefix, &ns);
+        if (res < 0)
+          goto error;
         if (ns != NULL) {
           xmlNodePtr root = target;
           xmlNodePtr pred = NULL;
@@ -4094,6 +3967,8 @@ xmlCopyPropInternal(xmlDocPtr doc, xmlNodePtr target, xmlAttrPtr cur) {
             root = pred;
           }
           ret->ns = xmlNewNs(root, ns->href, ns->prefix);
+          if (ret->ns == NULL)
+              goto error;
         }
       } else {
         /*
@@ -4109,7 +3984,9 @@ xmlCopyPropInternal(xmlDocPtr doc, xmlNodePtr target, xmlAttrPtr cur) {
            * we are in trouble: we need a new reconciled namespace.
            * This is expensive
            */
-          ret->ns = xmlNewReconciledNs(target->doc, target, cur->ns);
+          ret->ns = xmlNewReconciledNs(target, cur->ns);
+          if (ret->ns == NULL)
+              goto error;
         }
       }
 
@@ -4120,6 +3997,8 @@ xmlCopyPropInternal(xmlDocPtr doc, xmlNodePtr target, xmlAttrPtr cur) {
 	xmlNodePtr tmp;
 
 	ret->children = xmlStaticCopyNodeList(cur->children, ret->doc, (xmlNodePtr) ret);
+        if (ret->children == NULL)
+            goto error;
 	ret->last = NULL;
 	tmp = ret->children;
 	while (tmp != NULL) {
@@ -4132,20 +4011,31 @@ xmlCopyPropInternal(xmlDocPtr doc, xmlNodePtr target, xmlAttrPtr cur) {
     /*
      * Try to handle IDs
      */
-    if ((target!= NULL) && (cur!= NULL) &&
+    if ((target != NULL) && (cur != NULL) &&
 	(target->doc != NULL) && (cur->doc != NULL) &&
-	(cur->doc->ids != NULL) && (cur->parent != NULL)) {
-	if (xmlIsID(cur->doc, cur->parent, cur)) {
+        (cur->parent != NULL) &&
+        (cur->children != NULL)) {
+        int res = xmlIsID(cur->doc, cur->parent, cur);
+
+        if (res < 0)
+            goto error;
+	if (res != 0) {
 	    xmlChar *id;
 
-	    id = xmlNodeListGetString(cur->doc, cur->children, 1);
-	    if (id != NULL) {
-		xmlAddID(NULL, target->doc, id, ret);
-		xmlFree(id);
-	    }
+	    id = xmlNodeGetContent((xmlNodePtr) cur);
+	    if (id == NULL)
+                goto error;
+            res = xmlAddIDSafe(ret, id);
+	    xmlFree(id);
+            if (res < 0)
+                goto error;
 	}
     }
     return(ret);
+
+error:
+    xmlFreeProp(ret);
+    return(NULL);
 }
 
 /**
@@ -4153,9 +4043,14 @@ xmlCopyPropInternal(xmlDocPtr doc, xmlNodePtr target, xmlAttrPtr cur) {
  * @target:  the element where the attribute will be grafted
  * @cur:  the attribute
  *
- * Do a copy of the attribute.
+ * Create a copy of the attribute. This function sets the parent
+ * pointer of the copy to @target but doesn't set the attribute on
+ * the target element. Users should consider to set the attribute
+ * by calling xmlAddChild afterwards or reset the parent pointer to
+ * NULL.
  *
- * Returns: a new #xmlAttrPtr, or NULL in case of error.
+ * Returns the copied attribute or NULL if a memory allocation
+ * failed.
  */
 xmlAttrPtr
 xmlCopyProp(xmlNodePtr target, xmlAttrPtr cur) {
@@ -4167,9 +4062,12 @@ xmlCopyProp(xmlNodePtr target, xmlAttrPtr cur) {
  * @target:  the element where the attributes will be grafted
  * @cur:  the first attribute
  *
- * Do a copy of an attribute list.
+ * Create a copy of an attribute list. This function sets the
+ * parent pointers of the copied attributes to @target but doesn't
+ * set the attributes on the target element.
  *
- * Returns: a new #xmlAttrPtr, or NULL in case of error.
+ * Returns the head of the copied list or NULL if a memory
+ * allocation failed.
  */
 xmlAttrPtr
 xmlCopyPropList(xmlNodePtr target, xmlAttrPtr cur) {
@@ -4180,8 +4078,10 @@ xmlCopyPropList(xmlNodePtr target, xmlAttrPtr cur) {
         return(NULL);
     while (cur != NULL) {
         q = xmlCopyProp(target, cur);
-	if (q == NULL)
+	if (q == NULL) {
+            xmlFreePropList(ret);
 	    return(NULL);
+        }
 	if (p == NULL) {
 	    ret = p = q;
 	} else {
@@ -4213,7 +4113,18 @@ xmlCopyPropList(xmlNodePtr target, xmlAttrPtr cur) {
  * namespace info, but don't recurse on children.
  */
 
-static xmlNodePtr
+/**
+ * xmlStaticCopyNode:
+ * @node:  source node
+ * @doc:  target document
+ * @parent:  target parent
+ * @extended:  flags
+ *
+ * Copy a node.
+ *
+ * Returns the copy or NULL if a memory allocation failed.
+ */
+xmlNodePtr
 xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
                   int extended) {
     xmlNodePtr ret;
@@ -4225,7 +4136,6 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
         case XML_ELEMENT_NODE:
         case XML_DOCUMENT_FRAG_NODE:
         case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
         case XML_PI_NODE:
         case XML_COMMENT_NODE:
         case XML_XINCLUDE_START:
@@ -4238,18 +4148,8 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
 
         case XML_DOCUMENT_NODE:
         case XML_HTML_DOCUMENT_NODE:
-#ifdef LIBXML_DOCB_ENABLED
-        case XML_DOCB_DOCUMENT_NODE:
-#endif
-#ifdef LIBXML_TREE_ENABLED
 	    return((xmlNodePtr) xmlCopyDoc((xmlDocPtr) node, extended));
-#endif /* LIBXML_TREE_ENABLED */
-        case XML_DOCUMENT_TYPE_NODE:
-        case XML_NOTATION_NODE:
-        case XML_DTD_NODE:
-        case XML_ELEMENT_DECL:
-        case XML_ATTRIBUTE_DECL:
-        case XML_ENTITY_DECL:
+        default:
             return(NULL);
     }
 
@@ -4257,10 +4157,8 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
      * Allocate a new node and fill the fields.
      */
     ret = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-    if (ret == NULL) {
-	xmlTreeErrMemory("copying node");
+    if (ret == NULL)
 	return(NULL);
-    }
     memset(ret, 0, sizeof(xmlNode));
     ret->type = node->type;
 
@@ -4277,6 +4175,8 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
 	    ret->name = xmlDictLookup(doc->dict, node->name, -1);
 	else
 	    ret->name = xmlStrdup(node->name);
+        if (ret->name == NULL)
+            goto error;
     }
     if ((node->type != XML_ELEMENT_NODE) &&
 	(node->content != NULL) &&
@@ -4284,52 +4184,51 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
 	(node->type != XML_XINCLUDE_END) &&
 	(node->type != XML_XINCLUDE_START)) {
 	ret->content = xmlStrdup(node->content);
+        if (ret->content == NULL)
+            goto error;
     }else{
       if (node->type == XML_ELEMENT_NODE)
         ret->line = node->line;
-    }
-    if (parent != NULL) {
-	xmlNodePtr tmp;
-
-	/*
-	 * this is a tricky part for the node register thing:
-	 * in case ret does get coalesced in xmlAddChild
-	 * the deregister-node callback is called; so we register ret now already
-	 */
-	if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
-	    xmlRegisterNodeDefaultValue((xmlNodePtr)ret);
-
-        tmp = xmlAddChild(parent, ret);
-	/* node could have coalesced */
-	if (tmp != ret)
-	    return(tmp);
     }
 
     if (!extended)
 	goto out;
     if (((node->type == XML_ELEMENT_NODE) ||
-         (node->type == XML_XINCLUDE_START)) && (node->nsDef != NULL))
+         (node->type == XML_XINCLUDE_START)) && (node->nsDef != NULL)) {
         ret->nsDef = xmlCopyNamespaceList(node->nsDef);
+        if (ret->nsDef == NULL)
+            goto error;
+    }
 
-    if (node->ns != NULL) {
-        xmlNsPtr ns;
+    if ((node->type == XML_ELEMENT_NODE) && (node->ns != NULL)) {
+        xmlNsPtr ns = NULL;
+        int res;
 
-	ns = xmlSearchNs(doc, ret, node->ns->prefix);
+	res = xmlSearchNsSafe(ret, node->ns->prefix, &ns);
+        if (res < 0)
+            goto error;
 	if (ns == NULL) {
 	    /*
 	     * Humm, we are copying an element whose namespace is defined
 	     * out of the new tree scope. Search it in the original tree
-	     * and add it at the top of the new tree
+	     * and add it at the top of the new tree.
+             *
+             * TODO: Searching the original tree seems unnecessary. We
+             * already have a namespace URI.
 	     */
-	    ns = xmlSearchNs(node->doc, node, node->ns->prefix);
+	    res = xmlSearchNsSafe(node, node->ns->prefix, &ns);
+            if (res < 0)
+                goto error;
 	    if (ns != NULL) {
 	        xmlNodePtr root = ret;
 
 		while (root->parent != NULL) root = root->parent;
 		ret->ns = xmlNewNs(root, ns->href, ns->prefix);
-		} else {
-			ret->ns = xmlNewReconciledNs(doc, ret, node->ns);
+            } else {
+                ret->ns = xmlNewReconciledNs(ret, node->ns);
 	    }
+            if (ret->ns == NULL)
+                goto error;
 	} else {
 	    /*
 	     * reference the existing namespace definition in our own tree.
@@ -4337,9 +4236,11 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
 	    ret->ns = ns;
 	}
     }
-    if (((node->type == XML_ELEMENT_NODE) ||
-         (node->type == XML_XINCLUDE_START)) && (node->properties != NULL))
+    if ((node->type == XML_ELEMENT_NODE) && (node->properties != NULL)) {
         ret->properties = xmlCopyPropList(ret, node->properties);
+        if (ret->properties == NULL)
+            goto error;
+    }
     if (node->type == XML_ENTITY_REF_NODE) {
 	if ((doc == NULL) || (node->doc != doc)) {
 	    /*
@@ -4354,45 +4255,120 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
 	}
 	ret->last = ret->children;
     } else if ((node->children != NULL) && (extended != 2)) {
-        ret->children = xmlStaticCopyNodeList(node->children, doc, ret);
-	UPDATE_LAST_CHILD_AND_PARENT(ret)
+        xmlNodePtr cur, insert;
+
+        cur = node->children;
+        insert = ret;
+        while (cur != NULL) {
+            xmlNodePtr copy = xmlStaticCopyNode(cur, doc, insert, 2);
+            if (copy == NULL)
+                goto error;
+
+            /* Check for coalesced text nodes */
+            if (insert->last != copy) {
+                if (insert->last == NULL) {
+                    insert->children = copy;
+                } else {
+                    copy->prev = insert->last;
+                    insert->last->next = copy;
+                }
+                insert->last = copy;
+            }
+
+            if ((cur->type != XML_ENTITY_REF_NODE) &&
+                (cur->children != NULL)) {
+                cur = cur->children;
+                insert = copy;
+                continue;
+            }
+
+            while (1) {
+                if (cur->next != NULL) {
+                    cur = cur->next;
+                    break;
+                }
+
+                cur = cur->parent;
+                insert = insert->parent;
+                if (cur == node) {
+                    cur = NULL;
+                    break;
+                }
+            }
+        }
     }
 
 out:
-    /* if parent != NULL we already registered the node above */
-    if ((parent == NULL) &&
-        ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue)))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)ret);
     return(ret);
+
+error:
+    xmlFreeNode(ret);
+    return(NULL);
 }
 
-static xmlNodePtr
+/**
+ * xmlStaticCopyNodeList:
+ * @node:  node to copy
+ * @doc:  target document
+ * @parent:  target node (optional)
+ *
+ * Copy a node list. If @parent is provided, sets the parent pointer
+ * of the copied nodes, but doesn't update the children and last
+ * pointer of @parent.
+ *
+ * Returns a the copy or NULL in case of error.
+ */
+xmlNodePtr
 xmlStaticCopyNodeList(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent) {
     xmlNodePtr ret = NULL;
     xmlNodePtr p = NULL,q;
+    xmlDtdPtr newSubset = NULL;
+    int linkedSubset = 0;
 
     while (node != NULL) {
-#ifdef LIBXML_TREE_ENABLED
+        xmlNodePtr next = node->next;
+
 	if (node->type == XML_DTD_NODE ) {
 	    if (doc == NULL) {
-		node = node->next;
+		node = next;
 		continue;
 	    }
-	    if (doc->intSubset == NULL) {
+	    if ((doc->intSubset == NULL) && (newSubset == NULL)) {
 		q = (xmlNodePtr) xmlCopyDtd( (xmlDtdPtr) node );
-		if (q == NULL) return(NULL);
-		q->doc = doc;
+		if (q == NULL) goto error;
+                /* Can't fail on DTD */
+		xmlSetTreeDoc(q, doc);
 		q->parent = parent;
-		doc->intSubset = (xmlDtdPtr) q;
-		xmlAddChild(parent, q);
+		newSubset = (xmlDtdPtr) q;
 	    } else {
+                /*
+                 * We don't allow multiple internal subsets in a document,
+                 * so we move the DTD instead of creating a copy.
+                 */
+                linkedSubset = 1;
 		q = (xmlNodePtr) doc->intSubset;
-		xmlAddChild(parent, q);
+                /* Unlink */
+                if (q->prev == NULL) {
+                    if (q->parent != NULL)
+                        q->parent->children = q->next;
+                } else {
+                    q->prev->next = q->next;
+                }
+                if (q->next == NULL) {
+                    if (q->parent != NULL)
+                        q->parent->last = q->prev;
+                } else {
+                    q->next->prev = q->prev;
+                }
+                q->parent = parent;
+                q->next = NULL;
+                q->prev = NULL;
 	    }
 	} else
-#endif /* LIBXML_TREE_ENABLED */
 	    q = xmlStaticCopyNode(node, doc, parent, 1);
-	if (q == NULL) return(NULL);
+	if (q == NULL) goto error;
 	if (ret == NULL) {
 	    q->prev = NULL;
 	    ret = p = q;
@@ -4402,9 +4378,20 @@ xmlStaticCopyNodeList(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent) {
 	    q->prev = p;
 	    p = q;
 	}
-	node = node->next;
+	node = next;
     }
+    if ((doc != NULL) && (newSubset != NULL))
+        doc->intSubset = newSubset;
     return(ret);
+error:
+    xmlFreeNodeList(ret);
+    if (newSubset != NULL)
+        xmlFreeDtd(newSubset);
+    if (linkedSubset != 0) {
+        doc->intSubset->next = NULL;
+        doc->intSubset->prev = NULL;
+    }
+    return(NULL);
 }
 
 /**
@@ -4414,9 +4401,11 @@ xmlStaticCopyNodeList(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent) {
  *			when applicable)
  *		if 2 copy properties and namespaces (when applicable)
  *
- * Do a copy of the node.
+ * Copy a node.
  *
- * Returns: a new #xmlNodePtr, or NULL in case of error.
+ * Use of this function is DISCOURAGED in favor of xmlDocCopyNode.
+ *
+ * Returns the copied node or NULL if a memory allocation failed.
  */
 xmlNodePtr
 xmlCopyNode(xmlNodePtr node, int extended) {
@@ -4434,9 +4423,9 @@ xmlCopyNode(xmlNodePtr node, int extended) {
  *			when applicable)
  *		if 2 copy properties and namespaces (when applicable)
  *
- * Do a copy of the node to a given document.
+ * Copy a node into another document.
  *
- * Returns: a new #xmlNodePtr, or NULL in case of error.
+ * Returns the copied node or NULL if a memory allocation failed.
  */
 xmlNodePtr
 xmlDocCopyNode(xmlNodePtr node, xmlDocPtr doc, int extended) {
@@ -4451,9 +4440,10 @@ xmlDocCopyNode(xmlNodePtr node, xmlDocPtr doc, int extended) {
  * @doc: the target document
  * @node:  the first node in the list.
  *
- * Do a recursive copy of the node list.
+ * Copy a node list and all children into a new document.
  *
- * Returns: a new #xmlNodePtr, or NULL in case of error.
+ * Returns the head of the copied list or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr xmlDocCopyNodeList(xmlDocPtr doc, xmlNodePtr node) {
     xmlNodePtr ret = xmlStaticCopyNodeList(node, doc, NULL);
@@ -4464,24 +4454,25 @@ xmlNodePtr xmlDocCopyNodeList(xmlDocPtr doc, xmlNodePtr node) {
  * xmlCopyNodeList:
  * @node:  the first node in the list.
  *
- * Do a recursive copy of the node list.
- * Use xmlDocCopyNodeList() if possible to ensure string interning.
+ * Copy a node list and all children.
  *
- * Returns: a new #xmlNodePtr, or NULL in case of error.
+ * Use of this function is DISCOURAGED in favor of xmlDocCopyNodeList.
+ *
+ * Returns the head of the copied list or NULL if a memory
+ * allocation failed.
  */
 xmlNodePtr xmlCopyNodeList(xmlNodePtr node) {
     xmlNodePtr ret = xmlStaticCopyNodeList(node, NULL, NULL);
     return(ret);
 }
 
-#if defined(LIBXML_TREE_ENABLED)
 /**
  * xmlCopyDtd:
- * @dtd:  the dtd
+ * @dtd:  the DTD
  *
- * Do a copy of the dtd.
+ * Copy a DTD.
  *
- * Returns: a new #xmlDtdPtr, or NULL in case of error.
+ * Returns the copied DTD or NULL if a memory allocation failed.
  */
 xmlDtdPtr
 xmlCopyDtd(xmlDtdPtr dtd) {
@@ -4491,21 +4482,36 @@ xmlCopyDtd(xmlDtdPtr dtd) {
     if (dtd == NULL) return(NULL);
     ret = xmlNewDtd(NULL, dtd->name, dtd->ExternalID, dtd->SystemID);
     if (ret == NULL) return(NULL);
-    if (dtd->entities != NULL)
+    if (dtd->entities != NULL) {
         ret->entities = (void *) xmlCopyEntitiesTable(
 	                    (xmlEntitiesTablePtr) dtd->entities);
-    if (dtd->notations != NULL)
+        if (ret->entities == NULL)
+            goto error;
+    }
+    if (dtd->notations != NULL) {
         ret->notations = (void *) xmlCopyNotationTable(
 	                    (xmlNotationTablePtr) dtd->notations);
-    if (dtd->elements != NULL)
+        if (ret->notations == NULL)
+            goto error;
+    }
+    if (dtd->elements != NULL) {
         ret->elements = (void *) xmlCopyElementTable(
 	                    (xmlElementTablePtr) dtd->elements);
-    if (dtd->attributes != NULL)
+        if (ret->elements == NULL)
+            goto error;
+    }
+    if (dtd->attributes != NULL) {
         ret->attributes = (void *) xmlCopyAttributeTable(
 	                    (xmlAttributeTablePtr) dtd->attributes);
-    if (dtd->pentities != NULL)
+        if (ret->attributes == NULL)
+            goto error;
+    }
+    if (dtd->pentities != NULL) {
 	ret->pentities = (void *) xmlCopyEntitiesTable(
 			    (xmlEntitiesTablePtr) dtd->pentities);
+        if (ret->pentities == NULL)
+            goto error;
+    }
 
     cur = dtd->children;
     while (cur != NULL) {
@@ -4537,6 +4543,8 @@ xmlCopyDtd(xmlDtdPtr dtd) {
 		xmlGetDtdQAttrDesc(ret, tmp->elem, tmp->name, tmp->prefix);
 	} else if (cur->type == XML_COMMENT_NODE) {
 	    q = xmlCopyNode(cur, 0);
+            if (q == NULL)
+                goto error;
 	}
 
 	if (q == NULL) {
@@ -4558,19 +4566,22 @@ xmlCopyDtd(xmlDtdPtr dtd) {
     }
 
     return(ret);
-}
-#endif
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
+error:
+    xmlFreeDtd(ret);
+    return(NULL);
+}
+
 /**
  * xmlCopyDoc:
  * @doc:  the document
  * @recursive:  if not zero do a recursive copy.
  *
- * Do a copy of the document info. If recursive, the content tree will
+ * Copy a document. If recursive, the content tree will
  * be copied too as well as DTD, namespaces and entities.
  *
- * Returns: a new #xmlDocPtr, or NULL in case of error.
+ * Returns the copied document or NULL if a memory allocation
+ * failed.
  */
 xmlDocPtr
 xmlCopyDoc(xmlDocPtr doc, int recursive) {
@@ -4580,12 +4591,21 @@ xmlCopyDoc(xmlDocPtr doc, int recursive) {
     ret = xmlNewDoc(doc->version);
     if (ret == NULL) return(NULL);
     ret->type = doc->type;
-    if (doc->name != NULL)
+    if (doc->name != NULL) {
         ret->name = xmlMemStrdup(doc->name);
-    if (doc->encoding != NULL)
+        if (ret->name == NULL)
+            goto error;
+    }
+    if (doc->encoding != NULL) {
         ret->encoding = xmlStrdup(doc->encoding);
-    if (doc->URL != NULL)
+        if (ret->encoding == NULL)
+            goto error;
+    }
+    if (doc->URL != NULL) {
         ret->URL = xmlStrdup(doc->URL);
+        if (ret->URL == NULL)
+            goto error;
+    }
     ret->charset = doc->charset;
     ret->compression = doc->compression;
     ret->standalone = doc->standalone;
@@ -4593,24 +4613,25 @@ xmlCopyDoc(xmlDocPtr doc, int recursive) {
 
     ret->last = NULL;
     ret->children = NULL;
-#ifdef LIBXML_TREE_ENABLED
     if (doc->intSubset != NULL) {
         ret->intSubset = xmlCopyDtd(doc->intSubset);
-	if (ret->intSubset == NULL) {
-	    xmlFreeDoc(ret);
-	    return(NULL);
-	}
+	if (ret->intSubset == NULL)
+            goto error;
+        /* Can't fail on DTD */
 	xmlSetTreeDoc((xmlNodePtr)ret->intSubset, ret);
-	ret->intSubset->parent = ret;
     }
-#endif
-    if (doc->oldNs != NULL)
+    if (doc->oldNs != NULL) {
         ret->oldNs = xmlCopyNamespaceList(doc->oldNs);
+        if (ret->oldNs == NULL)
+            goto error;
+    }
     if (doc->children != NULL) {
 	xmlNodePtr tmp;
 
 	ret->children = xmlStaticCopyNodeList(doc->children, ret,
 		                               (xmlNodePtr)ret);
+        if (ret->children == NULL)
+            goto error;
 	ret->last = NULL;
 	tmp = ret->children;
 	while (tmp != NULL) {
@@ -4620,8 +4641,11 @@ xmlCopyDoc(xmlDocPtr doc, int recursive) {
 	}
     }
     return(ret);
+
+error:
+    xmlFreeDoc(ret);
+    return(NULL);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /************************************************************************
  *									*
@@ -4655,7 +4679,7 @@ xmlGetLineNoInternal(const xmlNode *node, int depth)
 	(node->type == XML_PI_NODE)) {
 	if (node->line == 65535) {
 	    if ((node->type == XML_TEXT_NODE) && (node->psvi != NULL))
-	        result = (long) (ptrdiff_t) node->psvi;
+	        result = XML_PTR_TO_INT(node->psvi);
 	    else if ((node->type == XML_ELEMENT_NODE) &&
 	             (node->children != NULL))
 	        result = xmlGetLineNoInternal(node->children, depth + 1);
@@ -4665,7 +4689,7 @@ xmlGetLineNoInternal(const xmlNode *node, int depth)
 	        result = xmlGetLineNoInternal(node->prev, depth + 1);
 	}
 	if ((result == -1) || (result == 65535))
-	    result = (long) node->line;
+	    result = node->line;
     } else if ((node->prev != NULL) &&
              ((node->prev->type == XML_ELEMENT_NODE) ||
 	      (node->prev->type == XML_TEXT_NODE) ||
@@ -4695,7 +4719,6 @@ xmlGetLineNo(const xmlNode *node)
     return(xmlGetLineNoInternal(node, 0));
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_DEBUG_ENABLED)
 /**
  * xmlGetNodePath:
  * @node: a node
@@ -4709,8 +4732,8 @@ xmlChar *
 xmlGetNodePath(const xmlNode *node)
 {
     const xmlNode *cur, *tmp, *next;
-    xmlChar *buffer = NULL, *temp;
-    size_t buf_len;
+    xmlChar *buffer = NULL;
+    size_t buf_len, len;
     xmlChar *buf;
     const char *sep;
     const char *name;
@@ -4721,14 +4744,11 @@ xmlGetNodePath(const xmlNode *node)
         return (NULL);
 
     buf_len = 500;
-    buffer = (xmlChar *) xmlMallocAtomic(buf_len * sizeof(xmlChar));
-    if (buffer == NULL) {
-	xmlTreeErrMemory("getting node path");
+    buffer = xmlMalloc(buf_len);
+    if (buffer == NULL)
         return (NULL);
-    }
-    buf = (xmlChar *) xmlMallocAtomic(buf_len * sizeof(xmlChar));
+    buf = xmlMalloc(buf_len);
     if (buf == NULL) {
-	xmlTreeErrMemory("getting node path");
         xmlFree(buffer);
         return (NULL);
     }
@@ -4910,25 +4930,36 @@ xmlGetNodePath(const xmlNode *node)
         /*
          * Make sure there is enough room
          */
-        if (xmlStrlen(buffer) + sizeof(nametemp) + 20 > buf_len) {
-            buf_len =
-                2 * buf_len + xmlStrlen(buffer) + sizeof(nametemp) + 20;
-            temp = (xmlChar *) xmlRealloc(buffer, buf_len);
+        len = strlen((const char *) buffer);
+        if (buf_len - len < sizeof(nametemp) + 20) {
+            xmlChar *temp;
+            int newSize;
+
+            if ((buf_len > SIZE_MAX / 2) ||
+                (2 * buf_len > SIZE_MAX - len - sizeof(nametemp) - 20)) {
+                xmlFree(buf);
+                xmlFree(buffer);
+                return (NULL);
+            }
+            newSize = 2 * buf_len + len + sizeof(nametemp) + 20;
+
+            temp = xmlRealloc(buffer, newSize);
             if (temp == NULL) {
-		xmlTreeErrMemory("getting node path");
                 xmlFree(buf);
                 xmlFree(buffer);
                 return (NULL);
             }
             buffer = temp;
-            temp = (xmlChar *) xmlRealloc(buf, buf_len);
+
+            temp = xmlRealloc(buf, newSize);
             if (temp == NULL) {
-		xmlTreeErrMemory("getting node path");
                 xmlFree(buf);
                 xmlFree(buffer);
                 return (NULL);
             }
             buf = temp;
+
+            buf_len = newSize;
         }
         if (occur == 0)
             snprintf((char *) buf, buf_len, "%s%s%s",
@@ -4942,7 +4973,6 @@ xmlGetNodePath(const xmlNode *node)
     xmlFree(buf);
     return (buffer);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlDocGetRootElement:
@@ -4951,7 +4981,7 @@ xmlGetNodePath(const xmlNode *node)
  * Get the root element of the document (doc->children is a list
  * containing possibly comments, PIs, etc ...).
  *
- * Returns the #xmlNodePtr for the root or NULL
+ * Returns the root element or NULL if no element was found.
  */
 xmlNodePtr
 xmlDocGetRootElement(const xmlDoc *doc) {
@@ -4967,7 +4997,6 @@ xmlDocGetRootElement(const xmlDoc *doc) {
     return(ret);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_WRITER_ENABLED)
 /**
  * xmlDocSetRootElement:
  * @doc:  the document
@@ -4977,7 +5006,10 @@ xmlDocGetRootElement(const xmlDoc *doc) {
  * Set the root element of the document (doc->children is a list
  * containing possibly comments, PIs, etc ...).
  *
- * Returns the old root element if any was found, NULL if root was NULL
+ * @root must be an element node. It is unlinked before insertion.
+ *
+ * Returns the unlinked old root element or NULL if the document
+ * didn't have a root element or a memory allocation failed.
  */
 xmlNodePtr
 xmlDocSetRootElement(xmlDocPtr doc, xmlNodePtr root) {
@@ -4986,15 +5018,18 @@ xmlDocSetRootElement(xmlDocPtr doc, xmlNodePtr root) {
     if (doc == NULL) return(NULL);
     if ((root == NULL) || (root->type == XML_NAMESPACE_DECL))
 	return(NULL);
-    xmlUnlinkNode(root);
-    xmlSetTreeDoc(root, doc);
-    root->parent = (xmlNodePtr) doc;
     old = doc->children;
     while (old != NULL) {
 	if (old->type == XML_ELEMENT_NODE)
 	    break;
         old = old->next;
     }
+    if (old == root)
+        return(old);
+    xmlUnlinkNodeInternal(root);
+    if (xmlSetTreeDoc(root, doc) < 0)
+        return(NULL);
+    root->parent = (xmlNodePtr) doc;
     if (old == NULL) {
 	if (doc->children == NULL) {
 	    doc->children = root;
@@ -5007,9 +5042,7 @@ xmlDocSetRootElement(xmlDocPtr doc, xmlNodePtr root) {
     }
     return(old);
 }
-#endif
 
-#if defined(LIBXML_TREE_ENABLED)
 /**
  * xmlNodeSetLang:
  * @cur:  the node being changed
@@ -5017,45 +5050,28 @@ xmlDocSetRootElement(xmlDocPtr doc, xmlNodePtr root) {
  *
  * Set the language of a node, i.e. the values of the xml:lang
  * attribute.
+ *
+ * Return 0 on success, 1 if arguments are invalid, -1 if a
+ * memory allocation failed.
  */
-void
+int
 xmlNodeSetLang(xmlNodePtr cur, const xmlChar *lang) {
     xmlNsPtr ns;
+    xmlAttrPtr attr;
+    int res;
 
-    if (cur == NULL) return;
-    switch(cur->type) {
-        case XML_TEXT_NODE:
-        case XML_CDATA_SECTION_NODE:
-        case XML_COMMENT_NODE:
-        case XML_DOCUMENT_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-        case XML_DOCUMENT_FRAG_NODE:
-        case XML_NOTATION_NODE:
-        case XML_HTML_DOCUMENT_NODE:
-        case XML_DTD_NODE:
-        case XML_ELEMENT_DECL:
-        case XML_ATTRIBUTE_DECL:
-        case XML_ENTITY_DECL:
-        case XML_PI_NODE:
-        case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
-	case XML_NAMESPACE_DECL:
-#ifdef LIBXML_DOCB_ENABLED
-	case XML_DOCB_DOCUMENT_NODE:
-#endif
-	case XML_XINCLUDE_START:
-	case XML_XINCLUDE_END:
-	    return;
-        case XML_ELEMENT_NODE:
-        case XML_ATTRIBUTE_NODE:
-	    break;
-    }
-    ns = xmlSearchNsByHref(cur->doc, cur, XML_XML_NAMESPACE);
-    if (ns == NULL)
-	return;
-    xmlSetNsProp(cur, ns, BAD_CAST "lang", lang);
+    if ((cur == NULL) || (cur->type != XML_ELEMENT_NODE))
+        return(1);
+
+    res = xmlSearchNsByHrefSafe(cur, XML_XML_NAMESPACE, &ns);
+    if (res != 0)
+        return(res);
+    attr = xmlSetNsProp(cur, ns, BAD_CAST "lang", lang);
+    if (attr == NULL)
+        return(-1);
+
+    return(0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeGetLang:
@@ -5070,20 +5086,26 @@ xmlNodeSetLang(xmlNodePtr cur, const xmlChar *lang) {
 xmlChar *
 xmlNodeGetLang(const xmlNode *cur) {
     xmlChar *lang;
+    int res;
 
     if ((cur == NULL) || (cur->type == XML_NAMESPACE_DECL))
         return(NULL);
+
     while (cur != NULL) {
-        lang = xmlGetNsProp(cur, BAD_CAST "lang", XML_XML_NAMESPACE);
+        res = xmlNodeGetAttrValue(cur, BAD_CAST "lang", XML_XML_NAMESPACE,
+                                  &lang);
+        if (res < 0)
+            return(NULL);
 	if (lang != NULL)
 	    return(lang);
+
 	cur = cur->parent;
     }
+
     return(NULL);
 }
 
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNodeSetSpacePreserve:
  * @cur:  the node being changed
@@ -5091,52 +5113,35 @@ xmlNodeGetLang(const xmlNode *cur) {
  *
  * Set (or reset) the space preserving behaviour of a node, i.e. the
  * value of the xml:space attribute.
+ *
+ * Return 0 on success, 1 if arguments are invalid, -1 if a
+ * memory allocation failed.
  */
-void
+int
 xmlNodeSetSpacePreserve(xmlNodePtr cur, int val) {
     xmlNsPtr ns;
+    xmlAttrPtr attr;
+    const char *string;
+    int res;
 
-    if (cur == NULL) return;
-    switch(cur->type) {
-        case XML_TEXT_NODE:
-        case XML_CDATA_SECTION_NODE:
-        case XML_COMMENT_NODE:
-        case XML_DOCUMENT_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-        case XML_DOCUMENT_FRAG_NODE:
-        case XML_NOTATION_NODE:
-        case XML_HTML_DOCUMENT_NODE:
-        case XML_DTD_NODE:
-        case XML_ELEMENT_DECL:
-        case XML_ATTRIBUTE_DECL:
-        case XML_ENTITY_DECL:
-        case XML_PI_NODE:
-        case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
-	case XML_NAMESPACE_DECL:
-	case XML_XINCLUDE_START:
-	case XML_XINCLUDE_END:
-#ifdef LIBXML_DOCB_ENABLED
-	case XML_DOCB_DOCUMENT_NODE:
-#endif
-	    return;
-        case XML_ELEMENT_NODE:
-        case XML_ATTRIBUTE_NODE:
-	    break;
-    }
-    ns = xmlSearchNsByHref(cur->doc, cur, XML_XML_NAMESPACE);
-    if (ns == NULL)
-	return;
-    switch (val) {
-    case 0:
-	xmlSetNsProp(cur, ns, BAD_CAST "space", BAD_CAST "default");
-	break;
-    case 1:
-	xmlSetNsProp(cur, ns, BAD_CAST "space", BAD_CAST "preserve");
-	break;
-    }
+    if ((cur == NULL) || (cur->type != XML_ELEMENT_NODE))
+        return(1);
+
+    res = xmlSearchNsByHrefSafe(cur, XML_XML_NAMESPACE, &ns);
+    if (res != 0)
+	return(res);
+
+    if (val == 0)
+        string = "default";
+    else
+        string = "preserve";
+
+    attr = xmlSetNsProp(cur, ns, BAD_CAST "space", BAD_CAST string);
+    if (attr == NULL)
+        return(-1);
+
+    return(0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeGetSpacePreserve:
@@ -5151,11 +5156,16 @@ xmlNodeSetSpacePreserve(xmlNodePtr cur, int val) {
 int
 xmlNodeGetSpacePreserve(const xmlNode *cur) {
     xmlChar *space;
+        int res;
 
     if ((cur == NULL) || (cur->type != XML_ELEMENT_NODE))
         return(-1);
+
     while (cur != NULL) {
-	space = xmlGetNsProp(cur, BAD_CAST "space", XML_XML_NAMESPACE);
+	res = xmlNodeGetAttrValue(cur, BAD_CAST "space", XML_XML_NAMESPACE,
+                                  &space);
+        if (res < 0)
+            return(-1);
 	if (space != NULL) {
 	    if (xmlStrEqual(space, BAD_CAST "preserve")) {
 		xmlFree(space);
@@ -5167,12 +5177,13 @@ xmlNodeGetSpacePreserve(const xmlNode *cur) {
 	    }
 	    xmlFree(space);
 	}
+
 	cur = cur->parent;
     }
+
     return(-1);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNodeSetName:
  * @cur:  the node being changed
@@ -5184,58 +5195,41 @@ void
 xmlNodeSetName(xmlNodePtr cur, const xmlChar *name) {
     xmlDocPtr doc;
     xmlDictPtr dict;
-    const xmlChar *freeme = NULL;
+    const xmlChar *copy;
+    const xmlChar *oldName;
 
     if (cur == NULL) return;
     if (name == NULL) return;
     switch(cur->type) {
-        case XML_TEXT_NODE:
-        case XML_CDATA_SECTION_NODE:
-        case XML_COMMENT_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-        case XML_DOCUMENT_FRAG_NODE:
-        case XML_NOTATION_NODE:
-        case XML_HTML_DOCUMENT_NODE:
-	case XML_NAMESPACE_DECL:
-	case XML_XINCLUDE_START:
-	case XML_XINCLUDE_END:
-#ifdef LIBXML_DOCB_ENABLED
-	case XML_DOCB_DOCUMENT_NODE:
-#endif
-	    return;
         case XML_ELEMENT_NODE:
         case XML_ATTRIBUTE_NODE:
         case XML_PI_NODE:
         case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
-        case XML_DTD_NODE:
-        case XML_DOCUMENT_NODE:
-        case XML_ELEMENT_DECL:
-        case XML_ATTRIBUTE_DECL:
-        case XML_ENTITY_DECL:
 	    break;
+        default:
+            return;
     }
+
     doc = cur->doc;
     if (doc != NULL)
 	dict = doc->dict;
     else
         dict = NULL;
-    if (dict != NULL) {
-        if ((cur->name != NULL) && (!xmlDictOwns(dict, cur->name)))
-	    freeme = cur->name;
-	cur->name = xmlDictLookup(dict, name, -1);
-    } else {
-	if (cur->name != NULL)
-	    freeme = cur->name;
-	cur->name = xmlStrdup(name);
-    }
 
-    if (freeme)
-        xmlFree((xmlChar *) freeme);
+    if (dict != NULL)
+        copy = xmlDictLookup(dict, name, -1);
+    else
+        copy = xmlStrdup(name);
+    if (copy == NULL)
+        return;
+
+    oldName = cur->name;
+    cur->name = copy;
+    if ((oldName != NULL) &&
+        ((dict == NULL) || (!xmlDictOwns(dict, oldName))))
+        xmlFree((xmlChar *) oldName);
 }
-#endif
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_XINCLUDE_ENABLED)
 /**
  * xmlNodeSetBase:
  * @cur:  the node being changed
@@ -5243,68 +5237,59 @@ xmlNodeSetName(xmlNodePtr cur, const xmlChar *name) {
  *
  * Set (or reset) the base URI of a node, i.e. the value of the
  * xml:base attribute.
+ *
+ * Returns 0 on success, -1 on error.
  */
-void
+int
 xmlNodeSetBase(xmlNodePtr cur, const xmlChar* uri) {
     xmlNsPtr ns;
     xmlChar* fixed;
 
-    if (cur == NULL) return;
+    if (cur == NULL)
+        return(-1);
     switch(cur->type) {
-        case XML_TEXT_NODE:
-        case XML_CDATA_SECTION_NODE:
-        case XML_COMMENT_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-        case XML_DOCUMENT_FRAG_NODE:
-        case XML_NOTATION_NODE:
-        case XML_DTD_NODE:
-        case XML_ELEMENT_DECL:
-        case XML_ATTRIBUTE_DECL:
-        case XML_ENTITY_DECL:
-        case XML_PI_NODE:
-        case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
-	case XML_NAMESPACE_DECL:
-	case XML_XINCLUDE_START:
-	case XML_XINCLUDE_END:
-	    return;
         case XML_ELEMENT_NODE:
         case XML_ATTRIBUTE_NODE:
 	    break;
         case XML_DOCUMENT_NODE:
-#ifdef LIBXML_DOCB_ENABLED
-	case XML_DOCB_DOCUMENT_NODE:
-#endif
         case XML_HTML_DOCUMENT_NODE: {
 	    xmlDocPtr doc = (xmlDocPtr) cur;
 
 	    if (doc->URL != NULL)
 		xmlFree((xmlChar *) doc->URL);
-	    if (uri == NULL)
+	    if (uri == NULL) {
 		doc->URL = NULL;
-	    else
+            } else {
 		doc->URL = xmlPathToURI(uri);
-	    return;
+                if (doc->URL == NULL)
+                    return(-1);
+            }
+	    return(0);
 	}
+        default:
+	    return(-1);
     }
 
-    ns = xmlSearchNsByHref(cur->doc, cur, XML_XML_NAMESPACE);
+    xmlSearchNsByHrefSafe(cur, XML_XML_NAMESPACE, &ns);
     if (ns == NULL)
-	return;
+	return(-1);
     fixed = xmlPathToURI(uri);
-    if (fixed != NULL) {
-	xmlSetNsProp(cur, ns, BAD_CAST "base", fixed);
-	xmlFree(fixed);
-    } else {
-	xmlSetNsProp(cur, ns, BAD_CAST "base", uri);
+    if (fixed == NULL)
+        return(-1);
+    if (xmlSetNsProp(cur, ns, BAD_CAST "base", fixed) == NULL) {
+        xmlFree(fixed);
+        return(-1);
     }
+    xmlFree(fixed);
+
+    return(0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
- * xmlNodeGetBase:
+ * xmlNodeGetBaseSafe:
  * @doc:  the document the node pertains to
  * @cur:  the node being checked
+ * @baseOut:  pointer to base
  *
  * Searches for the BASE URL. The code should work on both XML
  * and HTML document even if base mechanisms are completely different.
@@ -5315,19 +5300,27 @@ xmlNodeSetBase(xmlNodePtr cur, const xmlChar* uri) {
  * However it does not return the document base (5.1.3), use
  * doc->URL in this case
  *
- * Returns a pointer to the base URL, or NULL if not found
- *     It's up to the caller to free the memory with xmlFree().
+ * Available since 2.13.0.
+ *
+ * Return 0 in case of success, 1 if a URI or argument is invalid, -1 if a
+ * memory allocation failed.
  */
-xmlChar *
-xmlNodeGetBase(const xmlDoc *doc, const xmlNode *cur) {
-    xmlChar *oldbase = NULL;
+int
+xmlNodeGetBaseSafe(const xmlDoc *doc, const xmlNode *cur, xmlChar **baseOut) {
+    xmlChar *ret = NULL;
     xmlChar *base, *newbase;
+    int res;
 
+    if (baseOut == NULL)
+        return(1);
+    *baseOut = NULL;
     if ((cur == NULL) && (doc == NULL))
-        return(NULL);
+        return(1);
     if ((cur != NULL) && (cur->type == XML_NAMESPACE_DECL))
-        return(NULL);
-    if (doc == NULL) doc = cur->doc;
+        return(1);
+    if (doc == NULL)
+        doc = cur->doc;
+
     if ((doc != NULL) && (doc->type == XML_HTML_DOCUMENT_NODE)) {
         cur = doc->children;
 	while ((cur != NULL) && (cur->name != NULL)) {
@@ -5344,50 +5337,91 @@ xmlNodeGetBase(const xmlDoc *doc, const xmlNode *cur) {
 		continue;
 	    }
 	    if (!xmlStrcasecmp(cur->name, BAD_CAST "base")) {
-                return(xmlGetProp(cur, BAD_CAST "href"));
+                if (xmlNodeGetAttrValue(cur, BAD_CAST "href", NULL, &ret) < 0)
+                    return(-1);
+                if (ret == NULL)
+                    return(1);
+                goto found;
 	    }
 	    cur = cur->next;
 	}
-	return(NULL);
+	return(0);
     }
+
     while (cur != NULL) {
 	if (cur->type == XML_ENTITY_DECL) {
 	    xmlEntityPtr ent = (xmlEntityPtr) cur;
-	    return(xmlStrdup(ent->URI));
+
+            if (ent->URI == NULL)
+                break;
+            xmlFree(ret);
+	    ret = xmlStrdup(ent->URI);
+            if (ret == NULL)
+                return(-1);
+            goto found;
 	}
 	if (cur->type == XML_ELEMENT_NODE) {
-	    base = xmlGetNsProp(cur, BAD_CAST "base", XML_XML_NAMESPACE);
+	    if (xmlNodeGetAttrValue(cur, BAD_CAST "base", XML_XML_NAMESPACE,
+                                    &base) < 0) {
+                xmlFree(ret);
+                return(-1);
+            }
 	    if (base != NULL) {
-		if (oldbase != NULL) {
-		    newbase = xmlBuildURI(oldbase, base);
-		    if (newbase != NULL) {
-			xmlFree(oldbase);
-			xmlFree(base);
-			oldbase = newbase;
-		    } else {
-			xmlFree(oldbase);
-			xmlFree(base);
-			return(NULL);
-		    }
+		if (ret != NULL) {
+		    res = xmlBuildURISafe(ret, base, &newbase);
+                    xmlFree(ret);
+                    xmlFree(base);
+                    if (res != 0)
+                        return(res);
+		    ret = newbase;
 		} else {
-		    oldbase = base;
+		    ret = base;
 		}
-		if ((!xmlStrncmp(oldbase, BAD_CAST "http://", 7)) ||
-		    (!xmlStrncmp(oldbase, BAD_CAST "ftp://", 6)) ||
-		    (!xmlStrncmp(oldbase, BAD_CAST "urn:", 4)))
-		    return(oldbase);
+		if ((!xmlStrncmp(ret, BAD_CAST "http://", 7)) ||
+		    (!xmlStrncmp(ret, BAD_CAST "ftp://", 6)) ||
+		    (!xmlStrncmp(ret, BAD_CAST "urn:", 4)))
+                    goto found;
 	    }
 	}
 	cur = cur->parent;
     }
+
     if ((doc != NULL) && (doc->URL != NULL)) {
-	if (oldbase == NULL)
-	    return(xmlStrdup(doc->URL));
-	newbase = xmlBuildURI(oldbase, doc->URL);
-	xmlFree(oldbase);
-	return(newbase);
+	if (ret == NULL) {
+	    ret = xmlStrdup(doc->URL);
+            if (ret == NULL)
+                return(-1);
+        } else {
+            res = xmlBuildURISafe(ret, doc->URL, &newbase);
+            xmlFree(ret);
+            if (res != 0)
+                return(res);
+            ret = newbase;
+        }
     }
-    return(oldbase);
+
+found:
+    *baseOut = ret;
+    return(0);
+}
+
+/**
+ * xmlNodeGetBase:
+ * @doc:  the document the node pertains to
+ * @cur:  the node being checked
+ *
+ * See xmlNodeGetBaseSafe. This function doesn't allow to distinguish
+ * memory allocation failures from a non-existing base.
+ *
+ * Returns a pointer to the base URL, or NULL if not found
+ *     It's up to the caller to free the memory with xmlFree().
+ */
+xmlChar *
+xmlNodeGetBase(const xmlDoc *doc, const xmlNode *cur) {
+    xmlChar *base;
+
+    xmlNodeGetBaseSafe(doc, cur, &base);
+    return(base);
 }
 
 /**
@@ -5407,15 +5441,78 @@ int
 xmlNodeBufGetContent(xmlBufferPtr buffer, const xmlNode *cur)
 {
     xmlBufPtr buf;
-    int ret;
+    int ret1, ret2;
 
     if ((cur == NULL) || (buffer == NULL)) return(-1);
     buf = xmlBufFromBuffer(buffer);
-    ret = xmlBufGetNodeContent(buf, cur);
-    buffer = xmlBufBackToBuffer(buf);
-    if ((ret < 0) || (buffer == NULL))
+    ret1 = xmlBufGetNodeContent(buf, cur);
+    ret2 = xmlBufBackToBuffer(buf, buffer);
+    if ((ret1 < 0) || (ret2 < 0))
         return(-1);
     return(0);
+}
+
+static void
+xmlBufGetEntityRefContent(xmlBufPtr buf, const xmlNode *ref) {
+    xmlEntityPtr ent;
+
+    if (ref->children != NULL) {
+        ent = (xmlEntityPtr) ref->children;
+    } else {
+        /* lookup entity declaration */
+        ent = xmlGetDocEntity(ref->doc, ref->name);
+        if (ent == NULL)
+            return;
+    }
+
+    /*
+     * The parser should always expand predefined entities but it's
+     * possible to create references to predefined entities using
+     * the tree API.
+     */
+    if (ent->etype == XML_INTERNAL_PREDEFINED_ENTITY) {
+        xmlBufCat(buf, ent->content);
+        return;
+    }
+
+    if (ent->flags & XML_ENT_EXPANDING)
+        return;
+
+    ent->flags |= XML_ENT_EXPANDING;
+    xmlBufGetChildContent(buf, (xmlNodePtr) ent);
+    ent->flags &= ~XML_ENT_EXPANDING;
+}
+
+static void
+xmlBufGetChildContent(xmlBufPtr buf, const xmlNode *tree) {
+    const xmlNode *cur = tree->children;
+
+    while (cur != NULL) {
+        switch (cur->type) {
+            case XML_TEXT_NODE:
+            case XML_CDATA_SECTION_NODE:
+                xmlBufCat(buf, cur->content);
+                break;
+
+            case XML_ENTITY_REF_NODE:
+                xmlBufGetEntityRefContent(buf, cur);
+                break;
+
+            default:
+                if (cur->children != NULL) {
+                    cur = cur->children;
+                    continue;
+                }
+                break;
+        }
+
+        while (cur->next == NULL) {
+            cur = cur->parent;
+            if (cur == tree)
+                return;
+        }
+        cur = cur->next;
+    }
 }
 
 /**
@@ -5434,130 +5531,38 @@ xmlNodeBufGetContent(xmlBufferPtr buffer, const xmlNode *cur)
 int
 xmlBufGetNodeContent(xmlBufPtr buf, const xmlNode *cur)
 {
-    if ((cur == NULL) || (buf == NULL)) return(-1);
+    if ((cur == NULL) || (buf == NULL))
+        return(-1);
+
     switch (cur->type) {
+        case XML_DOCUMENT_NODE:
+        case XML_HTML_DOCUMENT_NODE:
+        case XML_DOCUMENT_FRAG_NODE:
+        case XML_ELEMENT_NODE:
+        case XML_ATTRIBUTE_NODE:
+        case XML_ENTITY_DECL:
+            xmlBufGetChildContent(buf, cur);
+            break;
+
         case XML_CDATA_SECTION_NODE:
         case XML_TEXT_NODE:
-	    xmlBufCat(buf, cur->content);
-            break;
-        case XML_DOCUMENT_FRAG_NODE:
-        case XML_ELEMENT_NODE:{
-                const xmlNode *tmp = cur;
-
-                while (tmp != NULL) {
-                    switch (tmp->type) {
-                        case XML_CDATA_SECTION_NODE:
-                        case XML_TEXT_NODE:
-                            if (tmp->content != NULL)
-                                xmlBufCat(buf, tmp->content);
-                            break;
-                        case XML_ENTITY_REF_NODE:
-                            xmlBufGetNodeContent(buf, tmp);
-                            break;
-                        default:
-                            break;
-                    }
-                    /*
-                     * Skip to next node
-                     */
-                    if (tmp->children != NULL) {
-                        if (tmp->children->type != XML_ENTITY_DECL) {
-                            tmp = tmp->children;
-                            continue;
-                        }
-                    }
-                    if (tmp == cur)
-                        break;
-
-                    if (tmp->next != NULL) {
-                        tmp = tmp->next;
-                        continue;
-                    }
-
-                    do {
-                        tmp = tmp->parent;
-                        if (tmp == NULL)
-                            break;
-                        if (tmp == cur) {
-                            tmp = NULL;
-                            break;
-                        }
-                        if (tmp->next != NULL) {
-                            tmp = tmp->next;
-                            break;
-                        }
-                    } while (tmp != NULL);
-                }
-		break;
-            }
-        case XML_ATTRIBUTE_NODE:{
-                xmlAttrPtr attr = (xmlAttrPtr) cur;
-		xmlNodePtr tmp = attr->children;
-
-		while (tmp != NULL) {
-		    if (tmp->type == XML_TEXT_NODE)
-		        xmlBufCat(buf, tmp->content);
-		    else
-		        xmlBufGetNodeContent(buf, tmp);
-		    tmp = tmp->next;
-		}
-                break;
-            }
         case XML_COMMENT_NODE:
         case XML_PI_NODE:
 	    xmlBufCat(buf, cur->content);
             break;
-        case XML_ENTITY_REF_NODE:{
-                xmlEntityPtr ent;
-                xmlNodePtr tmp;
 
-                /* lookup entity declaration */
-                ent = xmlGetDocEntity(cur->doc, cur->name);
-                if (ent == NULL)
-                    return(-1);
-
-                /* an entity content can be any "well balanced chunk",
-                 * i.e. the result of the content [43] production:
-                 * http://www.w3.org/TR/REC-xml#NT-content
-                 * -> we iterate through child nodes and recursive call
-                 * xmlNodeGetContent() which handles all possible node types */
-                tmp = ent->children;
-                while (tmp) {
-		    xmlBufGetNodeContent(buf, tmp);
-                    tmp = tmp->next;
-                }
-		break;
-            }
-        case XML_ENTITY_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-        case XML_NOTATION_NODE:
-        case XML_DTD_NODE:
-        case XML_XINCLUDE_START:
-        case XML_XINCLUDE_END:
+        case XML_ENTITY_REF_NODE:
+            xmlBufGetEntityRefContent(buf, cur);
             break;
-        case XML_DOCUMENT_NODE:
-#ifdef LIBXML_DOCB_ENABLED
-        case XML_DOCB_DOCUMENT_NODE:
-#endif
-        case XML_HTML_DOCUMENT_NODE:
-	    cur = cur->children;
-	    while (cur!= NULL) {
-		if ((cur->type == XML_ELEMENT_NODE) ||
-		    (cur->type == XML_TEXT_NODE) ||
-		    (cur->type == XML_CDATA_SECTION_NODE)) {
-		    xmlBufGetNodeContent(buf, cur);
-		}
-		cur = cur->next;
-	    }
-	    break;
+
         case XML_NAMESPACE_DECL:
 	    xmlBufCat(buf, ((xmlNsPtr) cur)->href);
 	    break;
-        case XML_ELEMENT_DECL:
-        case XML_ATTRIBUTE_DECL:
-        case XML_ENTITY_DECL:
+
+        default:
             break;
     }
+
     return(0);
 }
 
@@ -5575,96 +5580,102 @@ xmlBufGetNodeContent(xmlBufPtr buf, const xmlNode *cur)
 xmlChar *
 xmlNodeGetContent(const xmlNode *cur)
 {
+    xmlBufPtr buf;
+    xmlChar *ret;
+
     if (cur == NULL)
         return (NULL);
-    switch (cur->type) {
-        case XML_DOCUMENT_FRAG_NODE:
-        case XML_ELEMENT_NODE:{
-                xmlBufPtr buf;
-                xmlChar *ret;
 
-                buf = xmlBufCreateSize(64);
-                if (buf == NULL)
-                    return (NULL);
-		xmlBufGetNodeContent(buf, cur);
-                ret = xmlBufDetach(buf);
-                xmlBufFree(buf);
-                return (ret);
-            }
+    switch (cur->type) {
+        case XML_DOCUMENT_NODE:
+        case XML_HTML_DOCUMENT_NODE:
+        case XML_ENTITY_REF_NODE:
+            break;
+
+        case XML_DOCUMENT_FRAG_NODE:
+        case XML_ELEMENT_NODE:
         case XML_ATTRIBUTE_NODE:
-	    return(xmlGetPropNodeValueInternal((xmlAttrPtr) cur));
+        case XML_ENTITY_DECL: {
+            xmlNodePtr children = cur->children;
+
+            if (children == NULL)
+                return(xmlStrdup(BAD_CAST ""));
+
+            /* Optimization for single text children */
+            if (((children->type == XML_TEXT_NODE) ||
+                 (children->type == XML_CDATA_SECTION_NODE)) &&
+                (children->next == NULL)) {
+                if (children->content == NULL)
+                    return(xmlStrdup(BAD_CAST ""));
+                return(xmlStrdup(children->content));
+            }
+
+            break;
+        }
+
+        case XML_CDATA_SECTION_NODE:
+        case XML_TEXT_NODE:
         case XML_COMMENT_NODE:
         case XML_PI_NODE:
             if (cur->content != NULL)
-                return (xmlStrdup(cur->content));
-            return (NULL);
-        case XML_ENTITY_REF_NODE:{
-                xmlEntityPtr ent;
-                xmlBufPtr buf;
-                xmlChar *ret;
+                return(xmlStrdup(cur->content));
+            else
+                return(xmlStrdup(BAD_CAST ""));
 
-                /* lookup entity declaration */
-                ent = xmlGetDocEntity(cur->doc, cur->name);
-                if (ent == NULL)
-                    return (NULL);
+        case XML_NAMESPACE_DECL:
+	    return(xmlStrdup(((xmlNsPtr) cur)->href));
 
-                buf = xmlBufCreate();
-                if (buf == NULL)
-                    return (NULL);
-
-                xmlBufGetNodeContent(buf, cur);
-
-                ret = xmlBufDetach(buf);
-                xmlBufFree(buf);
-                return (ret);
-            }
-        case XML_ENTITY_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-        case XML_NOTATION_NODE:
-        case XML_DTD_NODE:
-        case XML_XINCLUDE_START:
-        case XML_XINCLUDE_END:
-            return (NULL);
-        case XML_DOCUMENT_NODE:
-#ifdef LIBXML_DOCB_ENABLED
-        case XML_DOCB_DOCUMENT_NODE:
-#endif
-        case XML_HTML_DOCUMENT_NODE: {
-	    xmlBufPtr buf;
-	    xmlChar *ret;
-
-	    buf = xmlBufCreate();
-	    if (buf == NULL)
-		return (NULL);
-
-	    xmlBufGetNodeContent(buf, (xmlNodePtr) cur);
-
-	    ret = xmlBufDetach(buf);
-	    xmlBufFree(buf);
-	    return (ret);
-	}
-        case XML_NAMESPACE_DECL: {
-	    xmlChar *tmp;
-
-	    tmp = xmlStrdup(((xmlNsPtr) cur)->href);
-            return (tmp);
-	}
-        case XML_ELEMENT_DECL:
-            /* TODO !!! */
-            return (NULL);
-        case XML_ATTRIBUTE_DECL:
-            /* TODO !!! */
-            return (NULL);
-        case XML_ENTITY_DECL:
-            /* TODO !!! */
-            return (NULL);
-        case XML_CDATA_SECTION_NODE:
-        case XML_TEXT_NODE:
-            if (cur->content != NULL)
-                return (xmlStrdup(cur->content));
-            return (NULL);
+        default:
+            return(NULL);
     }
-    return (NULL);
+
+    buf = xmlBufCreate(50);
+    if (buf == NULL)
+        return (NULL);
+    xmlBufGetNodeContent(buf, cur);
+    ret = xmlBufDetach(buf);
+    xmlBufFree(buf);
+
+    return(ret);
+}
+
+static int
+xmlNodeSetContentInternal(xmlNodePtr cur, const xmlChar *content, int len) {
+    if (cur == NULL) {
+	return(1);
+    }
+    switch (cur->type) {
+        case XML_DOCUMENT_FRAG_NODE:
+        case XML_ELEMENT_NODE:
+        case XML_ATTRIBUTE_NODE:
+            if (xmlNodeParseContent(cur, content, len) < 0)
+                return(-1);
+	    break;
+
+        case XML_TEXT_NODE:
+        case XML_CDATA_SECTION_NODE:
+        case XML_PI_NODE:
+        case XML_COMMENT_NODE: {
+            xmlChar *copy = NULL;
+
+	    if (content != NULL) {
+                if (len < 0)
+                    copy = xmlStrdup(content);
+                else
+		    copy = xmlStrndup(content, len);
+                if (copy == NULL)
+                    return(-1);
+	    }
+
+            xmlTextSetContent(cur, copy);
+	    break;
+        }
+
+        default:
+            break;
+    }
+
+    return(0);
 }
 
 /**
@@ -5672,150 +5683,43 @@ xmlNodeGetContent(const xmlNode *cur)
  * @cur:  the node being modified
  * @content:  the new value of the content
  *
- * Replace the content of a node.
- * NOTE: @content is supposed to be a piece of XML CDATA, so it allows entity
- *       references, but XML special chars need to be escaped first by using
- *       xmlEncodeEntitiesReentrant() resp. xmlEncodeSpecialChars().
+ * Replace the text content of a node.
+ *
+ * Sets the raw text content of text, CDATA, comment or PI nodes.
+ *
+ * For element and attribute nodes, removes all children and
+ * replaces them by parsing @content which is expected to be a
+ * valid XML attribute value possibly containing character and
+ * entity references. Syntax errors and references to undeclared
+ * entities are ignored silently. Unfortunately, there isn't an
+ * API to pass raw content directly. An inefficient work-around
+ * is to escape the content with xmlEncodeSpecialChars before
+ * passing it. A better trick is clearing the old content
+ * with xmlNodeSetContent(node, NULL) first and then calling
+ * xmlNodeAddContent(node, content). Unlike this function,
+ * xmlNodeAddContent accepts raw text.
+ *
+ * Returns 0 on success, 1 on error, -1 if a memory allocation failed.
  */
-void
+int
 xmlNodeSetContent(xmlNodePtr cur, const xmlChar *content) {
-    if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNodeSetContent : node == NULL\n");
-#endif
-	return;
-    }
-    switch (cur->type) {
-        case XML_DOCUMENT_FRAG_NODE:
-        case XML_ELEMENT_NODE:
-        case XML_ATTRIBUTE_NODE:
-	    if (cur->children != NULL) xmlFreeNodeList(cur->children);
-	    cur->children = xmlStringGetNodeList(cur->doc, content);
-	    UPDATE_LAST_CHILD_AND_PARENT(cur)
-	    break;
-        case XML_TEXT_NODE:
-        case XML_CDATA_SECTION_NODE:
-        case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
-        case XML_PI_NODE:
-        case XML_COMMENT_NODE:
-	    if ((cur->content != NULL) &&
-	        (cur->content != (xmlChar *) &(cur->properties))) {
-	        if (!((cur->doc != NULL) && (cur->doc->dict != NULL) &&
-		    (xmlDictOwns(cur->doc->dict, cur->content))))
-		    xmlFree(cur->content);
-	    }
-	    if (cur->children != NULL) xmlFreeNodeList(cur->children);
-	    cur->last = cur->children = NULL;
-	    if (content != NULL) {
-		cur->content = xmlStrdup(content);
-	    } else
-		cur->content = NULL;
-	    cur->properties = NULL;
-	    cur->nsDef = NULL;
-	    break;
-        case XML_DOCUMENT_NODE:
-        case XML_HTML_DOCUMENT_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-	case XML_XINCLUDE_START:
-	case XML_XINCLUDE_END:
-#ifdef LIBXML_DOCB_ENABLED
-	case XML_DOCB_DOCUMENT_NODE:
-#endif
-	    break;
-        case XML_NOTATION_NODE:
-	    break;
-        case XML_DTD_NODE:
-	    break;
-	case XML_NAMESPACE_DECL:
-	    break;
-        case XML_ELEMENT_DECL:
-	    /* TODO !!! */
-	    break;
-        case XML_ATTRIBUTE_DECL:
-	    /* TODO !!! */
-	    break;
-        case XML_ENTITY_DECL:
-	    /* TODO !!! */
-	    break;
-    }
+    return(xmlNodeSetContentInternal(cur, content, -1));
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNodeSetContentLen:
  * @cur:  the node being modified
  * @content:  the new value of the content
  * @len:  the size of @content
  *
- * Replace the content of a node.
- * NOTE: @content is supposed to be a piece of XML CDATA, so it allows entity
- *       references, but XML special chars need to be escaped first by using
- *       xmlEncodeEntitiesReentrant() resp. xmlEncodeSpecialChars().
+ * See xmlNodeSetContent.
+ *
+ * Returns 0 on success, 1 on error, -1 if a memory allocation failed.
  */
-void
+int
 xmlNodeSetContentLen(xmlNodePtr cur, const xmlChar *content, int len) {
-    if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNodeSetContentLen : node == NULL\n");
-#endif
-	return;
-    }
-    switch (cur->type) {
-        case XML_DOCUMENT_FRAG_NODE:
-        case XML_ELEMENT_NODE:
-        case XML_ATTRIBUTE_NODE:
-	    if (cur->children != NULL) xmlFreeNodeList(cur->children);
-	    cur->children = xmlStringLenGetNodeList(cur->doc, content, len);
-	    UPDATE_LAST_CHILD_AND_PARENT(cur)
-	    break;
-        case XML_TEXT_NODE:
-        case XML_CDATA_SECTION_NODE:
-        case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
-        case XML_PI_NODE:
-        case XML_COMMENT_NODE:
-        case XML_NOTATION_NODE:
-	    if ((cur->content != NULL) &&
-	        (cur->content != (xmlChar *) &(cur->properties))) {
-	        if (!((cur->doc != NULL) && (cur->doc->dict != NULL) &&
-		    (xmlDictOwns(cur->doc->dict, cur->content))))
-		    xmlFree(cur->content);
-	    }
-	    if (cur->children != NULL) xmlFreeNodeList(cur->children);
-	    cur->children = cur->last = NULL;
-	    if (content != NULL) {
-		cur->content = xmlStrndup(content, len);
-	    } else
-		cur->content = NULL;
-	    cur->properties = NULL;
-	    cur->nsDef = NULL;
-	    break;
-        case XML_DOCUMENT_NODE:
-        case XML_DTD_NODE:
-        case XML_HTML_DOCUMENT_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-	case XML_NAMESPACE_DECL:
-	case XML_XINCLUDE_START:
-	case XML_XINCLUDE_END:
-#ifdef LIBXML_DOCB_ENABLED
-	case XML_DOCB_DOCUMENT_NODE:
-#endif
-	    break;
-        case XML_ELEMENT_DECL:
-	    /* TODO !!! */
-	    break;
-        case XML_ATTRIBUTE_DECL:
-	    /* TODO !!! */
-	    break;
-        case XML_ENTITY_DECL:
-	    /* TODO !!! */
-	    break;
-    }
+    return(xmlNodeSetContentInternal(cur, content, len));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeAddContentLen:
@@ -5827,70 +5731,43 @@ xmlNodeSetContentLen(xmlNodePtr cur, const xmlChar *content, int len) {
  * NOTE: In contrast to xmlNodeSetContentLen(), @content is supposed to be
  *       raw text, so unescaped XML special chars are allowed, entity
  *       references are not supported.
+ *
+ * Returns 0 on success, 1 on error, -1 if a memory allocation failed.
  */
-void
+int
 xmlNodeAddContentLen(xmlNodePtr cur, const xmlChar *content, int len) {
-    if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNodeAddContentLen : node == NULL\n");
-#endif
-	return;
-    }
-    if (len <= 0) return;
+    if (cur == NULL)
+	return(1);
+    if ((content == NULL) || (len <= 0))
+        return(0);
+
     switch (cur->type) {
         case XML_DOCUMENT_FRAG_NODE:
         case XML_ELEMENT_NODE: {
-	    xmlNodePtr last, newNode, tmp;
+	    xmlNodePtr newNode, tmp;
 
-	    last = cur->last;
-	    newNode = xmlNewTextLen(content, len);
-	    if (newNode != NULL) {
-		tmp = xmlAddChild(cur, newNode);
-		if (tmp != newNode)
-		    return;
-	        if ((last != NULL) && (last->next == newNode)) {
-		    xmlTextMerge(last, newNode);
-		}
-	    }
+	    newNode = xmlNewDocTextLen(cur->doc, content, len);
+	    if (newNode == NULL)
+                return(-1);
+            tmp = xmlAddChild(cur, newNode);
+            if (tmp == NULL) {
+                xmlFreeNode(newNode);
+                return(-1);
+            }
 	    break;
 	}
         case XML_ATTRIBUTE_NODE:
 	    break;
         case XML_TEXT_NODE:
         case XML_CDATA_SECTION_NODE:
-        case XML_ENTITY_REF_NODE:
-        case XML_ENTITY_NODE:
         case XML_PI_NODE:
         case XML_COMMENT_NODE:
-        case XML_NOTATION_NODE:
-	    if (content != NULL) {
-	        if ((cur->content == (xmlChar *) &(cur->properties)) ||
-		    ((cur->doc != NULL) && (cur->doc->dict != NULL) &&
-			    xmlDictOwns(cur->doc->dict, cur->content))) {
-		    cur->content = xmlStrncatNew(cur->content, content, len);
-		    cur->properties = NULL;
-		    cur->nsDef = NULL;
-		    break;
-		}
-		cur->content = xmlStrncat(cur->content, content, len);
-            }
-        case XML_DOCUMENT_NODE:
-        case XML_DTD_NODE:
-        case XML_HTML_DOCUMENT_NODE:
-        case XML_DOCUMENT_TYPE_NODE:
-	case XML_NAMESPACE_DECL:
-	case XML_XINCLUDE_START:
-	case XML_XINCLUDE_END:
-#ifdef LIBXML_DOCB_ENABLED
-	case XML_DOCB_DOCUMENT_NODE:
-#endif
-	    break;
-        case XML_ELEMENT_DECL:
-        case XML_ATTRIBUTE_DECL:
-        case XML_ENTITY_DECL:
-	    break;
+            return(xmlTextAddContent(cur, content, len));
+        default:
+            break;
     }
+
+    return(0);
 }
 
 /**
@@ -5902,21 +5779,12 @@ xmlNodeAddContentLen(xmlNodePtr cur, const xmlChar *content, int len) {
  * NOTE: In contrast to xmlNodeSetContent(), @content is supposed to be
  *       raw text, so unescaped XML special chars are allowed, entity
  *       references are not supported.
+ *
+ * Returns 0 on success, 1 on error, -1 if a memory allocation failed.
  */
-void
+int
 xmlNodeAddContent(xmlNodePtr cur, const xmlChar *content) {
-    int len;
-
-    if (cur == NULL) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNodeAddContent : node == NULL\n");
-#endif
-	return;
-    }
-    if (content == NULL) return;
-    len = xmlStrlen(content);
-    xmlNodeAddContentLen(cur, content, len);
+    return(xmlNodeAddContentLen(cur, content, xmlStrlen(content)));
 }
 
 /**
@@ -5924,79 +5792,99 @@ xmlNodeAddContent(xmlNodePtr cur, const xmlChar *content) {
  * @first:  the first text node
  * @second:  the second text node being merged
  *
- * Merge two text nodes into one
- * Returns the first text node augmented
+ * Merge the second text node into the first. If @first is NULL,
+ * @second is returned. Otherwise, the second node is unlinked and
+ * freed.
+ *
+ * Returns the first text node augmented or NULL in case of error.
  */
 xmlNodePtr
 xmlTextMerge(xmlNodePtr first, xmlNodePtr second) {
-    if (first == NULL) return(second);
-    if (second == NULL) return(first);
-    if (first->type != XML_TEXT_NODE) return(first);
-    if (second->type != XML_TEXT_NODE) return(first);
-    if (second->name != first->name)
-	return(first);
-    xmlNodeAddContent(first, second->content);
-    xmlUnlinkNode(second);
+    if (first == NULL)
+        return(second);
+    if (second == NULL)
+        return(first);
+
+    if ((first->type != XML_TEXT_NODE) ||
+        (second->type != XML_TEXT_NODE) ||
+        (first == second) ||
+        (first->name != second->name))
+	return(NULL);
+
+    if (xmlTextAddContent(first, second->content, -1) < 0)
+        return(NULL);
+
+    xmlUnlinkNodeInternal(second);
     xmlFreeNode(second);
     return(first);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_XPATH_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
- * xmlGetNsList:
+ * xmlGetNsListSafe:
  * @doc:  the document
  * @node:  the current node
+ * @out:  the returned namespace array
  *
- * Search all the namespace applying to a given element.
- * Returns an NULL terminated array of all the #xmlNsPtr found
- *         that need to be freed by the caller or NULL if no
- *         namespace if defined
+ * Find all in-scope namespaces of a node. @out returns a NULL
+ * terminated array of namespace pointers that must be freed by
+ * the caller.
+ *
+ * Available since 2.13.0.
+ *
+ * Returns 0 on success, 1 if no namespaces were found, -1 if a
+ * memory allocation failed.
  */
-xmlNsPtr *
-xmlGetNsList(const xmlDoc *doc ATTRIBUTE_UNUSED, const xmlNode *node)
+int
+xmlGetNsListSafe(const xmlDoc *doc ATTRIBUTE_UNUSED, const xmlNode *node,
+                 xmlNsPtr **out)
 {
     xmlNsPtr cur;
-    xmlNsPtr *ret = NULL;
+    xmlNsPtr *namespaces = NULL;
     int nbns = 0;
-    int maxns = 10;
+    int maxns = 0;
     int i;
 
+    if (out == NULL)
+        return(1);
+    *out = NULL;
     if ((node == NULL) || (node->type == XML_NAMESPACE_DECL))
-        return(NULL);
+        return(1);
 
     while (node != NULL) {
         if (node->type == XML_ELEMENT_NODE) {
             cur = node->nsDef;
             while (cur != NULL) {
-                if (ret == NULL) {
-                    ret =
-                        (xmlNsPtr *) xmlMalloc((maxns + 1) *
-                                               sizeof(xmlNsPtr));
-                    if (ret == NULL) {
-			xmlTreeErrMemory("getting namespace list");
-                        return (NULL);
-                    }
-                    ret[nbns] = NULL;
-                }
                 for (i = 0; i < nbns; i++) {
-                    if ((cur->prefix == ret[i]->prefix) ||
-                        (xmlStrEqual(cur->prefix, ret[i]->prefix)))
+                    if ((cur->prefix == namespaces[i]->prefix) ||
+                        (xmlStrEqual(cur->prefix, namespaces[i]->prefix)))
                         break;
                 }
                 if (i >= nbns) {
                     if (nbns >= maxns) {
-                        maxns *= 2;
-                        ret = (xmlNsPtr *) xmlRealloc(ret,
-                                                      (maxns +
-                                                       1) *
-                                                      sizeof(xmlNsPtr));
-                        if (ret == NULL) {
-			    xmlTreeErrMemory("getting namespace list");
-                            return (NULL);
+                        xmlNsPtr *tmp;
+                        int newSize;
+
+                        newSize = xmlGrowCapacity(maxns, sizeof(tmp[0]),
+                                                  10, XML_MAX_ITEMS);
+                        if (newSize < 0) {
+                            xmlFree(namespaces);
+                            return(-1);
                         }
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+                        if (newSize < 2)
+                            newSize = 2;
+#endif
+                        tmp = xmlRealloc(namespaces,
+                                         (newSize + 1) * sizeof(tmp[0]));
+                        if (tmp == NULL) {
+                            xmlFree(namespaces);
+                            return(-1);
+                        }
+                        namespaces = tmp;
+                        maxns = newSize;
                     }
-                    ret[nbns++] = cur;
-                    ret[nbns] = NULL;
+                    namespaces[nbns++] = cur;
+                    namespaces[nbns] = NULL;
                 }
 
                 cur = cur->next;
@@ -6004,9 +5892,55 @@ xmlGetNsList(const xmlDoc *doc ATTRIBUTE_UNUSED, const xmlNode *node)
         }
         node = node->parent;
     }
-    return (ret);
+
+    *out = namespaces;
+    return((namespaces == NULL) ? 1 : 0);
 }
-#endif /* LIBXML_TREE_ENABLED */
+
+/**
+ * xmlGetNsList:
+ * @doc:  the document
+ * @node:  the current node
+ *
+ * Find all in-scope namespaces of a node.
+ *
+ * Use xmlGetNsListSafe for better error reporting.
+ *
+ * Returns a NULL terminated array of namespace pointers that must
+ * be freed by the caller or NULL if no namespaces were found or
+ * a memory allocation failed.
+ */
+xmlNsPtr *
+xmlGetNsList(const xmlDoc *doc, const xmlNode *node)
+{
+    xmlNsPtr *ret;
+
+    xmlGetNsListSafe(doc, node, &ret);
+    return(ret);
+}
+
+static xmlNsPtr
+xmlNewXmlNs(void) {
+    xmlNsPtr ns;
+
+    ns = (xmlNsPtr) xmlMalloc(sizeof(xmlNs));
+    if (ns == NULL)
+        return(NULL);
+    memset(ns, 0, sizeof(xmlNs));
+    ns->type = XML_LOCAL_NAMESPACE;
+    ns->href = xmlStrdup(XML_XML_NAMESPACE);
+    if (ns->href == NULL) {
+        xmlFreeNs(ns);
+        return(NULL);
+    }
+    ns->prefix = xmlStrdup(BAD_CAST "xml");
+    if (ns->prefix == NULL) {
+        xmlFreeNs(ns);
+        return(NULL);
+    }
+
+    return(ns);
+}
 
 /*
 * xmlTreeEnsureXMLDecl:
@@ -6014,30 +5948,104 @@ xmlGetNsList(const xmlDoc *doc ATTRIBUTE_UNUSED, const xmlNode *node)
 *
 * Ensures that there is an XML namespace declaration on the doc.
 *
-* Returns the XML ns-struct or NULL on API and internal errors.
+* Returns the XML ns-struct or NULL if a memory allocation failed.
 */
 static xmlNsPtr
 xmlTreeEnsureXMLDecl(xmlDocPtr doc)
 {
-    if (doc == NULL)
-	return (NULL);
-    if (doc->oldNs != NULL)
-	return (doc->oldNs);
-    {
-	xmlNsPtr ns;
-	ns = (xmlNsPtr) xmlMalloc(sizeof(xmlNs));
-	if (ns == NULL) {
-	    xmlTreeErrMemory(
-		"allocating the XML namespace");
-	    return (NULL);
-	}
-	memset(ns, 0, sizeof(xmlNs));
-	ns->type = XML_LOCAL_NAMESPACE;
-	ns->href = xmlStrdup(XML_XML_NAMESPACE);
-	ns->prefix = xmlStrdup((const xmlChar *)"xml");
-	doc->oldNs = ns;
+    xmlNsPtr ns;
+
+    ns = doc->oldNs;
+    if (ns != NULL)
 	return (ns);
+
+    ns = xmlNewXmlNs();
+    doc->oldNs = ns;
+
+    return(ns);
+}
+
+/**
+ * xmlSearchNsSafe:
+ * @node:  a node
+ * @prefix:  a namespace prefix
+ * @out:  pointer to resulting namespace
+ *
+ * Search a namespace with @prefix in scope of @node.
+ *
+ * Returns 0 on success, -1 if a memory allocation failed, 1 on
+ * other errors.
+ */
+int
+xmlSearchNsSafe(xmlNodePtr node, const xmlChar *prefix,
+                xmlNsPtr *out) {
+    xmlNsPtr cur;
+    xmlDocPtr doc;
+    xmlNodePtr orig = node;
+    xmlNodePtr parent;
+
+    if (out == NULL)
+        return(1);
+    *out = NULL;
+    if ((node == NULL) || (node->type == XML_NAMESPACE_DECL))
+        return(1);
+
+    doc = node->doc;
+
+    if ((doc != NULL) && (IS_STR_XML(prefix))) {
+        cur = xmlTreeEnsureXMLDecl(doc);
+        if (cur == NULL)
+            return(-1);
+        *out = cur;
+        return(0);
     }
+
+    while (node->type != XML_ELEMENT_NODE) {
+        node = node->parent;
+        if (node == NULL)
+            return(0);
+    }
+
+    parent = node;
+
+    while ((node != NULL) && (node->type == XML_ELEMENT_NODE)) {
+        cur = node->nsDef;
+        while (cur != NULL) {
+            if ((xmlStrEqual(cur->prefix, prefix)) &&
+                (cur->href != NULL)) {
+                *out = cur;
+                return(0);
+            }
+            cur = cur->next;
+        }
+        if (orig != node) {
+            cur = node->ns;
+            if ((cur != NULL) &&
+                (xmlStrEqual(cur->prefix, prefix)) &&
+                (cur->href != NULL)) {
+                *out = cur;
+                return(0);
+            }
+        }
+
+	node = node->parent;
+    }
+
+    /*
+     * The XML-1.0 namespace is normally held on the document
+     * element. In this case exceptionally create it on the
+     * node element.
+     */
+    if ((doc == NULL) && (IS_STR_XML(prefix))) {
+        cur = xmlNewXmlNs();
+        if (cur == NULL)
+            return(-1);
+        cur->next = parent->nsDef;
+        parent->nsDef = cur;
+        *out = cur;
+    }
+
+    return(0);
 }
 
 /**
@@ -6054,82 +6062,17 @@ xmlTreeEnsureXMLDecl(xmlDocPtr doc)
  * the namespace within those you will be in troubles !!! A warning
  * is generated to cover this case.
  *
- * Returns the namespace pointer or NULL.
+ * Returns the namespace pointer or NULL if no namespace was found or
+ * a memory allocation failed. Allocations can only fail if the "xml"
+ * namespace is queried.
  */
 xmlNsPtr
-xmlSearchNs(xmlDocPtr doc, xmlNodePtr node, const xmlChar *nameSpace) {
-
+xmlSearchNs(xmlDocPtr doc ATTRIBUTE_UNUSED, xmlNodePtr node,
+            const xmlChar *nameSpace) {
     xmlNsPtr cur;
-    const xmlNode *orig = node;
 
-    if ((node == NULL) || (node->type == XML_NAMESPACE_DECL)) return(NULL);
-    if ((nameSpace != NULL) &&
-	(xmlStrEqual(nameSpace, (const xmlChar *)"xml"))) {
-	if ((doc == NULL) && (node->type == XML_ELEMENT_NODE)) {
-	    /*
-	     * The XML-1.0 namespace is normally held on the root
-	     * element. In this case exceptionally create it on the
-	     * node element.
-	     */
-	    cur = (xmlNsPtr) xmlMalloc(sizeof(xmlNs));
-	    if (cur == NULL) {
-		xmlTreeErrMemory("searching namespace");
-		return(NULL);
-	    }
-	    memset(cur, 0, sizeof(xmlNs));
-	    cur->type = XML_LOCAL_NAMESPACE;
-	    cur->href = xmlStrdup(XML_XML_NAMESPACE);
-	    cur->prefix = xmlStrdup((const xmlChar *)"xml");
-	    cur->next = node->nsDef;
-	    node->nsDef = cur;
-	    return(cur);
-	}
-	if (doc == NULL) {
-	    doc = node->doc;
-	    if (doc == NULL)
-		return(NULL);
-	}
-	/*
-	* Return the XML namespace declaration held by the doc.
-	*/
-	if (doc->oldNs == NULL)
-	    return(xmlTreeEnsureXMLDecl(doc));
-	else
-	    return(doc->oldNs);
-    }
-    while (node != NULL) {
-	if ((node->type == XML_ENTITY_REF_NODE) ||
-	    (node->type == XML_ENTITY_NODE) ||
-	    (node->type == XML_ENTITY_DECL))
-	    return(NULL);
-	if (node->type == XML_ELEMENT_NODE) {
-	    cur = node->nsDef;
-	    while (cur != NULL) {
-		if ((cur->prefix == NULL) && (nameSpace == NULL) &&
-		    (cur->href != NULL))
-		    return(cur);
-		if ((cur->prefix != NULL) && (nameSpace != NULL) &&
-		    (cur->href != NULL) &&
-		    (xmlStrEqual(cur->prefix, nameSpace)))
-		    return(cur);
-		cur = cur->next;
-	    }
-	    if (orig != node) {
-	        cur = node->ns;
-	        if (cur != NULL) {
-		    if ((cur->prefix == NULL) && (nameSpace == NULL) &&
-		        (cur->href != NULL))
-		        return(cur);
-		    if ((cur->prefix != NULL) && (nameSpace != NULL) &&
-		        (cur->href != NULL) &&
-		        (xmlStrEqual(cur->prefix, nameSpace)))
-		        return(cur);
-	        }
-	    }
-	}
-	node = node->parent;
-    }
-    return(NULL);
+    xmlSearchNsSafe(node, nameSpace, &cur);
+    return(cur);
 }
 
 /**
@@ -6152,7 +6095,6 @@ xmlNsInScope(xmlDocPtr doc ATTRIBUTE_UNUSED, xmlNodePtr node,
 
     while ((node != NULL) && (node != ancestor)) {
         if ((node->type == XML_ENTITY_REF_NODE) ||
-            (node->type == XML_ENTITY_NODE) ||
             (node->type == XML_ENTITY_DECL))
             return (-1);
         if (node->type == XML_ELEMENT_NODE) {
@@ -6176,6 +6118,98 @@ xmlNsInScope(xmlDocPtr doc ATTRIBUTE_UNUSED, xmlNodePtr node,
 }
 
 /**
+ * xmlSearchNsByHrefSafe:
+ * @node:  a node
+ * @href:  a namespace URI
+ * @out:  pointer to resulting namespace
+ *
+ * Search a namespace matching @URI in scope of @node.
+ *
+ * Returns 0 on success, -1 if a memory allocation failed, 1 on
+ * other errors.
+ */
+int
+xmlSearchNsByHrefSafe(xmlNodePtr node, const xmlChar *href,
+                      xmlNsPtr *out) {
+    xmlNsPtr cur;
+    xmlDocPtr doc;
+    xmlNodePtr orig = node;
+    xmlNodePtr parent;
+    int is_attr;
+
+    if (out == NULL)
+        return(1);
+    *out = NULL;
+    if ((node == NULL) || (node->type == XML_NAMESPACE_DECL))
+        return(1);
+
+    doc = node->doc;
+
+    if ((doc != NULL) && (xmlStrEqual(href, XML_XML_NAMESPACE))) {
+        cur = xmlTreeEnsureXMLDecl(doc);
+        if (cur == NULL)
+            return(-1);
+        *out = cur;
+        return(0);
+    }
+
+    is_attr = (node->type == XML_ATTRIBUTE_NODE);
+
+    while (node->type != XML_ELEMENT_NODE) {
+        node = node->parent;
+        if (node == NULL)
+            return(0);
+    }
+
+    parent = node;
+
+    while ((node != NULL) && (node->type == XML_ELEMENT_NODE)) {
+        cur = node->nsDef;
+        while (cur != NULL) {
+            if (xmlStrEqual(cur->href, href)) {
+                if (((!is_attr) || (cur->prefix != NULL)) &&
+                    (xmlNsInScope(doc, orig, node, cur->prefix) == 1)) {
+                    *out = cur;
+                    return(0);
+                }
+            }
+            cur = cur->next;
+        }
+        if (orig != node) {
+            cur = node->ns;
+            if (cur != NULL) {
+                if (xmlStrEqual(cur->href, href)) {
+                    if (((!is_attr) || (cur->prefix != NULL)) &&
+                        (xmlNsInScope(doc, orig, node,
+                                      cur->prefix) == 1)) {
+                        *out = cur;
+                        return(0);
+                    }
+                }
+            }
+        }
+
+        node = node->parent;
+    }
+
+    /*
+     * The XML-1.0 namespace is normally held on the document
+     * element. In this case exceptionally create it on the
+     * node element.
+     */
+    if ((doc == NULL) && (xmlStrEqual(href, XML_XML_NAMESPACE))) {
+        cur = xmlNewXmlNs();
+        if (cur == NULL)
+            return(-1);
+        cur->next = parent->nsDef;
+        parent->nsDef = cur;
+        *out = cur;
+    }
+
+    return(0);
+}
+
+/**
  * xmlSearchNsByHref:
  * @doc:  the document
  * @node:  the current node
@@ -6183,85 +6217,18 @@ xmlNsInScope(xmlDocPtr doc ATTRIBUTE_UNUSED, xmlNodePtr node,
  *
  * Search a Ns aliasing a given URI. Recurse on the parents until it finds
  * the defined namespace or return NULL otherwise.
- * Returns the namespace pointer or NULL.
+ *
+ * Returns the namespace pointer or NULL if no namespace was found or
+ * a memory allocation failed. Allocations can only fail if the "xml"
+ * namespace is queried.
  */
 xmlNsPtr
-xmlSearchNsByHref(xmlDocPtr doc, xmlNodePtr node, const xmlChar * href)
-{
+xmlSearchNsByHref(xmlDocPtr doc ATTRIBUTE_UNUSED, xmlNodePtr node,
+                  const xmlChar * href) {
     xmlNsPtr cur;
-    xmlNodePtr orig = node;
-    int is_attr;
 
-    if ((node == NULL) || (node->type == XML_NAMESPACE_DECL) || (href == NULL))
-        return (NULL);
-    if (xmlStrEqual(href, XML_XML_NAMESPACE)) {
-        /*
-         * Only the document can hold the XML spec namespace.
-         */
-        if ((doc == NULL) && (node->type == XML_ELEMENT_NODE)) {
-            /*
-             * The XML-1.0 namespace is normally held on the root
-             * element. In this case exceptionally create it on the
-             * node element.
-             */
-            cur = (xmlNsPtr) xmlMalloc(sizeof(xmlNs));
-            if (cur == NULL) {
-		xmlTreeErrMemory("searching namespace");
-                return (NULL);
-            }
-            memset(cur, 0, sizeof(xmlNs));
-            cur->type = XML_LOCAL_NAMESPACE;
-            cur->href = xmlStrdup(XML_XML_NAMESPACE);
-            cur->prefix = xmlStrdup((const xmlChar *) "xml");
-            cur->next = node->nsDef;
-            node->nsDef = cur;
-            return (cur);
-        }
-	if (doc == NULL) {
-	    doc = node->doc;
-	    if (doc == NULL)
-		return(NULL);
-	}
-	/*
-	* Return the XML namespace declaration held by the doc.
-	*/
-	if (doc->oldNs == NULL)
-	    return(xmlTreeEnsureXMLDecl(doc));
-	else
-	    return(doc->oldNs);
-    }
-    is_attr = (node->type == XML_ATTRIBUTE_NODE);
-    while (node != NULL) {
-        if ((node->type == XML_ENTITY_REF_NODE) ||
-            (node->type == XML_ENTITY_NODE) ||
-            (node->type == XML_ENTITY_DECL))
-            return (NULL);
-        if (node->type == XML_ELEMENT_NODE) {
-            cur = node->nsDef;
-            while (cur != NULL) {
-                if ((cur->href != NULL) && (href != NULL) &&
-                    (xmlStrEqual(cur->href, href))) {
-		    if (((!is_attr) || (cur->prefix != NULL)) &&
-		        (xmlNsInScope(doc, orig, node, cur->prefix) == 1))
-			return (cur);
-                }
-                cur = cur->next;
-            }
-            if (orig != node) {
-                cur = node->ns;
-                if (cur != NULL) {
-                    if ((cur->href != NULL) && (href != NULL) &&
-                        (xmlStrEqual(cur->href, href))) {
-			if (((!is_attr) || (cur->prefix != NULL)) &&
-		            (xmlNsInScope(doc, orig, node, cur->prefix) == 1))
-			    return (cur);
-                    }
-                }
-            }
-        }
-        node = node->parent;
-    }
-    return (NULL);
+    xmlSearchNsByHrefSafe(node, href, &cur);
+    return(cur);
 }
 
 /**
@@ -6278,29 +6245,24 @@ xmlSearchNsByHref(xmlDocPtr doc, xmlNodePtr node, const xmlChar * href)
  * Returns the (new) namespace definition or NULL in case of error
  */
 static xmlNsPtr
-xmlNewReconciledNs(xmlDocPtr doc, xmlNodePtr tree, xmlNsPtr ns) {
+xmlNewReconciledNs(xmlNodePtr tree, xmlNsPtr ns) {
     xmlNsPtr def;
     xmlChar prefix[50];
     int counter = 1;
+    int res;
 
     if ((tree == NULL) || (tree->type != XML_ELEMENT_NODE)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewReconciledNs : tree == NULL\n");
-#endif
 	return(NULL);
     }
     if ((ns == NULL) || (ns->type != XML_NAMESPACE_DECL)) {
-#ifdef DEBUG_TREE
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlNewReconciledNs : ns == NULL\n");
-#endif
 	return(NULL);
     }
     /*
      * Search an existing namespace definition inherited.
      */
-    def = xmlSearchNsByHref(doc, tree, ns->href);
+    res = xmlSearchNsByHrefSafe(tree, ns->href, &def);
+    if (res < 0)
+        return(NULL);
     if (def != NULL)
         return(def);
 
@@ -6313,7 +6275,9 @@ xmlNewReconciledNs(xmlDocPtr doc, xmlNodePtr tree, xmlNsPtr ns) {
     else
 	snprintf((char *) prefix, sizeof(prefix), "%.20s", (char *)ns->prefix);
 
-    def = xmlSearchNs(doc, tree, prefix);
+    res = xmlSearchNsSafe(tree, prefix, &def);
+    if (res < 0)
+        return(NULL);
     while (def != NULL) {
         if (counter > 1000) return(NULL);
 	if (ns->prefix == NULL)
@@ -6321,7 +6285,9 @@ xmlNewReconciledNs(xmlDocPtr doc, xmlNodePtr tree, xmlNsPtr ns) {
 	else
 	    snprintf((char *) prefix, sizeof(prefix), "%.20s%d",
 		(char *)ns->prefix, counter++);
-	def = xmlSearchNs(doc, tree, prefix);
+	res = xmlSearchNsSafe(tree, prefix, &def);
+        if (res < 0)
+            return(NULL);
     }
 
     /*
@@ -6331,7 +6297,29 @@ xmlNewReconciledNs(xmlDocPtr doc, xmlNodePtr tree, xmlNsPtr ns) {
     return(def);
 }
 
-#ifdef LIBXML_TREE_ENABLED
+typedef struct {
+    xmlNsPtr oldNs;
+    xmlNsPtr newNs;
+} xmlNsCache;
+
+static int
+xmlGrowNsCache(xmlNsCache **cache, int *capacity) {
+    xmlNsCache *tmp;
+    int newSize;
+
+    newSize = xmlGrowCapacity(*capacity, sizeof(tmp[0]),
+                              10, XML_MAX_ITEMS);
+    if (newSize < 0)
+        return(-1);
+    tmp = xmlRealloc(*cache, newSize * sizeof(tmp[0]));
+    if (tmp == NULL)
+        return(-1);
+    *cache = tmp;
+    *capacity = newSize;
+
+    return(0);
+}
+
 /**
  * xmlReconciliateNs:
  * @doc:  the document
@@ -6344,12 +6332,12 @@ xmlNewReconciledNs(xmlDocPtr doc, xmlNodePtr tree, xmlNsPtr ns) {
  * as possible the function try to reuse the existing namespaces found in
  * the new environment. If not possible the new namespaces are redeclared
  * on @tree at the top of the given subtree.
- * Returns the number of namespace declarations created or -1 in case of error.
+ *
+ * Returns 0 on success or -1 in case of error.
  */
 int
 xmlReconciliateNs(xmlDocPtr doc, xmlNodePtr tree) {
-    xmlNsPtr *oldNs = NULL;
-    xmlNsPtr *newNs = NULL;
+    xmlNsCache *cache = NULL;
     int sizeCache = 0;
     int nbCache = 0;
 
@@ -6359,35 +6347,15 @@ xmlReconciliateNs(xmlDocPtr doc, xmlNodePtr tree) {
     int ret = 0, i;
 
     if ((node == NULL) || (node->type != XML_ELEMENT_NODE)) return(-1);
-    if ((doc == NULL) || (doc->type != XML_DOCUMENT_NODE)) return(-1);
     if (node->doc != doc) return(-1);
     while (node != NULL) {
         /*
 	 * Reconciliate the node namespace
 	 */
 	if (node->ns != NULL) {
-	    /*
-	     * initialize the cache if needed
-	     */
-	    if (sizeCache == 0) {
-		sizeCache = 10;
-		oldNs = (xmlNsPtr *) xmlMalloc(sizeCache *
-					       sizeof(xmlNsPtr));
-		if (oldNs == NULL) {
-		    xmlTreeErrMemory("fixing namespaces");
-		    return(-1);
-		}
-		newNs = (xmlNsPtr *) xmlMalloc(sizeCache *
-					       sizeof(xmlNsPtr));
-		if (newNs == NULL) {
-		    xmlTreeErrMemory("fixing namespaces");
-		    xmlFree(oldNs);
-		    return(-1);
-		}
-	    }
-	    for (i = 0;i < nbCache;i++) {
-	        if (oldNs[i] == node->ns) {
-		    node->ns = newNs[i];
+	    for (i = 0; i < nbCache; i++) {
+	        if (cache[i].oldNs == node->ns) {
+		    node->ns = cache[i].newNs;
 		    break;
 		}
 	    }
@@ -6395,32 +6363,22 @@ xmlReconciliateNs(xmlDocPtr doc, xmlNodePtr tree) {
 	        /*
 		 * OK we need to recreate a new namespace definition
 		 */
-		n = xmlNewReconciledNs(doc, tree, node->ns);
-		if (n != NULL) { /* :-( what if else ??? */
+		n = xmlNewReconciledNs(tree, node->ns);
+		if (n == NULL) {
+                    ret = -1;
+                } else {
 		    /*
 		     * check if we need to grow the cache buffers.
 		     */
-		    if (sizeCache <= nbCache) {
-		        sizeCache *= 2;
-			oldNs = (xmlNsPtr *) xmlRealloc(oldNs, sizeCache *
-			                               sizeof(xmlNsPtr));
-		        if (oldNs == NULL) {
-			    xmlTreeErrMemory("fixing namespaces");
-			    xmlFree(newNs);
-			    return(-1);
-			}
-			newNs = (xmlNsPtr *) xmlRealloc(newNs, sizeCache *
-			                               sizeof(xmlNsPtr));
-		        if (newNs == NULL) {
-			    xmlTreeErrMemory("fixing namespaces");
-			    xmlFree(oldNs);
-			    return(-1);
-			}
-		    }
-		    newNs[nbCache] = n;
-		    oldNs[nbCache++] = node->ns;
-		    node->ns = n;
+		    if ((sizeCache <= nbCache) &&
+                        (xmlGrowNsCache(&cache, &sizeCache) < 0)) {
+                        ret = -1;
+		    } else {
+                        cache[nbCache].newNs = n;
+                        cache[nbCache++].oldNs = node->ns;
+                    }
                 }
+		node->ns = n;
 	    }
 	}
 	/*
@@ -6430,28 +6388,9 @@ xmlReconciliateNs(xmlDocPtr doc, xmlNodePtr tree) {
 	    attr = node->properties;
 	    while (attr != NULL) {
 		if (attr->ns != NULL) {
-		    /*
-		     * initialize the cache if needed
-		     */
-		    if (sizeCache == 0) {
-			sizeCache = 10;
-			oldNs = (xmlNsPtr *) xmlMalloc(sizeCache *
-						       sizeof(xmlNsPtr));
-			if (oldNs == NULL) {
-			    xmlTreeErrMemory("fixing namespaces");
-			    return(-1);
-			}
-			newNs = (xmlNsPtr *) xmlMalloc(sizeCache *
-						       sizeof(xmlNsPtr));
-			if (newNs == NULL) {
-			    xmlTreeErrMemory("fixing namespaces");
-			    xmlFree(oldNs);
-			    return(-1);
-			}
-		    }
-		    for (i = 0;i < nbCache;i++) {
-			if (oldNs[i] == attr->ns) {
-			    attr->ns = newNs[i];
+		    for (i = 0; i < nbCache; i++) {
+			if (cache[i].oldNs == attr->ns) {
+			    attr->ns = cache[i].newNs;
 			    break;
 			}
 		    }
@@ -6459,32 +6398,22 @@ xmlReconciliateNs(xmlDocPtr doc, xmlNodePtr tree) {
 			/*
 			 * OK we need to recreate a new namespace definition
 			 */
-			n = xmlNewReconciledNs(doc, tree, attr->ns);
-			if (n != NULL) { /* :-( what if else ??? */
+			n = xmlNewReconciledNs(tree, attr->ns);
+			if (n == NULL) {
+                            ret = -1;
+                        } else {
 			    /*
 			     * check if we need to grow the cache buffers.
 			     */
-			    if (sizeCache <= nbCache) {
-				sizeCache *= 2;
-				oldNs = (xmlNsPtr *) xmlRealloc(oldNs,
-				           sizeCache * sizeof(xmlNsPtr));
-				if (oldNs == NULL) {
-				    xmlTreeErrMemory("fixing namespaces");
-				    xmlFree(newNs);
-				    return(-1);
-				}
-				newNs = (xmlNsPtr *) xmlRealloc(newNs,
-				           sizeCache * sizeof(xmlNsPtr));
-				if (newNs == NULL) {
-				    xmlTreeErrMemory("fixing namespaces");
-				    xmlFree(oldNs);
-				    return(-1);
-				}
+                            if ((sizeCache <= nbCache) &&
+                                (xmlGrowNsCache(&cache, &sizeCache) < 0)) {
+                                ret = -1;
+                            } else {
+                                cache[nbCache].newNs = n;
+                                cache[nbCache++].oldNs = attr->ns;
 			    }
-			    newNs[nbCache] = n;
-			    oldNs[nbCache++] = attr->ns;
-			    attr->ns = n;
 			}
+			attr->ns = n;
 		    }
 		}
 		attr = attr->next;
@@ -6520,19 +6449,19 @@ xmlReconciliateNs(xmlDocPtr doc, xmlNodePtr tree) {
 	} else
 	    break;
     }
-    if (oldNs != NULL)
-	xmlFree(oldNs);
-    if (newNs != NULL)
-	xmlFree(newNs);
+    if (cache != NULL)
+	xmlFree(cache);
     return(ret);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 static xmlAttrPtr
 xmlGetPropNodeInternal(const xmlNode *node, const xmlChar *name,
 		       const xmlChar *nsName, int useDTD)
 {
     xmlAttrPtr prop;
+
+    /* Avoid unused variable warning if features are disabled. */
+    (void) useDTD;
 
     if ((node == NULL) || (node->type != XML_ELEMENT_NODE) || (name == NULL))
 	return(NULL);
@@ -6565,7 +6494,6 @@ xmlGetPropNodeInternal(const xmlNode *node, const xmlChar *name,
 	}
     }
 
-#ifdef LIBXML_TREE_ENABLED
     if (! useDTD)
 	return(NULL);
     /*
@@ -6582,7 +6510,11 @@ xmlGetPropNodeInternal(const xmlNode *node, const xmlChar *name,
 	*/
 	if ((node->ns != NULL) && (node->ns->prefix != NULL)) {
 	    tmpstr = xmlStrdup(node->ns->prefix);
+	    if (tmpstr == NULL)
+		return(NULL);
 	    tmpstr = xmlStrcat(tmpstr, BAD_CAST ":");
+	    if (tmpstr == NULL)
+		return(NULL);
 	    tmpstr = xmlStrcat(tmpstr, node->name);
 	    if (tmpstr == NULL)
 		return(NULL);
@@ -6648,7 +6580,7 @@ xmlGetPropNodeInternal(const xmlNode *node, const xmlChar *name,
 	if ((attrDecl != NULL) && (attrDecl->defaultValue != NULL))
 	    return((xmlAttrPtr) attrDecl);
     }
-#endif /* LIBXML_TREE_ENABLED */
+
     return(NULL);
 }
 
@@ -6658,28 +6590,7 @@ xmlGetPropNodeValueInternal(const xmlAttr *prop)
     if (prop == NULL)
 	return(NULL);
     if (prop->type == XML_ATTRIBUTE_NODE) {
-	/*
-	* Note that we return at least the empty string.
-	*   TODO: Do we really always want that?
-	*/
-	if (prop->children != NULL) {
-	    if ((prop->children->next == NULL) &&
-		((prop->children->type == XML_TEXT_NODE) ||
-		(prop->children->type == XML_CDATA_SECTION_NODE)))
-	    {
-		/*
-		* Optimization for the common case: only 1 text node.
-		*/
-		return(xmlStrdup(prop->children->content));
-	    } else {
-		xmlChar *ret;
-
-		ret = xmlNodeListGetString(prop->doc, prop->children, 1);
-		if (ret != NULL)
-		    return(ret);
-	    }
-	}
-	return(xmlStrdup((xmlChar *)""));
+	return(xmlNodeGetContent((xmlNodePtr) prop));
     } else if (prop->type == XML_ATTRIBUTE_DECL) {
 	return(xmlStrdup(((xmlAttributePtr)prop)->defaultValue));
     }
@@ -6693,10 +6604,11 @@ xmlGetPropNodeValueInternal(const xmlAttr *prop)
  *
  * Search an attribute associated to a node
  * This function also looks in DTD attribute declaration for #FIXED or
- * default declaration values unless DTD use has been turned off.
+ * default declaration values.
  *
  * Returns the attribute or the attribute declaration or NULL if
- *         neither was found.
+ * neither was found. Also returns NULL if a memory allocation failed
+ * making this function unreliable.
  */
 xmlAttrPtr
 xmlHasProp(const xmlNode *node, const xmlChar *name) {
@@ -6715,7 +6627,6 @@ xmlHasProp(const xmlNode *node, const xmlChar *name) {
         }
 	prop = prop->next;
     }
-    if (!xmlCheckDTD) return(NULL);
 
     /*
      * Check if there is a default declaration in the internal
@@ -6747,16 +6658,53 @@ xmlHasProp(const xmlNode *node, const xmlChar *name) {
  * This attribute has to be anchored in the namespace specified.
  * This does the entity substitution.
  * This function looks in DTD attribute declaration for #FIXED or
- * default declaration values unless DTD use has been turned off.
+ * default declaration values.
  * Note that a namespace of NULL indicates to use the default namespace.
  *
- * Returns the attribute or the attribute declaration or NULL
- *     if neither was found.
+ * Returns the attribute or the attribute declaration or NULL if
+ * neither was found. Also returns NULL if a memory allocation failed
+ * making this function unreliable.
  */
 xmlAttrPtr
 xmlHasNsProp(const xmlNode *node, const xmlChar *name, const xmlChar *nameSpace) {
 
-    return(xmlGetPropNodeInternal(node, name, nameSpace, xmlCheckDTD));
+    return(xmlGetPropNodeInternal(node, name, nameSpace, 1));
+}
+
+/**
+ * xmlNodeGetAttrValue:
+ * @node:  the node
+ * @name:  the attribute name
+ * @nsUri:  the URI of the namespace
+ * @out:  the returned string
+ *
+ * Search and get the value of an attribute associated to a node
+ * This attribute has to be anchored in the namespace specified.
+ * This does the entity substitution. The returned value must be
+ * freed by the caller.
+ *
+ * Available since 2.13.0.
+ *
+ * Returns 0 on success, 1 if no attribute was found, -1 if a
+ * memory allocation failed.
+ */
+int
+xmlNodeGetAttrValue(const xmlNode *node, const xmlChar *name,
+                    const xmlChar *nsUri, xmlChar **out) {
+    xmlAttrPtr prop;
+
+    if (out == NULL)
+        return(1);
+    *out = NULL;
+
+    prop = xmlGetPropNodeInternal(node, name, nsUri, 0);
+    if (prop == NULL)
+	return(1);
+
+    *out = xmlGetPropNodeValueInternal(prop);
+    if (*out == NULL)
+        return(-1);
+    return(0);
 }
 
 /**
@@ -6767,13 +6715,17 @@ xmlHasNsProp(const xmlNode *node, const xmlChar *name, const xmlChar *nameSpace)
  * Search and get the value of an attribute associated to a node
  * This does the entity substitution.
  * This function looks in DTD attribute declaration for #FIXED or
- * default declaration values unless DTD use has been turned off.
- * NOTE: this function acts independently of namespaces associated
+ * default declaration values.
+ *
+ * NOTE: This function acts independently of namespaces associated
  *       to the attribute. Use xmlGetNsProp() or xmlGetNoNsProp()
  *       for namespace aware processing.
  *
- * Returns the attribute value or NULL if not found.
- *     It's up to the caller to free the memory with xmlFree().
+ * NOTE: This function doesn't allow to distinguish malloc failures from
+ *       missing attributes. It's more robust to use xmlNodeGetAttrValue.
+ *
+ * Returns the attribute value or NULL if not found or a memory allocation
+ * failed. It's up to the caller to free the memory with xmlFree().
  */
 xmlChar *
 xmlGetProp(const xmlNode *node, const xmlChar *name) {
@@ -6793,18 +6745,21 @@ xmlGetProp(const xmlNode *node, const xmlChar *name) {
  * Search and get the value of an attribute associated to a node
  * This does the entity substitution.
  * This function looks in DTD attribute declaration for #FIXED or
- * default declaration values unless DTD use has been turned off.
+ * default declaration values.
  * This function is similar to xmlGetProp except it will accept only
  * an attribute in no namespace.
  *
- * Returns the attribute value or NULL if not found.
- *     It's up to the caller to free the memory with xmlFree().
+ * NOTE: This function doesn't allow to distinguish malloc failures from
+ *       missing attributes. It's more robust to use xmlNodeGetAttrValue.
+ *
+ * Returns the attribute value or NULL if not found or a memory allocation
+ * failed. It's up to the caller to free the memory with xmlFree().
  */
 xmlChar *
 xmlGetNoNsProp(const xmlNode *node, const xmlChar *name) {
     xmlAttrPtr prop;
 
-    prop = xmlGetPropNodeInternal(node, name, NULL, xmlCheckDTD);
+    prop = xmlGetPropNodeInternal(node, name, NULL, 1);
     if (prop == NULL)
 	return(NULL);
     return(xmlGetPropNodeValueInternal(prop));
@@ -6820,22 +6775,24 @@ xmlGetNoNsProp(const xmlNode *node, const xmlChar *name) {
  * This attribute has to be anchored in the namespace specified.
  * This does the entity substitution.
  * This function looks in DTD attribute declaration for #FIXED or
- * default declaration values unless DTD use has been turned off.
+ * default declaration values.
  *
- * Returns the attribute value or NULL if not found.
- *     It's up to the caller to free the memory with xmlFree().
+ * NOTE: This function doesn't allow to distinguish malloc failures from
+ *       missing attributes. It's more robust to use xmlNodeGetAttrValue.
+ *
+ * Returns the attribute value or NULL if not found or a memory allocation
+ * failed. It's up to the caller to free the memory with xmlFree().
  */
 xmlChar *
 xmlGetNsProp(const xmlNode *node, const xmlChar *name, const xmlChar *nameSpace) {
     xmlAttrPtr prop;
 
-    prop = xmlGetPropNodeInternal(node, name, nameSpace, xmlCheckDTD);
+    prop = xmlGetPropNodeInternal(node, name, nameSpace, 1);
     if (prop == NULL)
 	return(NULL);
     return(xmlGetPropNodeValueInternal(prop));
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlUnsetProp:
  * @node:  the node
@@ -6852,7 +6809,7 @@ xmlUnsetProp(xmlNodePtr node, const xmlChar *name) {
     prop = xmlGetPropNodeInternal(node, name, NULL, 0);
     if (prop == NULL)
 	return(-1);
-    xmlUnlinkNode((xmlNodePtr) prop);
+    xmlUnlinkNodeInternal((xmlNodePtr) prop);
     xmlFreeProp(prop);
     return(0);
 }
@@ -6870,16 +6827,15 @@ int
 xmlUnsetNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name) {
     xmlAttrPtr prop;
 
-    prop = xmlGetPropNodeInternal(node, name, (ns != NULL) ? ns->href : NULL, 0);
+    prop = xmlGetPropNodeInternal(node, name,
+                                  (ns != NULL) ? ns->href : NULL, 0);
     if (prop == NULL)
 	return(-1);
-    xmlUnlinkNode((xmlNodePtr) prop);
+    xmlUnlinkNodeInternal((xmlNodePtr) prop);
     xmlFreeProp(prop);
     return(0);
 }
-#endif
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_XINCLUDE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED) || defined(LIBXML_HTML_ENABLED)
 /**
  * xmlSetProp:
  * @node:  the node
@@ -6896,8 +6852,10 @@ xmlUnsetNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name) {
  */
 xmlAttrPtr
 xmlSetProp(xmlNodePtr node, const xmlChar *name, const xmlChar *value) {
-    int len;
-    const xmlChar *nqname;
+    xmlNsPtr ns = NULL;
+    const xmlChar *localname;
+    xmlChar *prefix;
+    int res;
 
     if ((node == NULL) || (name == NULL) || (node->type != XML_ELEMENT_NODE))
 	return(NULL);
@@ -6905,16 +6863,19 @@ xmlSetProp(xmlNodePtr node, const xmlChar *name, const xmlChar *value) {
     /*
      * handle QNames
      */
-    nqname = xmlSplitQName3(name, &len);
-    if (nqname != NULL) {
-        xmlNsPtr ns;
-	xmlChar *prefix = xmlStrndup(name, len);
-	ns = xmlSearchNs(node->doc, node, prefix);
-	if (prefix != NULL)
-	    xmlFree(prefix);
-	if (ns != NULL)
-	    return(xmlSetNsProp(node, ns, nqname, value));
+    localname = xmlSplitQName4(name, &prefix);
+    if (localname == NULL)
+        return(NULL);
+
+    if (prefix != NULL) {
+	res = xmlSearchNsSafe(node, prefix, &ns);
+	xmlFree(prefix);
+        if (res < 0)
+            return(NULL);
+        if (ns != NULL)
+            return(xmlSetNsProp(node, ns, localname, value));
     }
+
     return(xmlSetNsProp(node, NULL, name, value));
 }
 
@@ -6938,11 +6899,22 @@ xmlSetNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name,
 
     if (ns && (ns->href == NULL))
 	return(NULL);
-    prop = xmlGetPropNodeInternal(node, name, (ns != NULL) ? ns->href : NULL, 0);
+    if (name == NULL)
+        return(NULL);
+    prop = xmlGetPropNodeInternal(node, name,
+                                  (ns != NULL) ? ns->href : NULL, 0);
     if (prop != NULL) {
+        xmlNodePtr children = NULL;
+
 	/*
 	* Modify the attribute's value.
 	*/
+        if (value != NULL) {
+	    children = xmlNewDocText(node->doc, value);
+            if (children == NULL)
+                return(NULL);
+        }
+
 	if (prop->atype == XML_ATTRIBUTE_ID) {
 	    xmlRemoveID(node->doc, prop);
 	    prop->atype = XML_ATTRIBUTE_ID;
@@ -6955,7 +6927,7 @@ xmlSetNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name,
 	if (value != NULL) {
 	    xmlNodePtr tmp;
 
-	    prop->children = xmlNewDocText(node->doc, value);
+	    prop->children = children;
 	    prop->last = NULL;
 	    tmp = prop->children;
 	    while (tmp != NULL) {
@@ -6965,8 +6937,10 @@ xmlSetNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name,
 		tmp = tmp->next;
 	    }
 	}
-	if (prop->atype == XML_ATTRIBUTE_ID)
-	    xmlAddID(NULL, node->doc, value, prop);
+	if ((prop->atype == XML_ATTRIBUTE_ID) &&
+	    (xmlAddIDSafe(prop, value) < 0)) {
+            return(NULL);
+        }
 	return(prop);
     }
     /*
@@ -6974,8 +6948,6 @@ xmlSetNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name,
     */
     return(xmlNewPropInternal(node, ns, name, value, 0));
 }
-
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeIsText:
@@ -7025,784 +6997,26 @@ xmlIsBlankNode(const xmlNode *node) {
  * @content:  the content
  * @len:  @content length
  *
- * Concat the given string at the end of the existing node content
+ * Concat the given string at the end of the existing node content.
+ *
+ * If @len is -1, the string length will be calculated.
  *
  * Returns -1 in case of error, 0 otherwise
  */
 
 int
 xmlTextConcat(xmlNodePtr node, const xmlChar *content, int len) {
-    if (node == NULL) return(-1);
+    if (node == NULL)
+        return(-1);
 
     if ((node->type != XML_TEXT_NODE) &&
         (node->type != XML_CDATA_SECTION_NODE) &&
 	(node->type != XML_COMMENT_NODE) &&
-	(node->type != XML_PI_NODE)) {
-#ifdef DEBUG_TREE
-	xmlGenericError(xmlGenericErrorContext,
-		"xmlTextConcat: node is not text nor CDATA\n");
-#endif
+	(node->type != XML_PI_NODE))
         return(-1);
-    }
-    /* need to check if content is currently in the dictionary */
-    if ((node->content == (xmlChar *) &(node->properties)) ||
-        ((node->doc != NULL) && (node->doc->dict != NULL) &&
-		xmlDictOwns(node->doc->dict, node->content))) {
-	node->content = xmlStrncatNew(node->content, content, len);
-    } else {
-        node->content = xmlStrncat(node->content, content, len);
-    }
-    node->properties = NULL;
-    if (node->content == NULL)
-        return(-1);
-    return(0);
+
+    return(xmlTextAddContent(node, content, len));
 }
-
-/************************************************************************
- *									*
- *			Output : to a FILE or in memory			*
- *									*
- ************************************************************************/
-
-/**
- * xmlBufferCreate:
- *
- * routine to create an XML buffer.
- * returns the new structure.
- */
-xmlBufferPtr
-xmlBufferCreate(void) {
-    xmlBufferPtr ret;
-
-    ret = (xmlBufferPtr) xmlMalloc(sizeof(xmlBuffer));
-    if (ret == NULL) {
-	xmlTreeErrMemory("creating buffer");
-        return(NULL);
-    }
-    ret->use = 0;
-    ret->size = xmlDefaultBufferSize;
-    ret->alloc = xmlBufferAllocScheme;
-    ret->content = (xmlChar *) xmlMallocAtomic(ret->size * sizeof(xmlChar));
-    if (ret->content == NULL) {
-	xmlTreeErrMemory("creating buffer");
-	xmlFree(ret);
-        return(NULL);
-    }
-    ret->content[0] = 0;
-    ret->contentIO = NULL;
-    return(ret);
-}
-
-/**
- * xmlBufferCreateSize:
- * @size: initial size of buffer
- *
- * routine to create an XML buffer.
- * returns the new structure.
- */
-xmlBufferPtr
-xmlBufferCreateSize(size_t size) {
-    xmlBufferPtr ret;
-
-    ret = (xmlBufferPtr) xmlMalloc(sizeof(xmlBuffer));
-    if (ret == NULL) {
-	xmlTreeErrMemory("creating buffer");
-        return(NULL);
-    }
-    ret->use = 0;
-    ret->alloc = xmlBufferAllocScheme;
-    ret->size = (size ? size+2 : 0);         /* +1 for ending null */
-    if (ret->size){
-        ret->content = (xmlChar *) xmlMallocAtomic(ret->size * sizeof(xmlChar));
-        if (ret->content == NULL) {
-	    xmlTreeErrMemory("creating buffer");
-            xmlFree(ret);
-            return(NULL);
-        }
-        ret->content[0] = 0;
-    } else
-	ret->content = NULL;
-    ret->contentIO = NULL;
-    return(ret);
-}
-
-/**
- * xmlBufferDetach:
- * @buf:  the buffer
- *
- * Remove the string contained in a buffer and gie it back to the
- * caller. The buffer is reset to an empty content.
- * This doesn't work with immutable buffers as they can't be reset.
- *
- * Returns the previous string contained by the buffer.
- */
-xmlChar *
-xmlBufferDetach(xmlBufferPtr buf) {
-    xmlChar *ret;
-
-    if (buf == NULL)
-        return(NULL);
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE)
-        return(NULL);
-
-    ret = buf->content;
-    buf->content = NULL;
-    buf->size = 0;
-    buf->use = 0;
-
-    return ret;
-}
-
-
-/**
- * xmlBufferCreateStatic:
- * @mem: the memory area
- * @size:  the size in byte
- *
- * routine to create an XML buffer from an immutable memory area.
- * The area won't be modified nor copied, and is expected to be
- * present until the end of the buffer lifetime.
- *
- * returns the new structure.
- */
-xmlBufferPtr
-xmlBufferCreateStatic(void *mem, size_t size) {
-    xmlBufferPtr ret;
-
-    if ((mem == NULL) || (size == 0))
-        return(NULL);
-
-    ret = (xmlBufferPtr) xmlMalloc(sizeof(xmlBuffer));
-    if (ret == NULL) {
-	xmlTreeErrMemory("creating buffer");
-        return(NULL);
-    }
-    ret->use = size;
-    ret->size = size;
-    ret->alloc = XML_BUFFER_ALLOC_IMMUTABLE;
-    ret->content = (xmlChar *) mem;
-    return(ret);
-}
-
-/**
- * xmlBufferSetAllocationScheme:
- * @buf:  the buffer to tune
- * @scheme:  allocation scheme to use
- *
- * Sets the allocation scheme for this buffer
- */
-void
-xmlBufferSetAllocationScheme(xmlBufferPtr buf,
-                             xmlBufferAllocationScheme scheme) {
-    if (buf == NULL) {
-#ifdef DEBUG_BUFFER
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlBufferSetAllocationScheme: buf == NULL\n");
-#endif
-        return;
-    }
-    if ((buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) ||
-        (buf->alloc == XML_BUFFER_ALLOC_IO)) return;
-    if ((scheme == XML_BUFFER_ALLOC_DOUBLEIT) ||
-        (scheme == XML_BUFFER_ALLOC_EXACT) ||
-        (scheme == XML_BUFFER_ALLOC_HYBRID) ||
-        (scheme == XML_BUFFER_ALLOC_IMMUTABLE))
-	buf->alloc = scheme;
-}
-
-/**
- * xmlBufferFree:
- * @buf:  the buffer to free
- *
- * Frees an XML buffer. It frees both the content and the structure which
- * encapsulate it.
- */
-void
-xmlBufferFree(xmlBufferPtr buf) {
-    if (buf == NULL) {
-#ifdef DEBUG_BUFFER
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlBufferFree: buf == NULL\n");
-#endif
-	return;
-    }
-
-    if ((buf->alloc == XML_BUFFER_ALLOC_IO) &&
-        (buf->contentIO != NULL)) {
-        xmlFree(buf->contentIO);
-    } else if ((buf->content != NULL) &&
-        (buf->alloc != XML_BUFFER_ALLOC_IMMUTABLE)) {
-        xmlFree(buf->content);
-    }
-    xmlFree(buf);
-}
-
-/**
- * xmlBufferEmpty:
- * @buf:  the buffer
- *
- * empty a buffer.
- */
-void
-xmlBufferEmpty(xmlBufferPtr buf) {
-    if (buf == NULL) return;
-    if (buf->content == NULL) return;
-    buf->use = 0;
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) {
-        buf->content = BAD_CAST "";
-    } else if ((buf->alloc == XML_BUFFER_ALLOC_IO) &&
-               (buf->contentIO != NULL)) {
-        size_t start_buf = buf->content - buf->contentIO;
-
-	buf->size += start_buf;
-        buf->content = buf->contentIO;
-        buf->content[0] = 0;
-    } else {
-        buf->content[0] = 0;
-    }
-}
-
-/**
- * xmlBufferShrink:
- * @buf:  the buffer to dump
- * @len:  the number of xmlChar to remove
- *
- * Remove the beginning of an XML buffer.
- *
- * Returns the number of #xmlChar removed, or -1 in case of failure.
- */
-int
-xmlBufferShrink(xmlBufferPtr buf, unsigned int len) {
-    if (buf == NULL) return(-1);
-    if (len == 0) return(0);
-    if (len > buf->use) return(-1);
-
-    buf->use -= len;
-    if ((buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) ||
-        ((buf->alloc == XML_BUFFER_ALLOC_IO) && (buf->contentIO != NULL))) {
-	/*
-	 * we just move the content pointer, but also make sure
-	 * the perceived buffer size has shrunk accordingly
-	 */
-        buf->content += len;
-	buf->size -= len;
-
-        /*
-	 * sometimes though it maybe be better to really shrink
-	 * on IO buffers
-	 */
-	if ((buf->alloc == XML_BUFFER_ALLOC_IO) && (buf->contentIO != NULL)) {
-	    size_t start_buf = buf->content - buf->contentIO;
-	    if (start_buf >= buf->size) {
-		memmove(buf->contentIO, &buf->content[0], buf->use);
-		buf->content = buf->contentIO;
-		buf->content[buf->use] = 0;
-		buf->size += start_buf;
-	    }
-	}
-    } else {
-	memmove(buf->content, &buf->content[len], buf->use);
-	buf->content[buf->use] = 0;
-    }
-    return(len);
-}
-
-/**
- * xmlBufferGrow:
- * @buf:  the buffer
- * @len:  the minimum free size to allocate
- *
- * Grow the available space of an XML buffer.
- *
- * Returns the new available space or -1 in case of error
- */
-int
-xmlBufferGrow(xmlBufferPtr buf, unsigned int len) {
-    int size;
-    xmlChar *newbuf;
-
-    if (buf == NULL) return(-1);
-
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return(0);
-    if (len + buf->use < buf->size) return(0);
-
-    /*
-     * Windows has a BIG problem on realloc timing, so we try to double
-     * the buffer size (if that's enough) (bug 146697)
-     * Apparently BSD too, and it's probably best for linux too
-     * On an embedded system this may be something to change
-     */
-#if 1
-    if (buf->size > len)
-        size = buf->size * 2;
-    else
-        size = buf->use + len + 100;
-#else
-    size = buf->use + len + 100;
-#endif
-
-    if ((buf->alloc == XML_BUFFER_ALLOC_IO) && (buf->contentIO != NULL)) {
-        size_t start_buf = buf->content - buf->contentIO;
-
-	newbuf = (xmlChar *) xmlRealloc(buf->contentIO, start_buf + size);
-	if (newbuf == NULL) {
-	    xmlTreeErrMemory("growing buffer");
-	    return(-1);
-	}
-	buf->contentIO = newbuf;
-	buf->content = newbuf + start_buf;
-    } else {
-	newbuf = (xmlChar *) xmlRealloc(buf->content, size);
-	if (newbuf == NULL) {
-	    xmlTreeErrMemory("growing buffer");
-	    return(-1);
-	}
-	buf->content = newbuf;
-    }
-    buf->size = size;
-    return(buf->size - buf->use);
-}
-
-/**
- * xmlBufferDump:
- * @file:  the file output
- * @buf:  the buffer to dump
- *
- * Dumps an XML buffer to  a FILE *.
- * Returns the number of #xmlChar written
- */
-int
-xmlBufferDump(FILE *file, xmlBufferPtr buf) {
-    int ret;
-
-    if (buf == NULL) {
-#ifdef DEBUG_BUFFER
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlBufferDump: buf == NULL\n");
-#endif
-	return(0);
-    }
-    if (buf->content == NULL) {
-#ifdef DEBUG_BUFFER
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlBufferDump: buf->content == NULL\n");
-#endif
-	return(0);
-    }
-    if (file == NULL)
-	file = stdout;
-    ret = fwrite(buf->content, sizeof(xmlChar), buf->use, file);
-    return(ret);
-}
-
-/**
- * xmlBufferContent:
- * @buf:  the buffer
- *
- * Function to extract the content of a buffer
- *
- * Returns the internal content
- */
-
-const xmlChar *
-xmlBufferContent(const xmlBuffer *buf)
-{
-    if(!buf)
-        return NULL;
-
-    return buf->content;
-}
-
-/**
- * xmlBufferLength:
- * @buf:  the buffer
- *
- * Function to get the length of a buffer
- *
- * Returns the length of data in the internal content
- */
-
-int
-xmlBufferLength(const xmlBuffer *buf)
-{
-    if(!buf)
-        return 0;
-
-    return buf->use;
-}
-
-/**
- * xmlBufferResize:
- * @buf:  the buffer to resize
- * @size:  the desired size
- *
- * Resize a buffer to accommodate minimum size of @size.
- *
- * Returns  0 in case of problems, 1 otherwise
- */
-int
-xmlBufferResize(xmlBufferPtr buf, unsigned int size)
-{
-    unsigned int newSize;
-    xmlChar* rebuf = NULL;
-    size_t start_buf;
-
-    if (buf == NULL)
-        return(0);
-
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return(0);
-
-    /* Don't resize if we don't have to */
-    if (size < buf->size)
-        return 1;
-
-    if (size > UINT_MAX - 10) {
-        xmlTreeErrMemory("growing buffer");
-        return 0;
-    }
-
-    /* figure out new size */
-    switch (buf->alloc){
-	case XML_BUFFER_ALLOC_IO:
-	case XML_BUFFER_ALLOC_DOUBLEIT:
-	    /*take care of empty case*/
-	    newSize = (buf->size ? buf->size : size + 10);
-	    while (size > newSize) {
-	        if (newSize > UINT_MAX / 2) {
-	            xmlTreeErrMemory("growing buffer");
-	            return 0;
-	        }
-	        newSize *= 2;
-	    }
-	    break;
-	case XML_BUFFER_ALLOC_EXACT:
-	    newSize = size+10;
-	    break;
-        case XML_BUFFER_ALLOC_HYBRID:
-            if (buf->use < BASE_BUFFER_SIZE)
-                newSize = size;
-            else {
-                newSize = buf->size;
-                while (size > newSize) {
-                    if (newSize > UINT_MAX / 2) {
-                        xmlTreeErrMemory("growing buffer");
-                        return 0;
-                    }
-                    newSize *= 2;
-                }
-            }
-            break;
-
-	default:
-	    newSize = size+10;
-	    break;
-    }
-
-    if ((buf->alloc == XML_BUFFER_ALLOC_IO) && (buf->contentIO != NULL)) {
-        start_buf = buf->content - buf->contentIO;
-
-        if (start_buf > newSize) {
-	    /* move data back to start */
-	    memmove(buf->contentIO, buf->content, buf->use);
-	    buf->content = buf->contentIO;
-	    buf->content[buf->use] = 0;
-	    buf->size += start_buf;
-	} else {
-	    rebuf = (xmlChar *) xmlRealloc(buf->contentIO, start_buf + newSize);
-	    if (rebuf == NULL) {
-		xmlTreeErrMemory("growing buffer");
-		return 0;
-	    }
-	    buf->contentIO = rebuf;
-	    buf->content = rebuf + start_buf;
-	}
-    } else {
-	if (buf->content == NULL) {
-	    rebuf = (xmlChar *) xmlMallocAtomic(newSize);
-	} else if (buf->size - buf->use < 100) {
-	    rebuf = (xmlChar *) xmlRealloc(buf->content, newSize);
-        } else {
-	    /*
-	     * if we are reallocating a buffer far from being full, it's
-	     * better to make a new allocation and copy only the used range
-	     * and free the old one.
-	     */
-	    rebuf = (xmlChar *) xmlMallocAtomic(newSize);
-	    if (rebuf != NULL) {
-		memcpy(rebuf, buf->content, buf->use);
-		xmlFree(buf->content);
-		rebuf[buf->use] = 0;
-	    }
-	}
-	if (rebuf == NULL) {
-	    xmlTreeErrMemory("growing buffer");
-	    return 0;
-	}
-	buf->content = rebuf;
-    }
-    buf->size = newSize;
-
-    return 1;
-}
-
-/**
- * xmlBufferAdd:
- * @buf:  the buffer to dump
- * @str:  the #xmlChar string
- * @len:  the number of #xmlChar to add
- *
- * Add a string range to an XML buffer. if len == -1, the length of
- * str is recomputed.
- *
- * Returns 0 successful, a positive error code number otherwise
- *         and -1 in case of internal or API error.
- */
-int
-xmlBufferAdd(xmlBufferPtr buf, const xmlChar *str, int len) {
-    unsigned int needSize;
-
-    if ((str == NULL) || (buf == NULL)) {
-	return -1;
-    }
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return -1;
-    if (len < -1) {
-#ifdef DEBUG_BUFFER
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlBufferAdd: len < 0\n");
-#endif
-	return -1;
-    }
-    if (len == 0) return 0;
-
-    if (len < 0)
-        len = xmlStrlen(str);
-
-    if (len < 0) return -1;
-    if (len == 0) return 0;
-
-    needSize = buf->use + len + 2;
-    if (needSize > buf->size){
-        if (!xmlBufferResize(buf, needSize)){
-	    xmlTreeErrMemory("growing buffer");
-            return XML_ERR_NO_MEMORY;
-        }
-    }
-
-    memmove(&buf->content[buf->use], str, len*sizeof(xmlChar));
-    buf->use += len;
-    buf->content[buf->use] = 0;
-    return 0;
-}
-
-/**
- * xmlBufferAddHead:
- * @buf:  the buffer
- * @str:  the #xmlChar string
- * @len:  the number of #xmlChar to add
- *
- * Add a string range to the beginning of an XML buffer.
- * if len == -1, the length of @str is recomputed.
- *
- * Returns 0 successful, a positive error code number otherwise
- *         and -1 in case of internal or API error.
- */
-int
-xmlBufferAddHead(xmlBufferPtr buf, const xmlChar *str, int len) {
-    unsigned int needSize;
-
-    if (buf == NULL)
-        return(-1);
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return -1;
-    if (str == NULL) {
-#ifdef DEBUG_BUFFER
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlBufferAddHead: str == NULL\n");
-#endif
-	return -1;
-    }
-    if (len < -1) {
-#ifdef DEBUG_BUFFER
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlBufferAddHead: len < 0\n");
-#endif
-	return -1;
-    }
-    if (len == 0) return 0;
-
-    if (len < 0)
-        len = xmlStrlen(str);
-
-    if (len <= 0) return -1;
-
-    if ((buf->alloc == XML_BUFFER_ALLOC_IO) && (buf->contentIO != NULL)) {
-        size_t start_buf = buf->content - buf->contentIO;
-
-	if (start_buf > (unsigned int) len) {
-	    /*
-	     * We can add it in the space previously shrunk
-	     */
-	    buf->content -= len;
-            memmove(&buf->content[0], str, len);
-	    buf->use += len;
-	    buf->size += len;
-	    return(0);
-	}
-    }
-    needSize = buf->use + len + 2;
-    if (needSize > buf->size){
-        if (!xmlBufferResize(buf, needSize)){
-	    xmlTreeErrMemory("growing buffer");
-            return XML_ERR_NO_MEMORY;
-        }
-    }
-
-    memmove(&buf->content[len], &buf->content[0], buf->use);
-    memmove(&buf->content[0], str, len);
-    buf->use += len;
-    buf->content[buf->use] = 0;
-    return 0;
-}
-
-/**
- * xmlBufferCat:
- * @buf:  the buffer to add to
- * @str:  the #xmlChar string
- *
- * Append a zero terminated string to an XML buffer.
- *
- * Returns 0 successful, a positive error code number otherwise
- *         and -1 in case of internal or API error.
- */
-int
-xmlBufferCat(xmlBufferPtr buf, const xmlChar *str) {
-    if (buf == NULL)
-        return(-1);
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return -1;
-    if (str == NULL) return -1;
-    return xmlBufferAdd(buf, str, -1);
-}
-
-/**
- * xmlBufferCCat:
- * @buf:  the buffer to dump
- * @str:  the C char string
- *
- * Append a zero terminated C string to an XML buffer.
- *
- * Returns 0 successful, a positive error code number otherwise
- *         and -1 in case of internal or API error.
- */
-int
-xmlBufferCCat(xmlBufferPtr buf, const char *str) {
-    const char *cur;
-
-    if (buf == NULL)
-        return(-1);
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return -1;
-    if (str == NULL) {
-#ifdef DEBUG_BUFFER
-        xmlGenericError(xmlGenericErrorContext,
-		"xmlBufferCCat: str == NULL\n");
-#endif
-	return -1;
-    }
-    for (cur = str;*cur != 0;cur++) {
-        if (buf->use  + 10 >= buf->size) {
-            if (!xmlBufferResize(buf, buf->use+10)){
-		xmlTreeErrMemory("growing buffer");
-                return XML_ERR_NO_MEMORY;
-            }
-        }
-        buf->content[buf->use++] = *cur;
-    }
-    buf->content[buf->use] = 0;
-    return 0;
-}
-
-/**
- * xmlBufferWriteCHAR:
- * @buf:  the XML buffer
- * @string:  the string to add
- *
- * routine which manages and grows an output buffer. This one adds
- * xmlChars at the end of the buffer.
- */
-void
-xmlBufferWriteCHAR(xmlBufferPtr buf, const xmlChar *string) {
-    if (buf == NULL)
-        return;
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return;
-    xmlBufferCat(buf, string);
-}
-
-/**
- * xmlBufferWriteChar:
- * @buf:  the XML buffer output
- * @string:  the string to add
- *
- * routine which manage and grows an output buffer. This one add
- * C chars at the end of the array.
- */
-void
-xmlBufferWriteChar(xmlBufferPtr buf, const char *string) {
-    if (buf == NULL)
-        return;
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return;
-    xmlBufferCCat(buf, string);
-}
-
-
-/**
- * xmlBufferWriteQuotedString:
- * @buf:  the XML buffer output
- * @string:  the string to add
- *
- * routine which manage and grows an output buffer. This one writes
- * a quoted or double quoted #xmlChar string, checking first if it holds
- * quote or double-quotes internally
- */
-void
-xmlBufferWriteQuotedString(xmlBufferPtr buf, const xmlChar *string) {
-    const xmlChar *cur, *base;
-    if (buf == NULL)
-        return;
-    if (buf->alloc == XML_BUFFER_ALLOC_IMMUTABLE) return;
-    if (xmlStrchr(string, '\"')) {
-        if (xmlStrchr(string, '\'')) {
-#ifdef DEBUG_BUFFER
-	    xmlGenericError(xmlGenericErrorContext,
- "xmlBufferWriteQuotedString: string contains quote and double-quotes !\n");
-#endif
-	    xmlBufferCCat(buf, "\"");
-            base = cur = string;
-            while(*cur != 0){
-                if(*cur == '"'){
-                    if (base != cur)
-                        xmlBufferAdd(buf, base, cur - base);
-                    xmlBufferAdd(buf, BAD_CAST "&quot;", 6);
-                    cur++;
-                    base = cur;
-                }
-                else {
-                    cur++;
-                }
-            }
-            if (base != cur)
-                xmlBufferAdd(buf, base, cur - base);
-	    xmlBufferCCat(buf, "\"");
-	}
-        else{
-	    xmlBufferCCat(buf, "\'");
-            xmlBufferCat(buf, string);
-	    xmlBufferCCat(buf, "\'");
-        }
-    } else {
-        xmlBufferCCat(buf, "\"");
-        xmlBufferCat(buf, string);
-        xmlBufferCCat(buf, "\"");
-    }
-}
-
 
 /**
  * xmlGetDocCompressMode:
@@ -7836,6 +7050,8 @@ xmlSetDocCompressMode (xmlDocPtr doc, int mode) {
 /**
  * xmlGetCompressMode:
  *
+ * DEPRECATED: Use xmlGetDocCompressMode
+ *
  * get the default compression mode used, ZLIB based.
  * Returns 0 (uncompressed) to 9 (max compression)
  */
@@ -7848,6 +7064,8 @@ xmlGetCompressMode(void)
 /**
  * xmlSetCompressMode:
  * @mode:  the compression ratio
+ *
+ * DEPRECATED: Use xmlSetDocCompressMode
  *
  * set the default compression mode used, ZLIB based
  * Correct values: 0 (uncompressed) to 9 (max compression)
@@ -7956,10 +7174,8 @@ xmlDOMWrapNsMapAddItem(xmlNsMapPtr *nsmap, int position,
 	* Create the ns-map.
 	*/
 	map = (xmlNsMapPtr) xmlMalloc(sizeof(struct xmlNsMap));
-	if (map == NULL) {
-	    xmlTreeErrMemory("allocating namespace map");
-	    return (NULL);
-	}
+	if (map == NULL)
+	    return(NULL);
 	memset(map, 0, sizeof(struct xmlNsMap));
 	*nsmap = map;
     }
@@ -7976,10 +7192,8 @@ xmlDOMWrapNsMapAddItem(xmlNsMapPtr *nsmap, int position,
 	* Create a new item.
 	*/
 	ret = (xmlNsMapItemPtr) xmlMalloc(sizeof(struct xmlNsMapItem));
-	if (ret == NULL) {
-	    xmlTreeErrMemory("allocating namespace map item");
-	    return (NULL);
-	}
+	if (ret == NULL)
+	    return(NULL);
 	memset(ret, 0, sizeof(struct xmlNsMapItem));
     }
 
@@ -8071,10 +7285,8 @@ xmlDOMWrapNewCtxt(void)
     xmlDOMWrapCtxtPtr ret;
 
     ret = xmlMalloc(sizeof(xmlDOMWrapCtxt));
-    if (ret == NULL) {
-	xmlTreeErrMemory("allocating DOM-wrapper context");
+    if (ret == NULL)
 	return (NULL);
-    }
     memset(ret, 0, sizeof(xmlDOMWrapCtxt));
     return (ret);
 }
@@ -8191,39 +7403,6 @@ xmlDOMWrapNSNormGatherInScopeNs(xmlNsMapPtr *map,
 }
 
 /*
-* XML_TREE_ADOPT_STR: If we have a dest-dict, put @str in the dict;
-* otherwise copy it, when it was in the source-dict.
-*/
-#define XML_TREE_ADOPT_STR(str) \
-    if (adoptStr && (str != NULL)) { \
-	if (destDoc->dict) { \
-	    const xmlChar *old = str;	\
-	    str = xmlDictLookup(destDoc->dict, str, -1); \
-	    if ((sourceDoc == NULL) || (sourceDoc->dict == NULL) || \
-	        (!xmlDictOwns(sourceDoc->dict, old))) \
-		xmlFree((char *)old); \
-	} else if ((sourceDoc) && (sourceDoc->dict) && \
-	    xmlDictOwns(sourceDoc->dict, str)) { \
-	    str = BAD_CAST xmlStrdup(str); \
-	} \
-    }
-
-/*
-* XML_TREE_ADOPT_STR_2: If @str was in the source-dict, then
-* put it in dest-dict or copy it.
-*/
-#define XML_TREE_ADOPT_STR_2(str) \
-    if (adoptStr && (str != NULL) && (sourceDoc != NULL) && \
-	(sourceDoc->dict != NULL) && \
-	xmlDictOwns(sourceDoc->dict, cur->content)) { \
-	if (destDoc->dict) \
-	    cur->content = (xmlChar *) \
-		xmlDictLookup(destDoc->dict, cur->content, -1); \
-	else \
-	    cur->content = xmlStrdup(BAD_CAST cur->content); \
-    }
-
-/*
 * xmlDOMWrapNSNormAddNsMapItem2:
 *
 * For internal use. Adds a ns-decl mapping.
@@ -8234,23 +7413,20 @@ static int
 xmlDOMWrapNSNormAddNsMapItem2(xmlNsPtr **list, int *size, int *number,
 			xmlNsPtr oldNs, xmlNsPtr newNs)
 {
-    if (*list == NULL) {
-	*list = (xmlNsPtr *) xmlMalloc(6 * sizeof(xmlNsPtr));
-	if (*list == NULL) {
-	    xmlTreeErrMemory("alloc ns map item");
-	    return(-1);
-	}
-	*size = 3;
-	*number = 0;
-    } else if ((*number) >= (*size)) {
-	*size *= 2;
-	*list = (xmlNsPtr *) xmlRealloc(*list,
-	    (*size) * 2 * sizeof(xmlNsPtr));
-	if (*list == NULL) {
-	    xmlTreeErrMemory("realloc ns map item");
-	    return(-1);
-	}
+    if (*number >= *size) {
+        xmlNsPtr *tmp;
+        int newSize;
+
+        newSize = xmlGrowCapacity(*size, 2 * sizeof(tmp[0]), 3, XML_MAX_ITEMS);
+        if (newSize < 0)
+            return(-1);
+        tmp = xmlRealloc(*list, newSize * 2 * sizeof(tmp[0]));
+        if (tmp == NULL)
+            return(-1);
+        *list = tmp;
+        *size = newSize;
     }
+
     (*list)[2 * (*number)] = oldNs;
     (*list)[2 * (*number) +1] = newNs;
     (*number)++;
@@ -8279,7 +7455,7 @@ xmlDOMWrapRemoveNode(xmlDOMWrapCtxtPtr ctxt, xmlDocPtr doc,
 		     xmlNodePtr node, int options ATTRIBUTE_UNUSED)
 {
     xmlNsPtr *list = NULL;
-    int sizeList, nbList, i, j;
+    int sizeList = 0, nbList = 0, ret = 0, i, j;
     xmlNsPtr ns;
 
     if ((node == NULL) || (doc == NULL) || (node->doc != doc))
@@ -8295,7 +7471,7 @@ xmlDOMWrapRemoveNode(xmlDOMWrapCtxtPtr ctxt, xmlDocPtr doc,
 	case XML_ENTITY_REF_NODE:
 	case XML_PI_NODE:
 	case XML_COMMENT_NODE:
-	    xmlUnlinkNode(node);
+	    xmlUnlinkNodeInternal(node);
 	    return (0);
 	case XML_ELEMENT_NODE:
 	case XML_ATTRIBUTE_NODE:
@@ -8303,7 +7479,7 @@ xmlDOMWrapRemoveNode(xmlDOMWrapCtxtPtr ctxt, xmlDocPtr doc,
 	default:
 	    return (1);
     }
-    xmlUnlinkNode(node);
+    xmlUnlinkNodeInternal(node);
     /*
     * Save out-of-scope ns-references in doc->oldNs.
     */
@@ -8315,7 +7491,7 @@ xmlDOMWrapRemoveNode(xmlDOMWrapCtxtPtr ctxt, xmlDocPtr doc,
 		    do {
 			if (xmlDOMWrapNSNormAddNsMapItem2(&list, &sizeList,
 			    &nbList, ns, ns) == -1)
-			    goto internal_error;
+			    ret = -1;
 			ns = ns->next;
 		    } while (ns != NULL);
 		}
@@ -8345,7 +7521,7 @@ xmlDOMWrapRemoveNode(xmlDOMWrapCtxtPtr ctxt, xmlDocPtr doc,
 			ns = xmlDOMWrapStoreNs(doc, node->ns->href,
 			    node->ns->prefix);
 			if (ns == NULL)
-			    goto internal_error;
+			    ret = -1;
 		    }
 		    if (ns != NULL) {
 			/*
@@ -8353,7 +7529,7 @@ xmlDOMWrapRemoveNode(xmlDOMWrapCtxtPtr ctxt, xmlDocPtr doc,
 			*/
 			if (xmlDOMWrapNSNormAddNsMapItem2(&list, &sizeList,
 			    &nbList, node->ns, ns) == -1)
-			    goto internal_error;
+			    ret = -1;
 		    }
 		    node->ns = ns;
 		}
@@ -8378,19 +7554,22 @@ next_sibling:
 	if (node->next != NULL)
 	    node = node->next;
 	else {
+            int type = node->type;
+
 	    node = node->parent;
-	    goto next_sibling;
+            if ((type == XML_ATTRIBUTE_NODE) &&
+                (node != NULL) &&
+                (node->children != NULL)) {
+                node = node->children;
+            } else {
+	        goto next_sibling;
+            }
 	}
     } while (node != NULL);
 
     if (list != NULL)
 	xmlFree(list);
-    return (0);
-
-internal_error:
-    if (list != NULL)
-	xmlFree(list);
-    return (-1);
+    return (ret);
 }
 
 /*
@@ -8488,8 +7667,7 @@ xmlSearchNsByNamespaceStrict(xmlDocPtr doc, xmlNodePtr node,
 		out = prev;
 		prev = cur;
 	    }
-	} else if ((cur->type == XML_ENTITY_NODE) ||
-            (cur->type == XML_ENTITY_DECL))
+	} else if (cur->type == XML_ENTITY_DECL)
 	    return (0);
 	cur = cur->parent;
     } while ((cur != NULL) && (cur->doc != (xmlDocPtr) cur));
@@ -8551,8 +7729,7 @@ xmlSearchNsByPrefixStrict(xmlDocPtr doc, xmlNodePtr node,
 		    ns = ns->next;
 		} while (ns != NULL);
 	    }
-	} else if ((cur->type == XML_ENTITY_NODE) ||
-            (cur->type == XML_ENTITY_DECL))
+	} else if (cur->type == XML_ENTITY_DECL)
 	    return (0);
 	cur = cur->parent;
     } while ((cur != NULL) && (cur->doc != (xmlDocPtr) cur));
@@ -8736,7 +7913,6 @@ xmlDOMWrapNSNormAcquireNormalizedNs(xmlDocPtr doc,
 	*/
 	if (xmlDOMWrapNsMapAddItem(nsMap, -1, ns,
 		tmpns, XML_TREE_NSMAP_DOC) == NULL) {
-	    xmlFreeNs(tmpns);
 	    return (-1);
 	}
 	*retNs = tmpns;
@@ -8766,7 +7942,6 @@ xmlDOMWrapNSNormAcquireNormalizedNs(xmlDocPtr doc,
 	    }
 	}
 	if (xmlDOMWrapNsMapAddItem(nsMap, -1, ns, tmpns, depth) == NULL) {
-	    xmlFreeNs(tmpns);
 	    return (-1);
 	}
 	*retNs = tmpns;
@@ -8811,7 +7986,7 @@ xmlDOMWrapReconcileNamespaces(xmlDOMWrapCtxtPtr ctxt ATTRIBUTE_UNUSED,
     int optRemoveRedundantNS =
 	((xmlDOMReconcileNSOptions) options & XML_DOM_RECONNS_REMOVEREDUND) ? 1 : 0;
     xmlNsPtr *listRedund = NULL;
-    int sizeRedund = 0, nbRedund = 0, ret, i, j;
+    int sizeRedund = 0, nbRedund = 0, ret = 0, i, j;
 
     if ((elem == NULL) || (elem->doc == NULL) ||
 	(elem->type != XML_ELEMENT_NODE))
@@ -8840,7 +8015,7 @@ xmlDOMWrapReconcileNamespaces(xmlDOMWrapCtxtPtr ctxt ATTRIBUTE_UNUSED,
 				*/
 				if (xmlDOMWrapNSNormGatherInScopeNs(&nsMap,
 				    elem->parent) == -1)
-				    goto internal_error;
+				    ret = -1;
 			    }
 			    parnsdone = 1;
 			}
@@ -8862,16 +8037,18 @@ xmlDOMWrapReconcileNamespaces(xmlDOMWrapCtxtPtr ctxt ATTRIBUTE_UNUSED,
 				    * Add it to the list of redundant ns-decls.
 				    */
 				    if (xmlDOMWrapNSNormAddNsMapItem2(&listRedund,
-					&sizeRedund, &nbRedund, ns, mi->newNs) == -1)
-					goto internal_error;
-				    /*
-				    * Remove the ns-decl from the element-node.
-				    */
-				    if (prevns)
-					prevns->next = ns->next;
-				    else
-					cur->nsDef = ns->next;
-				    goto next_ns_decl;
+					&sizeRedund, &nbRedund, ns, mi->newNs) == -1) {
+					ret = -1;
+                                    } else {
+                                        /*
+                                        * Remove the ns-decl from the element-node.
+                                        */
+                                        if (prevns)
+                                            prevns->next = ns->next;
+                                        else
+                                            cur->nsDef = ns->next;
+                                        goto next_ns_decl;
+                                    }
 				}
 			    }
 			}
@@ -8901,7 +8078,7 @@ xmlDOMWrapReconcileNamespaces(xmlDOMWrapCtxtPtr ctxt ATTRIBUTE_UNUSED,
 			*/
 			if (xmlDOMWrapNsMapAddItem(&nsMap, -1, ns, ns,
 			    depth) == NULL)
-			    goto internal_error;
+			    ret = -1;
 
 			prevns = ns;
 next_ns_decl:
@@ -8921,7 +8098,7 @@ next_ns_decl:
 			((xmlNodePtr) elem->parent->doc != elem->parent)) {
 			if (xmlDOMWrapNSNormGatherInScopeNs(&nsMap,
 				elem->parent) == -1)
-			    goto internal_error;
+			    ret = -1;
 		    }
 		    parnsdone = 1;
 		}
@@ -8960,7 +8137,7 @@ next_ns_decl:
 			&nsMap, depth,
 			ancestorsOnly,
 			(cur->type == XML_ATTRIBUTE_NODE) ? 1 : 0) == -1)
-		    goto internal_error;
+		    ret = -1;
 		cur->ns = ns;
 
 ns_end:
@@ -9020,11 +8197,6 @@ next_sibling:
 	}
     } while (cur != NULL);
 
-    ret = 0;
-    goto exit;
-internal_error:
-    ret = -1;
-exit:
     if (listRedund) {
 	for (i = 0, j = 0; i < nbRedund; i++, j += 2) {
 	    xmlFreeNs(listRedund[j]);
@@ -9060,7 +8232,7 @@ exit:
 */
 static int
 xmlDOMWrapAdoptBranch(xmlDOMWrapCtxtPtr ctxt,
-		      xmlDocPtr sourceDoc,
+		      xmlDocPtr sourceDoc ATTRIBUTE_UNUSED,
 		      xmlNodePtr node,
 		      xmlDocPtr destDoc,
 		      xmlNodePtr destParent,
@@ -9071,20 +8243,11 @@ xmlDOMWrapAdoptBranch(xmlDOMWrapCtxtPtr ctxt,
     xmlNsMapPtr nsMap = NULL;
     xmlNsMapItemPtr mi;
     xmlNsPtr ns = NULL;
-    int depth = -1, adoptStr = 1;
+    int depth = -1;
     /* gather @parent's ns-decls. */
     int parnsdone;
     /* @ancestorsOnly should be set per option. */
     int ancestorsOnly = 0;
-
-    /*
-    * Optimize string adoption for equal or none dicts.
-    */
-    if ((sourceDoc != NULL) &&
-	(sourceDoc->dict == destDoc->dict))
-	adoptStr = 0;
-    else
-	adoptStr = 1;
 
     /*
     * Get the ns-map from the context if available.
@@ -9105,40 +8268,21 @@ xmlDOMWrapAdoptBranch(xmlDOMWrapCtxtPtr ctxt,
 	parnsdone = 0;
 
     cur = node;
-    if ((cur != NULL) && (cur->type == XML_NAMESPACE_DECL))
-	goto internal_error;
 
     while (cur != NULL) {
-	/*
-	* Paranoid source-doc sanity check.
-	*/
-	if (cur->doc != sourceDoc) {
-	    /*
-	    * We'll assume XIncluded nodes if the doc differs.
-	    * TODO: Do we need to reconciliate XIncluded nodes?
-	    * This here skips XIncluded nodes and tries to handle
-	    * broken sequences.
-	    */
-	    if (cur->next == NULL)
-		goto leave_node;
-	    do {
-		cur = cur->next;
-		if ((cur->type == XML_XINCLUDE_END) ||
-		    (cur->doc == node->doc))
-		    break;
-	    } while (cur->next != NULL);
+        if (cur->doc != destDoc) {
+            if (xmlNodeSetDoc(cur, destDoc) < 0)
+                ret = -1;
+        }
 
-	    if (cur->doc != node->doc)
-		goto leave_node;
-	}
-	cur->doc = destDoc;
 	switch (cur->type) {
 	    case XML_XINCLUDE_START:
 	    case XML_XINCLUDE_END:
 		/*
 		* TODO
 		*/
-		return (-1);
+		ret = -1;
+                goto leave_node;
 	    case XML_ELEMENT_NODE:
 		curElem = cur;
 		depth++;
@@ -9159,14 +8303,12 @@ xmlDOMWrapAdoptBranch(xmlDOMWrapCtxtPtr ctxt,
 			*/
 			if (xmlDOMWrapNSNormGatherInScopeNs(&nsMap,
 			    destParent) == -1)
-			    goto internal_error;
+			    ret = -1;
 			parnsdone = 1;
 		    }
 		    for (ns = cur->nsDef; ns != NULL; ns = ns->next) {
 			/*
 			* NOTE: ns->prefix and ns->href are never in the dict.
-			* XML_TREE_ADOPT_STR(ns->prefix)
-			* XML_TREE_ADOPT_STR(ns->href)
 			*/
 			/*
 			* Does it shadow any ns-decl?
@@ -9188,7 +8330,7 @@ xmlDOMWrapAdoptBranch(xmlDOMWrapCtxtPtr ctxt,
 			*/
 			if (xmlDOMWrapNsMapAddItem(&nsMap, -1,
 			    ns, ns, depth) == NULL)
-			    goto internal_error;
+			    ret = -1;
 		    }
 		}
                 /* Falls through. */
@@ -9200,7 +8342,7 @@ xmlDOMWrapAdoptBranch(xmlDOMWrapCtxtPtr ctxt,
 		if (! parnsdone) {
 		    if (xmlDOMWrapNSNormGatherInScopeNs(&nsMap,
 			destParent) == -1)
-			goto internal_error;
+			ret = -1;
 		    parnsdone = 1;
 		}
 		/*
@@ -9234,7 +8376,7 @@ xmlDOMWrapAdoptBranch(xmlDOMWrapCtxtPtr ctxt,
 		    */
 		    if (xmlDOMWrapNsMapAddItem(&nsMap, -1,
 			    cur->ns, ns, XML_TREE_NSMAP_CUSTOM) == NULL)
-			goto internal_error;
+			ret = -1;
 		    cur->ns = ns;
 		} else {
 		    /*
@@ -9248,15 +8390,11 @@ xmlDOMWrapAdoptBranch(xmlDOMWrapCtxtPtr ctxt,
 			ancestorsOnly,
 			/* ns-decls must be prefixed for attributes. */
 			(cur->type == XML_ATTRIBUTE_NODE) ? 1 : 0) == -1)
-			goto internal_error;
+			ret = -1;
 		    cur->ns = ns;
 		}
+
 ns_end:
-		/*
-		* Further node properties.
-		* TODO: Is this all?
-		*/
-		XML_TREE_ADOPT_STR(cur->name)
 		if (cur->type == XML_ELEMENT_NODE) {
 		    cur->psvi = NULL;
 		    cur->line = 0;
@@ -9271,55 +8409,16 @@ ns_end:
 			cur = (xmlNodePtr) cur->properties;
 			continue;
 		    }
-		} else {
-		    /*
-		    * Attributes.
-		    */
-		    if ((sourceDoc != NULL) &&
-			(((xmlAttrPtr) cur)->atype == XML_ATTRIBUTE_ID))
-		    {
-			xmlRemoveID(sourceDoc, (xmlAttrPtr) cur);
-		    }
-		    ((xmlAttrPtr) cur)->atype = 0;
-		    ((xmlAttrPtr) cur)->psvi = NULL;
 		}
 		break;
 	    case XML_TEXT_NODE:
 	    case XML_CDATA_SECTION_NODE:
-		/*
-		* This puts the content in the dest dict, only if
-		* it was previously in the source dict.
-		*/
-		XML_TREE_ADOPT_STR_2(cur->content)
-		goto leave_node;
-	    case XML_ENTITY_REF_NODE:
-		/*
-		* Remove reference to the entity-node.
-		*/
-		cur->content = NULL;
-		cur->children = NULL;
-		cur->last = NULL;
-		if ((destDoc->intSubset) || (destDoc->extSubset)) {
-		    xmlEntityPtr ent;
-		    /*
-		    * Assign new entity-node if available.
-		    */
-		    ent = xmlGetDocEntity(destDoc, cur->name);
-		    if (ent != NULL) {
-			cur->content = ent->content;
-			cur->children = (xmlNodePtr) ent;
-			cur->last = (xmlNodePtr) ent;
-		    }
-		}
-		goto leave_node;
 	    case XML_PI_NODE:
-		XML_TREE_ADOPT_STR(cur->name)
-		XML_TREE_ADOPT_STR_2(cur->content)
-		break;
 	    case XML_COMMENT_NODE:
-		break;
+	    case XML_ENTITY_REF_NODE:
+		goto leave_node;
 	    default:
-		goto internal_error;
+		ret = -1;
 	}
 	/*
 	* Walk the tree.
@@ -9370,12 +8469,6 @@ leave_node:
 	}
     }
 
-    goto exit;
-
-internal_error:
-    ret = -1;
-
-exit:
     /*
     * Cleanup.
     */
@@ -9437,7 +8530,7 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 		      int options ATTRIBUTE_UNUSED)
 {
     int ret = 0;
-    xmlNodePtr cur, curElem = NULL;
+    xmlNodePtr cur, cloneElem = NULL;
     xmlNsMapPtr nsMap = NULL;
     xmlNsMapItemPtr mi;
     xmlNsPtr ns;
@@ -9455,7 +8548,8 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
     xmlNsPtr cloneNs = NULL, *cloneNsDefSlot = NULL;
     xmlDictPtr dict; /* The destination dict */
 
-    if ((node == NULL) || (resNode == NULL) || (destDoc == NULL))
+    if ((node == NULL) || (resNode == NULL) || (destDoc == NULL) ||
+	((destParent != NULL) && (destParent->doc != destDoc)))
 	return(-1);
     /*
     * TODO: Initially we support only element-nodes.
@@ -9487,9 +8581,6 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
     *resNode = NULL;
 
     cur = node;
-    if ((cur != NULL) && (cur->type == XML_NAMESPACE_DECL))
-        return(-1);
-
     while (cur != NULL) {
 	if (cur->doc != sourceDoc) {
 	    /*
@@ -9517,15 +8608,12 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 	    case XML_PI_NODE:
 	    case XML_DOCUMENT_FRAG_NODE:
 	    case XML_ENTITY_REF_NODE:
-	    case XML_ENTITY_NODE:
 		/*
 		* Nodes of xmlNode structure.
 		*/
 		clone = (xmlNodePtr) xmlMalloc(sizeof(xmlNode));
-		if (clone == NULL) {
-		    xmlTreeErrMemory("xmlDOMWrapCloneNode(): allocating a node");
+		if (clone == NULL)
 		    goto internal_error;
-		}
 		memset(clone, 0, sizeof(xmlNode));
 		/*
 		* Set hierarchical links.
@@ -9537,6 +8625,7 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 			clone->prev = prevClone;
 		    } else
 			parentClone->children = clone;
+                    parentClone->last = clone;
 		} else
 		    resultClone = clone;
 
@@ -9545,11 +8634,9 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 		/*
 		* Attributes (xmlAttr).
 		*/
-		clone = (xmlNodePtr) xmlMalloc(sizeof(xmlAttr));
-		if (clone == NULL) {
-		    xmlTreeErrMemory("xmlDOMWrapCloneNode(): allocating an attr-node");
+		clone = xmlMalloc(sizeof(xmlAttr));
+		if (clone == NULL)
 		    goto internal_error;
-		}
 		memset(clone, 0, sizeof(xmlAttr));
 		/*
 		* Set hierarchical links.
@@ -9590,7 +8677,12 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 	else if (cur->name == xmlStringComment)
 	    clone->name = xmlStringComment;
 	else if (cur->name != NULL) {
-	    DICT_CONST_COPY(cur->name, clone->name);
+            if (dict != NULL)
+                clone->name = xmlDictLookup(dict, cur->name, -1);
+            else
+                clone->name = xmlStrdup(cur->name);
+            if (clone->name == NULL)
+                goto internal_error;
 	}
 
 	switch (cur->type) {
@@ -9601,7 +8693,7 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 		*/
 		return (-1);
 	    case XML_ELEMENT_NODE:
-		curElem = cur;
+		cloneElem = clone;
 		depth++;
 		/*
 		* Namespace declarations.
@@ -9627,18 +8719,25 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 			* Create a new xmlNs.
 			*/
 			cloneNs = (xmlNsPtr) xmlMalloc(sizeof(xmlNs));
-			if (cloneNs == NULL) {
-			    xmlTreeErrMemory("xmlDOMWrapCloneNode(): "
-				"allocating namespace");
-			    return(-1);
-			}
+			if (cloneNs == NULL)
+			    goto internal_error;
 			memset(cloneNs, 0, sizeof(xmlNs));
 			cloneNs->type = XML_LOCAL_NAMESPACE;
 
-			if (ns->href != NULL)
+			if (ns->href != NULL) {
 			    cloneNs->href = xmlStrdup(ns->href);
-			if (ns->prefix != NULL)
+                            if (cloneNs->href == NULL) {
+                                xmlFreeNs(cloneNs);
+                                goto internal_error;
+                            }
+                        }
+			if (ns->prefix != NULL) {
 			    cloneNs->prefix = xmlStrdup(ns->prefix);
+                            if (cloneNs->prefix == NULL) {
+                                xmlFreeNs(cloneNs);
+                                goto internal_error;
+                            }
+                        }
 
 			*cloneNsDefSlot = cloneNs;
 			cloneNsDefSlot = &(cloneNs->next);
@@ -9684,15 +8783,18 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 		/* IDs will be processed further down. */
 		/* cur->ns will be processed further down. */
 		break;
+	    case XML_PI_NODE:
+	    case XML_COMMENT_NODE:
 	    case XML_TEXT_NODE:
 	    case XML_CDATA_SECTION_NODE:
 		/*
 		* Note that this will also cover the values of attributes.
 		*/
-		DICT_COPY(cur->content, clone->content);
-		goto leave_node;
-	    case XML_ENTITY_NODE:
-		/* TODO: What to do here? */
+                if (cur->content != NULL) {
+                    clone->content = xmlStrdup(cur->content);
+                    if (clone->content == NULL)
+                        goto internal_error;
+                }
 		goto leave_node;
 	    case XML_ENTITY_REF_NODE:
 		if (sourceDoc != destDoc) {
@@ -9717,12 +8819,6 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 		    clone->children = cur->children;
 		    clone->last = cur->last;
 		}
-		goto leave_node;
-	    case XML_PI_NODE:
-		DICT_COPY(cur->content, clone->content);
-		goto leave_node;
-	    case XML_COMMENT_NODE:
-		DICT_COPY(cur->content, clone->content);
 		goto leave_node;
 	    default:
 		goto internal_error;
@@ -9783,8 +8879,8 @@ xmlDOMWrapCloneNode(xmlDOMWrapCtxtPtr ctxt,
 	    * Acquire a normalized ns-decl and add it to the map.
 	    */
 	    if (xmlDOMWrapNSNormAcquireNormalizedNs(destDoc,
-		/* ns-decls on curElem or on destDoc->oldNs */
-		destParent ? curElem : NULL,
+		/* ns-decls on cloneElem or on destDoc->oldNs */
+		destParent ? cloneElem : NULL,
 		cur->ns, &ns,
 		&nsMap, depth,
 		/* if we need to search only in the ancestor-axis */
@@ -9805,19 +8901,22 @@ end_ns_reference:
 	if ((clone->type == XML_ATTRIBUTE_NODE) &&
 	    (clone->parent != NULL))
 	{
-	    if (xmlIsID(destDoc, clone->parent, (xmlAttrPtr) clone)) {
+            int res;
 
+	    res = xmlIsID(destDoc, clone->parent, (xmlAttrPtr) clone);
+            if (res < 0)
+                goto internal_error;
+            if (res == 1) {
 		xmlChar *idVal;
 
-		idVal = xmlNodeListGetString(cur->doc, cur->children, 1);
-		if (idVal != NULL) {
-		    if (xmlAddID(NULL, destDoc, idVal, (xmlAttrPtr) cur) == NULL) {
-			/* TODO: error message. */
-			xmlFree(idVal);
-			goto internal_error;
-		    }
-		    xmlFree(idVal);
-		}
+		idVal = xmlNodeGetContent(cur);
+                if (idVal == NULL)
+                    goto internal_error;
+                if (xmlAddIDSafe((xmlAttrPtr) cur, idVal) < 0) {
+                    xmlFree(idVal);
+                    goto internal_error;
+                }
+                xmlFree(idVal);
 	    }
 	}
 	/*
@@ -9882,11 +8981,6 @@ leave_node:
 	    prevClone = clone;
 	    cur = cur->next;
 	} else if (cur->type != XML_ATTRIBUTE_NODE) {
-	    /*
-	    * Set clone->last.
-	    */
-	    if (clone->parent != NULL)
-		clone->parent->last = clone;
 	    clone = clone->parent;
 	    if (clone != NULL)
 		parentClone = clone->parent;
@@ -9955,19 +9049,22 @@ exit:
 */
 static int
 xmlDOMWrapAdoptAttr(xmlDOMWrapCtxtPtr ctxt,
-		    xmlDocPtr sourceDoc,
+		    xmlDocPtr sourceDoc ATTRIBUTE_UNUSED,
 		    xmlAttrPtr attr,
 		    xmlDocPtr destDoc,
 		    xmlNodePtr destParent,
 		    int options ATTRIBUTE_UNUSED)
 {
-    xmlNodePtr cur;
-    int adoptStr = 1;
+    int ret = 0;
 
     if ((attr == NULL) || (destDoc == NULL))
 	return (-1);
 
-    attr->doc = destDoc;
+    if (attr->doc != destDoc) {
+        if (xmlSetTreeDoc((xmlNodePtr) attr, destDoc) < 0)
+            ret = -1;
+    }
+
     if (attr->ns != NULL) {
 	xmlNsPtr ns = NULL;
 
@@ -9988,75 +9085,18 @@ xmlDOMWrapAdoptAttr(xmlDOMWrapCtxtPtr ctxt,
 	    */
 	    if (xmlSearchNsByNamespaceStrict(destDoc, destParent, attr->ns->href,
 		&ns, 1) == -1)
-		goto internal_error;
+		ret = -1;
 	    if (ns == NULL) {
 		ns = xmlDOMWrapNSNormDeclareNsForced(destDoc, destParent,
 		    attr->ns->href, attr->ns->prefix, 1);
 	    }
 	}
 	if (ns == NULL)
-	    goto internal_error;
+	    ret = -1;
 	attr->ns = ns;
     }
 
-    XML_TREE_ADOPT_STR(attr->name);
-    attr->atype = 0;
-    attr->psvi = NULL;
-    /*
-    * Walk content.
-    */
-    if (attr->children == NULL)
-	return (0);
-    cur = attr->children;
-    if ((cur != NULL) && (cur->type == XML_NAMESPACE_DECL))
-        goto internal_error;
-    while (cur != NULL) {
-	cur->doc = destDoc;
-	switch (cur->type) {
-	    case XML_TEXT_NODE:
-	    case XML_CDATA_SECTION_NODE:
-		XML_TREE_ADOPT_STR_2(cur->content)
-		break;
-	    case XML_ENTITY_REF_NODE:
-		/*
-		* Remove reference to the entity-node.
-		*/
-		cur->content = NULL;
-		cur->children = NULL;
-		cur->last = NULL;
-		if ((destDoc->intSubset) || (destDoc->extSubset)) {
-		    xmlEntityPtr ent;
-		    /*
-		    * Assign new entity-node if available.
-		    */
-		    ent = xmlGetDocEntity(destDoc, cur->name);
-		    if (ent != NULL) {
-			cur->content = ent->content;
-			cur->children = (xmlNodePtr) ent;
-			cur->last = (xmlNodePtr) ent;
-		    }
-		}
-		break;
-	    default:
-		break;
-	}
-	if (cur->children != NULL) {
-	    cur = cur->children;
-	    continue;
-	}
-next_sibling:
-	if (cur == (xmlNodePtr) attr)
-	    break;
-	if (cur->next != NULL)
-	    cur = cur->next;
-	else {
-	    cur = cur->parent;
-	    goto next_sibling;
-	}
-    }
-    return (0);
-internal_error:
-    return (-1);
+    return (ret);
 }
 
 /*
@@ -10094,6 +9134,8 @@ xmlDOMWrapAdoptNode(xmlDOMWrapCtxtPtr ctxt,
 		    xmlNodePtr destParent,
 		    int options)
 {
+    int ret = 0;
+
     if ((node == NULL) || (node->type == XML_NAMESPACE_DECL) ||
         (destDoc == NULL) ||
 	((destParent != NULL) && (destParent->doc != destDoc)))
@@ -10101,17 +9143,18 @@ xmlDOMWrapAdoptNode(xmlDOMWrapCtxtPtr ctxt,
     /*
     * Check node->doc sanity.
     */
-    if ((node->doc != NULL) && (sourceDoc != NULL) &&
-	(node->doc != sourceDoc)) {
-	/*
-	* Might be an XIncluded node.
-	*/
+    if (sourceDoc == NULL) {
+        sourceDoc = node->doc;
+    } else if (node->doc != sourceDoc) {
 	return (-1);
     }
-    if (sourceDoc == NULL)
-	sourceDoc = node->doc;
+
+    /*
+     * TODO: Shouldn't this be allowed?
+     */
     if (sourceDoc == destDoc)
 	return (-1);
+
     switch (node->type) {
 	case XML_ELEMENT_NODE:
 	case XML_ATTRIBUTE_NODE:
@@ -10131,7 +9174,7 @@ xmlDOMWrapAdoptNode(xmlDOMWrapCtxtPtr ctxt,
     * Unlink only if @node was not already added to @destParent.
     */
     if ((node->parent != NULL) && (destParent != node->parent))
-	xmlUnlinkNode(node);
+	xmlUnlinkNodeInternal(node);
 
     if (node->type == XML_ELEMENT_NODE) {
 	    return (xmlDOMWrapAdoptBranch(ctxt, sourceDoc, node,
@@ -10140,53 +9183,102 @@ xmlDOMWrapAdoptNode(xmlDOMWrapCtxtPtr ctxt,
 	    return (xmlDOMWrapAdoptAttr(ctxt, sourceDoc,
 		(xmlAttrPtr) node, destDoc, destParent, options));
     } else {
-	xmlNodePtr cur = node;
-	int adoptStr = 1;
-
-	cur->doc = destDoc;
-	/*
-	* Optimize string adoption.
-	*/
-	if ((sourceDoc != NULL) &&
-	    (sourceDoc->dict == destDoc->dict))
-		adoptStr = 0;
-	switch (node->type) {
-	    case XML_TEXT_NODE:
-	    case XML_CDATA_SECTION_NODE:
-		XML_TREE_ADOPT_STR_2(node->content)
-		    break;
-	    case XML_ENTITY_REF_NODE:
-		/*
-		* Remove reference to the entity-node.
-		*/
-		node->content = NULL;
-		node->children = NULL;
-		node->last = NULL;
-		if ((destDoc->intSubset) || (destDoc->extSubset)) {
-		    xmlEntityPtr ent;
-		    /*
-		    * Assign new entity-node if available.
-		    */
-		    ent = xmlGetDocEntity(destDoc, node->name);
-		    if (ent != NULL) {
-			node->content = ent->content;
-			node->children = (xmlNodePtr) ent;
-			node->last = (xmlNodePtr) ent;
-		    }
-		}
-		XML_TREE_ADOPT_STR(node->name)
-		break;
-	    case XML_PI_NODE: {
-		XML_TREE_ADOPT_STR(node->name)
-		XML_TREE_ADOPT_STR_2(node->content)
-		break;
-	    }
-	    default:
-		break;
-	}
+        if (node->doc != destDoc) {
+            if (xmlNodeSetDoc(node, destDoc) < 0)
+                ret = -1;
+        }
     }
-    return (0);
+    return (ret);
 }
 
-#define bottom_tree
-#include "elfgcchack.h"
+/************************************************************************
+ *									*
+ *			XHTML detection					*
+ *									*
+ ************************************************************************/
+
+#define XHTML_STRICT_PUBLIC_ID BAD_CAST \
+   "-//W3C//DTD XHTML 1.0 Strict//EN"
+#define XHTML_STRICT_SYSTEM_ID BAD_CAST \
+   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"
+#define XHTML_FRAME_PUBLIC_ID BAD_CAST \
+   "-//W3C//DTD XHTML 1.0 Frameset//EN"
+#define XHTML_FRAME_SYSTEM_ID BAD_CAST \
+   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd"
+#define XHTML_TRANS_PUBLIC_ID BAD_CAST \
+   "-//W3C//DTD XHTML 1.0 Transitional//EN"
+#define XHTML_TRANS_SYSTEM_ID BAD_CAST \
+   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"
+
+/**
+ * xmlIsXHTML:
+ * @systemID:  the system identifier
+ * @publicID:  the public identifier
+ *
+ * Try to find if the document correspond to an XHTML DTD
+ *
+ * Returns 1 if true, 0 if not and -1 in case of error
+ */
+int
+xmlIsXHTML(const xmlChar *systemID, const xmlChar *publicID) {
+    if ((systemID == NULL) && (publicID == NULL))
+	return(-1);
+    if (publicID != NULL) {
+	if (xmlStrEqual(publicID, XHTML_STRICT_PUBLIC_ID)) return(1);
+	if (xmlStrEqual(publicID, XHTML_FRAME_PUBLIC_ID)) return(1);
+	if (xmlStrEqual(publicID, XHTML_TRANS_PUBLIC_ID)) return(1);
+    }
+    if (systemID != NULL) {
+	if (xmlStrEqual(systemID, XHTML_STRICT_SYSTEM_ID)) return(1);
+	if (xmlStrEqual(systemID, XHTML_FRAME_SYSTEM_ID)) return(1);
+	if (xmlStrEqual(systemID, XHTML_TRANS_SYSTEM_ID)) return(1);
+    }
+    return(0);
+}
+
+/************************************************************************
+ *									*
+ *			Node callbacks					*
+ *									*
+ ************************************************************************/
+
+/**
+ * xmlRegisterNodeDefault:
+ * @func: function pointer to the new RegisterNodeFunc
+ *
+ * DEPRECATED: don't use
+ *
+ * Registers a callback for node creation
+ *
+ * Returns the old value of the registration function
+ */
+xmlRegisterNodeFunc
+xmlRegisterNodeDefault(xmlRegisterNodeFunc func)
+{
+    xmlRegisterNodeFunc old = xmlRegisterNodeDefaultValue;
+
+    xmlRegisterCallbacks = 1;
+    xmlRegisterNodeDefaultValue = func;
+    return(old);
+}
+
+/**
+ * xmlDeregisterNodeDefault:
+ * @func: function pointer to the new DeregisterNodeFunc
+ *
+ * DEPRECATED: don't use
+ *
+ * Registers a callback for node destruction
+ *
+ * Returns the previous value of the deregistration function
+ */
+xmlDeregisterNodeFunc
+xmlDeregisterNodeDefault(xmlDeregisterNodeFunc func)
+{
+    xmlDeregisterNodeFunc old = xmlDeregisterNodeDefaultValue;
+
+    xmlRegisterCallbacks = 1;
+    xmlDeregisterNodeDefaultValue = func;
+    return(old);
+}
+

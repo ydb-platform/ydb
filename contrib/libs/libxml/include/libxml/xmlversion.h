@@ -10,47 +10,33 @@
 #ifndef __XML_VERSION_H__
 #define __XML_VERSION_H__
 
-#include "xmlexports.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/*
- * use those to be sure nothing nasty will happen if
- * your library and includes mismatch
- */
-#ifndef LIBXML2_COMPILING_MSCCDEF
-XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
-#endif /* LIBXML2_COMPILING_MSCCDEF */
-
 /**
  * LIBXML_DOTTED_VERSION:
  *
  * the version string like "1.2.3"
  */
-#define LIBXML_DOTTED_VERSION "2.9.13"
+#define LIBXML_DOTTED_VERSION "2.14.4"
 
 /**
  * LIBXML_VERSION:
  *
  * the version number: 1.2.3 value is 10203
  */
-#define LIBXML_VERSION 20913
+#define LIBXML_VERSION 21404
 
 /**
  * LIBXML_VERSION_STRING:
  *
  * the version number string, 1.2.3 value is "10203"
  */
-#define LIBXML_VERSION_STRING "20913"
+#define LIBXML_VERSION_STRING "21404"
 
 /**
  * LIBXML_VERSION_EXTRA:
  *
  * extra version information, used to show a git commit description
  */
-#define LIBXML_VERSION_EXTRA ""
+#define LIBXML_VERSION_EXTRA "-GITv2.14.4"
 
 /**
  * LIBXML_TEST_VERSION:
@@ -58,32 +44,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  * Macro to check that the libxml version in use is compatible with
  * the version the software has been compiled against
  */
-#define LIBXML_TEST_VERSION xmlCheckVersion(20913);
-
-#ifndef VMS
-#if 0
-/**
- * WITH_TRIO:
- *
- * defined if the trio support need to be configured in
- */
-#define WITH_TRIO
-#else
-/**
- * WITHOUT_TRIO:
- *
- * defined if the trio support should not be configured in
- */
-#define WITHOUT_TRIO
-#endif
-#else /* VMS */
-/**
- * WITH_TRIO:
- *
- * defined if the trio support need to be configured in
- */
-#define WITH_TRIO 1
-#endif /* VMS */
+#define LIBXML_TEST_VERSION xmlCheckVersion(21404);
 
 /**
  * LIBXML_THREAD_ENABLED:
@@ -106,11 +67,9 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
 /**
  * LIBXML_TREE_ENABLED:
  *
- * Whether the DOM like tree manipulation API support is configured in
+ * Always enabled since 2.14.0
  */
-#if 1
 #define LIBXML_TREE_ENABLED
-#endif
 
 /**
  * LIBXML_OUTPUT_ENABLED:
@@ -167,15 +126,6 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
 #endif
 
 /**
- * LIBXML_FTP_ENABLED:
- *
- * Whether the FTP support is configured in
- */
-#if 0
-#define LIBXML_FTP_ENABLED
-#endif
-
-/**
  * LIBXML_HTTP_ENABLED:
  *
  * Whether the HTTP support is configured in
@@ -205,11 +155,9 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
 /**
  * LIBXML_LEGACY_ENABLED:
  *
- * Whether the deprecated APIs are compiled in for compatibility
+ * Removed in 2.14
  */
-#if 1
-#define LIBXML_LEGACY_ENABLED
-#endif
+#undef LIBXML_LEGACY_ENABLED
 
 /**
  * LIBXML_C14N_ENABLED:
@@ -227,15 +175,6 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  */
 #if 1
 #define LIBXML_CATALOG_ENABLED
-#endif
-
-/**
- * LIBXML_DOCB_ENABLED:
- *
- * Whether the SGML Docbook support is configured in
- */
-#if 1
-#define LIBXML_DOCB_ENABLED
 #endif
 
 /**
@@ -302,31 +241,11 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
 #endif
 
 /**
- * DEBUG_MEMORY_LOCATION:
- *
- * Whether the memory debugging is configured in
- */
-#if 0
-#define DEBUG_MEMORY_LOCATION
-#endif
-
-/**
- * LIBXML_DEBUG_RUNTIME:
- *
- * Whether the runtime debugging is configured in
- */
-#if 0
-#define LIBXML_DEBUG_RUNTIME
-#endif
-
-/**
  * LIBXML_UNICODE_ENABLED:
  *
- * Whether the Unicode related interfaces are compiled in
+ * Removed in 2.14
  */
-#if 1
-#define LIBXML_UNICODE_ENABLED
-#endif
+#undef LIBXML_UNICODE_ENABLED
 
 /**
  * LIBXML_REGEXP_ENABLED:
@@ -347,14 +266,12 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
 #endif
 
 /**
- * LIBXML_EXPR_ENABLED:
+ * LIBXML_RELAXNG_ENABLED:
  *
- * Whether the formal expressions interfaces are compiled in
- *
- * This code is unused and disabled unconditionally for now.
+ * Whether the RelaxNG validation interfaces are compiled in
  */
-#if 0
-#define LIBXML_EXPR_ENABLED
+#if 1
+#define LIBXML_RELAXNG_ENABLED
 #endif
 
 /**
@@ -395,7 +312,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  *
  * Whether the Zlib support is compiled in
  */
-#if 1
+#if 0
 #define LIBXML_ZLIB_ENABLED
 #endif
 
@@ -408,78 +325,8 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
 #define LIBXML_LZMA_ENABLED
 #endif
 
-#ifdef __GNUC__
+#include <libxml/xmlexports.h>
 
-/**
- * ATTRIBUTE_UNUSED:
- *
- * Macro used to signal to GCC unused function parameters
- */
-
-#ifndef ATTRIBUTE_UNUSED
-# if ((__GNUC__ > 2) || ((__GNUC__ == 2) && (__GNUC_MINOR__ >= 7)))
-#  define ATTRIBUTE_UNUSED __attribute__((unused))
-# else
-#  define ATTRIBUTE_UNUSED
-# endif
-#endif
-
-/**
- * LIBXML_ATTR_ALLOC_SIZE:
- *
- * Macro used to indicate to GCC this is an allocator function
- */
-
-#ifndef LIBXML_ATTR_ALLOC_SIZE
-# if (!defined(__clang__) && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 3))))
-#  define LIBXML_ATTR_ALLOC_SIZE(x) __attribute__((alloc_size(x)))
-# else
-#  define LIBXML_ATTR_ALLOC_SIZE(x)
-# endif
-#else
-# define LIBXML_ATTR_ALLOC_SIZE(x)
-#endif
-
-/**
- * LIBXML_ATTR_FORMAT:
- *
- * Macro used to indicate to GCC the parameter are printf like
- */
-
-#ifndef LIBXML_ATTR_FORMAT
-# if ((__GNUC__ > 3) || ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 3)))
-#  define LIBXML_ATTR_FORMAT(fmt,args) __attribute__((__format__(__printf__,fmt,args)))
-# else
-#  define LIBXML_ATTR_FORMAT(fmt,args)
-# endif
-#else
-# define LIBXML_ATTR_FORMAT(fmt,args)
-#endif
-
-#else /* ! __GNUC__ */
-/**
- * ATTRIBUTE_UNUSED:
- *
- * Macro used to signal to GCC unused function parameters
- */
-#define ATTRIBUTE_UNUSED
-/**
- * LIBXML_ATTR_ALLOC_SIZE:
- *
- * Macro used to indicate to GCC this is an allocator function
- */
-#define LIBXML_ATTR_ALLOC_SIZE(x)
-/**
- * LIBXML_ATTR_FORMAT:
- *
- * Macro used to indicate to GCC the parameter are printf like
- */
-#define LIBXML_ATTR_FORMAT(fmt,args)
-#endif /* __GNUC__ */
-
-#ifdef __cplusplus
-}
-#endif /* __cplusplus */
 #endif
 
 

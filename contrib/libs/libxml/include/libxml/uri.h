@@ -11,8 +11,9 @@
 #ifndef __XML_URI_H__
 #define __XML_URI_H__
 
-#include "xmlversion.h"
-#include "tree.h"
+#include <stdio.h>
+#include <libxml/xmlversion.h>
+#include <libxml/xmlstring.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,43 +50,54 @@ struct _xmlURI {
  * xmlChar *	xmlNodeGetBase	(xmlDocPtr doc,
  *                               xmlNodePtr cur);
  */
-XMLPUBFUN xmlURIPtr XMLCALL
+XMLPUBFUN xmlURIPtr
 		xmlCreateURI		(void);
-XMLPUBFUN xmlChar * XMLCALL
+XMLPUBFUN int
+		xmlBuildURISafe		(const xmlChar *URI,
+					 const xmlChar *base,
+					 xmlChar **out);
+XMLPUBFUN xmlChar *
 		xmlBuildURI		(const xmlChar *URI,
 					 const xmlChar *base);
-XMLPUBFUN xmlChar * XMLCALL
+XMLPUBFUN int
+		xmlBuildRelativeURISafe	(const xmlChar *URI,
+					 const xmlChar *base,
+					 xmlChar **out);
+XMLPUBFUN xmlChar *
 		xmlBuildRelativeURI	(const xmlChar *URI,
 					 const xmlChar *base);
-XMLPUBFUN xmlURIPtr XMLCALL
+XMLPUBFUN xmlURIPtr
 		xmlParseURI		(const char *str);
-XMLPUBFUN xmlURIPtr XMLCALL
+XMLPUBFUN int
+		xmlParseURISafe		(const char *str,
+					 xmlURIPtr *uri);
+XMLPUBFUN xmlURIPtr
 		xmlParseURIRaw		(const char *str,
 					 int raw);
-XMLPUBFUN int XMLCALL
+XMLPUBFUN int
 		xmlParseURIReference	(xmlURIPtr uri,
 					 const char *str);
-XMLPUBFUN xmlChar * XMLCALL
+XMLPUBFUN xmlChar *
 		xmlSaveUri		(xmlURIPtr uri);
-XMLPUBFUN void XMLCALL
+XMLPUBFUN void
 		xmlPrintURI		(FILE *stream,
 					 xmlURIPtr uri);
-XMLPUBFUN xmlChar * XMLCALL
+XMLPUBFUN xmlChar *
 		xmlURIEscapeStr         (const xmlChar *str,
 					 const xmlChar *list);
-XMLPUBFUN char * XMLCALL
+XMLPUBFUN char *
 		xmlURIUnescapeString	(const char *str,
 					 int len,
 					 char *target);
-XMLPUBFUN int XMLCALL
+XMLPUBFUN int
 		xmlNormalizeURIPath	(char *path);
-XMLPUBFUN xmlChar * XMLCALL
+XMLPUBFUN xmlChar *
 		xmlURIEscape		(const xmlChar *str);
-XMLPUBFUN void XMLCALL
+XMLPUBFUN void
 		xmlFreeURI		(xmlURIPtr uri);
-XMLPUBFUN xmlChar* XMLCALL
+XMLPUBFUN xmlChar*
 		xmlCanonicPath		(const xmlChar *path);
-XMLPUBFUN xmlChar* XMLCALL
+XMLPUBFUN xmlChar*
 		xmlPathToURI		(const xmlChar *path);
 
 #ifdef __cplusplus

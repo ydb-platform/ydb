@@ -14,13 +14,14 @@
 #ifndef __XML_SCHEMA_INTERNALS_H__
 #define __XML_SCHEMA_INTERNALS_H__
 
-#include "xmlversion.h"
+#include <libxml/xmlversion.h>
 
 #ifdef LIBXML_SCHEMAS_ENABLED
 
-#include "xmlregexp.h"
-#include "hash.h"
-#include "dict.h"
+#include <libxml/xmlregexp.h>
+#include <libxml/hash.h>
+#include <libxml/dict.h>
+#include <libxml/tree.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -947,8 +948,8 @@ struct _xmlSchema {
     void *volatiles; /* Obsolete */
 };
 
-XMLPUBFUN void XMLCALL         xmlSchemaFreeType        (xmlSchemaTypePtr type);
-XMLPUBFUN void XMLCALL         xmlSchemaFreeWildcard(xmlSchemaWildcardPtr wildcard);
+XMLPUBFUN void         xmlSchemaFreeType        (xmlSchemaTypePtr type);
+XMLPUBFUN void         xmlSchemaFreeWildcard(xmlSchemaWildcardPtr wildcard);
 
 #ifdef __cplusplus
 }

@@ -111,6 +111,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             TabletPathId.emplace(TInternalPathId::FromRawValue(*tabletInternalPathIdValue), TSchemeShardLocalPathId::FromRawValue(*tabletSchemeShardLocalPathIdValue));
             if (info) {
                 SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(TabletPathId->SchemeShardLocalPathId, info->TenantPathId);
+            } else {
+                SchemaObjectsCache = std::make_shared<NOlap::TSchemaObjectsCache>();
             }
         }
 

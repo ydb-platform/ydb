@@ -99,10 +99,6 @@ private:
             auto& error = *response->Record.MutableError();
             error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
             error.SetMessage("Incorrect request - 0 nodes requested");
-        } else if (Peers.empty()) {
-            auto& error = *response->Record.MutableError();
-            error.SetStatusCode(NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-            error.SetMessage("No active workers");
         } else if (!scheduler) {
             ScheduleUniformly(request, response);
         } else {
@@ -221,8 +217,13 @@ private:
 
         TVector<TPeer> nodes;
         for (ui32 i = 0; i < count; ++i) {
-            Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
-            nodes.push_back(Peers[SingleNodeScheduler.NodeOrder[NextPeer]]);
+            if (!Peers.empty()) {
+                Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
+                nodes.push_back(Peers[SingleNodeScheduler.NodeOrder[NextPeer]]);
+            } else {
+                TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
+                nodes.push_back(node);
+            }
         }
         if (++NextPeer >= Peers.size()) {
             NextPeer = 0;

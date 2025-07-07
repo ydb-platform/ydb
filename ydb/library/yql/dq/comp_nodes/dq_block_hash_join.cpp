@@ -161,8 +161,6 @@ private:
                     break;
                 }
             }
-
-            if (LeftFinished_) return NUdf::EFetchStatus::Finish;
             
             if (!RightFinished_) {
                 // Try to read from right stream with correct width

@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             TString select = R"(
                 SELECT L.*
                 FROM `left_table` AS L
-                INNER JOIN `right_table` AS R
+                INNER JOIN `left_table` AS R
                 ON L.id = R.id;
             )";
 

@@ -23,6 +23,7 @@ from ydb.tests.tools.nemesis.library.tablet import KillNodeBrokerNemesis
 from ydb.tests.tools.nemesis.library.tablet import KillBlocktoreVolume
 from ydb.tests.tools.nemesis.library.tablet import KillBlocktorePartition
 from ydb.tests.tools.nemesis.library.disk import data_storage_nemesis_list
+from ydb.tests.tools.nemesis.library.dc import datacenter_nemesis_list
 
 
 def is_first_cluster_node(cluster):
@@ -37,6 +38,7 @@ def basic_kikimr_nemesis_list(
     harmful_nemesis_list = []
     harmful_nemesis_list.extend(data_storage_nemesis_list(cluster))
     harmful_nemesis_list.extend(nodes_nemesis_list(cluster))
+    harmful_nemesis_list.extend(datacenter_nemesis_list(cluster))
     harmful_nemesis_list.extend(
         [
             KickTabletsFromNode(cluster),

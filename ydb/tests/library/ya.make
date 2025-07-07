@@ -47,6 +47,7 @@ PY_SRCS(
     nemesis/__init__.py
     nemesis/nemesis_core.py
     nemesis/nemesis_network.py
+    nemesis/nemesis_network_dc.py
     nemesis/nemesis_process_killers.py
     nemesis/nemesis_time_terrorist.py
     nemesis/network/__init__.py

@@ -245,7 +245,7 @@ class StabilityCluster:
             self._unpack_resource('ydb_cli'),
         )
 
-        if yaml_config is None:
+        if self.yaml_config is None:
             self.kikimr_cluster = ExternalKiKiMRCluster(
                 config_path=self.slice_directory,
                 kikimr_configure_binary_path=self._unpack_resource("cfg"),
@@ -1054,6 +1054,7 @@ Common usage scenarios:
     parser.add_argument(
         "--yaml_config",
         required=False,
+        default=None,
         type=path_type,
         help="Path to Yandex DB configuration v2",
     )
@@ -1201,13 +1202,14 @@ Common usage scenarios:
 def main():
     args = parse_args()
     ssh_username = args.ssh_user
+    yaml_config = args.yaml_config
     print('Initing cluster info')
     stability_cluster = StabilityCluster(
         ssh_username=ssh_username,
         cluster_path=args.cluster_path,
         ydbd_path=args.ydbd_path,
         ydbd_next_path=args.next_ydbd_path,
-        yaml_config=args.yaml_config,
+        yaml_config=yaml_config,
     )
 
     for action in args.actions:

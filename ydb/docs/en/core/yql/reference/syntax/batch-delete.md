@@ -17,7 +17,7 @@ The semantics are inherited from the standard `DELETE` with the following restri
 * The use of subqueries and multiple queries in a single expression, including `DELETE FROM ... ON`, is prohibited.
 * The `RETURNING` keyword is unavailable.
 
-### Example
+## Example
 
 ```yql
 BATCH DELETE FROM my_table

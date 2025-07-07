@@ -18,7 +18,7 @@ The semantics are inherited from the standard `UPDATE` with the following restri
 * The use of subqueries and multiple queries in a single expression, including `UPDATE ON`, is prohibited.
 * The `RETURNING` keyword is unavailable.
 
-### Example
+## Example
 
 ```yql
 BATCH UPDATE my_table

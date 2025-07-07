@@ -29,7 +29,7 @@ private:
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
-    std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
+    const std::shared_ptr<const TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
@@ -112,7 +112,7 @@ public:
         return *IndexVersionsPointer;
     }
 
-    const std::shared_ptr<TVersionedIndex>& GetIndexVersionsPtr() const {
+    const std::shared_ptr<const TVersionedIndex>& GetIndexVersionsPtr() const {
         AFL_VERIFY(IndexVersionsPointer);
         return IndexVersionsPointer;
     }
@@ -173,7 +173,7 @@ public:
         RequestShardingInfo = metadataAccessor->GetShardingInfo(IndexVersionsPointer, RequestSnapshot);
     }
 
-    TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
+    TReadMetadataBase(const std::shared_ptr<const TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
         const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor,
         const ui64 tabletId)
         : Sorting(sorting)

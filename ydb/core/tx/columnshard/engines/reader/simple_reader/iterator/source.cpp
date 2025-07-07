@@ -31,7 +31,7 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
     AFL_VERIFY(FetchingPlan);
     if (!ProcessingStarted) {
         InitStageData(std::make_unique<TFetchedData>(
-            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCount()));
+            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
         ProcessingStarted = true;
         SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
             GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());

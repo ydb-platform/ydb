@@ -1,7 +1,7 @@
 #pragma once
-#include <util/system/types.h>
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
+#include <util/system/types.h>
 
 namespace NKikimr::NColumnShard {
 class TInternalPathId {
@@ -20,6 +20,10 @@ public:
     TInternalPathId& operator=(const TInternalPathId&) = default;
     TInternalPathId& operator=(TInternalPathId&&) = default;
 
+    bool IsValid() const {
+        return PathId != 0;
+    }
+
     explicit operator bool() const {
         return PathId != 0;
     }
@@ -33,12 +37,12 @@ public:
 
     //Template function whithout generic implementation
     //Must be explicitly instantiated for messages that hold internal path id
-    template<typename Proto>
+    template <typename Proto>
     static TInternalPathId FromProto(const Proto& proto);
 
     //Template function whithout generic implementation
     //Must be explicitly instantiated for messages that hold internal path id
-    template<typename Proto>
+    template <typename Proto>
     void ToProto(Proto& proto) const;
 
     auto operator<=>(const TInternalPathId&) const = default;
@@ -48,14 +52,21 @@ static_assert(sizeof(TInternalPathId) == sizeof(ui64));
 
 class TSchemeShardLocalPathId {
     ui64 PathId;
+
 private:
     explicit TSchemeShardLocalPathId(const ui64 pathId)
         : PathId(pathId) {
     }
+
 public:
     TSchemeShardLocalPathId()
         : PathId(0) {
     }
+
+    bool IsValid() const {
+        return PathId != 0;
+    }
+
     explicit operator bool() const {
         return PathId != 0;
     }
@@ -70,12 +81,12 @@ public:
 
     //Templated function whithout generic implementation
     //Must be explicitly instantiated for messages that hold SchemeShardLocalPathId
-    template<typename Proto>
+    template <typename Proto>
     static TSchemeShardLocalPathId FromProto(const Proto& proto);
-    
+
     //Templated function whithout generic implementation
     //Must be explicitly instantiated for messages that hold SchemeShardLocalPathId
-    template<typename Proto>
+    template <typename Proto>
     void ToProto(Proto& proto) const;
 
     auto operator<=>(const TSchemeShardLocalPathId&) const = default;
@@ -83,7 +94,15 @@ public:
 
 static_assert(sizeof(TSchemeShardLocalPathId) == sizeof(ui64));
 
-struct TUnifiedPathId {
+class TUnifiedPathId {
+private:
+    TUnifiedPathId(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId)
+        : InternalPathId(internalPathId)
+        , SchemeShardLocalPathId(externalPathId) {
+    }
+
+public:
+    TUnifiedPathId() = default;
     TInternalPathId InternalPathId;
     TSchemeShardLocalPathId SchemeShardLocalPathId;
 
@@ -97,23 +116,35 @@ struct TUnifiedPathId {
     explicit operator bool() const {
         return InternalPathId && SchemeShardLocalPathId;
     }
+
+    bool IsValid() const {
+        return InternalPathId.IsValid() && SchemeShardLocalPathId.IsValid();
+    }
+
+    static TUnifiedPathId BuildValid(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId);
+    static TUnifiedPathId BuildNoCheck(
+        const std::optional<TInternalPathId> internalPathId, const std::optional<TSchemeShardLocalPathId> externalPathId);
 };
 
 static_assert(sizeof(TUnifiedPathId) == 2 * sizeof(ui64));
 
-} //namespace NKikimr::NColumnShard
+}   //namespace NKikimr::NColumnShard
 
 namespace NKikimr::NOlap {
 
 using TInternalPathId = NColumnShard::TInternalPathId;
 
-struct IPathIdTranslator {
-    virtual ~IPathIdTranslator() {}
+class IPathIdTranslator {
+public:
+    virtual ~IPathIdTranslator() = default;
     virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const = 0;
     virtual std::optional<TInternalPathId> ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const = 0;
+    NColumnShard::TSchemeShardLocalPathId ResolveSchemeShardLocalPathIdVerified(const TInternalPathId internalPathId) const;
+    TInternalPathId ResolveInternalPathIdVerified(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const;
+    NColumnShard::TUnifiedPathId GetUnifiedByInternalVerified(const TInternalPathId internalPathId) const;
 };
 
-} //namespace NKikimr::NOlap
+}   //namespace NKikimr::NOlap
 
 template <>
 struct THash<NKikimr::NColumnShard::TInternalPathId> {

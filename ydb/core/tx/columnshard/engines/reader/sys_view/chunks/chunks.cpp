@@ -132,8 +132,9 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata:
 
 std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
-    auto* index = self->GetIndexOptional();
-    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(), Sorting, read.GetProgram(),
+    auto* index = self->MutableIndexOptional();
+    return std::make_shared<TReadStatsMetadata>(index ? index->GetVersionedIndexReadonlyCopy() : nullptr, self->TabletID(), Sorting,
+        read.GetProgram(),
         index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
 }
 
@@ -227,7 +228,7 @@ public:
 
 TConclusionStatus TStatsIterator::Start() {
     std::vector<TPortionInfo::TConstPtr> portions;
-    std::shared_ptr<TVersionedIndex> actualIndexInfo;
+    std::shared_ptr<const TVersionedIndex> actualIndexInfo;
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(Context->GetDataAccessorsManager(), Context->GetStoragesManager());
     for (auto&& i : IndexGranules) {
         for (auto&& p : i.GetPortions()) {

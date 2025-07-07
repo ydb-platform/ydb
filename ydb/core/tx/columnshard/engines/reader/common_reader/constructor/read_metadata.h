@@ -46,7 +46,9 @@ public:
     std::shared_ptr<IDataSource> ExtractNext(const std::shared_ptr<TSpecialReadContext>& context) {
         AFL_VERIFY(!IsFinished());
         AFL_VERIFY(InitCursorFlag);
-        return DoExtractNext(context);
+        auto result = DoExtractNext(context);
+        AFL_VERIFY(result);
+        return result;
     }
     void InitCursor(const std::shared_ptr<IScanCursor>& cursor) {
         AFL_VERIFY(!InitCursorFlag);
@@ -168,7 +170,7 @@ public:
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read);
+    TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();

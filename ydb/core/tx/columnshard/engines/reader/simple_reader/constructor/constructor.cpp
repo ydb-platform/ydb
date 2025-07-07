@@ -7,11 +7,10 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
-    const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
-    AFL_VERIFY(vIndex);
-    auto& indexInfo = vIndex->GetSchemaVerified(Snapshot)->GetIndexInfo();
+    const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
+    auto& indexInfo = read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), Snapshot)->GetIndexInfo();
     NCommon::TIndexColumnResolver columnResolver(indexInfo);
-    return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
+    return TBase::ParseProgram(context, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }
 
 std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const {
@@ -21,7 +20,7 @@ std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const N
 
 TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
-    auto& index = self->TablesManager.GetPrimaryIndex();
+    auto* index = self->TablesManager.MutablePrimaryIndexAsOptional<TColumnEngineForLogs>();
     if (!index) {
         return std::shared_ptr<TReadMetadataBase>();
     }
@@ -31,7 +30,8 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
                                                         << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
     }
 
-    auto readMetadata = std::make_shared<TReadMetadata>(index->CopyVersionedIndexPtr(), read);
+    auto readMetadata =
+        std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(index->MutableVersionedSchemas()), read);
 
     auto initResult = readMetadata->Init(self, read, false);
     if (!initResult) {

@@ -13,7 +13,7 @@ private:
     YDB_READONLY_DEF(std::vector<NStorageOptimizer::TTaskDescription>, OptimizerTasks);
 public:
     TGranuleMetaView(const TGranuleMeta& granule, const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool reverse, const TSnapshot& reqSnapshot)
-        : PathId({granule.GetPathId(), schemeShardLocalPathId})
+        : PathId(NColumnShard::TUnifiedPathId::BuildValid(granule.GetPathId(), schemeShardLocalPathId))
     {
         for (auto&& i : granule.GetPortions()) {
             if (i.second->IsRemovedFor(reqSnapshot)) {

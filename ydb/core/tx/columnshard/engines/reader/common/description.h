@@ -38,6 +38,10 @@ public:
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
 
+    bool IsReverseSort() const {
+        return Sorting == ERequestSorting::DESC;
+    }
+
     // List of columns
     std::vector<ui32> ColumnIds;
 

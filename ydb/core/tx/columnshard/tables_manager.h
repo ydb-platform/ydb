@@ -107,7 +107,7 @@ public:
     }
 
     TUnifiedPathId GetPathId() const {
-        return TUnifiedPathId{ InternalPathId, SchemeShardLocalPathId };
+        return TUnifiedPathId::BuildValid(InternalPathId, SchemeShardLocalPathId);
     }
 
     const NOlap::TSnapshot& GetDropVersionVerified() const {
@@ -153,7 +153,7 @@ public:
                                                       ? rowset.template GetValue<Schema::TableInfo::SchemeShardLocalPathId>()
                                                       : internalPathId.GetRawValue());
         AFL_VERIFY(schemeShardLocalPathId);
-        TTableInfo result({ internalPathId, schemeShardLocalPathId });
+        TTableInfo result(TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId));
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             result.DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
@@ -216,7 +216,7 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
-    NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
+    YDB_READONLY_DEF(NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache>, SchemaObjectsCache);
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
     bool GenerateInternalPathId;
@@ -348,7 +348,7 @@ public:
     void MoveTableProgress(
         NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
 
-    NOlap::IColumnEngine& MutablePrimaryIndex() {
+    NOlap::IColumnEngine& MutablePrimaryIndex() const {
         Y_ABORT_UNLESS(!!PrimaryIndex);
         return *PrimaryIndex;
     }
@@ -389,6 +389,16 @@ public:
             return nullptr;
         }
         auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return result;
+    }
+
+    template <class TIndex>
+    TIndex* MutablePrimaryIndexAsOptional() const {
+        if (!PrimaryIndex) {
+            return nullptr;
+        }
+        auto result = dynamic_cast<TIndex*>(PrimaryIndex.get());
         AFL_VERIFY(result);
         return result;
     }

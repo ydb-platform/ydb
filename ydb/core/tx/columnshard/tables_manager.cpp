@@ -476,7 +476,7 @@ void TTablesManager::MoveTableProgress(
     table->UpdateLocalPathId(db, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(newSchemeShardLocalPathId, internalPathId).second);
-    NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, { internalPathId, oldSchemeShardLocalPathId });
+    NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(internalPathId, oldSchemeShardLocalPathId));
     NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, table->GetPathId());
 }
 
@@ -531,10 +531,9 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
     const TString& tableName, const std::optional<ui64> externalPathId, const std::optional<ui64> extInternalPathId) {
     if (extInternalPathId) {
-        const auto& externalPathIdResolved = ResolveSchemeShardLocalPathId(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId));
-        AFL_VERIFY(!!externalPathIdResolved);
+        const auto externalPathIdResolved = ResolveSchemeShardLocalPathIdVerified(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId));
         return std::make_shared<NOlap::TUserTableAccessor>(
-            tableName, NColumnShard::TUnifiedPathId{ NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId), *externalPathIdResolved });
+            tableName, TUnifiedPathId::BuildValid(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId), externalPathIdResolved));
     }
     AFL_VERIFY(externalPathId);
     const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*externalPathId);
@@ -544,17 +543,16 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
         AFL_VERIFY(extInternalPathId == internalPathId->GetRawValue());
     }
     if (tableName.find(".sys/") != TString::npos) {
-        return std::make_shared<NOlap::TSysViewTableAccessor>(
-            tableName, NColumnShard::TUnifiedPathId{ internalPathId.value_or(NColumnShard::TInternalPathId::FromRawValue(0)), schemeShardLocalPathId });
+        return std::make_shared<NOlap::TSysViewTableAccessor>(tableName, schemeShardLocalPathId, internalPathId);
     } else if (!internalPathId) {
         return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
     } else {
         if (!HasTable(*internalPathId)) {
             return std::make_shared<NOlap::TAbsentTableAccessor>(
-                tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+                tableName, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId));
         } else {
             return std::make_shared<NOlap::TUserTableAccessor>(
-                tableName, NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId });
+                tableName, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId));
         }
     }
 }

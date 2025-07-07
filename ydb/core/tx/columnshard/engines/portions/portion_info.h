@@ -104,6 +104,13 @@ private:
     }
 
 public:
+
+    struct TPortionAddressComparator {
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) {
+            return left->GetAddress() < right->GetAddress();
+        }
+    };
+
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);

@@ -1,4 +1,6 @@
 #pragma once
+#include "scheme/index_info.h"
+#include "scheme/versions/preset_schemas.h"
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -27,11 +29,47 @@ public:
         AFL_VERIFY(false);
         return NColumnShard::TUnifiedPathId();
     }
+    std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const {
+        return GetSnapshotSchemaVerified(vSchemas, TSnapshot::Max())->GetIndexInfo().GetPrimaryKeyColumns();
+    }
     TString GetTableName() const;
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(
-        const IColumnEngine& engine, const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const = 0;
+    virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(
+        const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const = 0;
+    std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaVerified(const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const {
+        auto result = GetSnapshotSchemaOptional(vSchemas, snapshot);
+        AFL_VERIFY(!!result);
+        return result;
+    }
+    virtual std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyOptional(TVersionedPresetSchemas& vSchemas) const = 0;
+    std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyVerified(TVersionedPresetSchemas& vSchemas) const {
+        auto result = GetVersionedIndexCopyOptional(vSchemas);
+        AFL_VERIFY(!!result);
+        return result;
+    }
+
+    class TSelectMetadataContext {
+    private:
+        const NOlap::IPathIdTranslator& PathIdTranslator;
+        const IColumnEngine& Engine;
+
+    public:
+        const NOlap::IPathIdTranslator& GetPathIdTranslator() const {
+            return PathIdTranslator;
+        }
+        const IColumnEngine& GetEngine() const {
+            return Engine;
+        }
+
+        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine)
+            : PathIdTranslator(pathIdTranslator)
+            , Engine(engine) {
+        }
+    };
+
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
+        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const = 0;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
-        const std::shared_ptr<TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
+        const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
 };
 
 class TSysViewTableAccessor: public ITableMetadataAccessor {
@@ -43,12 +81,18 @@ private:
         return PathId;
     }
 
+    virtual std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyOptional(TVersionedPresetSchemas& vSchemas) const override;
+
+    virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(
+        const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const override;
+
 public:
-    TSysViewTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId);
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const IColumnEngine& engine,
+    TSysViewTableAccessor(const TString& tableName, const NColumnShard::TSchemeShardLocalPathId externalPathId,
+        const std::optional<NColumnShard::TInternalPathId> internalPathId);
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
         const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
-        const std::shared_ptr<TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
+        const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;
     }
 };
@@ -57,6 +101,10 @@ class TUserTableAccessor: public ITableMetadataAccessor {
 private:
     using TBase = ITableMetadataAccessor;
     const NColumnShard::TUnifiedPathId PathId;
+    virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(
+        const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const override {
+        return vSchemas.GetDefaultVersionedIndex().GetSchemaVerified(snapshot);
+    }
 
     virtual NColumnShard::TUnifiedPathId GetPathId() const override {
         return PathId;
@@ -65,10 +113,14 @@ private:
 public:
     TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId);
 
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const IColumnEngine& engine,
+    virtual std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyOptional(TVersionedPresetSchemas& vSchemas) const override {
+        return vSchemas.GetDefaultVersionedIndexCopy();
+    }
+
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
         const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
-        const std::shared_ptr<TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
+        const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
         return indexVersionsPointer->GetShardingInfoOptional(PathId.GetInternalPathId(), ss);
     }
 };
@@ -77,6 +129,15 @@ class TAbsentTableAccessor: public ITableMetadataAccessor {
 private:
     using TBase = ITableMetadataAccessor;
     const NColumnShard::TUnifiedPathId PathId;
+
+    virtual std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyOptional(TVersionedPresetSchemas& vSchemas) const override {
+        return vSchemas.GetDefaultVersionedIndexCopy();
+    }
+
+    virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(
+        const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const override {
+        return vSchemas.GetDefaultVersionedIndex().GetSchemaVerified(snapshot);
+    }
 
 public:
     TAbsentTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
@@ -89,10 +150,10 @@ public:
     }
 
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
-        const std::shared_ptr<TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
+        const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;
     }
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const IColumnEngine& engine,
+    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
         const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
 };
 

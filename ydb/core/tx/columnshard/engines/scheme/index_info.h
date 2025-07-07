@@ -69,8 +69,10 @@ public:
 };
 
 struct TIndexInfo: public IIndexInfo {
-private:
+public:
     using TColumns = THashMap<ui32, NTable::TColumn>;
+
+private:
     friend class TPortionInfo;
     friend class TCompactedPortionInfo;
     friend class TPortionDataAccessor;
@@ -401,6 +403,7 @@ public:
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
+    std::vector<TString> GetColumnNames() const;
     std::vector<std::string> GetColumnSTLNames(const bool withSpecial = true) const;
     TColumnIdsView GetColumnIds(const bool withSpecial = true) const;
     ui32 GetColumnIdByIndexVerified(const ui32 index) const {

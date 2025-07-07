@@ -6,12 +6,12 @@
 
 namespace NKikimr::NOlap::NReader {
 
-TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
+TConclusionStatus IScannerConstructor::ParseProgram(const TProgramParsingContext& context, const NKikimrSchemeOp::EOlapProgramType programType,
     const TString& serializedProgram, TReadDescription& read, const NArrow::NSSA::IColumnResolver& columnResolver) const {
     std::set<TString> namesChecker;
     if (serializedProgram.empty()) {
         if (!read.ColumnIds.size()) {
-            auto schema = vIndex->GetSchemaVerified(read.GetSnapshot());
+            auto schema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), read.GetSnapshot());
             read.ColumnIds = std::vector<ui32>(schema->GetColumnIds().begin(), schema->GetColumnIds().end());
         }
         TProgramContainer container;

@@ -8,8 +8,7 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-TConclusionStatus TReadMetadata::Init(
-    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const bool isPlain) {
+TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const bool isPlain) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
     InitShardingInfo(readDescription.TableMetadataAccessor);
     TxId = readDescription.TxId;
@@ -19,7 +18,8 @@ TConclusionStatus TReadMetadata::Init(
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
     }
 
-    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(owner->GetIndexVerified(), readDescription, !!LockId, isPlain);
+    ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified());
+    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, !!LockId, isPlain);
     if (LockId) {
         for (auto&& i : SourcesConstructor->GetUncommittedWriteIds()) {
             auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i);
@@ -40,7 +40,7 @@ TConclusionStatus TReadMetadata::Init(
     return TConclusionStatus::Success();
 }
 
-TReadMetadata::TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read)
+TReadMetadata::TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read)
     : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorVerified(), read.GetTabletId())
     , TableMetadataAccessor(read.TableMetadataAccessor)
@@ -53,7 +53,7 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     std::set<ui32> result(ids.begin(), ids.end());
     AFL_VERIFY(result.size() == ids.size());
     for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
-        AFL_VERIFY(indexInfo.HasColumnId(i));
+        AFL_VERIFY(indexInfo.HasColumnId(i))("column_id", i);
     }
     return result;
 }

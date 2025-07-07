@@ -38,7 +38,15 @@ private:
     std::optional<ui64> SchemeVersionForActualization;
     ISnapshotSchema::TPtr SchemeForActualization;
 
+    TVersionedIndex(const TVersionedIndex& base) = default;
+    TVersionedIndex& operator=(const TVersionedIndex&) = delete;
+
 public:
+    TVersionedIndex() = default;
+    std::shared_ptr<const TVersionedIndex> DeepCopy() {
+        return std::shared_ptr<const TVersionedIndex>(new TVersionedIndex(*this));
+    }
+
     void EraseVersion(const ui64 version) {
         auto it = SnapshotByVersion.find(version);
         AFL_VERIFY(it != SnapshotByVersion.end());
@@ -52,7 +60,7 @@ public:
         return SnapshotByVersion;
     }
 
-    bool IsEqualTo(const TVersionedIndex& vIndex) {
+    bool IsEqualTo(const TVersionedIndex& vIndex) const {
         return LastSchemaVersion == vIndex.LastSchemaVersion && SnapshotByVersion.size() == vIndex.SnapshotByVersion.size() &&
                ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeVersionForActualization == vIndex.SchemeVersionForActualization;
     }

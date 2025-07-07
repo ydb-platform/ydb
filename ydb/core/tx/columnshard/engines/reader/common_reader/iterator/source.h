@@ -122,7 +122,7 @@ private:
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
-    YDB_READONLY(ui32, RecordsCount, 0);
+    std::optional<ui32> RecordsCountImpl;
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
     std::optional<ui64> MemoryGroupId;
@@ -134,7 +134,11 @@ private:
     }
 
     virtual ui64 DoGetEntityRecordsCount() const override {
-        return RecordsCount;
+        if (RecordsCountImpl) {
+            return *RecordsCountImpl;
+        } else {
+            return GetRecordsCountVirtual();
+        }
     }
 
     std::optional<bool> IsSourceInMemoryFlag;
@@ -160,8 +164,24 @@ private:
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     std::unique_ptr<TFetchedResult> StageResult;
+    virtual ui32 GetRecordsCountVirtual() const {
+        AFL_VERIFY(false);
+        return 0;
+    }
 
 public:
+    std::optional<ui32> GetRecordsCountOptional() const {
+        return RecordsCountImpl;
+    }
+
+    ui32 GetRecordsCount() const {
+        if (RecordsCountImpl) {
+            return *RecordsCountImpl;
+        } else {
+            return GetRecordsCountVirtual();
+        }
+    }
+
     void StartAsyncSection() {
         AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
     }
@@ -220,14 +240,14 @@ public:
     }
 
     IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
-        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
+        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : SourceId(sourceId)
         , SourceIdx(sourceIdx)
         , RecordSnapshotMin(recordSnapshotMin)
         , RecordSnapshotMax(recordSnapshotMax)
         , Context(context)
-        , RecordsCount(recordsCount)
+        , RecordsCountImpl(recordsCount)
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));

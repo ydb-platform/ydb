@@ -391,6 +391,10 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
 }
 
 bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+    if (IsSupportive()) {
+        return false;
+    }
+
     bool haveChanges = CleanUpBlobs(request, ctx);
 
     LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");

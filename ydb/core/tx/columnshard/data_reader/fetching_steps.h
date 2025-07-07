@@ -131,12 +131,9 @@ private:
         const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
         const ui64 memory = GetNecessaryDataMemory(fetchingContext, ColumnIds, accessors);
         if (!memory) {
-            memory = GetNecessaryDataMemory(ColumnIds, accessors);
-        }
-        if (!*memory) {
             return IFetchingStep::EStepResult::Continue;
         }
-        fetchingContext->AskMemoryAllocation(std::make_shared<TSubscriber>(*memory, fetchingContext));
+        fetchingContext->AskMemoryAllocation(std::make_shared<TSubscriber>(memory, fetchingContext));
         return IFetchingStep::EStepResult::Detached;
     }
 

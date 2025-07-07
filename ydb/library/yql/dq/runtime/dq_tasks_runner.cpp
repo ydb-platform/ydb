@@ -1,5 +1,6 @@
-#include "dq_tasks_runner.h"
+#include "dq_channel_service.h"
 #include "dq_tasks_counters.h"
+#include "dq_tasks_runner.h"
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
@@ -143,21 +144,21 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
     TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory, TDqMeteringStats::TInputStatsMeter stats,
-    TInstant& startTs, bool& inputConsumed, NUdf::IPgBuilder* pgBuilder)
+    TInstant& startTs, bool& inputConsumed, ui32& channelId, NUdf::IPgBuilder* pgBuilder)
 {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
             Y_ABORT_UNLESS(inputs.size() == 1);
             [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputConsumed);
+            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputConsumed, channelId);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
             GetSortColumnsInfo(type, protoSortCols, sortColsInfo);
             YQL_ENSURE(!sortColsInfo.empty());
 
-            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats, startTs, inputConsumed, pgBuilder);
+            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats, startTs, inputConsumed, channelId, pgBuilder);
         }
         default:
             YQL_ENSURE(false, "Unknown input type: " << (ui32) inputDesc.GetTypeCase());
@@ -616,11 +617,32 @@ public:
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
-                    auto inputChannel = CreateDqInputChannel(channelId, inputChannelDesc.GetSrcStageId(), *inputType,
+
+                    IDqInputChannel::TPtr inputChannel;
+                    if (task.GetFastChannels()) {
+                        Y_ENSURE(Context.ChannelService);
+                        TDqChannelParams params = {
+                            .RowType = *inputType,
+                            .HolderFactory = &holderFactory,
+                            .Desc = {
+                                .ChannelId = channelId,
+                                .SrcStageId = inputChannelDesc.GetSrcStageId(),
+                                .DstStageId = inputChannelDesc.GetDstStageId()
+                            },
+                            .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
+                            .TransportVersion = inputChannelDesc.GetTransportVersion(),
+                            .PackerVersion = FromProto(task.GetValuePackerVersion())
+                        };
+                        inputChannel = Context.ChannelService->GetInputChannel(params);
+                    } else {
+                        inputChannel = CreateDqInputChannel(channelId, inputChannelDesc.GetSrcStageId(), *inputType,
                         memoryLimits.ChannelBufferSize, StatsModeToCollectStatsLevel(Settings.StatsMode), typeEnv, holderFactory,
                         inputChannelDesc.GetTransportVersion(), FromProto(task.GetValuePackerVersion()));
+                    }
+
                     auto ret = AllocatedHolder->InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
+
                     inputs.emplace_back(inputChannel);
                 }
             }
@@ -628,16 +650,16 @@ public:
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, false);
             if (entryNode) {
                 if (transform) {
-                    transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, Stats->StartTs, InputConsumed, PgBuilder_.get());
+                    transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, Stats->StartTs, InputConsumed, ChannelId, PgBuilder_.get());
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
                     entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                         CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
-                            {inputStats, transform->TransformOutputType}, Stats->StartTs, InputConsumed));
+                            {inputStats, transform->TransformOutputType}, Stats->StartTs, InputConsumed, ChannelId));
                 } else {
                     entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                         DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
-                            {inputStats, entry->InputItemTypes[i]}, Stats->StartTs, InputConsumed, PgBuilder_.get()));
+                            {inputStats, entry->InputItemTypes[i]}, Stats->StartTs, InputConsumed, ChannelId, PgBuilder_.get()));
                 }
             } else {
                 // In some cases we don't need input. For example, for joining EmptyIterator with table.
@@ -709,10 +731,27 @@ public:
                         settings.MutableSettings.IsLocalChannel = srcNodeId == dstNodeId;
                     }
 
-                    auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
-
-                    auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
-                    YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);
+                    IDqOutputChannel::TPtr outputChannel;
+                    if (task.GetFastChannels()) {
+                        Y_ENSURE(Context.ChannelService);
+                        TDqChannelParams params = {
+                            .RowType = *taskOutputType,
+                            .HolderFactory = &holderFactory,
+                            .Desc = {
+                                .ChannelId = channelId,
+                                .SrcStageId = outputChannelDesc.GetSrcStageId(),
+                                .DstStageId = outputChannelDesc.GetDstStageId()
+                            },
+                            .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
+                            .TransportVersion = outputChannelDesc.GetTransportVersion(),
+                            .PackerVersion = FromProto(task.GetValuePackerVersion())
+                        };
+                        outputChannel = Context.ChannelService->GetOutputChannel(params);
+                    } else {
+                        outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
+                    }
+                    const auto& [it, inserted] = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
+                    YQL_ENSURE(inserted, "task: " << TaskId << ", duplicated output channelId: " << channelId);
                     outputs.emplace_back(outputChannel);
                 }
             }
@@ -776,6 +815,8 @@ public:
 
         InputConsumed = false;
         auto runStatus = FetchAndDispatch();
+        LastFetch = TInstant::Now();
+        LastStatus = runStatus;
 
         if (Y_UNLIKELY(CollectFull())) {
             if (SpillingTaskCounters) {

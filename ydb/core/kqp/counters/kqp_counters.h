@@ -344,6 +344,7 @@ public:
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters() const;
+    ::NMonitoring::TDynamicCounterPtr GetChannelCounters() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetActiveSessionActors() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetTxReplySizeExceededError() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetDataShardTxReplySizeExceededError() const;
@@ -355,6 +356,7 @@ public:
 
 public:
     ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
+    ::NMonitoring::TDynamicCounterPtr ChannelGroup;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
 

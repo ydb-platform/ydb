@@ -439,4 +439,9 @@ message TTableServiceConfig {
     optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnforceSqlVersionV1 = 107 [default = true, (InvalidateCompileCache) = true];
+    optional uint64 LocalChannelInflightBytes  = 108 [default = 8388608];
+    optional uint64 RemoteChannelInflightBytes = 109 [default = 16777216];
+    optional uint64 NodeSessionIcInflightBytes = 110 [default = 67108864];
+
+    optional bool EnableFastChannels = 111 [ default = true, (InvalidateCompileCache) = true];
 };

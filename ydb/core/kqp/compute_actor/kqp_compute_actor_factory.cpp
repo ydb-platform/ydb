@@ -82,6 +82,7 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
@@ -94,10 +95,12 @@ public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : ResourceManager_(resourceManager)
         , AsyncIoFactory(asyncIoFactory)
         , FederatedQuerySetup(federatedQuerySetup)
+        , ChannelService(channelService)
     {
         ApplyConfig(config);
     }
@@ -201,6 +204,8 @@ public:
                 }
             };
 
+        runtimeSettings.ChannelService = ChannelService;
+
         NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
         const auto tableKindExtract = [](const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta) {
             ETableKind result = (ETableKind)meta.GetTable().GetTableKind();
@@ -248,9 +253,10 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
 {
-    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup);
+    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup, channelService);
 }
 
 } // namespace NKikimr::NKqp::NComputeActor

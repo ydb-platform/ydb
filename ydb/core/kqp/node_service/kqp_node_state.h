@@ -155,6 +155,19 @@ public:
         return ret;
     }
 
+    bool FindCaId(const TString& caId, TActorId& id) {
+        TReadGuard guard(RWLock);
+        for (auto& [_, request] : Requests) {
+            for (auto& [_, task] : request.InFlyTasks) {
+                if (ToString(task.ComputeActorId) == caId) {
+                    id = task.ComputeActorId;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void GetInfo(TStringStream& str) {
         TReadGuard guard(RWLock);
         TMap<ui64, TVector<std::pair<const TActorId, const NKqpNode::TTasksRequest*>>> byTx;
@@ -162,15 +175,21 @@ public:
             byTx[key.first].emplace_back(key.second, &request);
         }
         for (auto& [txId, requests] : byTx) {
-            str << "    Requests:" << Endl;
-            for (auto& [requester, request] : requests) {
-                str << "      Requester: " << requester << Endl;
-                str << "        StartTime: " << request->StartTime << Endl;
-                str << "        Deadline: " << request->Deadline << Endl;
-                str << "        In-fly tasks:" << Endl;
-                for (auto& [taskId, task] : request->InFlyTasks) {
-                    str << "          Task: " << taskId << Endl;
-                    str << "            Compute actor: " << task.ComputeActorId << Endl;
+            HTML(str) {
+                str << "    Requests:" << Endl;
+                for (auto& [requester, request] : requests) {
+                    str << "      Requester: " << requester << Endl;
+                    str << "        StartTime: " << request->StartTime << Endl;
+                    str << "        Deadline: " << request->Deadline << Endl;
+                    str << "        In-fly tasks:" << Endl;
+                    for (auto& [taskId, task] : request->InFlyTasks) {
+                        str << "          Task: " << taskId << Endl;
+                        str << "            Compute actor: ";
+                        HREF("?ca=" + ToString(task.ComputeActorId))  {
+                            str << task.ComputeActorId;
+                        }
+                        str << Endl;
+                    }
                 }
             }
         }

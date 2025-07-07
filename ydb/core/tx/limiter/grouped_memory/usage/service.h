@@ -50,19 +50,6 @@ public:
         return Singleton<TSelf>()->DefaultStageFeatures;
     }
 
-    static std::shared_ptr<TGroupGuard> BuildGroupGuard(const ui64 processId, const ui32 scopeId) {
-        static TAtomicCounter counter = 0;
-        auto& context = NActors::TActorContext::AsActorContext();
-        const NActors::TActorId& selfId = context.SelfID;
-        return std::make_shared<TGroupGuard>(MakeServiceId(selfId.NodeId()), processId, scopeId, counter.Inc());
-    }
-
-    static std::shared_ptr<TScopeGuard> BuildScopeGuard(const ui64 processId, const ui32 scopeId) {
-        auto& context = NActors::TActorContext::AsActorContext();
-        const NActors::TActorId& selfId = context.SelfID;
-        return std::make_shared<TScopeGuard>(MakeServiceId(selfId.NodeId()), processId, scopeId);
-    }
-
     static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;

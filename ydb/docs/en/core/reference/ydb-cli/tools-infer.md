@@ -39,6 +39,14 @@ If both conditions are met, the values from the first row are used as the table'
 
 {% endnote %}
 
+## Column type inference algorithm {#column-type-inference}
+
+For each column, the command determines the least general type that fits all its values. The most general type is `Text`: if any value in a column is a string (for example, `abc`), the entire column will be inferred as `Text`.
+
+All integer values are inferred as `Int64` if they fit within the `Int64` range. If any value exceeds this range, the type is set to `Double`.
+
+Floating-point numbers are always inferred as `Double`.
+
 ## Current Limitation {#current-limitation}
 
 The first column is always chosen as the primary key. You may need to change the primary key to one that is more appropriate for your use case. For recommendations, see [{#T}](../../dev/primary-key/index.md).

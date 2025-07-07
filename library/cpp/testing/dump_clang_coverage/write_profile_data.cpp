@@ -121,7 +121,7 @@ void __attribute__((constructor)) premain() {
         int rc = __llvm_profile_write_file();
         if (!rc && getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE")) {
             if (const char* token = getenv("YA_COVERAGE_DUMP_PROFILE_RELIABILITY_TOKEN")) {
-                fprintf(stdout, token);
+                fprintf(stdout, "%s", token);
                 fflush(stdout);
             }
             rc = atoi(getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE"));

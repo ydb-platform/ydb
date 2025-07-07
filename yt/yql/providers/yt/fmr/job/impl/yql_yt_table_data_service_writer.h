@@ -18,6 +18,8 @@ struct TFmrWriterSettings {
 
 class TFmrTableDataServiceWriter: public NYT::TRawTableWriter {
 public:
+    using TPtr = TIntrusivePtr<TFmrTableDataServiceWriter>;
+
     TFmrTableDataServiceWriter(
         const TString& tableId,
         const TString& partId,

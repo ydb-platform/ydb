@@ -279,6 +279,12 @@ void TYqlJobBase::Init() {
         }, RuntimeLogLevel);
 }
 
+void TYqlJobBase::Finish() {
+    if (JobStats) {
+        JobStats->SetStat(Job_ThreadsCount, GetRunnigThreadsCount());
+    }
+}
+
 void TYqlJobBase::Save(IOutputStream& s) const {
     ::SaveMany(&s,
         UdfModules,
@@ -301,13 +307,6 @@ void TYqlJobBase::Load(IInputStream& s) {
         RuntimeLogLevel,
         LangVer
     );
-}
-
-void TYqlJobBase::Do(const NYT::TRawJobContext& jobContext) {
-    DoImpl(jobContext.GetInputFile(), jobContext.GetOutputFileList());
-    if (JobStats) {
-        JobStats->SetStat(Job_ThreadsCount, GetRunnigThreadsCount());
-    }
 }
 
 TCallableVisitFuncProvider TYqlJobBase::MakeTransformProvider(THashMap<TString, TRuntimeNode>* extraArgs) const {

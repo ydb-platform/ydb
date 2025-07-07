@@ -475,8 +475,7 @@ private:
 
         auto [mapInputTables, clusterConnections] = GetInputTablesAndConnections(inputTables, std::move(options));
 
-        TString executable = ""; //??? TODO how to extract executable bytecode from options
-        TMapOperationParams mapOperationParams{.Input = mapInputTables,.Output = fmrOutputTables, .Executable = executable};
+        TMapOperationParams mapOperationParams{.Input = mapInputTables,.Output = fmrOutputTables, .SerializedMapJobState = ""}; // TODO - fill
         TStartOperationRequest mapOperationRequest{
             .TaskType = ETaskType::Map,
             .OperationParams = mapOperationParams,

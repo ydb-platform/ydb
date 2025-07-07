@@ -62,6 +62,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
+    NCommon::TConfSetting<bool, Static> UseFastChannels;
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
 
@@ -227,6 +228,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
     bool EnableWatermarks = false;
+    bool DefaultUseFastChannels = false;
 
     bool Antlr4ParserIsAmbiguityError = false;
 

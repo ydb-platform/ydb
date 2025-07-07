@@ -77,6 +77,7 @@ message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
     optional uint32 SupportivePartition = 3;
+    optional uint64 TabletId = 4;
 }
 
 message TTopicOperationsResponse {

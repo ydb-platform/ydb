@@ -61,14 +61,13 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
-                        Rows(left_table # 10e12)
-                        Rows(right_table # 10e12)
+                        Rows(L # 10e12)
+                        Rows(R # 10e12)
                     ';
-                PRAGMA ydb.UseGraceJoinCoreForMap = "true";
             )";
             TString blocks = UseBlockHashJoin ? "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n" : "";
             TString select = R"(
-                SELECT *
+                SELECT L.*
                 FROM `left_table` AS L
                 INNER JOIN `right_table` AS R
                 ON L.id = R.id;
@@ -76,13 +75,17 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;
 
+            Cerr << "MISHA: " << joinQuery << Endl;
+
             auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
 
             auto resultSet = status.GetResultSets()[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+            // Current Join implementation is simple and returns all the rows
+            auto expectedRowsCount = UseBlockHashJoin ? 3 : 3;
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), expectedRowsCount);
 
             auto explainResult = queryClient.ExecuteQuery(
                 joinQuery, 

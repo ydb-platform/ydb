@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/core/kqp/expr_nodes
 )
 
 SRCS(
@@ -28,6 +29,7 @@ SRCS(
     dq_opt_stat.cpp
     dq_opt_stat_transformer_base.cpp
     dq_opt_predicate_selectivity.cpp
+    visualizer.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,4 +1,5 @@
 #include "dq_opt_peephole.h"
+#include "visualizer.h"
 
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -1041,6 +1042,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Seal()
         .Seal()
         .Build();
+    NKikimr::NKqp::NOpt::TAstTypeVisualizer::DumpAstIfEnabled(result, "peephole");
 
     return TExprBase(result);
 }

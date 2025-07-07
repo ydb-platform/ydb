@@ -1,5 +1,6 @@
 #include "dq_opt_join.h"
 #include "dq_opt_phy.h"
+#include "visualizer.h"
 
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -1832,8 +1833,10 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         default:
             ythrow yexception() << "Invalid hash join mode: " << mode;
     }
+    NKikimr::NKqp::NOpt::TAstTypeVisualizer::DumpAstIfEnabled(hashJoin, "before");
 
     // For block hash join, peephole handles everything - don't apply NarrowMap
+    Cerr << "MISHA use BlockHashJoin? " << useBlockHashJoin << Endl;
     if (!useBlockHashJoin) {
         std::vector<TString> fullColNames;
         for (const auto& v: leftNames) {
@@ -1874,6 +1877,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             .Seal()
             .Build();
     }
+    // NKikimr::NKqp::NOpt::AST_VISUALIZE_STAGE(hashJoin, "before_my_optimizer");
+    NKikimr::NKqp::NOpt::TAstTypeVisualizer::DumpAstIfEnabled(hashJoin, "after");
 
     // this func add join to the stage and add connection to it. we do this instead of map connection to reduce data network interacting
     auto addJoinToStage =

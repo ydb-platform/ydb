@@ -152,7 +152,9 @@ class YdbCliHelper:
                      scale: Optional[int],
                      query_prefix: Optional[str],
                      external_path: str,
-                     threads: int):
+                     threads: int,
+                     float_mode: str,
+                     ):
             self.result = YdbCliHelper.WorkloadRunResult()
             self.iterations = iterations
             self.check_canonical = check_canonical
@@ -172,6 +174,7 @@ class YdbCliHelper:
             self.__plan_path = f'{self.__prefix}.plan'
             self.__query_output_path = f'{self.__prefix}.result'
             self.json_path = f'{self.__prefix}.stats.json'
+            self.float_mode = float_mode
 
         def get_plan_path(self, query_name: str, plan_name: Any) -> str:
             return f'{self.__plan_path}.{query_name}.{plan_name}'
@@ -204,6 +207,8 @@ class YdbCliHelper:
                 cmd += ['--scale', str(self.scale)]
             if self.threads > 0:
                 cmd += ['--threads', str(self.threads)]
+            if self.float_mode:
+                cmd += ['--float-mode', self.float_mode]
             return cmd
 
         def run(self) -> YdbCliHelper.WorkloadRunResult:
@@ -343,7 +348,7 @@ class YdbCliHelper:
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_names: list[str], iterations: int = 5,
                      timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
-                     scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 0) -> dict[str, YdbCliHelper.WorkloadRunResult]:
+                     scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 0, float_mode: str = '') -> dict[str, YdbCliHelper.WorkloadRunResult]:
         runner = YdbCliHelper.WorkloadRunner(
             workload_type,
             path,
@@ -355,7 +360,8 @@ class YdbCliHelper:
             scale,
             query_prefix=query_prefix,
             external_path=external_path,
-            threads=threads
+            threads=threads,
+            float_mode=float_mode,
         )
         extended_query_names = query_names + ["Sum", "Avg", "GAvg"]
         if runner.run():

@@ -537,11 +537,9 @@ public:
                 if constexpr (std::is_same<TData, NYdb::Dev::TDecimalValue>::value) {
                     if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
                         char bytes[16] = {0};
-                        // Big-endian: Hi_ (signed) в первые 8 байт, Low_ (unsigned) в последние 8 байт
-                        for (int i = 0; i < 8; ++i) {
-                            bytes[i] = (data.Hi_ >> (56 - i * 8)) & 0xFF;
-                            bytes[8 + i] = (data.Low_ >> (56 - i * 8)) & 0xFF;
-                        }
+                        // Little-endian: Low_ (unsigned) в первые 8 байт, Hi_ (signed) в последние 8 байт
+                        std::memcpy(bytes, &data.Low_, 8);
+                        std::memcpy(bytes + 8, &data.Hi_, 8);
                         Y_ABORT_UNLESS(typedBuilder.Append(bytes).ok());
                         return true;
                     }

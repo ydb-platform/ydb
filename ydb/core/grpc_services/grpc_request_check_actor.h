@@ -145,9 +145,8 @@ public:
             entries.insert(entries.end(), e.begin(), e.end());
         }
 
-        if (TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> e = GetEntriesForClusterAccessCheck(rootAttributes)) {
-            entries.insert(entries.end(), e.begin(), e.end());
-        }
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> clusterAccessCheckEntries = GetEntriesForClusterAccessCheck(rootAttributes);
+        entries.insert(entries.end(), clusterAccessCheckEntries.begin(), clusterAccessCheckEntries.end());
 
         if (!entries.empty()) {
             SetEntries(entries);

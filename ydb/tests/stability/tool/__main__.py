@@ -247,7 +247,7 @@ class StabilityCluster:
 
         if self.yaml_config is None:
             self.kikimr_cluster = ExternalKiKiMRCluster(
-                config_path=self.slice_directory,
+                cluster_template=self.slice_directory,
                 kikimr_configure_binary_path=self._unpack_resource("cfg"),
                 kikimr_path=self.ydbd_path,
                 kikimr_next_path=self.ydbd_next_path,
@@ -256,7 +256,7 @@ class StabilityCluster:
             )
         else:
             self.kikimr_cluster = ExternalKiKiMRCluster(
-                config_path=self.slice_directory,
+                cluster_template=self.slice_directory,
                 kikimr_configure_binary_path=None,
                 kikimr_path=self.ydbd_path,
                 kikimr_next_path=self.ydbd_next_path,

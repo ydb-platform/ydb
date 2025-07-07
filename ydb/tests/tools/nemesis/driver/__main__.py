@@ -132,7 +132,7 @@ def nemesis_logic(arguments):
     if yaml_config is not None:
         nemesis = catalog.nemesis_factory(
             ExternalKiKiMRCluster(
-                cluster_path=arguments.ydb_cluster_template,
+                cluster_template=arguments.ydb_cluster_template,
                 kikimr_configure_binary_path=None,
                 kikimr_path=arguments.ydb_binary_path,
                 ssh_username=ssh_username,
@@ -144,7 +144,7 @@ def nemesis_logic(arguments):
     else:
         nemesis = catalog.nemesis_factory(
             ExternalKiKiMRCluster(
-                cluster_path=arguments.ydb_cluster_template,
+                cluster_template=arguments.ydb_cluster_template,
                 kikimr_configure_binary_path=None,
                 kikimr_path=arguments.ydb_binary_path,
                 ssh_username=ssh_username,

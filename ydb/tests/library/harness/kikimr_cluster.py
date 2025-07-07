@@ -17,29 +17,21 @@ DEFAULT_MON_PORT = 8765
 DEFAULT_GRPC_PORT = 2135
 
 
-def kikimr_cluster_factory(configurator=None, config_path=None):
-    # TODO: remove current function, use explicit KiKiMR/ExternalKiKiMRCluster
-    logger.info("Starting standalone YDB cluster")
-    if config_path is not None:
-        return ExternalKiKiMRCluster(config_path)
-    else:
-        return KiKiMR(configurator)
-
-
 class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def __init__(
             self,
-            config_path,
+            cluster_template,
             kikimr_configure_binary_path,
             kikimr_path,
             kikimr_next_path=None,
             ssh_username=None,
             deploy_cluster=False,
             yaml_config=None):
-        self.__config_path = config_path
-        with open(config_path, 'r') as r:
-            self.__cluster_config = yaml.safe_load(r.read())
-        self.__yaml_config = yaml_config
+        with open(cluster_template, 'r') as r:
+            self.__cluster_template = yaml.safe_load(r.read())
+        if yaml_config is not None:
+            with open(yaml_config, 'r') as r:
+                self.__yaml_config = yaml.safe_load(r.read())
         self.__kikimr_configure_binary_path = kikimr_configure_binary_path
         self._slots = None
         self.__kikimr_path = kikimr_path
@@ -47,16 +39,14 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self.__ssh_username = ssh_username
         self.__deploy_cluster = deploy_cluster
 
-        if self.__yaml_config is not None:
-            with open(self.__yaml_config, 'r') as r:
-                config_v2 = yaml.safe_load(r.read())
-                self.__hosts = [host.get('name', host.get('host')) for host in config_v2.get('config', {}).get('hosts')]
+        if yaml_config is not None:
+            self.__hosts = [host.get('name', host.get('host')) for host in self.__yaml_config.get('config', {}).get('hosts')]
         else:
-            # Backward compatibility for cluster.yaml
-            self.__hosts = [host.get('name', host.get('host')) for host in self.__cluster_config.get('hosts')]
+            # Backward compatibility for cluster_template
+            self.__hosts = [host.get('name', host.get('host')) for host in self.__cluster_template.get('hosts')]
 
         self.__slot_count = 0
-        for domain in self.__cluster_config['domains']:
+        for domain in self.__cluster_template['domains']:
             self.__slot_count = max(self.__slot_count, domain['dynamic_slots'])
 
         super(ExternalKiKiMRCluster, self).__init__()
@@ -141,7 +131,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             self._run_on(
                 inst_set,
                 lambda x: x.prepare_artifacts(
-                    self.__config_path
+                    self.__cluster_template
                 )
             )
 

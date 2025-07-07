@@ -143,12 +143,8 @@ public:
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
-<<<<<<< HEAD
         const TActorId checkpointCoordinatorId = {},
-        TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
-=======
         TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
->>>>>>> upstream/main
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))

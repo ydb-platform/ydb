@@ -664,24 +664,6 @@ void TKqpPlanner::Unsubscribe() {
     }
 }
 
-static bool IsInfiniteSourceType(const TString& sourceType) {
-    return sourceType == "PqSource";
-}
-
-NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TKqpTasksGraph::TTaskType& task) {
-    for (const auto& input : task.Inputs) {
-        if (const TString& srcType = input.SourceType; srcType && IsInfiniteSourceType(srcType)) {
-            return NDqProto::CHECKPOINTING_MODE_DEFAULT;
-        }
-        // for (const auto& channel : input.Channels) {
-        //     if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
-        //         return NDqProto::CHECKPOINTING_MODE_DEFAULT;
-        //     }
-        // }
-    }
-    return NDqProto::CHECKPOINTING_MODE_DISABLED;
-}
-
 bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state) {
     auto& task = TasksGraph.GetTask(taskId);
     if (!task.ComputeActorId) {
@@ -697,12 +679,15 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
 
             auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
             for (const auto& dqTask : TasksGraph.GetTasks()) {
-                //NDq::TDqTaskSettings se
 
                 Cerr << "CheckpointingMode " << (dqTask.CheckpointingMode != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) << Endl;
+
+                NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, dqTask, true);
+                auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
+
                 auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
                     dqTask.Id,
-                    GetTaskCheckpointingMode(dqTask) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED, //dqTask.CheckpointingMode != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
+                    NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
                     TasksGraph.IsIngress(dqTask),
                     TasksGraph.IsEgressTask(dqTask),
                     true, //NYql::NDq::HasState(settings),

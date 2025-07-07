@@ -15,11 +15,6 @@ from ydb.tests.library.nemesis.dc_nemesis_network import (
 class TestValidateMultipleDatacenters(unittest.TestCase):
     
     def setUp(self):
-        """Подготавливает тестовое окружение."""
-        self.cluster = Mock()
-        
-    def test_validate_multiple_datacenters_success(self):
-        """Тестирует успешную валидацию с несколькими ДЦ."""
         test_config = {
             'hosts': [
                 {'name': 'host1.zone-a.com', 'location': {'data_center': 'zone-a'}},
@@ -183,7 +178,6 @@ class TestDataCenterNetworkNemesis(unittest.TestCase):
                 mock_node.start.assert_called_once()
 
     def test_inject_fault_with_insufficient_datacenters(self):
-        """Тестирует поведение при недостаточном количестве ДЦ."""
         # Мок с одним ДЦ
         single_dc_config = {
             'hosts': [{'name': 'host1.example.com', 'location': {'data_center': 'zone-a'}}]
@@ -333,7 +327,6 @@ class TestDataCenterIptablesBlockPortsNemesis(unittest.TestCase):
         self.cluster.nodes = self.mock_nodes
         
     def test_prepare_state_iptables_nemesis(self):
-        """Тестирует подготовку состояния для iptables nemesis."""
         nemesis = DataCenterIptablesBlockPortsNemesis(self.cluster)
         nemesis.prepare_state()
         
@@ -422,7 +415,6 @@ class TestDataCenterIptablesBlockPortsNemesis(unittest.TestCase):
             self.assertGreater(len(restore_calls), 0)
             
     def test_inject_fault_iptables_cycle(self):
-        """Тестирует цикличность выбора ДЦ для блокировки портов."""
         nemesis = DataCenterIptablesBlockPortsNemesis(self.cluster)
         nemesis.prepare_state()
         
@@ -444,7 +436,6 @@ class TestDataCenterIptablesBlockPortsNemesis(unittest.TestCase):
 class TestDatacenterNemesisList(unittest.TestCase):
     
     def test_datacenter_nemesis_list(self):
-        """Тестирует фабричную функцию для создания списка nemesis."""
         cluster = Mock()
         nemesis_list = datacenter_nemesis_list(cluster)
         

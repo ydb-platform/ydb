@@ -16,3 +16,5 @@
 * 18296:Fixed replication continuing to consume disk space when storage was low, which caused VDisks to become read-only. [#18296](https://github.com/ydb-platform/ydb/pull/18296) ([Sergey Belyakov](https://github.com/serbel324))
 * 18271:Fix replication bug #10650 [#18271](https://github.com/ydb-platform/ydb/pull/18271) ([Alexander Rutkovsky](https://github.com/alexvru))
 * 18231:Fix segfault that could happen while retrying Whiteboard requests. [#18231](https://github.com/ydb-platform/ydb/pull/18231) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 19916:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19916](https://github.com/ydb-platform/ydb/pull/19916) ([Nikolay Shestakov](https://github.com/nshestakov))
+

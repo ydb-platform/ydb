@@ -412,7 +412,7 @@ class StabilityCluster:
             print(f'    {node}: {minidumps_search_results[node]}')
 
     def start_nemesis(self):
-        self.prepare_cluster_yaml()
+        self.prepare_config_files()
         with ThreadPoolExecutor() as pool:
             pool.map(lambda node: node.ssh_command(DICT_OF_SERVICES['nemesis']['start_command'], raise_on_error=True), self.kikimr_cluster.nodes.values())
 
@@ -614,17 +614,27 @@ class StabilityCluster:
             )
             node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
-    def prepare_cluster_yaml(self):
+    def prepare_config_files(self):
         with ThreadPoolExecutor() as pool:
-            pool.map(lambda node: node.copy_file_or_dir(
-                self.slice_directory,
-                '/Berkanavt/kikimr/cfg/cluster.yaml'
-            ), self.kikimr_cluster.nodes.values())
+            if self.yaml_config is None:
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.slice_directory,
+                    '/Berkanavt/kikimr/cfg/cluster.yaml'
+                ), self.kikimr_cluster.nodes.values())
+            else:
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.slice_directory,
+                    '/Berkanavt/kikimr/cfg/databases.yaml'
+                ), self.kikimr_cluster.nodes.values())
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.yaml_config,
+                    '/Berkanavt/kikimr/cfg/config.yaml'
+                ), self.kikimr_cluster.nodes.values())
 
     def deploy_tools(self):
         with ThreadPoolExecutor(len(self.kikimr_cluster.nodes)) as pool:
             pool.map(self.deploy_node_tools, self.kikimr_cluster.nodes.values())
-        self.prepare_cluster_yaml()
+        self.prepare_config_files()
 
     def get_workload_outputs(self, mode='err', last_n_lines=10):
         """Capture last N lines of output from all running workload screens."""

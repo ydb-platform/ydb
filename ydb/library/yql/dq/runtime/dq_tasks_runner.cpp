@@ -1,5 +1,6 @@
-#include "dq_tasks_runner.h"
+#include "dq_channel_service.h"
 #include "dq_tasks_counters.h"
+#include "dq_tasks_runner.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
@@ -627,11 +628,32 @@ public:
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
-                    auto inputChannel = CreateDqInputChannel(channelId, inputChannelDesc.GetSrcStageId(), *inputType,
+
+                    IDqInputChannel::TPtr inputChannel;
+                    if (task.GetFastChannels()) {
+                        Y_ENSURE(Context.ChannelService);
+                        TDqChannelParams params = {
+                            .RowType = *inputType,
+                            .HolderFactory = &holderFactory,
+                            .Desc = {
+                                .ChannelId = channelId,
+                                .SrcStageId = inputChannelDesc.GetSrcStageId(),
+                                .DstStageId = inputChannelDesc.GetDstStageId()
+                            },
+                            .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
+                            .TransportVersion = inputChannelDesc.GetTransportVersion(),
+                            .PackerVersion = FromProto(task.GetValuePackerVersion())
+                        };
+                        inputChannel = Context.ChannelService->GetInputChannel(params);
+                    } else {
+                        inputChannel = CreateDqInputChannel(channelId, inputChannelDesc.GetSrcStageId(), *inputType,
                         memoryLimits.ChannelBufferSize, StatsModeToCollectStatsLevel(Settings.StatsMode), typeEnv, holderFactory,
                         inputChannelDesc.GetTransportVersion(), FromProto(task.GetValuePackerVersion()));
+                    }
+
                     auto ret = AllocatedHolder->InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
+
                     inputs.emplace_back(inputChannel);
                 }
             }
@@ -753,10 +775,32 @@ public:
                         settings.MutableSettings.IsLocalChannel = srcNodeId == dstNodeId;
                     }
 
-                    auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
-
-                    auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
-                    YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);
+                    IDqOutputChannel::TPtr outputChannel;
+                    if (task.GetFastChannels()) {
+                        Y_ENSURE(Context.ChannelService);
+                        TDqChannelParams params = {
+                            .RowType = *taskOutputType,
+                            .HolderFactory = &holderFactory,
+                            .Desc = {
+                                .ChannelId = channelId,
+                                .SrcStageId = outputChannelDesc.GetSrcStageId(),
+                                .DstStageId = outputChannelDesc.GetDstStageId()
+                            },
+                            .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
+                            .TransportVersion = outputChannelDesc.GetTransportVersion(),
+                            .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                            .MaxChunkBytes = settings.MaxChunkBytes,
+                            .ChunkSizeLimit = settings.ChunkSizeLimit,
+                            .ArrayBufferMinFillPercentage = settings.ArrayBufferMinFillPercentage,
+                            .BufferPageAllocSize = settings.BufferPageAllocSize,
+                            .ChannelStorage = settings.ChannelStorage,
+                        };
+                        outputChannel = Context.ChannelService->GetOutputChannel(params);
+                    } else {
+                        outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
+                    }
+                    const auto& [it, inserted] = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
+                    YQL_ENSURE(inserted, "task: " << TaskId << ", duplicated output channelId: " << channelId);
                     outputs.emplace_back(outputChannel);
                 }
             }
@@ -820,6 +864,8 @@ public:
 
         InputConsumed = false;
         auto runStatus = FetchAndDispatch();
+        LastFetch = TInstant::Now();
+        LastStatus = runStatus;
 
         if (Y_UNLIKELY(CollectFull())) {
             if (SpillingTaskCounters) {

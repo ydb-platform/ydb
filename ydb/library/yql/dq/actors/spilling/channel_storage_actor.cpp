@@ -119,7 +119,7 @@ private:
         auto loadingBlobInfo = TLoadingBlobInfo{std::move(msg.Promise_), opBegin};
         LoadingBlobs_.emplace(msg.BlobId_, std::move(loadingBlobInfo));
 
-        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.BlobId_, true));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.BlobId_));
     }
 
     void HandleWork(TEvDqChannelSpilling::TEvPut::TPtr& ev) {

@@ -27,7 +27,6 @@ struct TDqComputeStorageActorEvents {
     enum {
         EvPut = EventSpaceBegin(NActors::TEvents::EEventSpace::ES_USERSPACE) + 30000,
         EvGet,
-        EvExtract,
         EvDelete
     };
 };
@@ -44,16 +43,14 @@ struct TEvPut : NActors::TEventLocal<TEvPut, TDqComputeStorageActorEvents::EvPut
 };
 
 struct TEvGet : NActors::TEventLocal<TEvGet, TDqComputeStorageActorEvents::EvGet> {
-    TEvGet(IDqComputeStorageActor::TKey key, NThreading::TPromise<std::optional<TChunkedBuffer>>&& promise, bool removeBlobAfterRead)
+    TEvGet(IDqComputeStorageActor::TKey key, NThreading::TPromise<std::optional<TChunkedBuffer>>&& promise)
         : Key_(key)
         , Promise_(std::move(promise))
-        , RemoveBlobAfterRead_(removeBlobAfterRead)
     {
     }
 
     IDqComputeStorageActor::TKey Key_;
     NThreading::TPromise<std::optional<TChunkedBuffer>> Promise_;
-    bool RemoveBlobAfterRead_;
 };
 
 struct TEvDelete : NActors::TEventLocal<TEvDelete, TDqComputeStorageActorEvents::EvDelete> {
@@ -67,7 +64,7 @@ struct TEvDelete : NActors::TEventLocal<TEvDelete, TDqComputeStorageActorEvents:
     NThreading::TPromise<void> Promise_;
 };
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, 
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback,
     TErrorCallback errorCallback, TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters);
 
 } // namespace NYql::NDq

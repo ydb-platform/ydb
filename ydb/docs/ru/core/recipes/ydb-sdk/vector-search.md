@@ -1,11 +1,17 @@
 # Векторный поиск
 
-В данном разделе содержатся рецепты кода на разных языках программирования для решения задач векторного поиска с использованием {{ ydb-short-name }} SDK.
+В данном разделе содержатся рецепты кода на разных языках программирования для решения задач [векторного поиска](../../concepts/vector_search.md) с использованием {{ ydb-short-name }} SDK.
+Подробно будут разобраны операции:
+
+* Создания таблицы для хранения векторов
+* Вставки векторов в таблицу
+* Добавления векторного индекса
+* Поиска ближайших векторов
 
 ## Подключение к YDB
 
 В данной секции описаны минимально необходимые действия для выполнения запросов в YDB.
-Для получения более детальной информации по подключению к YDB, обратитесь к статье [Инициализация драйвера](./init.md)
+Для получения более подробной информации о подключении к YDB обратитесь к статье [Инициализация драйвера](./init.md)
 
 {% list tabs %}
 
@@ -31,8 +37,7 @@
 ## Создание таблицы
 
 Сначала необходимо создать таблицу для хранения документов и их векторных представлений.
-
-Схема таблицы:
+Структура таблицы:
 
 * `id` - идентификатор документа
 * `document` - текст документа
@@ -40,7 +45,7 @@
 
 **Важно: хранения вектора используется тип `String`.**
 
-Более подробно типы данных описаны в документации про [точный векторный поиск](../../yql/reference/udf/list/knn.md#data-types)
+Подробное описание типов данных смотрите в документации по [точному векторному поиску](../../yql/reference/udf/list/knn.md#data-types)
 
 {% list tabs %}
 
@@ -61,23 +66,44 @@
         print("Vector table created")
     ```
 
+- C++
+
+    ```cpp
+    void CreateVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& tableName)
+    {
+        std::string query = std::format(R"(
+            CREATE TABLE IF NOT EXISTS `{}` (
+                id Utf8,
+                document Utf8,
+                embedding String,
+                PRIMARY KEY (id)
+            ))", tableName);
+
+        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        }));
+
+        std::cout << "Vector table created: " << tableName << std::endl;
+    }
+    ```
+
 {% endlist %}
 
 
 ## Вставка векторов
 
-После создания таблицы необходимо заполнить её векторами.
-В готовом YQL запросе важно правильно преобразовать вектор в тип `String`, для этого используется [функция преобразования](../../yql/reference/udf/list/knn.md#functions-convert) вектора в бинарное представление.
+После создания таблицы её необходимо заполнить векторами.
+В готовом YQL-запросе важно корректно преобразовать вектор в тип `String`. Для этого используется [функция преобразования](../../yql/reference/udf/list/knn.md#functions-convert) вектора в бинарное представление.
 
-Формируемый запрос использует возможности контейнерных типов данных для возможности разовой передачи случайного количества объектов.
+Запрос оперирует контейнерным типом данных `List<Struct>`, что позволяет передавать произвольное количество объектов за один раз.
 
 {% list tabs %}
 
 - Python
 
-    Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор объекта, `document` - текст и `embedding` - векторное представление текста.
+    Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
 
-    Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, у которого указываются типы всех полей. Для передачи списка таких структур, необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
+    Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
 
     ```python
     def insert_items(
@@ -117,12 +143,73 @@
         print(f"{len(items)} items inserted")
     ```
 
+- C++
+
+    ```cpp
+    void InsertItems(
+        NYdb::NQuery::TQueryClient& client,
+        const std::string& tableName,
+        const std::vector<TItem>& items)
+    {
+        std::string query = std::format(R"(
+            DECLARE $items AS List<Struct<
+                id: Utf8,
+                document: Utf8,
+                embedding: List<Float>
+            >>;
+
+            UPSERT INTO `{0}`
+            (
+            id,
+            document,
+            embedding
+            )
+            SELECT
+                id,
+                document,
+                Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+            FROM AS_TABLE($items);
+        )", tableName);
+
+        NYdb::TParamsBuilder paramsBuilder;
+        auto& valueBuilder = paramsBuilder.AddParam("$items");
+        valueBuilder.BeginList();
+        for (const auto& item : items) {
+            valueBuilder.AddListItem();
+            valueBuilder.BeginStruct();
+            valueBuilder.AddMember("id").Utf8(item.Id);
+            valueBuilder.AddMember("document").Utf8(item.Document);
+            valueBuilder.AddMember("embedding").BeginList();
+            for (const auto& value : item.Embedding) {
+                valueBuilder.AddListItem().Float(value);
+            }
+            valueBuilder.EndList();
+            valueBuilder.EndStruct();
+        }
+        valueBuilder.EndList();
+        valueBuilder.Build();
+
+        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        }));
+
+        std::cout << items.size() << " items inserted" << std::endl;
+    }
+    ```
+
 {% endlist %}
 
 
 ## Добавление индекса
 
-В данном примере описан метод для добавления векторного индекса. В методе делаются две вещи: создается временный индекс и производится атомарная замена. Данный подход позволяет создавать индекс и когда он уже существует (перестроение), и когда его еще нет.
+Использование векторного индекса позволяет эффективно решать задачу поиска. Подробнее преимущества и особенности использования описаны в документации [векторного индекса](../../dev/vector-indexes.md).
+
+Для добавления индекса необходимо выполнить две операции:
+
+* Создать временный индекс
+* Сохранить временный индекс как постоянный
+
+Такой подход позволяет создавать индекс как в случае его первоначального создания, так и при перестроении (если индекс уже существует).
 
 Доступные стратегии:
 
@@ -132,9 +219,9 @@
 * `distance=euclidean`
 * `distance=manhattan`
 
-Каждая из стратегий соответствует функции, с которой будет производится дальнейший поиск. Подробнее функции описаны в документации про [функции расстояния и сходства](../../yql/reference/udf/list/knn.md#fuctions-distance).
+Каждая стратегия определяет функцию, которая будет использоваться для последующего поиска. Более подробно функции описаны в документации по [функциям расстояния и сходства](../../yql/reference/udf/list/knn.md#fuctions-distance).
 
-Параметры, используемые при создании индекса типа `vector_kmeans_tree` описаны в документации [векторного индекса](../../dev/vector-indexes.md#kmeans-tree-type).
+Параметры, применяемые при создании индекса типа `vector_kmeans_tree` описаны в документации [векторного индекса](../../dev/vector-indexes.md#kmeans-tree-type).
 
 
 {% list tabs %}
@@ -181,13 +268,59 @@
         print(f"Table index {index_name} created.")
     ```
 
+- C++
+
+    ```cpp
+    void AddIndex(
+        NYdb::TDriver& driver,
+        NYdb::NQuery::TQueryClient& client,
+        const std::string& database,
+        const std::string& tableName,
+        const std::string& indexName,
+        const std::string& strategy,
+        std::uint64_t dim,
+        std::uint64_t levels,
+        std::uint64_t clusters)
+    {
+        std::string query = std::format(R"(
+            ALTER TABLE `{0}`
+            ADD INDEX {1}__temp
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+                {2},
+                vector_type="Float",
+                vector_dimension={3},
+                levels={4},
+                clusters={5}
+            );
+        )", tableName, indexName, strategy, dim, levels, clusters);
+
+        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        }));
+
+        NYdb::NTable::TTableClient tableClient(driver);
+        NYdb::NStatusHelpers::ThrowOnError(tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
+            return session.AlterTable(database + "/" + tableName, NYdb::NTable::TAlterTableSettings()
+                .AppendRenameIndexes(NYdb::NTable::TRenameIndex{
+                    .SourceName_ = indexName + "__temp",
+                    .DestinationName_ = indexName,
+                    .ReplaceDestination_ = true
+                })
+            ).ExtractValueSync();
+        }));
+
+        std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
+    }
+    ```
+
 {% endlist %}
 
 ## Поиск по вектору
 
-В данном примере описан метод для поиска документов по вектору. Метод возвращает словарь, включающий в себя значение колонок `id`, `document`, а также `score` - вывод функции поиска.
-
-Метод требует указать функцию расстояния или сходства. Возможные значения:
+Для поиска документов по вектору используется специальный YQL‑запрос, где необходимо определить функцию сходства или расстояния.
+Доступные значения:
 
 * `CosineSimilarity`
 * `InnerProductSimilarity`
@@ -195,9 +328,11 @@
 * `ManhattanDistance`
 * `EuclideanDistance`
 
-Подробнее функции описаны в документации по [функциях расстояния и сходства](../../yql/reference/udf/list/knn.md#fuctions-distance).
+Подробнее функции описаны в документации по [функциям расстояния и сходства](../../yql/reference/udf/list/knn.md#fuctions-distance).
 
-Метод позволяет указать имя индекса. Если оно указано, то в запрос будет добавлено выражение вида `VIEW index_name`, которое будет использовать векторный индекс в процессе поиска.
+Метод позволяет указать имя индекса. Если оно задано, в запросе будет добавлено выражение `VIEW index_name`, что позволит использовать векторный индекс при поиске.
+
+Метод возвращает список, состоящий из словарей с полями `id`, `document`, а также `score` - числом, отражающим степень сходства (или расстояния) с искомым вектором.
 
 {% list tabs %}
 
@@ -253,11 +388,69 @@
         return items
     ```
 
+- C++
+
+    ```cpp
+    std::vector<TResultItem> SearchItems(
+        NYdb::NQuery::TQueryClient& client,
+        const std::string& tableName,
+        const std::vector<float>& embedding,
+        const std::string& strategy,
+        std::uint64_t limit,
+        const std::optional<std::string>& indexName)
+    {
+        std::string viewIndex = indexName ? "VIEW " + *indexName : "";
+        std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
+
+        std::string query = std::format(R"(
+            DECLARE $embedding as List<Float>;
+
+            $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
+
+            SELECT
+                id,
+                document,
+                Knn::{2}(embedding, $TargetEmbedding) as score
+            FROM {0} {1}
+            ORDER BY score
+            {3}
+            LIMIT {4};
+        )", tableName, viewIndex, strategy, sortOrder, limit);
+
+        NYdb::TParamsBuilder paramsBuilder;
+        auto& valueBuilder = paramsBuilder.AddParam("$embedding");
+        valueBuilder.BeginList();
+        for (auto value : embedding) {
+            valueBuilder.AddListItem().Float(value);
+        }
+        valueBuilder.EndList().Build();
+
+        std::vector<TResultItem> result;
+
+        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query, &result](NYdb::NQuery::TSession session) {
+            auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+            if (execResult.IsSuccess()) {
+                auto parser = execResult.GetResultSetParser(0);
+                while (parser.TryNextRow()) {
+                    result.push_back({
+                        .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
+                        .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
+                        .Score = *parser.ColumnParser(2).GetOptionalFloat()
+                    });
+                }
+            }
+            return execResult;
+        }));
+
+        return result;
+    }
+    ```
+
 {% endlist %}
 
 ## Итоговый пример
 
-В данном разделе указан пример использования вышеупомянутых методов, состоящий из следующих шагов:
+Объединим все вышеописанные методы в один пример, который включает следующие шаги:
 
 1. Удаление существующей таблицы
 2. Создание новой таблицы
@@ -265,6 +458,8 @@
 4. Поиск ближайших векторов без использования индекса
 5. Добавление векторного индекса
 6. Поиск ближайших векторов с использованем индекса
+
+{% list tabs %}
 
 - Python
 
@@ -366,6 +561,61 @@
     [score=0.9878783822059631] 3: vector 3
     ```
 
+    В результате видно, что таблица была создана, добавлено 9 документов и успешно выполнён поиск по близости векторов — как до, так и после добавления векторного индекса.
+
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/python/examples/vector_search/vector_search.py).
+
+- C++
+
+    ```cpp
+    void PrintResults(const std::vector<TResultItem>& items)
+    {
+        if (items.empty()) {
+            std::cout << "No items found" << std::endl;
+            return;
+        }
+
+        for (const auto& item : items) {
+            std::cout << "[score=" << item.Score << "] " << item.Id << ": " << item.Document << std::endl;
+        }
+    }
+
+    void VectorExample(
+        const std::string& endpoint,
+        const std::string& database,
+        const std::string& tableName,
+        const std::string& indexName)
+    {
+        auto driverConfig = NYdb::CreateFromEnvironment(endpoint + "/?database=" + database);
+        NYdb::TDriver driver(driverConfig);
+        NYdb::NQuery::TQueryClient client(driver);
+
+        try {
+            DropVectorTable(client, tableName);
+            CreateVectorTable(client, tableName);
+            std::vector<TItem> items = {
+                {.Id = "1", .Document = "document 1", .Embedding = {0.98, 0.1, 0.01}},
+                {.Id = "2", .Document = "document 2", .Embedding = {1.0, 0.05, 0.05}},
+                {.Id = "3", .Document = "document 3", .Embedding = {0.9, 0.1, 0.1}},
+                {.Id = "4", .Document = "document 4", .Embedding = {0.03, 0.0, 0.99}},
+                {.Id = "5", .Document = "document 5", .Embedding = {0.0, 0.0, 0.99}},
+                {.Id = "6", .Document = "document 6", .Embedding = {0.0, 0.02, 1.0}},
+                {.Id = "7", .Document = "document 7", .Embedding = {0.0, 1.05, 0.05}},
+                {.Id = "8", .Document = "document 8", .Embedding = {0.02, 0.98, 0.1}},
+                {.Id = "9", .Document = "document 9", .Embedding = {0.0, 1.0, 0.05}},
+            };
+            InsertItems(client, tableName, items);
+            PrintResults(SearchItems(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
+            AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
+            PrintResults(SearchItems(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
+        } catch (const std::exception& e) {
+            std::cerr << "Execution failed: " << e.what() << std::endl;
+        }
+
+        driver.Stop(true);
+    }
+    ```
+
+    Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
 {% endlist %}

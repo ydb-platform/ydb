@@ -6,18 +6,18 @@ Released on July 4, 2025. To update to version **2.23.0**, select the [Downloads
 
 ### Features
 
-* Added the `{{ ydb-cli }} workload tpcc` command as a TPC-C benchmark.
+* Added the `{{ ydb-cli }} workload tpcc` command to run a TPC-C benchmark.
 * Added the `{{ ydb-cli }} workload vector select` command to benchmark vector index performance and recall.
 * Added the `{{ ydb-cli }} tools infer csv` command to generate a `CREATE TABLE` SQL query from a CSV data file.
 
 ### Improvements
 
 * Enhanced processing of special values (`null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr`, and `cerr`) for the `--output` option in the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
-* The `{{ ydb-cli }} workload` [commands](./reference/ydb-cli/commands/workload/index.md) now work with absolute paths.
+* The `{{ ydb-cli }} workload` [commands](./reference/ydb-cli/commands/workload/index.md) now work with absolute paths for database scheme objects.
 * Improvements in the `{{ ydb-cli }}` interactive mode:
   * Improved inline hints.
-  * Added named expressions completion (i.e. table column names).
-  * Added schema response caching.
+  * Added table column names completion.
+  * Added schema caching.
 
 ## Version 2.22.1 {#2-22-1}
 

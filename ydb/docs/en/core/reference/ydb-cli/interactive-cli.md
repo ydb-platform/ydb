@@ -82,7 +82,10 @@ While in interactive mode, pressing the `TAB` key shows a list of suggestions fo
 
 ![Auto completion](_assets/candidates.gif)
 
+Continue typing to narrow down the list of suitable candidates.
+
 If there is only one available option, pressing `TAB` will automatically complete the current word.
+
 If all available options share a common prefix, pressing `TAB` will automatically insert it.
 
 ### Interactive hints {#interactive-hints}

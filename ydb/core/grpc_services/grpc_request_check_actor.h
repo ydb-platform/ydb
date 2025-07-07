@@ -141,8 +141,8 @@ public:
         }
 
         if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
-            TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> e = GetEntriesForAuthAndCheckRequest(Request_);
-            entries.insert(entries.end(), e.begin(), e.end());
+            TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> authCheckRequestEntries = GetEntriesForAuthAndCheckRequest(Request_);
+            entries.insert(entries.end(), authCheckRequestEntries.begin(), authCheckRequestEntries.end());
         }
 
         TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> clusterAccessCheckEntries = GetEntriesForClusterAccessCheck(rootAttributes);

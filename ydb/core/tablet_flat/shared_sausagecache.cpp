@@ -1165,14 +1165,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // TODO: move pages async and batched
         for (const auto& kv : collection.PageMap) {
             auto* page = kv.second.Get();
-            switch (page->State) {
-            case PageStateLoaded:
-                TryMoveLoadedPage(page, ECacheTier::Regular);
-                break;
-            default:
-                page->CacheTier = ECacheTier::Regular;
-                break;
-            }
+            TryMovePageToTier(page, ECacheTier::Regular);
         }
     }
 
@@ -1196,22 +1189,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ui64 pagesToRequestBytes = 0;
         for (const auto& pageId : xrange(pageCollection->Total())) {
             auto* page = EnsurePage(*pageCollection, collection, pageId, ECacheTier::TryKeepInMemory);
+            TryMovePageToTier(page, ECacheTier::TryKeepInMemory);
+
             switch (page->State) {
             case PageStateEvicted:
-                page->CacheTier = ECacheTier::TryKeepInMemory;
                 TryLoadEvictedPage(page);
                 Evict(Cache.Touch(page));
-                break;
-            case PageStateLoaded:
-                TryMoveLoadedPage(page, ECacheTier::TryKeepInMemory);
                 break;
             case PageStateNo:
                 page->State = PageStateRequestedAsync;
                 pagesToRequest.push_back(pageId);
                 pagesToRequestBytes += page->Size;
-                break;
-            default:
-                page->CacheTier = ECacheTier::TryKeepInMemory;
                 break;
             }
         }
@@ -1225,13 +1213,19 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void TryMoveLoadedPage(TPage* page, ECacheTier targetTier) {
-        Y_ENSURE(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
+    void TryMovePageToTier(TPage* page, ECacheTier targetTier) {
         if (page->CacheTier != targetTier) {
-            Cache.Erase(page);
-            page->EnsureNoCacheFlags();
-            page->CacheTier = targetTier;
-            Evict(Cache.Touch(page));
+            switch (page->State) {
+            case PageStateLoaded:
+                Cache.Erase(page);
+                page->EnsureNoCacheFlags();
+                page->CacheTier = targetTier;
+                Evict(Cache.Touch(page));
+                break;
+            default:
+                page->CacheTier = targetTier;
+                break;
+            }
         }
     }
 

@@ -786,7 +786,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Owners.erase(ownerIt);
         Counters.Owners->Dec();
 
-        ProcessGCList();
+        DoGC();
     }
 
     void Handle(NSharedCache::TEvDetach::TPtr &ev, const TActorContext& ctx) {
@@ -821,7 +821,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TryDropExpiredCollection(*collection);
 
-        ProcessGCList();
+        DoGC();
     }
 
     void Handle(NBlockIO::TEvData::TPtr &ev, const TActorContext& ctx) {
@@ -1167,7 +1167,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             auto* page = kv.second.Get();
             switch (page->State) {
             case PageStateLoaded:
-                TryMoveActivePage(page, ECacheTier::Regular);
+                TryMoveLoadedPage(page, ECacheTier::Regular);
                 break;
             default:
                 page->CacheTier = ECacheTier::Regular;
@@ -1203,10 +1203,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 Evict(Cache.Touch(page));
                 break;
             case PageStateLoaded:
-                TryMoveActivePage(page, ECacheTier::TryKeepInMemory);
+                TryMoveLoadedPage(page, ECacheTier::TryKeepInMemory);
                 break;
             case PageStateNo:
-                page->State = PageStateRequested;
+                page->State = PageStateRequestedAsync;
                 pagesToRequest.push_back(pageId);
                 pagesToRequestBytes += page->Size;
                 break;
@@ -1225,7 +1225,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void TryMoveActivePage(TPage* page, ECacheTier targetTier) {
+    void TryMoveLoadedPage(TPage* page, ECacheTier targetTier) {
+        Y_ENSURE(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
         if (page->CacheTier != targetTier) {
             Cache.Erase(page);
             page->EnsureNoCacheFlags();

@@ -1,10 +1,11 @@
 PY3TEST()
-    ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
     TEST_SRCS(
         test_quota_exhaustion.py
+        zip_bomb.py
     )
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -16,8 +17,7 @@ PY3TEST()
 
     DEPENDS(
         ydb/apps/ydb
-        ydb/apps/ydbd
-    )
+        )
 
     PEERDIR(
     ydb/tests/library

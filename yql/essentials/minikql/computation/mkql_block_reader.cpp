@@ -162,6 +162,19 @@ private:
     i32 TypeLen = 0;
 };
 
+class TSingularTypeItemConverter: public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(item, holderFactory);
+        return NUdf::TUnboxedValuePod::Zero();
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        Y_UNUSED(value);
+        return TBlockItem::Zero();
+    }
+};
+
 template <bool Nullable>
 class TTupleBlockItemConverter : public IBlockItemConverter {
 public:
@@ -285,6 +298,7 @@ struct TConverterTraits {
     using TExtOptional = TExternalOptionalBlockItemConverter;
     template<typename TTzDate, bool Nullable>
     using TTzDateConverter = TTzDateBlockItemConverter<TTzDate, Nullable>;
+    using TSingularType = TSingularTypeItemConverter;
 
     constexpr static bool PassType = false;
 
@@ -324,6 +338,10 @@ struct TConverterTraits {
         } else {
             return std::make_unique<TTzDateConverter<TTzDate, false>>();
         }
+    }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
     }
 };
 

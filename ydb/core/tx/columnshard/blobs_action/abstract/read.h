@@ -254,6 +254,9 @@ public:
     }
 
     void Add(const std::shared_ptr<IBlobsReadingAction>& action) {
+        if (!action->GetExpectedBlobsCount()) {
+            return;
+        }
         auto it = Actions.find(action->GetStorageId());
         if (it == Actions.end()) {
             Actions.emplace(action->GetStorageId(), action);

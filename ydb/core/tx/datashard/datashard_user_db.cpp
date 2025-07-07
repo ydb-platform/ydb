@@ -4,15 +4,14 @@
 
 namespace NKikimr::NDataShard {
 
-TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64 globalTxId, const TRowVersion& readVersion, const TRowVersion& writeVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
+TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64 globalTxId, const TRowVersion& mvccVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
     : Self(self)
     , Db(db)
     , ChangeGroupProvider(self, db)
     , GlobalTxId(globalTxId)
     , LockTxId(0)
     , LockNodeId(0)
-    , ReadVersion(readVersion)
-    , WriteVersion(writeVersion)
+    , MvccVersion(mvccVersion)
     , Now(now)
     , Counters(counters)
 {
@@ -24,17 +23,32 @@ NTable::EReady TDataShardUserDb::SelectRow(
         TArrayRef<const NTable::TTag> tags,
         NTable::TRowState& row,
         NTable::TSelectStats& stats,
-        const TMaybe<TRowVersion>& readVersion)
+        const TMaybe<TRowVersion>& snapshot)
 {
     auto tid = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(tid != 0, "Unexpected SelectRow for an unknown table");
 
+    if (snapshot) {
+        // Note: snapshot is used by change collector to check scan snapshot state
+        // We don't want to apply any tx map or observer to reproduce whatever scan observes
+        return Db.Select(tid, key, tags, row, stats, /* readFlags */ 0, *snapshot);
+    }
+
     SetPerformedUserReads(true);
 
-    return Db.Select(tid, key, tags, row, stats, /* readFlags */ 0,
-        readVersion.GetOrElse(ReadVersion),
+    NTable::EReady ready = Db.Select(tid, key, tags, row, stats, /* readFlags */ 0,
+        MvccVersion,
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
+
+    if (stats.InvisibleRowSkips > 0) {
+        if (LockTxId) {
+            Self.SysLocksTable().BreakSetLocks();
+        }
+        MvccReadConflict = true;
+    }
+
+    return ready;
 }
 
 NTable::EReady TDataShardUserDb::SelectRow(
@@ -42,10 +56,10 @@ NTable::EReady TDataShardUserDb::SelectRow(
         TArrayRef<const TRawTypeValue> key,
         TArrayRef<const NTable::TTag> tags,
         NTable::TRowState& row,
-        const TMaybe<TRowVersion>& readVersion)
+        const TMaybe<TRowVersion>& snapshot)
 {
     NTable::TSelectStats stats;
-    return SelectRow(tableId, key, tags, row, stats, readVersion);
+    return SelectRow(tableId, key, tags, row, stats, snapshot);
 }
 
 ui64 CalculateKeyBytes(const TArrayRef<const TRawTypeValue> key) {
@@ -221,10 +235,10 @@ void TDataShardUserDb::UpsertRowInt(
 
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
-        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, WriteVersion))
+        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, MvccVersion))
             throw TNotReadyTabletException();
 
-        Db.Update(localTableId, rowOp, key, ops, WriteVersion);
+        Db.Update(localTableId, rowOp, key, ops, MvccVersion);
     } else {
         if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId))
             throw TNotReadyTabletException();
@@ -326,7 +340,7 @@ ui64 TDataShardUserDb::GetChangeGroup() {
     return ChangeGroupProvider.GetChangeGroup();
 }
 
-void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
+void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
     auto localTid = Self.GetLocalTableId(tableId);
     Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << Self.TabletID());
 
@@ -359,27 +373,27 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
             if (it != TxMaps.end()) {
-                it->second->Add(lockId, WriteVersion);
+                it->second->Add(lockId, MvccVersion);
             }
         }
         return;
     }
 
     LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Committing changes lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self.TabletID());
-    Db.CommitTx(localTid, lockId, writeVersion);
+    Db.CommitTx(localTid, lockId, MvccVersion);
     Self.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(lockId, Db);
 
     if (!CommittedLockChanges.contains(lockId) && Self.HasLockChangeRecords(lockId)) {
         if (auto* collector = GetChangeCollector(tableId)) {
-            collector->CommitLockChanges(lockId, WriteVersion);
+            collector->CommitLockChanges(lockId, MvccVersion);
             CommittedLockChanges.insert(lockId);
         }
     }
 }
 
-void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion) {
+void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId) {
     auto* dynamicTxMap = static_cast<NTable::TDynamicTransactionMap*>(GetReadTxMap(tableId).Get());
-    dynamicTxMap->Add(txId, commitVersion);
+    dynamicTxMap->Add(txId, MvccVersion);
 }
 
 class TLockedReadTxObserver: public NTable::ITransactionObserver {
@@ -434,11 +448,12 @@ public:
         // We already use InvisibleRowSkips for these
     }
 
-    void OnApplyCommitted(const TRowVersion&) override {
-        // Not needed
+    void OnApplyCommitted(const TRowVersion& rowVersion) override {
+        ConflictChecker.CheckReadConflict(rowVersion);
     }
 
-    void OnApplyCommitted(const TRowVersion&, ui64 txId) override {
+    void OnApplyCommitted(const TRowVersion& rowVersion, ui64 txId) override {
+        ConflictChecker.CheckReadConflict(rowVersion);
         ConflictChecker.CheckReadDependency(txId);
     }
 
@@ -698,7 +713,7 @@ ui64 TDataShardUserDb::GetWriteTxId(const TTableId& tableId) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
             if (it != TxMaps.end()) {
-                it->second->Add(VolatileTxId, WriteVersion);
+                it->second->Add(VolatileTxId, MvccVersion);
             }
         }
         return VolatileTxId;
@@ -736,7 +751,7 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
         } else if (VolatileTxId) {
             // We want committed volatile changes to be visible at the write version
             for (ui64 commitTxId : VolatileCommitTxIds) {
-                txMap->Add(commitTxId, WriteVersion);
+                txMap->Add(commitTxId, MvccVersion);
             }
         }
     }
@@ -751,6 +766,7 @@ NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTable
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected GetReadTxObserver for an unknown table");
 
     bool needObserver = (
+        SnapshotVersion < MvccVersion ||
         // We need observer when there are waiting changes in the tx map
         Self.GetVolatileTxManager().GetTxMap() ||
         // We need observer for locked reads when there are active write locks
@@ -774,7 +790,7 @@ NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTable
     return ptr;
 }
 
-void TDataShardUserDb::AddReadConflict(ui64 txId) const {
+void TDataShardUserDb::AddReadConflict(ui64 txId) {
     Y_ABORT_UNLESS(LockTxId);
 
     // We have detected uncommitted changes in txId that could affect
@@ -783,17 +799,24 @@ void TDataShardUserDb::AddReadConflict(ui64 txId) const {
     Self.SysLocksTable().AddReadConflict(txId);
 }
 
-void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) const {
-    Y_ABORT_UNLESS(LockTxId);
-
-    if (rowVersion > ReadVersion) {
-        // We are reading from snapshot at ReadVersion and should not normally
+void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
+    if (rowVersion > MvccVersion) {
+        // We are reading from snapshot at MvccVersion and should not normally
         // observe changes with a version above that. However, if we have an
         // uncommitted change, that we fake as committed for our own changes
         // visibility, we might shadow some change that happened after a
         // snapshot. This is a clear indication of a conflict between read
         // and that future conflict, hence we must break locks and abort.
-        Self.SysLocksTable().BreakSetLocks();
+        if (LockTxId) {
+            Self.SysLocksTable().BreakSetLocks();
+        }
+        MvccReadConflict = true;
+    } else if (rowVersion > SnapshotVersion) {
+        // During commit we read at the current mvcc version, however we may
+        // notice there have been changes between the snapshot and current
+        // commit version. This is not necessarily an error, but indicates
+        // if this read was performed under a lock it would have been broken.
+        SnapshotReadConflict = true;
     }
 }
 

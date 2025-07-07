@@ -20,7 +20,8 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor
         }
         AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
-    return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnIds);
+    AFL_VERIFY(columnIds.size() == 1);
+    return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), *columnIds.begin());
 }
 
 NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -36,6 +37,10 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(con
             return TConclusionStatus::Fail("column_names have to be in count min sketch features as array of strings ['column_name_1', ... , 'column_name_N']");
         }
         ColumnNames.emplace(i.GetString());
+    }
+    if (ColumnNames.size() > 1) {
+        return TConclusionStatus::Fail(
+            "column_names elements count have to be equal to 1 temporary");
     }
     return TConclusionStatus::Success();
 }

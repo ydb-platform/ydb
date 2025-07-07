@@ -21,12 +21,14 @@ TOthersData::TBuilderWithStats::TBuilderWithStats() {
     Values = static_cast<arrow::StringBuilder*>(Builders[2].get());
 }
 
-void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value) {
+void TOthersData::TBuilderWithStats::AddImpl(const ui32 recordIndex, const ui32 keyIndex, const std::string_view* value) {
     AFL_VERIFY(Builders.size());
     if (StatsByKeyIndex.size() <= keyIndex) {
         StatsByKeyIndex.resize((keyIndex + 1) * 2);
     }
-    StatsByKeyIndex[keyIndex].AddValue(value);
+    if (value) {
+        StatsByKeyIndex[keyIndex].AddValue(*value);
+    }
     if (!LastRecordIndex) {
         LastRecordIndex = recordIndex;
         LastKeyIndex = keyIndex;
@@ -35,7 +37,11 @@ void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyI
     }
     TStatusValidator::Validate(RecordIndex->Append(recordIndex));
     RTKeyIndexes.emplace_back(keyIndex);
-    TStatusValidator::Validate(Values->Append(value.data(), value.size()));
+    if (value) {
+        TStatusValidator::Validate(Values->Append(value->data(), value->size()));
+    } else {
+        TStatusValidator::Validate(Values->AppendNull());
+    }
     ++RecordsCount;
 }
 
@@ -119,6 +125,11 @@ public:
 };
 
 TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSettings& settings) const {
+    if (filter.IsTotalAllowFilter()) {
+        return *this;
+    } else if (filter.IsTotalDenyFilter()) {
+        return TOthersData::BuildEmpty();
+    }
     TOthersData::TIterator itOthersData = BuildIterator();
     bool currentAcceptance = filter.GetStartValue();
     ui32 filterIntervalStart = 0;
@@ -128,14 +139,23 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
     auto valuesBuilder = NArrow::MakeBuilder(arrow::utf8());
     TUsedKeysCollection usedKeys(Stats);
     std::vector<ui32> originalKeys;
+    std::optional<ui32> predRecordIndex;
+    const ui32 resultRecordsCount = filter.GetFilteredCountVerified();
     for (auto it = filter.GetFilter().begin(); itOthersData.IsValid() && it != filter.GetFilter().end(); ++it) {
         for (; itOthersData.IsValid(); itOthersData.Next()) {
             if (itOthersData.GetRecordIndex() < filterIntervalStart) {
                 AFL_VERIFY(false);
             } else if (itOthersData.GetRecordIndex() < filterIntervalStart + *it) {
                 if (currentAcceptance) {
-                    AFL_VERIFY(shiftSkippedCount <= itOthersData.GetRecordIndex());
+                    AFL_VERIFY(shiftSkippedCount <= itOthersData.GetRecordIndex())("shift", shiftSkippedCount)(
+                                                      "record_index", itOthersData.GetRecordIndex());
                     const ui32 filteredRecordIndex = itOthersData.GetRecordIndex() - shiftSkippedCount;
+                    if (predRecordIndex) {
+                        AFL_VERIFY(*predRecordIndex <= filteredRecordIndex)("pred", predRecordIndex)("index", filteredRecordIndex);
+                    }
+                    predRecordIndex = filteredRecordIndex;
+                    AFL_VERIFY(filteredRecordIndex < resultRecordsCount)("new_record_index", filteredRecordIndex)("count", resultRecordsCount)(
+                        "shift", shiftSkippedCount)("record_index", itOthersData.GetRecordIndex());
                     NArrow::Append<arrow::UInt32Type>(*recordIndexBuilder, filteredRecordIndex);
                     NArrow::Append<arrow::StringType>(*valuesBuilder, arrow::util::string_view(itOthersData.GetValue().data(), itOthersData.GetValue().size()));
                     originalKeys.emplace_back(itOthersData.GetKeyIndex());
@@ -151,7 +171,7 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
         currentAcceptance = !currentAcceptance;
         filterIntervalStart += *it;
     }
-    auto stats = usedKeys.BuildStats(settings, filter.GetFilteredCountVerified());
+    auto stats = usedKeys.BuildStats(settings, resultRecordsCount);
     const std::vector<ui32> decoder = usedKeys.BuildDecoder();
     auto keyIndexBuilder = NArrow::MakeBuilder(arrow::uint32());
     for (auto&& i : originalKeys) {
@@ -169,14 +189,17 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
 
 TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSettings& settings) const {
     AFL_VERIFY(Records->GetColumnsCount() == 3);
-    if (!count) {
+    if (!count || !Records || !Records->num_rows()) {
         return TOthersData::BuildEmpty();
     }
     TOthersData::TIterator itOthersData = BuildIterator();
+    if (!itOthersData.IsValid()) {
+        return TOthersData::BuildEmpty();
+    }
     std::optional<ui32> startPosition = itOthersData.FindPosition(offset);
     std::optional<ui32> finishPosition = itOthersData.FindPosition(offset + count);
     if (!startPosition || startPosition == finishPosition) {
-        return TOthersData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
+        return TOthersData::BuildEmpty();
     }
     TUsedKeysCollection usedKeys(Stats);
     {
@@ -223,14 +246,14 @@ TOthersData TOthersData::BuildEmpty() {
 std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_view path, const ui32 recordsCount) const {
     auto idx = Stats.GetKeyIndexOptional(path);
     if (!idx) {
-        return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::utf8(), recordsCount));
+        return std::make_shared<TSparsedArray>(nullptr, arrow::utf8(), recordsCount);
     }
     TColumnFilter filter = TColumnFilter::BuildAllowFilter();
     for (TIterator it(Records); it.IsValid(); it.Next()) {
         filter.Add(it.GetKeyIndex() == *idx);
     }
     auto recordsFiltered = Records;
-    AFL_VERIFY(filter.Apply(recordsFiltered));
+    filter.Apply(recordsFiltered);
     auto table = recordsFiltered->BuildTableVerified(std::set<std::string>({ "record_idx", "value" }));
 
     TSparsedArray::TBuilder builder(nullptr, arrow::utf8());

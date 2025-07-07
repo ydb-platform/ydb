@@ -2,6 +2,7 @@
 #include "ro_controller.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
@@ -26,6 +27,7 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
+    YDB_ACCESSOR_DEF(std::optional<bool>, OverrideAllowMergeFull);
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
@@ -240,6 +242,9 @@ protected:
 
 public:
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
+        if (OverrideAllowMergeFull && *OverrideAllowMergeFull) {
+            return false;
+        }
         return currentSubsetsCount > 1;
     }
 
@@ -282,7 +287,7 @@ public:
         return result;
     }
 
-    std::vector<ui64> GetPathIds(const ui64 tabletId) const;
+    std::vector<NKikimr::NColumnShard::TInternalPathId> GetPathIds(const ui64 tabletId) const;
 
     void SetExpectedShardsCount(const ui32 value) {
         ExpectedShardsCount = value;

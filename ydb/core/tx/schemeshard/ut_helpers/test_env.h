@@ -77,6 +77,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableDatabaseAdmin, std::nullopt);
         OPTION(std::optional<bool>, EnablePermissionsExport, std::nullopt);
         OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
+        OPTION(std::optional<bool>, EnableLocalDBBtreeIndex, std::nullopt);
         OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
 
         #undef OPTION
@@ -150,6 +151,7 @@ namespace NSchemeShardUT_Private {
 
         void BootSchemeShard(TTestActorRuntime& runtime, ui64 schemeRoot);
         void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId);
+        NKikimrConfig::TAppConfig GetAppConfig() const;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -169,6 +171,7 @@ namespace NSchemeShardUT_Private {
 
     public:
         TVector<ui64> TabletIds;
+        TSet<ui32> NoRebootEventTypes;
         THolder<TTestActorRuntime> Runtime;
         TTestEnvOptions EnvOpts;
         THolder<TTestEnv> TestEnv;
@@ -202,7 +205,7 @@ namespace NSchemeShardUT_Private {
     private:
         virtual TTestEnv* CreateTestEnv();
         // Make sure that user requests are not dropped
-        static bool PassUserRequests(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
+        bool PassUserRequests(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
 
     private:
         struct TFinalizer;

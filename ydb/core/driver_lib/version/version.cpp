@@ -1,6 +1,7 @@
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 #include <library/cpp/svnversion/svnversion.h>
+#include <ydb/library/global_plugins/abstract.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/viewer/json/json.h>
 #include "version.h"
@@ -26,7 +27,8 @@ TCompatibilityInfo::TCompatibilityInfo() {
 
     auto current = MakeCurrent();
 
-    // bool success = CompleteFromTag(current);
+    bool success = CompleteFromTag(current);
+    Y_UNUSED(success);
     // Y_ABORT_UNLESS(success);
 
     CurrentCompatibilityInfo.CopyFrom(current);
@@ -774,6 +776,10 @@ TString TCompatibilityInfo::PrintHumanReadable(const NKikimrConfig::TCurrentComp
         str << "trunk";
     }
     str << "\n";
+
+    if (NYdb::NGlobalPlugins::TPluginFactory::Has("internal_breakpad")) {
+        str << "    HasInternalBreakpad: true" << Endl;
+    }
 
     // print common rule
     if (current->HasVersion() && current->GetVersion().HasYear() && current->GetVersion().HasMajor()) {

@@ -1522,6 +1522,17 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
     }
 }
 
+inline bool IsSingularType(const TType* type) {
+    return type->IsNull() ||
+           type->IsVoid() ||
+           type->IsEmptyDict() ||
+           type->IsEmptyList();
+}
+
+inline bool NeedWrapWithExternalOptional(const TType* type) {
+    return type->IsPg() || IsSingularType(type);
+}
+
 bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail, bool output) {
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
@@ -1534,8 +1545,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         return false;
     }
 
-    if (unpacked->IsOptional() || isOptional && unpacked->IsPg()) {
-        // at least 2 levels of optionals
+    if (unpacked->IsOptional() || isOptional && NeedWrapWithExternalOptional(unpacked)) {
         ui32 nestLevel = 0;
         auto currentType = itemType;
         auto previousType = itemType;
@@ -1545,12 +1555,11 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
             currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
         } while (currentType->IsOptional());
 
-        if (currentType->IsPg()) {
+        if (NeedWrapWithExternalOptional(currentType)) {
             previousType = currentType;
             ++nestLevel;
         }
 
-        // previousType is always Optional
         std::shared_ptr<arrow::DataType> innerArrowType;
         if (!ConvertArrowTypeImpl(previousType, innerArrowType, onFail, output)) {
             return false;
@@ -1615,6 +1624,11 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
 
     if (unpacked->IsResource()) {
         type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
+        return true;
+    }
+
+    if (IsSingularType(unpacked)) {
+        type = arrow::null();
         return true;
     }
 
@@ -2479,6 +2493,10 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         return sizeof(NYql::NUdf::TUnboxedValue);
     }
 
+    if (IsSingularType(type)) {
+        return 0;
+    }
+
     if (type->IsData()) {
         auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
         switch (slot) {
@@ -2552,6 +2570,7 @@ struct TComparatorTraits {
     using TExtOptional = NUdf::TExternalOptionalBlockItemComparator;
     template <typename T, bool Nullable>
     using TTzDateComparator = NUdf::TTzDateBlockItemComparator<T, Nullable>;
+    using TSingularType = NUdf::TSingularTypeBlockItemComparator;
 
     constexpr static bool PassType = false;
 
@@ -2563,6 +2582,10 @@ struct TComparatorTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Comparator not implemented for block resources: ";
+    }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
     }
 
     template<typename TTzDate>
@@ -2586,6 +2609,7 @@ struct THasherTraits {
     using TExtOptional = NUdf::TExternalOptionalBlockItemHasher;
     template <typename T, bool Nullable>
     using TTzDateHasher = NYql::NUdf::TTzDateBlockItemHasher<T, Nullable>;
+    using TSingularType = NUdf::TSingularTypeBlockItemHaser;
 
     constexpr static bool PassType = false;
 
@@ -2606,6 +2630,10 @@ struct THasherTraits {
         } else {
             return std::make_unique<TTzDateHasher<TTzDate, false>>();
         }
+    }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
     }
 };
 

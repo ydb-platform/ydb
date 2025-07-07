@@ -126,6 +126,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
     }
+    TKikimrSettings& SetColumnShardDoubleOutOfRangeHandling(const NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy value) {
+        AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
+        return *this;
+    }
 };
 
 class TKikimrRunner {
@@ -273,28 +277,6 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
     }
 }
 
-inline constexpr TStringBuf IndexSubtypeSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "USING vector_kmeans_tree";
-    }
-}
-
-inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)";
-    }
-}
-
 TString ReformatYson(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
@@ -396,6 +378,7 @@ struct TGetPlanParams {
     bool IncludeFilters = false;
     bool IncludeOptimizerEstimation = false;
     bool IncludeTables = true;
+    bool IncludeShuffles = false;
 };
 
 /* Gets join order with details as: join algo, join type and scan type. */

@@ -63,7 +63,9 @@ public:
                 context.Ctx.SelfID,
                 ui64(OperationId.GetTxId()),
                 txShardString, seqNo,
-                context.SS->SelectProcessingParams(txState->TargetPathId));
+                context.SS->SelectProcessingParams(txState->TargetPathId),
+                0,
+                0);
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
 

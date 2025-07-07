@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NReader {
 
-NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
+TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
     const TString& serializedProgram, TReadDescription& read, const NArrow::NSSA::IColumnResolver& columnResolver) const {
     std::set<TString> namesChecker;
     if (serializedProgram.empty()) {
@@ -32,7 +32,7 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
     }
 }
 
-NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMetadata(
+TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     TConclusion<std::shared_ptr<TReadMetadataBase>> result = DoBuildReadMetadata(self, read);
     if (result.IsFail()) {
@@ -46,7 +46,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::Bu
     }
 }
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::IScanCursor>> IScannerConstructor::BuildCursorFromProto(
+TConclusion<std::shared_ptr<NKikimr::NOlap::IScanCursor>> IScannerConstructor::BuildCursorFromProto(
     const NKikimrKqp::TEvKqpScanCursor& proto) const {
     auto result = DoBuildCursor();
     if (!result) {

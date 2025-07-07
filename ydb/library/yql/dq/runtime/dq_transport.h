@@ -82,7 +82,7 @@ private:
         }
         TDqSerializedBatch result;
         result.Proto.SetTransportVersion(TransportVersion);
-        result.Proto.SetRows(count);
+        result.Proto.SetChunks(count);
         result.SetPayload(packer.Finish());
         return result;
     }

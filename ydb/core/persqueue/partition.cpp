@@ -403,6 +403,10 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
 }
 
 bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+    if (IsSupportive()) {
+        return false;
+    }
+
     bool haveChanges = CleanUpBlobs(request, ctx);
 
     PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
@@ -3259,9 +3263,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         );
 
         userInfo.Offset = offset;
-        if (userInfo.Offset <= (i64)StartOffset) {
-            userInfo.AnyCommits = false;
-        }
+        userInfo.AnyCommits = userInfo.Offset > (i64)StartOffset;
 
         if (LastOffsetHasBeenCommited(userInfo)) {
             SendReadingFinished(user);

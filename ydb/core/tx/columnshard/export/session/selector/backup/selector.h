@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/export/session/selector/abstract/selector.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NOlap::NExport {
@@ -13,7 +14,7 @@ public:
 private:
     TSnapshot Snapshot = TSnapshot::Zero();
     TString TableName;
-    ui64 TablePathId;
+    TInternalPathId TablePathId;
     static inline const TFactory::TRegistrator<TBackupSelector> Registrator = TFactory::TRegistrator<TBackupSelector>(GetClassNameStatic());
 
     TConclusionStatus Validate() const {
@@ -37,20 +38,20 @@ protected:
             return result;
         }
         TableName = proto.GetBackup().GetTableName();
-        TablePathId = proto.GetBackup().GetTablePathId();
+        TablePathId = TInternalPathId::FromRawValue(proto.GetBackup().GetTablePathId());
         return Validate();
     }
 
     virtual void DoSerializeToProto(NKikimrColumnShardExportProto::TSelectorContainer& proto) const override {
         *proto.MutableBackup()->MutableSnapshot() = Snapshot.SerializeToProto();
-        proto.MutableBackup()->SetTablePathId(TablePathId);
+        proto.MutableBackup()->SetTablePathId(TablePathId.GetRawValue());
         proto.MutableBackup()->SetTableName(TableName);
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TBackupTask& proto) {
         Snapshot = TSnapshot(proto.GetSnapshotStep(), proto.GetSnapshotTxId());
         TableName = proto.GetTableName();
-        TablePathId = proto.GetTableId();
+        TablePathId = TInternalPathId::FromRawValue(proto.GetTableId());
         return Validate();
     }
 public:
@@ -60,7 +61,7 @@ public:
 
     }
 
-    virtual ui64 GetPathId() const override {
+    virtual TInternalPathId GetPathId() const override {
         return TablePathId;
     }
 

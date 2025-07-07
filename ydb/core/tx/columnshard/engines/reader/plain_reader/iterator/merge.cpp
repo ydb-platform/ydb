@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <ydb/core/formats/arrow/program/collection.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
@@ -40,7 +41,7 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
         ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
         auto accessors = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
-        auto conclusion = Context->GetReadMetadata()->GetProgram().ApplyProgram(accessors);
+        auto conclusion = Context->GetReadMetadata()->GetProgram().ApplyProgram(accessors, std::make_shared<NArrow::NSSA::TFakeDataSource>());
         if (conclusion.IsFail()) {
             return conclusion;
         }
@@ -85,7 +86,7 @@ bool TBaseMergeTask::DoOnAllocated(
         return false;
     }
     AllocationGuard = std::move(guard);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(static_pointer_cast<TBaseMergeTask>(allocation));
+    NConveyor::TScanServiceOperator::SendTaskToExecute(static_pointer_cast<TBaseMergeTask>(allocation), Context->GetCommonContext()->GetConveyorProcessId());
     return true;
 }
 
@@ -142,7 +143,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
         }
     }
     Merger->PutControlPoint(MergingContext->GetFinish(), false);
-    Merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
+    Merger->SkipToBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
     const ui32 originalSourcesCount = Sources.size();
     Sources.clear();
 

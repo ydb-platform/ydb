@@ -12,6 +12,7 @@ RECURSE(
     folder_service
     formats
     fyamlcpp
+    global_plugins
     grpc
     http_proxy
     keys
@@ -28,6 +29,8 @@ RECURSE(
     query_actor
     schlab
     security
+    signal_backtrace
+    signals
     table_creator
     testlib
     time_series_vec

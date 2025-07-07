@@ -45,9 +45,9 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/core/tx/time_cast
     ydb/core/tx/tx_proxy
     yql/essentials/core/services/mounts
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base

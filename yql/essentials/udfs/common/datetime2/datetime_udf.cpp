@@ -1856,6 +1856,11 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
                                                                                          \
     END_SIMPLE_ARROW_UDF(T##name, (TFromConverterKernel<argType, retType, usecMultiplier>::Do))
 
+#define DATETIME_FROM_CONVERTER_UDF_N(space, name, retType, argType, usecMultiplier)    \
+    namespace N##space {                                                                \
+        DATETIME_FROM_CONVERTER_UDF(name, retType, argType, usecMultiplier);            \
+    }
+
     DATETIME_FROM_CONVERTER_UDF(FromSeconds, TTimestamp, ui32, UsecondsInSecond);
     DATETIME_FROM_CONVERTER_UDF(FromMilliseconds, TTimestamp, ui64, UsecondsInMilliseconds);
     DATETIME_FROM_CONVERTER_UDF(FromMicroseconds, TTimestamp, ui64, 1);
@@ -1867,7 +1872,8 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
     DATETIME_FROM_CONVERTER_UDF(IntervalFromDays, TInterval, i32, UsecondsInDay);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromHours, TInterval, i32, UsecondsInHour);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMinutes, TInterval, i32, UsecondsInMinute);
-    DATETIME_FROM_CONVERTER_UDF(IntervalFromSeconds, TInterval, i32, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF_N(Legacy, IntervalFromSeconds, TInterval, i32, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF_N(Actual, IntervalFromSeconds, TInterval, i64, UsecondsInSecond);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMilliseconds, TInterval, i64, UsecondsInMilliseconds);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMicroseconds, TInterval, i64, 1);
 
@@ -3465,7 +3471,12 @@ private:
         TIntervalFromDays,
         TIntervalFromHours,
         TIntervalFromMinutes,
-        TIntervalFromSeconds,
+
+        TLangVerForked<
+            NYql::MakeLangVersion(2025, 03),
+            NLegacy::TIntervalFromSeconds,
+            NActual::TIntervalFromSeconds>,
+
         TIntervalFromMilliseconds,
         TIntervalFromMicroseconds,
 

@@ -26,8 +26,23 @@ namespace NUdf {
 
     template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
     class TLangVerForked {
+    private:
+        Y_HAS_SUBTYPE(TBlockType);
+
     public:
         using TTypeAwareMarker = bool;
+
+        using TBlockType = decltype([] {
+            static_assert(THasTBlockType<TLegacyUDF>::value == THasTBlockType<TActualUDF>::value);
+            if constexpr (THasTBlockType<TActualUDF>::value) {
+                return TLangVerForked<
+                    V,
+                    typename TLegacyUDF::TBlockType,
+                    typename TActualUDF::TBlockType>();
+            } else {
+                return;
+            }
+        }());
 
         static const TStringRef& Name() {
             Y_ENSURE(TLegacyUDF::Name() == TActualUDF::Name());

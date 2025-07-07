@@ -858,7 +858,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             host,
             datacenter,
             rack,
-            bridge_pile,
+            bridge_pile_name,
             ssh_username,
             port,
             mon_port,
@@ -876,7 +876,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         self.__ic_port = ic_port
         self.__datacenter = datacenter
         self.__rack = rack
-        self.__bridge_pile = bridge_pile
+        self.__bridge_pile_name = bridge_pile_name
         self.__configurator = configurator
         self.__mbus_port = mbus_port
         self.logger = logger.getChild(self.__class__.__name__)
@@ -975,8 +975,8 @@ mon={mon}""".format(
         return self.__rack
     
     @property
-    def bridge_pile(self):
-        return self.__bridge_pile
+    def bridge_pile_name(self):
+        return self.__bridge_pile_name
 
     @property
     def port(self):

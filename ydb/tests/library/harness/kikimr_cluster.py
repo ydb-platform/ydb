@@ -49,10 +49,10 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self.__deploy_cluster = deploy_cluster
 
         if yaml_config is not None:
-            self.__hosts = [host for host in self.__yaml_config.get('config', {}).get('hosts')]
+            self.__hosts = self.__yaml_config.get('config', {}).get('hosts')
         else:
             # Backward compatibility for cluster_template
-            self.__hosts = [host for host in self.__cluster_template.get('hosts')]
+            self.__hosts = self.__cluster_template.get('hosts')
 
         self.__slot_count = 0
         for domain in self.__cluster_template['domains']:
@@ -196,9 +196,9 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                 kikimr_next_path=self.__kikimr_next_path,
                 node_id=node_id,
                 host=node.get('name', node.get('host')),
-                rack=node.get('rack', None),
-                datacenter=node.get('data_center', None),
-                bridge_pile=node.get('bridge_pile_name', None),
+                rack=node.get('location', {}).get('rack', None),
+                datacenter=node.get('location', {}).get('data_center', None),
+                bridge_pile_name=node.get('bridge_pile_name', None),
                 ssh_username=self.__ssh_username,
                 port=DEFAULT_GRPC_PORT,
                 mon_port=DEFAULT_MON_PORT,
@@ -232,7 +232,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                         host=node.host,
                         rack=node.rack,
                         datacenter=node.datacenter,
-                        bridge_pile=node.bridge_pile,
+                        bridge_pile_name=node.bridge_pile_name,
                         ssh_username=self.__ssh_username,
                         port=grpc_port,
                         mon_port=mon_port,

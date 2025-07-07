@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from ydb.tests.library.nemesis.nemesis_datacenter import (
-    SingleDataCenterFailureNemesis,
+    DataCenterStopNodesNemesis,
     DataCenterRouteUnreachableNemesis,
     DataCenterIptablesBlockPortsNemesis
 )
@@ -9,7 +9,7 @@ from ydb.tests.library.nemesis.nemesis_datacenter import (
 
 def datacenter_nemesis_list(cluster):
     return [
-        SingleDataCenterFailureNemesis(cluster),
+        DataCenterStopNodesNemesis(cluster),
         DataCenterRouteUnreachableNemesis(cluster),
         DataCenterIptablesBlockPortsNemesis(cluster)
     ]

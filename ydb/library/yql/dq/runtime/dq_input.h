@@ -3,13 +3,11 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
-#include "dq_async_stats.h" 
+#include "dq_async_stats.h"
 
 namespace NYql::NDq {
 
-struct TDqInputStats : public TDqAsyncStats {
-
-};
+using TDqInputStats = TDqAsyncStats;
 
 class IDqInput : public TSimpleRefCount<IDqInput> {
 public:

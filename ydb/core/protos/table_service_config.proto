@@ -437,4 +437,10 @@ message TTableServiceConfig {
     optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
+
+    optional uint64 LocalChannelInflightBytes  = 107 [default = 8388608];
+    optional uint64 RemoteChannelInflightBytes = 108 [default = 16777216];
+    optional uint64 NodeSessionIcInflightBytes = 109 [default = 67108864];
+
+    optional bool EnableFastChannels = 110 [ default = true, (InvalidateCompileCache) = true];
 };

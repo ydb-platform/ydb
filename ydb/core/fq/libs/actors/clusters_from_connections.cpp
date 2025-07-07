@@ -81,6 +81,17 @@ void FillS3ClusterConfig(NYql::TS3ClusterConfig& clusterConfig,
     FillClusterAuth(clusterConfig, s3.auth(), authToken, accountIdSignatures);
 }
 
+std::pair<TString, bool> ParseHttpEndpoint(const TString& endpoint) {
+    TStringBuf scheme;
+    TStringBuf host;
+    TStringBuf uri;
+    NHttp::CrackURL(endpoint, scheme, host, uri);
+
+    // by default useSsl is true
+    // explicit "http://" scheme should disable ssl usage
+    return std::make_pair(ToString(host), scheme != "http");
+}
+
 std::pair<TString, TIpPort> ParseGrpcEndpoint(const TString& endpoint) {
     TStringBuf scheme;
     TStringBuf address;
@@ -97,21 +108,18 @@ std::pair<TString, TIpPort> ParseGrpcEndpoint(const TString& endpoint) {
 void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const TString& name,
     const TString& authToken,
-    const TString& httpEndpoint,
-    const TString& grpcEndpoint,
+    const TString& endpoint,
     const THashMap<TString, TString>& accountIdSignatures,
     const FederatedQuery::Monitoring& monitoring) {
     clusterConfig.SetName(name);
 
-    clusterConfig.SetCluster(httpEndpoint);
+    auto [address, useSsl] = ParseHttpEndpoint(endpoint);
+
+    clusterConfig.SetCluster(address);
     clusterConfig.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
     clusterConfig.MutablePath()->SetProject(monitoring.project());
     clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
-    clusterConfig.SetUseSsl(true);
-
-    auto grpcSetting = clusterConfig.MutableSettings()->Add();
-    grpcSetting->set_name("grpc_location");
-    grpcSetting->set_value(grpcEndpoint);
+    clusterConfig.SetUseSsl(useSsl);
 
     FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
@@ -215,22 +223,20 @@ NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name,
 
 NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
         const TString& authToken,
-        const TString& httpEndpoint,
-        const TString& grpcEndpoint,
+        const TString& monitoringEndpoint,
         const TString& accountSignature,
         const FederatedQuery::Monitoring& monitoring) {
     NYql::TSolomonClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     accountIdSignatures[monitoring.auth().service_account().id()] = accountSignature;
-    FillSolomonClusterConfig(cluster, name, authToken, httpEndpoint, grpcEndpoint, accountIdSignatures, monitoring);
+    FillSolomonClusterConfig(cluster, name, authToken, monitoringEndpoint, accountIdSignatures, monitoring);
     return cluster;
 }
 
 void AddClustersFromConnections(
     const NConfig::TCommonConfig& common,
     const THashMap<TString, FederatedQuery::Connection>& connections,
-    const TString& monitoringHttpEndpoint,
-    const TString& monitoringGrpcEndpoint,
+    const TString& monitoringEndpoint,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures,
     TGatewaysConfig& gatewaysConfig,
@@ -290,7 +296,7 @@ void AddClustersFromConnections(
         case FederatedQuery::ConnectionSetting::kMonitoring: {
             const auto& monitoring = conn.content().setting().monitoring();
             auto* clusterCfg = gatewaysConfig.MutableSolomon()->AddClusterMapping();
-            FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, monitoringHttpEndpoint, monitoringGrpcEndpoint, accountIdSignatures, monitoring);
+            FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, monitoringEndpoint, accountIdSignatures, monitoring);
             clusters.emplace(connectionName, SolomonProviderName);
             break;
         }

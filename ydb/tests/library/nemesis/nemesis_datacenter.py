@@ -11,13 +11,11 @@ from ydb.tests.tools.nemesis.library import base
 def validate_multiple_datacenters(cluster, min_datacenters=2):
     dc_to_nodes = collections.defaultdict(list)
     for node in cluster.nodes.values():
-        host_name = node.host
-        datacenter = node.datacenter
-        if datacenter is not None:
-            dc_to_nodes[datacenter].append(host_name)
+        if node.datacenter is not None:
+            dc_to_nodes[node.datacenter].append(node.host)
 
     data_centers = list(dc_to_nodes.keys())
-    if len(data_centers) < min_datacenters:
+    if len(data_centers) <= min_datacenters:
         return None, None
     return dc_to_nodes, data_centers
 

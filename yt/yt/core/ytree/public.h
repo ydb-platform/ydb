@@ -17,7 +17,7 @@ class TAttributeFilter;
 
 } // namespace NProto
 
-struct TAttributeFilter;
+class TAttributeFilter;
 
 struct IYsonStructMeta;
 class TYsonStructBase;

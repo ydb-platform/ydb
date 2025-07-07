@@ -1165,8 +1165,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // TODO: move pages async and batched
         for (const auto& kv : collection.PageMap) {
             auto* page = kv.second.Get();
-            if (page->State == PageStateLoaded) {
-                MoveActivePage(page, ECacheTier::Regular);
+            switch (page->State) {
+            case PageStateLoaded:
+                TryMoveActivePage(page, ECacheTier::Regular);
+                break;
+            default:
+                page->CacheTier = ECacheTier::Regular;
+                break;
             }
         }
     }
@@ -1191,17 +1196,23 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ui64 pagesToRequestBytes = 0;
         for (const auto& pageId : xrange(pageCollection->Total())) {
             auto* page = EnsurePage(*pageCollection, collection, pageId, ECacheTier::TryKeepInMemory);
-            TryLoadEvictedPage(page);
             switch (page->State) {
+            case PageStateEvicted:
+                page->CacheTier = ECacheTier::TryKeepInMemory;
+                TryLoadEvictedPage(page);
+                Evict(Cache.Touch(page));
+                break;
             case PageStateLoaded:
-                MoveActivePage(page, ECacheTier::TryKeepInMemory);
+                TryMoveActivePage(page, ECacheTier::TryKeepInMemory);
                 break;
             case PageStateNo:
                 page->State = PageStateRequested;
                 pagesToRequest.push_back(pageId);
                 pagesToRequestBytes += page->Size;
                 break;
-
+            default:
+                page->CacheTier = ECacheTier::TryKeepInMemory;
+                break;
             }
         }
 
@@ -1214,13 +1225,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void MoveActivePage(TPage* page, ECacheTier targetTier) {
+    void TryMoveActivePage(TPage* page, ECacheTier targetTier) {
         if (page->CacheTier != targetTier) {
             Cache.Erase(page);
             page->EnsureNoCacheFlags();
             page->CacheTier = targetTier;
+            Evict(Cache.Touch(page));
         }
-        Evict(Cache.Touch(page));
     }
 
     void Evict(TIntrusiveList<TPage>&& pages) {

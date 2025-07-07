@@ -51,7 +51,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
     ControlId = ev->Sender;
 
-    for (const auto& task: ev->Get()->Tasks) {
+    for (const auto& task : ev->Get()->Tasks) {
         auto& actorId = TaskIdToActor[task.Id];
         if (actorId) {
             OnInternalError(TStringBuilder() << "Duplicate task id: " << task.Id);

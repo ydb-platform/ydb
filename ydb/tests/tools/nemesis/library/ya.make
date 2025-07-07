@@ -7,7 +7,7 @@ PY_SRCS(
     base.py
     catalog.py
     disk.py
-    dc.py
+    datacenter.py
     node.py
     tablet.py
     monitor.py

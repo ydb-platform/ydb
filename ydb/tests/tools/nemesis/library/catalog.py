@@ -23,7 +23,7 @@ from ydb.tests.tools.nemesis.library.tablet import KillNodeBrokerNemesis
 from ydb.tests.tools.nemesis.library.tablet import KillBlocktoreVolume
 from ydb.tests.tools.nemesis.library.tablet import KillBlocktorePartition
 from ydb.tests.tools.nemesis.library.disk import data_storage_nemesis_list
-from ydb.tests.tools.nemesis.library.dc import datacenter_nemesis_list
+from ydb.tests.tools.nemesis.library.datacenter import datacenter_nemesis_list
 
 
 def is_first_cluster_node(cluster):

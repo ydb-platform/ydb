@@ -9,16 +9,12 @@ from ydb.tests.tools.nemesis.library import base
 
 
 def validate_multiple_datacenters(cluster, min_datacenters=2):
-    yaml_config = cluster._ExternalKiKiMRCluster__yaml_config
-    hosts_config = yaml_config.get('hosts', [])
-
     dc_to_nodes = collections.defaultdict(list)
-    for host_config in hosts_config:
-        host_name = host_config.get('name', host_config.get('host'))
-        location = host_config.get('location', {})
-        data_center = location.get('data_center', 'unknown')
-        if data_center != 'unknown':
-            dc_to_nodes[data_center].append(host_name)
+    for _, node in cluster.nodes:
+        host_name = node.host()
+        datacenter = node.datacenter()
+        if datacenter is not None:
+            dc_to_nodes[datacenter].append(host_name)
 
     data_centers = list(dc_to_nodes.keys())
     if len(data_centers) < min_datacenters:
@@ -159,7 +155,7 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
 
 
 class SingleDataCenterFailureNemesis(DataCenterNetworkNemesis):
-    def __init__(self, cluster, schedule=(1200, 2400), stop_duration=3600):
+    def __init__(self, cluster, schedule=(300, 600), stop_duration=3600):
         super(SingleDataCenterFailureNemesis, self).__init__(
             cluster, schedule=schedule, stop_duration=stop_duration)
 
@@ -213,7 +209,6 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
             self.logger.info("Data center '%s' has %d hosts: %s",
                              dc, len(self._dc_to_nodes[dc]), self._dc_to_nodes[dc])
 
-        # Создаем циклический итератор по ДЦ
         self._dc_cycle_iterator = self._create_dc_cycle()
 
     def _create_dc_cycle(self):
@@ -222,25 +217,16 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
                 yield dc
 
     def inject_fault(self):
-        # Если есть заблокированные маршруты, проверяем не пора ли их восстановить
         if self._blocked_routes:
             self._check_and_restore_routes()
             return
 
-        # Если нет доступных ДЦ для тестирования
-        if len(self._data_centers) <= 1:
-            self.logger.info("Cannot inject fault. Need at least 2 data centers, found %d",
-                             len(self._data_centers))
-            return
-
-        # Выбираем следующий ДЦ как current
         if self._dc_cycle_iterator is None:
             self._dc_cycle_iterator = self._create_dc_cycle()
 
         self._current_dc = next(self._dc_cycle_iterator)
         self.logger.info("Starting route blocking for current DC: %s", self._current_dc)
 
-        # Блокируем маршруты к current ДЦ на всех хостах other ДЦ
         self._block_routes_to_current_dc()
 
         if self._blocked_routes:
@@ -254,13 +240,11 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
             self.logger.warning("No hosts found in current data center: %s", self._current_dc)
             return
 
-        # Получаем все other ДЦ (все кроме current)
         other_dcs = [dc for dc in self._data_centers if dc != self._current_dc]
 
         self.logger.info("Blocking routes from other DCs %s to current DC '%s' hosts: %s",
                          other_dcs, self._current_dc, current_dc_hosts)
 
-        # Создаем temporary файл со списком IP current ДЦ
         current_dc_ips_content = '\n'.join(current_dc_hosts)
 
         for other_dc in other_dcs:
@@ -268,7 +252,6 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
 
             for other_host in other_dc_hosts:
                 try:
-                    # Ищем соответствующую ноду в кластере
                     target_node = self._find_node_by_host(other_host)
                     if not target_node:
                         self.logger.warning("Node not found for host: %s", other_host)
@@ -277,20 +260,15 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
                     self.logger.info("Blocking routes on host %s (other DC: %s) to current DC %s",
                                      other_host, other_dc, self._current_dc)
 
-                    # Создаем временный файл с IP адресами current DC на other хосте
                     temp_file = '/tmp/blocked_ips_{}_{}_{}'.format(
                         self._current_dc, other_dc, int(time.time())
                     )
 
-                    # Записываем IP в файл
                     create_file_cmd = 'echo "{}" | sudo tee {}'.format(current_dc_ips_content, temp_file)
                     target_node.ssh_command(create_file_cmd)
 
-                    # Блокируем маршруты к current ДЦ
                     block_cmd = 'for i in `cat {}`; do sudo /usr/bin/ip -6 ro add unreach ${{i}} || sudo /usr/bin/ip ro add unreachable ${{i}}; done'.format(temp_file)
                     target_node.ssh_command(block_cmd, raise_on_error=False)  # Не падаем если маршрут уже есть
-
-                    # Сохраняем информацию для восстановления
                     self._blocked_routes.append({
                         'node': target_node,
                         'host': other_host,
@@ -337,12 +315,8 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
                 temp_file = route_info['temp_file']
 
                 self.logger.info("Restoring routes on host %s to current DC %s", host, self._current_dc)
-
-                # Выполняем команду восстановления маршрутов
                 restore_cmd = 'for i in `cat {}`; do sudo /usr/bin/ip -6 ro del unreach ${{i}} || sudo /usr/bin/ip ro del unreachable ${{i}}; done'.format(temp_file)
                 node.ssh_command(restore_cmd, raise_on_error=False)  # Не падаем если маршрутов уже нет
-
-                # Удаляем временный файл
                 cleanup_cmd = "sudo rm -f {}".format(temp_file)
                 node.ssh_command(cleanup_cmd, raise_on_error=False)
 
@@ -355,7 +329,6 @@ class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self.logger.info("Successfully restored routes for %d hosts in current DC '%s'",
                          restored_count, self._current_dc)
 
-        # Очищаем состояние
         self._blocked_routes = []
         self._block_time = None
         self._current_dc = None
@@ -371,16 +344,14 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
         self._cluster = cluster
         self._block_duration = block_duration
         self._current_dc = None
-        self._blocked_hosts = []  # Список хостов с заблокированными портами
+        self._blocked_hosts = []
         self._dc_cycle_iterator = None
         self._block_time = None
         self._restore_schedule = Schedule.from_tuple_or_int(block_duration)
 
-        # Инициализируем состояние
         self._dc_to_nodes = {}
         self._data_centers = []
 
-        # Команды для iptables
         self._block_ports_cmd = (
             "sudo /sbin/ip6tables -w -A YDB_FW -p tcp -m multiport "
             "--ports 2135,2136,8765,19001,31000:32000 -j REJECT"

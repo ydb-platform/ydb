@@ -305,3 +305,74 @@ void BM_CallAsync(benchmark::State& state) {
 }
 
 BENCHMARK(BM_CallAsync)->MeasureProcessCPUTime();
+
+class TAsyncRescheduleRunnableActor : public TActorBootstrapped<TAsyncRescheduleRunnableActor> {
+public:
+    TAsyncRescheduleRunnableActor(benchmark::State& state, TPromise<void> promise)
+        : State(state)
+        , Promise(std::move(promise))
+    {}
+
+    ~TAsyncRescheduleRunnableActor() {
+        Promise.SetValue();
+    }
+
+    struct TRescheduleRunnable : public TActorRunnableItem::TImpl<TRescheduleRunnable> {
+        static constexpr bool IsActorAwareAwaiter = true;
+
+        constexpr bool await_ready() { return false; }
+        constexpr void await_resume() {}
+
+        void await_suspend(std::coroutine_handle<> caller) noexcept {
+            Caller = caller;
+            TActorRunnableQueue::Schedule(this);
+        }
+
+        void DoRun(IActor*) noexcept {
+            Caller.resume();
+        }
+
+        std::coroutine_handle<> Caller;
+    };
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+
+        for (auto _ : State) {
+            co_await TRescheduleRunnable{};
+        }
+
+        PassAway();
+    }
+
+    STFUNC(StateWork) {
+        Y_UNUSED(ev);
+    }
+
+private:
+    benchmark::State& State;
+    TPromise<void> Promise;
+};
+
+void BM_RescheduleRunnableAsync(benchmark::State& state) {
+    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    setup->NodeId = 0;
+    setup->ExecutorsCount = 1;
+    setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
+    for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
+        setup->Executors[i] = new TBasicExecutorPool(i, 1, 1, "basic");
+    }
+    setup->Scheduler = new TBasicSchedulerThread;
+
+    TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    auto promise = NewPromise<void>();
+    auto future = promise.GetFuture();
+    actorSystem.Register(new TAsyncRescheduleRunnableActor(state, std::move(promise)));
+    future.GetValueSync();
+
+    actorSystem.Stop();
+}
+
+BENCHMARK(BM_RescheduleRunnableAsync)->MeasureProcessCPUTime();

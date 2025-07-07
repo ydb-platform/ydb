@@ -83,7 +83,7 @@ namespace NSQLComplete {
                 .CursorPosition = pos,
             };
 
-            auto output = engine->CompleteAsync(input).ExtractValueSync();
+            auto output = engine->Complete(input).ExtractValueSync();
             Y_DO_NOT_OPTIMIZE_AWAY(output);
 
             i += 1;

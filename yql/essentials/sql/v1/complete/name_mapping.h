@@ -7,8 +7,8 @@
 
 namespace NSQLComplete {
 
-    TCandidate ToCandidate(TGenericName name, TLocalSyntaxContext& context);
+    TCandidate ToCandidate(TGenericName name, TLocalSyntaxContext& local);
 
-    TVector<TCandidate> ToCandidate(TVector<TGenericName> names, TLocalSyntaxContext context);
+    TVector<TCandidate> ToCandidate(TVector<TGenericName> names, TLocalSyntaxContext local);
 
 } // namespace NSQLComplete

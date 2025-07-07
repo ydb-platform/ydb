@@ -1,14 +1,8 @@
-from devtools.yamaker.fileutil import subcopy
 from devtools.yamaker.modules import Linkable, Switch, Words
-from devtools.yamaker.project import NixProject
+from devtools.yamaker.project import GNUMakeNixProject
 
 
-def cctz_post_build(self):
-    # Copy tests preserving the previous layout.
-    subcopy(self.srcdir + "/src", self.dstdir + "/test", ["*_test.cc"])
-
-
-def cctz_post_install(self):
+def post_install(self):
     with self.yamakes["."] as m:
         # Support Darwin.
         m.after(
@@ -19,13 +13,23 @@ def cctz_post_install(self):
         m.RECURSE |= {"test", "tzdata"}
 
 
-cctz = NixProject(
-    owners=["dfyz", "petrk"],
+cctz = GNUMakeNixProject(
     arcdir="contrib/libs/cctz",
     nixattr="cctz",
-    keep_paths=["README", "test/ya.make", "tzdata/"],
-    install_targets=["cctz"],
+    keep_paths=[
+        "test/ya.make",
+        "tzdata",
+    ],
+    copy_sources=[
+        "src/*_test.cc",
+    ],
+    disable_includes=[
+        "fuchsia/intl/cpp/fidl.h",
+        "lib/async-loop/cpp/loop.h",
+        "lib/fdio/directory.h",
+    ],
+    use_full_libnames=True,
+    install_targets=["libcctz"],
     addincl_global={".": {"./include"}},
-    post_build=cctz_post_build,
-    post_install=cctz_post_install,
+    post_install=post_install,
 )

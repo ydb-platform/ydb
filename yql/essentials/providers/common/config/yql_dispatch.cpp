@@ -166,7 +166,9 @@ void TSettingDispatcher::Restore() {
 
 void TSettingDispatcher::Enumerate(std::function<void(std::string_view)> callback) {
     for (const auto& name : Names_) {
-        callback(name);
+        if (!Handlers_.at(NormalizeName(name))->IsDeprecated()) {
+            callback(name);
+        }
     }
 }
 

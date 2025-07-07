@@ -9,6 +9,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
 
@@ -17,17 +18,11 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
-    struct TColumnId {
-        TString TableAlias;
-        TString Name;
-
-        friend bool operator<(const TColumnId& lhs, const TColumnId& rhs);
-        friend bool operator==(const TColumnId& lhs, const TColumnId& rhs) = default;
-    };
-
+    // TODO(YQL-19747): Try to refactor to use Map/Set data structures
     struct TColumnContext {
         TVector<TAliased<TTableId>> Tables;
         TVector<TColumnId> Columns;
+        THashMap<TString, THashSet<TString>> WithoutByTableAlias;
 
         bool IsAsterisk() const;
         TColumnContext ExtractAliased(TMaybe<TStringBuf> alias);

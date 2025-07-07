@@ -1206,64 +1206,6 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
-    // DqBlockHashJoin callable has same structure as GraceJoinCore:
-    // leftInput, rightInput, joinType, leftKeys, rightKeys, leftRenames, rightRenames, leftKeyNames, rightKeyNames, flags
-    // But from kqp_mkql_compiler it comes with only 5 args: leftInput, rightInput, joinKind, leftKeys, rightKeys
-    
-    if (!EnsureArgsCount(*input, 5, ctx)) {
-        return TStatus::Error;
-    }
-
-    // Parse arguments - DqBlockHashJoin uses same structure as GraceJoin
-    auto leftInput = input->Child(0);
-    auto rightInput = input->Child(1);
-    auto joinType = input->Child(2);
-    auto leftKeys = input->Child(3);
-    auto rightKeys = input->Child(4);
-
-    if (!EnsureAtom(*joinType, ctx)) {
-        return TStatus::Error;
-    }
-
-    const auto joinKind = joinType->Content();
-    if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly" && joinKind != "Cross") {
-        ctx.AddError(TIssue(ctx.GetPosition(joinType->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
-            << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
-        return TStatus::Error;
-    }
-
-    if (!EnsureTuple(*leftKeys, ctx)) {
-        return TStatus::Error;
-    }
-
-    if (!EnsureTuple(*rightKeys, ctx)) {
-        return TStatus::Error;
-    }
-
-    // For DqBlockHashJoin from kqp_mkql_compiler, inputs are already runtime nodes
-    // So we expect them to have return type annotation built by compiler
-    if (!leftInput->GetTypeAnn()) {
-        ctx.AddError(TIssue(ctx.GetPosition(leftInput->Pos()), "Left input should have type annotation"));
-        return TStatus::Error;
-    }
-
-    if (!rightInput->GetTypeAnn()) {
-        ctx.AddError(TIssue(ctx.GetPosition(rightInput->Pos()), "Right input should have type annotation"));
-        return TStatus::Error;
-    }
-
-    // Use the return type from node annotation (built by kqp_mkql_compiler)
-    if (!input->GetTypeAnn()) {
-        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "DqBlockHashJoin should have return type annotation"));
-        return TStatus::Error;
-    }
-
-    // The type annotation should already be set by kqp_mkql_compiler
-    return TStatus::Ok;
-}
-
-
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -1274,11 +1216,6 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()),
                     TStringBuilder() << "At function: " << input->Content());
             });
-
-            // Handle DqBlockHashJoin callable
-            if (input->Content() == "DqBlockHashJoin") {
-                return AnnotateDqBlockHashJoin(input, ctx);
-            }
 
             // Handle BlockHashJoin callable (from peephole)
             if (input->Content() == "BlockHashJoin") {

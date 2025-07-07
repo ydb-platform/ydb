@@ -1052,7 +1052,7 @@ Common usage scenarios:
         help="Path to next ydbd version binary (for cross-version testing)",
     )
     parser.add_argument(
-        "--yaml_config",
+        "--yaml-config",
         required=False,
         default=None,
         type=path_type,

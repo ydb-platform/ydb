@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     actions.cpp
     grpc_connections.cpp
+    response_queue.cpp
 )
 
 PEERDIR(
@@ -14,6 +15,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/stats
     ydb/public/sdk/cpp/src/client/resources
     ydb/public/sdk/cpp/src/client/types/exceptions
+    ydb/public/sdk/cpp/src/client/types/executor
 )
 
 END()

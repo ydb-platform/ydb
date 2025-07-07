@@ -22,8 +22,8 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 R"(
                     CREATE TABLE `/Root/left_table` (
                         id Int32 NOT NULL,
-                        value String NOT NULL,
-                        PRIMARY KEY (id, value)
+                        data String NOT NULL,
+                        PRIMARY KEY (id, data)
                     )
                     WITH (STORE = COLUMN);
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         {
             auto status = queryClient.ExecuteQuery(
                 R"(
-                    INSERT INTO `/Root/left_table` (id, value) VALUES
+                    INSERT INTO `/Root/left_table` (id, data) VALUES
                         (1, "left1"),
                         (2, "left2"),
                         (3, "left3");
@@ -69,8 +69,8 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             TString select = R"(
                 SELECT L.*
                 FROM `left_table` AS L
-                INNER JOIN `left_table` AS R
-                ON L.id = R.id AND L.value = R.value;
+                INNER JOIN `right_table` AS R
+                ON L.id = R.id AND L.data = R.data;
             )";
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/control.h>
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/task.h>
 #include <ydb/core/tx/columnshard/export/common/identifier.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/export/protos/task.pb.h>
 
@@ -19,7 +20,7 @@ public:
         return "CS::EXPORT";
     }
 private:
-    TIdentifier Identifier = TIdentifier(0);
+    TIdentifier Identifier = TIdentifier(TInternalPathId{});
     YDB_READONLY_DEF(TSelectorContainer, Selector);
     YDB_READONLY_DEF(TStorageInitializerContainer, StorageInitializer);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);

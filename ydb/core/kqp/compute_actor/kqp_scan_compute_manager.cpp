@@ -27,10 +27,9 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
         AFL_ENSURE(data.Finished);
         result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data.LocksInfo)));
     } else if (data.SplittedBatches.size() > 1) {
-        ui32 idx = 0;
         AFL_ENSURE(data.ArrowBatch);
         for (auto&& i : data.SplittedBatches) {
-            result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(data.ArrowBatch, TabletId, std::move(i), data.LocksInfo), idx++));
+            result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(data.ArrowBatch, TabletId, std::move(i), data.LocksInfo)));
         }
     } else if (data.ArrowBatch) {
         result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(data.ArrowBatch, TabletId, data.LocksInfo)));

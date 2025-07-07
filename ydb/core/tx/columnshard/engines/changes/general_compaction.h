@@ -33,8 +33,8 @@ protected:
         return true;
     }
 
-    virtual TPortionMeta::EProduced GetResultProducedClass() const override {
-        return TPortionMeta::EProduced::SPLIT_COMPACTED;
+    virtual NPortion::EProduced GetResultProducedClass() const override {
+        return NPortion::EProduced::SPLIT_COMPACTED;
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;

@@ -1782,7 +1782,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void TestExternalDataSourceBackupRestore() {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         TTableClient tableClient(driver);
@@ -1804,7 +1806,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreExternalDataSourceWithoutSecret) {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
@@ -1843,7 +1847,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void TestExternalTableBackupRestore() {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         TTableClient tableClient(driver);

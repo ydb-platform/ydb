@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/columnshard/transactions/locks/abstract.h>
 #include <ydb/core/tx/locks/sys_tables.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 class TManager;
@@ -198,7 +199,7 @@ public:
         return *result;
     }
 
-    TWriteOperation::TPtr RegisterOperation(const ui64 pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
+    TWriteOperation::TPtr RegisterOperation(const TInternalPathId pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
         const NEvWrite::EModificationType mType, const bool portionsWriting);
     bool RegisterLock(const ui64 lockId, const ui64 generationId) {
         if (LockFeatures.contains(lockId)) {
@@ -224,7 +225,7 @@ public:
         }
     }
 
-    bool HasReadLocks(const ui64 pathId) const {
+    bool HasReadLocks(const TInternalPathId pathId) const {
         return InteractionsContext.HasReadIntervals(pathId);
     }
 

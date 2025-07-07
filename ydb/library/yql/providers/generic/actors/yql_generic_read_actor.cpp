@@ -45,10 +45,10 @@ namespace NYql::NDq {
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
             TGenericTokenProvider::TPtr tokenProvider,
-            NGeneric::TSource&& source,
+            Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            TVector<NGeneric::TPartition>&& partitions)
+            TVector<Generic::TPartition>&& partitions)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
             , Client_(std::move(client))
@@ -380,7 +380,7 @@ namespace NYql::NDq {
         NConnector::IClient::TPtr Client_;
         TGenericTokenProvider::TPtr TokenProvider_;
 
-        TVector<NGeneric::TPartition> Partitions_;
+        TVector<Generic::TPartition> Partitions_;
 
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
         std::optional<NConnector::NApi::TReadSplitsResponse> LastReadSplitsResponse_;
@@ -388,24 +388,24 @@ namespace NYql::NDq {
 
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-        NGeneric::TSource Source_;
+        Generic::TSource Source_;
     };
 
     void ExtractPartitionsFromParams(
-        TVector<NGeneric::TPartition>& partitions,
+        TVector<Generic::TPartition>& partitions,
         const THashMap<TString, TString>& taskParams, // partitions are here in v1
         const TVector<TString>& readRanges            // partitions are here in v2
     ) {
         if (!readRanges.empty()) {
             for (const auto& readRange : readRanges) {
-                NGeneric::TPartition partition;
+                Generic::TPartition partition;
                 YQL_ENSURE(partition.ParseFromString(readRange), "Failed to parse partition from read ranges");
                 partitions.emplace_back(std::move(partition));
             }
         } else {
             const auto& iter = taskParams.find(GenericProviderName);
             if (iter != taskParams.end()) {
-                NGeneric::TPartition partition;
+                Generic::TPartition partition;
                 TStringInput input(iter->first);
                 YQL_ENSURE(partition.ParseFromString(iter->second), "Failed to parse partition from task params");
                 partitions.emplace_back(std::move(partition));
@@ -417,7 +417,7 @@ namespace NYql::NDq {
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
     CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
-                           NGeneric::TSource&& source,
+                           Generic::TSource&& source,
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,
@@ -428,7 +428,7 @@ namespace NYql::NDq {
                            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {
-        TVector<NGeneric::TPartition> partitions;
+        TVector<Generic::TPartition> partitions;
         ExtractPartitionsFromParams(partitions, taskParams, readRanges);
 
         const auto dsi = source.select().data_source_instance();

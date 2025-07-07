@@ -62,8 +62,17 @@
                                                         "PlanNodeId": 8,
                                                         "Plans": [
                                                             {
+<<<<<<< HEAD
                                                                 "Node Type": "UnionAll",
                                                                 "PlanNodeId": 7,
+=======
+                                                                "HashFunc": "HashV1",
+                                                                "KeyColumns": [
+                                                                    "unique1"
+                                                                ],
+                                                                "Node Type": "HashShuffle",
+                                                                "PlanNodeId": 5,
+>>>>>>> 1fa4fef39c6 ([KQP] Splitted hashfunc into hashv1 and columnshardhashv1 (#19578))
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {

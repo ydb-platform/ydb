@@ -26,6 +26,7 @@ target_link_libraries(kqp-gateway-utils PUBLIC
   kqp-gateway-actors
   core-kqp-provider
   ydb-core-protos
+  core-protos-schemeshard
 )
 
 target_sources(kqp-gateway-utils PRIVATE

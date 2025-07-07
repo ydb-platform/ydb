@@ -534,9 +534,15 @@ public:
                     }
                 }
 
-                if constexpr (std::is_same<TData, NYdb::TDecimalValue>::value) {
-                    if constexpr (arrow::is_string_like_type<T>::value) {
-                        Y_ABORT_UNLESS(typedBuilder.Append(data.ToString()).ok());
+                if constexpr (std::is_same<TData, NYdb::Dev::TDecimalValue>::value) {
+                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
+                        char bytes[16] = {0};
+                        // Big-endian: Hi_ (signed) в первые 8 байт, Low_ (unsigned) в последние 8 байт
+                        for (int i = 0; i < 8; ++i) {
+                            bytes[i] = (data.Hi_ >> (56 - i * 8)) & 0xFF;
+                            bytes[8 + i] = (data.Low_ >> (56 - i * 8)) & 0xFF;
+                        }
+                        Y_ABORT_UNLESS(typedBuilder.Append(bytes).ok());
                         return true;
                     }
                 }

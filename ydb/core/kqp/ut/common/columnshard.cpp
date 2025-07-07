@@ -392,7 +392,6 @@ namespace NKqp {
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Decimal: {
-            // Добавляем precision/scale в метаданные
             auto meta = arrow::KeyValueMetadata::Make(
                 std::vector<std::string>{"precision", "scale"},
                 std::vector<std::string>{

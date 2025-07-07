@@ -87,7 +87,7 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, 
             auto& fsb = static_cast<const arrow::FixedSizeBinaryType&>(type);
             if (fsb.byte_width() == 16) {
                 Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
-                ui32 precision = 22, scale = 9; // значения по умолчанию
+                ui32 precision = 22, scale = 9;
                 if (field && field->metadata()) {
                     auto precisionMeta = field->metadata()->Get("precision").ValueOr("");
                     auto scaleMeta = field->metadata()->Get("scale").ValueOr("");

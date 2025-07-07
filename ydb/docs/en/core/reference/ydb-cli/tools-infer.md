@@ -41,9 +41,7 @@ If both conditions are met, the values from the first row are used as the table'
 
 ## Current Limitation {#current-limitation}
 
-The first column is always chosen as the primary key. You may need to change the primary key to one that is more appropriate for your use case.
-
-[{#T}](../../dev/primary-key/index.md)
+The first column is always chosen as the primary key. You may need to change the primary key to one that is more appropriate for your use case. For recommendations, see [{#T}](../../dev/primary-key/index.md).
 
 ## Examples {#examples}
 

@@ -364,19 +364,13 @@ private:
                 ApplyMemTableLimit(limitBytes);
                 break;
             case EMemoryConsumerKind::SharedCache:
+            case EMemoryConsumerKind::BlobCache:
+            case EMemoryConsumerKind::DataAccessorCache:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
             case EMemoryConsumerKind::ScanMemoryLimiter:
-                Send(consumer.ActorId, new TEvConsumerLimit(limitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient, limitBytes));
-                break;
             case EMemoryConsumerKind::CompMemoryLimiter:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient, limitBytes));
-                break;
-            case EMemoryConsumerKind::BlobCache:
-                Send(NKikimr::NBlobCache::MakeBlobCacheServiceId(), new NBlobCache::TEvBlobCache::TEvUpdateMaxCacheDataSize(limitBytes));
-                break;
-            case EMemoryConsumerKind::DataAccessorCache:
-                NKikimr::NOlap::NDataAccessorControl::TGeneralCache::UpdateMaxCacheSize(limitBytes);
                 break;
         }
     }

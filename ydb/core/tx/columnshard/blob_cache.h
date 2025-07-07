@@ -109,14 +109,6 @@ struct TEvBlobCache {
             : BlobId(blobId)
         {}
     };
-
-    struct TEvUpdateMaxCacheDataSize: public NActors::TEventLocal<TEvUpdateMaxCacheDataSize, EvUpdateMemoryLimit> {
-        i64 MaxCacheDataSize = 0;
-
-        explicit TEvUpdateMaxCacheDataSize(const i64 maxCacheDataSize)
-            : MaxCacheDataSize(maxCacheDataSize) {
-        }
-    };
 };
 
 inline

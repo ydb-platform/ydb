@@ -12,13 +12,34 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(basic_example)
-add_subdirectory(bulk_upsert_simple)
-add_subdirectory(pagination)
-add_subdirectory(secondary_index)
-add_subdirectory(secondary_index_builtin)
-add_subdirectory(topic_writer)
-add_subdirectory(ttl)
-add_subdirectory(vector_index)
-add_subdirectory(vector_index_builtin)
-add_subdirectory(topic_reader)
+add_executable(vector_index_builtin)
+
+
+target_link_libraries(vector_index_builtin PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-getopt
+  src-client-query
+  src-client-table
+  src-client-helpers
+)
+
+target_allocator(vector_index_builtin
+  system_allocator
+)
+
+target_link_options(vector_index_builtin PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
+
+target_sources(vector_index_builtin PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/vector_index_builtin/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/vector_index_builtin/vector_index.cpp
+)
+
+
+vcs_info(vector_index_builtin)

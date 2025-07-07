@@ -610,6 +610,7 @@ void TCheckpointCoordinator::PassAway() {
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }
+    NActors::TActor<TCheckpointCoordinator>::PassAway();
 }
 
 void TCheckpointCoordinator::HandleException(const std::exception& err) {

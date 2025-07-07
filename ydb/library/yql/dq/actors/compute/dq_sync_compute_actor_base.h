@@ -32,7 +32,14 @@ protected:
         auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
 
         auto lastPollResult = TBase::PollAsyncInput();
+
+        TaskRunner->ChannelId = this->ResumeCookie;
         ERunStatus status = TaskRunner->Run();
+        TaskRunner->ChannelId = 0;
+
+        if (this->ResumeCookie) {
+            CA_LOG_W("DoExecuteImpl: ChannelId=" << this->ResumeCookie << ", TaksRunner::Run() status=" << (int)status);
+        }
 
         CA_LOG_T("Resume execution, run status: " << status);
 
@@ -89,7 +96,72 @@ protected:
         return true;  // returns true, when channels were handled synchronously
     }
 
-protected: //TDqComputeActorChannels::ICallbacks
+    TString GetMonitoringInfo() override {
+        TStringStream str;
+        HTML(str) {
+            PRE() {
+                str << "TDqSyncComputeActorBase SelfId: " << this->SelfId() << Endl;
+                str << "  State: " << (unsigned int)TBase::State << Endl;
+
+                if (TaskRunner) {
+                    str << "TaskRunner" << Endl
+                        << "  LastFetch: " << TaskRunner->LastFetch << Endl
+                        << "  LastStatus: " << TaskRunner->LastStatus << Endl;
+                }
+
+                str << Endl << "Output Channels:" << Endl;
+
+                TABLE_SORTABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ChannelId";}
+                            TABLEH() {str << "PeerActorId";}
+                            TABLEH() {str << "FillLevel";}
+                            TABLEH() {str << "Finished";}
+                            TABLEH() {str << "EarlyFinish";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (auto& [channelId, info] : TBase::OutputChannelsMap) {
+                            TABLER() {
+                                TABLED() {str << channelId;}
+                                TABLED() {str << (info.HasPeer ? ToString(info.PeerId) : "N/A");}
+                                TABLED() {str << (info.Channel ? FillLevelToString(info.Channel->GetFillLevel()) : "nullptr");}
+                                TABLED() {str << info.Finished;}
+                                TABLED() {str << info.EarlyFinish;}
+                            }
+                        }
+                    }
+                }
+
+                str << Endl << "Input Channels:" << Endl;
+
+                TABLE_SORTABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ChannelId";}
+                            TABLEH() {str << "HasPeer";}
+                            TABLEH() {str << "Empty";}
+                            TABLEH() {str << "Finished";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (auto& [channelId, info] : TBase::InputChannelsMap) {
+                            TABLER() {
+                                TABLED() {str << channelId;}
+                                TABLED() {str << info.HasPeer;}
+                                TABLED() {str << (info.Channel ? ToString(info.Channel->Empty()) : "nullptr");}
+                                TABLED() {str << (info.Channel ? ToString(info.Channel->IsFinished()) : "nullptr");}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return str.Str();
+    }
+
+protected: //TDqComputeActorChannels::ICalbacks
     i64 GetInputChannelFreeSpace(ui64 channelId) const override final {
         const auto* inputChannel = this->InputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
@@ -283,6 +355,9 @@ protected:
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
+            if (this->Task.GetFastChannels() && channel.HasPeer) {
+                Y_ENSURE(channel.Channel->Bind(this->SelfId(), channel.PeerId));
+            }
         }
 
         for (auto& [outputIndex, transform] : this->OutputTransformsMap) {

@@ -506,6 +506,15 @@ private:
     }
 
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
+
+        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+        auto caId = cgi.Get("ca");
+        TActorId id;
+        if (caId && State_->FindCaId(caId, id)) {
+            TActivationContext::Send(ev->Forward(id));
+            return;
+        }
+
         TStringStream str;
         HTML(str) {
             PRE() {

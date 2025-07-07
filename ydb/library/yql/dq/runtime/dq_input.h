@@ -7,9 +7,7 @@
 
 namespace NYql::NDq {
 
-struct TDqInputStats : public TDqAsyncStats {
-
-};
+using TDqInputStats = TDqAsyncStats;
 
 class IDqInput : public TSimpleRefCount<IDqInput> {
 public:

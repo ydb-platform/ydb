@@ -113,31 +113,52 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const
 }
 
 void TNodeState::DumpInfo(TStringStream& str) const {
-    for (const auto& bucket : Buckets) {
-        TReadGuard guard(bucket.Mutex);
-        TMap<ui64, TVector<std::pair<const TActorId, const TNodeRequest*>>> byTx;
+    HTML(str) {
+        for (const auto& bucket : Buckets) {
+            TReadGuard guard(bucket.Mutex);
+            TMap<ui64, TVector<std::pair<const TActorId, const TNodeRequest*>>> byTx;
 
-        for (const auto& [txId, request] : bucket.Requests) {
-            byTx[txId].emplace_back(request.ExecuterId, &request);
-        }
-        for (const auto& [txId, requests] : byTx) {
-            str << "    Requests:" << Endl;
-            for (auto& [requester, request] : requests) {
-                str << "      Requester: " << requester << Endl;
-                str << "        StartTime: " << request->StartTime << Endl;
-                str << "        Deadline: " << request->Deadline << Endl;
-                str << "        In-fly tasks:" << Endl;
-                for (auto& [taskId, actorId] : request->Tasks) {
-                    str << "          Task: " << taskId << Endl;
-                    if (actorId) {
-                        str << "            Compute actor: " << *actorId << Endl;
-                    } else {
-                        str << "            Compute actor: (task not started yet)" << Endl;
+            for (const auto& [txId, request] : bucket.Requests) {
+                byTx[txId].emplace_back(request.ExecuterId, &request);
+            }
+            for (const auto& [txId, requests] : byTx) {
+                str << "    Requests:" << Endl;
+                for (auto& [requester, request] : requests) {
+                    str << "      Requester: " << requester << Endl;
+                    str << "        StartTime: " << request->StartTime << Endl;
+                    str << "        Deadline: " << request->Deadline << Endl;
+                    str << "        In-fly tasks:" << Endl;
+                    for (auto& [taskId, actorId] : request->Tasks) {
+                        str << "          Task: " << taskId << Endl;
+                        if (actorId) {
+                            str << "            Compute actor: ";
+                            HREF("?ca=" + ToString(*actorId))  {
+                                str << *actorId;
+                            }
+                            str << Endl;
+                        } else {
+                            str << "            Compute actor: (task not started yet)" << Endl;
+                        }
                     }
                 }
             }
         }
     }
+}
+
+bool TNodeState::FindCaId(const TString& caId, TActorId& id) const {
+    for (const auto& bucket : Buckets) {
+        TReadGuard guard(bucket.Mutex);
+        for (const auto& [_, request] : bucket.Requests) {
+            for (auto& [_, actorId] : request.Tasks) {
+                if (actorId && ToString(*actorId) == caId) {
+                    id = *actorId;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace NKikimr::NKqp::NKqpNode

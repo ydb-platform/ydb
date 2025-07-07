@@ -64,6 +64,7 @@ void TKqpComputeActor::DoBootstrap() {
     execCtx.ApplyCtx = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
+    execCtx.ChannelService = RuntimeSettings.ChannelService;
 
     TDqTaskRunnerSettings settings;
     settings.StatsMode = RuntimeSettings.StatsMode;

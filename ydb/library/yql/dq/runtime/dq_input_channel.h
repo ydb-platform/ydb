@@ -27,6 +27,11 @@ public:
     virtual void Push(TInstant watermark) = 0;
 
     virtual void Finish() = 0;
+
+    // fast channels
+    virtual bool Bind(NActors::TActorId /* outputActorId */, NActors::TActorId /* inputActorId */ ) {
+        return false;
+    }
 };
 
 IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,

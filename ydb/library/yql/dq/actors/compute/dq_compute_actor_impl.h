@@ -143,9 +143,11 @@ public:
             InitializeLogPrefix(); // re-initialize with SelfId
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
-            Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
-                RuntimeSettings.StatsMode, MemoryLimits.ChannelBufferSize, this, this->GetActivityType());
-            this->RegisterWithSameMailbox(Channels);
+            if (!Task.GetFastChannels()) {
+                Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
+                    RuntimeSettings.StatsMode, MemoryLimits.ChannelBufferSize, this, this->GetActivityType());
+                this->RegisterWithSameMailbox(Channels);
+            }
 
             InitializeWatermarks();
 
@@ -329,6 +331,7 @@ protected:
             hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
             hFunc(TEvPrivate::TEvAsyncOutputError, HandleAsyncOutputError);
             hFunc(TEvPrivate::TEvCheckIdleness, HandleCheckIdleness);
+            hFunc(NActors::NMon::TEvHttpInfo, HandleExecuteBase)
             default: {
                 CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                 InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
@@ -423,10 +426,20 @@ protected:
             }
 
             if (!outputChannel.Finished || Checkpoints) {
-                if (Channels->CanSendChannelData(channelId)) {
-                    DrainOutputChannel(outputChannel);
+                if (Channels) {
+                    if (Channels->CanSendChannelData(channelId)) {
+                        DrainOutputChannel(outputChannel);
+                    } else {
+                        ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
+                    }
                 } else {
-                    ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
+                    Y_ENSURE(outputChannel.Channel);
+                    if (outputChannel.Channel->IsFinished()) {
+                        outputChannel.Finished = true;
+                    } else {
+                        ProcessOutputsState.HasDataToSend = true;
+                    }
+                    // ProcessOutputsState.HasDataToSend |= !outputChannel.Channel->IsFinished();
                 }
             } else {
                 CA_LOG_T("Do not drain channelId: " << channelId << ", finished");
@@ -484,15 +497,17 @@ protected:
             // So, if there is space in the channel buffer (and on previous step is was full), we send ChannelDataAck
             // event with the last known seqNo, and the process on the other side of this channel updates its state
             // and sends us a new batch of data.
-            bool pollSent = false;
-            for (auto& [channelId, inputChannel] : InputChannelsMap) {
-                pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
-            }
-            if (!pollSent) {
-                if (ProcessOutputsState.DataWasSent) {
-                    ContinueExecute(EResumeSource::CADataSent);
+            if (Channels) {
+                bool pollSent = false;
+                for (auto& [channelId, inputChannel] : InputChannelsMap) {
+                    pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
                 }
-                return;
+                if (!pollSent) {
+                    if (ProcessOutputsState.DataWasSent) {
+                        ContinueExecute(EResumeSource::CADataSent);
+                    }
+                    return;
+                }
             }
         }
 
@@ -510,11 +525,24 @@ protected:
                 CA_LOG_D("Continue execution, either output buffers are not empty or not all channels are ready"
                     << ", hasDataToSend: " << ProcessOutputsState.HasDataToSend << ", channelsReady: " << ProcessOutputsState.ChannelsReady);
             } else {
-                if (!Channels->FinishInputChannels()) {
-                    CA_LOG_D("Continue execution, not all input channels are initialized");
-                    return;
+                if (Channels) {
+                    if (!Channels->FinishInputChannels()) {
+                        CA_LOG_D("Continue execution, not all input channels are initialized");
+                        return;
+                    }
+                } else {
+                    // bool finished = true;
+                    for (auto& [channelId, info] : InputChannelsMap) {
+                        if (!info.Channel->IsFinished()) {
+                            info.Channel->Finish();
+                            // finished = false;
+                        }
+                    }
+                    // if (!finished) {
+                    //     return;
+                    // }
                 }
-                if (Channels->CheckInFlight("Tasks execution finished") && AllAsyncOutputsFinished()) {
+                if ((!Channels || Channels->CheckInFlight("Tasks execution finished")) && AllAsyncOutputsFinished()) {
                     State = NDqProto::COMPUTE_STATE_FINISHED;
                     CA_LOG_D("Compute state finished. All channels and sinks finished");
                     ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::SUCCESS, {TIssue("success")});
@@ -904,6 +932,7 @@ protected:
         ui32 DstStageId;
         IDqOutputChannel::TPtr Channel;
         bool HasPeer = false;
+        NActors::TActorId PeerId;
         bool Finished = false; // != Channel->IsFinished() // If channel is in finished state, it sends only checkpoints.
         bool EarlyFinish = false;
         bool PopStarted = false;
@@ -1050,10 +1079,27 @@ protected:
         return true;
     }
 
-
+    virtual TString GetMonitoringInfo() {
+        return "TDqComputeActorBase::GetMonitoringInfo() does nothing";
+    }
 
 protected:
-    void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
+    void HandleExecuteBase(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+        if (cgi.Get("action") == "run") {
+            if (Running) {
+                DoExecute();
+            }
+        }
+        this->Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(GetMonitoringInfo()));
+    }
+
+    void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr& ev) {
+        if (ev->Cookie) {
+            CA_LOG_W("TEvResumeExecution: ChannelId=" << ev->Cookie << ", Running=" << Running << ", State=" << (int)State);
+        }
+        ResumeCookie = ev->Cookie;
+
         ResumeEventScheduled = false;
         if (Running) {
             DoExecute();
@@ -1072,7 +1118,12 @@ protected:
 
                 CA_LOG_D("Update input channelId: " << channelUpdate.GetId() << ", peer: " << peer);
 
-                Channels->SetInputChannelPeer(channelUpdate.GetId(), peer);
+                if (Task.GetFastChannels()) {
+                    Y_ENSURE(inputChannel->Channel);
+                    Y_ENSURE(inputChannel->Channel->Bind(peer, this->SelfId()));
+                } else {
+                    Channels->SetInputChannelPeer(channelUpdate.GetId(), peer);
+                }
                 inputChannel->HasPeer = true;
 
                 continue;
@@ -1084,11 +1135,16 @@ protected:
 
                 CA_LOG_D("Update output channelId: " << channelUpdate.GetId() << ", peer: " << peer);
 
-                Channels->SetOutputChannelPeer(channelUpdate.GetId(), peer);
-                outputChannel->HasPeer = true;
-                if (outputChannel->Channel) {
-                    outputChannel->Channel->UpdateSettings({.IsLocalChannel = peer.NodeId() == this->SelfId().NodeId()});
+                if (Task.GetFastChannels()) {
+                    Y_ENSURE(outputChannel->Channel);
+                    Y_ENSURE(outputChannel->Channel->Bind(this->SelfId(), peer));
+                } else {
+                    Channels->SetOutputChannelPeer(channelUpdate.GetId(), peer);
+                    if (outputChannel->Channel) {
+                        outputChannel->Channel->UpdateSettings({.IsLocalChannel = peer.NodeId() == this->SelfId().NodeId()});
+                    }
                 }
+                outputChannel->HasPeer = true;
 
                 continue;
             }
@@ -1688,6 +1744,9 @@ protected:
                 for (auto& channel : outputDesc.GetChannels()) {
                     TOutputChannelInfo outputChannel(channel.GetId(), channel.GetDstStageId());
                     outputChannel.HasPeer = channel.GetDstEndpoint().HasActorId();
+                    if (outputChannel.HasPeer) {
+                        outputChannel.PeerId =  NActors::ActorIdFromProto(channel.GetDstEndpoint().GetActorId());
+                    }
                     outputChannel.IsTransformOutput = outputDesc.HasTransform();
                     outputChannel.WatermarksMode = channel.GetWatermarksMode();
 
@@ -1807,7 +1866,7 @@ public:
 
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
             // when TR finished, use channels to detect output back pressure
-            if (taskStats->FinishTs && State != NDqProto::COMPUTE_STATE_FINISHED) {
+            if (taskStats->FinishTs && State != NDqProto::COMPUTE_STATE_FINISHED && Channels) {
                 auto lastOutputTime = Channels->GetLastOutputMessageTime();
                 if (lastOutputTime) {
                     protoTask->SetCurrentWaitOutputTimeUs((TInstant::Now() - lastOutputTime).MicroSeconds());
@@ -1961,52 +2020,56 @@ public:
                     }
                 }
 
-                for (auto& protoChannel : *protoTask->MutableInputChannels()) {
-                    if (auto channelId = protoChannel.GetChannelId()) { // Profile or Full Single
-                        if (auto* channelStats = Channels->GetInputChannelStats(channelId)) {
-                            protoChannel.SetPollRequests(channelStats->PollRequests);
-                            protoChannel.SetResentMessages(channelStats->ResentMessages);
-                        }
-                    } else if (auto srcStageId = protoChannel.GetSrcStageId()) { // Full Aggregated
-                        // TODO Optimize
-                        ui64 pollRequests = 0;
-                        ui64 resentMessages = 0;
-                        for (const auto& [channelId, channel] : InputChannelsMap) {
-                            if (channel.SrcStageId == srcStageId) {
-                                if (auto* channelStats = Channels->GetInputChannelStats(channelId)) {
-                                    pollRequests += channelStats->PollRequests;
-                                    resentMessages += channelStats->ResentMessages;
-                                }
-                            }
-                        }
-                        if (pollRequests) {
-                            protoChannel.SetPollRequests(pollRequests);
-                        }
-                        if (resentMessages) {
-                            protoChannel.SetResentMessages(resentMessages);
-                        }
-                    }
-                }
+                if (Channels) {
 
-                for (auto& protoChannel : *protoTask->MutableOutputChannels()) {
-                    if (auto channelId = protoChannel.GetChannelId()) { // Profile or Full Single
-                        if (auto* channelStats = Channels->GetOutputChannelStats(channelId)) {
-                            protoChannel.SetResentMessages(channelStats->ResentMessages);
-                        }
-                    } else if (auto dstStageId = protoChannel.GetDstStageId()) { // Full Aggregated
-                        // TODO Optimize
-                        ui64 resentMessages = 0;
-                        for (const auto& [channelId, channel] : OutputChannelsMap) {
-                            if (channel.DstStageId == dstStageId) {
-                                if (auto* channelStats = Channels->GetOutputChannelStats(channelId)) {
-                                    resentMessages += channelStats->ResentMessages;
+                    for (auto& protoChannel : *protoTask->MutableInputChannels()) {
+                        if (auto channelId = protoChannel.GetChannelId()) { // Profile or Full Single
+                            if (auto* channelStats = Channels->GetInputChannelStats(channelId)) {
+                                protoChannel.SetPollRequests(channelStats->PollRequests);
+                                protoChannel.SetResentMessages(channelStats->ResentMessages);
+                            }
+                        } else if (auto srcStageId = protoChannel.GetSrcStageId()) { // Full Aggregated
+                            // TODO Optimize
+                            ui64 pollRequests = 0;
+                            ui64 resentMessages = 0;
+                            for (const auto& [channelId, channel] : InputChannelsMap) {
+                                if (channel.SrcStageId == srcStageId) {
+                                    if (auto* channelStats = Channels->GetInputChannelStats(channelId)) {
+                                        pollRequests += channelStats->PollRequests;
+                                        resentMessages += channelStats->ResentMessages;
+                                    }
                                 }
                             }
-                        }
-                        if (resentMessages) {
-                            protoChannel.SetResentMessages(resentMessages);
+                            if (pollRequests) {
+                                protoChannel.SetPollRequests(pollRequests);
+                            }
+                            if (resentMessages) {
+                                protoChannel.SetResentMessages(resentMessages);
+                            }
                         }
                     }
+
+                    for (auto& protoChannel : *protoTask->MutableOutputChannels()) {
+                        if (auto channelId = protoChannel.GetChannelId()) { // Profile or Full Single
+                            if (auto* channelStats = Channels->GetOutputChannelStats(channelId)) {
+                                protoChannel.SetResentMessages(channelStats->ResentMessages);
+                            }
+                        } else if (auto dstStageId = protoChannel.GetDstStageId()) { // Full Aggregated
+                            // TODO Optimize
+                            ui64 resentMessages = 0;
+                            for (const auto& [channelId, channel] : OutputChannelsMap) {
+                                if (channel.DstStageId == dstStageId) {
+                                    if (auto* channelStats = Channels->GetOutputChannelStats(channelId)) {
+                                        resentMessages += channelStats->ResentMessages;
+                                    }
+                                }
+                            }
+                            if (resentMessages) {
+                                protoChannel.SetResentMessages(resentMessages);
+                            }
+                        }
+                    }
+
                 }
             }
         } else {
@@ -2098,6 +2161,7 @@ protected:
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
     TDuration InputTransformCpuTime;
+    ui32 ResumeCookie = 0;
 private:
     TInstant StartTime;
     bool Running = true;

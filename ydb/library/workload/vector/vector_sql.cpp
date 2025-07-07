@@ -45,7 +45,7 @@ std::string MakeSelect(const TVectorWorkloadParams& params, const TString& index
     ret << "DECLARE $Embedding as String;" << "\n";
     if (params.PrefixColumn)
         ret << "DECLARE $PrefixValue as " << params.PrefixType << ";" << "\n";
-    ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << params.KmeansTreeClusters << "\";" << "\n";
+    ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << params.KmeansTreeSearchClusters << "\";" << "\n";
     ret << "SELECT UNWRAP(CAST(" << params.KeyColumn << " AS string)) AS id FROM " << params.TableName << "\n";
     if (!indexName.empty())
         ret << "VIEW " << indexName << "\n";

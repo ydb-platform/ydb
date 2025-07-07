@@ -3,6 +3,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
+
 namespace NYdb::inline Dev {
 
 bool IsTokenCorrect(const std::string& in) {
@@ -137,7 +138,7 @@ private:
 TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params)
     : MetricRegistryPtr_(nullptr)
     , ClientThreadsNum_(params->GetClientThreadsNum())
-    , ResponseQueue_(CreateThreadPool(ClientThreadsNum_))
+    , ResponseQueue_(CreateResponseQueue(params))
     , DefaultDiscoveryEndpoint_(params->GetEndpoint())
     , SslCredentials_(params->GetSslCredentials())
     , DefaultDatabase_(params->GetDatabase())
@@ -181,7 +182,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     }
 #endif
     //TAdaptiveThreadPool ignores params
-    ResponseQueue_->Start(ClientThreadsNum_, MaxQueuedResponses_);
+    ResponseQueue_->Start();
     if (!DefaultDatabase_.empty()) {
         DefaultState_ = StateTracker_.GetDriverState(
             DefaultDatabase_,
@@ -427,7 +428,7 @@ const TLog& TGRpcConnectionsImpl::GetLog() const {
 }
 
 void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
-    Y_ENSURE(ResponseQueue_->Add(action));
+    ResponseQueue_->Post(action);
 }
 
 } // namespace NYdb

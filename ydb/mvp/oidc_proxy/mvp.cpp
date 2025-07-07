@@ -294,6 +294,7 @@ void TMVP::TryGetGenericOptionsFromConfig(
             ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
         }
     }
+    OpenIdConnectSettings.InitTimeoutOverrides();
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {

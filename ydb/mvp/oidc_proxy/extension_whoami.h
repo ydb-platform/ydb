@@ -6,25 +6,27 @@
 
 namespace NMVP::NOIDC {
 
-class TExtensionWhoami : public TExtension {
-private:
-    using TBase = TExtension;
+class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoamiWorker> {
+    using TBase = IExtension;
     using TProfileService = nebius::iam::v1::ProfileService;
 
-protected:
     const TString AuthHeader;
-    bool Timeout = false;
+
+    const TOpenIdConnectSettings Settings;
+    TIntrusivePtr<TExtensionContext> Context;
 
     std::optional<TEvPrivate::TEvGetProfileResponse::TPtr> IamResponse;
     std::optional<TEvPrivate::TEvErrorResponse::TPtr> IamError;
+    TDuration Timeout;
 
 public:
-    TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader)
-        : TBase(settings)
-        , AuthHeader(authHeader)
+    TExtensionWhoamiWorker(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout)
+        : AuthHeader(authHeader)
+        , Settings(settings)
+        , Timeout(timeout)
     {}
-    void Bootstrap() override;
-    void Handle(TEvPrivate::TEvExtensionRequest::TPtr event) override;
+    void Bootstrap();
+    void Handle(TEvPrivate::TEvExtensionRequest::TPtr event);
     void Handle(TEvPrivate::TEvGetProfileResponse::TPtr event);
     void Handle(TEvPrivate::TEvErrorResponse::TPtr event);
 
@@ -32,9 +34,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvGetProfileResponse, Handle);
             hFunc(TEvPrivate::TEvErrorResponse, Handle);
-            default:
-                TBase::StateWork(ev);
-                break;
+            hFunc(TEvPrivate::TEvExtensionRequest, Handle);
         }
     }
 
@@ -43,6 +43,16 @@ private:
     void ApplyIfReady();
     void ApplyExtension();
     void SetExtendedError(NJson::TJsonValue& root, const TStringBuf section, const TStringBuf key, const TStringBuf value);
+    void ContinueAndPassAway();
+};
+
+class TExtensionWhoami : public IExtension {
+private:
+    TActorId WhoamiHandlerId;
+
+public:
+    TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout);
+    void Execute(TIntrusivePtr<TExtensionContext> ctx) override;
 };
 
 } // NMVP::NOIDC

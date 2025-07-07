@@ -75,6 +75,7 @@ namespace NActors {
         auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply](NActors::TActorSystem* as, NInterconnect::NRdma::TEvRdmaIoDone* ioDone) {
             if (!ioDone->IsSuccess()) {
                 reply(as, ioDone);
+                return;
             }
 
             size_t before = left->fetch_sub(size, std::memory_order_relaxed);
@@ -276,7 +277,7 @@ namespace NActors {
 
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
         if (!ev->Get()->Event->IsSuccess()) {
-            LOG_ERROR_IC_SESSION("ICIS14", "Rdma IO failed");
+            LOG_ERROR_IC_SESSION("ICRDMA", "Rdma IO failed %d", ev->Get()->Event->GetErrCode());
             throw TExDestroySession({TDisconnectReason::RdmaError()});
         }
         ProcessEvents(GetPerChannelContext(ev->Get()->Channel));
@@ -692,6 +693,10 @@ namespace NActors {
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
                     context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel);
+                    for (const auto& cred : creds.GetCreds()) {
+                        RdmaBytesReadScheduled += cred.GetSize();
+                        RdmaWrReadScheduled++;
+                    }
                     continue;
                 }
             }
@@ -1212,6 +1217,8 @@ namespace NActors {
                             MON_VAR(Context->LastProcessedSerial)
                             MON_VAR(ConfirmedByInput)
                             MON_VAR(RdmaQp);
+                            MON_VAR(RdmaBytesReadScheduled);
+                            MON_VAR(RdmaWrReadScheduled);
                         }
                     }
                 }

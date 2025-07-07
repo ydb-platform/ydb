@@ -64,7 +64,7 @@ namespace NActors {
         }
     }
 
-    bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial) {
+    bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial, ssize_t rdmaDeviceIndex) {
         for (;;) {
             Y_ABORT_UNLESS(!Queue.empty());
             TEventHolder& event = Queue.front();
@@ -110,7 +110,7 @@ namespace NActors {
                     break;
 
                 case EState::BODY:
-                    if (FeedPayload(task, event)) {
+                    if (FeedPayload(task, event, rdmaDeviceIndex)) {
                         State = EState::DESCRIPTOR;
                     } else {
                         return false;
@@ -242,7 +242,7 @@ namespace NActors {
         return complete;
     }
 
-    bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event) {
+    bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex) {
         for (;;) {
             // calculate inline or external part size (it may cover a few sections, not just single one)
             while (!PartLenRemain) {
@@ -271,7 +271,7 @@ namespace NActors {
             if (IsPartInline) {
                 complete = FeedInlinePayload(task, event);
             } else if (SendViaRdma) {
-                complete = FeedRdmaPayload(task, event); // TODO: improve error handling
+                complete = FeedRdmaPayload(task, event, rdmaDeviceIndex); // TODO: improve error handling
                 Y_ABORT_UNLESS(complete && *complete, "RDMA payload serialization failed for event, we need to improve error handling here");
             } else {
                 complete = FeedExternalPayload(task, event);
@@ -308,7 +308,7 @@ namespace NActors {
         return complete;
     }
 
-    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds) {
+    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ssize_t rdmaDeviceIndex) {
         if (!event.Buffer && event.Event) {
             std::optional<TRope> rope = event.Event->SerializeToRope(
                 [&](ui32 size) -> TRcBuf { return RdmaMemPool->AllocRcBuf(size); }
@@ -333,15 +333,16 @@ namespace NActors {
                 auto cred = rdmaCreds.AddCreds();
                 cred->SetAddress(reinterpret_cast<ui64>(memReg.GetAddr()));
                 cred->SetSize(memReg.GetSize());
-                cred->SetRkey(memReg.GetRKey(0)); // TODO: RdmaCtx device index
+                cred->SetRkey(memReg.GetRKey(rdmaDeviceIndex));
             }
         } 
         return true;
     }
 
-    std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event) {
+    std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex) {
+        Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
         NActorsInterconnect::TRdmaCreds rdmaCreds;
-        if (!SerializeEventRdma(event, rdmaCreds)) {
+        if (!SerializeEventRdma(event, rdmaCreds, rdmaDeviceIndex)) {
             return std::nullopt; // serialization failed
         }
 
@@ -365,6 +366,7 @@ namespace NActors {
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
         Y_ABORT_UNLESS(rdmaCreds.SerializePartialToArray(ptr, credsSerializedSize));
+        OutputQueueSize -= event.EventSerializedSize;
 
         task.Write<false>(buffer, partSize);
 

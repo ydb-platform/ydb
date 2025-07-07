@@ -101,7 +101,7 @@ namespace NActors {
 
         void DropConfirmed(ui64 confirm, TEventHolderPool& pool);
 
-        bool FeedBuf(TTcpPacketOutTask& task, ui64 serial);
+        bool FeedBuf(TTcpPacketOutTask& task, ui64 serial, ssize_t rdmaDeviceIndex=-1);
 
         bool IsEmpty() const {
             return Queue.empty();
@@ -156,12 +156,12 @@ namespace NActors {
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
-        bool SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds);
+        bool SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ssize_t rdmaDeviceIndex);
 
-        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event);
+        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex);
         std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event);
         std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event);
-        std::optional<bool> FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event);
+        std::optional<bool> FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex);
 
         bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event);
 

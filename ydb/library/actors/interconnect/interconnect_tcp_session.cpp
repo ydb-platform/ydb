@@ -267,6 +267,7 @@ namespace NActors {
 
         auto qp = std::move(ev->Get()->Qp);
         auto cq = std::move(ev->Get()->CqPtr);
+        RdmaCtx = qp ? qp->GetCtx() : nullptr;
 
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);
@@ -1008,7 +1009,7 @@ namespace NActors {
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
             const ui32 grossBefore = task.GetDataSize();
-            const bool eventDone = channel->FeedBuf(task, serial);
+            const bool eventDone = channel->FeedBuf(task, serial, RdmaCtx ? RdmaCtx->GetDeviceIndex() : -1);
             const ui32 grossAfter = task.GetDataSize();
             Y_DEBUG_ABORT_UNLESS(grossBefore <= grossAfter);
             const ui32 gross = grossAfter - grossBefore;

@@ -369,6 +369,7 @@ namespace NActors {
                             if (rdmaIncommingRead) {
                                 auto ack = TryRdmaRead(rdmaIncommingRead.value());
                                 SendExBlock(MainChannel, ack, "TRdmaHandshakeReadAck");
+                                Params.UseRdma = true;
                             }
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
                         } else {

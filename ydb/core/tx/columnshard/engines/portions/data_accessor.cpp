@@ -37,8 +37,8 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
         if ((it == portionData.GetRecordsVerified().end() || i < it->GetColumnId())) {
             if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
                 columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+                portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
             }
-            portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
         }
         if (it == portionData.GetRecordsVerified().end()) {
             continue;

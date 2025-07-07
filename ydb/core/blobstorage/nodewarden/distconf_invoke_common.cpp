@@ -21,7 +21,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Bootstrap(TActorId parentId) {
         if (LifetimeToken.expired()) {
-            return FinishWithError(TResult::ERROR, "distributed config keeper terminated");
+            return FinishWithError(TResult::RACE, "distributed config keeper terminated");
         }
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC42, "TInvokeRequestHandlerActor::Bootstrap", (Sender, Sender), (Cookie, Cookie),
@@ -30,11 +30,26 @@ namespace NKikimr::NStorage {
         ParentId = parentId;
         Become(&TThis::StateFunc);
 
+        if (const auto& record = Event->Get()->Record; record.HasSwitchBridgeClusterState() && Self->Cfg->BridgeConfig) {
+            const auto& cmd = record.GetSwitchBridgeClusterState();
+            const auto& newClusterState = cmd.GetNewClusterState();
+
+            for (ui32 bridgePileId : cmd.GetSpecificBridgePileIds()) {
+                SpecificBridgePileIds.insert(TBridgePileId::FromValue(bridgePileId));
+            }
+
+            if (const auto& error = ValidateSwitchBridgeClusterState(newClusterState)) {
+                return FinishWithError(TResult::ERROR, *error);
+            }
+
+            SwitchBridgeNewConfig.emplace(GetSwitchBridgeNewConfig(newClusterState));
+        }
+
         if (Self->ScepterlessOperationInProgress) {
-            FinishWithError(TResult::ERROR, "an operation is already in progress");
+            FinishWithError(TResult::RACE, "an operation is already in progress");
         } else if (Self->Binding) {
             if (RequestSessionId) {
-                FinishWithError(TResult::ERROR, "no double-hop invokes allowed");
+                FinishWithError(TResult::RACE, "no double-hop invokes allowed");
             } else {
                 const ui32 root = Self->Binding->RootNodeId;
                 Send(MakeBlobStorageNodeWardenID(root), Event->Release(), IEventHandle::FlagSubscribeOnSession);
@@ -42,7 +57,8 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(inserted);
                 WaitingReplyFromNode = root;
             }
-        } else if (!Scepter.expired() || CheckSwitchBridgeCommand()) {
+        } else if (!Scepter.expired() || // we have either scepter, or quorum for reduced set of nodes to execute this command
+                (SwitchBridgeNewConfig && Self->HasConnectedNodeQuorum(*SwitchBridgeNewConfig, SpecificBridgePileIds))) {
             if (Scepter.expired()) {
                 Self->ScepterlessOperationInProgress = IsScepterlessOperation = true;
             }
@@ -138,16 +154,19 @@ namespace NKikimr::NStorage {
                 return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
 
             case TQuery::kSwitchBridgeClusterState:
-                return SwitchBridgeClusterState(record.GetSwitchBridgeClusterState().GetNewClusterState());
+                return SwitchBridgeClusterState();
 
             case TQuery::REQUEST_NOT_SET:
                 return FinishWithError(TResult::ERROR, "Request field not set");
-            
+
             case TQuery::kReconfigStateStorage:
                 return ReconfigStateStorage(record.GetReconfigStateStorage());
 
             case TQuery::kGetStateStorageConfig:
-                return GetStateStorageConfig();
+                return GetStateStorageConfig(record.GetGetStateStorageConfig());
+
+            case TQuery::kNotifyBridgeSyncFinished:
+                return NotifyBridgeSyncFinished(record.GetNotifyBridgeSyncFinished());
         }
 
         FinishWithError(TResult::ERROR, "unhandled request");
@@ -267,8 +286,11 @@ namespace NKikimr::NStorage {
                 : ERootState::INITIAL);
             Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
 
-            if (auto error = Self->ProcessProposeStorageConfig(res->MutableProposeStorageConfig())) {
+            if (auto error = Self->ProcessProposeStorageConfig(res->MutableProposeStorageConfig(), SpecificBridgePileIds)) {
                 return error;
+            }
+            if (CheckSyncersAfterCommit) {
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::IssueQuerySyncers);
             }
             Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
             return std::nullopt;
@@ -299,13 +321,13 @@ namespace NKikimr::NStorage {
         if (!Self->StorageConfig) {
             FinishWithError(TResult::ERROR, "no agreed StorageConfig");
         } else if (Self->CurrentProposedStorageConfig) {
-            FinishWithError(TResult::ERROR, "config proposition request in flight");
+            FinishWithError(TResult::RACE, "config proposition request in flight");
         } else if (Self->RootState != (IsScepterlessOperation ? ERootState::INITIAL : ERootState::RELAX)) {
-            FinishWithError(TResult::ERROR, "something going on with default FSM");
+            FinishWithError(TResult::RACE, "something going on with default FSM");
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
         } else if (IsScepterExpired()) {
-            FinishWithError(TResult::ERROR, "scepter lost during query execution");
+            FinishWithError(TResult::RACE, "scepter lost during query execution");
         } else {
             return true;
         }

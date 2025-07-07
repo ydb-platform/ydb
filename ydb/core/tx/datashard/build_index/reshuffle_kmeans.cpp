@@ -358,10 +358,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
-        response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         LOG_N("Starting TReshuffleKMeansScan TabletId: " << TabletID()
             << " " << ToShortDebugString(request)
@@ -447,7 +444,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
             lead = CreateLeadFrom(range);
         }
 
-        if (!request.HasOutputName()) {
+        if (!request.GetOutputName()) {
             badRequest(TStringBuilder() << "Empty output table name");
         }
 

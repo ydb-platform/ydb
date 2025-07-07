@@ -11,9 +11,9 @@ public:
     TYdbUpdater(std::string storageUrl);
     ~TYdbUpdater();
 
-    bool CheckIfUpdateNeeded(bool forceRequest = false);
     int Update(bool forceUpdate);
     void SetCheckVersion(bool value);
+    void PrintUpdateMessageIfNeeded(bool forceVersionCheck);
 
 private:
     void LoadConfig();

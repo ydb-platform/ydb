@@ -607,6 +607,7 @@ protected:
     void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev);
     void HandleInit(TEvNodeWardenStorageConfig::TPtr& ev);
+    void Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -1025,6 +1026,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return CurrentConfig.GetUseTabletUsageEstimate();
     }
 
+    TDuration GetBalanceCountersRefreshFrequency() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetBalanceCountersRefreshFrequency());
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static ui64 GetRestartsPerPeriod(const google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);
@@ -1068,6 +1073,8 @@ protected:
     };
 
     THiveStats GetStats() const;
+    template<std::forward_iterator TIter>
+    THiveStats GetStats(TIter begin, TIter end) const;
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
     void WaitToMoveTablets(TActorId actor);

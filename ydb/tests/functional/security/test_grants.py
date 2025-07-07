@@ -17,20 +17,30 @@ TABLE_PATH = f"{DATABASE}/{TABLE_NAME}"
 CREATE_TABLE_GRANTS = ['ydb.granular.create_table']
 ALTER_TABLE_ADD_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_DROP_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+ERASE_ROW_GRANTS = ['ydb.granular.describe_schema', 'ydb.granular.select_row', 'ydb.granular.erase_row']
+ALTER_TABLE_ALTER_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+ALTER_TABLE_DROP_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_ADD_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TOPIC_ADD_CONSUMER_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 READ_TOPIC_GRANTS = []
 ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+CREATE_TOPIC_GRANTS = ['ydb.granular.create_queue']
+DROP_TOPIC_GRANTS = ['ydb.granular.remove_schema']
 ALL_USED_GRANS = set(
     CREATE_TABLE_GRANTS
     + ALTER_TABLE_ADD_COLUMN_GRANTS
     + ALTER_TABLE_DROP_COLUMN_GRANTS
+    + ERASE_ROW_GRANTS
+    + ALTER_TABLE_ALTER_INDEX_GRANTS
+    + ALTER_TABLE_DROP_INDEX_GRANTS
     + DROP_TABLE_GRANTS
     + ALTER_TABLE_ADD_CHANGEFEED_GRANTS
     + ALTER_TOPIC_ADD_CONSUMER_GRANTS
     + READ_TOPIC_GRANTS
     + ALTER_TABLE_DROP_CHANGEFEED_GRANTS
+    + CREATE_TOPIC_GRANTS
+    + DROP_TOPIC_GRANTS
 )
 
 
@@ -138,6 +148,56 @@ def test_granular_grants_for_tables(ydb_cluster):
         "you do not have access permissions",
     )
 
+    # DELETE FROM
+    erase_row_query = f"DELETE FROM `{TABLE_PATH}` WHERE a = 10 AND b = 20;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        erase_row_query,
+        TABLE_PATH,
+        ERASE_ROW_GRANTS,
+        "you do not have access permissions",
+    )
+
+    # ALTER TABLE ... ADD INDEX
+    create_index_query = f"ALTER TABLE `{TABLE_PATH}` ADD INDEX `b_column_index` GLOBAL ON (`b`);"
+    _test_grants(
+        tenant_admin_config,
+        user1_config,
+        'user1',
+        create_index_query,
+        TABLE_PATH,
+        [],  # user1 is the owner of a table
+        "",
+    )
+
+    # ALTER TABLE ... ALTER INDEX
+    alter_index_query = (
+        f"ALTER TABLE `{TABLE_PATH}` ALTER INDEX `b_column_index` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED);"
+    )
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        alter_index_query,
+        TABLE_PATH,
+        ALTER_TABLE_ALTER_INDEX_GRANTS,
+        "you do not have access permissions",
+    )
+
+    # ALTER TABLE ... DROP INDEX
+    drop_index_query = f"ALTER TABLE `{TABLE_PATH}` DROP INDEX `b_column_index`;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_index_query,
+        TABLE_PATH,
+        ALTER_TABLE_DROP_INDEX_GRANTS,
+        "you do not have access permissions",
+    )
+
     # DROP TABLE
     drop_table_query = f"DROP TABLE `{TABLE_PATH}`;"
     _test_grants(
@@ -213,6 +273,46 @@ def test_cdc_grants(ydb_cluster):
         TABLE_PATH,
         ALTER_TABLE_DROP_CHANGEFEED_GRANTS,
         "you do not have access permissions",
+    )
+
+    ydb_cluster.remove_database(DATABASE)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+
+def test_pq_grants(ydb_cluster):
+    ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
+    database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
+    ydb_cluster.wait_tenant_up(DATABASE)
+
+    tenant_admin_config = ydb.DriverConfig(
+        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+        database=DATABASE,
+    )
+
+    # CREATE TOPIC
+    user1_config = create_user(ydb_cluster, tenant_admin_config, "user1")
+    create_topic_query = f"CREATE TOPIC `{DATABASE}/topic`;"
+    _test_grants(
+        tenant_admin_config,
+        user1_config,
+        'user1',
+        create_topic_query,
+        DATABASE,
+        CREATE_TOPIC_GRANTS,
+        "Access denied",
+    )
+
+    # DROP TOPIC
+    user2_config = create_user(ydb_cluster, tenant_admin_config, "user2")
+    drop_topic_query = f"DROP TOPIC `{DATABASE}/topic`;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_topic_query,
+        DATABASE,
+        DROP_TOPIC_GRANTS,
+        "Access denied",
     )
 
     ydb_cluster.remove_database(DATABASE)

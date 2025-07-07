@@ -23,6 +23,7 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenNotifyConfigMismatch;
     struct TEvNodeWardenWriteMetadata;
     struct TEvNodeWardenQueryCacheResult;
+    struct TEvNodeWardenManageSyncers;
 
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
@@ -526,6 +527,7 @@ namespace NKikimr::NStorage {
             TActorId GroupResolver; // resolver actor id
             TIntrusiveList<TVDiskRecord, TGroupRelationTag> VDisksOfGroup;
             TNodeLayoutInfoPtr NodeLayoutInfo;
+            THashMap<TBridgePileId, TActorId> WorkingSyncers;
         };
 
         std::unordered_map<ui32, TGroupRecord> Groups;
@@ -629,6 +631,8 @@ namespace NKikimr::NStorage {
         void SendScrubRequests();
 
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::TPtr ev);
+
+        void HandleManageSyncers(TAutoPtr<TEventHandle<TEvNodeWardenManageSyncers>> ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

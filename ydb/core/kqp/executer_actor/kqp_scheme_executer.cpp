@@ -114,15 +114,6 @@ public:
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(GetSessionDirName());
 
-        NACLib::TDiffACL diffAcl;
-        diffAcl.AddAccess(
-            NACLib::EAccessType::Allow,
-            NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema,
-            AppData()->AllAuthenticatedUsers);
-
-        auto* modifyAcl = modifyScheme->MutableModifyACL();
-        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
-
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
         RegisterWithSameMailbox(requestHandler);
@@ -142,9 +133,7 @@ public:
         auto& record = ev->Record;
 
         record.SetDatabaseName(Database);
-        if (UserToken) {
-            record.SetUserToken(UserToken->GetSerializedToken());
-        }
+        record.SetUserToken(NACLib::TSystemUsers::Tmp().SerializeAsString());
         record.SetPeerName(ClientAddress);
 
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
@@ -156,14 +145,20 @@ public:
         makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
 
-        NACLib::TDiffACL diffAcl;
-        diffAcl.RemoveAccess(
-            NACLib::EAccessType::Allow,
-            NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema,
-            AppData()->AllAuthenticatedUsers);
+        if (UserToken) {
+            constexpr ui32 access = NACLib::EAccessRights::CreateDirectory
+                | NACLib::EAccessRights::CreateTable
+                | NACLib::EAccessRights::RemoveSchema
+                | NACLib::EAccessRights::DescribeSchema;
 
-        auto* modifyAcl = modifyScheme->MutableModifyACL();
-        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
+            NACLib::TDiffACL diffAcl;
+            diffAcl.AddAccess(
+                NACLib::EAccessType::Allow,
+                access,
+                UserToken->GetUserSID());
+            auto* modifyAcl = modifyScheme->MutableModifyACL();
+            modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
+        }
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
@@ -505,6 +500,8 @@ public:
             failedOnAlreadyExists = ev->Record.GetTransaction().GetModifyScheme().GetFailedOnAlreadyExists();
         }
 
+        const auto operationType = ev->Record.GetTransaction().GetModifyScheme().GetOperationType();
+
         IActor* requestHandler = new TSchemeOpRequestHandler(
             ev.Release(),
             promise,
@@ -515,9 +512,19 @@ public:
 
         auto actorSystem = TActivationContext::ActorSystem();
         auto selfId = SelfId();
-        promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
+        promise.GetFuture().Subscribe([actorSystem, selfId, operationType](const TFuture<IKqpGateway::TGenericResult>& future) {
+            const auto& value = future.GetValue();
             auto ev = MakeHolder<TEvPrivate::TEvResult>();
-            ev->Result = future.GetValue();
+            ev->Result.SetStatus(value.Status());
+
+            if (value.Issues()) {
+                NYql::TIssue rootIssue(TStringBuilder() << "Executing " << NKikimrSchemeOp::EOperationType_Name(operationType));
+                rootIssue.SetCode(ev->Result.Status(), NYql::TSeverityIds::S_INFO);
+                for (const auto& issue : value.Issues()) {
+                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+                }
+                ev->Result.AddIssue(rootIssue);
+            }
 
             actorSystem->Send(selfId, ev.Release());
         });
@@ -551,7 +558,7 @@ public:
         auto resultFuture = cBehaviour->GetOperationsManager()->ExecutePrepared(schemeOp, SelfId().NodeId(), cBehaviour, context);
 
         using TResultFuture = NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus>;
-        resultFuture.Subscribe([actorSystem, selfId](const TResultFuture& f) {
+        resultFuture.Subscribe([actorSystem, selfId, objectType = schemeOp.GetObjectType()](const TResultFuture& f) {
             const auto& status = f.GetValue();
             auto ev = MakeHolder<TEvPrivate::TEvResult>();
             if (status.Ok()) {
@@ -559,7 +566,12 @@ public:
             } else {
                 ev->Result.SetStatus(status.GetStatus());
                 if (TString message = status.GetErrorMessage()) {
-                    ev->Result.AddIssue(NYql::TIssue(message).SetCode(status.GetStatus(), NYql::TSeverityIds::S_ERROR));
+                    const auto createIssue = [status = status.GetStatus()](const TString& message) {
+                        return NYql::TIssue(message).SetCode(status, NYql::TSeverityIds::S_ERROR);
+                    };
+                    ev->Result.AddIssue(createIssue(TStringBuilder() << "Executing operation with object \"" << objectType << "\"")
+                        .AddSubIssue(MakeIntrusive<NYql::TIssue>(createIssue(status.GetErrorMessage())))
+                    );
                 }
             }
             actorSystem->Send(selfId, ev.Release());

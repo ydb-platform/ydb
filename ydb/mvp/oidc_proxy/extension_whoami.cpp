@@ -62,10 +62,7 @@ void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue&
         }
         outJson = &errorJson;
     }
-
-    if (Context->Params->HeadersOverride) {
-        Context->Params->HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
-    }
+    Context->Params->HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
     TStringStream content;
     NJson::WriteJson(&content, outJson, {
         .FloatToStringMode = EFloatToStringMode::PREC_NDIGITS,
@@ -81,9 +78,6 @@ void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue&
 
 void TExtensionWhoami::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
     Context = std::move(ev->Get()->Context);
-    if (!Context->Params->HeadersOverride) {
-        Context->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-    }
     if (Context->Params->StatusOverride.StartsWith("3") || Context->Params->StatusOverride == "404") {
         ContinueAndPassAway();
     }

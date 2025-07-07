@@ -70,12 +70,20 @@ public:
         return it->second;
     }
 
-    TString Extract(const TBlobRange& bRange) {
+    std::optional<TString> ExtractOptional(const TBlobRange& bRange) {
         auto it = Blobs.find(bRange);
-        AFL_VERIFY(it != Blobs.end())("range", bRange.ToString());
+        if (it == Blobs.end()) {
+            return std::nullopt;
+        }
         TString result = it->second;
         Blobs.erase(it);
         return result;
+    }
+
+    TString ExtractVerified(const TBlobRange& bRange) {
+        auto result = ExtractOptional(bRange);
+        AFL_VERIFY(result)("range", bRange.ToString());
+        return std::move(*result);
     }
 
     bool IsEmpty() const {

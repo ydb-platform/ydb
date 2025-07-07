@@ -23,19 +23,20 @@ void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
 }
 
 void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
-    if (!event) {
-        ExtensionCtx->Params->ResponseError = "Timeout while waiting for whoami info";
-        ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-    } else if (!event->Get()->Response) {
-        ExtensionCtx->Params->ResponseError = event->Get()->GetError();
-        ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-    } else {
-        auto& response = event->Get()->Response;
-        ExtensionCtx->Params->StatusOverride = response->Status;
-        ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>(response->Headers);
-        ExtensionCtx->Params->MessageOverride = response->Message;
-        ExtensionCtx->Params->BodyOverride = response->Body;
+    ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+    ExtensionCtx->Params->ResponseError = event ? event->Get()->GetError() : "Timeout while waiting info";
+
+    if (!event || !event->Get()->Response)
+        return;
+
+    auto& response = event->Get()->Response;
+    ExtensionCtx->Params->StatusOverride = response->Status;
+    auto headers = NHttp::THeaders(response->Headers);
+    for (const auto& header : headers.Headers) {
+        ExtensionCtx->Params->HeadersOverride->Set(header.first, header.second);
     }
+    ExtensionCtx->Params->MessageOverride = response->Message;
+    ExtensionCtx->Params->BodyOverride = response->Body;
 }
 
 void TExtensionManager::AddExtensionWhoami() {

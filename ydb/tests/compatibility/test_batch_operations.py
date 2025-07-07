@@ -34,7 +34,7 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
             where = f"id = {value % self.groups_cnt}"
             self.assert_batch(
                 self.q_batch_update(f"v1 = {value}, v2 = \"String_{value}\"", where),
-                self.q_select(f"{where} AND (v1 != {value} OR v2 != \"String_{value}\")")
+                self.q_select(f"({where}) AND (v1 != {value} OR v2 != \"String_{value}\")")
             )
 
             value += 1
@@ -42,7 +42,7 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
             where = f"id = {value % self.groups_cnt} OR k1 % 2 = 0"
             self.assert_batch(
                 self.q_batch_update(f"v1 = {value}, v2 = \"String_{value}\"", where),
-                self.q_select(f"{where} AND (v1 != {value} OR v2 != \"String_{value}\")")
+                self.q_select(f"({where}) AND (v1 != {value} OR v2 != \"String_{value}\")")
             )
 
             value += 1
@@ -50,7 +50,7 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
             where = f"id = {value % self.groups_cnt} AND k2 IS NOT NULL AND k2 <= {value % 5}"
             self.assert_batch(
                 self.q_batch_update(f"v1 = {value}, v2 = \"String_{value}\"", where),
-                self.q_select(f"{where} AND (v1 != {value} OR v2 != \"String_{value}\")")
+                self.q_select(f"({where}) AND (v1 != {value} OR v2 != \"String_{value}\")")
             )
 
             value += 1

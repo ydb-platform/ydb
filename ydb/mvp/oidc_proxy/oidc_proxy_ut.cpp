@@ -1586,10 +1586,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         // oidc extends whoami
         const TString url = "/" + allowedProxyHost + "/viewer/whoami";
-        auto request = new NHttp::THttpIncomingRequest();
-        request->Method = "GET";
-        request->URL = url;
-        request->Endpoint->Secure = true;
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -1730,7 +1726,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
-        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ClientError"], "Timeout while waiting for whoami info");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ClientError"], "Timeout while waiting info");
         UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Iam"));
     }
 

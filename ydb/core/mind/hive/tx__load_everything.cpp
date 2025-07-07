@@ -319,8 +319,11 @@ public:
                 pileInfo.State = bridgePileRowset.GetValue<Schema::BridgePile::State>();
                 pileInfo.IsPrimary = bridgePileRowset.GetValue<Schema::BridgePile::IsPrimary>();
                 pileInfo.IsPromoted = bridgePileRowset.GetValue<Schema::BridgePile::IsPromoted>();
-                BLOG_NOTICE("THive::TTxLoadEverything loaded " << numPiles << " bridge piles");
+                if (!bridgePileRowset.Next()) {
+                    return false;
+                }
             }
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numPiles << " bridge piles");
         }
 
         {

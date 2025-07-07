@@ -12,6 +12,8 @@ namespace NKikimr {
 
 namespace NSchemeBoard {
 
+    bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup);
+    bool ShouldIgnoreInQuorum(const TStateStorageInfo::TRingGroup& ringGroup);
     bool IsMajorityReached(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks);
 
 }

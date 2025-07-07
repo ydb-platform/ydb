@@ -14,6 +14,8 @@ host_configs:
   drive:
   - path: <path_to_device>
     type: <type>
+    expected_slot_count: <number>
+    slot_size_in_units: <number>
   - path: ...
 - host_config_id: 2
   ...
@@ -23,6 +25,10 @@ host_configs:
 
 - `path` : Путь к смонтированному блочному устройству, например `/dev/disk/by-partlabel/ydb_disk_ssd_01`
 - `type` : Тип физического носителя устройства: `ssd`, `nvme` или `rot` (rotational - HDD)
+- `expected_slot_count` : Количество [слотов](../../concepts/glossary.md#slot), между которыми распределяются ресурсы PDisk.
+- `slot_size_in_units` : Размер слотов в условных единицах (числовое значение), см. [Управлениe кластером с неоднородными дисками]
+
+[Управлениe кластером с неоднородными дисками]: ../../maintenance/manual/managing-non-uniform-drives.md
 
 ### Примеры
 

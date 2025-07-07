@@ -1596,6 +1596,9 @@ public:
         ui64 dqGraphIndex = 0;
         ui64 generation = 0;
         NFq::NConfig::TCheckpointCoordinatorConfig config;
+        config.SetEnabled(true);
+        config.SetCheckpointingPeriodMillis(1000);
+        config.SetMaxInflight(1);
         //auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto stateLoadMode = FederatedQuery::StateLoadMode::EMPTY;
         FederatedQuery::StreamingDisposition streamingDisposition;
@@ -2841,6 +2844,8 @@ public:
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
+
+                hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }
@@ -3027,6 +3032,11 @@ private:
             Send(ctx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
             ctx->BufferActorId = {};
         }
+    }
+
+    void Handle(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) {
+        LOG_D("Coordinator saved zero checkpoint");
+        Send(CheckpointCoordinatorId, new NFq::TEvCheckpointCoordinator::TEvRunGraph());
     }
 
 private:

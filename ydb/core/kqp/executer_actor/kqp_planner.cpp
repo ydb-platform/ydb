@@ -664,6 +664,24 @@ void TKqpPlanner::Unsubscribe() {
     }
 }
 
+static bool IsInfiniteSourceType(const TString& sourceType) {
+    return sourceType == "PqSource";
+}
+
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TKqpTasksGraph::TTaskType& task) {
+    for (const auto& input : task.Inputs) {
+        if (const TString& srcType = input.SourceType; srcType && IsInfiniteSourceType(srcType)) {
+            return NDqProto::CHECKPOINTING_MODE_DEFAULT;
+        }
+        // for (const auto& channel : input.Channels) {
+        //     if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+        //         return NDqProto::CHECKPOINTING_MODE_DEFAULT;
+        //     }
+        // }
+    }
+    return NDqProto::CHECKPOINTING_MODE_DISABLED;
+}
+
 bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state) {
     auto& task = TasksGraph.GetTask(taskId);
     if (!task.ComputeActorId) {
@@ -678,17 +696,20 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             LOG_I("TEvReadyState to " << CheckpointCoordinatorId);
 
             auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
-           // for (const auto& [settings, actorId] : Tasks) {
-                // auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
-                //     settings.GetId(),
-                //     NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
-                //     NYql::NDq::IsIngress(settings),
-                //     NYql::NDq::IsEgress(settings),
-                //     NYql::NDq::HasState(settings),
-                //     actorId
-                // };
-                // event->Tasks.emplace_back(std::move(task));
-            //}                
+            for (const auto& dqTask : TasksGraph.GetTasks()) {
+                //NDq::TDqTaskSettings se
+
+                Cerr << "CheckpointingMode " << (dqTask.CheckpointingMode != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) << Endl;
+                auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+                    dqTask.Id,
+                    GetTaskCheckpointingMode(dqTask) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED, //dqTask.CheckpointingMode != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
+                    TasksGraph.IsIngress(dqTask),
+                    TasksGraph.IsEgressTask(dqTask),
+                    true, //NYql::NDq::HasState(settings),
+                    dqTask.ComputeActorId
+                };
+                event->Tasks.emplace_back(std::move(task));
+            }                
             TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
         }
 

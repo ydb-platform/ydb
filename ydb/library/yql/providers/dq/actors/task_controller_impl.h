@@ -546,7 +546,7 @@ public:
                     actorId
                 };
                 event->Tasks.emplace_back(std::move(task));
-            }                
+            }
             Send(CheckpointCoordinatorId, event.release());
         }
     }

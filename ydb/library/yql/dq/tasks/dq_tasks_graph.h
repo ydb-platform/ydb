@@ -322,6 +322,15 @@ public:
         return true;
     }
 
+    bool IsIngress(const TTaskType& task) const {
+        for (const auto& input : task.Inputs) {
+            if (!input.SourceType) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     static bool IsInfiniteSourceType(const TString& sourceType) {
         return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
     }
@@ -408,6 +417,7 @@ public:
             }
 
             // Apply mode to task and its outputs.
+            Cerr << "task " << task.Id << " mode " << (checkpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) << Endl;
             task.CheckpointingMode = checkpointingMode;
             task.WatermarksMode = watermarksMode;
             for (const auto& output : task.Outputs) {

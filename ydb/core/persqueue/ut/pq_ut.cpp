@@ -1099,6 +1099,7 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
 
         PQTabletPrepare({.lowWatermark=(8_MB - 512_KB)}, {{"user1", true}}, tc); //nothing dropped
                 //no important clients, lifetimeseconds=0 - delete all right now, except last datablob

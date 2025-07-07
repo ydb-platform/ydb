@@ -239,6 +239,53 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
     LOG_D("request " << CompactionBlobsCount << " blobs for compaction");
 }
 
+void TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
+                                      TProcessParametersBase& parameters,
+                                      TEvKeyValue::TEvRequest* compactionRequest,
+                                      TInstant& blobCreationUnixTime)
+{
+    TMaybe<ui64> firstBlobOffset = requestedBlob.Offset;
+
+    for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
+        TBatch batch = it.GetBatch();
+        batch.Unpack();
+
+        for (const auto& blob : batch.Blobs) {
+            TWriteMsg msg{Max<ui64>(), firstBlobOffset, TEvPQ::TEvWrite::TMsg{
+                .SourceId = blob.SourceId,
+                .SeqNo = blob.SeqNo,
+                .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
+                .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
+                .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
+                .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
+
+                // Disable deduplication, because otherwise we get an error,
+                // due to the messages written through Kafka protocol with idempotent producer
+                // have seqnos starting from 0 for new producer epochs (i.e. they have duplicate seqnos).
+                // Disabling deduplication here is safe because all deduplication checks have been done already,
+                // when the messages were written to the supportive partition.
+                .DisableDeduplication = true,
+
+                .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
+                .Data = blob.Data,
+                .UncompressedSize = blob.UncompressedSize,
+                .PartitionKey = blob.PartitionKey,
+                .ExplicitHashKey = blob.ExplicitHashKey,
+                .External = false,
+                .IgnoreQuotaDeadline = true,
+                .HeartbeatVersion = std::nullopt,
+            }, std::nullopt};
+            msg.Internal = true;
+
+            blobCreationUnixTime = std::max(blobCreationUnixTime, blob.WriteTimestamp);
+            ExecRequestForCompaction(msg, parameters, compactionRequest, blobCreationUnixTime);
+
+            firstBlobOffset = Nothing();
+        }
+    }
+}
+
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)
 {
     const auto& ctx = ActorContext();
@@ -264,61 +311,16 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
-    for (const auto& [key, pos] : KeysForCompaction) {
-        if (pos == Max<size_t>()) {
-            Rename_Key();
-        } else {
-            const TRequestedBlob& requestedBlob = blobs[pos];
-            Write_key();
-        }
-
-        Y_ABORT_UNLESS(pos != Max<size_t>(),
-                       "key=%s, pos=%" PRISZT,
-                       key.ToString().data(), pos);
-    }
-
     TInstant blobCreationUnixTime = TInstant::Zero();
 
-    for (const auto& requestedBlob : blobs) {
-        TMaybe<ui64> firstBlobOffset = requestedBlob.Offset;
-
-        for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
-            TBatch batch = it.GetBatch();
-            batch.Unpack();
-
-            for (const auto& blob : batch.Blobs) {
-                TWriteMsg msg{Max<ui64>(), firstBlobOffset, TEvPQ::TEvWrite::TMsg{
-                    .SourceId = blob.SourceId,
-                    .SeqNo = blob.SeqNo,
-                    .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
-                    .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
-                    .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
-                    .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
-                    .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
-
-                    // Disable deduplication, because otherwise we get an error,
-                    // due to the messages written through Kafka protocol with idempotent producer
-                    // have seqnos starting from 0 for new producer epochs (i.e. they have duplicate seqnos).
-                    // Disabling deduplication here is safe because all deduplication checks have been done already,
-                    // when the messages were written to the supportive partition.
-                    .DisableDeduplication = true,
-
-                    .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
-                    .Data = blob.Data,
-                    .UncompressedSize = blob.UncompressedSize,
-                    .PartitionKey = blob.PartitionKey,
-                    .ExplicitHashKey = blob.ExplicitHashKey,
-                    .External = false,
-                    .IgnoreQuotaDeadline = true,
-                    .HeartbeatVersion = std::nullopt,
-                }, std::nullopt};
-                msg.Internal = true;
-
-                blobCreationUnixTime = std::max(blobCreationUnixTime, blob.WriteTimestamp);
-                ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blob.WriteTimestamp);
-
-                firstBlobOffset = Nothing();
-            }
+    for (const auto& [key, pos] : KeysForCompaction) {
+        if (pos == Max<size_t>()) {
+            PQ_LOG_D("rename key " << key.ToString());
+            Y_FAIL();
+        } else {
+            PQ_LOG_D("add key " << key.ToString());
+            const TRequestedBlob& requestedBlob = blobs[pos];
+            CompactRequestedBlob(requestedBlob, parameters, compactionRequest.Get(), blobCreationUnixTime);
         }
     }
 

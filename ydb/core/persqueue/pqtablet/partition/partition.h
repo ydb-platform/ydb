@@ -1143,6 +1143,11 @@ private:
 
     bool CanProcessUserActionAndTransactionEvents() const;
     ui64 GetCompactedBlobSizeLowerBound() const;
+
+    void CompactRequestedBlob(const TRequestedBlob& requestedBlob,
+                              TProcessParametersBase& parameters,
+                              TEvKeyValue::TEvRequest* compactionRequest,
+                              TInstant& blobCreationUnixTime);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

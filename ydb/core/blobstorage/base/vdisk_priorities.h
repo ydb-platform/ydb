@@ -28,7 +28,6 @@ namespace NKikimr {
         constexpr ui8 HullHugeAsyncBlob = 8;// Huge: Huge Async Blob writes
         constexpr ui8 HullHugeUserData = 9; // Huge: Huge User Data writes
         constexpr ui8 HullComp = 10;         // Comp: Ordinary compaction
-
     } // NPriWrite
 
     // PDisk internal use only (all goes through fair "Log" queue if necessary)
@@ -50,4 +49,5 @@ namespace NKikimr {
     constexpr ui64 LoadWeightDefault = 2;
     constexpr ui64 LowWeightDefault = 1;
 
+    TString PriToString(ui8 pri);
 } // NKikimr

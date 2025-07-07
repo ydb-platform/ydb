@@ -18,6 +18,8 @@
 #include <util/random/shuffle.h>
 #include <util/string/printf.h>
 
+#include <google/protobuf/arena.h>
+
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
@@ -120,7 +122,12 @@ int GetRandomCount(int warehouseId, int customerId, int districtId) {
 
 //-----------------------------------------------------------------------------
 
-NTable::TBulkUpsertResult LoadItems(NTable::TTableClient& client, const TString& tableFullPath, TLog* Log) {
+NTable::TBulkUpsertResult LoadItems(
+    NTable::TTableClient& client,
+    const TString& tableFullPath,
+    google::protobuf::Arena& arena,
+    TLog* Log)
+{
     LOG_T("Loading " << ITEM_COUNT << " items...");
 
     auto valueBuilder = TValueBuilder();
@@ -151,7 +158,12 @@ NTable::TBulkUpsertResult LoadItems(NTable::TTableClient& client, const TString&
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -161,6 +173,7 @@ NTable::TBulkUpsertResult LoadWarehouses(
     const TString& tableFullPath,
     int startId,
     int lastId,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading warehouses " << startId << " to " << lastId);
@@ -184,7 +197,12 @@ NTable::TBulkUpsertResult LoadWarehouses(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -195,6 +213,7 @@ NTable::TBulkUpsertResult LoadStock(
     int wh,
     int itemId,
     int itemsToLoad,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading stock for warehouse " << wh << " items " << itemId << " to " << (itemId + itemsToLoad - 1));
@@ -242,7 +261,12 @@ NTable::TBulkUpsertResult LoadStock(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -252,6 +276,7 @@ NTable::TBulkUpsertResult LoadDistricts(
     const TString& tableFullPath,
     int startId,
     int lastId,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading districts for warehouses " << startId << " to " << lastId);
@@ -279,7 +304,12 @@ NTable::TBulkUpsertResult LoadDistricts(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -289,6 +319,7 @@ NTable::TBulkUpsertResult LoadCustomers(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading customers for warehouse " << wh << " district " << district);
@@ -333,7 +364,12 @@ NTable::TBulkUpsertResult LoadCustomers(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -343,6 +379,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading customer history for warehouse " << wh << " district " << district);
@@ -375,7 +412,12 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -385,6 +427,7 @@ NTable::TBulkUpsertResult LoadOpenOrders(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading open orders for warehouse " << wh << " district " << district);
@@ -419,7 +462,12 @@ NTable::TBulkUpsertResult LoadOpenOrders(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -429,6 +477,7 @@ NTable::TBulkUpsertResult LoadNewOrders(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading new orders for warehouse " << wh << " district " << district);
@@ -450,7 +499,12 @@ NTable::TBulkUpsertResult LoadNewOrders(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -460,6 +514,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading order lines for warehouse " << wh << " district " << district);
@@ -503,7 +558,12 @@ NTable::TBulkUpsertResult LoadOrderLines(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -545,7 +605,13 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log
 
 //-----------------------------------------------------------------------------
 
-void LoadSmallTables(TDriver& driver, const TString& path, int warehouseCount, TLog* Log) {
+void LoadSmallTables(
+    TDriver& driver,
+    const TString& path,
+    int warehouseCount,
+    google::protobuf::Arena& arena,
+    TLog* Log)
+{
     NTable::TTableClient tableClient(driver);
 
     TString itemTablePath = path + "/" + TABLE_ITEM;
@@ -553,13 +619,13 @@ void LoadSmallTables(TDriver& driver, const TString& path, int warehouseCount, T
     TString districtTablePath = path + "/" + TABLE_DISTRICT;
 
     ExecuteWithRetry("LoadItems", [&]() {
-        return LoadItems(tableClient, itemTablePath, Log);
+        return LoadItems(tableClient, itemTablePath, arena, Log);
     }, Log);
     ExecuteWithRetry("LoadWarehouses", [&]() {
-        return LoadWarehouses(tableClient, warehouseTablePath, 1, warehouseCount, Log);
+        return LoadWarehouses(tableClient, warehouseTablePath, 1, warehouseCount, arena, Log);
     }, Log);
     ExecuteWithRetry("LoadDistricts", [&]() {
-        return LoadDistricts(tableClient, districtTablePath, 1, warehouseCount, Log);
+        return LoadDistricts(tableClient, districtTablePath, 1, warehouseCount, arena, Log);
     }, Log);
 }
 
@@ -609,7 +675,15 @@ struct TLoadState {
 
 //-----------------------------------------------------------------------------
 
-void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLoadState& state, TLog* Log) {
+void LoadRange(
+    TDriver& driver,
+    const TString& path,
+    int whStart,
+    int whEnd,
+    TLoadState& state,
+    google::protobuf::Arena& arena,
+    TLog* Log)
+{
     NTable::TTableClient tableClient(driver);
 
     static_assert(ITEM_COUNT % 10 == 0, "ITEM_COUNT must be divisible by 10");
@@ -638,10 +712,10 @@ void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLo
 
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadCustomers", [&]() {
-                return LoadCustomers(tableClient, customerTablePath, wh, district, Log);
+                return LoadCustomers(tableClient, customerTablePath, wh, district, arena, Log);
             }, Log);
             ExecuteWithRetry("LoadOpenOrders", [&]() {
-                return LoadOpenOrders(tableClient, oorderTablePath, wh, district, Log);
+                return LoadOpenOrders(tableClient, oorderTablePath, wh, district, arena, Log);
             }, Log);
         }
         state.DataSizeLoaded.fetch_add(indexedPerWh, std::memory_order_relaxed);
@@ -661,19 +735,19 @@ void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLo
             int startItemId = batch * itemBatchSize + 1;
             int itemsToLoad = itemBatchSize;
             ExecuteWithRetry("LoadStock", [&]() {
-                return LoadStock(tableClient, stockTablePath, wh, startItemId, itemsToLoad, Log);
+                return LoadStock(tableClient, stockTablePath, wh, startItemId, itemsToLoad, arena, Log);
             }, Log);
         }
 
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadOrderLines", [&]() {
-                return LoadOrderLines(tableClient, orderLineTablePath, wh, district, Log);
+                return LoadOrderLines(tableClient, orderLineTablePath, wh, district, arena, Log);
             }, Log);
             ExecuteWithRetry("LoadCustomerHistory", [&]() {
-                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, Log);
+                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, Log);
             }, Log);
             ExecuteWithRetry("LoadNewOrders", [&]() {
-                return LoadNewOrders(tableClient, newOrderTablePath, wh, district, Log);
+                return LoadNewOrders(tableClient, newOrderTablePath, wh, district, arena, Log);
             }, Log);
         }
 
@@ -856,13 +930,14 @@ public:
             int whEnd = (threadId + 1) * Config.WarehouseCount / threadCount;
 
             threads.emplace_back([threadId, &drivers, driverCount, this, whStart, whEnd]() {
+                google::protobuf::Arena arena;
                 auto& driver = drivers[threadId % driverCount];
                 if (threadId == 0) {
-                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, Log.get());
+                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, arena, Log.get());
                 } else {
                     std::this_thread::sleep_for(std::chrono::milliseconds(threadId));
                 }
-                LoadRange(driver, Config.Path, whStart, whEnd, LoadState, Log.get());
+                LoadRange(driver, Config.Path, whStart, whEnd, LoadState, arena, Log.get());
             });
         }
 

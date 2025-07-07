@@ -71,7 +71,7 @@ static int fill_pattern(int tc)
 }
 
 static int __test_io(const char *file, struct io_uring *ring, int tc, int read,
-		     int sqthread, int fixed, int nonvec)
+		     int sqthread, int fixed, int nonvec, int async, int linked)
 {
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
@@ -122,6 +122,16 @@ static int __test_io(const char *file, struct io_uring *ring, int tc, int read,
 		unsigned int iovcnt = 1;
 		size_t total_len;
 
+		if (linked) {
+			sqe = io_uring_get_sqe(ring);
+			io_uring_prep_nop(sqe);
+			if (async)
+				sqe->flags |= IOSQE_ASYNC;
+			sqe->flags |= IOSQE_IO_LINK;
+			sqe->user_data = 0x1000;
+			submit_count++;
+		}
+
 		sqe = io_uring_get_sqe(ring);
 		if (!sqe) {
 			fprintf(stderr, "sqe get failed\n");
@@ -136,6 +146,8 @@ static int __test_io(const char *file, struct io_uring *ring, int tc, int read,
 			do_fixed = 0;
 		if (do_fixed)
 			sqe->buf_index = 0;
+		if (async)
+			sqe->flags |= IOSQE_ASYNC;
 		if (nonvec)
 			sqe->cmd_op = NVME_URING_CMD_IO;
 		else
@@ -195,6 +207,8 @@ static int __test_io(const char *file, struct io_uring *ring, int tc, int read,
 	}
 
 	for (i = 0; i < submit_count; i++) {
+		int is_link;
+
 		ret = io_uring_wait_cqe(ring, &cqe);
 		if (ret) {
 			fprintf(stderr, "wait_cqe=%d\n", ret);
@@ -212,7 +226,10 @@ static int __test_io(const char *file, struct io_uring *ring, int tc, int read,
 			fprintf(stderr, "cqe res %d, wanted 0\n", cqe->res);
 			goto err;
 		}
+		is_link = cqe->user_data == 0x1000;
 		io_uring_cqe_seen(ring, cqe);
+		if (is_link)
+			continue;
 		if (read) {
 			int index = cqe->user_data & 0xffffffff;
 			void *buf = vecs[index].iov_base;
@@ -249,7 +266,7 @@ err:
 }
 
 static int test_io(const char *file, int tc, int read, int sqthread,
-		   int fixed, int nonvec, int hybrid)
+		   int fixed, int nonvec, int hybrid, int async, int linked)
 {
 	struct io_uring ring;
 	int ret, ring_flags = 0;
@@ -266,7 +283,7 @@ static int test_io(const char *file, int tc, int read, int sqthread,
 	if (fixed && (!vec_fixed_supported && !nonvec))
 		return 0;
 
-	ret = t_create_ring(64, &ring, ring_flags);
+	ret = t_create_ring(128, &ring, ring_flags);
 	if (ret == T_SETUP_SKIP)
 		return 0;
 	if (ret != T_SETUP_OK) {
@@ -278,7 +295,7 @@ static int test_io(const char *file, int tc, int read, int sqthread,
 		return 1;
 	}
 
-	ret = __test_io(file, &ring, tc, read, sqthread, fixed, nonvec);
+	ret = __test_io(file, &ring, tc, read, sqthread, fixed, nonvec, async, linked);
 	io_uring_queue_exit(&ring);
 
 	return ret;
@@ -465,14 +482,16 @@ int main(int argc, char *argv[])
 		t_posix_memalign(&meta_mem, 0x1000,
 				 meta_size * BUFFERS * (BS >> lba_shift));
 
-	for (i = 0; i < 32; i++) {
+	for (i = 0; i < 64; i++) {
 		int read = (i & 1) != 0;
 		int sqthread = (i & 2) != 0;
 		int fixed = (i & 4) != 0;
 		int nonvec = (i & 8) != 0;
 		int hybrid = (i & 16) != 0;
+		int async = (i & 32) != 0;
+		int linked = (i & 64) != 0;
 
-		ret = test_io(fname, i, read, sqthread, fixed, nonvec, hybrid);
+		ret = test_io(fname, i, read, sqthread, fixed, nonvec, hybrid, async, linked);
 		if (no_pt)
 			break;
 		if (ret) {

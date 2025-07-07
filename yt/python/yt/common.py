@@ -318,7 +318,7 @@ class YtError(Exception):
     def is_tablet_in_intermediate_state(self):
         """Tablet is in intermediate state."""
         # TODO(ifsmirnov) migrate to error code, YT-10993
-        return self._matches_regexp("Tablet .* is in state .*")
+        return self.contains_code(1744) or self._matches_regexp("Tablet .* is in state .*")
 
     def is_no_such_tablet(self):
         """No such tablet."""

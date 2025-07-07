@@ -124,7 +124,10 @@ namespace NSQLComplete {
     }
 
     bool IsLikelyColumnStack(const TParserCallStack& stack) {
-        return Contains({RULE(Result_column)}, stack);
+        return Contains({RULE(Select_core)}, stack) &&
+               (Contains({RULE(Result_column)}, stack) ||
+                Contains({RULE(Expr)}, stack) ||
+                Contains({RULE(Sort_specification)}, stack));
     }
 
     bool IsLikelyBindingStack(const TParserCallStack& stack) {

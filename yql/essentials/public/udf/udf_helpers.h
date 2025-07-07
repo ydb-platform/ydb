@@ -18,6 +18,49 @@
 namespace NYql {
 namespace NUdf {
 
+    template <class T>
+    concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        { T::Name() } -> std::convertible_to<const TStringRef&>;
+        { T::DeclareSignature(name, userType, builder, typesOnly) } -> std::convertible_to<bool>;
+    };
+
+    template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
+    class TLangVerForked {
+    private:
+        Y_HAS_SUBTYPE(TBlockType);
+
+    public:
+        using TTypeAwareMarker = bool;
+
+        using TBlockType = decltype([] {
+            static_assert(THasTBlockType<TLegacyUDF>::value == THasTBlockType<TActualUDF>::value);
+            if constexpr (THasTBlockType<TActualUDF>::value) {
+                return TLangVerForked<
+                    V,
+                    typename TLegacyUDF::TBlockType,
+                    typename TActualUDF::TBlockType>();
+            } else {
+                return;
+            }
+        }());
+
+        static const TStringRef& Name() {
+            Y_ENSURE(TLegacyUDF::Name() == TActualUDF::Name());
+            return TActualUDF::Name();
+        }
+
+        static bool DeclareSignature(
+            const TStringRef& name, TType* userType,
+            IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
+            if (V <= builder.GetCurrentLangVer()) {
+                return TActualUDF::DeclareSignature(name, userType, builder, typesOnly);
+            }
+#endif
+            return TLegacyUDF::DeclareSignature(name, userType, builder, typesOnly);
+        }
+    };
+
     inline TSourcePosition GetSourcePosition(IFunctionTypeInfoBuilder& builder) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 9)
         return builder.GetSourcePosition();
@@ -347,7 +390,7 @@ public:
     }
 };
 
-template<typename... TUdfs>
+template<CUDF... TUdfs>
 class TSimpleUdfModuleHelper : public IUdfModule
 {
     Y_HAS_SUBTYPE(TTypeAwareMarker);

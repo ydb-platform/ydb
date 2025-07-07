@@ -33,9 +33,6 @@
     "name": "yt.BufferRowCount"
   },
   {
-    "name": "yt.ClientMapTimeout"
-  },
-  {
     "name": "yt.ColumnGroupMode"
   },
   {
@@ -145,9 +142,6 @@
   },
   {
     "name": "yt.ExpirationInterval"
-  },
-  {
-    "name": "yt.ExtendTableLimit"
   },
   {
     "name": "yt.ExtendedStatsMaxChunkCount"
@@ -283,9 +277,6 @@
   },
   {
     "name": "yt.JoinMergeUseSmallAsPrimary"
-  },
-  {
-    "name": "yt.JoinUseColumnarStatistics"
   },
   {
     "name": "yt.JoinWaitAllInputs"
@@ -612,9 +603,6 @@
     "name": "yt.UseFlow"
   },
   {
-    "name": "yt.UseIntermediateSchema"
-  },
-  {
     "name": "yt.UseIntermediateStreams"
   },
   {
@@ -646,9 +634,6 @@
   },
   {
     "name": "yt.UseTmpfs"
-  },
-  {
-    "name": "yt.UseTypeV2"
   },
   {
     "name": "yt.UseYqlRowSpecCompactForm"

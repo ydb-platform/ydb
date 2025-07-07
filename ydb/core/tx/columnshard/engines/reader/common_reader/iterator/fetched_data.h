@@ -90,6 +90,7 @@ public:
     }
 
     void InitRecordsCount(const ui32 recordsCount) {
+        AFL_VERIFY(!Table->HasData());
         Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
     }
 

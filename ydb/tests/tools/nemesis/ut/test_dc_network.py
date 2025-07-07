@@ -3,11 +3,11 @@ import unittest
 import tempfile
 from unittest.mock import Mock, patch
 
-from ydb.tests.tools.nemesis.library.hosts_network import (
+from ydb.tests.tools.nemesis.library.dc_network import datacenter_nemesis_list
+from ydb.tests.library.nemesis.dc_nemesis_network import (
     DataCenterNetworkNemesis, 
     DataCenterRouteUnreachableNemesis,
     DataCenterIptablesBlockPortsNemesis,
-    datacenter_nemesis_list,
     validate_multiple_datacenters
 )
 

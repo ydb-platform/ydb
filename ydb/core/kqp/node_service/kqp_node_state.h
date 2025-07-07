@@ -61,6 +61,7 @@ public:
     std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
 
     void DumpInfo(TStringStream& str) const;
+    bool FindCaId(const TString& caId, TActorId& id) const;
 
 private:
     inline auto& GetBucketByTxId(ui64 txId) {

@@ -14,7 +14,7 @@ General format of the command:
 
 {% note info %}
 
-Note that the command still needs [connection parameters](./connect.md) to be set. It may be a default or explicitly specified profile and/or a set of connection parameters.
+Note that the command still requires [connection parameters](./connect.md) to be set. You can supply them by having the default profile, via an explicitly specified profile, or by passing a set of connection parameters.
 
 {% endnote %}
 

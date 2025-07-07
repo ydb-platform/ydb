@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             Env.Sim(TDuration::Seconds(10));
         }
 
-        
+
         void ReplicaCleanup(const TActorId &replica, ui64 gen, ui64 guid) {
             const TActorId edge = Runtime.AllocateEdgeActor(1);
             Runtime.WrapInActorContext(edge, [&] {
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             , {1, 0, NKikimrProto::EReplyStatus::ERROR}
         }) {
             test.ChangeReplicaConfig(replicas[1], gen, guid);
-            UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, res); 
+            UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, res);
         }
     }
 
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return true;
         };
         UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, NKikimrProto::EReplyStatus::OK);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 0);
     }
 
     Y_UNIT_TEST(TestProxyConfigMismatch) {
@@ -180,13 +180,13 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return true;
         };
         UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, NKikimrProto::EReplyStatus::ERROR);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 0);
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         UNIT_ASSERT_EQUAL(test.ReplicaLookup(replicas[1], 3, 4)->Get()->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 1);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 1);
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         test.ReplicaDelete(replicas[1], 3, 4);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 2);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 2);
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         test.ReplicaCleanup(replicas[1], 3, 4);
         UNIT_ASSERT_EQUAL(nw1Cnt, 3);
@@ -205,19 +205,63 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return true;
         };
         test.BoardLookup(replicas[1], 0, 0);
-        UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
+        UNIT_ASSERT_EQUAL(nw1Cnt, 0);
         test.BoardLookup(replicas[1], 1, 0);
         UNIT_ASSERT_EQUAL(nw1Cnt, 1);
         test.BoardLookup(replicas[1], 0, 1);
         UNIT_ASSERT_EQUAL(nw1Cnt, 2);
-        test.ChangeReplicaConfig(replicas[1], 3, 4, true);
+        ui64 guid = Max<ui64>();
+        test.ChangeReplicaConfig(replicas[1], 3, guid, true);
         auto result = test.BoardLookup(replicas[1], 0, 0);
         UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGeneration(), 3);
-        UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGuid(), 4);
+        UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGuid(), guid);
         UNIT_ASSERT_EQUAL(nw1Cnt, 2);
         test.BoardCleanup(replicas[1], 5, 6);
         UNIT_ASSERT_EQUAL(nw1Cnt, 3);
         test.BoardUnsubscribe(replicas[1], 5, 6);
         UNIT_ASSERT_EQUAL(nw1Cnt, 4);
     }
+
+    Y_UNIT_TEST(TestStateStorageUpdateSig) {
+        StateStorageTest test;
+        auto res = test.ResolveReplicas();
+        const auto &replicas = res->Get()->GetPlainReplicas();
+        ui32 rejectCnt = 0;
+        const TActorId proxy = MakeStateStorageProxyID();
+        const auto edge1 = test.Runtime.AllocateEdgeActor(1);
+        std::unordered_set<ui32> processed;
+        test.Runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaInfo::EventType) {
+                ui32 cookie = ev->Get<TEvStateStorage::TEvReplicaInfo>()->Record.GetCookie();
+                rejectCnt++;
+                if (rejectCnt == 1) {
+                    return false;
+                }
+                if (rejectCnt >= replicas.size()) {
+                    return true;
+                }
+                if (rejectCnt < (replicas.size() / 2 + 2)) {
+                    return true;
+                }
+                if(processed.insert(cookie).second) {
+                    test.Runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, new TEvents::TEvUndelivered(ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected), 0, cookie), node);
+                    test.Runtime.Send(ev->Forward(ev->Recipient), node);
+                }
+                return false;
+            }
+            return true;
+        };
+
+        test.Runtime.WrapInActorContext(edge1, [&] {
+            test.Runtime.Send(new IEventHandle(proxy, edge1, new TEvStateStorage::TEvLookup(test.TabletId, 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)), IEventHandle::FlagTrackDelivery));
+        });
+        test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvInfo>(edge1, false);
+        auto ev = test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvUpdateSignature>(edge1);
+        for (auto replica : replicas) {
+            UNIT_ASSERT(ev->Get()->Signature.GetReplicaSignature(replica) != Max<ui64>());
+        }
+        UNIT_ASSERT(rejectCnt > replicas.size());
+        test.Runtime.FilterFunction = nullptr;
+    }
+
 }

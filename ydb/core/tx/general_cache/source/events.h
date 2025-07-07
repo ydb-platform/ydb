@@ -13,6 +13,7 @@ template <class TPolicy>
 struct TEvents {
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
+    using TSourceId = typename TPolicy::TSourceId;
     using EConsumer = typename TPolicy::EConsumer;
 
     enum EEv {
@@ -32,7 +33,13 @@ struct TEvents {
         bool ErrorsExtracted = false;
         THashMap<TAddress, TString> Errors;
 
+        const TSourceId SourceId;
+
     public:
+        TSourceId GetSourceId() const {
+            return SourceId;
+        }
+
         THashMap<TAddress, TObject> ExtractObjects() {
             AFL_VERIFY(!ObjectsExtracted);
             ObjectsExtracted = true;
@@ -51,11 +58,12 @@ struct TEvents {
             return std::move(Errors);
         }
 
-        TEvObjectsInfo(THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& errors)
+        TEvObjectsInfo(
+            const TSourceId sourceId, THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& errors)
             : Removed(std::move(removed))
             , Objects(std::move(objects))
             , Errors(std::move(errors))
-        {
+            , SourceId(sourceId) {
         }
     };
 
@@ -67,7 +75,13 @@ struct TEvents {
         bool RemoveObjectsExtracted = false;
         THashSet<TAddress> RemoveObjects;
 
+        const TSourceId SourceId;
+
     public:
+        TSourceId GetSourceId() const {
+            return SourceId;
+        }
+
         THashMap<TAddress, TObject> ExtractAddObjects() {
             AFL_VERIFY(!AddObjectsExtracted);
             AddObjectsExtracted = true;
@@ -80,10 +94,10 @@ struct TEvents {
             return std::move(RemoveObjects);
         }
 
-        TEvAdditionalObjectsInfo(THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove)
+        TEvAdditionalObjectsInfo(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove)
             : AddObjects(std::move(add))
             , RemoveObjects(std::move(remove))
-        {
+            , SourceId(sourceId) {
         }
     };
 };

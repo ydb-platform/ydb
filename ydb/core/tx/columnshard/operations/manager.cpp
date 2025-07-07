@@ -29,7 +29,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
 
             auto operation = std::make_shared<TWriteOperation>(TUnifiedPathId{}, writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec),
-                granuleShardingVersionId, NEvWrite::EModificationType::Upsert);
+                granuleShardingVersionId, NEvWrite::EModificationType::Upsert, metaProto.GetIsBulk());
             operation->FromProto(metaProto);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "register_operation_on_load")("operation_id", operation->GetWriteId());
             AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
@@ -203,10 +203,10 @@ void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const 
 }
 
 TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie,
-    const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType) {
+    const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType, const bool isBulk) {
     auto writeId = BuildNextOperationWriteId();
     auto operation = std::make_shared<TWriteOperation>(pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(),
-        granuleShardingVersionId, mType);
+        granuleShardingVersionId, mType, isBulk);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "register_operation")("operation_id", operation->GetWriteId())(
         "last", LastWriteId);
     AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);

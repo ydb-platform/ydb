@@ -6,6 +6,7 @@ SRCS(
     distconf.cpp
     distconf.h
     distconf_binding.cpp
+    distconf_bridge.cpp
     distconf_cache.cpp
     distconf_connectivity.cpp
     distconf_console.cpp
@@ -45,6 +46,7 @@ PEERDIR(
     library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/blob_depot/agent
+    ydb/core/blobstorage/bridge/syncer
     ydb/core/blobstorage/common
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/dsproxy/bridge

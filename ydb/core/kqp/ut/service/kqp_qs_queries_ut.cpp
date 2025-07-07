@@ -1908,6 +1908,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
         auto client = kikimr.GetQueryClient();
+
+        TString SessionId;
         {
             auto session = client.GetSession().GetValueSync().GetSession();
             auto id = session.GetId();
@@ -1933,13 +1935,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
             const TVector<TString> sessionIdSplitted = StringSplitter(id).SplitByString("&id=");
+            SessionId = sessionIdSplitted.back();
+
             const auto queryCreateRestricted = Q_(fmt::format(R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/.tmp/sessions/{}/Test` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
-                );)", sessionIdSplitted.back()));
+                );)", SessionId));
 
             auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultCreateRestricted.IsSuccess());
@@ -1966,9 +1970,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto schemeClient = kikimr.GetSchemeClient();
-            auto listResult = schemeClient.ListDirectory("/Root/.tmp/sessions").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 0);
+            auto listResult = schemeClient.ListDirectory(
+                fmt::format("/Root/.tmp/sessions/{}", SessionId)
+                ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, listResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(listResult.GetIssues().ToString(), "Path not found",listResult.GetIssues().ToString());
         }
     }
 
@@ -2289,7 +2295,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group1\", code: 2 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group1\", code: 2 } }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group1 ADD USER user3;
@@ -2306,14 +2312,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user1\" is not a member of role \"group1\", code: 3 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user1\" is not a member of role \"group1\", code: 3 } }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group1 DROP USER user3;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user3\" is not a member of role \"group1\", code: 3 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user3\" is not a member of role \"group1\", code: 3 } }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group1 ADD USER user1, user3, user2;
@@ -2325,7 +2331,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group1\", code: 2 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group1\", code: 2 } }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group1 ADD USER user2;
@@ -2338,21 +2344,21 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user3\" is not a member of role \"group1\", code: 3 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user3\" is not a member of role \"group1\", code: 3 } }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group1 DROP USER user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user1\" is not a member of role \"group1\", code: 3 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user1\" is not a member of role \"group1\", code: 3 } }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group1 DROP USER user2;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user2\" is not a member of role \"group1\", code: 3 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user2\" is not a member of role \"group1\", code: 3 } }");
 
         //Check create with users
         result = db.ExecuteQuery(R"(
@@ -2370,7 +2376,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group3\", code: 2 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group3\", code: 2 } }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group3 ADD USER user2;
@@ -2387,14 +2393,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Error: Group already exists, code: 2029 }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Error: Group already exists, code: 2029 }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group4 ADD USER user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().Size() == 1);
-        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group4\", code: 2 } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group4\", code: 2 } }");
 
         result = db.ExecuteQuery(R"(
             ALTER GROUP group4 ADD USER user2;

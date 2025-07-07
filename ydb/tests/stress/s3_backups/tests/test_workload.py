@@ -1,26 +1,20 @@
 # -*- coding: utf-8 -*-
 import os
+import pytest
 import yatest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        config = KikimrConfigGenerator(
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
             extra_feature_flags={
                 "enable_export_auto_dropping": True,
                 "enable_changefeeds_export": True,
             }
         )
-        cls.cluster = KiKiMR(config)
-        cls.cluster.start()
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
 
     def test(self):
         cmd = [

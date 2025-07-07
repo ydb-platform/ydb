@@ -69,6 +69,10 @@ void TCommandBridgeUpdate::Config(TConfig& config) {
         .RequiredArgument("ID:STATE").Handler([this](const TString& value) {
             PileStateUpdates.push_back(value);
         });
+    config.Opts->AddLongOption("specific-pile-id", "Acquire quorum only for specific set of piles. Can be used multiple times.")
+        .RequiredArgument("ID").Handler([this](const TString& value) {
+            SpecificPileIds.push_back(FromString(value));
+        });
     config.Opts->AddLongOption('f', "file", "Path to a JSON file with state updates.")
         .RequiredArgument("PATH").StoreResult(&FilePath);
     config.Opts->MutuallyExclusive("set", "file");
@@ -124,7 +128,7 @@ int TCommandBridgeUpdate::Run(TConfig& config) {
     auto driver = std::make_unique<TDriver>(CreateDriver(config));
     auto client = NYdb::NBridge::TBridgeClient(*driver);
 
-    auto result = client.UpdateClusterState(Updates).GetValueSync();
+    auto result = client.UpdateClusterState(Updates, SpecificPileIds).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;

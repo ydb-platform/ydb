@@ -67,6 +67,8 @@ public:
                 }
                 if (usage) {
                     sources.front().SetIsStartedByCursor();
+                } else {
+                    sources.pop_front();
                 }
                 break;
             }

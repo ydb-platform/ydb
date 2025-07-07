@@ -1,5 +1,5 @@
 #include "kqp_rbo_rules.h"
-
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/utils/log/log.h>
 
 
@@ -64,7 +64,30 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
             .Done().Ptr();
     }
 }
+
+THashSet<TString> CmpOperators{"=", "<", ">", "<=", ">="};
+
+TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
+    if (node->IsCallable("ToPg") || node->IsCallable("PgCast")) {
+        return node->Child(0);
+    }
+    return node;
 }
+
+bool IsNullRejectingPredicate(const TFilterInfo& filter, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+#ifdef DEBUG_PREDICATE
+    YQL_CLOG(TRACE, CoreDq) << "IsNullRejectingPredicate: " << NYql::KqpExprToPrettyString(TExprBase(filter.FilterBody), ctx);
+#endif
+    auto predicate = filter.FilterBody;
+    if (predicate->IsCallable("PgResolvedOp") && CmpOperators.contains(TString(predicate->Child(0)->Content()))) {
+        auto left = PruneCast(predicate->Child(2));
+        auto right = PruneCast(predicate->Child(3));
+        return (left->IsCallable("PgConst") || right->IsCallable("PgConst"));
+    }
+    return false;
+}
+}  // namespace
 
 namespace NKikimr {
 namespace NKqp {
@@ -91,8 +114,8 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
 
     // Only handle Inner and Cross join at this time
     auto join = CastOperator<TOpJoin>(filter->GetInput());
-    if (join->JoinKind != "Inner" && join->JoinKind != "Cross") {
-        YQL_CLOG(TRACE, CoreDq) << "Wrong join type";
+    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && to_lower(join->JoinKind) != "left") {
+        YQL_CLOG(TRACE, CoreDq) << "Wrong join type " << join->JoinKind << Endl;
         return input;
     }
 
@@ -157,8 +180,26 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     }
 
     if (pushRight.size()) {
-        auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Node->Pos(), pushRight, ctx);
-        rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda, ctx, rightInput->Node->Pos());
+        if (join->JoinKind == "Left") {
+            TVector<TFilterInfo> predicatesForRightSide;
+            for (const auto& predicate : pushRight) {
+                if (IsNullRejectingPredicate(predicate, ctx)) {
+                    predicatesForRightSide.push_back(predicate);
+                } else {
+                    topLevelPreds.push_back(predicate);
+                }
+            }
+            if (predicatesForRightSide.size()) {
+                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Node->Pos(), pushRight, ctx);
+                rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda, ctx, rightInput->Node->Pos());
+                join->JoinKind = "Inner";
+            } else {
+                return input;
+            }
+        } else {
+            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Node->Pos(), pushRight, ctx);
+            rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda, ctx, rightInput->Node->Pos());
+        }
     }
 
     if (join->JoinKind == "Cross" && joinConditions.size()) {
@@ -286,4 +327,4 @@ TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TPushFilterRule>(
 TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()}, false);
 
 }
-}
+}  // namespace NKikimr

@@ -54,6 +54,8 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
 
 ## Checklist {#checklist}
 
+### If the PR is new content for the main branch
+
 - [ ] The text is understandable for the article's target audience.
 - [ ] The text is technically accurate.
 - [ ] The text is grammatically correct, with no punctuation, spelling, or typographical errors.
@@ -71,6 +73,16 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
 This checklist is a condensed version of [{#T}](style-guide.md) and serves as a reminder. Feel free to copy-paste it into the pull request description and check off items as you go. Refer to the full style guide for initial understanding and additional details.
 
 {% endnote %}
+
+### If the PR is a backport to a stable branch
+
+The documentation content is independently published on the website from multiple Git branches. Similar to source code development, `main` is the documentation for upcoming releases, while the documentation for each specific {{ ydb-short-name }} release is published from a stable branch. For example, {{ ydb-short-name }} v25.1 corresponds to the `stable-25-1` branch. If the documentation content needs to be cherry-picked from `main` to a stable branch, a separate PR is created with `stable-***` as the target branch. The review process for such PRs is different, as the content has already been reviewed when it was merged into `main`. Use the following checklist instead:
+
+- [ ] The backport PR mentions identifiers or links to one or more PRs where this content was introduced in the `main` branch.
+- [ ] The content of the backport PR matches the original PRs to `main`. The content has been correctly moved if there was a structural refactoring between branches.
+- [ ] The PR compiles correctly, the preview generates without errors or warnings, and the content appears in the correct locations.
+- [ ] There are no merge artifacts such as duplicate content, `>>>>>>>>`-like Git markers, or similar issues.
+- [ ] The feature appears to be available in the corresponding {{ ydb-short-name }} release. Double-check with the author or feature owner if unsure.
 
 ## What documentation review is not
 

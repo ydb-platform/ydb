@@ -22,6 +22,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+ui64 gVectorIndexSeed = 0;
+
 // return count, parts, step
 static std::tuple<NTableIndex::TClusterId, NTableIndex::TClusterId, NTableIndex::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
@@ -186,8 +188,8 @@ private:
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
 
         response->Record.SetId(ui64(BuildId));
-        response->Record.SetUploadRows(UploadRows->size());
-        response->Record.SetUploadBytes(UploadBytes);
+        response->Record.MutableMeteringStats()->SetUploadRows(UploadRows->size());
+        response->Record.MutableMeteringStats()->SetUploadBytes(UploadBytes);
 
         UploadStatusToMessage(response->Record);
 
@@ -512,7 +514,7 @@ private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
     template <bool WithSnapshot = true, typename TRequest>
-    TTabletId CommonFillScanRequest(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+    TTabletId FillScanRequestCommon(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
         request.SetTabletId(ui64(shardId));
 
@@ -543,6 +545,13 @@ private:
         return shardId;
     }
 
+    template <typename TRequest>
+    void FillScanRequestSeed(TRequest& request) {
+        request.SetSeed(gVectorIndexSeed
+            ? gVectorIndexSeed
+            : request.GetTabletId());
+    }
+
     void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
@@ -566,8 +575,8 @@ private:
 
         ev->Record.AddColumns(buildInfo.IndexColumns.back());
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+        FillScanRequestSeed(ev->Record);
         LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -606,7 +615,7 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -638,7 +647,7 @@ private:
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         LOG_N("TTxBuildProgress: TEvRecomputeKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -686,8 +695,8 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+        FillScanRequestSeed(ev->Record);
         LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -731,8 +740,8 @@ private:
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);
         }
 
-        auto shardId = CommonFillScanRequest<false>(ev->Record, shardIdx, buildInfo);
-        ev->Record.SetSeed(ui64(shardId));
+        auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
+        FillScanRequestSeed(ev->Record);
         LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -780,7 +789,7 @@ private:
 
         ev->Record.SetTargetName(buildInfo.TargetName);
 
-        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 
         LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
 
@@ -1712,9 +1721,9 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        auto billingStats = GetBillingStats();
-        shardStatus.Processed += billingStats;
-        buildInfo.Processed += billingStats;
+        auto stats = GetMeteringStats();
+        shardStatus.Processed += stats;
+        buildInfo.Processed += stats;
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetIssues(), issues);
@@ -1779,7 +1788,13 @@ public:
         Y_UNUSED(db, buildInfo);
     }
 
-    virtual TBillingStats GetBillingStats() const = 0;
+    virtual TMeteringStats GetMeteringStats() const {
+        auto& record = Response->Get()->Record;
+        if constexpr (requires { record.MutableMeteringStats(); }) {
+            return record.GetMeteringStats();
+        }
+        Y_ENSURE(false, "Should be overwritten");
+    }
 
     virtual TString ResponseShortDebugString() const {
         auto& record = Response->Get()->Record;
@@ -1824,11 +1839,6 @@ struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TTxShardReply<TEvDat
         }
     }
 
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {0, 0, record.GetReadRows(), record.GetReadBytes()};
-    }
-
     TString ResponseShortDebugString() const override {
         auto& record = Response->Get()->Record;
         return ToShortDebugString(record);
@@ -1856,11 +1866,6 @@ struct TSchemeShard::TIndexBuilder::TTxReplyRecomputeKMeans: public TTxShardRepl
         Self->PersistBuildIndexClustersUpdate(db, buildInfo);
     }
 
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {0, 0, record.GetReadRows(), record.GetReadBytes()};
-    }
-
     TString ResponseShortDebugString() const override {
         auto& record = Response->Get()->Record;
         return ToShortDebugString(record);
@@ -1872,11 +1877,6 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
     }
-
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {record.GetUploadRows(), record.GetUploadBytes(), record.GetReadRows(), record.GetReadBytes()};
-    }
 };
 
 struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardReply<TEvDataShard::TEvReshuffleKMeansResponse> {
@@ -1884,22 +1884,12 @@ struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardRepl
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
     }
-
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {record.GetUploadRows(), record.GetUploadBytes(), record.GetReadRows(), record.GetReadBytes()};
-    }
 };
 
 struct TSchemeShard::TIndexBuilder::TTxReplyPrefixKMeans: public TTxShardReply<TEvDataShard::TEvPrefixKMeansResponse> {
     explicit TTxReplyPrefixKMeans(TSelf* self, TEvDataShard::TEvPrefixKMeansResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
-    }
-
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {record.GetUploadRows(), record.GetUploadBytes(), record.GetReadRows(), record.GetReadBytes()};
     }
 };
 
@@ -1938,8 +1928,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        TBillingStats stats{record.GetUploadRows(), record.GetUploadBytes(), 0, 0};
-        buildInfo.Processed += stats;
+        buildInfo.Processed += record.GetMeteringStats();
         // As long as we don't try to upload sample in parallel with requests to shards,
         // it's okay to persist Processed not incrementally
         Self->PersistBuildIndexProcessed(db, buildInfo);
@@ -2000,11 +1989,16 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
         }
     }
 
-    TBillingStats GetBillingStats() const override {
+    TMeteringStats GetMeteringStats() const override {
         auto& record = Response->Get()->Record;
         // secondary index reads and writes almost the same amount of data
         // do not count them separately for simplicity
-        return {record.GetRowsDelta(), record.GetBytesDelta(), record.GetRowsDelta(), record.GetBytesDelta()};
+        TMeteringStats result;
+        result.SetUploadRows(record.GetRowsDelta());
+        result.SetUploadBytes(record.GetBytesDelta());
+        result.SetReadRows(record.GetRowsDelta());
+        result.SetReadBytes(record.GetBytesDelta());
+        return result;
     }
 };
 

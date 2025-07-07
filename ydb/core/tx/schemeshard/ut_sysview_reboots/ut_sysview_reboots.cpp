@@ -4,16 +4,10 @@
 using namespace NSchemeShardUT_Private;  // for helpers.h's Test*() methods
 
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTestReboots) {
-    Y_UNIT_TEST(CreateSysViewWithReboots) {
+    Y_UNIT_TEST(CreateSysView) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableSystemNamesProtection(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            {
-                TInactiveZone inactive(activeZone);
-                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".sys");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            }
-
             TestCreateSysView(runtime, ++t.TxId, "/MyRoot/.sys",
                               R"(
                                  Name: "new_sys_view"
@@ -29,14 +23,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropSysViewWithReboots) {
+    Y_UNIT_TEST(DropSysView) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableSystemNamesProtection(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
-                TInactiveZone inactive(activeZone);
-                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".sys");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestCreateSysView(runtime, ++t.TxId, "/MyRoot/.sys",
                                   R"(
                                      Name: "new_sys_view"

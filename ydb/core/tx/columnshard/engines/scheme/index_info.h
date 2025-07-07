@@ -53,6 +53,21 @@ using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
+
+class TPresetId {
+private:
+    ui64 PresetId;
+
+public:
+    ui64 GetPresetId() const {
+        return PresetId;
+    }
+
+    TPresetId(const ui64 presetId)
+        : PresetId(presetId) {
+    }
+};
+
 struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
@@ -73,13 +88,17 @@ private:
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
 
+    TPresetId PresetId;
+    std::shared_ptr<TAtomic> IgnoreToVersion = std::make_shared<TAtomic>(0);
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
-    TIndexInfo() = default;
+    TIndexInfo(const ui64 presetId)
+        : PresetId(presetId) {
+    }
 
     static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
         auto arrowType = NArrow::GetArrowType(column.PType);
@@ -160,6 +179,23 @@ public:
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
     }
 
+    void SetIgnoreToVersion(const ui64 version) const {
+        AFL_VERIFY(AtomicCas(&*IgnoreToVersion, version, 0) || (ui64)AtomicGet(*IgnoreToVersion) == version)("already", AtomicGet(*IgnoreToVersion))(
+                                                               "version", version);
+    }
+
+    std::optional<ui64> GetIgnoreToVersion() const {
+        if (const ui64 val = AtomicGet(*IgnoreToVersion)) {
+            return val;
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    ui64 GetPresetId() const {
+        return PresetId.GetPresetId();
+    }
+
     static std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(
         const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
@@ -232,10 +268,11 @@ public:
         return sb;
     }
 
-    static TIndexInfo BuildDefault();
+    static TIndexInfo BuildDefault(const ui64 presetId);
 
-    static TIndexInfo BuildDefault(const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<ui32>& pkIds) {
-        TIndexInfo result = BuildDefault();
+    static TIndexInfo BuildDefault(
+        const ui64 presetId, const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<ui32>& pkIds) {
+        TIndexInfo result = BuildDefault(presetId);
         result.PKColumnIds = pkIds;
         result.SetAllKeys(operators, columns);
         result.Validate();
@@ -248,9 +285,11 @@ public:
         return GetColumnFeaturesVerified(columnId).ActualizeColumnData(source, sourceIndexInfo.GetColumnFeaturesVerified(columnId));
     }
 
-    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
+    static std::optional<TIndexInfo> BuildFromProto(const ui64 presetId, const NKikimrSchemeOp::TColumnTableSchema& schema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
-    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& schema, const TIndexInfo& prevSchema,
+    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff, const TIndexInfo& prevSchema,
+        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
+    static std::optional<TIndexInfo> BuildFromProto(const TSchemaDiffView& diff, const TIndexInfo& prevSchema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     bool HasColumnId(const ui32 columnId) const {

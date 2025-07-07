@@ -1,4 +1,5 @@
 #include "impl.h"
+#include "cluster_balancing.h"
 
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/util/json_util.h>
@@ -1055,6 +1056,41 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                         TABLER() {
                             TABLED() { out << "PDisk space color border"; }
                             TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(PDiskSpaceColorBorder); }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Cluster Balancing Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Status"; }
+                                    TABLED() { out << (ClusterBalancingSettings.Enable ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Iteration interval (ms)"; }
+                                    TABLED() { out << ClusterBalancingSettings.IterationIntervalMs; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating PDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingPDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating VDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingVDisks; }
+                                }
+                            }
                         }
                     }
                 }

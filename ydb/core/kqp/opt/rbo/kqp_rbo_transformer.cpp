@@ -62,6 +62,17 @@ TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit>& joinKeys, const TJoinTab
     return Build<TDqJoinKeyTupleList>(ctx, pos).Add(keys).Done().Ptr();
 }
 
+void ToCamelCase(std::string & s)
+{
+    char previous = ' ';
+    auto f = [&](char current){
+        char result = (std::isblank(previous) && std::isalpha(current)) ? std::toupper(current) : std::tolower(current);
+        previous = current;
+        return result;
+    };
+    std::transform(s.begin(),s.end(),s.begin(),f);
+}
+
 TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     Y_UNUSED(typeCtx);
     auto setItems = GetSetting(node->Head(), "set_items");
@@ -144,10 +155,13 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                     rightInput = aliasToInputMap[rightSideAlias];
                 }
 
+                auto joinKind = TString(joinType);
+                ToCamelCase(joinKind);
+
                 joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
                                .LeftInput(leftInput)
                                .RightInput(rightInput)
-                               .JoinKind().Value(joinType).Build()
+                               .JoinKind().Value(joinKind).Build()
                                .JoinKeys(BuildJoinKeys(joinKeys, joinAliases, processedInputs, ctx, node->Pos()))
                                .Done().Ptr();
                 tableInputsCount = 0;

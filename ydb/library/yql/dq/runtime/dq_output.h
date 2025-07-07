@@ -57,8 +57,8 @@ struct TDqFillAggregator {
         ui32 index2 = static_cast<ui32>(level);
         YQL_ENSURE(index1 < FILL_COUNTERS_SIZE && index2 < FILL_COUNTERS_SIZE);
         if (index1 != index2) {
-            Counts[index1]--;
             Counts[index2]++;
+            Counts[index1]--;
         }
     }
 

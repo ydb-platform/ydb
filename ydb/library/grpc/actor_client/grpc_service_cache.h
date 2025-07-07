@@ -1,7 +1,6 @@
 #pragma once
 
 #include <variant>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/core/util/simple_cache.h>

@@ -556,13 +556,15 @@ void TDynamicNameserver::OnPipeDestroyed(ui32 domain, const TActorContext &ctx)
 }
 
 void TDynamicNameserver::UpdateCounters() {
-    ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;
-    const auto &config = DynamicConfigs[domain];
+    auto info = AppData()->DomainsInfo;
+    if (info->Domain) {
+        const auto &config = DynamicConfigs[info->Domain->DomainUid];
 
-    *EpochVersionCounter = config->Epoch.Version;
-    *ActiveDynamicNodesCounter = config->DynamicNodes.size();
-    *ExpiredDynamicNodesCounter = config->ExpiredNodes.size();
-    *StaticNodesCounter = StaticConfig->StaticNodeTable.size();
+        *EpochVersionCounter = config->Epoch.Version;
+        *ActiveDynamicNodesCounter = config->DynamicNodes.size();
+        *ExpiredDynamicNodesCounter = config->ExpiredNodes.size();
+        *StaticNodesCounter = StaticConfig->StaticNodeTable.size();
+    }
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,

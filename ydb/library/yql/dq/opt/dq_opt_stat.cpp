@@ -651,6 +651,7 @@ void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TTypeAnnotationC
         if (auto inputStats = typeCtx->GetStats(input.Get())) {
             stats->Nrows += inputStats->Nrows;
             stats->ByteSize += inputStats->ByteSize;
+            stats->Cost += inputStats->Cost;
         }
     }
 
@@ -859,6 +860,7 @@ void InferStatisticsForUnionAll(const TExprNode::TPtr& input, TTypeAnnotationCon
         if (auto inputStats = typeCtx->GetStats(input.Get())) {
             stats->Nrows += inputStats->Nrows;
             stats->ByteSize += inputStats->ByteSize;
+            stats->Cost += inputStats->Cost;
         }
     }
 

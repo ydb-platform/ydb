@@ -314,7 +314,7 @@ int BuildAST(int argc, char* argv[]) {
                         NSQLTranslation::TSQLHints hints;
                         auto lexer = SqlLexer(query, parseRes.Issues, settings);
                         if (lexer && CollectSqlHints(*lexer, query, queryFile, settings.File, hints, parseRes.Issues, settings.MaxErrors)) {
-                            parseRes = NSQLTranslation::SqlASTToYql(*ast, hints, settings);
+                            parseRes = NSQLTranslation::SqlASTToYql(query, *ast, hints, settings);
                         }
                    }
                 } else {

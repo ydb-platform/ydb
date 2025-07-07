@@ -15,6 +15,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/testlib/default
+    ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/public/lib/ydb_cli/dump
     ydb/public/sdk/cpp/client/ydb_export
@@ -24,7 +25,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
     ydb/public/sdk/cpp/client/ydb_value
     ydb/library/backup
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
 )
 
 YQL_LAST_ABI_VERSION()

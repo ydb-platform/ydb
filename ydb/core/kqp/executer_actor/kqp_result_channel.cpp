@@ -156,13 +156,12 @@ private:
         batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
         batch.Payload = std::move(computeData.Payload);
 
-        TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-        auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), ItemType, ColumnOrder);
-
         auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
         streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
         streamEv->Record.SetQueryResultIndex(QueryResultIndex + StatementResultIndex);
-        streamEv->Record.MutableResultSet()->Swap(&resultSet);
+
+        TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+        protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches), ItemType, ColumnOrder);
 
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER,
             "Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()

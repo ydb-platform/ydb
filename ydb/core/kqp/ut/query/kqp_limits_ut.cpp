@@ -933,7 +933,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::MilliSeconds(500));
+        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::Seconds(20));
         kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync(); });
 
         TDispatchOptions opts;

@@ -147,6 +147,11 @@ NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err) {
 bool IsRetryableError(int error) {
     switch (error) {
         case LDAP_SERVER_DOWN:
+        case LDAP_TIMEOUT:
+        case LDAP_CONNECT_ERROR:
+        case LDAP_BUSY:
+        case LDAP_UNAVAILABLE:
+        case LDAP_ADMIN_LIMIT_EXCEEDED:
             return true;
     }
     return false;

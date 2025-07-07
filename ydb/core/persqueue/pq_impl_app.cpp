@@ -228,6 +228,10 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return true;
     }
 
+    if (ev->Get()->Cgi().Has("SendReadSet")) {
+        return OnSendReadSetToYourself(ev, ctx);
+    }
+
     if (ev->Get()->Cgi().Has("kv")) {
         return TKeyValueFlat::OnRenderAppHtmlPage(ev, ctx);
     }

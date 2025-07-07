@@ -43,6 +43,8 @@ namespace NQuoter {
 
 namespace TEvKesus = NKesus::TEvKesus;
 
+const ui64 KesusReconnectLimit = 5;
+
 class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     struct TResourceState {
         const TString Resource;
@@ -290,7 +292,6 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     TInstant DisconnectTime;
     ui64 OfflineAllocationCookie = 0;
     ui64 KesusReconnectCount = 0;
-    static constexpr ui64 KesusReconnectLimit = 5;
 
     TMap<TString, THolder<TResourceState>> Resources; // Map because iterators are needed to remain valid during insertions.
     THashMap<ui64, decltype(Resources)::iterator> ResIndex;

@@ -60,6 +60,7 @@ public:
     }
 private:
     TCtxsMap CtxMap;
+
     void ScanDevices() {
         int numDevices = 0;
         int err;

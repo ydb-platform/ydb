@@ -120,13 +120,15 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
         TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
 
+        auto rdma = InitLocalRdmaStuff();
+
         auto* ev = MakeTestEvent(123, memPool.get());
         auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
         channel.Push(*evHandle, pool);
 
         NInterconnect::TOutgoingStream main, xdc;
         TTcpPacketOutTask task(p, main, xdc);
-        UNIT_ASSERT(channel.FeedBuf(task, 0));
+        UNIT_ASSERT(channel.FeedBuf(task, 0, rdma->Ctx->GetDeviceIndex()));
 
         TVector<TConstIoVec> mainData, xdcData;
         main.ProduceIoVec(mainData, 100, 10000);
@@ -146,7 +148,10 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
         Cerr << Endl;
         const char* ptr = mainDataFlat.data();
         char* end = mainDataFlat.data() + mainDataFlat.size();
-        while (*ptr == -66) {
+        while (true) {
+            if (ptr[0] == 1 && ptr[1] == 64 && ptr[2] == 16 && ptr[3] == 0) {
+                break;
+            }
             ++ptr;
         }
 
@@ -183,9 +188,6 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
                 Cerr << "Rdma cred: " << cred.GetAddress() << " " << cred.GetRkey() << " " << cred.GetSize() << Endl;
             }
         }
-
-        // read rdma data
-        auto rdma = InitLocalRdmaStuff();
 
         TVector<TMemRegionPtr> memRegions;
         for (const auto& cred: creds.GetCreds()) {

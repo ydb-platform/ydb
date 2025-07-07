@@ -306,6 +306,9 @@ namespace NActors {
         std::array<ui32, 16> InputTrafficArray;
         THashMap<ui16, ui32> InputTrafficMap;
 
+        ui64 RdmaBytesReadScheduled = 0;
+        ui64 RdmaWrReadScheduled = 0;
+
         ui64 StarvingInRow = 0;
 
         bool CloseInputSessionRequested = false;
@@ -677,6 +680,8 @@ namespace NActors {
         NHPTimer::STime PartUpdateTimestamp = 0;
 
         NInterconnect::TInterconnectZcProcessor ZcProcessor;
+
+        NInterconnect::NRdma::TRdmaCtx* RdmaCtx = nullptr;
 
         void UpdateState(std::optional<EState> newState = std::nullopt) {
             if (!newState || *newState != State) {

@@ -492,7 +492,14 @@ private:
         auto ranges = SplitTimeIntervalIntoRanges(from, to, pointsCount);
 
         for (const auto& [fromRange, toRange] : ranges) {
-            MetricsWithTimeRange.emplace_back(metric.Labels, "", fromRange, toRange);
+            TMetricTimeRange metricTimeRange {
+                .Selectors = metric.Labels,
+                .Program = "",
+                .From = fromRange,
+                .To = toRange
+            };
+
+            MetricsWithTimeRange.push_back(metricTimeRange);
         }
         ListedTimeRanges += ranges.size();
     }

@@ -161,6 +161,7 @@ target_link_libraries(essentials-parser-pg_wrapper PUBLIC
   yutil
   library-cpp-resource
   library-cpp-yson
+  cpp-string_utils-base64
   yql-essentials-core
   essentials-minikql-arrow
   essentials-minikql-computation

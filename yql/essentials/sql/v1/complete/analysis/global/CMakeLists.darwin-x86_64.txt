@@ -20,6 +20,7 @@ target_link_libraries(complete-analysis-global PUBLIC
   yutil
   v1-complete-core
   v1-complete-syntax
+  v1-complete-text
   antlr_ast-gen-v1_antlr4
   antlr_ast-gen-v1_ansi_antlr4
 )

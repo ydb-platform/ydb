@@ -17,7 +17,7 @@ add_library(datetime2_udf INTERFACE)
 
 target_compile_options(datetime2_udf INTERFACE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=40
+  -DUDF_ABI_VERSION_MINOR=43
   -DUDF_ABI_VERSION_PATCH=0
 )
 
@@ -30,6 +30,7 @@ target_link_libraries(datetime2_udf INTERFACE
   util-draft
   cpp-type_info-tz
   public-udf-arrow
+  essentials-public-langver
   yql-essentials-minikql
   essentials-minikql-datetime
 )
@@ -41,7 +42,7 @@ add_global_library_for(datetime2_udf.global
 
 target_compile_options(datetime2_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=40
+  -DUDF_ABI_VERSION_MINOR=43
   -DUDF_ABI_VERSION_PATCH=0
 )
 
@@ -54,6 +55,7 @@ target_link_libraries(datetime2_udf.global PUBLIC
   util-draft
   cpp-type_info-tz
   public-udf-arrow
+  essentials-public-langver
   yql-essentials-minikql
   essentials-minikql-datetime
 )

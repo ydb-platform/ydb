@@ -27,8 +27,8 @@ NThreading::TFuture<NKikimr::NMiniKQL::ISpiller::TKey> TDqComputeStorage::Put(TC
     return future;
 }
 
-NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::Get(TKey) {
-    Y_ENSURE(false, "Get w/o deletion prohibited, use Extract");
+NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::Get(TKey key) {
+    return Extract(key);
 }
 
 NThreading::TFuture<void> TDqComputeStorage::Delete(TKey key) {

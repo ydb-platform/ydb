@@ -480,7 +480,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
         return;
     }
 
-    CC_LOG_I("[" << checkpointId << "] Checkpoint status changed to 'PendingCommit', committing states  to " << ActorsToNotify.size() << " actor(s)");
+    CC_LOG_I("[" << checkpointId << "] Checkpoint status changed to 'PendingCommit', committing states to " << ActorsToNotify.size() << " actor(s)");
     PendingCommitCheckpoints.emplace(checkpointId, TPendingCheckpoint(ActorsToNotifySet, it->second.GetType(), it->second.GetStats()));
     PendingCheckpoints.erase(it);
     UpdateInProgressMetric();

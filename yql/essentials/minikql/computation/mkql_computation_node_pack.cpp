@@ -978,6 +978,19 @@ bool IsUi64Scalar(const TBlockType* blockType) {
     return static_cast<const TDataType*>(blockType->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Uint64;
 }
 
+bool IsOffsetExplicitStored(EValuePackerVersion valuePackerVersion) {
+    return valuePackerVersion >= EValuePackerVersion::V1;
+};
+
+size_t GetTopLevelOffsetsCount(EValuePackerVersion valuePackerVersion, ui32 width) {
+    if (!IsOffsetExplicitStored(valuePackerVersion)) {
+        return width - 1;
+    }
+    return 0;
+};
+
+} // namespace
+
 bool IsLegacyStructBlock(const TType* type, ui32& blockLengthIndex, TVector<const TBlockType*>& items) {
     items.clear();
     blockLengthIndex = Max<ui32>();
@@ -1036,20 +1049,7 @@ bool IsMultiBlock(const TType* type, ui32& blockLengthIndex, TVector<const TBloc
     return true;
 }
 
-bool IsOffsetExplicitStored(EValuePackerVersion valuePackerVersion) {
-    return valuePackerVersion >= EValuePackerVersion::V1;
-};
-
-size_t GetTopLevelOffsetsCount(EValuePackerVersion valuePackerVersion, ui32 width) {
-    if (!IsOffsetExplicitStored(valuePackerVersion)) {
-        return width - 1;
-    }
-    return 0;
-};
-
-} // namespace
-
-template <bool Fast>
+template<bool Fast>
 TValuePackerGeneric<Fast>::TValuePackerGeneric(bool stable, const TType* type)
     : Stable_(stable)
     , Type_(type)

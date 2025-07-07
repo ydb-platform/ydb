@@ -565,7 +565,7 @@ private:
         TActorContext::AsActorContext().Send(ParentActorId, std::move(ev));
     }
 
-    virtual std::optional<ui64> GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
         const std::vector<NOlap::TPortionDataAccessor>& acc) const override {
         AFL_VERIFY(!columnIds);
         THashMap<ui32, ui64> memoryByColumns;
@@ -1389,13 +1389,13 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         }
     };
 
-    NOlap::NDataFetcher::TFetcherMemoryProcessInfo memoryProcess;
+    std::shared_ptr<NOlap::NGroupedMemoryManager::TFullGroupGuard> memoryGroupGuard = NOlap::NDataFetcher::TCurrentContext::BuildGroupGuard();
     for (const auto& [consumer, requestsByColumn] : ev->Get()->GetRequests()) {
         for (const auto& [columnId, portionAddresses] : requestsByColumn) {
             std::vector<NOlap::TPortionInfo::TConstPtr> portions;
 
             auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-            NOlap::NDataFetcher::TRequestInput rInput(portions, actualIndexInfo, consumer, "", memoryProcess);
+            NOlap::NDataFetcher::TRequestInput rInput(portions, actualIndexInfo, consumer, "", memoryGroupGuard);
             auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
 
             NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetching(std::move(rInput),

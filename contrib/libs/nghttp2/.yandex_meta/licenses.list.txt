@@ -155,6 +155,7 @@ Jonas Kvinge
 Josh Braegger
 José F. Calcerrada
 Kamil Dudka
+Karthik Dasari
 Kazuho Oku
 Kenny (kang-yen) Peng
 Kenny Peng
@@ -164,6 +165,7 @@ LazyHamster
 Leo Neat
 Lorenz Nickel
 Lucas Pardue
+Lukas Märdian
 MATSUMOTO Ryosuke
 Marc Bachmann
 Marcelo Trylesinski
@@ -179,6 +181,7 @@ Nora Shoemaker
 Paweł Wegner
 Pedro Santos
 Peeyush Aggarwal
+Peng-Yu Chen
 Peter Wu
 Piotr Sikora
 PufferOverflow
@@ -194,6 +197,7 @@ Ryan Carsten Schmidt
 Ryo Ota
 Scott Mitchell
 Sebastiaan Deckers
+Sergei Trofimovich
 Sergey Fedorov
 Shelley Vohr
 Simon Frankenberger
@@ -221,6 +225,7 @@ Ville Vesilehto
 Wenfeng Liu
 William A Rowe Jr
 Xiaoguang Sun
+Zachary Turner
 Zhuoyun Wei
 acesso
 ayanamist
@@ -230,6 +235,7 @@ dalf
 dawg
 es
 fangdingjun
+feicong
 hrxi
 jwchoi
 kumagi

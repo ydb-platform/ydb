@@ -31,9 +31,8 @@ implementation.
 
 * https://nghttp2.org/ (TLS + ALPN and HTTP/3)
 
-  This endpoint supports ``h2``, ``h2-16``, ``h2-14``, and
-  ``http/1.1`` via ALPN and requires TLSv1.2 for HTTP/2
-  connection.
+  This endpoint supports ``h2`` and ``http/1.1`` via ALPN and requires
+  TLSv1.2 for HTTP/2 connection.
 
   It also supports HTTP/3.
 
@@ -123,12 +122,12 @@ exploited.  The neverbleed is disabled by default.  To enable it, use
 To enable the experimental HTTP/3 support for h2load and nghttpx, the
 following libraries are required:
 
-* `OpenSSL with QUIC support
+* `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_; or
   wolfSSL; or LibreSSL (does not support 0RTT); or aws-lc; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  294ab9730c570213b496cfc2fc14b3c0bfcd4bcc)
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.4.0
+  9295969e1dad2c31d0d99481734c1c68dcbc6403); or OpenSSL >= 3.5.0
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.12.0
 * `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 1.1.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
@@ -151,7 +150,7 @@ executable.
 Compiling libnghttp2 C source code requires a C99 compiler.  gcc 4.8
 is known to be adequate.  In order to compile the C++ source code,
 C++20 compliant compiler is required.  At least g++ >= 12 and
-clang++ >= 15 are known to work.
+clang++ >= 18 are known to work.
 
 .. note::
 
@@ -341,7 +340,7 @@ Build aws-lc:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.46.1 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.52.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON --install-prefix=$PWD/opt
    $ make -j$(nproc) -C build
@@ -352,7 +351,7 @@ Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.8.0 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v1.9.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
    $ git submodule update --init --depth 1
    $ autoreconf -i
@@ -365,7 +364,7 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.11.0 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v1.12.0 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
    $ git submodule update --init --depth 1
    $ autoreconf -i
@@ -381,7 +380,7 @@ from source:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.5.0 https://github.com/libbpf/libbpf
+   $ git clone --depth 1 -b v1.5.1 https://github.com/libbpf/libbpf
    $ cd libbpf
    $ PREFIX=$PWD/build make -C src install
    $ cd ..
@@ -395,7 +394,7 @@ Build nghttp2:
    $ git submodule update --init
    $ autoreconf -i
    $ ./configure --with-mruby --enable-http3 --with-libbpf \
-         CC=clang-15 CXX=clang++-15 \
+         CC=clang-18 CXX=clang++-18 \
          PKG_CONFIG_PATH="$PWD/../aws-lc/opt/lib/pkgconfig:$PWD/../nghttp3/build/lib/pkgconfig:$PWD/../ngtcp2/build/lib/pkgconfig:$PWD/../libbpf/build/lib64/pkgconfig" \
          LDFLAGS="$LDFLAGS -Wl,-rpath,$PWD/../aws-lc/opt/lib -Wl,-rpath,$PWD/../libbpf/build/lib64"
    $ make -j$(nproc)
@@ -847,10 +846,10 @@ to know how to migrate from earlier releases.
 
 ``nghttpx`` implements `important performance-oriented features
 <https://istlsfastyet.com/#server-performance>`_ in TLS, such as
-session IDs, session tickets (with automatic key rotation), OCSP
-stapling, dynamic record sizing, ALPN, forward secrecy and HTTP/2.
-``nghttpx`` also offers the functionality to share session cache and
-ticket keys among multiple ``nghttpx`` instances via memcached.
+session IDs, session tickets (with automatic key rotation), dynamic
+record sizing, ALPN, forward secrecy and HTTP/2.  ``nghttpx`` also
+offers the functionality to share ticket keys among multiple
+``nghttpx`` instances via memcached.
 
 ``nghttpx`` has 2 operation modes:
 

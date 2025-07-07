@@ -1359,7 +1359,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
 
     auto blocks = node.GetBlock2();
 
-    TPosition unionPos = pos; // Position of first select
+    TPosition opPos = pos; // Position of first select
     TVector<TSortSpecificationPtr> orderBy;
     bool assumeOrderBy = false;
     TNodePtr skipTake;
@@ -1372,7 +1372,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
 
     for (int i = 0; i < blocks.size(); ++i) {
         auto& b = blocks[i];
-        const bool second = (i == 0);
+        const bool first = (i == 0);
         const bool last = (i + 1 == blocks.size());
         TSelectKindPlacement placement;
         placement.IsLastInSelectOp = last;
@@ -1395,7 +1395,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
             // nothing
         } else if (selectOperator == "intersect" || selectOperator == "except") {
             if (!IsBackwardCompatibleFeatureAvailable(Ctx_.Settings.LangVer, MakeLangVersion(2025, 3), Ctx_.Settings.BackportMode)) {
-                Ctx_.Error() << "INTERSECT and EXCEPT are available starting from 2025.03 version";
+                Ctx_.Error() << "INTERSECT and EXCEPT are available starting from 2025.03 version.";
                 return nullptr;
             }
         } else {
@@ -1414,11 +1414,23 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
             }
         }
 
-        // currentSelectOperator == "" <=> second == true
-        if (!second && (currentSelectOperator != selectOperator || quantifier != currentQuantifier)) {
-            auto source = BuildSelectOp(pos, std::move(sources), currentSelectOperator, currentQuantifier, {});
-            sources.clear();
-            sources.emplace_back(std::move(source));
+        // currentSelectOperator == "" <=> first == true
+        if (!first) {
+            if (currentSelectOperator == selectOperator) {
+                if (currentSelectOperator == "union") {
+                    if (currentQuantifier != quantifier) {
+                        auto source = BuildSelectOp(pos, std::move(sources), currentSelectOperator, currentQuantifier, {});
+                        sources.clear();
+                        sources.emplace_back(std::move(source));
+                    }
+                } else {
+                    Ctx_.Error() << "Multiple usage of INTERSECT and EXCEPT is not implemented yet.";
+                    return nullptr;
+                }
+            } else {
+                Ctx_.Error() << "Simultaneous usage of UNION, INTERSECT, and EXCEPT is not implemented yet.";
+                return nullptr;
+            }
         }
 
         sources.emplace_back(std::move(next.Source));
@@ -1442,15 +1454,15 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
         bool stream = false;
 
         TVector<TNodePtr> terms;
-        terms.push_back(BuildColumn(unionPos, "*", ""));
+        terms.push_back(BuildColumn(opPos, "*", ""));
 
-        result = BuildSelectCore(Ctx_, unionPos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
+        result = BuildSelectCore(Ctx_, opPos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
             assumeOrderBy, orderBy, having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms),
             distinct, std::move(without), forceWithout, stream, outermostSettings, {}, {});
 
-        result = BuildSelect(unionPos, std::move(result), skipTake);
+        result = BuildSelect(opPos, std::move(result), skipTake);
     } else if (skipTake) {
-        result = BuildSelect(unionPos, std::move(result), skipTake);
+        result = BuildSelect(opPos, std::move(result), skipTake);
     }
 
     return result;

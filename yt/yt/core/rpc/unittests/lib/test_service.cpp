@@ -7,12 +7,13 @@
 
 #include <yt/yt/core/rpc/grpc/proto/grpc.pb.h>
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/error.h>
 
 #include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/blob.h>
 
 #include <random>
 

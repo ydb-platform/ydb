@@ -75,10 +75,11 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const std::string& keyOrAl
 void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const
 {
     const auto& parameter = GetParameter(key);
+    auto pathGetter = [&] {
+        return "/" + key;
+    };
     auto validate = [&] {
-        parameter->PostprocessParameter(target, [&] {
-            return "/" + key;
-        });
+        parameter->PostprocessParameter(target, pathGetter);
         try {
             for (const auto& postprocessor : Postprocessors_) {
                 postprocessor(target);
@@ -92,7 +93,7 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& 
         }
     };
     auto loadOptions = TLoadParameterOptions{
-        .PathGetter = {},
+        .PathGetter = pathGetter,
     };
 
     parameter->SafeLoad(target, node, loadOptions, validate);

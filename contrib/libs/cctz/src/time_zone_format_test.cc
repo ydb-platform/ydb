@@ -15,9 +15,13 @@
 #include "cctz/time_zone.h"
 
 #include <chrono>
+#include <cstdint>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#if defined(__linux__)
+#include <features.h>
+#endif
 
 #include "cctz/civil_time.h"
 #include "gmock/gmock.h"
@@ -75,23 +79,27 @@ TEST(Format, TimePointResolution) {
       chrono::system_clock::from_time_t(1420167845) +
       chrono::milliseconds(123) + chrono::microseconds(456) +
       chrono::nanoseconds(789);
+  EXPECT_EQ("03:04:05.123456789",
+            cctz::format(kFmt, chrono::time_point_cast<chrono::nanoseconds>(t0),
+                         utc));
+  EXPECT_EQ("03:04:05.123456",
+            cctz::format(
+                kFmt, chrono::time_point_cast<chrono::microseconds>(t0), utc));
+  EXPECT_EQ("03:04:05.123",
+            cctz::format(
+                kFmt, chrono::time_point_cast<chrono::milliseconds>(t0), utc));
   EXPECT_EQ(
-      "03:04:05.123456789",
-      cctz::format(kFmt, chrono::time_point_cast<chrono::nanoseconds>(t0), utc));
+      "03:04:05",
+      cctz::format(kFmt, chrono::time_point_cast<chrono::seconds>(t0), utc));
   EXPECT_EQ(
-      "03:04:05.123456",
-      cctz::format(kFmt, chrono::time_point_cast<chrono::microseconds>(t0), utc));
+      "03:04:05",
+      cctz::format(kFmt, chrono::time_point_cast<cctz::seconds>(t0), utc));
   EXPECT_EQ(
-      "03:04:05.123",
-      cctz::format(kFmt, chrono::time_point_cast<chrono::milliseconds>(t0), utc));
-  EXPECT_EQ("03:04:05",
-            cctz::format(kFmt, chrono::time_point_cast<chrono::seconds>(t0), utc));
-  EXPECT_EQ("03:04:05",
-            cctz::format(kFmt, chrono::time_point_cast<cctz::seconds>(t0), utc));
-  EXPECT_EQ("03:04:00",
-            cctz::format(kFmt, chrono::time_point_cast<chrono::minutes>(t0), utc));
-  EXPECT_EQ("03:00:00",
-            cctz::format(kFmt, chrono::time_point_cast<chrono::hours>(t0), utc));
+      "03:04:00",
+      cctz::format(kFmt, chrono::time_point_cast<chrono::minutes>(t0), utc));
+  EXPECT_EQ(
+      "03:00:00",
+      cctz::format(kFmt, chrono::time_point_cast<chrono::hours>(t0), utc));
 }
 
 TEST(Format, TimePointExtendedResolution) {
@@ -176,8 +184,10 @@ TEST(Format, PosixConversions) {
   TestFormatSpecifier(tp, tz, "%F", "1970-01-01");
   TestFormatSpecifier(tp, tz, "%g", "70");
   TestFormatSpecifier(tp, tz, "%G", "1970");
+#if defined(__GLIBC__)
   TestFormatSpecifier(tp, tz, "%k", " 0");
   TestFormatSpecifier(tp, tz, "%l", "12");
+#endif
   TestFormatSpecifier(tp, tz, "%n", "\n");
   TestFormatSpecifier(tp, tz, "%R", "00:00");
   TestFormatSpecifier(tp, tz, "%t", "\t");
@@ -209,7 +219,9 @@ TEST(Format, LocaleSpecific) {
 #if defined(__linux__)
   // SU/C99/TZ extensions
   TestFormatSpecifier(tp, tz, "%h", "Jan");  // Same as %b
+#if defined(__GLIBC__)
   TestFormatSpecifier(tp, tz, "%P", "am");
+#endif
   TestFormatSpecifier(tp, tz, "%r", "12:00:00 AM");
 
   // Modified conversion specifiers %E_
@@ -635,27 +647,33 @@ TEST(Format, RFC3339Format) {
   EXPECT_EQ("1977-06-28T09:08:07-07:00", cctz::format(RFC3339_sec, tp, tz));
 
   tp += chrono::milliseconds(3);
-  EXPECT_EQ("1977-06-28T09:08:07.123-07:00", cctz::format(RFC3339_full, tp, tz));
+  EXPECT_EQ("1977-06-28T09:08:07.123-07:00",
+            cctz::format(RFC3339_full, tp, tz));
   EXPECT_EQ("1977-06-28T09:08:07-07:00", cctz::format(RFC3339_sec, tp, tz));
 
   tp += chrono::microseconds(400);
-  EXPECT_EQ("1977-06-28T09:08:07.1234-07:00", cctz::format(RFC3339_full, tp, tz));
+  EXPECT_EQ("1977-06-28T09:08:07.1234-07:00",
+            cctz::format(RFC3339_full, tp, tz));
   EXPECT_EQ("1977-06-28T09:08:07-07:00", cctz::format(RFC3339_sec, tp, tz));
 
   tp += chrono::microseconds(50);
-  EXPECT_EQ("1977-06-28T09:08:07.12345-07:00", cctz::format(RFC3339_full, tp, tz));
+  EXPECT_EQ("1977-06-28T09:08:07.12345-07:00",
+            cctz::format(RFC3339_full, tp, tz));
   EXPECT_EQ("1977-06-28T09:08:07-07:00", cctz::format(RFC3339_sec, tp, tz));
 
   tp += chrono::microseconds(6);
-  EXPECT_EQ("1977-06-28T09:08:07.123456-07:00", cctz::format(RFC3339_full, tp, tz));
+  EXPECT_EQ("1977-06-28T09:08:07.123456-07:00",
+            cctz::format(RFC3339_full, tp, tz));
   EXPECT_EQ("1977-06-28T09:08:07-07:00", cctz::format(RFC3339_sec, tp, tz));
 
   tp += chrono::nanoseconds(700);
-  EXPECT_EQ("1977-06-28T09:08:07.1234567-07:00", cctz::format(RFC3339_full, tp, tz));
+  EXPECT_EQ("1977-06-28T09:08:07.1234567-07:00",
+            cctz::format(RFC3339_full, tp, tz));
   EXPECT_EQ("1977-06-28T09:08:07-07:00", cctz::format(RFC3339_sec, tp, tz));
 
   tp += chrono::nanoseconds(80);
-  EXPECT_EQ("1977-06-28T09:08:07.12345678-07:00", cctz::format(RFC3339_full, tp, tz));
+  EXPECT_EQ("1977-06-28T09:08:07.12345678-07:00",
+            cctz::format(RFC3339_full, tp, tz));
   EXPECT_EQ("1977-06-28T09:08:07-07:00", cctz::format(RFC3339_sec, tp, tz));
 
   tp += chrono::nanoseconds(9);
@@ -669,8 +687,10 @@ TEST(Format, RFC1123Format) {  // locale specific
   EXPECT_TRUE(load_time_zone("America/Los_Angeles", &tz));
 
   auto tp = convert(civil_second(1977, 6, 28, 9, 8, 7), tz);
-  EXPECT_EQ("Tue, 28 Jun 1977 09:08:07 -0700", cctz::format(RFC1123_full, tp, tz));
-  EXPECT_EQ("28 Jun 1977 09:08:07 -0700", cctz::format(RFC1123_no_wday, tp, tz));
+  EXPECT_EQ("Tue, 28 Jun 1977 09:08:07 -0700",
+            cctz::format(RFC1123_full, tp, tz));
+  EXPECT_EQ("28 Jun 1977 09:08:07 -0700",
+            cctz::format(RFC1123_no_wday, tp, tz));
 }
 
 TEST(Format, Week) {
@@ -1038,9 +1058,11 @@ TEST(Parse, LocaleSpecific) {
   EXPECT_TRUE(parse("%h", "Feb", tz, &tp));
   EXPECT_EQ(2, convert(tp, tz).month());  // Equivalent to %b
 
+#if defined(__GLIBC__)
   tp = reset;
   EXPECT_TRUE(parse("%l %p", "5 PM", tz, &tp));
   EXPECT_EQ(17, convert(tp, tz).hour());
+#endif
 
   tp = reset;
   EXPECT_TRUE(parse("%r", "03:44:55 PM", tz, &tp));
@@ -1048,6 +1070,7 @@ TEST(Parse, LocaleSpecific) {
   EXPECT_EQ(44, convert(tp, tz).minute());
   EXPECT_EQ(55, convert(tp, tz).second());
 
+#if defined(__GLIBC__)
   tp = reset;
   EXPECT_TRUE(parse("%Ec", "Tue Nov 19 05:06:07 2013", tz, &tp));
   EXPECT_EQ(convert(civil_second(2013, 11, 19, 5, 6, 7), tz), tp);
@@ -1119,6 +1142,7 @@ TEST(Parse, LocaleSpecific) {
   EXPECT_TRUE(parse("%Oy", "04", tz, &tp));
   EXPECT_EQ(2004, convert(tp, tz).year());
 #endif
+#endif
 }
 
 TEST(Parse, ExtendedSeconds) {
@@ -1129,7 +1153,7 @@ TEST(Parse, ExtendedSeconds) {
   // All %E<prec>S cases are treated the same as %E*S on input.
   auto precisions = {"*", "0", "1",  "2",  "3",  "4",  "5",  "6", "7",
                      "8", "9", "10", "11", "12", "13", "14", "15"};
-  for (const std::string& prec : precisions) {
+  for (const std::string prec : precisions) {
     const std::string fmt = "%E" + prec + "S";
     SCOPED_TRACE(fmt);
     time_point<chrono::nanoseconds> tp = unix_epoch;
@@ -1211,7 +1235,7 @@ TEST(Parse, ExtendedSubeconds) {
   // All %E<prec>f cases are treated the same as %E*f on input.
   auto precisions = {"*", "0", "1",  "2",  "3",  "4",  "5",  "6", "7",
                      "8", "9", "10", "11", "12", "13", "14", "15"};
-  for (const std::string& prec : precisions) {
+  for (const std::string prec : precisions) {
     const std::string fmt = "%E" + prec + "f";
     SCOPED_TRACE(fmt);
     time_point<chrono::nanoseconds> tp = unix_epoch - chrono::seconds(1);
@@ -1498,7 +1522,7 @@ TEST(Parse, MaxRange) {
       parse(RFC3339_sec, "292277026596-12-04T14:30:07-01:00", utc, &tp));
   EXPECT_EQ(tp, time_point<cctz::seconds>::max());
   EXPECT_FALSE(
-      parse(RFC3339_sec, "292277026596-12-04T15:30:07-01:00", utc, &tp));
+      parse(RFC3339_sec, "292277026596-12-04T14:30:08-01:00", utc, &tp));
 
   // tests the lower limit using +00:00 offset
   EXPECT_TRUE(
@@ -1519,10 +1543,82 @@ TEST(Parse, MaxRange) {
                      utc, &tp));
   EXPECT_FALSE(parse(RFC3339_sec, "-9223372036854775808-01-01T00:00:00+00:01",
                      utc, &tp));
+}
 
-  // TODO: Add tests that parsing times with fractional seconds overflow
-  // appropriately. This can't be done until cctz::parse() properly detects
-  // overflow when combining the chrono seconds and femto.
+TEST(Parse, TimePointOverflow) {
+  const time_zone utc = utc_time_zone();
+
+  using D = chrono::duration<std::int64_t, std::nano>;
+  time_point<D> tp;
+
+  EXPECT_TRUE(
+      parse(RFC3339_full, "2262-04-11T23:47:16.8547758079+00:00", utc, &tp));
+  EXPECT_EQ(tp, time_point<D>::max());
+  EXPECT_EQ("2262-04-11T23:47:16.854775807+00:00",
+            cctz::format(RFC3339_full, tp, utc));
+#if 0
+  // TODO(#199): Will fail until cctz::parse() properly detects overflow.
+  EXPECT_FALSE(
+      parse(RFC3339_full, "2262-04-11T23:47:16.8547758080+00:00", utc, &tp));
+  EXPECT_TRUE(
+      parse(RFC3339_full, "1677-09-21T00:12:43.1452241920+00:00", utc, &tp));
+  EXPECT_EQ(tp, time_point<D>::min());
+  EXPECT_EQ("1677-09-21T00:12:43.145224192+00:00",
+            cctz::format(RFC3339_full, tp, utc));
+  EXPECT_FALSE(
+      parse(RFC3339_full, "1677-09-21T00:12:43.1452241919+00:00", utc, &tp));
+#endif
+
+  using DS = chrono::duration<std::int8_t, chrono::seconds::period>;
+  time_point<DS> stp;
+
+  EXPECT_TRUE(parse(RFC3339_full, "1970-01-01T00:02:07.9+00:00", utc, &stp));
+  EXPECT_EQ(stp, time_point<DS>::max());
+  EXPECT_EQ("1970-01-01T00:02:07+00:00", cctz::format(RFC3339_full, stp, utc));
+  EXPECT_FALSE(parse(RFC3339_full, "1970-01-01T00:02:08+00:00", utc, &stp));
+
+  EXPECT_TRUE(parse(RFC3339_full, "1969-12-31T23:57:52+00:00", utc, &stp));
+  EXPECT_EQ(stp, time_point<DS>::min());
+  EXPECT_EQ("1969-12-31T23:57:52+00:00", cctz::format(RFC3339_full, stp, utc));
+  EXPECT_FALSE(parse(RFC3339_full, "1969-12-31T23:57:51.9+00:00", utc, &stp));
+
+  using DM = chrono::duration<std::int8_t, chrono::minutes::period>;
+  time_point<DM> mtp;
+
+  EXPECT_TRUE(parse(RFC3339_full, "1970-01-01T02:07:59+00:00", utc, &mtp));
+  EXPECT_EQ(mtp, time_point<DM>::max());
+  EXPECT_EQ("1970-01-01T02:07:00+00:00", cctz::format(RFC3339_full, mtp, utc));
+  EXPECT_FALSE(parse(RFC3339_full, "1970-01-01T02:08:00+00:00", utc, &mtp));
+
+  EXPECT_TRUE(parse(RFC3339_full, "1969-12-31T21:52:00+00:00", utc, &mtp));
+  EXPECT_EQ(mtp, time_point<DM>::min());
+  EXPECT_EQ("1969-12-31T21:52:00+00:00", cctz::format(RFC3339_full, mtp, utc));
+  EXPECT_FALSE(parse(RFC3339_full, "1969-12-31T21:51:59+00:00", utc, &mtp));
+}
+
+TEST(Parse, TimePointOverflowFloor) {
+  const time_zone utc = utc_time_zone();
+
+  using D = chrono::duration<std::int64_t, std::micro>;
+  time_point<D> tp;
+
+  EXPECT_TRUE(
+      parse(RFC3339_full, "294247-01-10T04:00:54.7758079+00:00", utc, &tp));
+  EXPECT_EQ(tp, time_point<D>::max());
+  EXPECT_EQ("294247-01-10T04:00:54.775807+00:00",
+            cctz::format(RFC3339_full, tp, utc));
+#if 0
+  // TODO(#199): Will fail until cctz::parse() properly detects overflow.
+  EXPECT_FALSE(
+      parse(RFC3339_full, "294247-01-10T04:00:54.7758080+00:00", utc, &tp));
+  EXPECT_TRUE(
+      parse(RFC3339_full, "-290308-12-21T19:59:05.2241920+00:00", utc, &tp));
+  EXPECT_EQ(tp, time_point<D>::min());
+  EXPECT_EQ("-290308-12-21T19:59:05.224192+00:00",
+            cctz::format(RFC3339_full, tp, utc));
+  EXPECT_FALSE(
+      parse(RFC3339_full, "-290308-12-21T19:59:05.2241919+00:00", utc, &tp));
+#endif
 }
 
 //

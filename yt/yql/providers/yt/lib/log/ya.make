@@ -10,6 +10,7 @@ PEERDIR(
     yt/cpp/mapreduce/interface/logging
     yql/essentials/utils/log
     yql/essentials/utils/backtrace
+    library/cpp/malloc/api
 )
 
 END()

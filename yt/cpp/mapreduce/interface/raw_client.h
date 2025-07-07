@@ -206,6 +206,11 @@ public:
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IOutputStream> WriteFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileWriterOptions& options = {}) = 0;
+
     // File cache
 
     virtual TMaybe<TYPath> GetFileFromCache(

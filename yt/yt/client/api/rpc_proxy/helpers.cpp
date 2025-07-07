@@ -1924,7 +1924,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
-        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch);
+        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch) ||
+        error.FindMatching(NTableClient::EErrorCode::UnableToSynchronizeReplicationCard);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned)

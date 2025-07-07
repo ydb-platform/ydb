@@ -130,7 +130,7 @@ NTable::TBulkUpsertResult LoadItems(
 {
     LOG_T("Loading " << ITEM_COUNT << " items...");
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int i = 1; i <= ITEM_COUNT; ++i) {
@@ -178,7 +178,7 @@ NTable::TBulkUpsertResult LoadWarehouses(
 {
     LOG_T("Loading warehouses " << startId << " to " << lastId);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int warehouseId = startId; warehouseId <= lastId; ++warehouseId) {
@@ -218,7 +218,7 @@ NTable::TBulkUpsertResult LoadStock(
 {
     LOG_T("Loading stock for warehouse " << wh << " items " << itemId << " to " << (itemId + itemsToLoad - 1));
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int i = 0; i < itemsToLoad; ++i) {
@@ -281,7 +281,7 @@ NTable::TBulkUpsertResult LoadDistricts(
 {
     LOG_T("Loading districts for warehouses " << startId << " to " << lastId);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int warehouseId = startId; warehouseId <= lastId; ++warehouseId) {
@@ -324,7 +324,7 @@ NTable::TBulkUpsertResult LoadCustomers(
 {
     LOG_T("Loading customers for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
@@ -384,7 +384,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
 {
     LOG_T("Loading customer history for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     i64 prevTs = 0;
@@ -432,7 +432,7 @@ NTable::TBulkUpsertResult LoadOpenOrders(
 {
     LOG_T("Loading open orders for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     // TPC-C 4.3.3.1: o_c_id must be a permutation of [1, customersPerDistrict]
@@ -482,7 +482,7 @@ NTable::TBulkUpsertResult LoadNewOrders(
 {
     LOG_T("Loading new orders for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     static_assert(FIRST_UNPROCESSED_O_ID < CUSTOMERS_PER_DISTRICT,
@@ -519,7 +519,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
 {
     LOG_T("Loading order lines for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int orderId = 1; orderId <= CUSTOMERS_PER_DISTRICT; ++orderId) {

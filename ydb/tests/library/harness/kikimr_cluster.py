@@ -17,6 +17,15 @@ DEFAULT_MON_PORT = 8765
 DEFAULT_GRPC_PORT = 2135
 
 
+def kikimr_cluster_factory(configurator=None, config_path=None):
+    # TODO: remove current function, use explicit KiKiMR/ExternalKiKiMRCluster
+    logger.info("Starting standalone YDB cluster")
+    if config_path is not None:
+        return ExternalKiKiMRCluster(config_path)
+    else:
+        return KiKiMR(configurator)
+
+
 class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def __init__(
             self,

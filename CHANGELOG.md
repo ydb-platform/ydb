@@ -17,10 +17,7 @@
 * 18271:Fix replication bug #10650 [#18271](https://github.com/ydb-platform/ydb/pull/18271) ([Alexander Rutkovsky](https://github.com/alexvru))
 * 18231:Fix segfault that could happen while retrying Whiteboard requests. [#18231](https://github.com/ydb-platform/ydb/pull/18231) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 20241:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20241](https://github.com/ydb-platform/ydb/pull/20241) ([Nikolay Shestakov](https://github.com/nshestakov))
-* 20079:Поправил коммит оффсетов сообщений топика при чтении в федеративных инсталляциях. До фикса пользователь получал ошибку "Unable to navigate:path: \'Root/logbroker-federation/--cut--/stable/guidance\' status: PathErrorUnknown\n" 
-Сломали начиная с 25-1-2 [#20079](https://github.com/ydb-platform/ydb/pull/20079) ([Nikolay Shestakov](https://github.com/nshestakov))
-* 20054:Make nodes less critical (to make cluster less critical), closes https://github.com/ydb-platform/ydb/issues/19676
-Minimize returned data to avoid large responses, closes https://github.com/ydb-platform/ydb/issues/19810 [#20054](https://github.com/ydb-platform/ydb/pull/20054) ([Alexey Efimov](https://github.com/adameat))
+* 20054:Make nodes less critical (to make cluster less critical), closes https://github.com/ydb-platform/ydb/issues/19676 [#20054](https://github.com/ydb-platform/ydb/pull/20054) ([Alexey Efimov](https://github.com/adameat))
 * 20025:Changes from #20020
 
 There was a T1 transaction in the EXECUTED queue. She is waiting for the signal to continue working. The T2 transaction was queued and its state was saved to disk. Transaction T1 was running at that moment. As a result, the T2 transaction continued to run when its state had not yet been saved to disk. She sent TEvReadSetAck to her "colleagues" and they deleted the T2 transaction. If the tablet restarts at this moment, the T2 transaction will be in the PLANNED state and will never receive a TEvReadSet from "colleagues".

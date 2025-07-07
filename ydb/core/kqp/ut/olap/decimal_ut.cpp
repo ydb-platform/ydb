@@ -72,14 +72,14 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
             {
                 TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(1).Add(4).Add("3.14");
-                inserter.AddRow().Add(2).Add(3).Add("8.16");
+                inserter.AddRow().Add(1).Add(4).Add(TDecimalValue("3.14", Precision, Scale));
+                inserter.AddRow().Add(2).Add(3).Add(TDecimalValue("8.16", Precision, Scale));
                 Upsert(inserter);
             }
             {
                 TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(4).Add(1).Add("12.46");
-                inserter.AddRow().Add(3).Add(2).Add("8.492");
+                inserter.AddRow().Add(4).Add(1).Add(TDecimalValue("12.46", Precision, Scale));
+                inserter.AddRow().Add(3).Add(2).Add(TDecimalValue("8.492", Precision, Scale));
 
                 Upsert(inserter);
             }
@@ -96,10 +96,10 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
             {
                 TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(1).Add(1).Add("12.46");
-                inserter.AddRow().Add(2).Add(1).Add("8.16");
-                inserter.AddRow().Add(3).Add(2).Add("12.46");
-                inserter.AddRow().Add(4).Add(2).Add("8.16");
+                inserter.AddRow().Add(1).Add(1).Add(TDecimalValue("12.46", Precision, Scale));
+                inserter.AddRow().Add(2).Add(1).Add(TDecimalValue("8.16", Precision, Scale));
+                inserter.AddRow().Add(3).Add(2).Add(TDecimalValue("12.46", Precision, Scale));
+                inserter.AddRow().Add(4).Add(2).Add(TDecimalValue("8.16", Precision, Scale));
                 Upsert(inserter);
             }
         }
@@ -220,8 +220,8 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         auto insert = [](TDecimalTestCase& tester) {
             TTestHelper::TUpdatesBuilder inserter = tester.Inserter();
-            inserter.AddRow().Add(5).Add(12).Add("8.492");
-            inserter.AddRow().Add(6).Add(30).Add("12.46");
+            inserter.AddRow().Add(5).Add(12).Add(TDecimalValue("8.492", tester.GetPrecision(), tester.GetScale()));
+            inserter.AddRow().Add(6).Add(30).Add(TDecimalValue("12.46", tester.GetPrecision(), tester.GetScale()));
             tester.Upsert(inserter);
         };
 

@@ -122,7 +122,7 @@ TResult SwitchTypeImpl(arrow::Type::type typeId, TFunc&& f) {
         case arrow::Type::INTERVAL_MONTHS:
             return f(TTypeWrapper<arrow::MonthIntervalType>());
         case arrow::Type::DECIMAL:
-            return f(TTypeWrapper<arrow::Decimal128Type>());
+            return f(TTypeWrapper<arrow::FixedSizeBinaryType>());
         case arrow::Type::DURATION:
             return f(TTypeWrapper<arrow::DurationType>());
         case arrow::Type::LARGE_STRING:

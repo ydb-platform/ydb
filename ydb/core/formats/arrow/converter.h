@@ -33,7 +33,12 @@ private:
     template <typename TArray>
     TCell MakeCellFromView(const std::shared_ptr<arrow::Array>& column, i64 row) {
         auto array = std::static_pointer_cast<TArray>(column);
+        if (array->IsNull(row)) {
+            std::cout << "[DEBUG] MakeCellFromView: row=" << row << " is_null=1 size=0" << std::endl;
+            return TCell();
+        }
         auto data = array->GetView(row);
+        std::cout << "[DEBUG] MakeCellFromView: row=" << row << " is_null=0 size=" << data.size() << std::endl;
         return TCell(data.data(), data.size());
     }
 
@@ -55,6 +60,18 @@ private:
     template <>
     TCell MakeCell<arrow::Decimal128Array>(const std::shared_ptr<arrow::Array>& column, i64 row) {
         return MakeCellFromView<arrow::Decimal128Array>(column, row);
+    }
+
+    template <>
+    TCell MakeCell<arrow::FixedSizeBinaryArray>(const std::shared_ptr<arrow::Array>& column, i64 row) {
+        auto array = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
+        if (array->IsNull(row)) {
+            std::cout << "[DEBUG] MakeCell<FixedSizeBinaryArray>: row=" << row << " is_null=1 size=0" << std::endl;
+            return TCell();
+        }
+        auto data = array->GetView(row);
+        std::cout << "[DEBUG] MakeCell<FixedSizeBinaryArray>: row=" << row << " is_null=0 size=" << data.size() << std::endl;
+        return TCell(data.data(), data.size());
     }
 
 public:

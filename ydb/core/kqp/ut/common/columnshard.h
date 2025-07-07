@@ -81,7 +81,7 @@ public:
             return *this;
         }
 
-        private:
+    private:
         virtual TString GetObjectType() const = 0;
         TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const;
         std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const;

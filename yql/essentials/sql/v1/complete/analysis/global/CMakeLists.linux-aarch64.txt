@@ -31,6 +31,7 @@ target_sources(complete-analysis-global PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/evaluate.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/function.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/global.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/input.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/named_node.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/narrowing_visitor.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/parse_tree.cpp

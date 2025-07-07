@@ -18,7 +18,7 @@ add_library(contrib-libs-openldap)
 
 
 target_compile_options(contrib-libs-openldap PRIVATE
-  -DLDAPI_SOCK="/run/openldap/ldapi"
+  [=[-DLDAPI_SOCK="/run/openldap/ldapi"]=]
   -DLDAP_LIBRARY
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )

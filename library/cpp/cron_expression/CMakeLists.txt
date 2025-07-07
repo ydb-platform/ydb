@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(text)
-add_subdirectory(antlr4)
-add_subdirectory(name)
-add_subdirectory(core)
-add_subdirectory(syntax)
-add_subdirectory(analysis)
-add_subdirectory(check)
-
-add_library(sql-v1-complete)
-
-
-target_link_libraries(sql-v1-complete PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  sql-v1-lexer
-  v1-complete-antlr4
-  complete-name-service
-  v1-complete-syntax
-  complete-analysis-global
-  complete-analysis-local
-  v1-complete-text
-  name-service-ranking
-  name-service-binding
-  name-service-column
-)
-
-target_sources(sql-v1-complete PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/configuration.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name_mapping.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/sql_complete.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

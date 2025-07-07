@@ -40,6 +40,8 @@ target_link_libraries(sql-v1-complete PUBLIC
 )
 
 target_sources(sql-v1-complete PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/configuration.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name_mapping.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/sql_complete.cpp
 )
 

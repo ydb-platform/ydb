@@ -20,7 +20,7 @@ add_library(essentials-parser-pg_wrapper)
 target_compile_options(essentials-parser-pg_wrapper PRIVATE
   -DHAVE__GET_CPUID=1
   -DUSE_SSE42_CRC32C_WITH_RUNTIME_CHECK=1
-  -DDLSUFFIX=".so"
+  [=[-DDLSUFFIX=".so"]=]
   -Wno-ignored-attributes
   -Wno-unused-parameter
   -Wno-sign-compare

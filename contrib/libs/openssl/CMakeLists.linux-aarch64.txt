@@ -29,8 +29,8 @@ target_compile_options(contrib-libs-openssl PRIVATE
   -DPOLY1305_ASM
   -DKECCAK1600_ASM
   -DVPAES_ASM
-  -DENGINESDIR="/usr/local/lib/engines-1.1"
-  -DOPENSSLDIR="/usr/local/ssl"
+  [=[-DENGINESDIR="/usr/local/lib/engines-1.1"]=]
+  [=[-DOPENSSLDIR="/usr/local/ssl"]=]
   -DOPENSSL_USE_NODELETE
   -DOPENSSL_BUILD=1
   -DAESNI_ASM
@@ -42,8 +42,8 @@ target_compile_options(contrib-libs-openssl PRIVATE
   -DECP_NISTZ256_ASM
   -DPOLY1305_ASM
   -DKECCAK1600_ASM
-  -DENGINESDIR="/usr/local/lib/engines-1.1"
-  -DOPENSSLDIR="/usr/local/ssl"
+  [=[-DENGINESDIR="/usr/local/lib/engines-1.1"]=]
+  [=[-DOPENSSLDIR="/usr/local/ssl"]=]
   -DOPENSSL_USE_NODELETE
   -DVPAES_ASM
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>

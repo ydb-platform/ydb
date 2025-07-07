@@ -17,7 +17,7 @@ add_library(libs-apache-avro)
 
 target_compile_options(libs-apache-avro PRIVATE
   -DAVRO_SOURCE
-  -DAVRO_VERSION="1.12.0"
+  [=[-DAVRO_VERSION="1.12.0"]=]
   -DSNAPPY_CODEC_AVAILABLE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )

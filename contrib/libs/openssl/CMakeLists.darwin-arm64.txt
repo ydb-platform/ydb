@@ -27,8 +27,8 @@ target_compile_options(contrib-libs-openssl PRIVATE
   -DPOLY1305_ASM
   -DKECCAK1600_ASM
   -DVPAES_ASM
-  -DENGINESDIR="/usr/local/lib/engines-1.1"
-  -DOPENSSLDIR="/usr/local/ssl"
+  [=[-DENGINESDIR="/usr/local/lib/engines-1.1"]=]
+  [=[-DOPENSSLDIR="/usr/local/ssl"]=]
   -DL_ENDIAN
   -DOPENSSL_PIC
   -DOPENSSL_BUILD=1
@@ -41,8 +41,8 @@ target_compile_options(contrib-libs-openssl PRIVATE
   -DECP_NISTZ256_ASM
   -DPOLY1305_ASM
   -DKECCAK1600_ASM
-  -DENGINESDIR="/usr/local/lib/engines-1.1"
-  -DOPENSSLDIR="/usr/local/ssl"
+  [=[-DENGINESDIR="/usr/local/lib/engines-1.1"]=]
+  [=[-DOPENSSLDIR="/usr/local/ssl"]=]
   -DL_ENDIAN
   -DOPENSSL_PIC
   -DVPAES_ASM

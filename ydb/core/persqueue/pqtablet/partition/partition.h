@@ -1120,6 +1120,11 @@ private:
 
     bool CanProcessUserActionAndTransactionEvents() const;
     ui64 GetCompactedBlobSizeLowerBound() const;
+
+    void CompactRequestedBlob(const TRequestedBlob& requestedBlob,
+                              TProcessParametersBase& parameters,
+                              TEvKeyValue::TEvRequest* compactionRequest,
+                              ui64& blobCreationUnixTime);
 };
 
 } // namespace NKikimr::NPQ

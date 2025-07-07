@@ -1,6 +1,6 @@
 #include <ydb/core/ymq/http/xml_builder.h>
 
-#include <libxml/threads.h>
+#include <libxml/parser.h>
 #include <libxml/xmlwriter.h>
 
 #include <exception>
@@ -14,9 +14,7 @@
 // So, if we call functions, that initialize them, once in one thread, bug won't appear.
 static std::once_flag LibXmlBugsWorkaroundFlag;
 static void LibXmlBugsWorkAround() {
-    xmlInitCharEncodingHandlers(); // Leak Sanitizer
-    xmlGetGlobalState(); // Thread Sanitizer
-    xmlInitThreads(); // Thread Sanitizer
+    xmlInitParser();
 }
 
 TXmlStringBuilder::TXmlStringBuilder() {
@@ -42,7 +40,7 @@ TXmlStringBuilder::~TXmlStringBuilder() {
 
 TString TXmlStringBuilder::GetResult() {
     xmlBufferPtr buf = (xmlBufferPtr)MemoryBuffer;
-    return (const char*)buf->content;
+    return (const char*)xmlBufferContent(buf);
 }
 
 TXmlDocument::TXmlDocument(TXmlStringBuilder& builder)

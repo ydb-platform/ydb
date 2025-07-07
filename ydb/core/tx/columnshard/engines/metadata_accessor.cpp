@@ -109,6 +109,40 @@ private:
         if (columnId == 6) {
             return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(Portion->GetPortionId()), recordsCount));
         }
+        if (columnId == 11) {
+            auto builder = NArrow::MakeBuilder(arrow::uint64());
+            for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetBlobRange().GetOffset());
+            }
+            for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
+                if (auto range = i.GetBlobRangeOptional()) {
+                    NArrow::Append<arrow::UInt64Type>(*builder, range->GetOffset());
+                } else {
+                    NArrow::Append<arrow::UInt64Type>(*builder, 0);
+                }
+            }
+            return NArrow::FinishBuilder(std::move(builder));
+        }
+        if (columnId == 4) {
+            auto builder = NArrow::MakeBuilder(arrow::uint64());
+            for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRecordsCount());
+            }
+            for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetRecordsCount());
+            }
+            return NArrow::FinishBuilder(std::move(builder));
+        }
+        if (columnId == 12) {
+            auto builder = NArrow::MakeBuilder(arrow::uint64());
+            for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetBlobRange().GetSize());
+            }
+            for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetDataSize());
+            }
+            return NArrow::FinishBuilder(std::move(builder));
+        }
         if (columnId == 13) {
             if (Portion->IsRemovedFor(GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())) {
                 return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(0), recordsCount));
@@ -116,7 +150,7 @@ private:
                 return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(1), recordsCount));
             }
         }
-        AFL_VERIFY(false);
+        AFL_VERIFY(false)("column_id", columnId);
         return nullptr;
     }
 

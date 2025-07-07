@@ -20,9 +20,14 @@ std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const N
 
 TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+    TVersionedPresetSchemas* schemas = nullptr;
+    TVersionedPresetSchemas defaultSchemas(
+        0, self->GetStoragesManager(), self->GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
     auto* index = self->TablesManager.MutablePrimaryIndexAsOptional<TColumnEngineForLogs>();
-    if (!index) {
-        return std::shared_ptr<TReadMetadataBase>();
+    if (index) {
+        schemas = &index->MutableVersionedSchemas();
+    } else {
+        schemas = &defaultSchemas;
     }
 
     if (read.GetSnapshot().GetPlanInstant() < self->GetMinReadSnapshot().GetPlanInstant()) {
@@ -30,8 +35,7 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
                                                         << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
     }
 
-    auto readMetadata =
-        std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(index->MutableVersionedSchemas()), read);
+    auto readMetadata = std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(*schemas), read);
 
     auto initResult = readMetadata->Init(self, read, false);
     if (!initResult) {

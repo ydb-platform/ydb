@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_finished.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
@@ -16,6 +17,11 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     if (LockId) {
         owner->GetOperationsManager().RegisterLock(*LockId, owner->Generation());
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
+    }
+    if (!owner->GetIndexOptional()) {
+        SourcesConstructor = std::make_unique<NReader::NSimple::TNotSortedPortionsSources>();
+        SourcesConstructor->InitCursor(nullptr);
+        return TConclusionStatus::Success();
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified());

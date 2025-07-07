@@ -80,6 +80,10 @@ public:
         }
     }
 
+    EDqFillLevel GetFillLevel() const override {
+        return FillLevel;
+    }
+
     EDqFillLevel UpdateFillLevel() override {
         auto result = CalcFillLevel();
         if (FillLevel != result) {
@@ -109,7 +113,7 @@ public:
 
     // Try to split data before push to fulfill ChunkSizeLimit
     void DoPushSafe(NUdf::TUnboxedValue* values, ui32 width) {
-        YQL_ENSURE(UpdateFillLevel() != HardLimit);
+        YQL_ENSURE(GetFillLevel() != HardLimit);
 
         if (Finished) {
             return;

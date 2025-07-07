@@ -89,6 +89,7 @@ public:
     virtual const TDqOutputStats& GetPushStats() const = 0;
 
     // <| producer methods
+    virtual EDqFillLevel GetFillLevel() const = 0;
     virtual EDqFillLevel UpdateFillLevel() = 0;
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
     // can throw TDqChannelStorageException

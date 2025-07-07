@@ -1012,6 +1012,10 @@ public:
     }
 
     // <| producer methods
+    EDqFillLevel GetFillLevel() const override {
+        Y_ABORT("Unimplemented");
+    }
+
     EDqFillLevel UpdateFillLevel() override {
         ythrow yexception() << "unimplemented";
     };
@@ -1250,6 +1254,10 @@ public:
     bool Pop(NDqProto::TCheckpoint& checkpoint) override {
         Y_UNUSED(checkpoint);
         Y_ABORT("Checkpoints are not supported");
+    }
+
+    EDqFillLevel GetFillLevel() const override {
+        Y_ABORT("Unimplemented");
     }
 
     EDqFillLevel UpdateFillLevel() override {

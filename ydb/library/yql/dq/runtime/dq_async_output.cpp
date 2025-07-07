@@ -75,6 +75,10 @@ public:
         return PopStats;
     }
 
+    EDqFillLevel GetFillLevel() const override {
+        return FillLevel;
+    }
+
     EDqFillLevel UpdateFillLevel() override {
         auto result = EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
         if (FillLevel != result) {

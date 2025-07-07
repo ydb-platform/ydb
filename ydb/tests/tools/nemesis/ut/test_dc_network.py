@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from ydb.tests.tools.nemesis.library.dc_network import datacenter_nemesis_list
 from ydb.tests.library.nemesis.dc_nemesis_network import (
-    DataCenterNetworkNemesis, 
+    SingleDataCenterFailureNemesis,
     DataCenterRouteUnreachableNemesis,
     DataCenterIptablesBlockPortsNemesis,
     validate_multiple_datacenters
@@ -15,6 +15,9 @@ from ydb.tests.library.nemesis.dc_nemesis_network import (
 class TestValidateMultipleDatacenters(unittest.TestCase):
     
     def setUp(self):
+        # Создаем мок кластера
+        self.cluster = Mock()
+        
         test_config = {
             'hosts': [
                 {'name': 'host1.zone-a.com', 'location': {'data_center': 'zone-a'}},
@@ -38,7 +41,7 @@ class TestValidateMultipleDatacenters(unittest.TestCase):
             self.assertEqual(len(dc_to_nodes['zone-b']), 1)
         
     def test_validate_multiple_datacenters_insufficient(self):
-        """Тестирует валидацию с недостаточным количеством ДЦ."""
+        # Тестирует валидацию с недостаточным количеством ДЦ.
         test_config = {
             'hosts': [
                 {'name': 'host1.zone-a.com', 'location': {'data_center': 'zone-a'}},
@@ -53,10 +56,9 @@ class TestValidateMultipleDatacenters(unittest.TestCase):
         self.assertIsNone(data_centers)
 
 
-class TestDataCenterNetworkNemesis(unittest.TestCase):
+class TestSingleDataCenterFailureNemesis(unittest.TestCase):
     
     def setUp(self):
-        """Подготавливает тестовое окружение."""
         # Создаем мок кластера
         self.cluster = Mock()
         
@@ -98,8 +100,8 @@ class TestDataCenterNetworkNemesis(unittest.TestCase):
         self.cluster.nodes = self.mock_nodes
         
     def test_prepare_state_with_multiple_datacenters(self):
-        """Тестирует подготовку состояния с несколькими ДЦ."""
-        nemesis = DataCenterNetworkNemesis(self.cluster)
+        # Тестирует подготовку состояния с несколькими ДЦ.
+        nemesis = SingleDataCenterFailureNemesis(self.cluster)
         nemesis.prepare_state()
         
         # Проверяем, что ДЦ правильно распознаны
@@ -120,7 +122,6 @@ class TestDataCenterNetworkNemesis(unittest.TestCase):
         self.assertIn('host4.zone-b.example.com', zone_b_hosts)
         
     def test_prepare_state_with_single_datacenter(self):
-        """Тестирует поведение с одним ДЦ."""
         # Модифицируем конфигурацию для одного ДЦ
         single_dc_config = {
             'hosts': [
@@ -130,15 +131,15 @@ class TestDataCenterNetworkNemesis(unittest.TestCase):
         }
         self.cluster._ExternalKiKiMRCluster__yaml_config = single_dc_config
         
-        nemesis = DataCenterNetworkNemesis(self.cluster)
+        nemesis = SingleDataCenterFailureNemesis(self.cluster)
         nemesis.prepare_state()
         
         # С одним ДЦ nemesis не должен инициализироваться
         self.assertEqual(len(nemesis._data_centers), 0)
         
     def test_stop_datacenter_services(self):
-        """Тестирует остановку сервисов в ДЦ."""
-        nemesis = DataCenterNetworkNemesis(self.cluster)
+        # Тестирует остановку сервисов в ДЦ.
+        nemesis = SingleDataCenterFailureNemesis(self.cluster)
         nemesis.prepare_state()
         
         # Останавливаем сервисы в zone-a
@@ -155,8 +156,8 @@ class TestDataCenterNetworkNemesis(unittest.TestCase):
             node.stop.assert_called_once()
             
     def test_extract_fault(self):
-        """Тестирует восстановление сервисов."""
-        nemesis = DataCenterNetworkNemesis(self.cluster)
+        # Тестирует восстановление сервисов.
+        nemesis = SingleDataCenterFailureNemesis(self.cluster)
         nemesis.prepare_state()
         
         # Сначала останавливаем сервисы
@@ -184,7 +185,7 @@ class TestDataCenterNetworkNemesis(unittest.TestCase):
         }
         self.cluster._ExternalKiKiMRCluster__yaml_config = single_dc_config
         
-        nemesis = DataCenterNetworkNemesis(self.cluster)
+        nemesis = SingleDataCenterFailureNemesis(self.cluster)
         nemesis.prepare_state()
         
         # inject_fault не должен ничего делать с одним ДЦ
@@ -196,7 +197,6 @@ class TestDataCenterNetworkNemesis(unittest.TestCase):
 class TestDataCenterRouteUnreachableNemesis(unittest.TestCase):
     
     def setUp(self):
-        """Подготавливает тестовое окружение для тестирования блокировки маршрутов."""
         self.cluster = Mock()
         
         # Создаем тестовую YAML конфигурацию с 3 ДЦ
@@ -223,7 +223,6 @@ class TestDataCenterRouteUnreachableNemesis(unittest.TestCase):
         self.cluster.nodes = self.mock_nodes
         
     def test_prepare_state_route_nemesis(self):
-        """Тестирует подготовку состояния для route nemesis."""
         nemesis = DataCenterRouteUnreachableNemesis(self.cluster)
         nemesis.prepare_state()
         
@@ -234,7 +233,6 @@ class TestDataCenterRouteUnreachableNemesis(unittest.TestCase):
         self.assertIn('zone-c', nemesis._data_centers)
         
     def test_find_node_by_host(self):
-        """Тестирует поиск ноды по имени хоста."""
         nemesis = DataCenterRouteUnreachableNemesis(self.cluster)
         nemesis.prepare_state()
         
@@ -249,7 +247,7 @@ class TestDataCenterRouteUnreachableNemesis(unittest.TestCase):
         self.assertIsNone(node)
         
     def test_block_routes_to_current_dc(self):
-        """Тестирует блокировку маршрутов к current ДЦ."""
+        # Тестирует блокировку маршрутов к current ДЦ.
         nemesis = DataCenterRouteUnreachableNemesis(self.cluster)
         nemesis.prepare_state()
         nemesis._current_dc = 'zone-a'
@@ -267,7 +265,7 @@ class TestDataCenterRouteUnreachableNemesis(unittest.TestCase):
             self.assertGreater(node.ssh_command.call_count, 0)
 
     def test_extract_fault_route_nemesis(self):
-        """Тестирует восстановление заблокированных маршрутов."""
+        # Тестирует восстановление заблокированных маршрутов.
         nemesis = DataCenterRouteUnreachableNemesis(self.cluster)
         nemesis.prepare_state()
         
@@ -297,7 +295,7 @@ class TestDataCenterRouteUnreachableNemesis(unittest.TestCase):
 class TestDataCenterIptablesBlockPortsNemesis(unittest.TestCase):
     
     def setUp(self):
-        """Подготавливает тестовое окружение для тестирования блокировки портов через iptables."""
+        # Подготавливает тестовое окружение для тестирования блокировки портов через iptables.
         self.cluster = Mock()
         
         # Создаем тестовую YAML конфигурацию с 2 ДЦ
@@ -336,7 +334,7 @@ class TestDataCenterIptablesBlockPortsNemesis(unittest.TestCase):
         self.assertIn('zone-b', nemesis._data_centers)
         
     def test_block_ports_on_current_dc_success(self):
-        """Тестирует успешную блокировку портов в current ДЦ."""
+        # Тестирует успешную блокировку портов в current ДЦ.
         nemesis = DataCenterIptablesBlockPortsNemesis(self.cluster)
         nemesis.prepare_state()
         nemesis._current_dc = 'zone-a'
@@ -358,7 +356,7 @@ class TestDataCenterIptablesBlockPortsNemesis(unittest.TestCase):
         self.assertIn('host2.zone-a.com', blocked_hostnames)
         
     def test_block_ports_with_missing_chain(self):
-        """Тестирует поведение при отсутствии цепочки YDB_FW."""
+        # Тестирует поведение при отсутствии цепочки YDB_FW.
         nemesis = DataCenterIptablesBlockPortsNemesis(self.cluster)
         nemesis.prepare_state()
         nemesis._current_dc = 'zone-a'
@@ -380,7 +378,7 @@ class TestDataCenterIptablesBlockPortsNemesis(unittest.TestCase):
         self.assertNotIn('host1.zone-a.com', blocked_hostnames)
         
     def test_extract_fault_iptables_nemesis(self):
-        """Тестирует восстановление заблокированных портов."""
+        # Тестирует восстановление заблокированных портов.
         nemesis = DataCenterIptablesBlockPortsNemesis(self.cluster)
         nemesis.prepare_state()
         
@@ -407,7 +405,6 @@ class TestDataCenterIptablesBlockPortsNemesis(unittest.TestCase):
         self.assertEqual(len(nemesis._blocked_hosts), 0)
         self.assertIsNone(nemesis._current_dc)
         
-        # Проверяем, что команды восстановления были выполнены
         for mock_node in [self.mock_nodes[1], self.mock_nodes[2]]:
             # Проверяем, что была вызвана команда flush
             calls = mock_node.ssh_command.call_args_list
@@ -439,11 +436,10 @@ class TestDatacenterNemesisList(unittest.TestCase):
         cluster = Mock()
         nemesis_list = datacenter_nemesis_list(cluster)
         
-        self.assertEqual(len(nemesis_list), 4)
-        self.assertIsInstance(nemesis_list[0], DataCenterNetworkNemesis)
-        self.assertIsInstance(nemesis_list[1], DataCenterNetworkNemesis)  # SingleDataCenterFailureNemesis наследует от DataCenterNetworkNemesis
-        self.assertIsInstance(nemesis_list[2], DataCenterRouteUnreachableNemesis)
-        self.assertIsInstance(nemesis_list[3], DataCenterIptablesBlockPortsNemesis)
+        self.assertEqual(len(nemesis_list), 3)
+        self.assertIsInstance(nemesis_list[0], SingleDataCenterFailureNemesis)
+        self.assertIsInstance(nemesis_list[1], DataCenterRouteUnreachableNemesis)
+        self.assertIsInstance(nemesis_list[2], DataCenterIptablesBlockPortsNemesis)
 
 
 if __name__ == '__main__':

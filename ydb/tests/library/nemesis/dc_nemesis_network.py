@@ -32,9 +32,10 @@ def validate_multiple_datacenters(cluster, min_datacenters=2):
     return dc_to_nodes, data_centers
 
 
-class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
-    def __init__(self, cluster, schedule=(300, 600), stop_duration=60):
-        super(DataCenterNetworkNemesis, self).__init__(schedule=schedule)
+
+class SingleDataCenterFailureNemesis(Nemesis, base.AbstractMonitoredNemesis):
+    def __init__(self, cluster, schedule=(1200, 2400), stop_duration=3600):
+        super(SingleDataCenterFailureNemesis, self).__init__(schedule=schedule)
         base.AbstractMonitoredNemesis.__init__(self, scope='datacenter')
         
         self._cluster = cluster
@@ -52,16 +53,16 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
     def next_schedule(self):
         if self._stopped_nodes:
             return next(self._restore_schedule)
-        return super(DataCenterNetworkNemesis, self).next_schedule()
+        return super(SingleDataCenterFailureNemesis, self).next_schedule()
 
     def prepare_state(self):
-        self.logger.info("Preparing DataCenterNetworkNemesis state...")
+        self.logger.info("Preparing SingleDataCenterFailureNemesis state...")
         
         # Используем общую функцию валидации
         dc_to_nodes, data_centers = validate_multiple_datacenters(self._cluster, min_datacenters=2)
         
         if dc_to_nodes is None or data_centers is None:
-            self.logger.warning("Found insufficient data centers. DataCenter nemesis requires multiple DCs.")
+            self.logger.warning("Found insufficient data centers. Single DC failure nemesis requires multiple DCs.")
             return
         
         self._dc_to_nodes = dc_to_nodes
@@ -83,8 +84,7 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
 
     def _create_dc_cycle(self):
         while True:
-            for dc in self._data_centers:
-                yield dc
+            yield random.choice(self._data_centers)
 
     def inject_fault(self):
         # Если есть остановленные ноды, проверяем не пора ли их восстановить
@@ -181,16 +181,6 @@ class DataCenterNetworkNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._current_dc = None
         
         return True
-
-
-class SingleDataCenterFailureNemesis(DataCenterNetworkNemesis):
-    def __init__(self, cluster, schedule=(1200, 2400), stop_duration=3600):
-        super(SingleDataCenterFailureNemesis, self).__init__(
-            cluster, schedule=schedule, stop_duration=stop_duration)
-
-    def _create_dc_cycle(self):
-        while True:
-            yield random.choice(self._data_centers)
 
 
 class DataCenterRouteUnreachableNemesis(Nemesis, base.AbstractMonitoredNemesis):
@@ -540,9 +530,7 @@ class DataCenterIptablesBlockPortsNemesis(Nemesis, base.AbstractMonitoredNemesis
             self.extract_fault()
 
     def extract_fault(self):
-        """
-        Восстанавливает заблокированные порты через flush iptables цепочки.
-        """
+        #Восстанавливает заблокированные порты через flush iptables цепочки.
         if not self._blocked_hosts:
             return False
             

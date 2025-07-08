@@ -22,6 +22,7 @@ TProcessGuard::TProcessGuard(const ESpecialTaskCategory category, const TString&
     , ScopeId(scopeId)
     , ExternalProcessId(externalProcessId)
     , ServiceActorId(actorId) {
+    Y_UNUSED(ExternalProcessId);
     if (ServiceActorId) {
         NActors::TActorContext::AsActorContext().Send(
             *ServiceActorId, new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, InternalProcessId));

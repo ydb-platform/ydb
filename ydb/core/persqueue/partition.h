@@ -12,6 +12,7 @@
 #include "user_info.h"
 #include "utils.h"
 #include "read_quoter.h"
+#include "partition_compactification.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -349,7 +350,7 @@ private:
                         const TActorContext& ctx);
 
 
-    void ScheduleReplyOk(const ui64 dst);
+    void ScheduleReplyOk(const ui64 dst, bool internal = false);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                         const i64 offset,
                                         const TInstant writeTimestamp,
@@ -465,13 +466,8 @@ private:
 
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
-<<<<<<< HEAD
-=======
-    TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
-
     void CreateCompacter();
 
->>>>>>> bd3be0bde8d (Further implementation of compactification)
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -562,11 +558,7 @@ private:
             HFuncTraced(TEvPQ::TEvGetWriteInfoError, HandleOnInit);
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
-<<<<<<< HEAD
-=======
-            hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
->>>>>>> bd3be0bde8d (Further implementation of compactification)
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -631,11 +623,7 @@ private:
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
-<<<<<<< HEAD
-=======
-            hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
->>>>>>> bd3be0bde8d (Further implementation of compactification)
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -1039,16 +1027,8 @@ private:
 
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
-<<<<<<< HEAD
-                     const TActorContext& ctx);
-=======
-                     ui64 creationUnixTime,
-                     const TActorContext& ctx, bool includeToWriteCycle = true);
-    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
-                     TEvKeyValue::TEvRequest* request,
                      const TActorContext& ctx, bool includeToWriteCycle = true);
 
->>>>>>> bd3be0bde8d (Further implementation of compactification)
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            ProcessParameters& parameters,
                            ui32 curWrites,
@@ -1064,13 +1044,6 @@ private:
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
 
     TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
-<<<<<<< HEAD
-=======
-
-    void OnReadComplete(TReadInfo& info,
-                        TUserInfo* userInfo,
-                        const TEvPQ::TEvBlobResponse* blobResponse,
-                        const TActorContext& ctx);
 
     enum ERequestCookie : ui64 {
         ReadBlobsForCompaction = 0,
@@ -1078,120 +1051,6 @@ private:
         CompactificationWrite,
         End
     };
-
-    void TryRunCompaction();
-    void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
-    void BlobsForCompactionWereWrite();
-    ui64 NextReadCookie();
-    bool ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime);
-
-    bool CompactionInProgress = false;
-    size_t CompactionBlobsCount = 0;
-
-    void DumpZones(const char* file = nullptr, unsigned line = 0) const;
-
-    const TPartitionBlobEncoder& GetBlobEncoder(ui64 offset) const;
-
-    size_t GetBodyKeysCountLimit() const;
-    ui64 GetCumulativeSizeLimit() const;
-
-    void UpdateCompactionCounters();
-    bool ThereIsUncompactedData() const;
-    TInstant GetFirstUncompactedBlobTimestamp() const;
-
-    void TryCorrectStartOffset(TMaybe<ui64> offset);
->>>>>>> bd3be0bde8d (Further implementation of compactification)
-};
-
-
-class TPartitionCompaction {
-public:
-    TPartitionCompaction(ui64 lastCompactedOffset, ui64 startCookie, ui64 endCookie, TPartition* partitionActor);
-
-    enum class EStep {
-        PENDING,
-        READING,
-        COMPACTING,
-    };
-
-    class TReadState {
-        friend TPartitionCompaction;
-        constexpr static const ui64 MAX_DATA_KEYS = 5000;
-
-        ui64 OffsetToRead;
-        ui64 LastOffset = 0;
-        ui64 NextPartNo = 0;
-        THashMap<TString, ui64> TopicData; //Key -> Offset
-
-
-        TPartition* PartitionActor;
-        TMaybe<NKikimrClient::TCmdReadResult::TResult> LastMessage;
-
-    public:
-        TReadState(ui64 firstOffset, TPartition* partitionActor);
-
-        bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
-        EStep ContinueIfPossible(ui64 nextRequestCookie);
-        THashMap<TString, ui64>&& GetData();
-        ui64 GetLastOffset();
-        void UpdateConfig(ui64 maxBurst, ui64 readQuota); //ToDo;
-    };
-
-    class TCompactState {
-        friend TPartitionCompaction;
-        using TKeysIter = std::deque<TDataKey>::iterator;
-
-        THolder<TEvKeyValue::TEvRequest> Request;
-        ui64 RequestSize;
-        ui64 MaxOffset;
-        THashMap<TString, ui64> TopicData;
-        TVector<TKey> DroppedKeys;
-        TPartition* PartitionActor;
-
-        TMaybe<ui64> DropOffset;
-        TKeysIter KeysIter;
-        TSet<ui64> OffsetsToKeep;
-        TSet<ui64>::iterator OffsetsIter;
-        bool Failure = false;
-        ui64 RequestDataSize = 0;
-        std::deque<TDataKey> DataKeysBody;
-        ui64 FirstHeadOffset;
-        ui64 FirstHeadPartNo;
-
-        TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor);
-
-        EStep ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
-        bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
-
-        EStep ContinueIfPossible(ui64 nextCookie);
-        void RunKvRequest();
-        void AddDeleteRange(const TKey& key);
-    };
-
-    EStep Step = EStep::PENDING;
-    ui64 FirstUncompactedOffset = 0;
-    bool HaveRequestInflight = false;
-    ui64 StartCookie = 0;
-    ui64 EndCookie = 0;
-    ui64 CurrentCookie = 0;
-
-
-    std::optional<TReadState> ReadState;
-    std::optional<TCompactState> CompactState;
-    TPartition* PartitionActor;
-
-    ui64 GetNextCookie() {
-        CurrentCookie++;
-        if (CurrentCookie > EndCookie) {
-            CurrentCookie = StartCookie;
-        }
-        return CurrentCookie;
-    }
-
-    void TryCompactionIfPossible();
-    void UpdatePartitionConifg();
-    void ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
-    void ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev);
 
 };
 

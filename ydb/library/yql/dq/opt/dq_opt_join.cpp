@@ -1554,9 +1554,6 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         shift = 1;
         selfJoin = true;
     }
-    if (useBlockHashJoin) {
-        callableName = "DqPhyBlockHashJoin";
-    }
 
     TCoArgument leftInputArg{ctx.NewArgument(join.LeftInput().Pos(), "_dq_join_left")};
     TCoArgument rightInputArg{ctx.NewArgument(join.RightInput().Pos(), "_dq_join_right")};
@@ -1583,6 +1580,22 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     switch (mode) {
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
+            if (useBlockHashJoin) {
+                // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
+                // Pass the original structured inputs, not wide flows
+                hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
+                    .LeftInput(leftInputArg)
+                    .RightInput(rightInputArg)
+                    .LeftLabel(join.LeftLabel())
+                    .RightLabel(join.RightLabel())
+                    .JoinType(join.JoinType())
+                    .JoinKeys(join.JoinKeys())
+                    .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                    .RightJoinKeyNames(join.RightJoinKeyNames())
+                    .Done().Ptr();
+                break;
+            }
+
             hashJoin = ctx.Builder(join.Pos())
                 .Callable(callableName)
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -1816,44 +1829,46 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
 
     // For block hash join, peephole handles everything - don't apply NarrowMap
     Cerr << "MISHA use BlockHashJoin? " << useBlockHashJoin << Endl;
-    std::vector<TString> fullColNames;
-    for (const auto& v: leftNames) {
-        if (leftTableName.empty()) {
-            fullColNames.emplace_back(v.first);
-        } else {
-            fullColNames.emplace_back(FullColumnName(leftTableName, v.first));
+    if (!useBlockHashJoin) {
+        std::vector<TString> fullColNames;
+        for (const auto& v: leftNames) {
+            if (leftTableName.empty()) {
+                fullColNames.emplace_back(v.first);
+            } else {
+                fullColNames.emplace_back(FullColumnName(leftTableName, v.first));
+            }
         }
-    }
 
-    for (const auto& v: rightNames ) {
-        if (rightTableName.empty()) {
-            fullColNames.emplace_back(v.first);
-        } else {
-            fullColNames.emplace_back(FullColumnName(rightTableName, v.first));
+        for (const auto& v: rightNames ) {
+            if (rightTableName.empty()) {
+                fullColNames.emplace_back(v.first);
+            } else {
+                fullColNames.emplace_back(FullColumnName(rightTableName, v.first));
+            }
         }
-    }
 
-    hashJoin = ctx.Builder(join.Pos())
-        .Callable("NarrowMap")
-            .Add(0, std::move(hashJoin))
-            .Lambda(1)
-                .Params("output", fullColNames.size())
-                .Callable("AsStruct")
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 i = 0U;
-                        for (const auto& colName : fullColNames) {
-                            parent.List(i)
-                                .Atom(0, colName)
-                                .Arg(1, "output", i)
-                            .Seal();
-                            i++;
-                        }
-                        return parent;
-                    })
+        hashJoin = ctx.Builder(join.Pos())
+            .Callable("NarrowMap")
+                .Add(0, std::move(hashJoin))
+                .Lambda(1)
+                    .Params("output", fullColNames.size())
+                    .Callable("AsStruct")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            ui32 i = 0U;
+                            for (const auto& colName : fullColNames) {
+                                parent.List(i)
+                                    .Atom(0, colName)
+                                    .Arg(1, "output", i)
+                                .Seal();
+                                i++;
+                            }
+                            return parent;
+                        })
+                    .Seal()
                 .Seal()
             .Seal()
-        .Seal()
-        .Build();
+            .Build();
+    }
 
     // this func add join to the stage and add connection to it. we do this instead of map connection to reduce data network interacting
     auto addJoinToStage =

@@ -9,6 +9,7 @@
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -36,7 +37,7 @@ public:
 
             YQL_ENSURE(clusterConnections.size() == 1);
 
-            std::vector<NYT::TRawTableReaderPtr> ytTableReaders = GetYtTableReaders(ytTableTaskRef, clusterConnections);
+            std::vector<NYT::TRawTableReaderPtr> ytTableReaders = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(tableId, partId, TableDataService_, Settings_.FmrWriterSettings);
 
             for (auto& ytTableReader: ytTableReaders) {
@@ -95,7 +96,7 @@ public:
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 threadPool->SafeAddFunc([&, tableDataServiceWriter] {
                     try {
-                        auto inputTableReaders = GetTableInputStreams(inputTableRef, clusterConnections);
+                        auto inputTableReaders = GetTableInputStreams(YtJobService_, TableDataService_, inputTableRef, clusterConnections);
                         for (auto& tableReader: inputTableReaders) {
                             ParseRecords(tableReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
                         }
@@ -122,42 +123,6 @@ public:
     ) override {
         YQL_CLOG(ERROR, FastMapReduce) << "MAP NOT IMPLEMENTED";
         ythrow yexception() << "Not implemented";
-    }
-
-private:
-    std::vector<NYT::TRawTableReaderPtr> GetTableInputStreams(const TTaskTableRef& tableRef, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) const {
-        auto ytTableTaskRef = std::get_if<TYtTableTaskRef>(&tableRef);
-        auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
-        if (ytTableTaskRef) {
-            return GetYtTableReaders(*ytTableTaskRef, clusterConnections);
-        } else if (fmrTable) {
-            return {MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, TableDataService_, Settings_.FmrReaderSettings)};
-        } else {
-            ythrow yexception() << "Unsupported table type";
-        }
-    }
-
-    std::vector<NYT::TRawTableReaderPtr> GetYtTableReaders(const TYtTableTaskRef& ytTableTaskRef, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) const {
-        std::vector<NYT::TRawTableReaderPtr> ytTableReaders;
-        if (!ytTableTaskRef.FilePaths.empty()) {
-            // underlying gateway is file, so create readers from filepaths.
-            for (auto& filePath: ytTableTaskRef.FilePaths) {
-                ytTableReaders.emplace_back(YtJobService_->MakeReader(filePath));
-                YQL_CLOG(DEBUG, FastMapReduce) << "Creating reader for file path " << filePath;
-            }
-        } else {
-            for (auto& richPath: ytTableTaskRef.RichPaths) {
-                YQL_ENSURE(richPath.Cluster_);
-
-                // TODO - вместо этого написать нормальные хелперы из RichPath в структуры и назад
-                TStringBuf choppedPath;
-                YQL_ENSURE(TStringBuf(richPath.Path_).AfterPrefix("//", choppedPath));
-                auto fmrTableId = TFmrTableId(*richPath.Cluster_, TString(choppedPath));
-                auto clusterConnection = clusterConnections.at(fmrTableId);
-                ytTableReaders.emplace_back(YtJobService_->MakeReader(richPath, clusterConnection, Settings_.YtReaderSettings));
-            }
-        }
-        return ytTableReaders;
     }
 
 private:
@@ -208,6 +173,20 @@ TJobResult RunJob(
     auto statistics = std::get_if<TStatistics>(&taskResult);
     return {ETaskStatus::Completed, *statistics};
 };
+
+void FillMapFmrJob(
+    TFmrUserJob& mapJob,
+    const TMapTaskParams& mapTaskParams,
+    const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+    const TString& tableDataServiceDiscoveryFilePath,
+    bool useFileGateway
+) {
+    mapJob.SetTableDataService(tableDataServiceDiscoveryFilePath);
+    mapJob.SetTaskInputTables(mapTaskParams.Input);
+    mapJob.SetTaskFmrOutputTables(mapTaskParams.Output);
+    mapJob.SetClusterConnections(clusterConnections);
+    mapJob.SetYtJobService(useFileGateway);
+}
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
     if (!task->JobSettings) {

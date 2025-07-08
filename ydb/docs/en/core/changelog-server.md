@@ -8,12 +8,12 @@ Release date: 2025.
 
 #### Functionality
 
-* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii) under the guarantee of not rolling back to previous versions.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./maintenance/manual/dynamic-config.md) under the guarantee of not rolling back to previous versions.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
 * [Implemented] BATCH UPDATE and BATCH DELETE expressions, allowing to apply changes to large string tables outside of transactional constraints.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
 * [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the `enable_kafka_native_balancing` flag in the cluster configuration.
-* Added support for [auto-partitioning topics](./concepts/cdc.md#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* Added support for [auto-partitioning topics](./concepts/cdc.md#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md#topic-settings) using the `ALTER TOPIC` statement.
 * [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md#debezium-json-record-structure) for CDC.
 * [Added](https://github.com/ydb-platform/ydb/pull/19507) the ability to create changefeed streams to index tables.

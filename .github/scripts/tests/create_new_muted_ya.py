@@ -276,7 +276,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         logging.info(f"Result: Unmuted tests : stable {unmuted_stable} and deleted {unmuted_deleted}")
     except (KeyError, TypeError) as e:
         logging.error(f"Error processing test data: {e}. Check your query results for valid keys.")
-        return []
+        return 0
 
     return len(new_muted_ya_tests)
 

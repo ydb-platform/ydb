@@ -268,7 +268,7 @@ class TestOutputFormatting(unittest.TestCase):
                     'test_name': 'test2',
                     'owner': 'team/ateam',  # Команда которая должна быть первой в алфавитном порядке
                     'success_rate': 30.0,
-                    'days_in_state': 14,
+                    'days_in_state': 8,
                     'state': 'Flaky',
                     'date_window': 19723,
                     'summary': 'Another test summary',
@@ -345,7 +345,7 @@ class TestOutputFormatting(unittest.TestCase):
                     'test_name': 'test2',
                     'owner': 'team/team2',
                     'success_rate': 30.0,
-                    'days_in_state': 14,
+                    'days_in_state': 8,
                     'state': 'Flaky',
                     'date_window': 19723,
                     'summary': 'Another test summary',

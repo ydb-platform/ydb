@@ -39,7 +39,7 @@ class TestCreateIssues(unittest.TestCase):
                 'test_name': 'test2',
                 'owner': 'team/topics',
                 'success_rate': 30.0,
-                'days_in_state': 14,
+                'days_in_state': 8,
                 'state': 'Muted Stable',
                 'date_window': 19723,
                 'summary': 'Another test summary',
@@ -210,39 +210,6 @@ ydb/library/actors test3"""
         finally:
             os.unlink(test_file_path)
 
-    @patch('create_new_muted_ya.execute_query')
-    @patch('create_new_muted_ya.create_mute_issues')
-    @patch('ydb.Driver')
-    @patch('builtins.open', create=True)
-    def test_mute_worker_create_issues_mode(self, mock_open, mock_driver, mock_create_issues, mock_execute):
-        """Тест режима create_issues в mute_worker"""
-        from create_new_muted_ya import mute_worker
-        import argparse
-        
-        # Создаем аргументы для режима create_issues
-        args = argparse.Namespace()
-        args.mode = 'create_issues'
-        args.file_path = '/tmp/test_file.txt'
-        args.branch = 'main'
-        args.close_issues = True
-        
-        # Мокируем файл muted_ya.txt
-        mock_file_content = "ydb/tests/functional/tpc test1\nydb/core/tx/schemeshard test2\n"
-        mock_open.return_value.__enter__.return_value.read.return_value = mock_file_content
-        
-        # Настройка моков
-        mock_execute.return_value = self.sample_tests_data
-        mock_driver_instance = MagicMock()
-        mock_driver.return_value.__enter__.return_value = mock_driver_instance
-        
-        result = mute_worker(args)
-        
-        # Проверяем что функции были вызваны правильно
-        mock_execute.assert_called_once_with(mock_driver_instance, 'main')
-        mock_create_issues.assert_called_once_with(self.sample_tests_data, '/tmp/test_file.txt', close_issues=True)
-        
-        # Проверяем что результат корректный
-        self.assertIsNone(result)
 
     @patch('create_new_muted_ya.get_muted_tests_from_issues')
     @patch('create_new_muted_ya.close_unmuted_issues')

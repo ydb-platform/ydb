@@ -110,8 +110,11 @@ struct TDistributedTransaction {
 
     NWilson::TSpan ExecuteSpan;
     NWilson::TSpan PersistSpan;
+    NWilson::TSpan CalcPredicateSpan;
     NWilson::TSpan WaitRSSpan;
+    NWilson::TSpan WaitRSAcksSpan;
     NWilson::TSpan CommitSpan;
+    NWilson::TSpan DeleteSpan;
 };
 
 }

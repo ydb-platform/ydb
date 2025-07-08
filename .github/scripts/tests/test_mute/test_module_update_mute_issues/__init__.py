@@ -1,0 +1,1 @@
+# Тесты для update_mute_issues.py модуля 

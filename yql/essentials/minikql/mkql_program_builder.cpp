@@ -1652,7 +1652,7 @@ TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode sec
     auto firstItemType = firstType->GetItemType();
     auto secondItemType = secondType->GetItemType();
 
-    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), "Expecting Optional or Pg type as first argument");
+    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), TStringBuilder() << "Expecting Optional or Pg type as first argument, but got: " << *firstItemType);
 
     if (!firstItemType->IsSameType(*secondItemType)) {
         bool firstOptional;
@@ -2480,14 +2480,15 @@ TRuntimeNode TProgramBuilder::Coalesce(TRuntimeNode data, TRuntimeNode defaultDa
     bool isOptional = false;
     const auto dataType = UnpackOptional(data, isOptional);
     if (!isOptional && !data.GetStaticType()->IsPg()) {
-        MKQL_ENSURE(data.GetStaticType()->IsSameType(*defaultData.GetStaticType()), "Mismatch operand types");
+        MKQL_ENSURE(data.GetStaticType()->IsSameType(*defaultData.GetStaticType()),
+                    TStringBuilder() << "Mismatch operand types. Left: " << *data.GetStaticType() << ", right: " << *defaultData.GetStaticType());
         return data;
     }
 
     if (!dataType->IsSameType(*defaultData.GetStaticType())) {
         bool isOptionalDefault;
         const auto defaultDataType = UnpackOptional(defaultData, isOptionalDefault);
-        MKQL_ENSURE(dataType->IsSameType(*defaultDataType), "Mismatch operand types");
+        MKQL_ENSURE(dataType->IsSameType(*defaultDataType),  TStringBuilder() << "Mismatch operand types. Left: " << *dataType << ", right: " << *defaultDataType);
     }
 
     TCallableBuilder callableBuilder(Env_, __func__, defaultData.GetStaticType());

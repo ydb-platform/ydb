@@ -632,6 +632,7 @@ public:
 
         if (dstParent.IsUnderOperation()) {
             dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
+            dstParent = dstPath.Parent();
         }
 
         {

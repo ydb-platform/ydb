@@ -7,7 +7,7 @@
 
 namespace NKafka {
 
-enum ConfigSource {
+enum EConfigSource {
     UNKNOWN = 0,
     DYNAMIC_TOPIC_CONFIG = 1,
     DYNAMIC_BROKER_CONFIG = 2,

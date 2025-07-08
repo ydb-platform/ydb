@@ -140,3 +140,23 @@ class TestKiKiMRDistConfSelfHeal(KiKiMRDistConfSelfHealTest):
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
+
+
+class TestKiKiMRDistConfSelfHealNotNeed(KiKiMRDistConfSelfHealTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 9
+
+    def check_failed(self, req, message):
+        resp = self.do_request(req)
+        assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
+
+    def do_test(self, configName):
+        rg = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
+        logger.info("Start SelfHeal")
+        self.check_failed({"SelfHealStateStorage": {"WaitForConfigStep": 1}}, "Current configuration is recommended. Nothing to self-heal.")
+        time.sleep(10)
+
+        rg2 = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg, rg2)

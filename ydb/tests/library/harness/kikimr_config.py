@@ -699,7 +699,7 @@ class KikimrConfigGenerator(object):
             if self.static_erasure == Erasure.MIRROR_3_DC:
                 self.n_to_select = 9
             else:
-                self.n_to_select = min(5, nodes)
+                self.n_to_select = min(5, len(self.__node_ids))
         if self.state_storage_rings is None:
             self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if self.static_erasure == Erasure.MIRROR_3_DC else 8])
         self.yaml_config["domains_config"]["state_storage"] = []

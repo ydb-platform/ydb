@@ -6,7 +6,14 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
+    void TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
+        GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
+        GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
+    }
+
+    bool TInvokeRequestHandlerActor::AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         auto testNewConfig = [](auto newSSInfo, auto oldSSInfo) {
             THashSet<TActorId> replicas;
@@ -33,8 +40,9 @@ namespace NKikimr::NStorage {
         auto process = [&](const char *name, auto mutableFunc, auto ssMutableFunc, auto buildFunc) {
             ui32 actorIdOffset = 0;
             auto *newMutableConfig = (currentConfig->*ssMutableFunc)();
-            GenerateStateStorageConfig(newMutableConfig, config);
-            Y_ABORT_UNLESS(newMutableConfig->RingGroupsSize());
+            if (newMutableConfig->RingGroupsSize() == 0) {
+                return true;
+            }
             TIntrusivePtr<TStateStorageInfo> newSSInfo;
             TIntrusivePtr<TStateStorageInfo> oldSSInfo;
             oldSSInfo = (*buildFunc)(*(config.*mutableFunc)());
@@ -78,8 +86,10 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         if (cmd.GetRecommended()) {
-            if (!GetRecommendedStateStorageConfig(currentConfig))
+            GetRecommendedStateStorageConfig(currentConfig);
+            if (!AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(currentConfig)) {
                 return;
+            }
         } else {
             GetCurrentStateStorageConfig(currentConfig);
         }
@@ -94,7 +104,41 @@ namespace NKikimr::NStorage {
         GetCurrentStateStorageConfig(&currentConfig);
 
         NKikimrBlobStorage::TStateStorageConfig targetConfig;
-        if (!GetRecommendedStateStorageConfig(&targetConfig)) {
+        GetRecommendedStateStorageConfig(&targetConfig);
+
+        auto needReconfig = [&](auto clearFunc, auto ssMutableFunc, auto buildFunc) {
+            auto copyCurrentConfig = currentConfig;
+            auto ss = *(copyCurrentConfig.*ssMutableFunc)();
+            if (ss.RingGroupsSize() == 0) {
+                ss.MutableRing()->ClearRingGroupActorIdOffset();
+            } else {
+                for (ui32 i : xrange(ss.RingGroupsSize())) {
+                    ss.MutableRingGroups(i)->ClearRingGroupActorIdOffset();
+                }
+            }
+            TIntrusivePtr<TStateStorageInfo> newSSInfo;
+            TIntrusivePtr<TStateStorageInfo> oldSSInfo;
+            oldSSInfo = (*buildFunc)(ss);
+            newSSInfo = (*buildFunc)(*(targetConfig.*ssMutableFunc)());
+            STLOG(PRI_DEBUG, BS_NODE, NW52, "needReconfig " << (oldSSInfo->RingGroups == newSSInfo->RingGroups));
+            if (oldSSInfo->RingGroups == newSSInfo->RingGroups) {
+                (targetConfig.*clearFunc)();
+                return false;
+            }
+            return true;
+        };
+        #define NEED_RECONFIG(NAME) needReconfig(&NKikimrBlobStorage::TStateStorageConfig::Clear##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)
+        auto needReconfigSS = NEED_RECONFIG(StateStorage);
+        auto needReconfigSSB = NEED_RECONFIG(StateStorageBoard);
+        auto needReconfigSB = NEED_RECONFIG(SchemeBoard);
+
+        if (!needReconfigSS && !needReconfigSSB && !needReconfigSB) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "Current configuration is recommended. Nothing to self-heal.");
+            return;
+        }
+        #undef NEED_RECONFIG
+
+        if (!AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(&targetConfig)) {
             return;
         }
 

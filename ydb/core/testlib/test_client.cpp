@@ -1478,7 +1478,37 @@ namespace Tests {
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
         }
 
+        // if (Settings->EnableStorageProxy) {
+
+        //     Cerr << "EnableStorageProxy 999 " << Endl;
+
+        //     NFq::NConfig::TConfig protoConfig;
+        //     NFq::NConfig::TCommonConfig commonConfig;
+            
+        //     commonConfig.SetIdsPrefix("ut");
+        //     const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+        //     auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        //     auto yqSharedResources = NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
+
+        //     NFq::NConfig::TCheckpointCoordinatorConfig config;
+        //     config.SetEnabled(true);
+        //     auto& checkpointConfig = *config.MutableStorage();
+        //     checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        //     checkpointConfig.SetDatabase(GetEnv("YDB_DATABASE"));
+        //     checkpointConfig.SetToken("");
+        //     checkpointConfig.SetTablePrefix("tablePrefix");
+
+        //     auto actor = NFq::NewCheckpointStorageService(
+        //         config,
+        //         commonConfig,
+        //         ydbCredFactory,
+        //         NFq::TYqSharedResources::Cast(yqSharedResources),
+        //         counters);
+        //     TActorId netClassifierId = Runtime->Register(actor.release(), nodeIdx, userPoolId);
+        //     Runtime->RegisterService(NYql::NDq::MakeCheckpointStorageID(), netClassifierId, nodeIdx);
+
         if (Settings->EnableStorageProxy) {
+            const auto& config = Settings->AppConfig->GetQueryServiceConfig().GetCheckpointsConfig();
             NFq::NConfig::TConfig protoConfig;
             NFq::NConfig::TCommonConfig commonConfig;
             commonConfig.SetIdsPrefix("ut");
@@ -1486,16 +1516,33 @@ namespace Tests {
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto yqSharedResources = NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
 
-            NFq::NConfig::TCheckpointCoordinatorConfig config;
-            config.SetEnabled(true);
-            auto& checkpointConfig = *config.MutableStorage();
-            checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
-            checkpointConfig.SetDatabase(GetEnv("YDB_DATABASE"));
-            checkpointConfig.SetToken("");
-            checkpointConfig.SetTablePrefix("tablePrefix");
+            NFq::NConfig::TCheckpointCoordinatorConfig tmpConfig;
+            tmpConfig.SetEnabled(config.GetEnabled());
+            auto& storageConfig = *tmpConfig.MutableStorage();
+            const auto& externalStorage = config.GetExternalStorage();
+             storageConfig.SetEndpoint(externalStorage.GetEndpoint());
+             storageConfig.SetDatabase(externalStorage.GetDatabase());
+            // storageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+            // storageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
+
+            storageConfig.SetOAuthFile(externalStorage.GetOAuthFile());
+            storageConfig.SetToken(externalStorage.GetToken());
+            storageConfig.SetTablePrefix(externalStorage.GetTablePrefix());
+            storageConfig.SetCertificateFile(externalStorage.GetCertificateFile());
+            storageConfig.SetIamEndpoint(externalStorage.GetIamEndpoint());
+            storageConfig.SetSaKeyFile(externalStorage.GetSaKeyFile());
+            storageConfig.SetUseLocalMetadataService(externalStorage.GetUseLocalMetadataService());
+            storageConfig.SetClientTimeoutSec(externalStorage.GetClientTimeoutSec());
+            storageConfig.SetOperationTimeoutSec(externalStorage.GetOperationTimeoutSec());
+            storageConfig.SetCancelAfterSec(externalStorage.GetCancelAfterSec());
+            storageConfig.SetUseSsl(externalStorage.GetUseSsl());
+
+            const auto& gc = config.GetCheckpointGarbageConfig();
+            auto& gcConfig = *tmpConfig.MutableCheckpointGarbageConfig();
+            gcConfig.SetEnabled(gc.GetEnabled());
 
             auto actor = NFq::NewCheckpointStorageService(
-                config,
+                tmpConfig,
                 commonConfig,
                 ydbCredFactory,
                 NFq::TYqSharedResources::Cast(yqSharedResources),

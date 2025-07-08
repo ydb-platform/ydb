@@ -75,6 +75,7 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     const TStorageProxyMetricsPtr Metrics;
+    bool Initialized = false;
 
 public:
     explicit TStorageProxy(
@@ -85,6 +86,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
+    void Initialize();
 
     static constexpr char ActorName[] = "YQ_STORAGE_PROXY";
 
@@ -153,32 +155,43 @@ TStorageProxy::TStorageProxy(
 }
 
 void TStorageProxy::Bootstrap() {
+    LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
     auto ydbConnectionPtr = NewYdbConnection(Config.GetStorage(), CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver);
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(CommonConfig.GetIdsPrefix()), ydbConnectionPtr);
-    auto issues = CheckpointStorage->Init().GetValueSync();
-    if (!issues.Empty()) {
-        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
-    }
-
     StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
-    issues = StateStorage->Init().GetValueSync();
-    if (!issues.Empty()) {
-        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
-    }
-
     if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
         const auto& gcConfig = Config.GetCheckpointGarbageConfig();
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
-
+    Initialize();
     Become(&TStorageProxy::StateFunc);
-
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
         << StorageConfig.GetEndpoint().data()
         << ":" << StorageConfig.GetDatabase().data())
 }
 
+void TStorageProxy::Initialize() {
+    if (Initialized) {
+        return;
+    }
+    LOG_STREAMS_STORAGE_SERVICE_INFO("Initialize");
+    Initialized = true;
+    
+    auto issues = CheckpointStorage->Init().GetValueSync();
+    if (!issues.Empty()) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
+        Initialized = false;
+    }
+    
+    issues = StateStorage->Init().GetValueSync();
+    if (!issues.Empty()) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
+        Initialized = false;
+    }
+}
+
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
+    Initialize();
     auto context = MakeIntrusive<TRequestContext>(Metrics);
 
     const auto* event = ev->Get();

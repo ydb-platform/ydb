@@ -37,11 +37,26 @@ A database corresponds to a directory in the file structure, which contains:
 - The `create_group.sql` file, which describes the cluster groups in YQL format
 - The `alter_group.sql` file, which describes user membership in the cluster groups in YQL format
 
-## Schema mapping
+## Schema mapping {#schema-mapping}
 
 When exporting data to S3-compatible object storage with a common prefix, a `SchemaMapping/mapping.json` file is generated. This file contains a list of schema objects in the export, mapped to the paths in the S3 storage.
 
 For encrypted exports, this mapping serves two purposes: it anonymizes the original object names and stores additional metadata required for decryption.
+
+The example of `SchemaMapping/mapping.json` file content:
+
+```json
+{
+    "exportedObjects": {
+        "dir/table1": {
+            "exportPrefix": "dir/table1"
+        },
+        "table2": {
+            "exportPrefix": "table2"
+        }
+    }
+}
+```
 
 ## Directories {#dir}
 

@@ -50,9 +50,9 @@ namespace NIniConfig {
                 } else {
                     //value
                     TStringBuf key, value;
-    
-                    tmp.Split('=', key, value);
-    
+                    if (!tmp.TrySplit('=', key, value)) {
+                        ythrow TConfigParseError() << "invalid line: " << tmp;
+                    }
                     auto& dict = cur->GetNonConstant<TDict>();
                     auto strippedValue = TString(StripString(value));
                     dict[StripString(key)] = ConstructValue(strippedValue);

@@ -8,7 +8,7 @@ Release date: 2025.
 
 #### Functionality
 
-* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./maintenance/manual/dynamic-config.md) under the guarantee of not rolling back to previous versions.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./maintenance/manual/dynamic-config) under the guarantee of not rolling back to previous versions.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
 * [Implemented] BATCH UPDATE and BATCH DELETE expressions, allowing to apply changes to large string tables outside of transactional constraints.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
@@ -65,7 +65,7 @@ Release date: 2025.
 
 #### Bug Fixes
 
-* [Fixed](https://github.com/ydb-platform/ydb/pull/9707) an error in [Interconnect](../concepts/glossary.md#actor-system-interconnect) configuration that led to performance degradation.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9707) an error in [Interconnect](../concepts/glossary#actor-system-interconnect) configuration that led to performance degradation.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/13993) the out-of-memory error when deleting very large tables by regulating the number of tablets simultaneously processing this operation.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9848) an issue with handling accidental duplicate entries in the system tablet configuration.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/11059) an issue where reading data would take too long (seconds) during frequent table resharding operations.
@@ -80,7 +80,7 @@ Release date: 2025.
 * [Improved](https://github.com/ydb-platform/ydb/pull/16420) the process of building secondary indices: when certain errors occur, the system retries the process instead of interrupting it.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16635) an error in executing the `RETURNING` expression in `INSERT` and `UPSERT` operations.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16269) an issue with Drop Tablet operations in the PQ tablet hanging, especially during Interconnect delays.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/16194) an error that occurred during VDisk [compaction](../concepts/glossary.md#compaction).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16194) an error that occurred during VDisk [compaction](../concepts/glossary#compaction).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an issue where long topic reading sessions ended with "too big inflight" errors.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15515) an issue where reading a topic by multiple consumers would hang if at least one partition had no incoming data.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18614) a rare issue with PQ tablet restarts.

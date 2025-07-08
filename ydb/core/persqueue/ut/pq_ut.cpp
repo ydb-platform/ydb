@@ -1580,6 +1580,7 @@ Y_UNIT_TEST(TestComactifiedWithRetention) {
         activeZone = false;
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(100);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         TVector<std::pair<ui64, TString>> data;
         activeZone = PlainOrSoSlow(true, false);
@@ -1594,10 +1595,12 @@ Y_UNIT_TEST(TestComactifiedWithRetention) {
         CmdWrite(0, "sourceid1", data, tc, false);
         CmdWrite(0, "sourceid2", data, tc, false);
         PQGetPartInfo(0, 30, tc);
+
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = false}, {}, tc);
         CmdWrite(0, "sourceid3", data, tc, false);
         CmdWrite(0, "sourceid4", data, tc, false);
         CmdWrite(0, "sourceid5", data, tc, false);
+        Cerr << "Get part info with compactification disabled\n";
         PQGetPartInfo(50, 60, tc);
     });
 }

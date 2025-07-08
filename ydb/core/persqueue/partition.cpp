@@ -3435,7 +3435,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                                            offset,
                                            ts.first, ts.second, ui ? ui->AnyCommits : false);
         } else {
-            ScheduleReplyOk(act.Cookie);
+            ScheduleReplyOk(act.Cookie, act.IsInternal);
         }
 
         if (createSession) {
@@ -3471,9 +3471,9 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     }
 }
 
-void TPartition::ScheduleReplyOk(const ui64 dst)
+void TPartition::ScheduleReplyOk(const ui64 dst, bool internal)
 {
-    Replies.emplace_back(Tablet,
+    Replies.emplace_back(internal ? SelfId() : Tablet,
                          MakeReplyOk(dst).Release());
 }
 

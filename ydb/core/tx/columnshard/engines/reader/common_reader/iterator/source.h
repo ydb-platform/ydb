@@ -137,6 +137,7 @@ private:
         if (RecordsCountImpl) {
             return *RecordsCountImpl;
         } else {
+            AFL_VERIFY(!!GetRecordsCountVirtual());
             return GetRecordsCountVirtual();
         }
     }
@@ -170,14 +171,25 @@ protected:
     }
 
 public:
+    virtual bool NeedPortionData() const {
+        return true;
+    }
+
     std::optional<ui32> GetRecordsCountOptional() const {
         return RecordsCountImpl;
+    }
+
+    virtual void InitRecordsCount(const ui32 recordsCount) {
+        AFL_VERIFY(!RecordsCountImpl);
+        RecordsCountImpl = recordsCount;
+        StageData->InitRecordsCount(recordsCount);
     }
 
     ui32 GetRecordsCount() const {
         if (RecordsCountImpl) {
             return *RecordsCountImpl;
         } else {
+            AFL_VERIFY(!!GetRecordsCountVirtual());
             return GetRecordsCountVirtual();
         }
     }
@@ -364,7 +376,7 @@ public:
     }
 
     std::unique_ptr<TFetchedData> ExtractStageData() {
-        AFL_VERIFY(StageData);
+        AFL_VERIFY(StageData)("source_id", SourceId);
         auto result = std::move(StageData);
         StageData.reset();
         return std::move(result);
@@ -375,7 +387,7 @@ public:
     }
 
     const TFetchedData& GetStageData() const {
-        AFL_VERIFY(StageData);
+        AFL_VERIFY(StageData)("source_id", SourceId);
         return *StageData;
     }
 

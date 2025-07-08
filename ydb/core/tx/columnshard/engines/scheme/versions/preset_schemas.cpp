@@ -1,6 +1,6 @@
 #include "preset_schemas.h"
 
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/chunks/chunks.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/schema.h>
 
 namespace NKikimr::NOlap {
 
@@ -12,10 +12,16 @@ TVersionedPresetSchemas::TVersionedPresetSchemas(const ui64 defaultPresetId, con
     AFL_VERIFY(StoragesManager);
     AFL_VERIFY(SchemaObjectsCache);
     RegisterPreset(defaultPresetId);
-    using TSchemaAdapter = NReader::NSysView::NChunks::TSchemaAdapter<NKikimr::NSysView::Schema::PrimaryIndexStats>;
-    RegisterPreset(TSchemaAdapter::GetPresetId());
-    MutableVersionedIndex(TSchemaAdapter::GetPresetId())
-        .AddIndex(TSnapshot::Zero(), SchemaObjectsCache->UpsertIndexInfo(TSchemaAdapter::GetIndexInfo(StoragesManager, SchemaObjectsCache)));
+    for (auto&& key : NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::GetRegisteredKeys()) {
+        if (key.StartsWith("store_")) {
+            continue;
+        }
+        auto obj = NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(key);
+        AFL_VERIFY(!!obj);
+        RegisterPreset(obj->GetPresetId());
+        MutableVersionedIndex(obj->GetPresetId())
+            .AddIndex(TSnapshot::Zero(), SchemaObjectsCache->UpsertIndexInfo(obj->GetIndexInfo(StoragesManager, SchemaObjectsCache)));
+    }
 }
 
 }   // namespace NKikimr::NOlap

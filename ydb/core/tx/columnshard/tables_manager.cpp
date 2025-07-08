@@ -3,6 +3,7 @@
 
 #include "engines/column_engine_logs.h"
 #include "engines/metadata_accessor.h"
+#include "engines/reader/simple_reader/iterator/sys_view/abstract/schema.h"
 #include "transactions/transactions/tx_add_sharding_info.h"
 
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -476,7 +477,8 @@ void TTablesManager::MoveTableProgress(
     table->UpdateLocalPathId(db, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(newSchemeShardLocalPathId, internalPathId).second);
-    NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(internalPathId, oldSchemeShardLocalPathId));
+    NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(
+        TabletId, TUnifiedPathId::BuildValid(internalPathId, oldSchemeShardLocalPathId));
     NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, table->GetPathId());
 }
 
@@ -529,11 +531,12 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
 }
 
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
-    const TString& tableName, const std::optional<ui64> externalPathId, const std::optional<ui64> extInternalPathId) {
+    const TString& tablePath, const std::optional<ui64> externalPathId, const std::optional<ui64> extInternalPathId) {
     if (extInternalPathId) {
-        const auto externalPathIdResolved = ResolveSchemeShardLocalPathIdVerified(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId));
+        const auto externalPathIdResolved =
+            ResolveSchemeShardLocalPathIdVerified(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId));
         return std::make_shared<NOlap::TUserTableAccessor>(
-            tableName, TUnifiedPathId::BuildValid(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId), externalPathIdResolved));
+            tablePath, TUnifiedPathId::BuildValid(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId), externalPathIdResolved));
     }
     AFL_VERIFY(externalPathId);
     const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*externalPathId);
@@ -542,17 +545,22 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
         AFL_VERIFY(internalPathId);
         AFL_VERIFY(extInternalPathId == internalPathId->GetRawValue());
     }
-    if (tableName.find(".sys/") != TString::npos) {
-        return std::make_shared<NOlap::TSysViewTableAccessor>(tableName, schemeShardLocalPathId, internalPathId);
+    if (tablePath.find(".sys/") != TString::npos) {
+        auto schemaAdapter =
+            NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(TFsPath(tablePath).Fix().GetName());
+        if (!schemaAdapter) {
+            return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tablePath + "::" + ::ToString(externalPathId));
+        }
+        return schemaAdapter->BuildMetadataAccessor(tablePath, schemeShardLocalPathId, internalPathId);
     } else if (!internalPathId) {
-        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tableName + "::" + ::ToString(externalPathId));
+        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tablePath + "::" + ::ToString(externalPathId));
     } else {
         if (!HasTable(*internalPathId)) {
             return std::make_shared<NOlap::TAbsentTableAccessor>(
-                tableName, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId));
+                tablePath, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId));
         } else {
             return std::make_shared<NOlap::TUserTableAccessor>(
-                tableName, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId));
+                tablePath, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId));
         }
     }
 }

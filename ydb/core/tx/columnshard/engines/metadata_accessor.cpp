@@ -4,8 +4,6 @@
 #include "reader/common_reader/constructor/read_metadata.h"
 #include "reader/plain_reader/iterator/constructors.h"
 #include "reader/simple_reader/iterator/collections/constructors.h"
-#include "reader/simple_reader/iterator/sys_view/constructor.h"
-#include "reader/simple_reader/iterator/sys_view/source.h"
 #include "reader/sys_view/chunks/chunks.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
@@ -25,46 +23,6 @@ ITableMetadataAccessor::ITableMetadataAccessor(const TString& tablePath)
 
 TString ITableMetadataAccessor::GetTableName() const {
     return TFsPath(TablePath).Fix().GetName();
-}
-
-TSysViewTableAccessor::TSysViewTableAccessor(const TString& tableName, const NColumnShard::TSchemeShardLocalPathId externalPathId,
-    const std::optional<NColumnShard::TInternalPathId> internalPathId)
-    : TBase(tableName)
-    , PathId(NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId)) {
-    AFL_VERIFY(GetTablePath().find(".sys") != TString::npos);
-}
-
-std::unique_ptr<NReader::NCommon::ISourcesConstructor> TSysViewTableAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool /*withUncommitted*/, const bool isPlain) const {
-    AFL_VERIFY(!isPlain);
-    if (GetTableName().EndsWith("primary_index_stats")) {
-        return std::make_unique<NReader::NSimple::TSysViewPortionChunksConstructor>(context.GetPathIdTranslator(), context.GetEngine(),
-            readDescription.GetTabletId(),
-            PathId.GetInternalPathId().GetRawValue() ? PathId.GetInternalPathId() : std::optional<NColumnShard::TInternalPathId>(),
-            readDescription.GetSnapshot(), readDescription.PKRangesFilter, readDescription.IsReverseSort());
-    }
-    AFL_VERIFY(false);
-    return nullptr;
-}
-
-std::shared_ptr<ISnapshotSchema> TSysViewTableAccessor::GetSnapshotSchemaOptional(
-    const TVersionedPresetSchemas& vSchemas, const TSnapshot& /*snapshot*/) const {
-    if (GetTableName().EndsWith("primary_index_stats")) {
-        return vSchemas
-            .GetVersionedIndex(NReader::NSysView::NChunks::TSchemaAdapter<NKikimr::NSysView::Schema::PrimaryIndexStats>::GetPresetId())
-            .GetLastSchema();
-    }
-    AFL_VERIFY(false);
-    return nullptr;
-}
-
-std::shared_ptr<const TVersionedIndex> TSysViewTableAccessor::GetVersionedIndexCopyOptional(TVersionedPresetSchemas& vSchemas) const {
-    if (GetTableName().EndsWith("primary_index_stats")) {
-        return vSchemas.GetVersionedIndexCopy(
-            NReader::NSysView::NChunks::TSchemaAdapter<NKikimr::NSysView::Schema::PrimaryIndexStats>::GetPresetId());
-    }
-    AFL_VERIFY(false);
-    return nullptr;
 }
 
 TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)

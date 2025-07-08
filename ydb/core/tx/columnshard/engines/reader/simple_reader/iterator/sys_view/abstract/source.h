@@ -5,15 +5,19 @@
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract {
 
-class TSysViewAbstractInfo: public NReader::NSimple::IDataSource {
+class TSourceData: public NReader::NSimple::IDataSource {
 private:
     using TBase = NReader::NSimple::IDataSource;
     YDB_READONLY(ui64, TabletId, 0);
 
     virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
+        return false;
+    }
+
+    virtual bool NeedPortionData() const override {
         return false;
     }
 
@@ -164,124 +168,47 @@ private:
     }
 
 public:
-    TSysViewAbstractInfo(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
-        const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
+    TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
+        const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
         const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
-        : TBase(sourceId, sourceIdx, context, std::move(start), std::move(finish), minSnapshot, maxSnapshot, std::nullopt, std::nullopt, false)
+        : TBase(sourceId, sourceIdx, context, std::move(start), std::move(finish), minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
         , TabletId(tabletId) {
     }
 };
 
-class TSysViewAbstractPortionInfo: public TSysViewAbstractInfo {
+class TTabletSourceData: public TSourceData {
 private:
-    using TBase = TSysViewAbstractInfo;
+    using TBase = TSourceData;
+
+public:
+    virtual NColumnShard::TInternalPathId GetPathId() const override {
+        AFL_VERIFY(false);
+        return NColumnShard::TInternalPathId::FromRawValue(0);
+    }
+
+    TTabletSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
+        const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
+        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context) {
+    }
+};
+
+class TPathSourceData: public TSourceData {
+private:
+    using TBase = TSourceData;
     YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, UnifiedPathId);
-    YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
 
 public:
     virtual NColumnShard::TInternalPathId GetPathId() const override {
         return GetUnifiedPathId().GetInternalPathId();
     }
 
-    TSysViewAbstractPortionInfo(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
-        const TPortionInfo::TConstPtr& portion, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
-        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
-        : TBase(sourceId, sourceIdx, tabletId, portion->RecordSnapshotMin(), portion->RecordSnapshotMin(), std::move(start), std::move(finish),
-              context)
-        , UnifiedPathId(pathId)
-        , Portion(portion) {
+    TPathSourceData(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
+        NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot,
+        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context)
+        , UnifiedPathId(pathId) {
     }
 };
 
-class TSysViewPortionChunksInfo: public TSysViewAbstractPortionInfo {
-private:
-    using TBase = TSysViewAbstractPortionInfo;
-
-    virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) override;
-
-    virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override {
-        if (columnId == 1) {
-            return NArrow::TStatusValidator::GetValid(
-                arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetUnifiedPathId().GetSchemeShardLocalPathId().GetRawValue()), recordsCount));
-        }
-        if (columnId == 2) {
-            return NArrow::TStatusValidator::GetValid(
-                arrow::MakeArrayFromScalar(arrow::StringScalar(::ToString(GetPortion()->GetProduced())), recordsCount));
-        }
-        if (columnId == 3) {
-            return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetTabletId()), recordsCount));
-        }
-        if (columnId == 6) {
-            return NArrow::TStatusValidator::GetValid(
-                arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetPortion()->GetPortionId()), recordsCount));
-        }
-        if (columnId == 11) {
-            auto builder = NArrow::MakeBuilder(arrow::uint64());
-            for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-                NArrow::Append<arrow::UInt64Type>(*builder, i.GetBlobRange().GetOffset());
-            }
-            for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-                if (auto range = i.GetBlobRangeOptional()) {
-                    NArrow::Append<arrow::UInt64Type>(*builder, range->GetOffset());
-                } else {
-                    NArrow::Append<arrow::UInt64Type>(*builder, 0);
-                }
-            }
-            return NArrow::FinishBuilder(std::move(builder));
-        }
-        if (columnId == 4) {
-            auto builder = NArrow::MakeBuilder(arrow::uint64());
-            for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-                NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRecordsCount());
-            }
-            for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-                NArrow::Append<arrow::UInt64Type>(*builder, i.GetRecordsCount());
-            }
-            return NArrow::FinishBuilder(std::move(builder));
-        }
-        if (columnId == 12) {
-            auto builder = NArrow::MakeBuilder(arrow::uint64());
-            for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-                NArrow::Append<arrow::UInt64Type>(*builder, i.GetBlobRange().GetSize());
-            }
-            for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-                NArrow::Append<arrow::UInt64Type>(*builder, i.GetDataSize());
-            }
-            return NArrow::FinishBuilder(std::move(builder));
-        }
-        if (columnId == 13) {
-            if (GetPortion()->IsRemovedFor(GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())) {
-                return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(0), recordsCount));
-            } else {
-                return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(1), recordsCount));
-            }
-        }
-        AFL_VERIFY(false)("column_id", columnId);
-        return nullptr;
-    }
-
-    virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(!UsedRawBytes);
-        UsedRawBytes = GetStageData().GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
-        MutableStageData().InitRecordsCount(GetRecordsCount());
-    }
-
-    virtual ui32 GetRecordsCountVirtual() const override {
-        if (HasStageData()) {
-            return GetStageData().GetPortionAccessor().GetRecordsVerified().size() +
-                   GetStageData().GetPortionAccessor().GetIndexesVerified().size();
-        } else {
-            return GetStageResult().GetBatch()->GetRecordsCount();
-        }
-    }
-
-public:
-    TSysViewPortionChunksInfo(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
-        const TPortionInfo::TConstPtr& portion, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
-        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
-        : TBase(sourceId, sourceIdx, pathId, tabletId, portion, std::move(start), std::move(finish), context) {
-    }
-};
-
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract

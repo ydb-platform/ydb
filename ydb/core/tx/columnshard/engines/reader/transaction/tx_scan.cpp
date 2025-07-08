@@ -147,7 +147,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
             if (newRange.IsSuccess()) {
                 readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
             } else {
-                return SendError("cannot build metadata withno ranges", newRange.GetErrorMessage(), ctx);
+                return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);
             }
         }
     }

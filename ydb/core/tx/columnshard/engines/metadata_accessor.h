@@ -24,6 +24,9 @@ private:
 
 public:
     ITableMetadataAccessor(const TString& tablePath);
+    virtual bool NeedStalenessChecker() const {
+        return true;
+    }
     virtual ~ITableMetadataAccessor() = default;
     virtual NColumnShard::TUnifiedPathId GetPathId() const {
         AFL_VERIFY(false);
@@ -70,31 +73,6 @@ public:
         const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const = 0;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
-};
-
-class TSysViewTableAccessor: public ITableMetadataAccessor {
-private:
-    using TBase = ITableMetadataAccessor;
-    const NColumnShard::TUnifiedPathId PathId;
-
-    virtual NColumnShard::TUnifiedPathId GetPathId() const override {
-        return PathId;
-    }
-
-    virtual std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyOptional(TVersionedPresetSchemas& vSchemas) const override;
-
-    virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(
-        const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const override;
-
-public:
-    TSysViewTableAccessor(const TString& tableName, const NColumnShard::TSchemeShardLocalPathId externalPathId,
-        const std::optional<NColumnShard::TInternalPathId> internalPathId);
-    virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
-        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
-    virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
-        const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
-        return std::nullopt;
-    }
 };
 
 class TUserTableAccessor: public ITableMetadataAccessor {

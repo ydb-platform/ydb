@@ -1,4 +1,5 @@
 #pragma once
+#include "schema.h"
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
@@ -6,12 +7,12 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/chunks/chunks.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 class TPortionDataConstructor {
 private:
     NColumnShard::TUnifiedPathId PathId;
     ui64 TabletId;
-    YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
+    YDB_READONLY_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
     NArrow::TSimpleRow Start;
     NArrow::TSimpleRow Finish;
     ui32 SourceId = 0;
@@ -24,14 +25,13 @@ public:
         SourceId = index + 1;
     }
 
-    TPortionDataConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const TPortionInfo::TConstPtr& portion)
+    TPortionDataConstructor(
+        const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const std::vector<TPortionInfo::TConstPtr>& portions)
         : PathId(pathId)
         , TabletId(tabletId)
-        , Portion(portion)
-        , Start(NReader::NSysView::NChunks::TSchemaAdapter<NKikimr::NSysView::Schema::PrimaryIndexStats>::GetPKSimpleRow(
-              PathId, TabletId, Portion->GetPortionId(), 0, 0))
-        , Finish(NReader::NSysView::NChunks::TSchemaAdapter<NKikimr::NSysView::Schema::PrimaryIndexStats>::GetPKSimpleRow(
-              PathId, TabletId, Portion->GetPortionId(), Max<ui32>(), Max<ui32>())) {
+        , Portions(portions)
+        , Start(TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portions.front()->GetPortionId()))
+        , Finish(TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portions.back()->GetPortionId())) {
     }
 
     const NArrow::TSimpleRow& GetStart() const {
@@ -61,14 +61,15 @@ public:
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context) {
         AFL_VERIFY(SourceId);
-        return std::make_shared<NReader::NSimple::TSysViewPortionChunksInfo>(
-            SourceId, SourceIdx, PathId, TabletId, Portion, std::move(Start), std::move(Finish), context);
+        return std::make_shared<TSourceData>(
+            SourceId, SourceIdx, PathId, TabletId, std::move(Portions), std::move(Start), std::move(Finish), context);
     }
 };
 
-class TSysViewPortionChunksConstructor: public NCommon::ISourcesConstructor {
+class TConstructor: public NCommon::ISourcesConstructor {
 private:
     std::deque<TPortionDataConstructor> Constructors;
+    const ui64 TabletId;
 
     virtual void DoClear() override {
         Constructors.clear();
@@ -94,29 +95,17 @@ private:
         return Default<TString>();
     }
 
-public:
-    TSysViewPortionChunksConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
-        const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
-        const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const bool isReverseSort) {
-        const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
-        for (auto&& i : engineImpl->GetTables()) {
-            if (internalPathId && *internalPathId != i.first) {
-                continue;
-            }
-            for (auto&& [_, p] : i.second->GetPortions()) {
-                if (reqSnapshot < p->RecordSnapshotMin()) {
-                    continue;
-                }
-                Constructors.emplace_back(pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p);
-                if (!pkFilter->IsUsed(Constructors.back().GetStart(), Constructors.back().GetFinish())) {
-                    Constructors.pop_back();
-                }
-            }
-        }
-        std::sort(Constructors.begin(), Constructors.end(), TPortionDataConstructor::TComparator(isReverseSort));
-        for (ui32 idx = 0; idx < Constructors.size(); ++idx) {
-            Constructors[idx].SetIndex(idx);
+    void AddConstructors(const NOlap::IPathIdTranslator& pathIdTranslator, const NColumnShard::TInternalPathId& pathId,
+        std::vector<TPortionInfo::TConstPtr>&& portions, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter) {
+        Constructors.emplace_back(pathIdTranslator.GetUnifiedByInternalVerified(pathId), TabletId, std::move(portions));
+        if (!pkFilter->IsUsed(Constructors.back().GetStart(), Constructors.back().GetFinish())) {
+            Constructors.pop_back();
         }
     }
+
+public:
+    TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
+        const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
+        const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const bool isReverseSort);
 };
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions

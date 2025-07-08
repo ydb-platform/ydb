@@ -106,7 +106,10 @@ private:
 public:
 
     struct TPortionAddressComparator {
-        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) {
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
             return left->GetAddress() < right->GetAddress();
         }
     };

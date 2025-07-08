@@ -15,10 +15,10 @@ IFetchingStep::EStepResult IFetchingStep::Execute(const std::shared_ptr<TPortion
 
 TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
     const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
-    const std::shared_ptr<NGroupedMemoryManager::TFullGroupGuard>& memoryGroupGuard)
+    const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard)
     : Consumer(consumer)
     , ExternalTaskId(externalTaskId)
-    , MemoryGroupGuard(memoryGroupGuard)
+    , MemoryProcessGuard(memoryProcessGuard)
 {
     AFL_VERIFY(portions.size());
     ActualSchema = versions->GetLastSchema();

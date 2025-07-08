@@ -25,22 +25,24 @@ class TCurrentContext: TMoveOnly {
 private:
     std::optional<std::vector<TPortionDataAccessor>> Accessors;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
-    std::shared_ptr<NGroupedMemoryManager::TFullGroupGuard> MemoryGroupGuard;
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
+    std::shared_ptr<NGroupedMemoryManager::TScopeGuard> MemoryScopeGuard;
+    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryGroupGuard;
     std::optional<NBlobOperations::NRead::TCompositeReadBlobs> Blobs;
     std::optional<std::vector<NArrow::TGeneralContainer>> AssembledData;
     inline static TAtomicCounter MemoryProcessIdCounter = 0;
 
 public:
     ui64 GetMemoryProcessId() const {
-        return MemoryGroupGuard->GetProcessGuard()->GetProcessId();
+        return MemoryProcessGuard->GetProcessId();
     }
 
     ui64 GetMemoryScopeId() const {
-        return MemoryGroupGuard->GetScopeGuard()->GetScopeId();
+        return MemoryScopeGuard->GetScopeId();
     }
 
     ui64 GetMemoryGroupId() const {
-        return MemoryGroupGuard->GetGroupGuard()->GetGroupId();
+        return MemoryGroupGuard->GetGroupId();
     }
 
     void SetBlobs(NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
@@ -76,20 +78,12 @@ public:
         return result;
     }
 
-    static std::shared_ptr<NGroupedMemoryManager::TFullGroupGuard> BuildGroupGuard() {
-        static std::shared_ptr<NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
-
-        auto processGuard =
-            NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard(MemoryProcessIdCounter.Inc(), { stageFeatures });
-        auto scopeGuard = processGuard->BuildScopeGuard(1);
-        auto groupGuard = scopeGuard->BuildGroupGuard();
-        return std::make_shared<NGroupedMemoryManager::TFullGroupGuard>(groupGuard, scopeGuard, processGuard);
-    }
-
-    TCurrentContext(std::shared_ptr<NGroupedMemoryManager::TFullGroupGuard>&& memoryGroupGuard)
-        : MemoryGroupGuard(memoryGroupGuard ? std::move(memoryGroupGuard) : BuildGroupGuard())
+    TCurrentContext(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>&& memoryProcessGuard)
+        : MemoryProcessGuard(std::move(memoryProcessGuard))
     {
+        AFL_VERIFY(MemoryProcessGuard);
+        MemoryScopeGuard = MemoryProcessGuard->BuildScopeGuard(1);
+        MemoryGroupGuard = MemoryScopeGuard->BuildGroupGuard();
     }
 
     void SetPortionAccessors(std::vector<TPortionDataAccessor>&& acc) {
@@ -251,19 +245,17 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY(NBlobOperations::EConsumer, Consumer, NBlobOperations::EConsumer::UNDEFINED);
     YDB_READONLY_DEF(TString, ExternalTaskId);
-    std::shared_ptr<NGroupedMemoryManager::TFullGroupGuard> MemoryGroupGuard;
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
 
 public:
     TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
-        const std::shared_ptr<NGroupedMemoryManager::TFullGroupGuard>& memoryGroupGuard = nullptr);
+        const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard);
 
-    std::shared_ptr<NGroupedMemoryManager::TFullGroupGuard> ExtractGroupGuardOptional() {
-        if (!MemoryGroupGuard) {
-            return nullptr;
-        }
-        auto result = std::move(MemoryGroupGuard);
-        MemoryGroupGuard.reset();
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ExtractProcessGuardVerified() {
+        AFL_VERIFY(MemoryProcessGuard);
+        auto result = std::move(MemoryProcessGuard);
+        MemoryProcessGuard.reset();
         return result;
     }
 };

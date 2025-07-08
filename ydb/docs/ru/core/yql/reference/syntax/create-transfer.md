@@ -123,7 +123,7 @@ $transformation_lambda = ($msg) -> {
     $json = CAST($msg._data AS JSON);
     return [
         <|
-            timestamp: DateTime::MakeDatetime(DateTime::ParseIso8601(CAST(Yson::ConvertToString($json.key[1]) AS Utf8))),
+            timestamp: CAST(Yson::ConvertToString($json.key[1]) AS Timestamp),
             object_id: CAST(Yson::ConvertToString($json.key[0]) AS Utf8),
             operation: CAST(Yson::ConvertToString($json.update.operation) AS Utf8)
         |>
@@ -133,7 +133,6 @@ $transformation_lambda = ($msg) -> {
 CREATE TRANSFER example_transfer
     FROM example_topic TO example_table USING $transformation_lambda;
 ```
-
 
 ## См. также
 

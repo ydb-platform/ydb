@@ -188,7 +188,7 @@ using TAsyncDescribeTransferResult = NThreading::TFuture<TDescribeTransferResult
 
 struct TBatchingSettings {
     TDuration FlushInterval;
-    ui64 SizeBytes;
+    std::uint64_t SizeBytes;
 };
 
 class TTransferDescription {

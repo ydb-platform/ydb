@@ -49,8 +49,7 @@ enum class ESchemeEntryType : i32 {
     ExternalTable = 18,
     ExternalDataSource = 19,
     View = 20,
-    ResourcePool = 21,
-    Transfer = 23,
+    ResourcePool = 21
 };
 
 struct TVirtualTimestamp {

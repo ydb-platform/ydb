@@ -1280,9 +1280,6 @@ public:
         }
 
         std::array<TOutputBuffer, PrefetchBatchSize> out;
-        for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
-            out[i].Resize(sizeof(TKey));
-        }
 
         std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
         std::array<ui64, PrefetchBatchSize> insertBatchRows;
@@ -1374,13 +1371,18 @@ public:
             }
 
             // encode key
-            out[insertBatchLen].Rewind();
+            TOutputBuffer& outBuf = out[insertBatchLen];
+            if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                outBuf.Resize(KeyLength_);
+            } else {
+                outBuf.Resize(sizeof(TKey));
+            }
             for (ui32 i = 0; i < keysDatum.size(); ++i) {
                 if (keysDatum[i].is_scalar()) {
                     // TODO: more efficient code when grouping by scalar
-                    Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
+                    Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), outBuf);
                 } else {
-                    Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
+                    Readers_[i]->SaveItem(*keysDatum[i].array(), row, outBuf);
                 }
             }
 

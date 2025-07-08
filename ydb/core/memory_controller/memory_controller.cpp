@@ -476,23 +476,20 @@ private:
                 break;
             }
             case EMemoryConsumerKind::ScanGroupedMemoryLimiter: {
-                stats.SetScanGroupedMemoryLimiterConsumption(consumer.Consumption);
-                stats.SetScanGroupedMemoryLimiterLimit(limitBytes);
+                stats.SetColumnTablesReadExecutionConsumption(consumer.Consumption);
+                stats.SetColumnTablesReadExecutionLimit(limitBytes);
                 break;
             }
             case EMemoryConsumerKind::CompGroupedMemoryLimiter: {
-                stats.SetCompGroupedMemoryLimiterConsumption(consumer.Consumption);
-                stats.SetCompGroupedMemoryLimiterLimit(limitBytes);
+                stats.SetColumnTablesCompactionConsumption(consumer.Consumption);
+                stats.SetColumnTablesCompactionLimit(limitBytes);
                 break;
             }
+            case EMemoryConsumerKind::DataAccessorCache:
             case EMemoryConsumerKind::BlobCache: {
-                stats.SetBlobCacheConsumption(consumer.Consumption);
-                stats.SetBlobCacheLimit(limitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::DataAccessorCache: {
-                stats.SetDataAccessorCacheConsumption(consumer.Consumption);
-                stats.SetDataAccessorCacheLimit(limitBytes);
+                stats.SetColumnTablesCacheConsumption(
+                    (stats.HasColumnTablesCacheConsumption() ? stats.GetColumnTablesCacheConsumption() : 0) + consumer.Consumption);
+                stats.SetColumnTablesCacheLimit((stats.HasColumnTablesCacheLimit() ? stats.GetColumnTablesCacheLimit() : 0) + limitBytes);
                 break;
             }
             default:

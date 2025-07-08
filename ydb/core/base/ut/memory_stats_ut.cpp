@@ -182,22 +182,16 @@ Y_UNIT_TEST_SUITE (TMemoryStatsAggregator) {
         TMemoryStatsAggregator aggregator;
 
         TMemoryStats stats;
-        stats.SetScanGroupedMemoryLimiterConsumption(1);
-        stats.SetScanGroupedMemoryLimiterLimit(2);
-        stats.SetCompGroupedMemoryLimiterConsumption(3);
-        stats.SetCompGroupedMemoryLimiterLimit(4);
-        stats.SetBlobCacheConsumption(5);
-        stats.SetBlobCacheLimit(6);
-        stats.SetDataAccessorCacheConsumption(7);
-        stats.SetDataAccessorCacheLimit(8);
-
-        Cerr << stats.ShortDebugString() << Endl;
+        stats.SetColumnTablesReadExecutionConsumption(1);
+        stats.SetColumnTablesReadExecutionLimit(2);
+        stats.SetColumnTablesCompactionConsumption(3);
+        stats.SetColumnTablesCompactionLimit(4);
+        stats.SetColumnTablesCacheConsumption(5);
+        stats.SetColumnTablesCacheLimit(6);
 
         aggregator.Add(stats, "host");
 
         TMemoryStats aggregated = aggregator.Aggregate();
-
-        Cerr << aggregated.ShortDebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(aggregated.ShortDebugString(), stats.ShortDebugString());
     }

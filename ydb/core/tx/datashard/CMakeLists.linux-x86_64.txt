@@ -33,7 +33,7 @@ add_subdirectory(ut_change_collector)
 add_subdirectory(ut_change_exchange)
 add_subdirectory(ut_column_stats)
 add_subdirectory(ut_compaction)
-add_subdirectory(ut_data_cleanup)
+add_subdirectory(ut_vacuum)
 add_subdirectory(ut_erase_rows)
 add_subdirectory(ut_export)
 add_subdirectory(ut_external_blobs)
@@ -177,7 +177,6 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__compact_borrowed.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__compaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__conditional_erase_rows.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__data_cleanup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__engine_host.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__get_state_tx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__init.cpp
@@ -201,6 +200,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__store_scan_state.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__store_table_path.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__vacuum.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_active_transaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_receiving.cpp

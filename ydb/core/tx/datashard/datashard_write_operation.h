@@ -131,6 +131,7 @@ private:
     YDB_READONLY_DEF(TInstant, ReceivedAt);
     YDB_READONLY_DEF(std::optional<ui64>, OverloadSubscribe);
     YDB_READONLY_DEF(bool, MvccSnapshotRead);
+    YDB_READONLY_DEF(std::optional<TRowVersion>, MvccSnapshot);
 
     YDB_READONLY_DEF(ui64, TxSize);
 

@@ -23,4 +23,5 @@
 ### Performance
 
 * 19844:Users will receive faster confirmation that the server has written the message thanks to changes the retry policy settings and adds a cache of SchemeNavigate responses.[#19844](https://github.com/ydb-platform/ydb/pull/19844) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 19916:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19916](https://github.com/ydb-platform/ydb/pull/19916) ([Nikolay Shestakov](https://github.com/nshestakov))
 

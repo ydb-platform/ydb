@@ -140,7 +140,7 @@ void TStageFeatures::Add(const ui64 volume, const bool allocated) {
     UpdateConsumption(this);
 }
 
-void TStageFeatures::SetConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
+void TStageFeatures::SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
     MemoryConsumer = std::move(consumer);
 }
 

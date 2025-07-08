@@ -28,8 +28,8 @@ private:
         Manager->AddRequest(std::make_shared<TRequest>(ev->Get()->ExtractAddresses(), ev->Get()->ExtractCallback(), ev->Get()->GetConsumer()));
     }
 
-    void HandleMain(NMemory::TEvConsumerRegistered::TPtr& /*ev*/) {
-        // TODO
+    void HandleMain(NMemory::TEvConsumerRegistered::TPtr& ev) {
+        Manager->SetMemoryConsumer(std::move(ev->Get()->Consumer));
     }
 
     void HandleMain(NMemory::TEvConsumerLimit::TPtr& ev) {
@@ -80,8 +80,6 @@ public:
 
     void Bootstrap() {
         Manager = std::make_unique<TManager>(TBase::SelfId(), Counters.GetManager());
-
-        Cerr << "!!! Register memory consumer: " << TPolicy::GetServiceCode() << "; " << TPolicy::GetCacheName() << Endl;
 
         TBase::Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(TPolicy::GetConsumerKind()));
 

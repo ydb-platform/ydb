@@ -84,7 +84,7 @@ struct TConsumerState {
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
     bool CanZeroLimit = false;
-    std::optional<ui64> exactLimit;
+    std::optional<ui64> ExactLimit;
 
     TConsumerState(const TMemoryConsumer& consumer)
         : Kind(consumer.Kind)
@@ -266,8 +266,8 @@ private:
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
             ui64 limitBytes;
-            if (consumer.exactLimit.has_value()) {
-                limitBytes = consumer.exactLimit.value();
+            if (consumer.ExactLimit.has_value()) {
+                limitBytes = consumer.ExactLimit.value();
             } else {
                 limitBytes = consumer.GetLimit(coefficient);
                 if (resultingConsumersConsumption + otherConsumption + externalConsumption > softLimitBytes && consumer.CanZeroLimit) {
@@ -279,12 +279,16 @@ private:
             LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state:"
                 << " Consumption: " << HumanReadableBytes(consumer.Consumption) << " Limit: " << HumanReadableBytes(limitBytes)
                 << " Min: " << HumanReadableBytes(consumer.MinBytes) << " Max: " << HumanReadableBytes(consumer.MaxBytes));
-            auto& counters = GetConsumerCounters(consumer.Kind);
+            auto& counters = GetConsumerCounters(consumer.Kind, !consumer.ExactLimit.has_value());
             counters.Consumption->Set(consumer.Consumption);
             counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
             counters.LimitBytes->Set(limitBytes);
-            counters.LimitMinBytes->Set(consumer.MinBytes);
-            counters.LimitMaxBytes->Set(consumer.MaxBytes);
+            if (counters.LimitMinBytes) {
+                counters.LimitMinBytes->Set(consumer.MinBytes);
+            }
+            if (counters.LimitMaxBytes) {
+                counters.LimitMaxBytes->Set(consumer.MaxBytes);
+            }
             SetMemoryStats(consumer, memoryStats, limitBytes);
 
             ApplyLimit(consumer, limitBytes);
@@ -440,18 +444,21 @@ private:
         queue->MutableLimit()->SetMemory(limitBytes);
     }
 
-    TConsumerCounters& GetConsumerCounters(EMemoryConsumerKind consumer) {
+    TConsumerCounters& GetConsumerCounters(EMemoryConsumerKind consumer, const bool minMaxRequired) {
         auto it = ConsumerCounters.FindPtr(consumer);
         if (it) {
             return *it;
         }
 
+        TCounterPtr limitMinBytes = minMaxRequired ? Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMin") : nullptr;
+        TCounterPtr limitMaxBytes = minMaxRequired ? Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMax") : nullptr;
+
         return ConsumerCounters.emplace(consumer, TConsumerCounters{
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Consumption"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Reservation"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Limit"),
-            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMin"),
-            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMax"),
+            limitMinBytes,
+            limitMaxBytes,
         }).first->second;
     }
 
@@ -508,20 +515,20 @@ private:
                 break;
             }
             case EMemoryConsumerKind::ScanMemoryLimiter: {
-                result.exactLimit = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes);
+                result.ExactLimit = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes);
                 break;
             }
             case EMemoryConsumerKind::CompMemoryLimiter: {
-                result.exactLimit = GetColumnTablesCompactionLimitBytes(Config, hardLimitBytes) *
+                result.ExactLimit = GetColumnTablesCompactionLimitBytes(Config, hardLimitBytes) *
                     NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterCompactionLimitCoefficient;
                 break;
             }
             case EMemoryConsumerKind::BlobCache: {
-                result.exactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::BlobCacheCoefficient;
+                result.ExactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::BlobCacheCoefficient;
                 break;
             }
             case EMemoryConsumerKind::DataAccessorCache: {
-                result.exactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DataAccessorCoefficient;
+                result.ExactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DataAccessorCoefficient;
                 break;
             }
             default:

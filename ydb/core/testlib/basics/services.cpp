@@ -168,7 +168,6 @@ namespace NPDisk {
     }
 
     void SetupCSMetadataCache(TTestActorRuntime& runtime, ui32 nodeIndex) {
-        Cerr << "!!! Register general cache service: " << __FILE__ << " : " << __LINE__ << Endl;
         auto* actor = NOlap::NDataAccessorControl::TGeneralCache::CreateService(
 			NGeneralCache::NPublic::TConfig::BuildDefault(), runtime.GetDynamicCounters(nodeIndex));
 		runtime.AddLocalService(NOlap::NDataAccessorControl::TGeneralCache::MakeServiceId(runtime.GetNodeId(nodeIndex)),

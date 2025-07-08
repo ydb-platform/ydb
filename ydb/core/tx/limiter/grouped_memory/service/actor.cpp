@@ -51,7 +51,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcessScope::TPt
 }
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerRegistered::TPtr& ev) {
-    Manager->SetConsumer(std::move(ev->Get()->Consumer));
+    Manager->SetMemoryConsumer(std::move(ev->Get()->Consumer));
 }
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {

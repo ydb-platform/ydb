@@ -2989,6 +2989,13 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
     NKeyValue::TKeyValueFlat::HandleDie(ctx);
 }
 
+void TPersQueue::InitPipeClientCache()
+{
+    PipeClientCacheConfig = MakeIntrusive<NTabletPipe::TBoundedClientCacheConfig>();
+    PipeClientCacheConfig->ClientPoolLimit = 2000;
+
+    PipeClientCache.Reset(NTabletPipe::CreateBoundedClientCache(PipeClientCacheConfig, GetPipeClientConfig()));
+}
 
 TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     : TKeyValueFlat(tablet, info)
@@ -3000,9 +3007,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     , Counters(nullptr)
     , NextResponseCookie(0)
     , ResourceMetrics(nullptr)
-    , PipeClientCacheConfig(new NTabletPipe::TBoundedClientCacheConfig())
-    , PipeClientCache(NTabletPipe::CreateBoundedClientCache(PipeClientCacheConfig, GetPipeClientConfig()))
 {
+    InitPipeClientCache();
+
     typedef TProtobufTabletCounters<
         NKeyValue::ESimpleCounters_descriptor,
         NKeyValue::ECumulativeCounters_descriptor,

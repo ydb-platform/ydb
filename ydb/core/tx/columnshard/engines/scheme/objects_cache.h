@@ -121,6 +121,10 @@ public:
         return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
     }
 
+    static size_t GetCachedOwnersCount() {
+        return Singleton<TSchemaCachesManager>()->CacheByTableOwner.size();
+    }
+
     static void DropCaches() {
         Singleton<TSchemaCachesManager>()->DropCachesImpl();
     }

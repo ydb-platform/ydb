@@ -8,7 +8,7 @@ namespace NKikimr::NStorage {
     TStateStorageSelfhealActor::TStateStorageSelfhealActor(TActorId sender, ui64 cookie, ui32 waitForConfigStep
         , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig)
         : WaitForConfigStep(waitForConfigStep > 0 && waitForConfigStep < MaxWaitForConfigStep ? waitForConfigStep : DefaultWaitForConfigStep)
-        , StateStorageReconfigurationStep(0)
+        , StateStorageReconfigurationStep(NONE)
         , Sender(sender)
         , Cookie(cookie)
         , CurrentConfig(currentConfig)
@@ -16,7 +16,7 @@ namespace NKikimr::NStorage {
     {}
 
     bool TStateStorageSelfhealActor::RequestChangeStateStorage() {
-        Y_ABORT_UNLESS(StateStorageReconfigurationStep > 0 && StateStorageReconfigurationStep < 5);
+        Y_ABORT_UNLESS(StateStorageReconfigurationStep > NONE && StateStorageReconfigurationStep < INVALID_RECONFIGURATION_STEP);
         auto request = std::make_unique<TEvNodeConfigInvokeOnRoot>();
         NKikimrBlobStorage::TStateStorageConfig *config = request->Record.MutableReconfigStateStorage();
         auto fillRingGroups = [&](auto *cfg, auto *currentCfg) {
@@ -24,18 +24,18 @@ namespace NKikimr::NStorage {
                 for (ui32 i : xrange(currentCfg->RingGroupsSize())) {
                     auto *ringGroup = cfg->AddRingGroups();
                     ringGroup->CopyFrom(currentCfg->GetRingGroups(i));
-                    ringGroup->SetWriteOnly(StateStorageReconfigurationStep == 3);
+                    ringGroup->SetWriteOnly(StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY);
                 }
             } else {
                 auto *ringGroup = cfg->AddRingGroups();
                 ringGroup->CopyFrom(currentCfg->GetRing());
-                ringGroup->SetWriteOnly(StateStorageReconfigurationStep == 3);
+                ringGroup->SetWriteOnly(StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY);
             }
         };
         auto process = [&](auto mutableFunc) {
             auto *cfg = (config->*mutableFunc)();
             auto *currentCfg = (CurrentConfig.*mutableFunc)();
-            if (StateStorageReconfigurationStep < 3) {
+            if (StateStorageReconfigurationStep < DELETE_PREVIOUS_GROUP) {
                 fillRingGroups(cfg, currentCfg);
             }
             auto *targetCfg = (TargetConfig.*mutableFunc)();
@@ -43,9 +43,9 @@ namespace NKikimr::NStorage {
             for (ui32 i : xrange(targetCfg->RingGroupsSize())) {
                 auto *ringGroup = cfg->AddRingGroups();
                 ringGroup->CopyFrom(targetCfg->GetRingGroups(i));
-                ringGroup->SetWriteOnly(StateStorageReconfigurationStep == 1);
+                ringGroup->SetWriteOnly(StateStorageReconfigurationStep == INTRODUCE_NEW_GROUP);
             }
-            if (StateStorageReconfigurationStep == 3) {
+            if (StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY) {
                 fillRingGroups(cfg, currentCfg);
             }
             return true;
@@ -60,14 +60,14 @@ namespace NKikimr::NStorage {
         F(SchemeBoard)
         #undef F
         STLOG(PRI_DEBUG, BS_NODE, NW52, "TStateStorageSelfhealActor::RequestChangeStateStorage",
-                (StateStorageReconfigurationStep, StateStorageReconfigurationStep), (StateStorageConfig, config));
+                (StateStorageReconfigurationStep, (ui32)StateStorageReconfigurationStep), (StateStorageConfig, config));
 
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
         return true;
     }
 
     void TStateStorageSelfhealActor::Bootstrap(TActorId /*parentId*/) {
-        StateStorageReconfigurationStep = 1;
+        StateStorageReconfigurationStep = INTRODUCE_NEW_GROUP;
         if (!RequestChangeStateStorage()) {
             Finish(TResult::ERROR);
             return;
@@ -84,13 +84,29 @@ namespace NKikimr::NStorage {
         PassAway();
     }
 
+    TStateStorageSelfhealActor::EReconfigurationStep TStateStorageSelfhealActor::GetNextStep(TStateStorageSelfhealActor::EReconfigurationStep prevStep) {
+        switch(prevStep) {
+            case NONE:
+                return INTRODUCE_NEW_GROUP;
+            case INTRODUCE_NEW_GROUP:
+                return MAKE_NEW_GROUP_READWRITE;
+            case MAKE_NEW_GROUP_READWRITE:
+                return MAKE_PREVIOUS_GROUP_WRITEONLY;
+            case MAKE_PREVIOUS_GROUP_WRITEONLY:
+                return DELETE_PREVIOUS_GROUP;
+            default:
+                Y_ABORT("Invalid reconfiguration step");
+        }
+        return INVALID_RECONFIGURATION_STEP;
+    }
+
     void TStateStorageSelfhealActor::HandleWakeup() {
-        StateStorageReconfigurationStep++;
+        StateStorageReconfigurationStep = GetNextStep(StateStorageReconfigurationStep);
         if (!RequestChangeStateStorage()) {
             Finish(TResult::ERROR);
             return;
         }
-        if (StateStorageReconfigurationStep == 4) {
+        if (StateStorageReconfigurationStep == DELETE_PREVIOUS_GROUP) {
             Finish(TResult::OK);
         } else {
             Schedule(TDuration::Seconds(WaitForConfigStep), new TEvents::TEvWakeup());
@@ -102,7 +118,7 @@ namespace NKikimr::NStorage {
     }
 
     void TStateStorageSelfhealActor::PassAway() {
-        StateStorageReconfigurationStep = 0;
+        StateStorageReconfigurationStep = INVALID_RECONFIGURATION_STEP;
         TActorBootstrapped::PassAway();
     }
 

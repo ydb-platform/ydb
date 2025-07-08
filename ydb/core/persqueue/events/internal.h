@@ -400,6 +400,7 @@ struct TEvPQ {
         bool Strict;
         TActorId PipeClient;
         std::optional<TString> CommittedMetadata;
+        bool IsInternal = false;
     };
 
 

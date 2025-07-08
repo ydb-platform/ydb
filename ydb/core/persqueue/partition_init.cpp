@@ -1270,7 +1270,14 @@ void TPartition::CreateCompacter() {
         Send(Tablet, new TEvPQ::TEvAllocateCookie(100));
         return;
     } else {
-        Compacter = MakeHolder<TPartitionCompaction>(0, *CompacterStartCookie, *CompacterStartCookie + 100, this);
+        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(CLIENTID_COMPACTION_CONSUMER);
+        ui64 compStartOffset = 0;
+        if (userInfo) {
+            compStartOffset = userInfo->Offset;
+        } else {
+            PQ_LOG_ALERT("Have compaction enabled but could not find compaction consumer; Will start from offset = 0");
+        }
+        Compacter = MakeHolder<TPartitionCompaction>(0 /* ToDo: !! */, *CompacterStartCookie, *CompacterStartCookie + 100, this);
         Compacter->TryCompactionIfPossible();
     }
 }

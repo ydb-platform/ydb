@@ -4,8 +4,6 @@
 #include "partition_util.h"
 
 namespace NKikimr::NPQ {
-
-
 std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(ui64 nextRequestCookie, ui64 startOffset, ui64 lastOffset, TMaybe<ui64> nextPartNo = Nothing()) {
     auto evRead = std::make_unique<TEvPQ::TEvRead>(
         nextRequestCookie,
@@ -281,18 +279,10 @@ TPartitionCompaction::TCompactState::TCompactState(
         if (offset < firstUncompactedOffset) {
             Failure = true;
         }
-        OffsetsToKeep.insert(offset);
     }
     TStringBuilder msg;
     msg << "===Compact state - start from offset: " << firstUncompactedOffset << ", max offset: " << maxOffset << Endl;
     Cerr << msg;
-    for (const auto& offset : OffsetsToKeep) {
-        Cerr << "===Compact state - got offset to keep: " << offset << Endl;
-    }
-
-    OffsetsToKeep.insert(FirstHeadOffset);
-    OffsetsToKeep.insert(std::numeric_limits<ui64>::max());
-    OffsetsIter = OffsetsToKeep.begin();
 
     KeysIter = DataKeysBody.begin();
 }
@@ -499,6 +489,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ProcessKVRespon
             }
         }
     }
+    SendCommit(LastProcessedOffset); // ToDo: Track processed offset;
     return EStep::COMPACTING;
 }
 } // namespace NKikimr::NPQ

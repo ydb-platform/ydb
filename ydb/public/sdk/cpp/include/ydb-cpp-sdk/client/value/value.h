@@ -508,8 +508,6 @@ public:
     TDerived& EmptyList();
 
     // Struct
-    TDerived& Struct(const std::vector<std::pair<std::string, TValue>>& members);
-
     TDerived& BeginStruct();
     TDerived& AddMember(const std::string& memberName);
     TDerived& AddMember(const std::string& memberName, const TValue& memberValue);

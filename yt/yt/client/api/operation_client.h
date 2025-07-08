@@ -2,6 +2,8 @@
 
 #include "client_common.h"
 
+#include <yt/yt/ytlib/exec_node/public.h>
+
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
 #include <yt/yt/client/scheduler/public.h>
 
@@ -93,6 +95,7 @@ struct TGetJobStderrOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
 {
+    std::optional<NExecNode::EJobStderrType> Type;
     std::optional<i64> Limit;
     std::optional<i64> Offset;
 };

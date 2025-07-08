@@ -86,7 +86,7 @@ void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tab
     const auto& tabletInternalPathId = CreateInternalPathId(tabletSchemeShardLocalPathId);
     TabletPathId.emplace(tabletInternalPathId, tabletSchemeShardLocalPathId);
     AFL_VERIFY(!SchemaObjectsCache);
-    SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletSchemeShardLocalPathId, info->TenantPathId);;
+    SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletInternalPathId, info->TenantPathId);;
     Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathId.GetRawValue());
     Schema::SaveSpecialValue(db, Schema::EValueIds::InternalOwnerPathId, tabletInternalPathId.GetRawValue());
     if (GenerateInternalPathId) {
@@ -110,7 +110,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
         if (tabletSchemeShardLocalPathIdValue.has_value()) {
             TabletPathId.emplace(TInternalPathId::FromRawValue(*tabletInternalPathIdValue), TSchemeShardLocalPathId::FromRawValue(*tabletSchemeShardLocalPathIdValue));
             if (info) {
-                SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(TabletPathId->SchemeShardLocalPathId, info->TenantPathId);
+                SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(TabletPathId->InternalPathId, info->TenantPathId);
             } else {
                 SchemaObjectsCache = std::make_shared<NOlap::TSchemaObjectsCache>();
             }

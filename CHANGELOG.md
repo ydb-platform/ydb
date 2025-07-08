@@ -18,17 +18,9 @@
 * 18231:Fix segfault that could happen while retrying Whiteboard requests. [#18231](https://github.com/ydb-platform/ydb/pull/18231) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 20241:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20241](https://github.com/ydb-platform/ydb/pull/20241) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20054:Make nodes less critical (to make cluster less critical), closes https://github.com/ydb-platform/ydb/issues/19676 [#20054](https://github.com/ydb-platform/ydb/pull/20054) ([Alexey Efimov](https://github.com/adameat))
-* 20025:Changes from #20020
-
-There was a T1 transaction in the EXECUTED queue. She is waiting for the signal to continue working. The T2 transaction was queued and its state was saved to disk. Transaction T1 was running at that moment. As a result, the T2 transaction continued to run when its state had not yet been saved to disk. She sent TEvReadSetAck to her "colleagues" and they deleted the T2 transaction. If the tablet restarts at this moment, the T2 transaction will be in the PLANNED state and will never receive a TEvReadSet from "colleagues".
-
-Before continuing to execute a transaction, you need to make sure that its state is saved to disk. Added a check. [#20025](https://github.com/ydb-platform/ydb/pull/20025) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 20025:[Fixed](https://github.com/ydb-platform/ydb/pull/20025) rare freezes of the topic table transaction. ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 
 ### Performance
 
-* 19844:Changes from #19807
-
-Changed the retry policy settings. Added a cache of SchemeNavigate responses. Users will receive faster confirmation that the server has written the message.
-
-Added logging of requests to KQP. [#19844](https://github.com/ydb-platform/ydb/pull/19844) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 19844:Users will receive faster confirmation that the server has written the message thanks to changes the retry policy settings and adds a cache of SchemeNavigate responses.[#19844](https://github.com/ydb-platform/ydb/pull/19844) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 

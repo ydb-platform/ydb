@@ -514,6 +514,7 @@ void TTablesManager::MoveTableProgress(
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(newSchemeShardLocalPathId, internalPathId).second);
     if (internalPathId == TabletPathId->InternalPathId) {
         TabletPathId->SchemeShardLocalPathId = newSchemeShardLocalPathId;
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, newSchemeShardLocalPathId.GetRawValue());
     }
     NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, { internalPathId, oldSchemeShardLocalPathId });
     NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, table->GetPathId());

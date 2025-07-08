@@ -89,6 +89,9 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/19057) ошибка "Failed to set up listener on port 9092 errno# 98 (Address already in use)", возникающая при обновлении версии.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/18905) ошибка, приводившая к segmentation fault при одновременном выполнении запроса к healthcheck и отключении узла кластера.
 * [Исправлен](https://github.com/ydb-platform/ydb/pull/18899) сбой в [партиционировании строковой таблицы](./concepts/datamodel/table#partitioning_row_table) при выборе разделенного ключа из образцов доступа, содержащих смешанные операции с полным ключом и префиксом ключа (например, точное чтение или чтение диапазона).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/18647) [ошибка](https://github.com/ydb-platform/ydb/issues/17885), из-за которой тип индекса ошибочно определялся как GLOBAL SYNC, хотя в запросе явно указывался UNIQUE.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/16797) ошибка, из-за которой автопартиционирование топиков не работало, когда параметр конфигурации `max_active_partition` был задан с помощью выражения `ALTER TOPIC`.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/18938) ошибка, из-за которой `ydb scheme describe` возвращал список столбцов не в том порядке, в котором они были заданы при создании таблицы. 
 
 ## Версия 24.4 {#24-4}
 

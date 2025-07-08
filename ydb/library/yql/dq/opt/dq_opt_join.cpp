@@ -1727,7 +1727,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                         for (ui32 i = 0U; i < rightNames.size(); ++i) {
                                             parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                                            parent.Atom(2*i + 1, ctx.GetIndexAsString(i), TNodeFlags::Default);
+                                            parent.Atom(2*i + 1, ctx.GetIndexAsString(i + leftNames.size()), TNodeFlags::Default);
                                         }
                                         return parent;
                                     })

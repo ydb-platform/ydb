@@ -497,8 +497,6 @@ THarmonizerStats THarmonizer::GetStats() const {
         .MinElapsedCpu = MinElapsedCpu.load(std::memory_order_relaxed),
         .AvgAwakeningTimeUs = WaitingInfo.AvgAwakeningTimeUs.load(std::memory_order_relaxed),
         .AvgWakingUpTimeUs = WaitingInfo.AvgWakingUpTimeUs.load(std::memory_order_relaxed),
-        .Budget = CpuConsumption.Budget,
-        .SharedFreeCpu = SharedInfo.FreeCpu,
     };
 }
 
@@ -540,8 +538,7 @@ TString THarmonizerStats::ToString() const {
         << "MinElapsedCpu: " << MinElapsedCpu << ", "
         << "AvgAwakeningTimeUs: " << AvgAwakeningTimeUs << ", "
         << "AvgWakingUpTimeUs: " << AvgWakingUpTimeUs << ", "
-        << "Budget: " << Budget << ", "
-        << "SharedFreeCpu: " << SharedFreeCpu << '}';
+        << '}';
 }
 
 }

@@ -507,10 +507,6 @@ namespace NActors {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
             poolState.ElapsedCpu = stats.AvgElapsedCpu;
             poolState.PossibleMaxLimit = stats.PotentialMaxThreadCount;
-            poolState.SharedCpuQuota = stats.SharedCpuQuota;
-            poolState.IsNeedy = stats.IsNeedy;
-            poolState.IsStarved = stats.IsStarved;
-            poolState.IsHoggish = stats.IsHoggish;
         } else {
             poolState.PossibleMaxLimit = poolState.MaxLimit;
         }

@@ -3,8 +3,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/thread_pool/pool.h>
-
 
 namespace NYdb::inline Dev {
 
@@ -186,7 +184,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
         ResponseQueue_ = params->GetExecutor();
     } else {
         // TAdaptiveThreadPool ignores params
-        ResponseQueue_ = NExec::CreateThreadPoolExecutorAdapter(CreateThreadPool(ClientThreadsNum_), ClientThreadsNum_, MaxQueuedRequests_);
+        ResponseQueue_ = NExec::CreateThreadPoolExecutor(ClientThreadsNum_, MaxQueuedRequests_);
     }
 
     ResponseQueue_->Start();

@@ -2,24 +2,30 @@
 
 ## Версия 25.1 {#25-1}
 
-### Версия 25.1.1.18 {#25-1-1-18}
+### Версия 25.1.2.6 {#25-1-2-6}
 
 Дата выхода: 2025.
 
 
 #### Функциональность
 
+* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближенного векторного поиска. Включается установкой флага `enable_vector_index` в конфигурации кластера под гарантию неотката на предыдущие версии.
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](./concepts/async-replication.md).
+* Поддержаны `BATCH UPDATE` и `BATCH DELETE` выражения, позволяющие применить изменения больших строковых таблиц вне транзакционных ограничений.
 * Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric).
-* Добавлена поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions)  в CDC для строковых таблиц. Включается установкой флага `enable_topic_autopartitioning_for_cdc` в [конфигурации кластера](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* Реализована клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (как у самой Kafka). Раньше балансировка проиходила на сервере. Включается установкой флага `enable_kafka_native_balancing` в конфигурации кластера.
+* Добавлена поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions) в CDC для строковых таблиц. Включается установкой флага `enable_topic_autopartitioning_for_cdc` в конфигурации кластера.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](./concepts/cdc.md#topic-options) в CDC топике с использованием выражения `ALTER TOPIC`.
-* [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) [формат DEBEZIUM_JSON](./concepts/cdc.md#debezium-json-record-structure)  для потоков изменений (changefeed). Включается установкой флага `enable_changefeed_ debezium_json_format`.
+* [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) [формат DEBEZIUM_JSON](./concepts/cdc.md#debezium-json-record-structure)  для потоков изменений (changefeed).
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/19507) возможность создавать потоки изменений (changefeed) к индексным таблицам.
+* Добавлена возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md) для вторичного индекса. Включается установкой флага `enable_access_to_index_impl_tables` в конфигурации кластера.
 * В операциях резервного копирования и восстановления расширен состав поддерживаемых объектов. Включается установкой флагов, указанных в скобках:
   * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (changefeed) (флаги `enable_changefeeds_export` и `enable_changefeeds_import`),
   * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представлений (VIEW) (флаг `enable_view_export`).
+* Добавлено автоудаление временных директорий и таблиц при экспорте в s3. Включается установкой флага `enable_export_auto_dropping` в конфигурации кластера.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, которая предотвращает восстановление из поврежденных резервных копий и защищает от потери данных.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений, использующих [UDF](./yql/reference/builtins/basic.md#udf) в своих запросах.
-* Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth) и [истории перегруженных партиций](./dev/system-views#top-overload-partitions).
+* Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth), [истории перегруженных партиций](./dev/system-views#top-overload-partitions), [истории партиций строковых таблиц со сломанными блокировками (TLI)](./dev/system-views#top-tli-partitions).
 * Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user.md) и [ALTER USER](./yql/reference/syntax/alter-user.md):
   * `HASH` - возможность задания пароля в зашифрованном виде,
   * `LOGIN` и `NOLOGIN` - разблокировка и блокировка пользователя.
@@ -48,6 +54,9 @@
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6509) поддержка [constant folding](https://en.wikipedia.org/wiki/Constant_folding) в оптимизаторе запросов по умолчанию, что повышает производительность запросов за счёт вычисления константных выражений на этапе компиляции.
 * [Добавлен](https://github.com/ydb-platform/ydb/issues/6512) новый протокол гранулярного таймкаста, который позволит сократить время выполнения распределенных транзакций (замедление одного шарда не будет приводить к замедлению всех).
 * [Реализована](https://github.com/ydb-platform/ydb/issues/11561) функциональность сохранения состояния даташардов в памяти при перезапусках, что позволяет сохранить блокировки и повысить шансы на успешное выполнение транзакций. Это обеспечивает сокращение времени выполнения долгих транзакций благодаря уменьшению количества повторных попыток.
+* [Реализована](https://github.com/ydb-platform/ydb/pull/15255) конвейерная обработка внутренних транзакций в [Node Broker](./concepts/glossary#node-broker-#node-broker), которая ускорила запуск динамических узлов в кластере YDB.
+* [Улучшена](https://github.com/ydb-platform/ydb/pull/15607) устойчивость Node Broker к повышенной нагрузке со стороны узлов кластера.
+* [Включены](https://github.com/ydb-platform/ydb/pull/19440) по умолчанию выгружаемые B-Tree индексы взамен невыгружаемых индексов SST, что позволяет сократить потребление памяти при хранении "холодных" данных.
 * [Оптимизировано](https://github.com/ydb-platform/ydb/pull/15264) потребление памяти узлами хранения.
 * [Оптимизировано](https://github.com/ydb-platform/ydb/pull/10969) время запуска Hive.
 * [Оптимизирован](https://github.com/ydb-platform/ydb/pull/6561) процесс репликации.

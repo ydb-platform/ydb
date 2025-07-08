@@ -14,7 +14,7 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 template <class TMemoryLimiterPolicy>
 class TServiceOperatorImpl {
 private:
-    TAtomicCounter NextProcessId = 0;
+    TAtomicCounter LastProcessId = 0;
     TConfig ServiceConfig = TConfig::BuildDisabledConfig();
     std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TStageFeatures> DefaultStageFeatures =
@@ -51,20 +51,21 @@ public:
         return Singleton<TSelf>()->DefaultStageFeatures;
     }
 
-    static std::shared_ptr<TProcessGuard> BuildProcessGuard(
-        const std::optional<ui64> processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
-        ui64 localProcessId;
-        if constexpr (TMemoryLimiterPolicy::ExternalProcessIdAllocation) {
-            AFL_VERIFY(processId);
-            localProcessId = *processId;
-        } else {
-            AFL_VERIFY(!processId);
-            localProcessId = Singleton<TSelf>()->NextProcessId.Val();
-            Singleton<TSelf>()->NextProcessId.Inc();
-        }
+    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const std::vector<std::shared_ptr<TStageFeatures>>& stages)
+        requires(!TMemoryLimiterPolicy::ExternalProcessIdAllocation)
+    {
+        ui64 processId = Singleton<TSelf>()->LastProcessId.Inc();
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
-        return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), localProcessId, stages);
+        return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId, stages);
+    }
+
+    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages)
+        requires(TMemoryLimiterPolicy::ExternalProcessIdAllocation)
+    {
+        auto& context = NActors::TActorContext::AsActorContext();
+        const NActors::TActorId& selfId = context.SelfID;
+        return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId, stages);
     }
 
     static bool SendToAllocation(const ui64 processId, const ui64 scopeId, const ui64 groupId,

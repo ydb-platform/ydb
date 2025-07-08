@@ -12,6 +12,10 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
+class TGroupGuard;
+class TScopeGuard;
+class TProcessGuard;
+
 class TGroupGuard {
 private:
     const NActors::TActorId ActorId;
@@ -23,6 +27,21 @@ public:
     TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 externalScopeId, const ui64 groupId);
 
     ~TGroupGuard();
+};
+
+class TProcessGuard {
+private:
+    const NActors::TActorId ActorId;
+    YDB_READONLY(ui64, ProcessId, 0);
+
+public:
+    TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
+
+    std::shared_ptr<TScopeGuard> BuildScopeGuard(const ui32 scopeId) const {
+        return std::make_shared<TScopeGuard>(ActorId, ProcessId, scopeId);
+    }
+
+    ~TProcessGuard();
 };
 
 class TScopeGuard {
@@ -40,21 +59,6 @@ public:
     }
 
     ~TScopeGuard();
-};
-
-class TProcessGuard {
-private:
-    const NActors::TActorId ActorId;
-    YDB_READONLY(ui64, ProcessId, 0);
-
-public:
-    TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
-
-    std::shared_ptr<TScopeGuard> BuildScopeGuard(const ui32 scopeId) const {
-        return std::make_shared<TScopeGuard>(ActorId, ProcessId, scopeId);
-    }
-
-    ~TProcessGuard();
 };
 
 class TAllocationGuard {

@@ -30,7 +30,7 @@ private:
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryGroupGuard;
     std::optional<NBlobOperations::NRead::TCompositeReadBlobs> Blobs;
     std::optional<std::vector<NArrow::TGeneralContainer>> AssembledData;
-    inline static TAtomicCounter MemoryProcessIdCounter = 0;
+    inline static TAtomicCounter MemoryScopeIdCounter = 0;
 
 public:
     ui64 GetMemoryProcessId() const {
@@ -78,11 +78,11 @@ public:
         return result;
     }
 
-    TCurrentContext(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>&& memoryProcessGuard)
-        : MemoryProcessGuard(std::move(memoryProcessGuard))
+    TCurrentContext(const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard)
+        : MemoryProcessGuard(memoryProcessGuard)
     {
         AFL_VERIFY(MemoryProcessGuard);
-        MemoryScopeGuard = MemoryProcessGuard->BuildScopeGuard(1);
+        MemoryScopeGuard = MemoryProcessGuard->BuildScopeGuard(MemoryScopeIdCounter.Inc());
         MemoryGroupGuard = MemoryScopeGuard->BuildGroupGuard();
     }
 
@@ -245,19 +245,12 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY(NBlobOperations::EConsumer, Consumer, NBlobOperations::EConsumer::UNDEFINED);
     YDB_READONLY_DEF(TString, ExternalTaskId);
-    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>, MemoryProcessGuard);
 
 public:
     TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
         const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard);
-
-    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ExtractProcessGuardVerified() {
-        AFL_VERIFY(MemoryProcessGuard);
-        auto result = std::move(MemoryProcessGuard);
-        MemoryProcessGuard.reset();
-        return result;
-    }
 };
 
 }   // namespace NKikimr::NOlap::NDataFetcher

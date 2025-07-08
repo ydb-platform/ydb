@@ -258,7 +258,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
 
         void ExecuteMultiColumn() {
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 

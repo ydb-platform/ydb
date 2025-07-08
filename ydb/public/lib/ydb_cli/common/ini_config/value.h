@@ -32,12 +32,14 @@ namespace NIniConfig {
         template <class T>
         inline IValue* ConstructValueImpl(const T& t, ...) {
             extern IValue* ConstructValueImpl(const T& t);
+
             return ConstructValueImpl(t);
         }
 
         template <class T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
         inline IValue* ConstructValueImpl(const T& t, TDummy) {
             extern IValue* ConstructValueImpl(const double& t);
+
             return ConstructValueImpl(t);
         }
 
@@ -45,17 +47,20 @@ namespace NIniConfig {
         inline IValue* ConstructValueImpl(const T& t, TDummy) {
             typedef std::conditional_t<std::is_signed<T>::value, i64, ui64> Type;
             extern IValue* ConstructValueImpl(const Type& t);
+
             return ConstructValueImpl(t);
         }
 
         template <class T, std::enable_if_t<std::is_convertible<T, TString>::value>* = nullptr>
         inline IValue* ConstructValueImpl(const T& t, TDummy) {
             extern IValue* ConstructValueImpl(const TString& t);
+
             return ConstructValueImpl(t);
         }
 
         inline IValue* ConstructValueImpl(const bool& t, TDummy) {
             extern IValue* ConstructValueImpl(const bool& t);
+
             return ConstructValueImpl(t);
         }
     }
@@ -88,6 +93,7 @@ namespace NIniConfig {
     template <class T>
     inline T ValueAs(const IValue* val) {
         typedef NCfgPrivate::TSelector<std::is_unsigned<T>::value> TCvt;
+
         return SafeIntegerCast<T>(TCvt::Cvt(val));
     }
 

@@ -864,6 +864,40 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
         .Done();
 }
 
+// Optimization rule: WideToBlocks(WideFromBlocks(x)) -> x
+TExprBase DqPeepholeOptimizeWideToBlocks(const TExprBase& node, TExprContext&) {
+    Cerr << "MISHA DqPeepholeOptimizeWideToBlocks: " << node.Ref().Content() << " -> " << node.Ref().Head().Content() << Endl;
+    if (!node.Ref().IsCallable("WideToBlocks")) {
+        return node;
+    }
+    
+    // Check if input is WideFromBlocks
+    const auto& input = node.Ref().Head();
+    if (!input.IsCallable("WideFromBlocks")) {
+        return node;
+    }
+    
+    // WideToBlocks(WideFromBlocks(x)) -> x
+    return TExprBase(input.HeadPtr());
+}
+
+// Optimization rule: WideFromBlocks(WideToBlocks(x)) -> x  
+TExprBase DqPeepholeOptimizeWideFromBlocks(const TExprBase& node, TExprContext&) {
+    Cerr << "MISHA DqPeepholeOptimizeWideFromBlocks: " << node.Ref().Content() << " -> " << node.Ref().Head().Content() << Endl;
+    if (!node.Ref().IsCallable("WideFromBlocks")) {
+        return node;
+    }
+    
+    // Check if input is WideToBlocks
+    const auto& input = node.Ref().Head();
+    if (!input.IsCallable("WideToBlocks")) {
+        return node;
+    }
+    
+    // WideFromBlocks(WideToBlocks(x)) -> x
+    return TExprBase(input.HeadPtr());
+}
+
 TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyBlockHashJoin>()) {
         return node;

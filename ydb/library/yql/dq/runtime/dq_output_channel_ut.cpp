@@ -328,7 +328,7 @@ void TestOverflow(TTestContext& ctx) {
         PushRow(ctx, std::move(row), ch);
         UNIT_FAIL("");
     } catch (yexception& e) {
-        UNIT_ASSERT(TString(e.what()).Contains("requirement UpdateFillLevel() != HardLimit failed"));
+        UNIT_ASSERT(TString(e.what()).Contains("requirement GetFillLevel() != HardLimit failed"));
     }
 }
 

@@ -163,7 +163,7 @@ void TStageFeatures::UpdateConsumption(const TStageFeatures* current) const {
         return;
     }
 
-    current->MemoryConsumer->SetConsumption(current->GetFullMemory());
+    current->MemoryConsumer->SetConsumption(current->Usage.Val());
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

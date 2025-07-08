@@ -166,7 +166,7 @@ namespace NKikimr {
 
                 bool producingHugeBlob = false;
 
-                if (inMemParts.Empty() && smallDiskParts.Empty()) { // we only have huge blobs, so keep it this way
+                if (inMemParts.Empty() && smallDiskParts.Empty() && !hugeDiskParts.Empty()) { // we only have huge blobs, so keep it this way
                     producingHugeBlob = true;
                 } else {
                     producingHugeBlob = targetingHugeBlob;

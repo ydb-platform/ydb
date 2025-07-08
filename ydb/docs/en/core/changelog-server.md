@@ -88,7 +88,10 @@ Release date: 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/19057) an issue where the `Failed to set up listener on port 9092 errno# 98 (Address already in use)` error would occur when updating the version.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18905) an error that led to a segmentation fault when simultaneously executing a request to healthcheck and disabling the cluster node.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18899) an issue that caused partitioning of [row-oriented tables](./concepts/datamodel/table.md#partitioning_row_table) to fail when a split key was selected from access samples containing a mix of full key and key prefix operations (such as exact and range reads).
-
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18647) an [issue](https://github.com/ydb-platform/ydb/issues/17885) where the index type was incorrectly defaulting to GLOBAL SYNC when UNIQUE was explicitly specified in the query.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16797) an issue where topic auto-partitioning did not work when the configuration parameter `max_active_partition` was set using the `ALTER TOPIC` statement.
+* [Fixed](https://github.com/db-platform/adb/pull/18938) an issue that causes `db scheme describe` to return a list of columns not in the order in which they were set when creating the table.
+  
 ## Version 24.4 {#24-4}
 
 ### Version 24.4.4.2 {#24-4-4-2}

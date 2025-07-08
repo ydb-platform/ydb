@@ -30,6 +30,7 @@ void TGRpcReplicationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
             #NAME, logger, getCounterBlock("replication", #NAME))->Run();
 
     ADD_REQUEST(DescribeReplication, DescribeReplicationRequest, DescribeReplicationResponse, DoDescribeReplication);
+    ADD_REQUEST(DescribeTransfer, DescribeTransferRequest, DescribeTransferResponse, DoDescribeTransfer);
 
 #undef ADD_REQUEST
 }

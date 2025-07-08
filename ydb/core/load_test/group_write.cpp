@@ -8,6 +8,8 @@
 #include <ydb/core/util/lz4_data_generator.h>
 #include <ydb/core/jaeger_tracing/throttler.h>
 
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+
 #include <google/protobuf/text_format.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -21,6 +23,34 @@
 namespace NKikimr {
 
 namespace {
+
+TRcBuf GenDataAsRcBuf(size_t size, NActors::TRdmaAllocatorWithFallback* alloc) {
+    struct TRcBufWrap : public TRcBuf {
+        using TRcBuf::TRcBuf;
+
+        TRcBufWrap(const TRcBuf& rcbuf)
+            : TRcBuf(rcbuf)
+        {}
+
+        TRcBufWrap(TRcBuf&& rcbuf)
+            : TRcBuf(std::move(rcbuf))
+        {}
+
+        char* mutable_data() {
+            return this->GetDataMut();
+        }
+
+        static TRcBufWrap Uninitialized(size_t size) {
+            return TRcBuf::Uninitialized(size);
+        }
+    };
+
+    TRcBufWrap data = alloc ? alloc->AllocRcBuf(size, 0, 0) : TRcBufWrap::Uninitialized(size);
+
+    FastGenDataForLZ4<TRcBufWrap>(size, 0, data);
+
+    return data;
+}
 
 class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActor> {
     class TWakeupQueue {
@@ -372,6 +402,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             std::shared_ptr<TRequestDelayManager> DelayManager;
             TInFlightTracker InFlightTracker;
             const ui64 MaxTotalBytes;
+            const ui32 RdmaMode;
         };
 
     private:
@@ -590,8 +621,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             const ui32 size = 1;
             const ui32 lastStep = Max<ui32>();
             const TLogoBlobID id(TabletId, Generation, lastStep, Channel, size, 0);
-            const TSharedData buffer = Self.GenerateBuffer(id);
-            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
+            TRcBuf buffer = Self.GenerateBuffer(id, ctx, WriteSettings.RdmaMode > 0);
+            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), TInstant::Max(), PutHandleClass);
 
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvPutResult *>(event);
@@ -916,8 +947,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 putHandleClass = PutHandleClass;
             }
             const TLogoBlobID id(TabletId, Generation, WriteStep, Channel, size, Cookie);
-            const TSharedData buffer = Self.GenerateBuffer(id);
-            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), putHandleClass);
+            TRcBuf buffer = Self.GenerateBuffer(id, ctx, WriteSettings.RdmaMode > 0);
+            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), TInstant::Max(), putHandleClass);
             const ui64 writeQueryId = ++WriteQueryId;
 
             auto writeCallback = [this, writeQueryId](IEventBase *event, const TActorContext& ctx) {
@@ -1177,7 +1208,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
     ui32 DelayAfterInitialWrite = 0;
 
-    TSharedData BlobData;
+    ui32 MaxBlobSize;
+    TRcBuf BlobData;
+    bool TryRdmaMemory = false;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
@@ -1234,9 +1267,11 @@ public:
                 .DelayManager = std::move(writeDelayManager),
                 .InFlightTracker = TInFlightTracker(profile.GetMaxInFlightWriteRequests(), profile.GetMaxInFlightWriteBytes()),
                 .MaxTotalBytes = profile.GetMaxTotalBytesWritten(),
+                .RdmaMode = profile.GetRdmaMode(),
             };
 
             maxBlobSize = std::max(maxBlobSize, writeSettings.SizeGen->GetMax());
+            TryRdmaMemory |= (bool)profile.GetRdmaMode();
 
             bool enableReads = profile.ReadIntervalsSize() || profile.HasReadHardRateDispatcher();
             NKikimrBlobStorage::EGetHandleClass getHandleClass = NKikimrBlobStorage::EGetHandleClass::FastRead;
@@ -1327,7 +1362,7 @@ public:
                 WorkersInInitialState++;
             }
         }
-        BlobData = FastGenDataForLZ4<TSharedData>(maxBlobSize);
+        MaxBlobSize = maxBlobSize;
     }
 
     void StartWorkers(const TActorContext& ctx) {
@@ -1354,6 +1389,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        BlobData = GenDataAsRcBuf(MaxBlobSize, TryRdmaMemory ? ctx.ActorSystem()->GetRcBufAllocator() : nullptr);
         Become(&TLogWriterLoadTestActor::StateFunc);
         EarlyStop = false;
         for (auto& writer : TabletWriters) {
@@ -1522,11 +1558,11 @@ public:
         Y_ABORT("TEvUndelivered# 0x%08" PRIx32 " ActorId# %s", ev->Get()->SourceType, ev->Sender.ToString().data());
     }
 
-    TSharedData GenerateBuffer(const TLogoBlobID& id) const {
+    TRcBuf GenerateBuffer(const TLogoBlobID& id, const TActorContext& ctx, bool rdmaMem) const {
         if (id.BlobSize() > BlobData.size())
-            return FastGenDataForLZ4<TSharedData>(id.BlobSize());
+            return GenDataAsRcBuf(id.BlobSize(), rdmaMem ? ctx.ActorSystem()->GetRcBufAllocator() : nullptr);
         Y_ABORT_UNLESS(id.BlobSize() <= BlobData.size());
-        TSharedData data(BlobData);
+        TRcBuf data(BlobData);
         data.TrimBack(id.BlobSize());
         return data;
     }

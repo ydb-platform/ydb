@@ -373,8 +373,8 @@ private:
             case EMemoryConsumerKind::DataAccessorCache:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
-            case EMemoryConsumerKind::ScanMemoryLimiter:
-            case EMemoryConsumerKind::CompMemoryLimiter:
+            case EMemoryConsumerKind::ScanGroupedMemoryLimiter:
+            case EMemoryConsumerKind::CompGroupedMemoryLimiter:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient, limitBytes));
                 break;
         }
@@ -475,14 +475,14 @@ private:
                 stats.SetSharedCacheLimit(limitBytes);
                 break;
             }
-            case EMemoryConsumerKind::ScanMemoryLimiter: {
-                stats.SetScanMemoryLimiterConsumption(consumer.Consumption);
-                stats.SetScanMemoryLimiterLimit(limitBytes);
+            case EMemoryConsumerKind::ScanGroupedMemoryLimiter: {
+                stats.SetScanGroupedMemoryLimiterConsumption(consumer.Consumption);
+                stats.SetScanGroupedMemoryLimiterLimit(limitBytes);
                 break;
             }
-            case EMemoryConsumerKind::CompMemoryLimiter: {
-                stats.SetCompMemoryLimiterConsumption(consumer.Consumption);
-                stats.SetCompMemoryLimiterLimit(limitBytes);
+            case EMemoryConsumerKind::CompGroupedMemoryLimiter: {
+                stats.SetCompGroupedMemoryLimiterConsumption(consumer.Consumption);
+                stats.SetCompGroupedMemoryLimiterLimit(limitBytes);
                 break;
             }
             case EMemoryConsumerKind::BlobCache: {
@@ -515,11 +515,11 @@ private:
                 result.CanZeroLimit = true;
                 break;
             }
-            case EMemoryConsumerKind::ScanMemoryLimiter: {
+            case EMemoryConsumerKind::ScanGroupedMemoryLimiter: {
                 result.ExactLimit = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes);
                 break;
             }
-            case EMemoryConsumerKind::CompMemoryLimiter: {
+            case EMemoryConsumerKind::CompGroupedMemoryLimiter: {
                 result.ExactLimit = GetColumnTablesCompactionLimitBytes(Config, hardLimitBytes) *
                     NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterCompactionLimitCoefficient;
                 break;

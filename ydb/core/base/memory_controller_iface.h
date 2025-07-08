@@ -7,8 +7,8 @@ namespace NKikimr::NMemory {
 enum class EMemoryConsumerKind {
     SharedCache,
     MemTable,
-    ScanMemoryLimiter,
-    CompMemoryLimiter,
+    ScanGroupedMemoryLimiter,
+    CompGroupedMemoryLimiter,
     BlobCache,
     DataAccessorCache
 };

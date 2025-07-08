@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE (TMemoryStatsAggregator) {
         aggregator.Add(stats1, "host1");
         aggregator.Add(stats2, "host2");
         aggregator.Add(stats3, "host3");
-        
+
         TMemoryStats aggregated = aggregator.Aggregate();
 
         Cerr << aggregated.ShortDebugString() << Endl;
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE (TMemoryStatsAggregator) {
         aggregator.Add(stats1, "host1");
         aggregator.Add(stats2, "host2");
         aggregator.Add(stats3, "host3");
-        
+
         TMemoryStats aggregated = aggregator.Aggregate();
 
         Cerr << aggregated.ShortDebugString() << Endl;
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE (TMemoryStatsAggregator) {
         aggregator.Add(stats1, "host");
         aggregator.Add(stats2, "host");
         aggregator.Add(stats3, "host");
-        
+
         TMemoryStats aggregated = aggregator.Aggregate();
 
         Cerr << aggregated.ShortDebugString() << Endl;
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE (TMemoryStatsAggregator) {
         aggregator.Add(stats1, "host");
         aggregator.Add(stats2, "host");
         aggregator.Add(stats3, "host");
-        
+
         TMemoryStats aggregated = aggregator.Aggregate();
 
         Cerr << aggregated.ShortDebugString() << Endl;
@@ -169,13 +169,37 @@ Y_UNIT_TEST_SUITE (TMemoryStatsAggregator) {
         aggregator.Add(stats1, "host1");
         aggregator.Add(stats2, "host1");
         aggregator.Add(stats3, "host2");
-        
+
         TMemoryStats aggregated = aggregator.Aggregate();
 
         Cerr << aggregated.ShortDebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(aggregated.ShortDebugString(),
             "AnonRss: 36 CGroupLimit: 66 MemTotal: 65 MemAvailable: 85 AllocatedMemory: 156 AllocatorCachesMemory: 186 HardLimit: 145 SoftLimit: 165 TargetUtilization: 185 ExternalConsumption: 194 SharedCacheConsumption: 336 SharedCacheLimit: 366 MemTableConsumption: 396 MemTableLimit: 426 QueryExecutionConsumption: 456 QueryExecutionLimit: 486");
+    }
+
+    Y_UNIT_TEST(ColumnShard_Single) {
+        TMemoryStatsAggregator aggregator;
+
+        TMemoryStats stats;
+        stats.SetScanGroupedMemoryLimiterConsumption(1);
+        stats.SetScanGroupedMemoryLimiterLimit(2);
+        stats.SetCompGroupedMemoryLimiterConsumption(3);
+        stats.SetCompGroupedMemoryLimiterLimit(4);
+        stats.SetBlobCacheConsumption(5);
+        stats.SetBlobCacheLimit(6);
+        stats.SetDataAccessorCacheConsumption(7);
+        stats.SetDataAccessorCacheLimit(8);
+
+        Cerr << stats.ShortDebugString() << Endl;
+
+        aggregator.Add(stats, "host");
+
+        TMemoryStats aggregated = aggregator.Aggregate();
+
+        Cerr << aggregated.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(aggregated.ShortDebugString(), stats.ShortDebugString());
     }
 }
 

@@ -101,7 +101,7 @@ public:
 class TScanMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Scan";
-    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ScanMemoryLimiter;
+    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ScanGroupedMemoryLimiter;
 };
 
 using TScanMemoryLimiterOperator = TServiceOperatorImpl<TScanMemoryLimiterPolicy>;
@@ -109,7 +109,7 @@ using TScanMemoryLimiterOperator = TServiceOperatorImpl<TScanMemoryLimiterPolicy
 class TCompMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Comp";
-    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::CompMemoryLimiter;
+    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::CompGroupedMemoryLimiter;
 };
 
 using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy>;

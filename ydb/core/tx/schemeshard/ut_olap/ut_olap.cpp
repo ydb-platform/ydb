@@ -1222,7 +1222,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/", defaultTableSchema);
         env.TestWaitNotification(runtime, txId);
-
         ui64 pathId = 0;
         ui64 shardId = 0;
         auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -1267,7 +1266,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, initialTablePath, false, NLs::PathNotExist);
-
         TestLsPathId(runtime, expectedMovedTablePathId, NLs::PathStringEqual(movedTablePath));
 
         UNIT_ASSERT(checkStat(movedTablePath));

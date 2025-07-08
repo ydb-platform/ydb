@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     actions.cpp
     grpc_connections.cpp
-    response_queue.cpp
 )
 
 PEERDIR(

@@ -933,7 +933,7 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
         auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Cookie, cookie, syncResponse->ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, true, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
 
         // No additional sync responses.
         UNIT_CHECK_GENERATED_EXCEPTION(

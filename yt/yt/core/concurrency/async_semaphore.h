@@ -53,7 +53,8 @@ class TAsyncSemaphore
     : public TRefCounted
 {
 public:
-    // Overdrafting allows successfully execute requests that try to acquire more slots than semaphore has in total.
+    // Overdraft allows successfully execute requests that try to acquire more slots than semaphore has in total,
+    // it can happen only if all slots are available for acquisition.
     explicit TAsyncSemaphore(i64 totalSlots, bool enableOverdraft = false);
 
     //! Updates the total number of slots.

@@ -421,9 +421,9 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
         });
 
-    compiler->AddCallable({TDqPhyBlockHashJoin::CallableName(), "BlockHashJoin"},
+    compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 5, "DqPhyBlockHashJoin/BlockHashJoin should have 5 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 5, "BlockHashJoinCore should have 5 arguments");
             
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);

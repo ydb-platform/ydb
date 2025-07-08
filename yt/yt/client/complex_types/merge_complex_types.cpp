@@ -244,8 +244,7 @@ TLogicalTypePtr MergeTypes(
     }
 
     switch (firstMetatype) {
-        case ELogicalMetatype::Simple:
-        {
+        case ELogicalMetatype::Simple: {
             if (CheckTypeCompatibility(firstType, secondType).first == ESchemaCompatibility::FullyCompatible) {
                 return secondType;
             }
@@ -260,55 +259,49 @@ TLogicalTypePtr MergeTypes(
                 << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
 
         }
-        case ELogicalMetatype::List:
-        {
+        case ELogicalMetatype::List: {
             auto mergedType = MergeTypes(
                 firstType->AsListTypeRef().GetElement(),
                 secondType->AsListTypeRef().GetElement());
 
-            return New<TListLogicalType>(mergedType);
+            return New<TListLogicalType>(std::move(mergedType));
         }
-        case ELogicalMetatype::VariantStruct:
-        {
+        case ELogicalMetatype::VariantStruct: {
             auto mergedFields = MergeStructTypes(
                 firstDescriptor,
                 secondDescriptor);
 
-            return New<TVariantStructLogicalType>(mergedFields);
+            return New<TVariantStructLogicalType>(std::move(mergedFields));
         }
 
-        case ELogicalMetatype::Struct:
-        {
+        case ELogicalMetatype::Struct: {
             auto mergedFields = MergeStructTypes(
                 firstDescriptor,
                 secondDescriptor);
 
-            return New<TStructLogicalType>(mergedFields);
+            return New<TStructLogicalType>(std::move(mergedFields));
         }
 
-        case ELogicalMetatype::Tuple:
-        {
+        case ELogicalMetatype::Tuple: {
             auto mergedElements = MergeTupleTypes(
                 firstDescriptor,
                 secondDescriptor);
 
-            return New<TTupleLogicalType>(mergedElements);
+            return New<TTupleLogicalType>(std::move(mergedElements));
         }
 
-        case ELogicalMetatype::VariantTuple:
-        {
+        case ELogicalMetatype::VariantTuple: {
             auto mergedElements = MergeTupleTypes(
                 firstDescriptor,
                 secondDescriptor);
 
-            return New<TVariantTupleLogicalType>(mergedElements);
+            return New<TVariantTupleLogicalType>(std::move(mergedElements));
         }
 
         case ELogicalMetatype::Dict:
             return MergeDictTypes(firstDescriptor, secondDescriptor);
 
-        case ELogicalMetatype::Decimal:
-        {
+        case ELogicalMetatype::Decimal: {
             if (*firstDescriptor.GetType() == *secondDescriptor.GetType()) {
                 return firstType;
             } else {

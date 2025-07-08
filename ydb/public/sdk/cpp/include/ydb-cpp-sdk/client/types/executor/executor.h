@@ -16,6 +16,9 @@ public:
     virtual ~IExecutor() = default;
 };
 
+// Create default executor for thread pool.
+std::shared_ptr<IExecutor> CreateThreadPoolExecutor(std::size_t threadCount, std::size_t maxQueueSize = 0);
+
 // Create executor adapter for util thread pool.
 std::shared_ptr<IExecutor> CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool, std::size_t threadCount, std::size_t maxQueueSize = 0);
 

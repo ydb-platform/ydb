@@ -94,8 +94,7 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeHistory = true,
                 .IncludeReplicatedTableOptions = false,
             },
-            false)
-));
+            false)));
 
 
 class TReplicationCardFetchOptionsOrTest
@@ -181,8 +180,7 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeProgress = true,
                 .IncludeHistory = true,
                 .IncludeReplicatedTableOptions = true,
-            }
-)));
+            })));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -279,8 +277,7 @@ INSTANTIATE_TEST_SUITE_P(
             ETableReplicaMode::Async,
             ETableReplicaState::Enabled,
             std::vector<TReplicaHistoryItem>(),
-            false)
-));
+            false)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -411,8 +408,7 @@ INSTANTIATE_TEST_SUITE_P(
     TReplicationCardComputeReplicasLagTest,
     ::testing::Values(
         TReplicationCardComputeReplicasLagTest::CreateTestDataNormal1(),
-        TReplicationCardComputeReplicasLagTest::CreateTestDataLaggingSyncReplica()
-));
+        TReplicationCardComputeReplicasLagTest::CreateTestDataLaggingSyncReplica()));
 
 ////////////////////////////////////////////////////////////////////////////////
 

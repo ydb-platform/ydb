@@ -1,5 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <yt/cpp/mapreduce/common/helpers.h>
+#include "yql_yt_job_ut.h"
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>

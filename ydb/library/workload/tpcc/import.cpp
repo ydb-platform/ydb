@@ -577,7 +577,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
 //-----------------------------------------------------------------------------
 
 template<typename LoadFunc>
-void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log) {
+void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::protobuf::Arena& arena, TLog* Log) {
     for (int retryCount = 0; retryCount < MAX_RETRIES; ++retryCount) {
         if (GetGlobalInterruptSource().stop_requested()) {
             break;
@@ -587,6 +587,8 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log
         if (result.IsSuccess()) {
             return;
         }
+
+        arena.Reset();
 
         const auto status = result.GetStatus();
         bool shouldFail = status == EStatus::NOT_FOUND || status == EStatus::UNDETERMINED
@@ -629,13 +631,13 @@ void LoadSmallTables(
 
     ExecuteWithRetry("LoadItems", [&]() {
         return LoadItems(tableClient, itemTablePath, arena, fastRng, Log);
-    }, Log);
+    }, arena, Log);
     ExecuteWithRetry("LoadWarehouses", [&]() {
         return LoadWarehouses(tableClient, warehouseTablePath, 1, warehouseCount, arena, fastRng, Log);
-    }, Log);
+    }, arena, Log);
     ExecuteWithRetry("LoadDistricts", [&]() {
         return LoadDistricts(tableClient, districtTablePath, 1, warehouseCount, arena, fastRng, Log);
-    }, Log);
+    }, arena, Log);
 }
 
 //-----------------------------------------------------------------------------
@@ -723,10 +725,10 @@ void LoadRange(
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadCustomers", [&]() {
                 return LoadCustomers(tableClient, customerTablePath, wh, district, arena, fastRng, Log);
-            }, Log);
+            }, arena, Log);
             ExecuteWithRetry("LoadOpenOrders", [&]() {
                 return LoadOpenOrders(tableClient, oorderTablePath, wh, district, arena, fastRng, Log);
-            }, Log);
+            }, arena, Log);
         }
         state.DataSizeLoaded.fetch_add(indexedPerWh, std::memory_order_relaxed);
     }
@@ -746,19 +748,19 @@ void LoadRange(
             int itemsToLoad = itemBatchSize;
             ExecuteWithRetry("LoadStock", [&]() {
                 return LoadStock(tableClient, stockTablePath, wh, startItemId, itemsToLoad, arena, fastRng, Log);
-            }, Log);
+            }, arena, Log);
         }
 
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadOrderLines", [&]() {
                 return LoadOrderLines(tableClient, orderLineTablePath, wh, district, arena, fastRng, Log);
-            }, Log);
+            }, arena, Log);
             ExecuteWithRetry("LoadCustomerHistory", [&]() {
                 return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, fastRng, Log);
-            }, Log);
+            }, arena, Log);
             ExecuteWithRetry("LoadNewOrders", [&]() {
                 return LoadNewOrders(tableClient, newOrderTablePath, wh, district, arena, Log);
-            }, Log);
+            }, arena, Log);
         }
 
         state.DataSizeLoaded.fetch_add(perWhDatasize, std::memory_order_relaxed);

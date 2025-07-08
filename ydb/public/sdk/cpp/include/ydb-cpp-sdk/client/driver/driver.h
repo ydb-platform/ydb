@@ -145,7 +145,8 @@ public:
 
     //! Set executor for async responses.
     //! If not set, default executor will be used.
-    TDriverConfig& SetExecutor(std::shared_ptr<IExecutor> executor);
+    //! Warning: executor should start before driver is created and stop after driver is stopped by Stop(true) method.
+    TDriverConfig& SetExecutor(std::shared_ptr<NExec::IExecutor> executor);
 
 private:
     class TImpl;

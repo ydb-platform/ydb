@@ -38,7 +38,7 @@ private:
 
 class TExecutorResponseQueue : public IResponseQueue {
 public:
-    TExecutorResponseQueue(std::shared_ptr<IExecutor> executor)
+    TExecutorResponseQueue(std::shared_ptr<NExec::IExecutor> executor)
         : Executor_(executor)
     {
     }
@@ -54,7 +54,7 @@ public:
     }
 
 private:
-    std::shared_ptr<IExecutor> Executor_;
+    std::shared_ptr<NExec::IExecutor> Executor_;
 };
 
 std::unique_ptr<IResponseQueue> CreateResponseQueue(std::shared_ptr<IConnectionsParams> params) {

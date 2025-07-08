@@ -4,7 +4,7 @@
 
 #include <functional>
 
-namespace NYdb::inline Dev {
+namespace NYdb::inline Dev::NExec {
 
 class IExecutor {
 public:

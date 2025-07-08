@@ -92,6 +92,13 @@ namespace NActors {
         Cleanup();
     }
 
+	bool TActorSystem::IsStopped() {
+		if (!TlsActivationContext) {
+			return true;
+		}
+		return TlsActivationContext->ActorSystem()->StopExecuted || !TlsActivationContext->ActorSystem()->StartExecuted;
+	}
+
     template <TActorSystem::TEPSendFunction EPSpecificSend>
     bool TActorSystem::GenericSend(TAutoPtr<IEventHandle> ev) const {
         if (Y_UNLIKELY(!ev))

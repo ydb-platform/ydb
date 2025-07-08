@@ -32,27 +32,48 @@ SELECT ...
 
 {% note info %}
 
-The vector index will not be automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer), so it must be specified explicitly using the expression `VIEW IndexName'.
+Vector index supports a distance or similarity function [from the Knn extension](../../udf/list/knn#functions-distance), specified during its construction.
+
+Vector index isn't automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer) and must be specified explicitly using the expression `VIEW IndexName'.
 
 {% endnote %}
 
+## KMeansTreeSearchTopSize
+
+Indexed vector search is based on an approximate algorithm (ANN, Approximate Nearest Neighbors). That means that indexed search may produce a result that differs from a similar full-scan nearest neighbor search.
+
+Completeness of the indexed vector search is controlled by the following parameter: `PRAGMA ydb.KMeansTreeSearchTopSize`.
+
+This parameter controls the maximum number of scanned clusters nearest to the requested search vector, at every level of the search tree.
+The parameter should be set explicitly for every search query.
+
+The default value is 1. This means that only 1 nearest cluster is scanned at every level of the search tree by default. Such value maximizes search performance and results in good search quality for vectors near to the center of some cluster, but it may be insufficient for vectors located approximately equally near to multiple clusters. So, to increase the search quality for such vectors (at the expense of slightly reduced search performance), you should raise the value of PRAGMA, for example:
+
+```yql
+PRAGMA ydb.KMeansTreeSearchTopSize="10";
+SELECT *
+    FROM TableName VIEW IndexName
+    ORDER BY Knn::CosineDistance(embedding, $target)
+    LIMIT 10
+```
+
 ## Examples
 
-* Select all the fields from the `series` row-oriented table using the `views_index` vector index created for `embedding` and inner product similarity:
+* Select all the fields from the `series` row-oriented table using the `views_index` vector index created for `embedding` and cosine similarity:
 
   ```yql
-  SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::InnerProductSimilarity(embedding, $target) as similarity
+  SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::CosineSimilarity(embedding, $target) as similarity
       FROM series VIEW views_index
       ORDER BY similarity DESC
       LIMIT 10
   ```
 
-* Select all the fields from the `series` row-oriented table using the `views_index2` prefixed vector index created for `embedding` and inner product similarity with prefix column `release_date`:
+* Select all the fields from the `series` row-oriented table using the `views_index2` prefixed vector index created for `embedding` and cosine similarity with prefix column `release_date`:
 
   ```yql
-  SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::InnerProductSimilarity(embedding, $target) as similarity
+  SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::CosineSimilarity(embedding, $target) as similarity
       FROM series VIEW views_index2
       WHERE release_date = "2025-03-31"
-      ORDER BY Knn::InnerProductSimilarity(embedding, $TargetEmbedding) DESC
+      ORDER BY similarity DESC
       LIMIT 10
   ```

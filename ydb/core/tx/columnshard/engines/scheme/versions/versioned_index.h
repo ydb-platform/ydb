@@ -112,7 +112,7 @@ public:
 
     ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
         auto it = SnapshotByVersion.lower_bound(version);
-        AFL_VERIFY(it != SnapshotByVersion.end(), "no schema for version %lu", version);
+        AFL_VERIFY(it != SnapshotByVersion.end())("problem", "no schema for version")("version", version);
         return it->second;
     }
 

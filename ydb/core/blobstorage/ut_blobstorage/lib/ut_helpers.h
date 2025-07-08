@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-TString MakeData(ui32 dataSize);
+TString MakeData(ui32 dataSize, ui32 step = 1);
 
 template<typename Int1 = ui32, typename Int2 = ui32>
 inline Int1 GenerateRandom(Int1 min, Int2 max) {

@@ -3,6 +3,8 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
+
 Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
     ui32 QueueClientId = 0;
@@ -402,5 +404,98 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
     Y_UNIT_TEST(block42) {
         ScrubTest(TBlobStorageGroupType::Erasure4Plus2Block);
     }
+}
+
+Y_UNIT_TEST_SUITE(DeepScrubbing) {
+
+    enum EBlobSize : ui32 {
+        SmallBlob = 100,
+        HugeBlob = 4_MB,
+    };
+
+    struct TTestCtx : public TTestCtxBase {
+    private:
+        class TNodeDisabler {
+        public:
+            TNodeDisabler(ui32 nodeId, const std::unique_ptr<TEnvironmentSetup>& env, ui32 corruptedPartCount) 
+                : NodeId(nodeId)
+                , Env(env)
+                , CorruptedPartCount(corruptedPartCount)
+            {
+                Env->StopNode(nodeId);
+                Env->Sim(TDuration::Seconds(1));
+            }
+
+            ~TNodeDisabler() {
+                Env->StartNode(NodeId);
+                Env->Sim(TDuration::Seconds(1));
+            }
+
+        private:
+            ui32 NodeId;
+            const std::unique_ptr<TEnvironmentSetup>& Env;
+        };
+
+    public:
+        TTestCtx(TBlobStorageGroupType erasure, EBlobSize blobSize, ui32 partCorruptionMask)
+            : TTestCtxBase(TEnvironmentSetup::TSettings{
+                .NodeCount = erasure.BlobSubgroupSize(),
+                .Erasure = erasure,
+                .BlobSize = blobSize,
+                .PartCorruptionMask(partCorruptionMask),
+            })
+        {}
+
+        void RunTest() {
+            Initialize();
+
+            ui64 tabletId = 5000;
+            ui32 channel = 1;
+            ui32 generation = 1;
+            ui32 step = 1;
+            ui32 blobSize = (ui32)BlobSize;
+            ui32 cookie = 1;
+            TString data = MakeData(blobSize, 1);
+
+            TLogoBlobID blobId(tabletId, generation, step, channel, blobSize, cookie);
+
+            Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVPut::EventType) {
+                    auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
+                    TLogoBlobID partId = LogoBlobIDFromLogoBlobID(vput->GetBlobId());
+                    if (PartCorruptionMask & (1 << partId.PartId())) {
+                        vput->Buffer = MakeData(vput->Buffer.size(), 2);
+                    }
+                }
+                return true;
+            };
+
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                TString data = MakeData(blobSize, 1);
+                SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max()));
+            });
+            Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(blobId);
+
+            for (ui32 deadOrderNumber1 = 1; deadOrderNumber1 <= NodeCount; ++deadOrderNumber1) {
+                TNodeDisabler nodeDisabler1(deadOrderNumber1);
+                for (ui32 deadOrderNumber2 = deadOrderNumber1 + 1; deadOrderNumber2 <= NodeCount; ++deadOrderNumber2) {
+                    TNodeDisabler nodeDisabler2(deadOrderNumber2);
+
+                    TString prefix = TStringBuilder() << "Disabled nodeIds# [" << deadOrderNumber1 << "," << deadOrderNumber2 << "]" << Endl;
+
+
+                }
+            }
+            
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvGet(blobId, 0, blobSize, TInstant::Max()));
+            });
+            Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(blobId);
+        }
+
+    private:
+        EBlobSize BlobSize;
+        ui32 PartCorruptionMask;
+    };
 
 }

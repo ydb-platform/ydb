@@ -46,8 +46,8 @@ def execute_query(driver, branch='main', build_type='relwithdebinfo'):
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Flaky'
-            AND days_in_state = 1
-            AND date_window = CurrentUtcDate()
+            AND days_in_state <= 2
+            AND date_window >= CurrentUtcDate() - 1*Interval("P1D")
             )as new_flaky
         ON 
             data.full_name = new_flaky.full_name
@@ -57,7 +57,7 @@ def execute_query(driver, branch='main', build_type='relwithdebinfo'):
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Flaky'
-            AND date_window = CurrentUtcDate()
+            AND date_window >= CurrentUtcDate() - 1*Interval("P1D")
             )as flaky
         ON 
             data.full_name = flaky.full_name
@@ -78,7 +78,7 @@ def execute_query(driver, branch='main', build_type='relwithdebinfo'):
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor`
             WHERE state= 'Muted Stable'
-            AND days_in_state >= 14
+            AND days_in_state >= 5
             AND date_window = CurrentUtcDate()
             and is_test_chunk = 0
             )as muted_stable_n_days
@@ -92,7 +92,7 @@ def execute_query(driver, branch='main', build_type='relwithdebinfo'):
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor`
             WHERE state = 'no_runs'
-            AND days_in_state >= 14
+            AND days_in_state >= 10
             AND date_window = CurrentUtcDate()
             and is_test_chunk = 0
             )as deleted
@@ -177,11 +177,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         flaky_tests = set(
             re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}\n")
             for test in all_tests
-            if test.get('days_in_state') >= 1
-            and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) >= 2
+            if test.get('flaky_today')
             and test.get('fail_count') >= 2
-            and test.get('fail_count')/(test.get('pass_count') + test.get('fail_count')) > 0.2 # <=80% success rate
         )
         flaky_tests = sorted(flaky_tests)
         add_lines_to_file(os.path.join(output_path, 'flaky.txt'), flaky_tests)
@@ -190,11 +187,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}")
             + f" # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')}, days in state {test.get('days_in_state')}, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
             for test in all_tests
-            if test.get('days_in_state') >= 1
-            and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) >=2
+            if test.get('flaky_today')
             and test.get('fail_count') >= 2
-            and test.get('fail_count')/(test.get('pass_count') + test.get('fail_count')) > 0.2 # <=80% success rate
         )
         ## тесты может запускаться 1 раз в день. если за последние 7 дней набирается трешход то мьютим
         ## падения сегодня более весомы ??  

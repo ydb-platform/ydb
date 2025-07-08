@@ -45,6 +45,8 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , StateLoadMode(stateLoadMode)
     , StreamingDisposition(streamingDisposition)
 {
+    CC_LOG_D("TCheckpointCoordinator 888");
+
 }
 
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
@@ -79,10 +81,12 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         }
         AllActorsSet.insert(actorId);
     }
+    if (ActorsToTrigger.empty())    // TODO
+        return;
 
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());
 
-    CC_LOG_D("Send TEvRegisterCoordinatorRequest");
+    CC_LOG_D("Send TEvRegisterCoordinatorRequest, AllActorsSet " << AllActorsSet.size() << " ActorsToTrigger " << ActorsToTrigger.size() << " ActorsToNotify " << ActorsToNotify.size());
     Send(StorageProxy, new TEvCheckpointStorage::TEvRegisterCoordinatorRequest(CoordinatorId), IEventHandle::FlagTrackDelivery);
 }
 
@@ -591,7 +595,7 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) 
     }
 
     TStringBuilder message;
-    message << "Undelivered Event " << ev->Get()->SourceType
+    message << "Undelivered777 Event " << ev->Get()->SourceType
         << " from " << SelfId() << " (Self) to " << ev->Sender
         << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
     OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, {});

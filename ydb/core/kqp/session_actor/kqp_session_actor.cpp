@@ -1596,19 +1596,22 @@ public:
             txCtx->TxManager->AddTopicsToShards();
         }
 
-        bool enableCheckpointCoordinator = true;
-        ui64 dqGraphIndex = 0;
-        ui64 generation = 0;
-        NFq::NConfig::TCheckpointCoordinatorConfig config;
-        config.SetEnabled(true);
-        config.SetCheckpointingPeriodMillis(1000);
-        config.SetMaxInflight(1);
-        //auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-        auto stateLoadMode = FederatedQuery::StateLoadMode::EMPTY;
-        FederatedQuery::StreamingDisposition streamingDisposition;
-        NFq::NProto::TGraphParams dqGraphParams;
-
+        bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig();
         if (enableCheckpointCoordinator) {
+            const NKikimrConfig::TCheckpointsConfig& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
+
+            NFq::NConfig::TCheckpointCoordinatorConfig config;
+            config.SetEnabled(checkpointConfig.GetEnabled());
+            config.SetCheckpointingPeriodMillis(checkpointConfig.GetCheckpointingPeriodMillis());
+            config.SetMaxInflight(checkpointConfig.GetMaxInflight());
+            config.SetCheckpointingSnapshotRotationPeriod(checkpointConfig.GetCheckpointingSnapshotRotationPeriod());   
+
+            ui64 dqGraphIndex = 0;
+            ui64 generation = 0;
+            auto stateLoadMode = FederatedQuery::StateLoadMode::EMPTY;
+            FederatedQuery::StreamingDisposition streamingDisposition;
+            NFq::NProto::TGraphParams dqGraphParams;
+
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(request.UserTraceId + "-" + ToString(dqGraphIndex), generation),
                 NYql::NDq::MakeCheckpointStorageID(),
@@ -1618,10 +1621,8 @@ public:
                 dqGraphParams,
                 stateLoadMode,
                 streamingDisposition).Release());
-
                 LOG_D("Created new CheckpointCoordinatorId: " << CheckpointCoordinatorId);
         }
-
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),

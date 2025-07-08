@@ -57,49 +57,72 @@ class TestCreateNewMutedYaConsolidated(unittest.TestCase):
         default_data.update(kwargs)
         return default_data
 
-    @patch('create_new_muted_ya.add_lines_to_file')
-    def test_new_flaky_rules_working(self, mock_add_lines):
-        """Тест проверяет новые правила: flaky_today=True AND fail_count >= 2"""
+    def test_new_flaky_rules_working(self):
+        """Тест проверяет новые правила: flaky_today=True AND fail_count >= 1"""
         
         test_data = [
-            # Этот тест ДОЛЖЕН попасть в flaky (условия выполнены)
+            # Этот тест ДОЛЖЕН попасть в flaky (1 падение >= 1)
             self.create_test_data(
-                test_name='test_3_failures_should_be_muted',
+                test_name='test_1_failure_should_be_included',
                 flaky_today=True,
-                fail_count=3,  # >= 2 падения
-                pass_count=10,
+                fail_count=1,  # >= 1, должен быть включен
+                pass_count=4,
+                success_rate=80.0,
+                days_in_state=1,
             ),
             
-            # Этот тест НЕ ДОЛЖЕН попасть в flaky (недостаточно падений)
+            # Этот тест НЕ ДОЛЖЕН попасть в flaky (0 падений < 1)
             self.create_test_data(
-                test_name='test_1_failure_too_few',
+                test_name='test_0_failures_should_not_be_included',
                 flaky_today=True,
-                fail_count=1,  # < 2 падений - НЕ ХВАТАЕТ!
-                pass_count=10,
+                fail_count=0,  # < 1, НЕ должен быть включен
+                pass_count=5,
+                success_rate=100.0,
+                days_in_state=1,
+            ),
+            
+            # Этот тест ДОЛЖЕН попасть в flaky (3 падения >= 1)
+            self.create_test_data(
+                test_name='test_3_failures_should_be_included',
+                flaky_today=True,
+                fail_count=3,  # >= 1, должен быть включен
+                pass_count=2,
+                success_rate=60.0,
+                days_in_state=2,
             ),
         ]
         
-        self.mock_mute_check.return_value = False
+        # Создаем мок для YaMuteCheck
+        mock_mute_check = Mock()
+        mock_mute_check.side_effect = lambda suite, test: False  # Ничего не мьютим через mute_check
         
-        result = apply_and_add_mutes(test_data, self.temp_dir, self.mock_mute_check)
-        
-        # Проверяем flaky файл
-        flaky_calls = [call for call in mock_add_lines.call_args_list 
-                      if 'flaky.txt' in str(call) and 'debug' not in str(call)]
-        
-        self.assertTrue(flaky_calls, "Файл flaky.txt не был создан")
-        
-        flaky_content = flaky_calls[0][0][1]
-        flaky_text = ' '.join([line.strip() for line in flaky_content if line.strip()])
-        
-        # Проверяем правила с информативными сообщениями
-        self.assertIn('test_3_failures_should_be_muted', flaky_text, 
-                     f"ОШИБКА: Тест 'test_3_failures_should_be_muted' (3 падения) должен быть в flaky.txt, но его там нет. "
-                     f"Содержимое flaky.txt: {flaky_text}")
-        
-        self.assertNotIn('test_1_failure_too_few', flaky_text,
-                        f"ОШИБКА: Тест 'test_1_failure_too_few' (1 падение) НЕ должен быть в flaky.txt, но он там есть! "
-                        f"Это нарушает правило 'fail_count >= 2'. Содержимое flaky.txt: {flaky_text}")
+        with patch('create_new_muted_ya.add_lines_to_file') as mock_add_lines:
+            result = apply_and_add_mutes(test_data, self.temp_dir, mock_mute_check)
+            
+            # Ищем вызов для flaky.txt
+            flaky_call = None
+            for call in mock_add_lines.call_args_list:
+                if call and len(call) > 0 and len(call[0]) > 0 and 'flaky.txt' in str(call[0][0]):
+                    flaky_call = call
+                    break
+            
+            self.assertIsNotNone(flaky_call, "flaky.txt должен был быть создан")
+            if flaky_call and len(flaky_call) > 0 and len(flaky_call[0]) > 1:
+                flaky_content = flaky_call[0][1]
+                flaky_text = ''.join(flaky_content)
+            else:
+                self.fail("flaky_call имеет неожиданную структуру")
+            
+            # Тесты с 0 падений НЕ должны быть в flaky.txt
+            self.assertNotIn('test_0_failures_should_not_be_included', flaky_text,
+                           f"ОШИБКА: Тест 'test_0_failures_should_not_be_included' (0 падений) НЕ должен быть в flaky.txt, но он там есть! Это нарушает правило 'fail_count >= 1'. Содержимое flaky.txt: {flaky_text}")
+            
+            # Тесты с >= 1 падений ДОЛЖНЫ быть в flaky.txt
+            self.assertIn('test_1_failure_should_be_included', flaky_text,
+                         f"ОШИБКА: Тест 'test_1_failure_should_be_included' (1 падение) ДОЛЖЕН быть в flaky.txt! Содержимое flaky.txt: {flaky_text}")
+            
+            self.assertIn('test_3_failures_should_be_included', flaky_text,
+                         f"ОШИБКА: Тест 'test_3_failures_should_be_included' (3 падения) ДОЛЖЕН быть в flaky.txt! Содержимое flaky.txt: {flaky_text}")
 
     @patch('create_new_muted_ya.add_lines_to_file')
     def test_deleted_and_stable_exclusion(self, mock_add_lines):
@@ -154,61 +177,72 @@ class TestCreateNewMutedYaConsolidated(unittest.TestCase):
         self.assertEqual(len(stable_tests), 1)
         self.assertIn('stable_test', stable_tests[0])
 
-    @patch('create_new_muted_ya.add_lines_to_file')
-    def test_boundary_conditions_fail_count(self, mock_add_lines):
-        """Тест граничных условий для fail_count - граница должна быть >= 2"""
+    def test_boundary_conditions_fail_count(self):
+        """Тест граничных условий для fail_count - граница должна быть >= 1"""
         
         test_data = [
-            # Точно на границе (2 падения) - ДОЛЖЕН попасть
+            # Меньше границы (0 падений) - НЕ ДОЛЖЕН попасть
             self.create_test_data(
-                test_name='test_2_failures_exact_boundary',
+                test_name='test_0_failures_below_boundary',
                 flaky_today=True,
-                fail_count=2,  # Точно на границе
-                pass_count=10,
+                fail_count=0,  # < 1, НЕ должен быть включен
+                pass_count=5,
+                success_rate=100.0,
+                days_in_state=1,
             ),
             
-            # Меньше границы (1 падение) - НЕ ДОЛЖЕН попасть
+            # Точно на границе (1 падение) - ДОЛЖЕН попасть
             self.create_test_data(
-                test_name='test_1_failure_below_boundary',
+                test_name='test_1_failure_exact_boundary',
                 flaky_today=True,
-                fail_count=1,  # Меньше границы - НЕ ХВАТАЕТ!
-                pass_count=10,
+                fail_count=1,  # >= 1, ДОЛЖЕН быть включен
+                pass_count=4,
+                success_rate=80.0,
+                days_in_state=1,
             ),
             
-            # Больше границы (3 падения) - ДОЛЖЕН попасть
+            # Больше границы (2 падения) - ДОЛЖЕН попасть
             self.create_test_data(
-                test_name='test_3_failures_above_boundary',
+                test_name='test_2_failures_above_boundary',
                 flaky_today=True,
-                fail_count=3,  # Больше границы
-                pass_count=10,
+                fail_count=2,  # > 1, ДОЛЖЕН быть включен
+                pass_count=4,
+                success_rate=67.0,
+                days_in_state=2,
             ),
         ]
         
-        self.mock_mute_check.return_value = False
+        mock_mute_check = Mock()
+        mock_mute_check.side_effect = lambda suite, test: False
         
-        result = apply_and_add_mutes(test_data, self.temp_dir, self.mock_mute_check)
-        
-        # Проверяем flaky файл
-        flaky_calls = [call for call in mock_add_lines.call_args_list 
-                      if 'flaky.txt' in str(call) and 'debug' not in str(call)]
-        
-        self.assertTrue(flaky_calls, "Файл flaky.txt не был создан")
-        
-        flaky_content = flaky_calls[0][0][1]
-        flaky_text = ' '.join([line.strip() for line in flaky_content if line.strip()])
-        
-        # Проверяем граничные условия с детальными сообщениями
-        self.assertIn('test_2_failures_exact_boundary', flaky_text,
-                     f"ОШИБКА: Тест 'test_2_failures_exact_boundary' (2 падения) должен быть в flaky.txt (граница >= 2). "
-                     f"Содержимое flaky.txt: {flaky_text}")
-        
-        self.assertNotIn('test_1_failure_below_boundary', flaky_text,
-                        f"ОШИБКА: Тест 'test_1_failure_below_boundary' (1 падение) НЕ должен быть в flaky.txt (< 2 падений). "
-                        f"Это нарушает правило граничных условий! Содержимое flaky.txt: {flaky_text}")
-        
-        self.assertIn('test_3_failures_above_boundary', flaky_text,
-                     f"ОШИБКА: Тест 'test_3_failures_above_boundary' (3 падения) должен быть в flaky.txt (> 2 падений). "
-                     f"Содержимое flaky.txt: {flaky_text}")
+        with patch('create_new_muted_ya.add_lines_to_file') as mock_add_lines:
+            result = apply_and_add_mutes(test_data, self.temp_dir, mock_mute_check)
+            
+            # Ищем вызов для flaky.txt
+            flaky_call = None
+            for call in mock_add_lines.call_args_list:
+                if call and len(call) > 0 and len(call[0]) > 0 and 'flaky.txt' in str(call[0][0]):
+                    flaky_call = call
+                    break
+            
+            self.assertIsNotNone(flaky_call, "flaky.txt должен был быть создан")
+            if flaky_call and len(flaky_call) > 0 and len(flaky_call[0]) > 1:
+                flaky_content = flaky_call[0][1]
+                flaky_text = ''.join(flaky_content)
+            else:
+                self.fail("flaky_call имеет неожиданную структуру")
+            
+            # 0 падений - НЕ должен быть включен (< 1)
+            self.assertNotIn('test_0_failures_below_boundary', flaky_text,
+                           f"ОШИБКА: Тест 'test_0_failures_below_boundary' (0 падений) НЕ должен быть в flaky.txt (< 1 падения). Это нарушает правило граничных условий! Содержимое flaky.txt: {flaky_text}")
+            
+            # 1 падение - ДОЛЖЕН быть включен (>= 1)
+            self.assertIn('test_1_failure_exact_boundary', flaky_text,
+                         f"ОШИБКА: Тест 'test_1_failure_exact_boundary' (1 падение) ДОЛЖЕН быть в flaky.txt (>= 1 падения). Содержимое flaky.txt: {flaky_text}")
+            
+            # 2 падения - ДОЛЖЕН быть включен (>= 1)
+            self.assertIn('test_2_failures_above_boundary', flaky_text,
+                         f"ОШИБКА: Тест 'test_2_failures_above_boundary' (2 падения) ДОЛЖЕН быть в flaky.txt (>= 1 падения). Содержимое flaky.txt: {flaky_text}")
 
     @patch('create_new_muted_ya.add_lines_to_file')
     def test_mute_check_overrides_everything(self, mock_add_lines):

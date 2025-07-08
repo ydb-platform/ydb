@@ -32,7 +32,10 @@ class TestUpdateMutedYaIntegration(unittest.TestCase):
                 'muted_stable_n_days_today': False,
                 'deleted_today': False,
                 'pass_count': 10,
-                'fail_count': 15
+                'fail_count': 15,
+                'date_window': 19737,  # 2024-01-15
+                'mute_count': 0,
+                'skip_count': 0
             },
             {
                 'full_name': 'ydb/core/tx/schemeshard/test2',
@@ -46,7 +49,10 @@ class TestUpdateMutedYaIntegration(unittest.TestCase):
                 'muted_stable_n_days_today': True,
                 'deleted_today': False,
                 'pass_count': 5,
-                'fail_count': 20
+                'fail_count': 20,
+                'date_window': 19737,  # 2024-01-15
+                'mute_count': 0,
+                'skip_count': 0
             }
         ]
 

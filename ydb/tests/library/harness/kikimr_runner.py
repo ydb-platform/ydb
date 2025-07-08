@@ -458,9 +458,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                     logger.info("Successfully bootstrapped cluster")
                     return result
                 else:
-                    error_msg = f"Bootstrap cluster failed with status: {result.operation.status}"
+                    error_msg = "Bootstrap cluster failed with status: %s" % (result.operation.status, )
                     for issue in result.operation.issues:
-                        error_msg += f"\nIssue: {issue}"
+                        error_msg += "\nIssue: %s" % (issue, )
                     raise Exception(error_msg)
 
             except Exception as e:

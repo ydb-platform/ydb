@@ -4,8 +4,6 @@
 #include "partition_util.h"
 
 namespace NKikimr::NPQ {
-
-
 std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(ui64 nextRequestCookie, ui64 startOffset, ui64 lastOffset, TMaybe<ui64> nextPartNo = Nothing()) {
     auto evRead = std::make_unique<TEvPQ::TEvRead>(
         nextRequestCookie,

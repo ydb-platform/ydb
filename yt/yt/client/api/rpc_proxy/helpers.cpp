@@ -442,7 +442,6 @@ void ToProto(
     }
 }
 
-
 void FromProto(
     NApi::TOperationEvent* result,
     const NProto::TOperationEvent& proto)

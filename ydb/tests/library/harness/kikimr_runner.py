@@ -864,6 +864,9 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             kikimr_next_path,
             node_id,
             host,
+            datacenter,
+            rack,
+            bridge_pile_name,
             ssh_username,
             port,
             mon_port,
@@ -879,6 +882,9 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         self.__grpc_port = port
         self.__mon_port = mon_port
         self.__ic_port = ic_port
+        self.__datacenter = datacenter
+        self.__rack = rack
+        self.__bridge_pile_name = bridge_pile_name
         self.__configurator = configurator
         self.__mbus_port = mbus_port
         self.logger = logger.getChild(self.__class__.__name__)
@@ -969,6 +975,18 @@ mon={mon}""".format(
         return self.__host
 
     @property
+    def datacenter(self):
+        return self.__datacenter
+    
+    @property
+    def rack(self):
+        return self.__rack
+    
+    @property
+    def bridge_pile_name(self):
+        return self.__bridge_pile_name
+
+    @property
     def port(self):
         return self.__port
 
@@ -1022,8 +1040,9 @@ mon={mon}""".format(
         self.update_binary_links()
 
     def prepare_artifacts(self, cluster_yml):
-        self.copy_file_or_dir(
-            self.__kikimr_configure_binary_path, self.kikimr_configure_binary_deploy_path)
+        if self.__kikimr_configure_binary_path is not None:
+            self.copy_file_or_dir(
+                self.__kikimr_configure_binary_path, self.kikimr_configure_binary_deploy_path)
 
         for version, local_driver in zip(self.versions, self.local_drivers_path):
             self.ssh_command("sudo rm -rf %s" % version)
@@ -1033,14 +1052,15 @@ mon={mon}""".format(
                 self.ssh_command("sudo /sbin/setcap 'CAP_SYS_RAWIO,CAP_SYS_NICE=ep' %s" % version)
 
         self.update_binary_links()
-        self.ssh_command("sudo mkdir -p %s" % self.kikimr_configuration_deploy_path)
-        self.copy_file_or_dir(cluster_yml, self.kikimr_cluster_yaml_deploy_path)
-        self.ssh_command(self.__generate_configs_cmd())
-        self.ssh_command(
-            self.__generate_configs_cmd(
-                "--dynamic"
+        if self.__kikimr_configure_binary_path is not None:
+            self.ssh_command("sudo mkdir -p %s" % self.kikimr_configuration_deploy_path)
+            self.copy_file_or_dir(cluster_yml, self.kikimr_cluster_yaml_deploy_path)
+            self.ssh_command(self.__generate_configs_cmd())
+            self.ssh_command(
+                self.__generate_configs_cmd(
+                    "--dynamic"
+                )
             )
-        )
 
     def format_pdisk(self, pdisk_id):
         pass

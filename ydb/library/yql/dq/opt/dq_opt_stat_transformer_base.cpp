@@ -10,8 +10,14 @@ namespace NYql::NDq {
 
 using namespace NNodes;
 
-TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints)
-    : TypeCtx(typeCtx), Pctx(ctx), CardinalityHints(hints)
+TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
+    TTypeAnnotationContext* typeCtx,
+    const IProviderContext& ctx,
+    const TOptimizerHints& hints
+)
+    : TypeCtx(typeCtx)
+    , Pctx(ctx)
+    , Hints(hints)
 { }
 
 void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
@@ -104,13 +110,13 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
 
     // Join matchers
     else if(TCoMapJoinCore::Match(input.Get())) {
-        InferStatisticsForMapJoin(input, TypeCtx, Pctx, CardinalityHints);
+        InferStatisticsForMapJoin(input, TypeCtx, Pctx, Hints);
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
-        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, CardinalityHints);
+        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints);
     }
     else if (TDqJoin::Match(input.Get())) {
-        InferStatisticsForDqJoin(input, TypeCtx, Pctx, CardinalityHints);
+        InferStatisticsForDqJoin(input, TypeCtx, Pctx, Hints);
     }
     else if(TDqPhyCrossJoin::Match(input.Get())) {
         InferStatisticsForDqPhyCrossJoin(input, TypeCtx);

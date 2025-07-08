@@ -765,7 +765,7 @@ namespace NKikimr {
         }
 
         ui32 GetMaxInFlightReads() {
-            return IsFresh ? (ui32) 0 : (ui32) HullCtx->VCfg->HullCompMaxInFlightReads;
+            return IsFresh ? (ui32) HullCtx->VCfg->FreshCompMaxInFlightReads : (ui32) HullCtx->VCfg->HullCompMaxInFlightReads;
         }
     };
 

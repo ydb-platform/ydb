@@ -1080,7 +1080,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         ClusterState.Guid = ev->Get()->ClusterStateGuid;
 
         this->Become(&TDerived::StateWork);
-        MaybeRunVersionSync();
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {

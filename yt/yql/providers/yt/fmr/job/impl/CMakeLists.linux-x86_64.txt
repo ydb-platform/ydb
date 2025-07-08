@@ -28,6 +28,7 @@ target_link_libraries(fmr-job-impl PUBLIC
   cpp-mapreduce-interface
   fmr-job-interface
   yt-fmr-utils
+  yt-fmr-process
   fmr-table_data_service-interface
   yql-essentials-utils
   essentials-utils-log
@@ -35,6 +36,9 @@ target_link_libraries(fmr-job-impl PUBLIC
 
 target_sources(fmr-job-impl PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue_writer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.cpp
 )

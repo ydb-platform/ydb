@@ -26,6 +26,8 @@ target_link_libraries(yt-fmr-utils PUBLIC
   cpp-mapreduce-client
   cpp-mapreduce-interface
   yt-fmr-request_options
+  fmr-yt_job_service-interface
+  fmr-table_data_service-interface
   providers-yt-codec
   yql-essentials-utils
 )
@@ -35,5 +37,6 @@ target_sources(yt-fmr-utils PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_log_context.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.cpp
 )
 

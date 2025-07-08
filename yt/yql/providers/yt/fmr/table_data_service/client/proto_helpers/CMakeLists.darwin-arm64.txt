@@ -12,32 +12,20 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-fmr-utils)
+add_library(table_data_service-client-proto_helpers)
 
 
-target_compile_options(yt-fmr-utils PRIVATE
+target_compile_options(table_data_service-client-proto_helpers PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(yt-fmr-utils PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(table_data_service-client-proto_helpers PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-http-io
-  cpp-mapreduce-client
-  cpp-mapreduce-interface
-  yt-fmr-request_options
-  fmr-yt_job_service-interface
-  fmr-table_data_service-interface
-  providers-yt-codec
-  yql-essentials-utils
+  yt-fmr-proto
 )
 
-target_sources(yt-fmr-utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_client.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_log_context.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.cpp
+target_sources(table_data_service-client-proto_helpers PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/table_data_service/client/proto_helpers/yql_yt_table_data_service_proto_helpers.cpp
 )
 

@@ -13,4 +13,6 @@
 # changes in this file.
 
 add_subdirectory(interface)
+add_subdirectory(client)
+add_subdirectory(discovery)
 add_subdirectory(local)

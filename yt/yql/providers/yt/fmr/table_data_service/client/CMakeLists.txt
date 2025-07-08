@@ -12,15 +12,5 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(fmr_tool_lib)
-add_subdirectory(coordinator)
-add_subdirectory(request_options)
-add_subdirectory(proto)
-add_subdirectory(utils)
-add_subdirectory(yt_job_service)
-add_subdirectory(table_data_service)
-add_subdirectory(gc_service)
-add_subdirectory(job)
-add_subdirectory(process)
-add_subdirectory(job_factory)
-add_subdirectory(worker)
+add_subdirectory(impl)
+add_subdirectory(proto_helpers)

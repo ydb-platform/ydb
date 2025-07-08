@@ -9,7 +9,7 @@
 
 #### Функциональность
 
-* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближенного векторного поиска. Включается установкой флага `enable_vector_index` в конфигурации кластера под гарантию неотката на предыдущие версии.
+* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближенного векторного поиска. Включается установкой флага `enable_vector_index` в [конфигурации кластера](./maintenance/manual/dynamic-config.md) под гарантию неотката на предыдущие версии.
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](./concepts/async-replication.md).
 * Поддержаны `BATCH UPDATE` и `BATCH DELETE` выражения, позволяющие применить изменения больших строковых таблиц вне транзакционных ограничений.
 * Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric).

@@ -5,7 +5,6 @@
 
 #include "actions.h"
 #include "params.h"
-#include "response_queue.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/client_pid.h>
@@ -752,7 +751,7 @@ private:
     ::NMonitoring::TMetricRegistry* MetricRegistryPtr_ = nullptr;
 
     const std::size_t ClientThreadsNum_;
-    std::unique_ptr<IResponseQueue> ResponseQueue_;
+    std::shared_ptr<NExec::IExecutor> ResponseQueue_;
 
     const std::string DefaultDiscoveryEndpoint_;
     const TSslCredentials SslCredentials_;

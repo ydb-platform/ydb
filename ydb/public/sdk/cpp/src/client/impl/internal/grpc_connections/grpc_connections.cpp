@@ -3,6 +3,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/thread_pool/pool.h>
+
 
 namespace NYdb::inline Dev {
 
@@ -138,7 +140,6 @@ private:
 TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params)
     : MetricRegistryPtr_(nullptr)
     , ClientThreadsNum_(params->GetClientThreadsNum())
-    , ResponseQueue_(CreateResponseQueue(params))
     , DefaultDiscoveryEndpoint_(params->GetEndpoint())
     , SslCredentials_(params->GetSslCredentials())
     , DefaultDatabase_(params->GetDatabase())
@@ -181,7 +182,13 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
         AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ * 0.1);
     }
 #endif
-    //TAdaptiveThreadPool ignores params
+    if (params->GetExecutor()) {
+        ResponseQueue_ = params->GetExecutor();
+    } else {
+        // TAdaptiveThreadPool ignores params
+        ResponseQueue_ = NExec::CreateThreadPoolExecutorAdapter(CreateThreadPool(ClientThreadsNum_), ClientThreadsNum_, MaxQueuedRequests_);
+    }
+
     ResponseQueue_->Start();
     if (!DefaultDatabase_.empty()) {
         DefaultState_ = StateTracker_.GetDriverState(
@@ -428,7 +435,9 @@ const TLog& TGRpcConnectionsImpl::GetLog() const {
 }
 
 void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
-    ResponseQueue_->Post(action);
+    ResponseQueue_->Post([action]() {
+        action->Process(nullptr);
+    });
 }
 
 } // namespace NYdb

@@ -22,7 +22,6 @@ target_link_libraries(core-wrappers-events PUBLIC
   contrib-libs-curl
   ydb-core-base
   ydb-core-protos
-  core-wrappers-ut_helpers
   library-actors-core
 )
 

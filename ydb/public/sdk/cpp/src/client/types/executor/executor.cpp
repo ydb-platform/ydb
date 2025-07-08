@@ -1,8 +1,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/executor/executor.h>
 
-namespace NYdb::inline Dev {
+namespace NYdb::inline Dev::NExec {
 
-class TThreadPoolExecutor : public IExecutor {
+class TThreadPoolExecutor : public NExec::IExecutor {
 public:
     TThreadPoolExecutor(std::shared_ptr<IThreadPool> threadPool)
         : ThreadPool(threadPool)
@@ -17,7 +17,7 @@ private:
     std::shared_ptr<IThreadPool> ThreadPool;
 };
 
-std::shared_ptr<IExecutor> CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool) {
+std::shared_ptr<NExec::IExecutor> CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool) {
     return std::make_shared<TThreadPoolExecutor>(threadPool);
 }
 

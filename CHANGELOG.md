@@ -28,5 +28,7 @@
 * 18077:The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives. Added a re-calculation of the values. [#18077](https://github.com/ydb-platform/ydb/pull/18077) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19057:Fixed "Failed to set up listener on port 9092 errno# 98 (Address already in use)" [#19057](https://github.com/ydb-platform/ydb/pull/19057) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 19115:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19083) in stream lookup join [#19115](https://github.com/ydb-platform/ydb/pull/19115) ([Vitalii Gridnev](https://github.com/gridnevvvit))
+* 20240:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20240](https://github.com/ydb-platform/ydb/pull/20240) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20072:[Fixed](https://github.com/ydb-platform/ydb/pull/20072) rare freezes of the topic table transaction. [#20072]([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19907:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19907](https://github.com/ydb-platform/ydb/pull/19907) ([Nikolay Shestakov](https://github.com/nshestakov))
 

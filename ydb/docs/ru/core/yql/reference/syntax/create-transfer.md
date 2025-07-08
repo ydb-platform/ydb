@@ -46,9 +46,9 @@ CREATE TOPIC example_topic;
 $transformation_lambda = ($msg) -> {
     return [
         <|
-            partition:CAST($msg._partition AS Uint32),
-            offset:CAST($msg._offset AS Uint32),
-            message:CAST($msg._data AS Utf8)
+            partition: CAST($msg._partition AS Uint32),
+            offset: CAST($msg._offset AS Uint32),
+            message: CAST($msg._data AS Utf8)
         |>
     ];
 };
@@ -71,9 +71,9 @@ CREATE TRANSFER example_transfer
 $transformation_lambda = ($msg) -> {
     return [
         <|
-            partition:CAST($msg._partition AS Uint32),
-            offset:CAST($msg._offset AS Uint32),
-            message:CAST($msg._data AS Utf8)
+            partition: CAST($msg._partition AS Uint32),
+            offset: CAST($msg._offset AS Uint32),
+            message: CAST($msg._data AS Utf8)
         |>
     ];
 };
@@ -92,9 +92,9 @@ WITH (
 $transformation_lambda = ($msg) -> {
     return [
         <|
-            partition:CAST($msg._partition AS Uint32),
-            offset:CAST($msg._offset AS Uint32),
-            message:CAST($msg._data AS Utf8)
+            partition: CAST($msg._partition AS Uint32),
+            offset: CAST($msg._offset AS Uint32),
+            message: CAST($msg._data AS Utf8)
         |>
     ];
 };

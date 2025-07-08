@@ -2,23 +2,29 @@
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.1.18 {#25-1-1-18}
+### Version 25.1.2.6 {#25-1-2-6}
 
 Release date: 2025.
 
 #### Functionality
 
+* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii) under the guarantee of not rolling back to previous versions.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
+* [Implemented] BATCH UPDATE and BATCH DELETE expressions, allowing to apply changes to large string tables outside of transactional constraints.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
+* [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the `enable_kafka_native_balancing` flag in the cluster configuration.
 * Added support for [auto-partitioning topics](./concepts/cdc.md#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md#topic-settings) using the `ALTER TOPIC` statement.
-* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md#debezium-json-record-structure) for CDC, which can be enabled by setting the `enable_changefeed_debezium_json_format` flag.
+* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md#debezium-json-record-structure) for CDC.
+* [Added](https://github.com/ydb-platform/ydb/pull/19507) the ability to create changefeed streams to index tables.
+* [Added](https://github.com/ydb-platform/ydb/issues/19310) ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes. This mode is enabled by setting the `enable_access_to_index_impl_tables` flag in the cluster configuration.
 * The scope of supported objects in backup and restore operations has been expanded:
   * [Support for changefeeds](https://github.com/ydb-platform/ydb/issues/7054) (enabled with the `enable_changefeeds_export` and `enable_changefeeds_import` flags).
   * [Support for views](https://github.com/ydb-platform/ydb/issues/12724) (enabled with the `enable_view_export` flag).
+* [Added](https://github.com/ydb-platform/ydb/issues/17734) automatic cleanup of temporary tables and directories during export to S3. This mode is enabled by setting the `enable_export_auto_dropping` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity checks of backups during import, which prevent restoration from corrupted backups and protect against data loss.
 * [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic.md#udf) in queries.
-* Added system views with information about [access right settings](./dev/system-views.md#auth) and [history of overloaded partitions](./dev/system-views.md#top-overload-partitions).
+* Added system views with information about [access right settings](./dev/system-views.md#auth), [history of overloaded partitions](./dev/system-views.md#top-overload-partitions), [history of partitions with broken locks](./dev/system-views#top-tli-partitions).
 * Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md) and [ALTER USER](./yql/reference/syntax/alter-user.md) operators:
   * `HASH` — sets a password in encrypted form.
   * `LOGIN` and `NOLOGIN` — unlocks and blocks a user, respectively.
@@ -47,6 +53,9 @@ Release date: 2025.
 * [Added](https://github.com/ydb-platform/ydb/pull/6509) support for [constant folding](https://en.wikipedia.org/wiki/Constant_folding) in the query optimizer by default, which improves query performance by evaluating constant expressions at compilation time. This feature reduces runtime overhead, enabling faster and more efficient query execution for complex static expressions.
 * [Added](https://github.com/ydb-platform/ydb/issues/6512) a granular timecast protocol that reduces the execution time of distributed transactions (slowing down one shard will not cause all shards to slow down).
 * [Implemented](https://github.com/ydb-platform/ydb/issues/11561) in-memory state migration on graceful restart, which preserves locks and increases the chances of successful transaction execution. This reduces the execution time of long transactions by decreasing the number of retries.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/15255) pipeline processing of internal transactions in Node Broker, which accelerated the startup of dynamic nodes in the cluster.
+* [Improved](https://github.com/ydb-platform/ydb/pull/15607) [Node Broker](./concepts/glossary#node-broker-#node-broker) resilience to increased load from cluster nodes.
+* [Enabled](https://github.com/ydb-platform/ydb/pull/19440) by default evictable B-Tree indexes instead of non-evictable SST indexes, which reduces memory consumption when storing "cold" data.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/15264) memory consumption by storage nodes.
 * [Improved](https://github.com/ydb-platform/ydb/pull/10969) Hive startup times.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/6561) the replication process.

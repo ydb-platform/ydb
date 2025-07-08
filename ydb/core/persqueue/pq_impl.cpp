@@ -3860,6 +3860,10 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
 
             ChangedTxs.emplace(tx->Step, txId);
 
+            tx->PersistSpan = tx->ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                                          "Topic.Transaction.Persist",
+                                                          NWilson::EFlags::AUTO_END);
+            tx->PersistSpan.Attribute("State", NKikimrPQ::TTransaction_EState_Name(state));
             tx->PersistSpan.Link(WriteTxsSpan.GetTraceId());
         }
     }
@@ -4635,11 +4639,6 @@ void TPersQueue::WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::E
     WriteTxs[tx.TxId] = state;
 
     tx.WriteInProgress = true;
-
-    tx.PersistSpan = tx.ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
-                                                "Topic.Transaction.Persist",
-                                                NWilson::EFlags::AUTO_END);
-    tx.PersistSpan.Attribute("State", NKikimrPQ::TTransaction_EState_Name(state));
 }
 
 void TPersQueue::DeleteTx(TDistributedTransaction& tx)

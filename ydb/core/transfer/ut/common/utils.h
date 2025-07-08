@@ -504,10 +504,7 @@ struct MainTestCase {
     auto DescribeTransfer() {
         TReplicationClient client(Driver);
 
-        TDescribeReplicationSettings settings;
-        settings.IncludeStats(true);
-
-        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, settings).ExtractValueSync();
+        return client.DescribeTransfer(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName).ExtractValueSync();
     }
 
     auto DescribeConsumer(const std::string& consumerName) {
@@ -670,19 +667,19 @@ struct MainTestCase {
             Sleep(TDuration::Seconds(1));
         }
 
-        CheckTransferState(TReplicationDescription::EState::Running);
+        CheckTransferState(TTransferDescription::EState::Running);
         UNIT_ASSERT_C(false, "Unable to wait transfer result");
     }
 
-    TReplicationDescription CheckTransferState(TReplicationDescription::EState expected) {
+    TTransferDescription CheckTransferState(TTransferDescription::EState expected) {
         for (size_t i = 20; i--;) {
-            auto result = DescribeTransfer().GetReplicationDescription();
+            auto result = DescribeTransfer().GetTransferDescription();
             if (expected == result.GetState()) {
                 return result;
             }
     
             std::string issues;
-            if (result.GetState() == TReplicationDescription::EState::Error) {
+            if (result.GetState() == TTransferDescription::EState::Error) {
                 issues = result.GetErrorState().GetIssues().ToOneLineString();
             }
     
@@ -694,7 +691,7 @@ struct MainTestCase {
     }
 
     void CheckTransferStateError(const std::string& expectedMessage) {
-        auto result = CheckTransferState(TReplicationDescription::EState::Error);
+        auto result = CheckTransferState(TTransferDescription::EState::Error);
         Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
         Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
         UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));

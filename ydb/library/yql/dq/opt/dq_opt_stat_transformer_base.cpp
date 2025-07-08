@@ -139,6 +139,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if (auto sortBase = TMaybeNode<TCoSortBase>(input)) {
         InferStatisticsForSortBase(input, TypeCtx);
     }
+    else if (TCoUnionAll::Match(input.Get())) {
+        InferStatisticsForUnionAll(input, TypeCtx);
+    }
     else {
         matched = false;
     }

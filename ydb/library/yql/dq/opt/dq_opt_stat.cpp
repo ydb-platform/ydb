@@ -650,6 +650,8 @@ void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TTypeAnnotationC
     for (const auto& input: input->Children()) {
         if (auto inputStats = typeCtx->GetStats(input.Get())) {
             stats->Nrows += inputStats->Nrows;
+            stats->ByteSize += inputStats->ByteSize;
+            stats->Cost += inputStats->Cost;
         }
     }
 
@@ -849,6 +851,22 @@ void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationCont
     typeCtx->SetStats(merge.Raw(), newStats);
 }
 
+void InferStatisticsForUnionAll(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto unionAll = inputNode.Cast<TCoUnionAll>();
+
+    auto stats = std::make_shared<TOptimizerStatistics>();
+    for (const auto& input: input->Children()) {
+        if (auto inputStats = typeCtx->GetStats(input.Get())) {
+            stats->Nrows += inputStats->Nrows;
+            stats->ByteSize += inputStats->ByteSize;
+            stats->Cost += inputStats->Cost;
+        }
+    }
+
+    typeCtx->SetStats(inputNode.Raw(), std::move(stats));
+}
+
 /**
  * Just update the sorted order with alias
  */
@@ -864,8 +882,6 @@ void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotat
     auto outputStats = RemoveSorting(inputStats);
     typeCtx->SetStats(cross.Raw(), outputStats);
 }
-
-
 
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats) {
     if (stats->SortingOrderings.HasState()) {

@@ -1138,6 +1138,7 @@ message TTransaction {
 
     optional NActorsProto.TTraceId ExecuteTraceId = 16;
     optional NActorsProto.TTraceId WaitRSTraceId = 17;
+    optional NActorsProto.TTraceId WaitRSAcksTraceId = 18;
 };
 
 message TTabletTxInfo {

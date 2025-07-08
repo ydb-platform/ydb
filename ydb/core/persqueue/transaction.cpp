@@ -75,6 +75,13 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
                                     "Topic.Transaction.WaitRS",
                                     NWilson::EFlags::AUTO_END);
     }
+    if (tx.HasWaitRSAcksTraceId()) {
+        NWilson::TTraceId traceId(tx.GetWaitRSAcksTraceId());
+        WaitRSSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                    std::move(traceId),
+                                    "Topic.Transaction.WaitRSAcks",
+                                    NWilson::EFlags::AUTO_END);
+    }
 }
 
 TString TDistributedTransaction::LogPrefix() const
@@ -417,6 +424,9 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
     }
     if (WaitRSSpan) {
         WaitRSSpan.GetTraceId().Serialize(tx.MutableWaitRSTraceId());
+    }
+    if (WaitRSAcksSpan) {
+        WaitRSAcksSpan.GetTraceId().Serialize(tx.MutableWaitRSAcksTraceId());
     }
 
     return tx;

@@ -55,6 +55,7 @@ int TProxy::Discovery() {
 
         const auto driver = NYdb::TDriver(config);
         Stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
+        Stuff->TopicClient = std::make_unique<NYdb::NTopic::TTopicClient>(driver);
         return 0;
     } else {
         std::cout << res.GetIssues().ToString() << std::endl;

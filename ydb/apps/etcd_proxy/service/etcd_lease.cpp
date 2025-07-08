@@ -194,7 +194,7 @@ private:
                     oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
                     auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
 
-                    ctx.Send(Stuff->Watchtower, std::make_unique<TEvChange>(std::move(key), Revision, std::move(oldData)));
+                    ctx.Send(Stuff->Watchtower, std::make_unique<TEvChange>(std::move(key), std::move(oldData)));
                 }
             } else {
                 if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow()) {

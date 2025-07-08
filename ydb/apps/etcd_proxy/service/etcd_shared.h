@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/actorid.h>
 
@@ -8,7 +9,7 @@
 
 namespace NEtcd {
 
-constexpr bool NotifyWatchtower = true;
+constexpr bool NotifyWatchtower = false;
 
 constexpr auto Endless = "\0"sv;
 
@@ -19,6 +20,8 @@ struct TSharedStuff {
     using TWeakPtr = std::weak_ptr<TSharedStuff>;
 
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
+    std::unique_ptr<NYdb::NTopic::TTopicClient> TopicClient;
+
     std::atomic<i64> Revision = 0LL;
     NActors::TActorSystem* ActorSystem = nullptr;
     NActors::TActorId Watchtower, MainGate, HolderHouse;

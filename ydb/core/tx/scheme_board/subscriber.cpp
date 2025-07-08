@@ -1042,7 +1042,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
 
         if (CurrentSyncRequest) {
-            SBS_LOG_I("Delaying current sync request: " << CurrentSyncRequest);
+            SBS_LOG_I("Delay current sync request: " << CurrentSyncRequest);
             DelayedSyncRequest = Max(DelayedSyncRequest, CurrentSyncRequest);
             CurrentSyncRequest = 0;
         }

@@ -1,5 +1,4 @@
 #include "dq_opt_peephole.h"
-#include "visualizer.h"
 
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -865,16 +864,6 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
         .Done();
 }
 
-/**
- * Rewrites a `TDqPhyBlockHashJoin` to use block-based processing with BlockHashJoin.
- *
- * This function handles the block hash join optimization by:
- *  - Checking input/output types and adding ToBlocks/FromBlocks wrappers as needed
- *  - Using GraceJoin logic for key processing and type handling
- *  - Converting inputs to wide streams and then to blocks if necessary
- *  - Performing the block hash join with BlockHashJoin
- *  - Converting back with FromBlocks if output should not be blocks
- */
 TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyBlockHashJoin>()) {
         return node;
@@ -1042,7 +1031,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Seal()
         .Seal()
         .Build();
-    NKikimr::NKqp::NOpt::TAstTypeVisualizer::DumpAstIfEnabled(result, "peephole");
 
     return TExprBase(result);
 }

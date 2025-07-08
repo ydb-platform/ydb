@@ -2019,17 +2019,27 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     void RunGenericQuery(const TString& query, TQueryClient& client, const TDriver&) {
-        auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        auto result = client.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Profile)
+        ).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetAst());
     }
 
     void RunGenericScript(const TString& script, TQueryClient& client, const TDriver& driver) {
-        auto scriptExecutionOperation = client.ExecuteScript(script).ExtractValueSync();
+        auto scriptExecutionOperation = client.ExecuteScript(
+            script,
+            NYdb::NQuery::TExecuteScriptSettings().StatsMode(NYdb::NQuery::EStatsMode::Profile)
+        ).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
         UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), driver);
         UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
+        UNIT_ASSERT(readyOp.Metadata().ExecStats.GetAst());
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSourceGenericQuery) {

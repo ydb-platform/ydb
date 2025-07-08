@@ -1013,7 +1013,7 @@ public:
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
                         RequestStop();
-                        return;
+                        break;
                     }
                     indexState.Progress = *progress;
                     if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {

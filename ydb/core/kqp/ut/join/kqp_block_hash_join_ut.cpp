@@ -61,8 +61,8 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
-                        Rows(L # 10e12)
-                        Rows(R # 10e12)
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
                     ';
             )";
             TString blocks = UseBlockHashJoin ? "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n" : "";

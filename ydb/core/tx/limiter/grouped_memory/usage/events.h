@@ -19,7 +19,6 @@ struct TEvExternal {
         EvFinishAllocationProcess,
         EvStartAllocationProcessScope,
         EvFinishAllocationProcessScope,
-        EvUpdateMemoryLimits,
         EvEnd
     };
 

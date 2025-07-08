@@ -39,7 +39,6 @@ struct TEvBlobCache {
         EvReadBlobRangeResult,
         EvCacheBlobRange,
         EvForgetBlob,
-        EvUpdateMemoryLimit,
 
         EvEnd
     };

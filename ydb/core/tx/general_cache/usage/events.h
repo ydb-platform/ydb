@@ -20,7 +20,6 @@ struct TEvents {
     enum EEv {
         EvAskData = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_PUBLIC),
         EvKillSource,
-        EvUpdateMaxCacheSize,
         EvEnd
     };
 

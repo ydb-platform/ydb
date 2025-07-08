@@ -316,7 +316,7 @@ namespace {
 
 //Workarownd for #19125
 NYql::NNodes::TCoUtf8 RemoveJsonPathUnnecessaryQuote(const NYql::NNodes::TCoUtf8& node, TExprContext& ctx) {
-    const std::string_view& path = node.Literal().StringValue();
+    const std::string_view& path = node.Literal();
     if (UTF8Detect(path) == ASCII && path.starts_with("$.\"") && path.substr(3).ends_with("\"")) {
         const auto& nakedPath = path.substr(3, path.length()-4);
         for (auto c: nakedPath) {

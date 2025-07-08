@@ -152,4 +152,57 @@ Y_UNIT_TEST_SUITE(IniConfigBasicTests) {
         // ini parser considers that key3 is also in a group
         UNIT_ASSERT_VALUES_EQUAL(cfg["group"]["key3"].As<TString>(), "root3");
     }
+
+    Y_UNIT_TEST(TypeChecks_GetAs) {
+        const TString ini = R"ini(
+            str = value
+            [dict]
+            key = val
+            [arr]
+            0 = first
+            1 = second
+        )ini";
+
+        TConfig cfg = TConfig::ReadIni(ini);
+
+        // str
+        UNIT_ASSERT(cfg["str"].IsA<TString>());
+        UNIT_ASSERT_VALUES_EQUAL(cfg["str"].Get<TString>(), "value");
+        UNIT_ASSERT_VALUES_EQUAL(cfg["str"].As<TString>(), "value");
+        UNIT_ASSERT(cfg["str"].IsNumeric() == false);
+
+        // dict
+        UNIT_ASSERT(cfg["dict"].IsA<TDict>());
+        const auto& dict = cfg["dict"].Get<TDict>();
+        UNIT_ASSERT_VALUES_EQUAL(dict.At("key").As<TString>(), "val");
+
+        // arr – manual emulation: arr section with keys "0", "1"
+        UNIT_ASSERT(cfg["arr"].IsA<TDict>());
+        const auto& arrDict = cfg["arr"].Get<TDict>();
+
+        TVector<TConfig> arr;
+        for (size_t i = 0; i < arrDict.size(); ++i) {
+            TString k = ToString(i);
+            UNIT_ASSERT(arrDict.find(k) != arrDict.end());
+            arr.push_back(arrDict.at(k));
+        }
+
+        UNIT_ASSERT_EQUAL(arr.size(), 2);
+        UNIT_ASSERT_EQUAL(arr[0].As<TString>(), "first");
+        UNIT_ASSERT_EQUAL(arr[1].As<TString>(), "second");
+    }
+
+    Y_UNIT_TEST(TypeMismatchThrows) {
+        const TString ini = R"ini(
+            str = hello
+            [dict]
+            key = val
+        )ini";
+
+        TConfig cfg = TConfig::ReadIni(ini);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cfg["str"].Get<TDict>(), TTypeMismatch, "string");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cfg["dict"].Get<TString>(), TTypeMismatch, "dict");
+    }
+
 }

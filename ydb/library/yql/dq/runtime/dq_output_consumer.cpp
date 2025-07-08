@@ -704,6 +704,7 @@ private:
     template<typename T = THashFunc, typename std::enable_if<std::is_same<T, THashV1>::value, int>::type = 0>
     size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
         ui64 hash = 0;
+        bool isNull = false;
         for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {
             const ui32 columnIndex = KeyColumns_[keyId].Index;
             Y_DEBUG_ABORT_UNLESS(columnIndex < OutputWidth_);
@@ -714,11 +715,19 @@ private:
                 }
                 keyHash = *ScalarColumnHashes_[keyId];
             } else {
-                keyHash = HashBlockColumn(keyId, *values[columnIndex]->array(), blockIndex);
+                keyHash = HashBlockColumn(keyId, *values[columnIndex]->array(), blockIndex, isNull);
             }
             hash = CombineHashes(hash, keyHash);
         }
-        return hash % Outputs_.size();
+        if (isNull) {
+            auto index = NullIndex++;
+            if (NullIndex >= Outputs_.size()) {
+                NullIndex = 0;
+            }
+            return index;
+        } else {
+            return hash % Outputs_.size();
+        }
     }
 
     template<typename T = THashFunc, typename std::enable_if<std::is_same<T, TColumnShardHashV1>::value, int>::type = 0>
@@ -745,8 +754,9 @@ private:
         return Hashers_[keyId]->Hash(item);
     }
 
-    inline ui64 HashBlockColumn(size_t keyId, const arrow::ArrayData& value, ui64 index) const {
+    inline ui64 HashBlockColumn(size_t keyId, const arrow::ArrayData& value, ui64 index, bool& isNull) const {
         TBlockItem item = Readers_[keyId]->GetItem(value, index);
+        isNull |= !item.HasValue();
         return Hashers_[keyId]->Hash(item);
     }
 
@@ -785,6 +795,7 @@ private:
 
     NUdf::IPgBuilder* PgBuilder_;
     THashFunc HashFunc;
+    ui32 NullIndex = 0;
 };
 
 class TDqOutputBroadcastConsumer : public IDqOutputConsumer {

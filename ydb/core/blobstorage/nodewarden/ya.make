@@ -23,6 +23,8 @@ SRCS(
     distconf_persistent_storage.cpp
     distconf_quorum.h
     distconf_scatter_gather.cpp
+    distconf_selfheal.h
+    distconf_selfheal.cpp
     distconf_validate.cpp
     node_warden.h
     node_warden_cache.cpp

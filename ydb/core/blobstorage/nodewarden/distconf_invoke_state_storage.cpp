@@ -1,9 +1,73 @@
 #include "distconf_invoke.h"
 #include "ydb/core/base/statestorage.h"
+#include "distconf_selfheal.h"
 
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
+
+    bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        auto testNewConfig = [](auto newSSInfo, auto oldSSInfo) {
+            THashSet<TActorId> replicas;
+            for (auto& ringGroup : oldSSInfo->RingGroups) {
+                for(auto& ring : ringGroup.Rings) {
+                    for(auto& node : ring.Replicas) {
+                        if(!replicas.insert(node).second) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            for (auto& ringGroup : newSSInfo->RingGroups) {
+                for(auto& ring : ringGroup.Rings) {
+                    for(auto& node : ring.Replicas) {
+                        if(!replicas.insert(node).second) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+        auto process = [&](const char *name, auto mutableFunc, auto ssMutableFunc, auto buildFunc) {
+            ui32 actorIdOffset = 0;
+            auto *newMutableConfig = (currentConfig->*ssMutableFunc)();
+            GenerateStateStorageConfig(newMutableConfig, config);
+            Y_ABORT_UNLESS(newMutableConfig->RingGroupsSize());
+            TIntrusivePtr<TStateStorageInfo> newSSInfo;
+            TIntrusivePtr<TStateStorageInfo> oldSSInfo;
+            oldSSInfo = (*buildFunc)(*(config.*mutableFunc)());
+            newSSInfo = (*buildFunc)(*newMutableConfig);
+            while (!testNewConfig(newSSInfo, oldSSInfo)) {
+                if (actorIdOffset > 16) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << name << " can not adjust RingGroupActorIdOffset");
+                    return false;
+                }
+                for (ui32 rg : xrange(newMutableConfig->RingGroupsSize())) {
+                    newMutableConfig->MutableRingGroups(rg)->SetRingGroupActorIdOffset(++actorIdOffset);
+                }
+                newSSInfo = (*buildFunc)(*newMutableConfig);
+            }
+            return true;
+        };
+        #define F(NAME) \
+        if (!process(#NAME, &NKikimrBlobStorage::TStorageConfig::Mutable##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)) { \
+            return false; \
+        }
+        F(StateStorage)
+        F(StateStorageBoard)
+        F(SchemeBoard)
+        #undef F
+        return true;
+    }
+
+    void TInvokeRequestHandlerActor::GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
+        currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
+        currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
+    }
 
     void TInvokeRequestHandlerActor::GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd) {
         if (!RunCommonChecks()) {
@@ -14,61 +78,28 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         if (cmd.GetRecommended()) {
-            auto testNewConfig = [](auto newSSInfo, auto oldSSInfo) {
-                THashSet<TActorId> replicas;
-                for (auto& ringGroup : oldSSInfo->RingGroups) {
-                    for(auto& ring : ringGroup.Rings) {
-                        for(auto& node : ring.Replicas) {
-                            if(!replicas.insert(node).second) {
-                                return false;
-                            }
-                        }
-                    }
-                }
-                for (auto& ringGroup : newSSInfo->RingGroups) {
-                    for(auto& ring : ringGroup.Rings) {
-                        for(auto& node : ring.Replicas) {
-                            if(!replicas.insert(node).second) {
-                                return false;
-                            }
-                        }
-                    }
-                }
-                return true;
-            };
-            auto process = [&](const char *name, auto mutableFunc, auto ssMutableFunc, auto buildFunc) {
-                ui32 actorIdOffset = 0;
-                auto *newMutableConfig = (currentConfig->*ssMutableFunc)();
-                GenerateStateStorageConfig(newMutableConfig, config);
-                TIntrusivePtr<TStateStorageInfo> newSSInfo;
-                TIntrusivePtr<TStateStorageInfo> oldSSInfo;
-                oldSSInfo = (*buildFunc)(*(config.*mutableFunc)());
-                newSSInfo = (*buildFunc)(*newMutableConfig);
-                while (!testNewConfig(newSSInfo, oldSSInfo)) {
-                    if (actorIdOffset > 16) {
-                        FinishWithError(TResult::ERROR, TStringBuilder() << name << " can not adjust RingGroupActorIdOffset");
-                        return false;
-                    }
-                    for (ui32 rg : xrange(newMutableConfig->RingGroupsSize())) {
-                        newMutableConfig->MutableRingGroups(rg)->SetRingGroupActorIdOffset(++actorIdOffset);
-                    }
-                    newSSInfo = (*buildFunc)(*newMutableConfig);
-                }
-                return true;
-            };
-            #define F(NAME) \
-            if (!process(#NAME, &NKikimrBlobStorage::TStorageConfig::Mutable##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)) { \
-                return; \
-            }
-            F(StateStorage)
-            F(StateStorageBoard)
-            F(SchemeBoard)
-            #undef F
+            if (!GetRecommendedStateStorageConfig(currentConfig))
+                return;
         } else {
-            currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
-            currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
-            currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
+            GetCurrentStateStorageConfig(currentConfig);
         }
+        Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+    }
+
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd) {
+        if (!RunCommonChecks()) {
+            return;
+        }
+        NKikimrBlobStorage::TStateStorageConfig currentConfig;
+        GetCurrentStateStorageConfig(&currentConfig);
+
+        NKikimrBlobStorage::TStateStorageConfig targetConfig;
+        if (!GetRecommendedStateStorageConfig(&targetConfig)) {
+            return;
+        }
+
+        RegisterWithSameMailbox(new TStateStorageSelfhealActor(Sender, Cookie, cmd.GetWaitForConfigStep(), std::move(currentConfig), std::move(targetConfig)));
+        auto ev = PrepareResult(TResult::OK, std::nullopt);
         Finish(Sender, SelfId(), ev.release(), 0, Cookie);
     }
 

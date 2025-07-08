@@ -265,8 +265,9 @@ private:
 
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
+            const bool isExactLimitConsumer = consumer.ExactLimit.has_value();
             ui64 limitBytes;
-            if (consumer.ExactLimit.has_value()) {
+            if (isExactLimitConsumer) {
                 limitBytes = consumer.ExactLimit.value();
             } else {
                 limitBytes = consumer.GetLimit(coefficient);
@@ -279,7 +280,7 @@ private:
             LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state:"
                 << " Consumption: " << HumanReadableBytes(consumer.Consumption) << " Limit: " << HumanReadableBytes(limitBytes)
                 << " Min: " << HumanReadableBytes(consumer.MinBytes) << " Max: " << HumanReadableBytes(consumer.MaxBytes));
-            auto& counters = GetConsumerCounters(consumer.Kind, !consumer.ExactLimit.has_value());
+            auto& counters = GetConsumerCounters(consumer.Kind, !isExactLimitConsumer);
             counters.Consumption->Set(consumer.Consumption);
             counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
             counters.LimitBytes->Set(limitBytes);

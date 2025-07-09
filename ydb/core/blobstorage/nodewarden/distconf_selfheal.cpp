@@ -15,7 +15,7 @@ namespace NKikimr::NStorage {
         , TargetConfig(targetConfig)
     {}
 
-    bool TStateStorageSelfhealActor::RequestChangeStateStorage() {
+    void TStateStorageSelfhealActor::RequestChangeStateStorage() {
         Y_ABORT_UNLESS(StateStorageReconfigurationStep > NONE && StateStorageReconfigurationStep < INVALID_RECONFIGURATION_STEP);
         auto request = std::make_unique<TEvNodeConfigInvokeOnRoot>();
         NKikimrBlobStorage::TStateStorageConfig *config = request->Record.MutableReconfigStateStorage();
@@ -59,24 +59,24 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NW52, "TStateStorageSelfhealActor::RequestChangeStateStorage",
                 (StateStorageReconfigurationStep, (ui32)StateStorageReconfigurationStep), (StateStorageConfig, config));
 
+        AllowNextStep = false;
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
-        return true;
     }
 
     void TStateStorageSelfhealActor::Bootstrap(TActorId /*parentId*/) {
         StateStorageReconfigurationStep = INTRODUCE_NEW_GROUP;
-        if (!RequestChangeStateStorage()) {
-            Finish(TResult::ERROR);
-            return;
-        }
+        RequestChangeStateStorage();
         Schedule(TDuration::Seconds(WaitForConfigStep), new TEvents::TEvWakeup());
         Become(&TThis::StateFunc);
     }
 
-    void TStateStorageSelfhealActor::Finish(TResult::EStatus result) {
+    void TStateStorageSelfhealActor::Finish(TResult::EStatus result, const TString& errorReason) {
         auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
         auto *record = &ev->Record;
         record->SetStatus(result);
+        if (!errorReason.empty()) {
+            record->SetErrorReason(errorReason);
+        }
         TActivationContext::Send(new IEventHandle(Sender, SelfId(), ev.release(), 0, Cookie));
         PassAway();
     }
@@ -98,22 +98,26 @@ namespace NKikimr::NStorage {
     }
 
     void TStateStorageSelfhealActor::HandleWakeup() {
-        StateStorageReconfigurationStep = GetNextStep(StateStorageReconfigurationStep);
-        if (!RequestChangeStateStorage()) {
-            Finish(TResult::ERROR);
+        if (!AllowNextStep) {
+            STLOG(PRI_ERROR, BS_NODE, NW52, "TStateStorageSelfhealActor::HandleWakeup aborted. Previous reconfiguration step not finished yet.", (StateStorageReconfigurationStep, (ui32)StateStorageReconfigurationStep));
+            Finish(TResult::ERROR, "Previous reconfiguration step not finished yet.");
             return;
         }
         if (StateStorageReconfigurationStep == DELETE_PREVIOUS_GROUP) {
             Finish(TResult::OK);
-        } else {
-            Schedule(TDuration::Seconds(WaitForConfigStep), new TEvents::TEvWakeup());
+            return;
         }
+        StateStorageReconfigurationStep = GetNextStep(StateStorageReconfigurationStep);
+        RequestChangeStateStorage();
+        Schedule(TDuration::Seconds(WaitForConfigStep), new TEvents::TEvWakeup());
     }
 
     void TStateStorageSelfhealActor::HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
         if (ev->Get()->Record.GetStatus() != TResult::OK) {
             STLOG(PRI_ERROR, BS_NODE, NW52, "TStateStorageSelfhealActor::HandleResult aborted. ", (Reason, ev->Get()->Record.GetErrorReason()));
-            Finish(TResult::ERROR);
+            Finish(TResult::ERROR, ev->Get()->Record.GetErrorReason());
+        } else {
+            AllowNextStep = true;
         }
     }
 

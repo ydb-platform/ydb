@@ -20,12 +20,13 @@ namespace NKikimr::NStorage {
         const ui64 Cookie;
         NKikimrBlobStorage::TStateStorageConfig CurrentConfig;
         NKikimrBlobStorage::TStateStorageConfig TargetConfig;
+        bool AllowNextStep = true;
 
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
         void HandleWakeup();
-        void Finish(TResult::EStatus result);
-        bool RequestChangeStateStorage();
+        void Finish(TResult::EStatus result, const TString& errorReason = "");
+        void RequestChangeStateStorage();
         void PassAway();
         void HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev);
         EReconfigurationStep GetNextStep(EReconfigurationStep prevStep);

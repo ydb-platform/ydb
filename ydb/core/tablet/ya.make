@@ -62,7 +62,8 @@ PEERDIR(
     ydb/library/actors/helpers
     ydb/library/actors/protos
     ydb/library/actors/util
-    library/cpp/blockcodecs
+    library/cpp/blockcodecs/core
+    ydb/library/blockcodecs
     library/cpp/deprecated/enum_codegen
     library/cpp/yson
     ydb/core/base

@@ -7,7 +7,8 @@ DATA(
 )
 
 PEERDIR(
-    library/cpp/blockcodecs
+    library/cpp/blockcodecs/core
+    ydb/library/blockcodecs
     library/cpp/histogram/simple
     library/cpp/testing/unittest
 )

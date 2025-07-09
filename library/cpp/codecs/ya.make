@@ -16,7 +16,8 @@ SRCS(
 PEERDIR(
     contrib/libs/zstd
     library/cpp/bit_io
-    library/cpp/blockcodecs
+    library/cpp/blockcodecs/core
+    ydb/library/blockcodecs
     library/cpp/codecs/greedy_dict
     library/cpp/comptable
     library/cpp/containers/comptrie

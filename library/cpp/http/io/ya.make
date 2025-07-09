@@ -1,7 +1,8 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/blockcodecs
+    library/cpp/blockcodecs/core
+    ydb/library/blockcodecs
     library/cpp/streams/brotli
     library/cpp/streams/bzip2
     library/cpp/streams/lzma

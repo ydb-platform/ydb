@@ -3,7 +3,8 @@ LIBRARY()
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
-    library/cpp/blockcodecs
+    library/cpp/blockcodecs/core
+    ydb/library/blockcodecs
     library/cpp/codecs
     library/cpp/containers/intrusive_avl_tree
     library/cpp/monlib/service/pages

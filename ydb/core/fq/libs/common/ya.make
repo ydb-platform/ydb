@@ -17,7 +17,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/blockcodecs
+    library/cpp/blockcodecs/core
+    ydb/library/blockcodecs
     ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/events
     yql/essentials/providers/common/structured_token

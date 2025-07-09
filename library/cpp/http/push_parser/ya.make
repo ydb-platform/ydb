@@ -6,7 +6,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/http/io
-    library/cpp/blockcodecs
+    library/cpp/blockcodecs/core
+    ydb/library/blockcodecs
     library/cpp/streams/brotli
 )
 

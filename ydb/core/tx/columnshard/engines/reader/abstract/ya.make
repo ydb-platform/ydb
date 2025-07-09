@@ -12,7 +12,6 @@ PEERDIR(
     ydb/core/tx/program
     ydb/core/protos
     ydb/core/tx/columnshard/data_sharing/protos
-    ydb/core/tx/columnshard/test_helper
     ydb/core/tx/conveyor/usage
 )
 

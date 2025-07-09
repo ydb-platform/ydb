@@ -2,7 +2,6 @@
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
-#include <ydb/core/tx/columnshard/test_helper/program_constructor.h>
 #include <ydb/core/tx/program/program.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -20,9 +19,13 @@ TConclusionStatus IScannerConstructor::ParseProgram(const TProgramParsingContext
         //        container.OverrideProcessingColumns(read.ColumnIds);
 
         {
-            NTxUT::TProgramProtoBuilder protoBuilder;
-            protoBuilder.AddProjection(read.ColumnIds);
-            container.Init(columnResolver, protoBuilder.FinishProto()).Validate();
+            NKikimrSSA::TProgram proto;
+            auto* command = proto.AddCommand();
+            for (auto&& i : read.ColumnIds) {
+                command->MutableProjection()->AddColumns()->SetId(i);
+            }
+
+            container.Init(columnResolver, proto).Validate();
             read.SetProgram(std::move(container));
         }
 

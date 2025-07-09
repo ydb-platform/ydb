@@ -8,16 +8,16 @@ Release date: 2025.
 
 #### Functionality
 
-* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./maintenance/manual/dynamic-config) under the guarantee of not rolling back to previous versions.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector similarity search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./reference/configuration/index.md), but rolling back to previous {{ ydb-short-name }} versions won't be possible after this.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
-* [Implemented] BATCH UPDATE and BATCH DELETE expressions, allowing to apply changes to large string tables outside of transactional constraints.
+* [Implemented] `BATCH UPDATE` and `BATCH DELETE` statements, allowing the application of changes to large row-oriented tables outside of transactional constraints.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
 * [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the `enable_kafka_native_balancing` flag in the cluster configuration.
 * Added support for [auto-partitioning topics](./concepts/cdc.md#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md#topic-settings) using the `ALTER TOPIC` statement.
-* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md#debezium-json-record-structure) for CDC.
+* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the `DEBEZIUM_JSON` format](./concepts/cdc.md#debezium-json-record-structure) for CDC.
 * [Added](https://github.com/ydb-platform/ydb/pull/19507) the ability to create changefeed streams to index tables.
-* [Added](https://github.com/ydb-platform/ydb/issues/19310) ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes. This mode is enabled by setting the `enable_access_to_index_impl_tables` flag in the cluster configuration.
+* [Added](https://github.com/ydb-platform/ydb/issues/19310) the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes. This mode is enabled by setting the `enable_access_to_index_impl_tables` flag in the cluster configuration.
 * The scope of supported objects in backup and restore operations has been expanded:
   * [Support for changefeeds](https://github.com/ydb-platform/ydb/issues/7054) (enabled with the `enable_changefeeds_export` and `enable_changefeeds_import` flags).
   * [Support for views](https://github.com/ydb-platform/ydb/issues/12724) (enabled with the `enable_view_export` flag).

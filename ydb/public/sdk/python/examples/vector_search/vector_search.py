@@ -66,19 +66,20 @@ def add_vector_index(
     table_name: str,
     index_name: str,
     strategy: str,
-    dim: int,
+    dimension: int,
     levels: int = 2,
     clusters: int = 128,
 ):
+    temp_index_name = f"{index_name}__temp"
     query = f"""
     ALTER TABLE `{table_name}`
-    ADD INDEX {index_name}__temp
+    ADD INDEX {temp_index_name}
     GLOBAL USING vector_kmeans_tree
     ON (embedding)
     WITH (
         {strategy},
         vector_type="Float",
-        vector_dimension={dim},
+        vector_dimension={dimension},
         levels={levels},
         clusters={clusters}
     );
@@ -89,7 +90,7 @@ def add_vector_index(
         f"{driver._driver_config.database}/{table_name}",
         rename_indexes=[
             ydb.RenameIndexItem(
-                source_name=f"{index_name}__temp",
+                source_name=temp_index_name,
                 destination_name=f"{index_name}",
                 replace_destination=True,
             ),
@@ -107,19 +108,19 @@ def search_items(
     limit: int = 1,
     index_name: str | None = None,
 ) -> list[dict]:
-    view_index = "" if not index_name else f"VIEW {index_name}"
+    view_index = f"VIEW {index_name}" if index_name else ""
 
     sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
     query = f"""
     DECLARE $embedding as List<Float>;
 
-    $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
+    $target_embedding = Knn::ToBinaryStringFloat($embedding);
 
     SELECT
         id,
         document,
-        Knn::{strategy}(embedding, $TargetEmbedding) as score
+        Knn::{strategy}(embedding, $target_embedding) as score
     FROM {table_name} {view_index}
     ORDER BY score
     {sort_order}

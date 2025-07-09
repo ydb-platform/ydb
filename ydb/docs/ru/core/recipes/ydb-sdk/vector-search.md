@@ -4,15 +4,26 @@
 
 Подробно будут разобраны операции:
 
-* Создание таблицы для хранения векторов;
-* Вставка векторов в таблицу;
-* Добавление векторного индекса;
-* Поиск ближайших векторов.
+* [Подключение к YDB](#connect-ydb)
+* [Создание таблицы для хранения векторов](#create-table)
+* [Вставка векторов в таблицу](#insert-vectors)
+* [Добавление векторного индекса](#add-vector-index)
+* [Поиск ближайших векторов](#search-by-vector)
 
-## Подключение к {{ ydb-short-name }}
+В данном рецепте будет создано хранилище текстов со следующей структурой:
 
-В данной секции описаны минимально необходимые действия для выполнения запросов в {{ ydb-short-name }}.  
-Для получения более подробной информации о подключении к YDB обратитесь к статье [{#T}](./init.md).
+|Поле|Пояснение|
+|---|---|
+|`id`|Идентификатор текста|
+|`document`|Текст|
+|`embedding`|Векторное представление текста|
+
+В рецепте предполагается, что `embedding` уже имеется.
+
+## Подключение к {{ ydb-short-name }} {#connect-ydb}
+
+В данной секции описаны минимально необходимые действия для выполнения запросов в {{ ydb-short-name }}.
+Для получения более подробной информации о подключении к {{ ydb-short-name }} обратитесь к статье [{#T}](./init.md).
 
 {% list tabs %}
 
@@ -21,8 +32,6 @@
     Для выполнения запросов необходимо создать `ydb.QuerySessionPool`.
 
     ```python
-    import ydb
-
     driver = ydb.Driver(
         endpoint=ydb_endpoint,
         database=ydb_database,
@@ -32,21 +41,31 @@
     pool = ydb.QuerySessionPool(driver)
     ```
 
+- C++
+
+    ```cpp
+    auto driverConfig = NYdb::CreateFromEnvironment(endpoint + "/?database=" + database);
+    NYdb::TDriver driver(driverConfig);
+    NYdb::NQuery::TQueryClient client(driver);
+    ```
+
 {% endlist %}
 
 
-## Создание таблицы
+## Создание таблицы {#create-table}
 
 Сначала необходимо создать таблицу для хранения документов и их векторных представлений.
+
 Структура таблицы:
 
-* `id` - идентификатор документа
-* `document` - текст документа
-* `embedding` - векторное представление документа
+|Название столбца|Тип данных|Пояснение|
+|---|----|------|
+|`id`|`Utf8`|идентификатор документа|
+|`document`|`Utf8`|текст документа|
+|`embedding`|`String`|векторное представление документа|
 
-**Важно: хранения вектора используется тип `String`.**
+**Важно: хранения вектора используется тип `String`.** Подробное смотрите в документации по [точному векторному поиску](../../yql/reference/udf/list/knn.md#data-types)
 
-Подробное описание типов данных смотрите в документации по [точному векторному поиску](../../yql/reference/udf/list/knn.md#data-types)
 
 {% list tabs %}
 
@@ -91,9 +110,9 @@
 {% endlist %}
 
 
-## Вставка векторов
+## Вставка векторов {#insert-vectors}
 
-После создания таблицы её необходимо заполнить векторами.
+Для вставки векторов необходимо подготовить правильный YQL-запрос. Для унификации вставки разных данных он параметризован.
 В готовом YQL-запросе важно корректно преобразовать вектор в тип `String`. Для этого используется [функция преобразования](../../yql/reference/udf/list/knn.md#functions-convert) вектора в бинарное представление.
 
 Запрос оперирует контейнерным типом данных `List<Struct<...>>` (список структур), что позволяет передавать произвольное количество объектов за один раз.
@@ -201,7 +220,7 @@
 {% endlist %}
 
 
-## Добавление индекса
+## Добавление индекса {#add-vector-index}
 
 Использование векторного индекса позволяет эффективно решать задачу приближённого поиска ближайших векторов. Подробнее о преимуществах и особенностях использования описано в документации по [векторному индексу](../../dev/vector-indexes.md).
 
@@ -230,25 +249,26 @@
 - Python
 
     ```python
-    def add_index(
+    def add_vector_index(
         pool: ydb.QuerySessionPool,
         driver: ydb.Driver,
         table_name: str,
         index_name: str,
         strategy: str,
-        dim: int,
+        dimension: int,
         levels: int = 2,
         clusters: int = 128,
     ):
+        temp_index_name = f"{index_name}__temp"
         query = f"""
         ALTER TABLE `{table_name}`
-        ADD INDEX {index_name}__temp
+        ADD INDEX {temp_index_name}
         GLOBAL USING vector_kmeans_tree
         ON (embedding)
         WITH (
             {strategy},
             vector_type="Float",
-            vector_dimension={dim},
+            vector_dimension={dimension},
             levels={levels},
             clusters={clusters}
         );
@@ -259,14 +279,14 @@
             f"{driver._driver_config.database}/{table_name}",
             rename_indexes=[
                 ydb.RenameIndexItem(
-                    source_name=f"{index_name}__temp",
-                    destination_name=index_name,
+                    source_name=temp_index_name,
+                    destination_name=f"{index_name}",
                     replace_destination=True,
                 ),
             ],
         )
 
-        print(f"Vector index {index_name} created for {table_name} table.")
+        print(f"Table index {index_name} created.")
     ```
 
 - C++
@@ -318,7 +338,7 @@
 
 {% endlist %}
 
-## Поиск по вектору
+## Поиск по вектору {#search-by-vector}
 
 Для поиска документов по вектору используется специальный YQL‑запрос, в котором необходимо определить функцию сходства или расстояния.
 Доступные значения:
@@ -348,19 +368,19 @@
         limit: int = 1,
         index_name: str | None = None,
     ) -> list[dict]:
-        view_index = "" if not index_name else f"VIEW {index_name}"
+        view_index = f"VIEW {index_name}" if index_name else ""
 
         sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
         query = f"""
         DECLARE $embedding as List<Float>;
 
-        $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
+        $target_embedding = Knn::ToBinaryStringFloat($embedding);
 
         SELECT
             id,
             document,
-            Knn::{strategy}(embedding, $TargetEmbedding) as score
+            Knn::{strategy}(embedding, $target_embedding) as score
         FROM {table_name} {view_index}
         ORDER BY score
         {sort_order}
@@ -449,7 +469,7 @@
 
 {% endlist %}
 
-## Итоговый пример
+## Итоговый пример {#full-example}
 
 Объединим все вышеописанные методы в один пример, который включает следующие шаги:
 
@@ -545,6 +565,16 @@
 
         pool.stop()
         driver.stop()
+
+
+    if __name__ == "__main__":
+        main(
+            ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
+            ydb_database=os.environ.get("YDB_DATABASE", "/local"),
+            ydb_credentials=ydb.credentials_from_env_variables(),
+            table_name="ydb_vector_search",
+            index_name="ydb_vector_index",
+        )
     ```
 
     Вывод программы:

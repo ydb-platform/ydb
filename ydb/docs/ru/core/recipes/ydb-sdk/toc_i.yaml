@@ -41,6 +41,8 @@ items:
   href: tx-control.md
 - name: Настройка TTL
   href: ttl.md
+- name: Векторный поиск
+  href: vector-search.md
 - name: Координация
   items:
   - name: Распределённая блокировка
@@ -61,5 +63,3 @@ items:
     href: debug-prometheus.md
   - name: Подключить трассировку в Jaeger
     href: debug-jaeger.md
-- name: Векторный поиск
-  href: vector-search.md

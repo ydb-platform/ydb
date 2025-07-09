@@ -6,6 +6,7 @@ import ydb.apps.dstool.lib.grouptool as grouptool
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import sys
+import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 
 description = 'Create workload to stress failure model'
 
@@ -23,6 +24,8 @@ def add_options(p):
     p.add_argument('--kill-signal', type=str, default='KILL', help='Kill signal to send to restart node')
     p.add_argument('--sleep-before-rounds', type=float, default=1, help='Seconds to sleep before rounds')
     p.add_argument('--no-fail-model-check', action='store_true', help='Do not check VDisk states before taking action')
+    p.add_argument('--enable-soft-switch-piles', action='store_true', help='Enable soft switch pile with PROMOTE')
+    p.add_argument('--enable-hard-switch-piles', action='store_true', help='Enable hard switch pile with setting PRIMARY')
 
 
 def fetch_start_time_map(base_config):
@@ -275,6 +278,14 @@ def do(args):
                 print('Killing tablet %d of type %s' % (tablet_id, item['Type']))
                 common.fetch('tablets', dict(RestartTabletID=tablet_id), fmt='raw', cache=False)
 
+        def do_soft_switch_pile(pile_id):
+            print(f"Switching primary pile to {pile_id} with PROMOTE")
+            common.promote_pile(pile_id)
+
+        def do_hard_switch_pile(pile_id, all_piles):
+            print(f"Switching primary pile to {pile_id} with setting PRIMARY")
+            common.set_primary_pile(pile_id, [x for x in all_piles if x != pile_id])
+
         ################################################################################################################
 
         now = datetime.now(timezone.utc)
@@ -359,6 +370,32 @@ def do(args):
 
         if restarts:
             possible_actions.append(('restart', (pick, restarts)))
+
+        has_pile_operations = args.enable_soft_switch_piles or args.enable_hard_switch_piles
+        if has_pile_operations:
+            piles_info = common.get_piles_info()
+            piles_count = len(piles_info.per_pile_state)
+            primary_pile = None
+            synchronized_piles = []
+            promoted_piles = []
+            non_synchronized_piles = []
+            for idx, pile_state in enumerate(piles_info.per_pile_state):
+                if pile_state.state == ydb_bridge.PileState.PRIMARY:
+                    primary_pile = idx
+                elif pile_state.state == ydb_bridge.PileState.SYNCHRONIZED:
+                    synchronized_piles.append(idx)
+                elif pile_state.state == ydb_bridge.PileState.PROMOTE:
+                    promoted_piles.append(idx)
+                else:
+                    non_synchronized_piles.append(idx)
+
+            can_soft_switch = (piles_count == len(synchronized_piles) + int(primary_pile is not None))
+            can_hard_switch = (len(synchronized_piles) + len(promoted_piles) > 0)
+
+            if args.enable_soft_switch_piles and can_soft_switch:
+                possible_actions.append(('soft-switch-pile', (do_soft_switch_pile, random.choice(synchronized_piles))))
+            if args.enable_hard_switch_piles and can_hard_switch:
+                possible_actions.append(('hard-switch-pile', (do_hard_switch_pile, random.choice(promoted_piles + synchronized_piles), [primary_pile] + promoted_piles + synchronized_piles)))
 
         if not possible_actions:
             common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)

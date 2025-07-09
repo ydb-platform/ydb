@@ -119,26 +119,14 @@ class TieringTestBase(BaseTestSet):
             ),
         )
 
-    def _get_env_or_external_param(self, env_name: str, param_name: str, default_value) -> str:
-        param_value = get_external_param(param_name, None)
-        if param_value is not None:
-            return param_value
-
-        env_value = os.getenv(env_name)
-        if env_value is not None:
-            return env_value
-
-        return default_value
-
     def _setup_tiering_test(self, ctx):
         random.seed(0)
 
         LOGGER.info('Initializing test parameters')
-
-        self.s3_endpoint = self._get_env_or_external_param('S3_ENDPOINT', 's3-endpoint', '')
-        self.s3_buckets = self._get_env_or_external_param('S3_BUCKETS', 's3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(',')
-        self.s3_access_key = self._get_env_or_external_param('S3_ACCESS_KEY', 's3-access-key', 'access_key')
-        self.s3_secret_key = self._get_env_or_external_param('S3_SECRET_KEY', 's3-secret-key', 'secret_key')
+        self.s3_endpoint = get_external_param('s3-endpoint', '')
+        self.s3_buckets = list(get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(','))
+        self.s3_access_key = os.getenv('S3_ACCESS_KEY', 'access_key')
+        self.s3_secret_key = os.getenv('S3_SECRET_KEY', 'secret_key')
 
         assert len(self.s3_buckets) == 2, len(self.s3_buckets)
 

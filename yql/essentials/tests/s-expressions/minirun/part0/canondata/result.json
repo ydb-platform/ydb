@@ -153,6 +153,20 @@
             "uri": "https://{canondata_backend}/1889210/9f4b906f09e498ba6ae471f1757ad6c2e977b007/resource.tar.gz#test.test_EquiJoin-JoinInMemRename-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Flow-DependsOnFlowMultipleClients-default.txt-Debug]": [
+        {
+            "checksum": "9f8f73859b1e709aad4b13c644e95cfd",
+            "size": 1244,
+            "uri": "https://{canondata_backend}/1903280/3fb0e318928fae9beeca96846c59623a03c2a654/resource.tar.gz#test.test_Flow-DependsOnFlowMultipleClients-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Flow-DependsOnFlowMultipleClients-default.txt-Results]": [
+        {
+            "checksum": "91e639fc280b4d454690d132e1c2264a",
+            "size": 2875,
+            "uri": "https://{canondata_backend}/1903280/3fb0e318928fae9beeca96846c59623a03c2a654/resource.tar.gz#test.test_Flow-DependsOnFlowMultipleClients-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[ImplictCasts-AutoConvertByIf-default.txt-Debug]": [
         {
             "checksum": "e828d461bd8c86f54368812537bd34e7",

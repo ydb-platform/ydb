@@ -713,8 +713,8 @@ u_fgetc(UFILE   *f);
  *
  * @param f The UFILE from which to read.
  * @return The UChar32 value read, or U_EOF if no character was
- * available, or U+FFFFFFFF if an ill-formed character was
- * encountered.
+ * available, or U+FFFD (replacement character) if an ill-formed
+ * character was encountered.
  * @see u_unescape()
  * @stable ICU 3.0
  */

@@ -280,7 +280,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
     join->Stats = TOptimizerStatistics(
-        ctx.ComputeJoinStatsV1(
+        ctx.ComputeJoinStatsV2(
             join->LeftArg->Stats,
             join->RightArg->Stats,
             join->LeftJoinKeys,
@@ -289,7 +289,8 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
             join->JoinType,
             nullptr,
             false,
-            false
+            false,
+            nullptr
         )
     );
 }

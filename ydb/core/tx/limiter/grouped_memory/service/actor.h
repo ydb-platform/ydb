@@ -2,6 +2,7 @@
 #include "counters.h"
 #include "manager.h"
 
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/events.h>
 
@@ -17,14 +18,16 @@ private:
     const TString Name;
     const std::shared_ptr<TCounters> Signals;
     const std::shared_ptr<TStageFeatures> DefaultStage;
+    const NMemory::EMemoryConsumerKind ConsumerKind;
 
 public:
     TMemoryLimiterActor(const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
-        const std::shared_ptr<TStageFeatures>& defaultStage)
+        const std::shared_ptr<TStageFeatures>& defaultStage, const NMemory::EMemoryConsumerKind consumerKind)
         : Config(config)
         , Name(name)
         , Signals(signals)
-        , DefaultStage(defaultStage) {
+        , DefaultStage(defaultStage)
+        , ConsumerKind(consumerKind) {
     }
 
     void Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev);
@@ -36,7 +39,8 @@ public:
     void Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvStartProcessScope::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvFinishProcessScope::TPtr& ev);
-    void Handle(NEvents::TEvExternal::TEvUpdateMemoryLimits::TPtr& ev);
+    void Handle(NMemory::TEvConsumerRegistered::TPtr& ev);
+    void Handle(NMemory::TEvConsumerLimit::TPtr& ev);
 
     void Bootstrap();
 
@@ -51,7 +55,8 @@ public:
             hFunc(NEvents::TEvExternal::TEvFinishProcess, Handle);
             hFunc(NEvents::TEvExternal::TEvStartProcessScope, Handle);
             hFunc(NEvents::TEvExternal::TEvFinishProcessScope, Handle);
-            hFunc(NEvents::TEvExternal::TEvUpdateMemoryLimits, Handle);
+            hFunc(NMemory::TEvConsumerRegistered, Handle);
+            hFunc(NMemory::TEvConsumerLimit, Handle);
             default:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }

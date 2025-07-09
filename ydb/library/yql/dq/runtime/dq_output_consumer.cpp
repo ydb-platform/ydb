@@ -36,8 +36,20 @@ public:
         YQL_ENSURE(!Consumers.empty());
     }
 
-    bool IsFull() const override {
-        return AnyOf(Consumers, [](const auto& consumer) { return consumer->IsFull(); });
+    EDqFillLevel GetFillLevel() const override {
+        EDqFillLevel result = SoftLimit;
+        for (auto consumer : Consumers) {
+            switch(consumer->GetFillLevel()) {
+                case HardLimit:
+                    return HardLimit;
+                case SoftLimit:
+                    break;
+                case NoLimit:
+                    result = NoLimit;
+                    break;
+            }
+        }
+        return result;
     }
 
     void WideConsume(TUnboxedValue* values, ui32 count) override {
@@ -79,8 +91,8 @@ public:
     TDqOutputMapConsumer(IDqOutput::TPtr output)
         : Output(output) {}
 
-    bool IsFull() const override {
-        return Output->IsFull();
+    EDqFillLevel GetFillLevel() const override {
+        return Output->UpdateFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) override {
@@ -256,29 +268,12 @@ private:
 template <typename THashFunc>
 class TDqOutputHashPartitionConsumer : public IDqOutputConsumer {
 private:
-    mutable bool IsWaitingFlag = false;
     mutable TUnboxedValue WaitingValue;
     mutable TUnboxedValueVector WideWaitingValues;
     mutable IDqOutput::TPtr OutputWaiting;
 protected:
-    void DrainWaiting() const {
-        if (Y_UNLIKELY(IsWaitingFlag)) {
-            if (OutputWaiting->IsFull()) {
-                return;
-            }
-            if (OutputWidth.Defined()) {
-                YQL_ENSURE(OutputWidth == WideWaitingValues.size());
-                OutputWaiting->WidePush(WideWaitingValues.data(), *OutputWidth);
-            } else {
-                OutputWaiting->Push(std::move(WaitingValue));
-            }
-            IsWaitingFlag = false;
-        }
-    }
-
     virtual bool DoTryFinish() override {
-        DrainWaiting();
-        return !IsWaitingFlag;
+        return true;
     }
 public:
     TDqOutputHashPartitionConsumer(
@@ -299,37 +294,42 @@ public:
         if (outputWidth.Defined()) {
             WideWaitingValues.resize(*outputWidth);
         }
+
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 
-    bool IsFull() const override {
-        DrainWaiting();
-        return IsWaitingFlag;
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumer {";
+        ui32 i = 0;
+        for (auto output : Outputs) {
+            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
+        }
+        builder << " }";
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
         ui32 partitionIndex = GetHashPartitionIndex(value);
-        if (Outputs[partitionIndex]->IsFull()) {
-            YQL_ENSURE(!IsWaitingFlag);
-            IsWaitingFlag = true;
-            OutputWaiting = Outputs[partitionIndex];
-            WaitingValue = std::move(value);
-        } else {
-            Outputs[partitionIndex]->Push(std::move(value));
-        }
+        Outputs[partitionIndex]->Push(std::move(value));
     }
 
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(OutputWidth.Defined() && count == OutputWidth);
         ui32 partitionIndex = GetHashPartitionIndex(values);
-        if (Outputs[partitionIndex]->IsFull()) {
-            YQL_ENSURE(!IsWaitingFlag);
-            IsWaitingFlag = true;
-            OutputWaiting = Outputs[partitionIndex];
-            std::move(values, values + count, WideWaitingValues.data());
-        } else {
-            Outputs[partitionIndex]->WidePush(values, count);
-        }
+        Outputs[partitionIndex]->WidePush(values, count);
     }
 
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
@@ -409,6 +409,7 @@ private:
     TVector<NUdf::IHash::TPtr> ValueHashers;
     const TMaybe<ui32> OutputWidth;
     THashFunc HashFunc;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 template <typename THashFunc>
@@ -436,11 +437,30 @@ public:
             Readers_.emplace_back(MakeBlockReader(TTypeInfoHelper(), blockType->GetItemType()));
             Hashers_.emplace_back(helper.MakeHasher(blockType->GetItemType()));
         }
+
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs_) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 private:
-    bool IsFull() const final {
-        DrainWaiting();
-        return IsWaitingFlag_;
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerScalar {";
+        ui32 i = 0;
+        for (auto output : Outputs_) {
+            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
+        }
+        builder << " }";
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -454,17 +474,7 @@ private:
         if (!inputBlockLen) {
             return;
         }
-
-        if (!Output_) {
-            Output_ = Outputs_[GetHashPartitionIndex(values)];
-        }
-        if (Output_->IsFull()) {
-            YQL_ENSURE(!IsWaitingFlag_);
-            IsWaitingFlag_ = true;
-            std::move(values, values + count, WaitingValues_.data());
-        } else {
-            Output_->WidePush(values, count);
-        }
+        Outputs_[GetHashPartitionIndex(values)]->WidePush(values, count);
     }
 
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
@@ -479,21 +489,8 @@ private:
         }
     }
 
-    void DrainWaiting() const {
-        if (Y_UNLIKELY(IsWaitingFlag_)) {
-            YQL_ENSURE(Output_);
-            if (Output_->IsFull()) {
-                return;
-            }
-            YQL_ENSURE(OutputWidth_ == WaitingValues_.size());
-            Output_->WidePush(WaitingValues_.data(), OutputWidth_);
-            IsWaitingFlag_ = false;
-        }
-    }
-
     bool DoTryFinish() final {
-        DrainWaiting();
-        return !IsWaitingFlag_;
+        return true;
     }
 
     template<typename T = THashFunc, typename std::enable_if<std::is_same<T, THashV1>::value, int>::type = 0>
@@ -531,10 +528,9 @@ private:
     const ui32 OutputWidth_;
     TVector<NUdf::IBlockItemHasher::TPtr> Hashers_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
-    IDqOutput::TPtr Output_;
-    mutable bool IsWaitingFlag_ = false;
     mutable TUnboxedValueVector WaitingValues_;
     THashFunc HashFunc;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 template <typename THashFunc>
@@ -577,12 +573,31 @@ public:
             Readers_.emplace_back(MakeBlockReader(helper, blockType->GetItemType()));
             Hashers_.emplace_back(blockHelper.MakeHasher(blockType->GetItemType()));
         }
+
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs_) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 
 private:
-    bool IsFull() const final {
-        DrainWaiting();
-        return IsWaitingFlag_;
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerBlock {";
+        ui32 i = 0;
+        for (auto output : Outputs_) {
+            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
+        }
+        builder << " }";
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -591,7 +606,6 @@ private:
     }
 
     void WideConsume(TUnboxedValue values[], ui32 count) final {
-        YQL_ENSURE(!IsWaitingFlag_);
         YQL_ENSURE(count == OutputWidth_);
 
         const ui64 inputBlockLen = TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
@@ -647,13 +661,6 @@ private:
         while (!outputData.empty()) {
             bool hasData = false;
             for (size_t i = 0; i < Outputs_.size(); ++i) {
-                if (Outputs_[i]->IsFull()) {
-                    IsWaitingFlag_ = true;
-                    Y_ENSURE(OutputData_.empty());
-                    OutputData_ = std::move(outputData);
-                    return;
-                }
-
                 std::vector<arrow::Datum> chunk;
                 ui64 blockLen = 0;
                 if (outputData[i] && outputData[i]->Next(chunk, blockLen)) {
@@ -685,20 +692,8 @@ private:
         }
     }
 
-    void DrainWaiting() const {
-        if (Y_UNLIKELY(IsWaitingFlag_)) {
-            TVector<std::unique_ptr<TArgsDechunker>> outputData;
-            outputData.swap(OutputData_);
-            DoConsume(std::move(outputData));
-            if (OutputData_.empty()) {
-                IsWaitingFlag_ = false;
-            }
-        }
-    }
-
     bool DoTryFinish() final {
-        DrainWaiting();
-        return !IsWaitingFlag_;
+        return true;
     }
 
     template<typename T = THashFunc, typename std::enable_if<std::is_same<T, THashV1>::value, int>::type = 0>
@@ -781,10 +776,9 @@ private:
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
 
-    mutable bool IsWaitingFlag_ = false;
-
     NUdf::IPgBuilder* PgBuilder_;
     THashFunc HashFunc;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 class TDqOutputBroadcastConsumer : public IDqOutputConsumer {
@@ -794,10 +788,29 @@ public:
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
     {
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 
-    bool IsFull() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << Aggregator->DebugString() << " TDqOutputBroadcastConsumer {";
+        ui32 i = 0;
+        for (auto output : Outputs) {
+            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            if (i >= 20) {
+                builder << "...";
+                break;
+            }
+        }
+        builder << " }";
+        return builder;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -832,6 +845,7 @@ private:
     TVector<IDqOutput::TPtr> Outputs;
     const TMaybe<ui32> OutputWidth;
     TUnboxedValueVector Tmp;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 } // namespace

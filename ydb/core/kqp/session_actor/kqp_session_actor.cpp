@@ -2033,12 +2033,14 @@ public:
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
                 response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
-                if (QueryState->CompileResult) {
-                    auto preparedQuery = QueryState->CompileResult->PreparedQuery;
-                    if (preparedQuery) {
-                        response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+                if (const auto compileResult = QueryState->CompileResult) {
+                    if (const auto preparedQuery = compileResult->PreparedQuery) {
+                        if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
+                            QueryState->QueryAst = queryAst;
+                        }
                     }
                 }
+                response->SetQueryAst(QueryState->QueryAst);
             }
             response->MutableQueryStats()->Swap(&stats);
         }

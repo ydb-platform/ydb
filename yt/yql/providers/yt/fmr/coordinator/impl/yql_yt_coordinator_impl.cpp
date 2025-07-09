@@ -619,7 +619,7 @@ private:
                 });
 
                 mapTaskParams.Output = fmrTableOutputRefs;
-                mapTaskParams.Executable = mapOperationParams.Executable; // TODO - change Executable to mapper
+                mapTaskParams.SerializedMapJobState = mapOperationParams.SerializedMapJobState;
                 TaskParams.emplace_back(mapTaskParams);
             }
         }

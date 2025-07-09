@@ -197,10 +197,23 @@ public:
             totalScanProgress = std::make_optional<TInitialScanProgress>();
         }
 
+        bool isTransfer = replication->GetConfig().HasTransferSpecific();
         for (ui64 tid = 0; tid < replication->GetNextTargetId(); ++tid) {
             auto* target = replication->FindTarget(tid);
             if (!target) {
                 continue;
+            }
+
+            if (isTransfer) {
+                // transfer always has one target
+                auto& specific = replication->GetConfig().GetTransferSpecific();
+
+                auto& transferSpecific = *Result->Record.MutableTransferSpecific();
+                transferSpecific.MutableTarget()->SetSrcPath(target->GetSrcPath());
+                transferSpecific.MutableTarget()->SetDstPath(target->GetDstPath());
+                transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
+                transferSpecific.MutableTarget()->SetTransformLambda(specific.GetTarget().GetTransformLambda());
+                transferSpecific.MutableBatching()->CopyFrom(specific.GetBatching());
             }
 
             auto& item = *Result->Record.AddTargets();

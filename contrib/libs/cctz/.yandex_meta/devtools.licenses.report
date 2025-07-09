@@ -43,9 +43,11 @@ BELONGS test/ya.make ya.make
         include/cctz/time_zone.h [3:13]
         include/cctz/zone_info_source.h [3:13]
         src/civil_time_detail.cc [3:13]
+        src/civil_time_test.cc [3:13]
         src/time_zone_fixed.cc [3:13]
         src/time_zone_fixed.h [3:13]
         src/time_zone_format.cc [3:13]
+        src/time_zone_format_test.cc [3:13]
         src/time_zone_if.cc [3:13]
         src/time_zone_if.h [3:13]
         src/time_zone_impl.cc [3:13]
@@ -55,11 +57,11 @@ BELONGS test/ya.make ya.make
         src/time_zone_libc.cc [3:13]
         src/time_zone_libc.h [3:13]
         src/time_zone_lookup.cc [3:13]
+        src/time_zone_lookup_test.cc [3:13]
         src/time_zone_posix.cc [3:13]
         src/time_zone_posix.h [3:13]
-        test/civil_time_test.cc [3:13]
-        test/time_zone_format_test.cc [3:13]
-        test/time_zone_lookup_test.cc [3:13]
+    Belongs difference:
+        + test/ya.make
 
 KEEP     Public-Domain        3a682fe6def1cddc889298ee2a043f6f
 BELONGS ya.make

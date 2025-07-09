@@ -38,8 +38,6 @@ static const TString SELECT_GROUPS_DESCRIPTION = R"sql(
 
 const ui32 TABLES_TO_INIT_COUNT = 2;
 
-const ui32 TABLES_TO_INIT_COUNT = 2;
-
 class TKafkaDescribeGroupsActor: public NActors::TActorBootstrapped<TKafkaDescribeGroupsActor> {
 
 using TBase = TActorBootstrapped<TKafkaDescribeGroupsActor>;

@@ -2,11 +2,11 @@
 #include "schema.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/constructor.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/chunks/chunks.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 class TPortionDataConstructor {

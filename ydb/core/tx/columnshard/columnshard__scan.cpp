@@ -2,7 +2,6 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include "columnshard.h"
 #include "columnshard_impl.h"
-#include "engines/reader/sys_view/abstract/policy.h"
 #include "engines/reader/transaction/tx_scan.h"
 #include "engines/reader/transaction/tx_internal_scan.h"
 
@@ -34,8 +33,8 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
 
     const auto schemeShardLocalPath = TSchemeShardLocalPathId::FromProto(record);
     auto internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPath);
-    if (!internalPathId && NOlap::NReader::NSysView::NAbstract::ISysViewPolicy::BuildByPath(record.GetTablePath())) {
-        internalPathId = TInternalPathId::FromRawValue(schemeShardLocalPath.GetRawValue());  //TODO register ColumnStore in tablesmanager
+    if (!internalPathId && record.GetTablePath().find(".sys/") != TString::npos) {
+        internalPathId = TInternalPathId::FromRawValue(0);
     }
     if (!internalPathId) {
         const auto& request = ev->Get()->Record;

@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/schema.h>
@@ -13,9 +14,11 @@ private:
     static const inline auto Registrator2 = TFactory::TRegistrator<TSchemaAdapter>("primary_index_portion_stats");
 
 public:
+    static NTable::TScheme::TTableSchema GetStatsSchema();
+
     static const TSchemaAdapter& GetInstance() {
         return *Singleton<TSchemaAdapter>();
-    }   
+    }
 
     virtual ui64 GetPresetId() const override {
         static ui64 presetId = NAbstract::ISchemaAdapter::Counter.Inc();

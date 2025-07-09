@@ -1,8 +1,10 @@
 #include "constructor.h"
 
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 
- TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
+TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
     const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
     const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const bool isReverseSort)
     : TabletId(tabletId) {

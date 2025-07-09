@@ -1,7 +1,6 @@
 #include "constructor.h"
 
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/program/program.h>
 
 namespace NKikimr::NOlap::NReader {

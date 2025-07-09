@@ -5,8 +5,6 @@
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {

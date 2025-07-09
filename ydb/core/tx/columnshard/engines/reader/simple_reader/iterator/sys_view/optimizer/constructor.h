@@ -6,7 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/constructor.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/chunks/chunks.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NOptimizer {
 class TGranuleDataConstructor {

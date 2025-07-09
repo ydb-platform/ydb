@@ -69,4 +69,10 @@ std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(co
     return std::make_shared<TAccessor>(tableName, externalPathId, internalPathId);
 }
 
+NTable::TScheme::TTableSchema TSchemaAdapter::GetStatsSchema() {
+    NTable::TScheme::TTableSchema schema;
+    NIceDb::NHelpers::TStaticSchemaFiller<NKikimr::NSysView::Schema::PrimaryIndexPortionStats>::Fill(schema);
+    return schema;
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions

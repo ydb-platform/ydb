@@ -1,5 +1,7 @@
 #include "constructor.h"
 
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules {
 
 TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,

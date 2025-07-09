@@ -4,7 +4,6 @@
 #include "reader/common_reader/constructor/read_metadata.h"
 #include "reader/plain_reader/iterator/constructors.h"
 #include "reader/simple_reader/iterator/collections/constructors.h"
-#include "reader/sys_view/chunks/chunks.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>

@@ -130,6 +130,11 @@ public:
         const TFormat& format,
         const TTableReaderOptions& options) override;
 
+    TRawTableReaderPtr CreateRawTablePartitionReader(
+        const TString& cookie,
+        const TFormat& format,
+        const TTablePartitionReaderOptions& options) override;
+
     TRawTableWriterPtr CreateRawWriter(
         const TRichYPath& path,
         const TFormat& format,
@@ -222,8 +227,6 @@ public:
 
     TBatchRequestPtr CreateBatchRequest() override;
 
-    IClientPtr GetParentClient() override;
-
     IRawClientPtr GetRawClient() const;
 
     const TClientContext& GetContext() const;
@@ -267,6 +270,21 @@ private:
     ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowReader(
         const TRichYPath& path,
         const TTableReaderOptions& options,
+        const ISkiffRowSkipperPtr& skipper,
+        const NSkiff::TSkiffSchemaPtr& schema) override;
+
+    ::TIntrusivePtr<INodeReaderImpl> CreateNodeTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options) override;
+
+    ::TIntrusivePtr<IProtoReaderImpl> CreateProtoTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const Message* prototype) override;
+
+    ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
         const NSkiff::TSkiffSchemaPtr& schema) override;
 
@@ -327,6 +345,8 @@ public:
     void Detach() override;
 
     ITransactionPingerPtr GetTransactionPinger() override;
+
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
 
 protected:
     TClientPtr GetParentClientImpl() override;
@@ -488,6 +508,8 @@ public:
 
     ITransactionPingerPtr GetTransactionPinger() override;
 
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
+
     // Helper methods
     TYtPoller& GetYtPoller();
 
@@ -507,9 +529,17 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName);
+
+TClientContext CreateClientContext(
+    const TString& serverName,
+    const TCreateClientOptions& options);
+
 TClientPtr CreateClientImpl(
     const TString& serverName,
-    const TCreateClientOptions& options = TCreateClientOptions());
+    const TCreateClientOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

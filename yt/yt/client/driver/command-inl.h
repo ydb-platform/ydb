@@ -427,6 +427,13 @@ void TSelectRowsCommandBase<
             return command->Options.SyntaxVersion;
         })
         .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<int>(
+        "expression_builder_version",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExpressionBuilderVersion;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

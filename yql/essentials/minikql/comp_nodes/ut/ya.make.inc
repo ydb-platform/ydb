@@ -2,6 +2,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
+IF (SANITIZER_TYPE  == "address")
+    SPLIT_FACTOR(100)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -22,7 +26,9 @@ SET(ORIG_SOURCES
     mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
     mkql_block_compress_ut.cpp
+    mkql_block_coalesce_ut.cpp
     mkql_block_exists_ut.cpp
+    mkql_block_logical_ut.cpp
     mkql_block_skiptake_ut.cpp
     mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
@@ -30,6 +36,7 @@ SET(ORIG_SOURCES
     mkql_blocks_ut.cpp
     mkql_combine_ut.cpp
     mkql_condense_ut.cpp
+    mkql_convert_ut.cpp
     mkql_decimal_ut.cpp
     mkql_chain_map_ut.cpp
     mkql_chopper_ut.cpp
@@ -46,6 +53,7 @@ SET(ORIG_SOURCES
     mkql_group_ut.cpp
     mkql_dict_ut.cpp
     mkql_isa_detection_ut.cpp
+    mkql_iterable_ut.cpp
     mkql_join_ut.cpp
     mkql_join_dict_ut.cpp
     mkql_grace_join_ut.cpp
@@ -59,6 +67,7 @@ SET(ORIG_SOURCES
     mkql_switch_ut.cpp
     mkql_time_order_recover_saveload_ut.cpp
     mkql_todict_ut.cpp
+    mkql_udf_ut.cpp
     mkql_variant_ut.cpp
     mkql_wide_chain_map_ut.cpp
     mkql_wide_chopper_ut.cpp

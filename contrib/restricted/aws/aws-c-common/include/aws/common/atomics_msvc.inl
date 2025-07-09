@@ -20,8 +20,8 @@
 
 AWS_EXTERN_C_BEGIN
 
-#if !(defined(_M_IX86) || defined(_M_X64))
-#    error Atomics are not currently supported for non-x86 MSVC platforms
+#if !(defined(_M_IX86) || defined(_M_X64) || defined(_M_ARM64))
+#    error Atomics are not currently supported for non-x86 or ARM64 MSVC platforms
 
 /*
  * In particular, it's not clear that seq_cst will work properly on non-x86
@@ -63,12 +63,56 @@ AWS_EXTERN_C_BEGIN
  * this use case.
  */
 
+/**
+ * Some general notes about ARM environments:
+ * ARM processors uses a weak memory model as opposed to the strong memory model used by Intel processors
+ * This means more permissible memory ordering allowed between stores and loads.
+ *
+ * Thus ARM port will need more hardware fences/barriers to assure developer intent.
+ * Memory barriers will prevent reordering stores and loads accross them depending on their type
+ * (read write, write only, read only ...)
+ *
+ * For more information about ARM64 memory ordering,
+ * see https://developer.arm.com/documentation/102336/0100/Memory-ordering
+ * For more information about Memory barriers,
+ * see https://developer.arm.com/documentation/102336/0100/Memory-barriers
+ * For more information about Miscosoft Interensic ARM64 APIs,
+ * see https://learn.microsoft.com/en-us/cpp/intrinsics/arm64-intrinsics?view=msvc-170
+ * Note: wrt _Interlocked[Op]64 is the same for ARM64 and x64 processors
+ */
+
 #ifdef _M_IX86
 #    define AWS_INTERLOCKED_INT(x) _Interlocked##x
 typedef long aws_atomic_impl_int_t;
 #else
 #    define AWS_INTERLOCKED_INT(x) _Interlocked##x##64
 typedef long long aws_atomic_impl_int_t;
+#endif
+
+#ifdef _M_ARM64
+/* Hardware Read Write barrier, prevents all memory operations to cross the barrier in both directions */
+#    define AWS_RW_BARRIER() __dmb(_ARM64_BARRIER_SY)
+/* Hardware Read barrier, prevents all memory operations to cross the barrier upwards */
+#    define AWS_R_BARRIER() __dmb(_ARM64_BARRIER_LD)
+/* Hardware Write barrier, prevents all memory operations to cross the barrier downwards */
+#    define AWS_W_BARRIER() __dmb(_ARM64_BARRIER_ST)
+/* Software barrier, prevents the compiler from reodering the operations across the barrier */
+#    define AWS_SW_BARRIER() _ReadWriteBarrier();
+#else
+/* hardware barriers, do nothing on x86 since it has a strong memory model
+ * as described in the section above: some general notes
+ */
+#    define AWS_RW_BARRIER()
+#    define AWS_R_BARRIER()
+#    define AWS_W_BARRIER()
+/*
+ * x86: only a compiler barrier is required. For seq_cst, we must use some form of interlocked operation for
+ * writes, but that's the caller's responsibility.
+ *
+ * Volatile ops may or may not imply this barrier, depending on the /volatile: switch, but adding an extra
+ * barrier doesn't hurt.
+ */
+#    define AWS_SW_BARRIER() _ReadWriteBarrier(); /* software barrier */
 #endif
 
 static inline void aws_atomic_priv_check_order(enum aws_memory_order order) {
@@ -107,14 +151,8 @@ static inline void aws_atomic_priv_barrier_before(enum aws_memory_order order, e
         return;
     }
 
-    /*
-     * x86: only a compiler barrier is required. For seq_cst, we must use some form of interlocked operation for
-     * writes, but that's the caller's responsibility.
-     *
-     * Volatile ops may or may not imply this barrier, depending on the /volatile: switch, but adding an extra
-     * barrier doesn't hurt.
-     */
-    _ReadWriteBarrier();
+    AWS_RW_BARRIER();
+    AWS_SW_BARRIER();
 }
 
 static inline void aws_atomic_priv_barrier_after(enum aws_memory_order order, enum aws_atomic_mode_priv mode) {
@@ -131,11 +169,8 @@ static inline void aws_atomic_priv_barrier_after(enum aws_memory_order order, en
         return;
     }
 
-    /*
-     * x86: only a compiler barrier is required. For seq_cst, we must use some form of interlocked operation for
-     * writes, but that's the caller's responsibility.
-     */
-    _ReadWriteBarrier();
+    AWS_RW_BARRIER();
+    AWS_SW_BARRIER();
 }
 
 /**
@@ -344,15 +379,28 @@ void aws_atomic_thread_fence(enum aws_memory_order order) {
             AWS_INTERLOCKED_INT(Exchange)(&x, 1);
             break;
         case aws_memory_order_release:
+            AWS_W_BARRIER();
+            AWS_SW_BARRIER();
+            break;
         case aws_memory_order_acquire:
+            AWS_R_BARRIER();
+            AWS_SW_BARRIER();
+            break;
         case aws_memory_order_acq_rel:
-            _ReadWriteBarrier();
+            AWS_RW_BARRIER();
+            AWS_SW_BARRIER();
             break;
         case aws_memory_order_relaxed:
             /* no-op */
             break;
     }
 }
+
+/* prevent conflicts with other files that might pick the same names */
+#undef AWS_RW_BARRIER
+#undef AWS_R_BARRIER
+#undef AWS_W_BARRIER
+#undef AWS_SW_BARRIER
 
 #define AWS_ATOMICS_HAVE_THREAD_FENCE
 AWS_EXTERN_C_END

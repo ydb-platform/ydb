@@ -23,7 +23,7 @@ namespace NRedo {
             free(p);
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Redo{" << NFmt::TStamp(Stamp) << " (" << Embedded.size()

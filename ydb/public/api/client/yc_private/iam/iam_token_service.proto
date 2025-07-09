@@ -18,6 +18,9 @@ service IamTokenService {
   // create iam token for service account
   rpc CreateForServiceAccount (CreateIamTokenForServiceAccountRequest) returns (CreateIamTokenResponse);
 
+  // create iam token for service
+  rpc CreateForService (CreateIamTokenForServiceRequest) returns (CreateIamTokenResponse);
+
   // create iam token for compute instance
   rpc CreateForComputeInstance (CreateIamTokenForComputeInstanceRequest) returns (CreateIamTokenResponse);
 
@@ -48,6 +51,14 @@ message CreateIamTokenForSubjectRequest {
 
 message CreateIamTokenForServiceAccountRequest {
   string service_account_id = 1;
+}
+
+message CreateIamTokenForServiceRequest {
+  string service_id = 1;
+  string microservice_id = 2;
+  string resource_id = 3;
+  string resource_type = 4;
+  string target_service_account_id = 5;
 }
 
 message CreateIamTokenForComputeInstanceRequest {

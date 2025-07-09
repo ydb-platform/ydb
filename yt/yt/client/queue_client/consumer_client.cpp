@@ -39,7 +39,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = QueueClientLogger;
+constinit const auto Logger = QueueClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -389,7 +389,7 @@ private:
     bool DecrementOffset_ = false;
 
     std::vector<TPartitionInfo> DoCollectPartitions(
-        const TString& selectQuery,
+        const std::string& selectQuery,
         bool withLastConsumeTime) const
     {
         std::vector<TPartitionInfo> result;
@@ -672,12 +672,13 @@ ISubConsumerClientPtr CreateSubConsumerClient(
 {
     auto queueCluster = queuePath.GetCluster();
     if (!queueCluster && queueClusterClient) {
-        if (auto queueClusterFromClient = queueClusterClient->GetClusterName()) {
+        // `CreateSubConsumerClient` function calls `WaitFor` already, it will be fixed later.
+        if (auto queueClusterFromClient = WaitFor(queueClusterClient->GetClusterName()).ValueOrThrow()) {
             queueCluster = *queueClusterFromClient;
         }
     }
     if (!queueCluster) {
-        if (auto clientCluster = consumerClusterClient->GetClusterName()) {
+        if (auto clientCluster = WaitFor(consumerClusterClient->GetClusterName()).ValueOrThrow()) {
             queueCluster = *clientCluster;
         }
     }

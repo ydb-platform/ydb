@@ -25,7 +25,6 @@ TFileWriter::TFileWriter(
         std::move(transactionPinger),
         context,
         transactionId,
-        GetWriteFileCommand(context.Config->ApiVersion),
         TMaybe<TFormat>(),
         path,
         options)

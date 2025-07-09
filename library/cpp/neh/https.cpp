@@ -11,10 +11,8 @@
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include <openssl/bio.h>
 #include <openssl/x509v3.h>
 
-#include <library/cpp/openssl/init/init.h>
 #include <library/cpp/openssl/method/io.h>
 #include <library/cpp/coroutine/listener/listen.h>
 #include <library/cpp/dns/cache.h>
@@ -26,12 +24,10 @@
 #include <util/generic/list.h>
 #include <util/generic/utility.h>
 #include <util/network/socket.h>
-#include <util/stream/str.h>
 #include <util/stream/zlib.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/system/condvar.h>
-#include <util/system/error.h>
 #include <util/system/types.h>
 #include <util/thread/factory.h>
 
@@ -361,12 +357,6 @@ namespace NNeh {
                     }
                 }
             }
-
-            struct TSSLInit {
-                inline TSSLInit() {
-                    InitOpenSSL();
-                }
-            } SSL_INIT;
         }
 
         static inline void PrepareSocket(SOCKET s) {
@@ -448,8 +438,7 @@ namespace NNeh {
             };
 
             TConnCache()
-                : InPurging_(0)
-                , MaxConnId_(0)
+                : MaxConnId_(0)
                 , Shutdown_(false)
             {
                 T_ = SystemThreadFactory()->Run(this);
@@ -557,7 +546,7 @@ namespace NNeh {
 
         private:
             void SuggestPurgeCache() {
-                if (AtomicTryLock(&InPurging_)) {
+                if (InPurging_.TryAcquire()) {
                     //evaluate the usefulness of purging the cache
                     //если в кеше мало соединений (< MaxConnId_/16 или 64), не чистим кеш
                     if ((size_t)CachedConnections.Val() > (Min((size_t)MaxConnId_.load(std::memory_order_acquire), (size_t)1024U) >> 4)) {
@@ -577,7 +566,7 @@ namespace NNeh {
                             return; //memo: thread MUST unlock InPurging_ (see DoExecute())
                         }
                     }
-                    AtomicUnlock(&InPurging_);
+                    InPurging_.Release();
                 }
             }
 
@@ -594,7 +583,7 @@ namespace NNeh {
 
                     PurgeCache();
 
-                    AtomicUnlock(&InPurging_);
+                    InPurging_.Release();
                 }
             }
 
@@ -660,7 +649,7 @@ namespace NNeh {
 
             NHttp::TLockFreeSequence<TConnList> Lst_;
 
-            TAtomic InPurging_;
+            TSpinLock InPurging_;
             std::atomic<size_t> MaxConnId_;
 
             TAutoPtr<IThreadFactory::IThread> T_;
@@ -1394,37 +1383,7 @@ namespace NNeh {
                         return;
                     }
 
-                    switch (*error) {
-                        case IRequest::TResponseError::BadRequest:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_BAD_REQUEST);
-                            break;
-                        case IRequest::TResponseError::Forbidden:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_FORBIDDEN);
-                            break;
-                        case IRequest::TResponseError::NotExistService:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_NOT_FOUND);
-                            break;
-                        case IRequest::TResponseError::TooManyRequests:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_TOO_MANY_REQUESTS);
-                            break;
-                        case IRequest::TResponseError::InternalError:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_INTERNAL_SERVER_ERROR);
-                            break;
-                        case IRequest::TResponseError::NotImplemented:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_NOT_IMPLEMENTED);
-                            break;
-                        case IRequest::TResponseError::BadGateway:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_BAD_GATEWAY);
-                            break;
-                        case IRequest::TResponseError::ServiceUnavailable:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_SERVICE_UNAVAILABLE);
-                            break;
-                        case IRequest::TResponseError::BandwidthLimitExceeded:
-                            os << HttpCodeStrEx(HttpCodes::HTTP_BANDWIDTH_LIMIT_EXCEEDED);
-                            break;
-                        case IRequest::TResponseError::MaxResponseError:
-                            ythrow yexception() << TStringBuf("unknow type of error");
-                    }
+                    os << HttpCodeStrEx(GetHttpCode(*error));
                 }
 
             public:

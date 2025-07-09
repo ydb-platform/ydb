@@ -44,7 +44,7 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
                                                  const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     bool newArtifact = false;
     // TODO: move artifact flags into operation flags.

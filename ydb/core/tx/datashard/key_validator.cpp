@@ -110,8 +110,7 @@ ui64 TKeyValidator::GetTableSchemaVersion(const TTableId& tableId) const {
     const auto& userTables = Self.GetUserTables();
     auto it = userTables.find(tableId.PathId.LocalPathId);
     if (it == userTables.end()) {
-        Y_FAIL_S("TKeyValidator (tablet id: " << Self.TabletID() << " state: " << Self.GetState() << ") unable to find given table with id: " << tableId);
-        return 0;
+        Y_ENSURE(false, "TKeyValidator (tablet id: " << Self.TabletID() << " state: " << Self.GetState() << ") unable to find given table with id: " << tableId);
     } else {
         return it->second->GetTableSchemaVersion();
     }

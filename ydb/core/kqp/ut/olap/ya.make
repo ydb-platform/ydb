@@ -1,11 +1,11 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(200)
+SPLIT_FACTOR(1000)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -15,11 +15,14 @@ SRCS(
     GLOBAL kqp_olap_ut.cpp
     aggregations_ut.cpp
     clickbench_ut.cpp
+    compaction_ut.cpp
     compression_ut.cpp
     datatime64_ut.cpp
     decimal_ut.cpp
     delete_ut.cpp
+    dictionary_ut.cpp
     indexes_ut.cpp
+    json_ut.cpp
     kqp_olap_stats_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp
@@ -38,16 +41,11 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
+    ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
     ydb/public/sdk/cpp/src/client/operation
 )
 
 YQL_LAST_ABI_VERSION()
-
-IF (SSA_RUNTIME_VERSION)
-    CFLAGS(
-        -DSSA_RUNTIME_VERSION=$SSA_RUNTIME_VERSION
-    )
-ENDIF()
 
 END()

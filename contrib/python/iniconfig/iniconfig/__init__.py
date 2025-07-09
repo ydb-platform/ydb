@@ -20,7 +20,7 @@ from typing import (
 import os
 
 if TYPE_CHECKING:
-    from typing_extensions import Final
+    from typing import Final
 
 __all__ = ["IniConfig", "ParseError", "COMMENTCHARS", "iscommentline"]
 

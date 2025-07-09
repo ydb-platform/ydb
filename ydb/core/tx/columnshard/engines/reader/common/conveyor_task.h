@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -17,6 +18,7 @@ public:
     bool Apply(IDataReader& indexedDataRead) const {
         return DoApply(indexedDataRead);
     }
+    virtual ~IApplyAction() = default;
 };
 
 class IDataTasksProcessor {
@@ -25,20 +27,20 @@ public:
     private:
         using TBase = NConveyor::ITask;
         const NActors::TActorId OwnerId;
+        NColumnShard::TCounterGuard Guard;
         virtual TConclusionStatus DoExecuteImpl() = 0;
 
     protected:
-        virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) override final;
+        virtual void DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) override final;
         virtual void DoOnCannotExecute(const TString& reason) override;
 
     public:
         using TPtr = std::shared_ptr<ITask>;
         virtual ~ITask() = default;
 
-        ITask(const NActors::TActorId& ownerId)
+        ITask(const NActors::TActorId& ownerId, NColumnShard::TCounterGuard&& scanCounter)
             : OwnerId(ownerId)
-        {
-
+            , Guard(std::move(scanCounter)) {
         }
     };
 };

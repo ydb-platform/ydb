@@ -52,7 +52,7 @@ struct TKqpCompileRequest {
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
         TKqpTempTablesState::TConstPtr tempTablesState = {},
         TMaybe<TQueryAst> queryAst = {},
-        NYql::TExprContext* splitCtx = nullptr,
+        std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
         NYql::TExprNode::TPtr splitExpr = nullptr)
         : Sender(sender)
         , Query(std::move(query))
@@ -70,8 +70,8 @@ struct TKqpCompileRequest {
         , TempTablesState(std::move(tempTablesState))
         , IntrestedInResult(std::move(intrestedInResult))
         , QueryAst(std::move(queryAst))
-        , SplitCtx(splitCtx)
-        , SplitExpr(splitExpr)
+        , SplitCtx(std::move(splitCtx))
+        , SplitExpr(std::move(splitExpr))
     {}
 
     TActorId Sender;
@@ -93,10 +93,12 @@ struct TKqpCompileRequest {
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
     TMaybe<TQueryAst> QueryAst;
 
-    NYql::TExprContext* SplitCtx;
+    std::shared_ptr<NYql::TExprContext> SplitCtx;
     NYql::TExprNode::TPtr SplitExpr;
 
     bool FindInCache = true;
+
+    TInstant CompileQueueEnqueuedAt = TInstant::Now();
 
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
@@ -116,8 +118,9 @@ class TKqpRequestsQueue {
     using TRequestsIteratorSet = THashSet<TRequestsIterator, TRequestsIteratorHash>;
 
 public:
-    TKqpRequestsQueue(size_t maxSize)
-        : MaxSize(maxSize) {}
+    TKqpRequestsQueue(TIntrusivePtr<TKqpCounters> counters, size_t maxSize)
+        : Counters(counters)
+        , MaxSize(maxSize) {}
 
     bool Enqueue(TKqpCompileRequest&& request) {
         if (Size() >= MaxSize) {
@@ -130,7 +133,7 @@ public:
         return true;
     }
 
-    TMaybe<TKqpCompileRequest> Dequeue() {
+    TMaybe<TKqpCompileRequest> Dequeue(const TInstant& now) {
         auto it = Queue.begin();
 
         while (it != Queue.end()) {
@@ -149,6 +152,7 @@ public:
             if (!ActiveRequests.contains(request.Query)) {
                 auto result = std::move(request);
 
+                Counters->ReportCompileQueueWaitTime(now - result.CompileQueueEnqueuedAt);
                 QueryIndex[result.Query].erase(curIt);
                 Queue.erase(curIt);
 
@@ -203,6 +207,7 @@ public:
     }
 
 private:
+    TIntrusivePtr<TKqpCounters> Counters;
     size_t MaxSize = 0;
     TRequestsList Queue;
     THashMap<TKqpQueryId, TRequestsIteratorSet> QueryIndex;
@@ -229,7 +234,7 @@ public:
         , KqpSettings(kqpSettings)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
-        , RequestsQueue(TableServiceConfig.GetCompileRequestQueueSize())
+        , RequestsQueue(Counters, TableServiceConfig.GetCompileRequestQueueSize())
         , QueryReplayFactory(std::move(queryReplayFactory))
         , FederatedQuerySetup(federatedQuerySetup)
     {}
@@ -279,15 +284,13 @@ private:
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
-        bool enableKqpDataQueryStreamLookup = TableServiceConfig.GetEnableKqpDataQueryStreamLookup();
+        bool allowMultiBroadcasts = TableServiceConfig.GetAllowMultiBroadcasts();
         bool enableKqpDataQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
         bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
 
         bool enableKqpScanQuerySourceRead = TableServiceConfig.GetEnableKqpScanQuerySourceRead();
 
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
-
-        auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
 
         ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
         ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
@@ -309,10 +312,23 @@ private:
 
         ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
         bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
+        bool enableFoldUdfs = TableServiceConfig.GetEnableFoldUdfs();
+
+        bool defaultEnableShuffleElimination = TableServiceConfig.GetDefaultEnableShuffleElimination();
 
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
+        bool enableSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
 
         bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
+
+        bool enableNewRBO = TableServiceConfig.GetEnableNewRBO();
+        bool enableSpillingInHashJoinShuffleConnections = TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections();
+        bool enableOlapScalarApply = TableServiceConfig.GetEnableOlapScalarApply();
+        bool enableOlapSubstringPushdown = TableServiceConfig.GetEnableOlapSubstringPushdown();
+
+        bool enableIndexStreamWrite = TableServiceConfig.GetEnableIndexStreamWrite();
+
+        bool enableOlapPushdownProjections = TableServiceConfig.GetEnableOlapPushdownProjections();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -321,11 +337,9 @@ private:
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
         if (TableServiceConfig.GetSqlVersion() != defaultSyntaxVersion ||
-            TableServiceConfig.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
             TableServiceConfig.GetEnableStreamWrite() != enableStreamWrite ||
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
@@ -339,11 +353,22 @@ private:
             TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
             TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
             TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
+            TableServiceConfig.GetEnableFoldUdfs() != enableFoldUdfs ||
             TableServiceConfig.GetEnableAstCache() != enableAstCache ||
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
             TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
-            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW) {
+            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
+            TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts ||
+            TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling ||
+            TableServiceConfig.GetEnableNewRBO() != enableNewRBO ||
+            TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
+            TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
+            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
+            TableServiceConfig.GetEnableIndexStreamWrite() != enableIndexStreamWrite ||
+            TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections)
+        {
 
             QueryCache->Clear();
 
@@ -610,7 +635,7 @@ private:
 
         if (compileResult->NeedToSplit) {
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
             ProcessQueue(ctx);
             return;
         }
@@ -635,7 +660,7 @@ private:
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     Reply(request.Sender, compileResult, compileStats, ctx,
-                        request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+                        request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
             } else {
                 if (!hasTempTablesNameClashes) {
@@ -647,7 +672,7 @@ private:
 
             LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
         }
         catch (const std::exception& e) {
             LogException("TEvCompileResponse", ev->Sender, e, ctx);
@@ -809,7 +834,8 @@ private:
         if (compileResult->GetAst() && QueryCache->FindByAst(query, *compileResult->GetAst(), keepInCache)) {
             return false;
         }
-        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, std::move(query), compileResult->QueryAst);
+        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, std::move(query), compileResult->QueryAst,
+            false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert preparing query with params, queryId: " << query.SerializeToString());
@@ -818,9 +844,9 @@ private:
 
     void ProcessQueue(const TActorContext& ctx) {
         auto maxActiveRequests = TableServiceConfig.GetCompileMaxActiveRequests();
-
+        TInstant processStartedAt = TInstant::Now();
         while (RequestsQueue.ActiveRequestsCount() < maxActiveRequests) {
-            auto request = RequestsQueue.Dequeue();
+            auto request = RequestsQueue.Dequeue(processStartedAt);
             if (!request) {
                 break;
             }
@@ -865,7 +891,7 @@ private:
 
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
         const TKqpStatsCompile& compileStats, const TActorContext& ctx, ui64 cookie,
-        NLWTrace::TOrbit orbit, NWilson::TSpan span, const std::optional<TString>& replayMessage = std::nullopt)
+        NLWTrace::TOrbit orbit, NWilson::TSpan span)
     {
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
@@ -878,7 +904,7 @@ private:
             << ", queryUid: " << compileResult->Uid
             << ", status:" << compileResult->Status);
 
-        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit), replayMessage);
+        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats = compileStats;
 
         if (span) {

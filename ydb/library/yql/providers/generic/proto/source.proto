@@ -2,6 +2,7 @@ syntax = "proto3";
 
 option cc_enable_arenas = true;
 
+// NOTE: never try to rename this package as it will break compatibility in DQ.
 package NYql.Generic;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";

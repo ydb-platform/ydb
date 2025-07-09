@@ -29,6 +29,13 @@ struct aws_s3_auto_ranged_put {
     struct aws_s3_meta_request_resume_token *resume_token;
 
     uint64_t content_length;
+    bool has_content_length;
+
+    /*
+     * total_num_parts_from_content_length is calculated by content_length / part_size.
+     * It will be 0 if there is no content_length.
+     */
+    uint32_t total_num_parts_from_content_length;
 
     /* Only meant for use in the update function, which is never called concurrently. */
     struct {
@@ -40,42 +47,39 @@ struct aws_s3_auto_ranged_put {
         uint32_t next_part_number;
     } threaded_update_data;
 
-    /*
-     * Should only be used during prepare requests. Note: stream reads must be sequential,
-     * so prepare currently never runs concurrently with another prepare
-     */
-    struct {
-        /*
-         * How many parts have been read from input steam.
-         * Since reads are always sequential, this is essentially the number of how many parts were read from start of
-         * stream.
-         */
-        uint32_t num_parts_read_from_stream;
-    } prepare_data;
-
-    /*
-     * Very similar to the etag_list used in complete_multipart_upload to create the XML payload. Each part will set the
-     * corresponding index to it's checksum result, so while the list is shared across threads each index will only be
-     * accessed once to initialize by the corresponding part number, and then again during the complete multipart upload
-     * request which will only be invoked after all other parts/threads have completed.
-     */
-    struct aws_byte_buf *encoded_checksum_list;
-
     /* Members to only be used when the mutex in the base type is locked. */
     struct {
-        /* Array list of `struct aws_string *`. */
-        struct aws_array_list etag_list;
+        /* Array list of `struct aws_s3_mpu_part_info *`
+         * Info about each part, that we need to remember for CompleteMultipartUpload.
+         * This is updated as we upload each part.
+         * If resuming an upload, we first call ListParts and store the details
+         * of previously uploaded parts here. In this case, the array may start with gaps
+         * (e.g. if parts 1 and 3 were previously uploaded, but not part 2). */
+        struct aws_array_list part_list;
 
         struct aws_s3_paginated_operation *list_parts_operation;
         struct aws_string *list_parts_continuation_token;
 
-        uint32_t total_num_parts;
-        uint32_t num_parts_sent;
+        /* Number of parts we've started work on */
+        uint32_t num_parts_started;
+        /* Number of parts we've started, and we have no more work to do */
         uint32_t num_parts_completed;
         uint32_t num_parts_successful;
         uint32_t num_parts_failed;
+        /* When content length is not known, requests are optimistically
+         * scheduled, below represents how many requests were scheduled and had no
+         * work to do*/
+        uint32_t num_parts_noop;
+
+        /* Number of parts we've started, but they're not done reading from stream yet.
+         * Though reads are serial (only 1 part can be reading from stream at a time)
+         * we may queue up more to minimize delays between each read. */
+        uint32_t num_parts_pending_read;
 
         struct aws_http_headers *needed_response_headers;
+
+        /* Whether body stream is exhausted. */
+        bool is_body_stream_at_end;
 
         int list_parts_error_code;
         int create_multipart_upload_error_code;
@@ -102,12 +106,16 @@ struct aws_s3_auto_ranged_put {
 
 AWS_EXTERN_C_BEGIN
 
-/* Creates a new auto-ranged put meta request.  This will do a multipart upload in parallel when appropriate. */
+/* Creates a new auto-ranged put meta request.
+ * This will do a multipart upload in parallel when appropriate.
+ * Note: if has_content_length is false, content_length and num_parts are ignored.
+ */
 
 AWS_S3_API struct aws_s3_meta_request *aws_s3_meta_request_auto_ranged_put_new(
     struct aws_allocator *allocator,
     struct aws_s3_client *client,
     size_t part_size,
+    bool has_content_length,
     uint64_t content_length,
     uint32_t num_parts,
     const struct aws_s3_meta_request_options *options);

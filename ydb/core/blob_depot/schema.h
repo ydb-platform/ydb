@@ -20,13 +20,15 @@ namespace NKikimr::NBlobDepot {
             struct ConfigProtobuf : Column<2, NScheme::NTypeIds::String> {};
             struct DecommitState : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDecommitState; static constexpr Type Default = EDecommitState::Default; };
             struct AssimilatorState : Column<4, NScheme::NTypeIds::String> {};
+            struct PerGenerationCounter : Column<5, NScheme::NTypeIds::Uint32> {};
 
             using TKey = TableKey<Key>;
             using TColumns = TableColumns<
                 Key,
                 ConfigProtobuf,
                 DecommitState,
-                AssimilatorState
+                AssimilatorState,
+                PerGenerationCounter
             >;
         };
 
@@ -106,13 +108,25 @@ namespace NKikimr::NBlobDepot {
             using TColumns = TableColumns<Channel, GroupId, IssuedGenStep, ConfirmedGenStep>;
         };
 
+        struct TrashS3 : Table<7> {
+            struct Generation : Column<1, NScheme::NTypeIds::Uint32> {};
+            struct KeyId : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct Len : Column<3, NScheme::NTypeIds::Uint32> {};
+
+            using TKey = TableKey<Generation, KeyId>;
+            using TColumns = TableColumns<Generation, KeyId, Len>;
+
+            using Precharge = NoAutoPrecharge;
+        };
+
         using TTables = SchemaTables<
             Config,
             Blocks,
             Barriers,
             Data,
             Trash,
-            GC
+            GC,
+            TrashS3
         >;
 
         using TSettings = SchemaSettings<

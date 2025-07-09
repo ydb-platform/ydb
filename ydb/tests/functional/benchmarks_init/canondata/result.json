@@ -32,6 +32,9 @@
     "test_init.TestClickbenchInit.test_s1_s3": {
         "uri": "file://test_init.TestClickbenchInit.test_s1_s3/s1_s3"
     },
+    "test_init.TestTpcdsInit.test_s100_column": {
+        "uri": "file://test_init.TestTpcdsInit.test_s100_column/s100_column"
+    },
     "test_init.TestTpcdsInit.test_s1_column": {
         "uri": "file://test_init.TestTpcdsInit.test_s1_column/s1_column"
     },
@@ -46,6 +49,9 @@
     },
     "test_init.TestTpcdsInit.test_s1_s3": {
         "uri": "file://test_init.TestTpcdsInit.test_s1_s3/s1_s3"
+    },
+    "test_init.TestTpchInit.test_s100_column": {
+        "uri": "file://test_init.TestTpchInit.test_s100_column/s100_column"
     },
     "test_init.TestTpchInit.test_s1_column": {
         "uri": "file://test_init.TestTpchInit.test_s1_column/s1_column"

@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <library/cpp/retry/retry_policy.h>
 #include <util/generic/ptr.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 //! Retry policy.
 //! Calculates delay before next retry.
@@ -38,4 +38,4 @@ struct IRetryPolicy: ::IRetryPolicy<EStatus> {
                                        std::function<ERetryErrorClass(EStatus)> customRetryClassFunction = {});
 };
 
-} // namespace NYdb::V3::NTopic
+} // namespace NYdb::NTopic

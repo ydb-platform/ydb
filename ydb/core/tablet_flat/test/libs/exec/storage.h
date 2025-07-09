@@ -3,6 +3,7 @@
 #include "events.h"
 
 #include <ydb/core/tablet_flat/flat_sausage_solid.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/base/blobstorage.h>
 
@@ -57,11 +58,7 @@ namespace NFake {
             } else if (auto *ev = eh->CastAsLocal<NStore::TEvRange>()) {
                 Reply(eh, Model->Handle(ev));
             } else if (auto *ev = eh->CastAsLocal<NStore::TEvCollectGarbage>()) {
-                if (DeferGc) {
-                    DeferredGcRequests.emplace_back(eh);
-                } else {
-                    Reply(eh, Model->Handle(ev));
-                }
+                Reply(eh, Model->Handle(ev));
             } else if (eh->CastAsLocal<NStore::TEvStatus>()) {
                 auto flg = Model->GetStorageStatusFlags();
 
@@ -70,13 +67,6 @@ namespace NFake {
             } else if (auto *ev = eh->CastAsLocal<NFake::TEvBlobStorageContainsRequest>()) {
                 auto contains = ContainsInBlobs(ev->Value);
                 Reply(eh, new NFake::TEvBlobStorageContainsResponse(std::move(contains)));
-            } else if (auto *ev = eh->CastAsLocal<NFake::TEvBlobStorageDeferGc>()) {
-                DeferGc = ev->Defer;
-                if (!DeferGc) {
-                    for (auto& gcEh : DeferredGcRequests) {
-                        Inbox(gcEh);
-                    }
-                }
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 ReportUsage();
 
@@ -84,7 +74,7 @@ namespace NFake {
 
                 PassAway();
             } else {
-                 Y_ABORT("DS proxy model got an unexpected event");
+                 Y_TABLET_ERROR("DS proxy model got an unexpected event");
             }
         }
 
@@ -93,7 +83,7 @@ namespace NFake {
             Send(eh->Sender, ev, 0, eh->Cookie);
         }
 
-        void ReportUsage() const noexcept
+        void ReportUsage() const
         {
             if (auto logl = Logger->Log(ELnLev::Info)) {
 
@@ -128,9 +118,6 @@ namespace NFake {
 
         ui64 PutItems = 0;
         ui64 PutBytes = 0;
-
-        bool DeferGc = false;
-        TVector<TEventHandlePtr> DeferredGcRequests;
     };
 
 }

@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/ydb.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
-#include <ydb-cpp-sdk/client/common_client/settings.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <memory>
 
-namespace NYdb::inline V3::NDynamicConfig {
+namespace NYdb::inline Dev::NDynamicConfig {
 
 struct TGetConfigResult : public TStatus {
     TGetConfigResult(
@@ -160,6 +160,79 @@ private:
 
 using TAsyncVerboseResolveConfigResult = NThreading::TFuture<TVerboseResolveConfigResult>;
 
+struct TFetchStartupConfigResult : public TStatus {
+    TFetchStartupConfigResult(TStatus&& status, std::string&& config)
+        : TStatus(std::move(status))
+        , Config_(std::move(config))
+    {}
+
+    const std::string& GetConfig() const {
+        return Config_;
+    }
+
+private:
+    std::string Config_;
+};
+
+using TAsyncFetchStartupConfigResult = NThreading::TFuture<TFetchStartupConfigResult>;
+
+struct TGetConfigurationVersionResult : public TStatus {
+    struct TNodeInfo {
+        uint32_t NodeId;
+        std::string Hostname;
+        uint32_t Port;
+
+        bool operator<(const TNodeInfo& other) const {
+            return std::tie(NodeId) < std::tie(other.NodeId);
+        }
+    };
+
+    TGetConfigurationVersionResult(TStatus&& status, uint32_t v1Nodes, std::vector<TNodeInfo>&& v1NodesList, 
+                                   uint32_t v2Nodes, std::vector<TNodeInfo>&& v2NodesList, 
+                                   uint32_t unknownNodes, std::vector<TNodeInfo>&& unknownNodesList)
+        : TStatus(std::move(status))
+        , V1Nodes_(v1Nodes)
+        , V1NodesList_(std::move(v1NodesList))
+        , V2Nodes_(v2Nodes)
+        , V2NodesList_(std::move(v2NodesList))
+        , UnknownNodes_(unknownNodes)
+        , UnknownNodesList_(std::move(unknownNodesList))
+    {}
+
+    uint32_t GetV1Nodes() const {
+        return V1Nodes_;
+    }
+
+    const std::vector<TNodeInfo>& GetV1NodesList() const {
+        return V1NodesList_;
+    }
+
+    uint32_t GetV2Nodes() const {
+        return V2Nodes_;
+    }
+
+    const std::vector<TNodeInfo>& GetV2NodesList() const {
+        return V2NodesList_;
+    }
+
+    uint32_t GetUnknownNodes() const {
+        return UnknownNodes_;
+    }
+
+    const std::vector<TNodeInfo>& GetUnknownNodesList() const {
+        return UnknownNodesList_;
+    }
+
+private:
+    uint32_t V1Nodes_;
+    std::vector<TNodeInfo> V1NodesList_;
+    uint32_t V2Nodes_;
+    std::vector<TNodeInfo> V2NodesList_;
+    uint32_t UnknownNodes_;
+    std::vector<TNodeInfo> UnknownNodesList_;
+};
+
+using TAsyncGetConfigurationVersionResult = NThreading::TFuture<TGetConfigurationVersionResult>;
 
 struct TDynamicConfigClientSettings : public TCommonClientSettingsBase<TDynamicConfigClientSettings> {
     using TSelf = TDynamicConfigClientSettings;
@@ -238,6 +311,14 @@ public:
     TAsyncVerboseResolveConfigResult VerboseResolveConfig(
         const std::string& config,
         const std::map<uint64_t, std::string>& volatileConfigs,
+        const TClusterConfigSettings& settings = {});
+
+    // Fetch startup config
+    TAsyncFetchStartupConfigResult FetchStartupConfig(const TClusterConfigSettings& settings = {});
+
+    // Get configuration version on nodes
+    TAsyncGetConfigurationVersionResult GetConfigurationVersion(
+        bool listNodes,
         const TClusterConfigSettings& settings = {});
 
 private:

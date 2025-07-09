@@ -26,7 +26,7 @@ namespace NKikimr {
             ui64 lsn,
             EOpMode mode)
     {
-        Y_ABORT_UNLESS(!id.PartId());
+        Y_VERIFY_S(!id.PartId(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
         LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS,
                 VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                     "Db# LogoBlobs action# add_data mode# %s id# %s lsn# %" PRIu64 " bufSize# %" PRIu32,
@@ -48,7 +48,7 @@ namespace NKikimr {
             ui64 lsn,
             EOpMode mode)
     {
-        Y_ABORT_UNLESS(!id.PartId());
+        Y_VERIFY_S(!id.PartId(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
         LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS,
                 VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                     "Db# LogoBlobs action# add_idx mode# %s id# %s lsn# %" PRIu64,
@@ -65,7 +65,7 @@ namespace NKikimr {
             ui64 lsn,
             EOpMode mode)
     {
-        Y_ABORT_UNLESS(!id.PartId());
+        Y_VERIFY_S(!id.PartId(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
         LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS,
                 VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                     "Db# LogoBlobs action# add_data_huge mode# %s id# %s lsn# %" PRIu64,
@@ -149,7 +149,7 @@ namespace NKikimr {
             UpdateBlocksCache(it.GetCurKey().TabletId, it.GetMemRec().BlockedGeneration, 0, lsnIt++, mode);
             it.Next();
         }
-        Y_ABORT_UNLESS(seg.Last + 1 == lsnIt);
+        Y_VERIFY_S(seg.Last + 1 == lsnIt, HullDs->HullCtx->VCtx->VDiskLogPrefix);
     }
 
     ///////////////// GC ////////////////////////////////////////////////////
@@ -193,7 +193,7 @@ namespace NKikimr {
         it.Seek(key);
 
         // ensure that everything is correct
-        Y_ABORT_UNLESS(it.Valid() && it.GetCurKey() == key);
+        Y_VERIFY_S(it.Valid() && it.GetCurKey() == key, HullDs->HullCtx->VCtx->VDiskLogPrefix);
 
         // put it into merger
         TIndexRecordMerger<TKeyBarrier, TMemRecBarrier> merger(HullDs->HullCtx->VCtx->Top->GType);
@@ -227,13 +227,13 @@ namespace NKikimr {
 
         for (ui32 i = 0; i < record.KeepSize(); ++i) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetKeep(i));
-            Y_ABORT_UNLESS(id.PartId() == 0);
+            Y_VERIFY_S(id.PartId() == 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             vec.push_back(id);
         }
 
         for (ui32 i = 0; i < record.DoNotKeepSize(); ++i) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetDoNotKeep(i));
-            Y_ABORT_UNLESS(id.PartId() == 0);
+            Y_VERIFY_S(id.PartId() == 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             vec.push_back(id);
         }
 
@@ -323,7 +323,7 @@ namespace NKikimr {
     {
         if (mode == RECOVERY) {
             // we check at RECOVERY mode only, because incoming message is being checked early
-            Y_ABORT_UNLESS(CheckGC(ctx, record)); // TODO: CheckGC consume resources just to be sure incoming message is good
+            Y_VERIFY_S(CheckGC(ctx, record), HullDs->HullCtx->VCtx->VDiskLogPrefix); // TODO: CheckGC consume resources just to be sure incoming message is good
         }
 
         // set up keep bits
@@ -331,7 +331,7 @@ namespace NKikimr {
         ingressKeep.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeKeep);
         for (ui32 i = 0; i < record.KeepSize(); ++i) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetKeep(i));
-            Y_ABORT_UNLESS(id.PartId() == 0);
+            Y_VERIFY_S(id.PartId() == 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             // Put only those logoblobs that belong to this vdisk
             if (Filter.Check(id)) {
                 TKeyLogoBlob key(id);
@@ -349,7 +349,7 @@ namespace NKikimr {
         ingressDontKeep.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeDoNotKeep);
         for (ui32 i = 0; i < record.DoNotKeepSize(); ++i) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetDoNotKeep(i));
-            Y_ABORT_UNLESS(id.PartId() == 0);
+            Y_VERIFY_S(id.PartId() == 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             if (Filter.Check(id)) {
                 TKeyLogoBlob key(id);
                 TMemRecLogoBlob memRec(ingressDontKeep);
@@ -371,7 +371,8 @@ namespace NKikimr {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
                 << "Db# LogoBlobs action# sync_data_batch mode# " << OpMode2Str(mode) << " lsn# " << seg);
 
-        Y_ABORT_UNLESS(logoBlobs && (seg.Last - seg.First + 1 == logoBlobs->GetSize()));
+        Y_VERIFY_S(logoBlobs && (seg.Last - seg.First + 1 == logoBlobs->GetSize()),
+                HullDs->HullCtx->VCtx->VDiskLogPrefix);
         HullDs->LogoBlobs->PutToFresh(std::move(logoBlobs), seg.First, seg.Last);
     }
 
@@ -384,7 +385,8 @@ namespace NKikimr {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
                 << "Db# Blocks action# sync_data_batch mode# " << OpMode2Str(mode) << " lsn# " << seg);
 
-        Y_ABORT_UNLESS(blocks && (seg.Last - seg.First + 1 == blocks->GetSize()));
+        Y_VERIFY_S(blocks && (seg.Last - seg.First + 1 == blocks->GetSize()),
+                HullDs->HullCtx->VCtx->VDiskLogPrefix);
         UpdateBlocksCache(blocks, seg, mode);
         HullDs->Blocks->PutToFresh(std::move(blocks), seg.First, seg.Last);
     }
@@ -398,7 +400,8 @@ namespace NKikimr {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
                 << "Db# Barriers action# sync_data_batch mode# " << OpMode2Str(mode) << " lsn# " << seg);
 
-        Y_ABORT_UNLESS(barriers && (seg.Last - seg.First + 1 == barriers->GetSize()));
+        Y_VERIFY_S(barriers && (seg.Last - seg.First + 1 == barriers->GetSize()),
+                HullDs->HullCtx->VCtx->VDiskLogPrefix);
         if (HullDs->HullCtx->BarrierValidation) {
             UpdateBarrierCache(barriers);
         }

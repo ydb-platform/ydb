@@ -2,6 +2,7 @@
 #include "background_controller.h"
 #include "columnshard.h"
 #include "columnshard_private_events.h"
+#include "columnshard_subdomain_path_id.h"
 #include "counters.h"
 #include "defs.h"
 #include "inflight_request_tracker.h"
@@ -27,6 +28,7 @@
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
 #include "transactions/tx_controller.h"
+#include "common/path_id.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/events.h>
@@ -39,6 +41,7 @@
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>
@@ -96,7 +99,7 @@ class TArrowData;
 class TEvWriteCommitPrimaryTransactionOperator;
 class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
-class TTxInsertTableCleanup;
+class TTxCleanupSchemasWithnoData;
 class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
@@ -106,11 +109,9 @@ class TWriteTasksQueue;
 class TWriteTask;
 
 namespace NLoading {
-class TInsertTableInitializer;
 class TTxControllerInitializer;
 class TOperationsManagerInitializer;
 class TStoragesManagerInitializer;
-class TLongTxInitializer;
 class TDBLocksInitializer;
 class TBackgroundSessionsInitializer;
 class TSharingSessionsInitializer;
@@ -130,7 +131,6 @@ struct TSettings {
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
     static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
-    static constexpr TDuration DefaultPeriodicWakeupActivationPeriod = TDuration::Seconds(60);
     static constexpr TDuration DefaultStatsReportInterval = TDuration::Seconds(10);
     static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
 
@@ -160,8 +160,8 @@ using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
-    friend class TTxInsertTableCleanup;
     friend class TTxInit;
+    friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
     friend class TTxProposeTransaction;
@@ -181,7 +181,10 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
-    friend class TWaitEraseTablesTxSubscriber;
+    friend class TWaitOnProposeTxSubscriberBase;
+    friend class TTxPersistSubDomainOutOfSpace;
+    friend class TTxPersistSubDomainPathId;
+    friend class TSpaceWatcher;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -217,17 +220,14 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TWriteOperation;
 
     friend class TSchemaTransactionOperator;
-    friend class TLongTxTransactionOperator;
     friend class TEvWriteTransactionOperator;
     friend class TBackupTransactionOperator;
     friend class IProposeTxOperator;
     friend class TSharingTransactionOperator;
 
-    friend class NLoading::TInsertTableInitializer;
     friend class NLoading::TTxControllerInitializer;
     friend class NLoading::TOperationsManagerInitializer;
     friend class NLoading::TStoragesManagerInitializer;
-    friend class NLoading::TLongTxInitializer;
     friend class NLoading::TDBLocksInitializer;
     friend class NLoading::TBackgroundSessionsInitializer;
     friend class NLoading::TSharingSessionsInitializer;
@@ -252,8 +252,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
@@ -295,8 +294,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
-
-    void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
@@ -332,8 +331,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
         putStatus.OnYellowChannels(Executor());
     }
 
-    void ActivateTiering(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
-    void OnTieringModified(const std::optional<ui64> pathId = {});
+    void ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
+    void OnTieringModified(const std::optional<TInternalPathId> pathId = {});
 
     std::shared_ptr<TAtomicCounter> TabletActivityImpl = std::make_shared<TAtomicCounter>(0);
 
@@ -346,15 +345,7 @@ public:
         return shift | Counter.Inc();
     }
 
-    enum class EOverloadStatus {
-        ShardTxInFly /* "shard_tx" */,
-        ShardWritesInFly /* "shard_writes" */,
-        ShardWritesSizeInFly /* "shard_writes_size" */,
-        InsertTable /* "insert_table" */,
-        OverloadMetadata /* "overload_metadata" */,
-        Disk /* "disk" */,
-        None /* "none" */
-    };
+    using EOverloadStatus = EOverloadStatus;
 
     // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
@@ -384,8 +375,8 @@ public:
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    EOverloadStatus CheckOverloadedImmediate(const ui64 tableId) const;
-    EOverloadStatus CheckOverloadedWait(const ui64 tableId) const;
+    EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
+    EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 
 protected:
     STFUNC(StateInit) {
@@ -421,10 +412,9 @@ protected:
             HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
             HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
-            HFunc(TEvColumnShard::TEvScan, Handle);
+            HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvColumnShard::TEvInternalScan, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
-            HFunc(TEvColumnShard::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
             HFunc(TEvPrivate::TEvStartCompaction, Handle);
             HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
@@ -462,7 +452,8 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
-            HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+            HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -494,14 +485,6 @@ private:
     std::optional<TMonotonic> StartInstant;
     bool IsTxInitFinished = false;
 
-    struct TLongTxWriteInfo {
-        TInsertWriteId InsertWriteId;
-        ui32 WritePartId;
-        NLongTxService::TLongTxId LongTxId;
-        ui64 PreparedTxId = 0;
-        std::optional<ui32> GranuleShardingVersionId;
-    };
-
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
@@ -523,9 +506,7 @@ private:
     TInstant LastStatsReport;
 
     TActorId ResourceSubscribeActor;
-    TActorId BufferizationInsertionWriteActorId;
     TActorId BufferizationPortionsWriteActorId;
-    TActorId DataAccessorsControlActorId;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
 
     TActorId StatsReportPipe;
@@ -536,26 +517,22 @@ private:
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
-    std::unique_ptr<NOlap::TInsertTable> InsertTable;
-    NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
     std::optional<ui64> ProgressTxInFlight;
     THashMap<ui64, TInstant> ScanTxInFlight;
-    THashMap<TInsertWriteId, TLongTxWriteInfo> LongTxWrites;
-    using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
-    THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
-    TMultiMap<NOlap::TSnapshot, TEvColumnShard::TEvScan::TPtr> WaitingScans;
+    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
+    TSpaceWatcher* SpaceWatcher;
+    TActorId SpaceWatcherId;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
-    void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TInsertWriteId>&& writesToAbort);
 
     bool WaitPlanStep(ui64 step);
     void SendWaitPlanStep(ui64 step);
@@ -567,14 +544,6 @@ private:
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
         return ProgressTxController->GetTxCompleteLag(mediatorTime);
     }
-
-    TInsertWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const;
-    TInsertWriteId GetLongTxWrite(
-        NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
-    void AddLongTxWrite(const TInsertWriteId writeId, ui64 txId);
-    void LoadLongTxWrite(const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId,
-        const std::optional<ui32> granuleShardingVersion);
-    bool RemoveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui64 txId);
 
     void EnqueueBackgroundActivities(const bool periodic = false);
     virtual void Enqueue(STFUNC_SIG) override;
@@ -593,20 +562,19 @@ private:
         const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(
         const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunMoveTable(
+        const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
-    void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
-    void SetupIndexation();
-    void SetupCompaction(const std::set<ui64>& pathIds);
+    void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();
-    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
+    bool SetupTtl();
     void SetupCleanupPortions();
     void SetupCleanupTables();
-    void SetupCleanupInsertTable();
+    void SetupCleanupSchemas();
     void SetupGC();
 
-    void UpdateInsertTableCounters();
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
@@ -626,9 +594,6 @@ public:
         return TablesManager;
     }
 
-    bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
-        return LongTxWrites.contains(insertWriteId);
-    }
     void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
@@ -690,11 +655,6 @@ public:
     const std::shared_ptr<NOlap::NDataLocks::TManager>& GetDataLocksManager() const {
         AFL_VERIFY(DataLocksManager);
         return DataLocksManager;
-    }
-
-    const NOlap::TInsertTable& GetInsertTable() const {
-        AFL_VERIFY(!!InsertTable);
-        return *InsertTable;
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

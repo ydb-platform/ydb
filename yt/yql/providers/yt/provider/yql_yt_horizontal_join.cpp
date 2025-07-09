@@ -603,8 +603,15 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
             size_t outNdx = JoinedMaps.size();
             const TExprNode* columns = nullptr;
             const TExprNode* ranges = nullptr;
+            bool incompleteSectionSettings = false;
             if (sectionList) {
-                auto path = TYtSection(node->Child(sectionNum)).Paths().Item(pathNum);
+                const auto section = TYtSection(node->Child(sectionNum));
+                const auto path = section.Paths().Item(pathNum);
+
+                // Section cannot be changed right now. Keep all section inputs as is (add to ExclusiveOuts)
+                incompleteSectionSettings = NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip)
+                    || HasNonEmptyKeyFilter(section);
+
                 columns = path.Columns().Raw();
                 ranges = path.Ranges().Raw();
             }
@@ -642,7 +649,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
             auto outRowSpec = TYtTableBaseInfo::GetRowSpec(map.Output().Item(0));
             const bool sortedOut = outRowSpec && outRowSpec->IsSorted();
 
-            if (sortedOut) {
+            if (sortedOut || incompleteSectionSettings) {
                 if (ExclusiveOuts.find(outNdx) == ExclusiveOuts.end()) {
                     // Sorted output cannot be joined with others
                     outputCountIncrement = 1;
@@ -694,7 +701,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
                 Worlds.emplace(map.World().Ptr(), Worlds.size());
             }
 
-            if (sortedOut) {
+            if (sortedOut || incompleteSectionSettings) {
                 ExclusiveOuts[outNdx].emplace_back(sectionNum, pathNum);
             } else {
                 GroupedOuts[std::make_tuple(sectionNum, columns, ranges)][outNdx] = pathNum;

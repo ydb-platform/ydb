@@ -27,6 +27,7 @@ class TTFont(object):
     they're actually accessed. This means that simple operations can be extremely fast.
 
     Example usage:
+
     .. code-block:: pycon
 
         >>>
@@ -39,8 +40,10 @@ class TTFont(object):
         >> tt['head'].unitsPerEm
         2048
 
-    For details of the objects returned when accessing each table, see :ref:`tables`.
+    For details of the objects returned when accessing each table, see the
+    :doc:`tables </ttLib/tables>` documentation.
     To add a table to the font, use the :py:func:`newTable` function:
+
     .. code-block:: pycon
 
         >>>
@@ -50,7 +53,8 @@ class TTFont(object):
         >> font["OS/2"] = os2
 
     TrueType fonts can also be serialized to and from XML format (see also the
-    :ref:`ttx` binary):
+    :doc:`ttx </ttx>` binary):
+
     .. code-block:: pycon
 
         >>
@@ -589,10 +593,8 @@ class TTFont(object):
         # temporary cmap and by the real cmap in case we don't find a unicode
         # cmap.
         numGlyphs = int(self["maxp"].numGlyphs)
-        glyphOrder = [None] * numGlyphs
+        glyphOrder = ["glyph%.5d" % i for i in range(numGlyphs)]
         glyphOrder[0] = ".notdef"
-        for i in range(1, numGlyphs):
-            glyphOrder[i] = "glyph%.5d" % i
         # Set the glyph order, so the cmap parser has something
         # to work with (so we don't get called recursively).
         self.glyphOrder = glyphOrder
@@ -602,7 +604,7 @@ class TTFont(object):
         # this naming table will usually not cover all glyphs in the font.
         # If the font has no Unicode cmap table, reversecmap will be empty.
         if "cmap" in self:
-            reversecmap = self["cmap"].buildReversed()
+            reversecmap = self["cmap"].buildReversedMin()
         else:
             reversecmap = {}
         useCount = {}
@@ -612,7 +614,7 @@ class TTFont(object):
                 # If a font maps both U+0041 LATIN CAPITAL LETTER A and
                 # U+0391 GREEK CAPITAL LETTER ALPHA to the same glyph,
                 # we prefer naming the glyph as "A".
-                glyphName = self._makeGlyphName(min(reversecmap[tempName]))
+                glyphName = self._makeGlyphName(reversecmap[tempName])
                 numUses = useCount[glyphName] = useCount.get(glyphName, 0) + 1
                 if numUses > 1:
                     glyphName = "%s.alt%d" % (glyphName, numUses - 1)

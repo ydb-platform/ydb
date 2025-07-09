@@ -7,6 +7,7 @@
 #include "flat_sausage_packet.h"
 #include "flat_part_loader.h"
 #include "flat_dbase_naked.h"
+#include "util_fmt_abort.h"
 
 #include <util/generic/xrange.h>
 
@@ -35,7 +36,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             PageCollections.resize(LargeGlobIds.size());
 
@@ -50,14 +51,14 @@ namespace NBoot {
             TryLoad();
         }
 
-        bool HandleBio(NSharedCache::TEvResult &msg) noexcept override
+        bool HandleBio(NSharedCache::TEvResult &msg) override
         {
-            Y_ABORT_UNLESS(Loader, "PageCollections loader got un unexpected pages fetch");
+            Y_ENSURE(Loader, "PageCollections loader got un unexpected pages fetch");
 
             LeftReads -= 1;
 
             if (msg.Status == NKikimrProto::OK) {
-                Loader->Save(msg.Cookie, msg.Loaded);
+                Loader->Save(msg.Cookie, msg.Pages);
 
                 TryFinalize();
 
@@ -70,16 +71,16 @@ namespace NBoot {
             return msg.Status == NKikimrProto::OK;
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftMetas);
 
             if (Loader) {
-                Y_ABORT("Got an unexpected load blobs result");
+                Y_TABLET_ERROR("Got an unexpected load blobs result");
             } else if (load->Cookie >= PageCollections.size()) {
-                Y_ABORT("Got blobs load step with an invalid cookie");
+                Y_TABLET_ERROR("Got blobs load step with an invalid cookie");
             } else if (PageCollections[load->Cookie]) {
-                Y_ABORT("Page collection is already loaded at room %zu", load->Cookie);
+                Y_TABLET_ERROR("Page collection is already loaded at room " << load->Cookie);
             } else {
                 auto *pack = new NPageCollection::TPageCollection(load->LargeGlobId, load->PlainData());
 
@@ -107,7 +108,7 @@ namespace NBoot {
         void TryFinalize()
         {
             if (!LeftReads) {
-                for (auto req : Loader->Run(false)) {
+                for (auto req : Loader->Run({.PreloadIndex = true, .PreloadData = false})) {
                     LeftReads += Logic->LoadPages(this, req);
                 }
             }

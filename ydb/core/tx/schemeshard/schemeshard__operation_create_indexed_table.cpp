@@ -1,11 +1,10 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard__op_traits.h"
-
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -76,7 +75,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
     {
         TString msg = "invalid table name: ";
-        if(!baseTablePath.IsValidLeafName(msg)) {
+        if(!baseTablePath.IsValidLeafName(context.UserToken.Get(), msg)) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
         }
     }
@@ -110,9 +109,13 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     {
         auto checks = baseTablePath.Check();
         checks
-            .PathShardsLimit(baseShards)
-            .PathsLimit(pathToCreate)
-            .ShardsLimit(shardsToCreate);
+            .PathsLimit(pathToCreate);
+
+        if (!tx.GetInternal()) {
+            checks
+                .PathShardsLimit(baseShards)
+                .ShardsLimit(shardsToCreate);
+        }
 
         if (!checks) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};
@@ -134,7 +137,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         TPath indexPath = baseTablePath.Child(indexName);
         {
             TString msg = "invalid table index name: ";
-            if (!indexPath.IsValidLeafName(msg)) {
+            if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
             }
         }
@@ -161,7 +164,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         TPath sequencePath = baseTablePath.Child(sequenceName);
         {
             TString msg = "invalid sequence name: ";
-            if (!sequencePath.IsValidLeafName(msg)) {
+            if (!sequencePath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
             }
         }
@@ -224,6 +227,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         auto scheme = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         scheme.SetFailOnExist(tx.GetFailOnExist());
         scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+        scheme.SetInternal(tx.GetInternal());
 
         scheme.MutableCreateTable()->CopyFrom(baseTableDescription);
         if (tx.HasAlterUserAttributes()) {
@@ -270,6 +274,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+            scheme.SetInternal(tx.GetInternal());
 
             *scheme.MutableCreateTable() = std::move(implTableDesc);
 
@@ -278,14 +283,23 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
         if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc;
-            if (indexDescription.IndexImplTableDescriptionsSize() == 2) {
+            const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
+            NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
+            if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
                 // This description provided by user to override partition policy
                 userLevelDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
+                if (prefixVectorIndex) {
+                    userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(2);
+                }
             }
+            const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
             result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc)));
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
+            if (prefixVectorIndex) {
+                const THashSet<TString> prefixColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
+                result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc)));
+            }
         } else {
             NKikimrSchemeOp::TTableDescription userIndexDesc;
             if (indexDescription.IndexImplTableDescriptionsSize()) {
@@ -303,6 +317,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
         scheme.SetFailOnExist(tx.GetFailOnExist());
         scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+        scheme.SetInternal(tx.GetInternal());
 
         *scheme.MutableSequence() = sequenceDescription;
 

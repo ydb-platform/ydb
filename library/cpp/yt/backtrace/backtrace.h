@@ -34,7 +34,7 @@ void SymbolizeBacktrace(
 /*!
  *  \param backtrace Backtrace to symbolize
  */
-TString SymbolizeBacktrace(TBacktrace backtrace);
+std::string SymbolizeBacktrace(TBacktrace backtrace);
 
 ////////////////////////////////////////////////////////////////////////////////
 

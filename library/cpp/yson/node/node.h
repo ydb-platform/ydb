@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/cast.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>

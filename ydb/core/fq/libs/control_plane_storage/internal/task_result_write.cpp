@@ -1,6 +1,18 @@
 #include "utils.h"
 
+#include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
+
 namespace NFq {
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev) const {
+    const auto& request = ev->Get()->Request;
+    return ValidateWriteResultData(
+        request.result_id().value(),
+        request.result_set(),
+        NProtoInterop::CastFromProto(request.deadline()),
+        Config->ResultSetsTtl
+    );
+}
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev)
 {
@@ -15,17 +27,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     const int64_t startRowId = request.offset();
     const TInstant deadline = NProtoInterop::CastFromProto(request.deadline());
     const Ydb::ResultSet& resultSet = request.result_set();
+    const auto resultSetRowsSize = resultSet.rows().size();
     const int byteSize = resultSet.ByteSize();
-
 
     CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline);
 
-    NYql::TIssues issues = ValidateWriteResultData(resultId, resultSet, deadline, Config->ResultSetsTtl);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D("WriteResultDataRequest, validation failed: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.DebugString() << " " << deadline << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvWriteResultDataResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
-        LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSet.rows().size(), delta, deadline, byteSize, false);
+        LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSetRowsSize, delta, deadline, byteSize, false);
         return;
     }
 
@@ -73,7 +84,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -81,7 +92,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
 
     success.Apply([=](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSet.rows().size(), delta, deadline, byteSize, future.GetValue());
+            LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSetRowsSize, delta, deadline, byteSize, future.GetValue());
         });
 }
 

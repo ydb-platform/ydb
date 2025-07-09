@@ -33,6 +33,7 @@ __pycache__/
 
 # MacOS specific
 .DS_Store
+*.dSYM
 
 # clangd cache
 /.cache
@@ -88,3 +89,7 @@ bin/config.json
 
 # handy for local junk, which is not intended to appear in the repo
 junk/
+
+# YDB CLI configuration file location is `~/ydb/config/config.yaml`
+config/config.yaml
+path.bash.inc

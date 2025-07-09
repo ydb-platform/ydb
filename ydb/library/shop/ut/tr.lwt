@@ -1,0 +1,4 @@
+Blocks {
+    ProbeDesc { Group: "SHOP_PROVIDER" }
+    Action { PrintToStderrAction {} }
+}

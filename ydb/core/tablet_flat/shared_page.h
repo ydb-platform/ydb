@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h"
+#include "shared_cache_tiers.h"
 #include "shared_handle.h"
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -27,6 +27,7 @@ struct TPage
     ui32 CacheId : 4 = 0;
     ui32 CacheFlags1 : 4 = 0;
     ui32 CacheFlags2 : 4 = 0;
+    ECacheTier CacheTier : 2 = ECacheTier::Regular;
 
     const TPageId PageId;
     const size_t Size;
@@ -59,9 +60,9 @@ struct TPage
     }
 
     void EnsureNoCacheFlags() {
-        Y_VERIFY_S(CacheId == 0, "Unexpected page " << CacheId << " cache id");
-        Y_VERIFY_S(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
-        Y_VERIFY_S(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
+        Y_ENSURE(CacheId == 0, "Unexpected page " << CacheId << " cache id");
+        Y_ENSURE(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
+        Y_ENSURE(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
     }
 };
 

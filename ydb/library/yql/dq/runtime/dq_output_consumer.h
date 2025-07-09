@@ -28,13 +28,16 @@ public:
         IsFinishingFlag = true;
         return DoTryFinish();
     }
-    virtual bool IsFull() const = 0;
+    virtual EDqFillLevel GetFillLevel() const = 0;
     virtual void Consume(NKikimr::NUdf::TUnboxedValue&& value) = 0;
     virtual void WideConsume(NKikimr::NUdf::TUnboxedValue values[], ui32 count) = 0;
     virtual void Consume(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;
     bool IsFinishing() const {
         return IsFinishingFlag;
+    }
+    virtual TString DebugString() {
+        return "";
     }
 protected:
     virtual bool DoTryFinish() {
@@ -51,7 +54,9 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     TMaybe<ui8> minFillPercentage,
-    NUdf::IPgBuilder* pgBuilder);
+    const NDqProto::TTaskOutputHashPartition& hashPartition,
+    NUdf::IPgBuilder* pgBuilder
+);
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
 

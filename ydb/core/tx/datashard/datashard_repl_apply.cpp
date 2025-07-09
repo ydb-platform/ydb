@@ -83,14 +83,14 @@ public:
 
         for (const auto& change : msg.GetChanges()) {
             if (!ApplyChange(txc, fullTableId, userTable, source, change)) {
-                Y_ABORT_UNLESS(Result);
+                Y_ENSURE(Result);
                 break;
             }
         }
 
-        if (MvccReadWriteVersion) {
-            Self->PromoteImmediatePostExecuteEdges(*MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
-            Pipeline.AddCommittingOp(*MvccReadWriteVersion);
+        if (MvccVersion) {
+            Self->PromoteImmediatePostExecuteEdges(*MvccVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+            Pipeline.AddCommittingOp(*MvccVersion);
         }
 
         if (!Result) {
@@ -105,7 +105,7 @@ public:
     TReplicationSourceState& EnsureSource(TTransactionContext& txc, const TPathId& pathId, const TString& sourceName) {
         TReplicationSourceOffsetsDb rdb(txc);
         auto* table = Self->EnsureReplicatedTable(pathId);
-        Y_ABORT_UNLESS(table);
+        Y_ENSURE(table);
         return table->EnsureSource(rdb, sourceName);
     }
 
@@ -113,7 +113,7 @@ public:
             TTransactionContext& txc, const TTableId& tableId, const TUserTable& userTable,
             TReplicationSourceState& source, const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change)
     {
-        Y_ABORT_UNLESS(userTable.IsReplicated() || Self->IsIncrementalRestore());
+        Y_ENSURE(userTable.IsReplicated() || Self->IsIncrementalRestore());
 
         // TODO: check source and offset, persist new values
         i64 sourceOffset = change.GetSourceOffset();
@@ -195,14 +195,12 @@ public:
             txc.DB.UpdateTx(userTable.LocalTid, rop, key, update, writeTxId);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
-            if (!MvccReadWriteVersion) {
-                auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
-                Y_DEBUG_ABORT_UNLESS(readVersion == writeVersion);
-                MvccReadWriteVersion = writeVersion;
+            if (!MvccVersion) {
+                MvccVersion = Self->GetMvccVersion();
             }
 
             Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
-            txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccReadWriteVersion);
+            txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccVersion);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
         }
 
@@ -251,12 +249,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(Ev);
-        Y_ABORT_UNLESS(Result);
+        Y_ENSURE(Ev);
+        Y_ENSURE(Result);
 
-        if (MvccReadWriteVersion) {
-            Pipeline.RemoveCommittingOp(*MvccReadWriteVersion);
-            Self->SendImmediateWriteResult(*MvccReadWriteVersion, Ev->Sender, Result.Release(), Ev->Cookie);
+        if (MvccVersion) {
+            Pipeline.RemoveCommittingOp(*MvccVersion);
+            Self->SendImmediateWriteResult(*MvccVersion, Ev->Sender, Result.Release(), Ev->Cookie);
         } else {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
         }
@@ -266,7 +264,7 @@ private:
     TPipeline& Pipeline;
     TEvDataShard::TEvApplyReplicationChanges::TPtr Ev;
     THolder<TEvDataShard::TEvApplyReplicationChangesResult> Result;
-    std::optional<TRowVersion> MvccReadWriteVersion;
+    std::optional<TRowVersion> MvccVersion;
 }; // TTxApplyReplicationChanges
 
 void TDataShard::Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx) {

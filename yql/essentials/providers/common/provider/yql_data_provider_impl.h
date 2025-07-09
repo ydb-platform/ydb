@@ -12,6 +12,7 @@ public:
     TPlanFormatterBase() = default;
     ~TPlanFormatterBase() = default;
 
+    bool HasCustomPlan(const TExprNode& node) override;
     void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override;
     void GetResultDependencies(const TExprNode::TPtr& node, TExprNode::TListType& children, bool compact) override;
@@ -91,6 +92,8 @@ public:
     IGraphTransformer& GetPlanInfoTransformer() override;
     IDqIntegration* GetDqIntegration() override;
     IDqOptimization* GetDqOptimization() override;
+    IYtflowIntegration* GetYtflowIntegration() override;
+    IYtflowOptimization* GetYtflowOptimization() override;
 
 protected:
     THolder<IGraphTransformer> DefConstraintTransformer_;

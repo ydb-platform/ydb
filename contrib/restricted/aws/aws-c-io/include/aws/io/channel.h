@@ -10,6 +10,8 @@
 #include <aws/common/statistics.h>
 #include <aws/common/task_scheduler.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_channel_direction {
     AWS_CHANNEL_DIR_READ,
     AWS_CHANNEL_DIR_WRITE,
@@ -52,6 +54,8 @@ struct aws_channel_handler_vtable {
     /**
      * Called by the channel when a message is available for processing in the read direction. It is your
      * responsibility to call aws_mem_release(message->allocator, message); on message when you are finished with it.
+     * You must only call `aws_mem_release(message->allocator, message);` if the `process_read_message`
+     * returns AWS_OP_SUCCESS. In case of an error, you must not clean up the message and should just raise the error.
      *
      * Also keep in mind that your slot's internal window has been decremented. You'll want to call
      * aws_channel_slot_increment_read_window() at some point in the future if you want to keep receiving data.
@@ -63,6 +67,8 @@ struct aws_channel_handler_vtable {
     /**
      * Called by the channel when a message is available for processing in the write direction. It is your
      * responsibility to call aws_mem_release(message->allocator, message); on message when you are finished with it.
+     * You must only call `aws_mem_release(message->allocator, message);` if the `process_read_message`
+     * returns AWS_OP_SUCCESS. In case of an error, you must not clean up the message and should just raise the error.
      */
     int (*process_write_message)(
         struct aws_channel_handler *handler,
@@ -504,5 +510,6 @@ AWS_IO_API
 int aws_channel_trigger_read(struct aws_channel *channel);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_CHANNEL_H */

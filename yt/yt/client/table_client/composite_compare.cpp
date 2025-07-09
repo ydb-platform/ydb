@@ -25,7 +25,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = TableClientLogger;
+constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -205,7 +205,7 @@ int CompareYsonValues(TYsonStringBuf lhs, TYsonStringBuf rhs)
         } else if (lhsItem.GetType() == EYsonItemType::EndOfStream) {
             return 0;
         }
-        Y_ASSERT(lhsItem.GetType() != EYsonItemType::EndOfStream &&
+        YT_ASSERT(lhsItem.GetType() != EYsonItemType::EndOfStream &&
             rhsItem.GetType() != EYsonItemType::EndOfStream);
     }
 }

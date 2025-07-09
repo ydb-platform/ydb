@@ -59,7 +59,7 @@ TRuntimePtr PrepareTestActorRuntime(const char* tablePrefix, bool enableGc = fal
 
     auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
     auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-    auto storageService = NewCheckpointStorageService(config, commonConfig, credFactory, yqSharedResources);
+    auto storageService = NewCheckpointStorageService(config, commonConfig, credFactory, yqSharedResources, MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
     runtime->AddLocalService(
         NYql::NDq::MakeCheckpointStorageID(),

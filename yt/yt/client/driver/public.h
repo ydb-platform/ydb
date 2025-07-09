@@ -9,7 +9,7 @@ namespace NYT::NDriver {
 DECLARE_REFCOUNTED_STRUCT(IDriver)
 DECLARE_REFCOUNTED_STRUCT(IProxyDiscoveryCache)
 
-DECLARE_REFCOUNTED_CLASS(TDriverConfig)
+DECLARE_REFCOUNTED_STRUCT(TDriverConfig)
 
 struct TCommandDescriptor;
 struct TDriverRequest;

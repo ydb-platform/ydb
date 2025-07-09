@@ -26,7 +26,6 @@ public:
         AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
         AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
         AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
-        AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
         if (FastSnapshotExpiration) {
             settings.SetKeepSnapshotTimeout(TDuration::Seconds(1));
@@ -40,7 +39,6 @@ public:
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
         {
             auto type = IsOlap ? "COLUMN" : "ROW";
@@ -101,8 +99,6 @@ public:
         }
 
         DoExecute();
-        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
 };

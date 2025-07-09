@@ -12,25 +12,6 @@ namespace NUdf {
 
 namespace {
 
-ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data) {
-    ui64 size = sizeof(data);
-    size += data.buffers.size() * sizeof(void*);
-    size += data.child_data.size() * sizeof(void*);
-    for (const auto& b : data.buffers) {
-        if (b) {
-            size += b->size();
-        }
-    }
-
-    for (const auto& c : data.child_data) {
-        if (c) {
-            size += GetSizeOfArrayDataInBytes(*c);
-        }
-    }
-
-    return size;
-}
-
 ui64 GetSizeOfDatumInBytes(const arrow::Datum& datum) {
     ui64 size = sizeof(datum);
     if (datum.is_scalar()) {
@@ -150,6 +131,25 @@ arrow::Datum MakeArray(const TVector<std::shared_ptr<arrow::ArrayData>>& chunks)
     return arrow::Datum(resultChunks.front());
 }
 
+ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data) {
+    ui64 size = sizeof(data);
+    size += data.buffers.size() * sizeof(void*);
+    size += data.child_data.size() * sizeof(void*);
+    for (const auto& b : data.buffers) {
+        if (b) {
+            size += b->size();
+        }
+    }
+
+    for (const auto& c : data.child_data) {
+        if (c) {
+            size += GetSizeOfArrayDataInBytes(*c);
+        }
+    }
+
+    return size;
+}
+
 ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch) {
     ui64 size = sizeof(batch);
     size += batch.num_columns() * sizeof(void*);
@@ -168,6 +168,16 @@ ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch) {
     }
 
     return size;
+}
+
+const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    TTaggedTypeInspector typeTagged(typeInfoHelper, type);
+    while (typeTagged) {
+        type = typeTagged.GetBaseType();
+        typeTagged = TTaggedTypeInspector(typeInfoHelper, type);
+    }
+
+    return type;
 }
 }
 }

@@ -15,6 +15,7 @@ namespace NMonitoring {
 
         virtual EMetricType Type() const noexcept = 0;
         virtual void Accept(TInstant time, IMetricConsumer* consumer) const = 0;
+        virtual void Reset() noexcept = 0;
     };
 
     using IMetricPtr = TIntrusivePtr<IMetric>;
@@ -28,7 +29,7 @@ namespace NMonitoring {
         virtual double Add(double n) noexcept = 0;
         virtual void Set(double n) noexcept = 0;
         virtual double Get() const noexcept = 0;
-        virtual void Reset() noexcept {
+        void Reset() noexcept override {
             Set(0);
         }
     };
@@ -58,7 +59,7 @@ namespace NMonitoring {
 
         virtual void Set(i64 value) noexcept = 0;
         virtual i64 Get() const noexcept = 0;
-        virtual void Reset() noexcept {
+        void Reset() noexcept override {
             Set(0);
         }
     };
@@ -84,7 +85,6 @@ namespace NMonitoring {
 
         virtual ui64 Add(ui64 n) noexcept = 0;
         virtual ui64 Get() const noexcept = 0;
-        virtual void Reset() noexcept = 0;
     };
 
     class ILazyCounter: public IMetric {
@@ -108,7 +108,6 @@ namespace NMonitoring {
 
         virtual ui64 Add(ui64 n) noexcept = 0;
         virtual ui64 Get() const noexcept = 0;
-        virtual void Reset() noexcept = 0;
     };
 
     class ILazyRate: public IMetric {
@@ -134,7 +133,6 @@ namespace NMonitoring {
         virtual void Record(double value) noexcept = 0;
         virtual void Record(double value, ui32 count) noexcept = 0;
         virtual IHistogramSnapshotPtr TakeSnapshot() const = 0;
-        virtual void Reset() noexcept = 0;
 
     protected:
         const bool IsRate_;
@@ -194,6 +192,8 @@ namespace NMonitoring {
             consumer->OnDouble(time, Get());
         }
 
+        void Reset() noexcept override {}
+
     private:
         std::function<double()> Supplier_;
     };
@@ -244,6 +244,8 @@ namespace NMonitoring {
         void Accept(TInstant time, IMetricConsumer* consumer) const override {
             consumer->OnInt64(time, Get());
         }
+
+        void Reset() noexcept override {}
 
     private:
         std::function<i64()> Supplier_;
@@ -296,6 +298,8 @@ namespace NMonitoring {
             consumer->OnUint64(time, Get());
         }
 
+        void Reset() noexcept override {}
+
     private:
         std::function<ui64()> Supplier_;
     };
@@ -346,6 +350,8 @@ namespace NMonitoring {
         void Accept(TInstant time, IMetricConsumer* consumer) const override {
             consumer->OnUint64(time, Get());
         }
+
+        void Reset() noexcept override {}
 
     private:
         std::function<ui64()> Supplier_;

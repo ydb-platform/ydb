@@ -1,0 +1,64 @@
+{% extends '//builtin/bag.ym' %}
+
+{% block current_version %}c8dfee3e4c489c5ae0d30c484c92db102a69ec51{% endblock %}
+
+{% block current_url %}
+https://github.com/google/tcmalloc/archive/{{self.version().strip()}}.tar.gz
+{% endblock %}
+
+{% block current_date %}2025-01-30{% endblock %}
+
+{% block keep_sources %}
+common.inc
+default/ya.make
+dynamic/ya.make
+malloc_extension/ya.make
+no_percpu_cache/ya.make
+no_percpu_cache/aligned_alloc.c
+numa_256k/ya.make
+numa_large_pages/ya.make
+profile_marshaller/ya.make
+small_but_slow/ya.make
+tcmalloc/internal/ya.make
+{% endblock %}
+
+{% block ya_make %}
+SUBSCRIBER(
+    g:cpp-contrib
+    ayles
+    mikailbag
+)
+
+SRCS(
+    # Options
+    tcmalloc/want_hpaa.cc
+)
+
+INCLUDE(common.inc)
+
+CFLAGS(
+    -DTCMALLOC_256K_PAGES
+)
+{% endblock %}
+
+{% block ya_make_suffix %}
+IF (NOT DLL_FOR)
+    RECURSE(
+        default
+        dynamic
+        malloc_extension
+        no_percpu_cache
+        numa_256k
+        numa_large_pages
+        profile_marshaller
+        small_but_slow
+        tcmalloc/internal
+    )
+ENDIF()
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+cp -R tcmalloc common.inc ${OUTPUT}
+cp no_percpu_cache/aligned_alloc.c ${OUTPUT}/no_percpu_cache/
+{% endblock %}

@@ -27,7 +27,7 @@
 #include <util/datetime/cputimer.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
 namespace NKikimr {
@@ -695,7 +695,10 @@ private:
 
                 while(parser.TryNextRow()) {
                     auto& col = parser.ColumnParser("data");
-                    query_response->Data = col.GetString();
+                    // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
+                    query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
+                        ? col.GetOptionalString()
+                        : col.GetString();
                  }
             } else {
                 SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "

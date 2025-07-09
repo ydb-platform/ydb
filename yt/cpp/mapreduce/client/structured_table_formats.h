@@ -22,12 +22,14 @@ TMaybe<TNode> GetCommonTableFormat(
 TMaybe<TNode> GetTableFormat(
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const IRawClientPtr& rawClient,
+    const TClientContext& context,
     const TTransactionId& transactionId,
     const TRichYPath& path);
 
 TMaybe<TNode> GetTableFormats(
     const IClientRetryPolicyPtr& clientRetryPolicy,
     const IRawClientPtr& rawClient,
+    const TClientContext& context,
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths);
 

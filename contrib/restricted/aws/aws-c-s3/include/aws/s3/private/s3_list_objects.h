@@ -44,7 +44,7 @@ struct aws_s3_object_info {
  * Invoked when an object or prefix is encountered during a ListObjectsV2 API call. Return false, to immediately
  * terminate the list operation. Returning true will continue until at least the current page is iterated.
  */
-typedef bool(aws_s3_on_object_fn)(const struct aws_s3_object_info *info, void *user_data);
+typedef int(aws_s3_on_object_fn)(const struct aws_s3_object_info *info, void *user_data);
 
 /**
  * Invoked upon the complete fetch and parsing of a page. If error_code is AWS_OP_SUCCESS and
@@ -109,10 +109,6 @@ AWS_EXTERN_C_BEGIN
  * the operation.
  */
 AWS_S3_API struct aws_s3_paginator *aws_s3_initiate_list_objects(
-    struct aws_allocator *allocator,
-    const struct aws_s3_list_objects_params *params);
-
-AWS_S3_API struct aws_s3_paginated_operation *aws_s3_list_objects_operation_new(
     struct aws_allocator *allocator,
     const struct aws_s3_list_objects_params *params);
 

@@ -3,6 +3,7 @@ from functools import partial
 from fontTools.misc import sstruct
 from fontTools.misc.textTools import safeEval
 from fontTools.misc.lazyTools import LazyDict
+from fontTools.ttLib import OPTIMIZE_FONT_SPEED
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
 from . import DefaultTable
 import array
@@ -23,19 +24,24 @@ log = logging.getLogger(__name__)
 # FreeType2 source code for parsing 'gvar':
 # http://git.savannah.gnu.org/cgit/freetype/freetype2.git/tree/src/truetype/ttgxvar.c
 
-GVAR_HEADER_FORMAT = """
+GVAR_HEADER_FORMAT_HEAD = """
 	> # big endian
 	version:			H
 	reserved:			H
 	axisCount:			H
 	sharedTupleCount:		H
 	offsetToSharedTuples:		I
-	glyphCount:			H
+"""
+# In between the HEAD and TAIL lies the glyphCount, which is
+# of different size: 2 bytes for gvar, and 3 bytes for GVAR.
+GVAR_HEADER_FORMAT_TAIL = """
+	> # big endian
 	flags:				H
 	offsetToGlyphVariationData:	I
 """
 
-GVAR_HEADER_SIZE = sstruct.calcsize(GVAR_HEADER_FORMAT)
+GVAR_HEADER_SIZE_HEAD = sstruct.calcsize(GVAR_HEADER_FORMAT_HEAD)
+GVAR_HEADER_SIZE_TAIL = sstruct.calcsize(GVAR_HEADER_FORMAT_TAIL)
 
 
 class table__g_v_a_r(DefaultTable.DefaultTable):
@@ -50,6 +56,7 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
     """
 
     dependencies = ["fvar", "glyf"]
+    gid_size = 2
 
     def __init__(self, tag=None):
         DefaultTable.DefaultTable.__init__(self, tag)
@@ -57,6 +64,7 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
         self.variations = {}
 
     def compile(self, ttFont):
+
         axisTags = [axis.axisTag for axis in ttFont["fvar"].axes]
         sharedTuples = tv.compileSharedTuples(
             axisTags, itertools.chain(*self.variations.values())
@@ -72,28 +80,33 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
         offsets.append(offset)
         compiledOffsets, tableFormat = self.compileOffsets_(offsets)
 
+        GVAR_HEADER_SIZE = GVAR_HEADER_SIZE_HEAD + self.gid_size + GVAR_HEADER_SIZE_TAIL
         header = {}
         header["version"] = self.version
         header["reserved"] = self.reserved
         header["axisCount"] = len(axisTags)
         header["sharedTupleCount"] = len(sharedTuples)
         header["offsetToSharedTuples"] = GVAR_HEADER_SIZE + len(compiledOffsets)
-        header["glyphCount"] = len(compiledGlyphs)
         header["flags"] = tableFormat
         header["offsetToGlyphVariationData"] = (
             header["offsetToSharedTuples"] + sharedTupleSize
         )
-        compiledHeader = sstruct.pack(GVAR_HEADER_FORMAT, header)
 
-        result = [compiledHeader, compiledOffsets]
+        result = [
+            sstruct.pack(GVAR_HEADER_FORMAT_HEAD, header),
+            len(compiledGlyphs).to_bytes(self.gid_size, "big"),
+            sstruct.pack(GVAR_HEADER_FORMAT_TAIL, header),
+        ]
+
+        result.append(compiledOffsets)
         result.extend(sharedTuples)
         result.extend(compiledGlyphs)
         return b"".join(result)
 
     def compileGlyphs_(self, ttFont, axisTags, sharedCoordIndices):
+        optimizeSpeed = ttFont.cfg[OPTIMIZE_FONT_SPEED]
         result = []
         glyf = ttFont["glyf"]
-        optimizeSize = getattr(self, "optimizeSize", True)
         for glyphName in ttFont.getGlyphOrder():
             variations = self.variations.get(glyphName, [])
             if not variations:
@@ -102,11 +115,12 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
             pointCountUnused = 0  # pointCount is actually unused by compileGlyph
             result.append(
                 compileGlyph_(
+                    self.gid_size,
                     variations,
                     pointCountUnused,
                     axisTags,
                     sharedCoordIndices,
-                    optimizeSize=optimizeSize,
+                    optimizeSize=not optimizeSpeed,
                 )
             )
         return result
@@ -114,7 +128,19 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
     def decompile(self, data, ttFont):
         axisTags = [axis.axisTag for axis in ttFont["fvar"].axes]
         glyphs = ttFont.getGlyphOrder()
-        sstruct.unpack(GVAR_HEADER_FORMAT, data[0:GVAR_HEADER_SIZE], self)
+
+        # Parse the header
+        GVAR_HEADER_SIZE = GVAR_HEADER_SIZE_HEAD + self.gid_size + GVAR_HEADER_SIZE_TAIL
+        sstruct.unpack(GVAR_HEADER_FORMAT_HEAD, data[:GVAR_HEADER_SIZE_HEAD], self)
+        self.glyphCount = int.from_bytes(
+            data[GVAR_HEADER_SIZE_HEAD : GVAR_HEADER_SIZE_HEAD + self.gid_size], "big"
+        )
+        sstruct.unpack(
+            GVAR_HEADER_FORMAT_TAIL,
+            data[GVAR_HEADER_SIZE_HEAD + self.gid_size : GVAR_HEADER_SIZE],
+            self,
+        )
+
         assert len(glyphs) == self.glyphCount
         assert len(axisTags) == self.axisCount
         sharedCoords = tv.decompileSharedTuples(
@@ -144,7 +170,7 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
                 glyph = glyf[glyphName]
                 numPointsInGlyph = self.getNumPoints_(glyph)
                 return decompileGlyph_(
-                    numPointsInGlyph, sharedCoords, axisTags, gvarData
+                    self.gid_size, numPointsInGlyph, sharedCoords, axisTags, gvarData
                 )
 
             return read_item
@@ -262,23 +288,42 @@ class table__g_v_a_r(DefaultTable.DefaultTable):
 
 
 def compileGlyph_(
-    variations, pointCount, axisTags, sharedCoordIndices, *, optimizeSize=True
+    dataOffsetSize,
+    variations,
+    pointCount,
+    axisTags,
+    sharedCoordIndices,
+    *,
+    optimizeSize=True,
 ):
+    assert dataOffsetSize in (2, 3)
     tupleVariationCount, tuples, data = tv.compileTupleVariationStore(
         variations, pointCount, axisTags, sharedCoordIndices, optimizeSize=optimizeSize
     )
     if tupleVariationCount == 0:
         return b""
-    result = [struct.pack(">HH", tupleVariationCount, 4 + len(tuples)), tuples, data]
-    if (len(tuples) + len(data)) % 2 != 0:
+
+    offsetToData = 2 + dataOffsetSize + len(tuples)
+
+    result = [
+        tupleVariationCount.to_bytes(2, "big"),
+        offsetToData.to_bytes(dataOffsetSize, "big"),
+        tuples,
+        data,
+    ]
+    if (offsetToData + len(data)) % 2 != 0:
         result.append(b"\0")  # padding
     return b"".join(result)
 
 
-def decompileGlyph_(pointCount, sharedTuples, axisTags, data):
-    if len(data) < 4:
+def decompileGlyph_(dataOffsetSize, pointCount, sharedTuples, axisTags, data):
+    assert dataOffsetSize in (2, 3)
+    if len(data) < 2 + dataOffsetSize:
         return []
-    tupleVariationCount, offsetToData = struct.unpack(">HH", data[:4])
+
+    tupleVariationCount = int.from_bytes(data[:2], "big")
+    offsetToData = int.from_bytes(data[2 : 2 + dataOffsetSize], "big")
+
     dataPos = offsetToData
     return tv.decompileTupleVariationStore(
         "gvar",
@@ -287,6 +332,6 @@ def decompileGlyph_(pointCount, sharedTuples, axisTags, data):
         pointCount,
         sharedTuples,
         data,
-        4,
+        2 + dataOffsetSize,
         offsetToData,
     )

@@ -12,7 +12,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/av_bootstrapped.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
@@ -55,8 +55,7 @@ public:
     void CreateTestOlapTable(TString tableName = "olapTable", ui32 tableShardsCount = 3,
         TString storeName = "olapStore", ui32 storeShardsCount = 4,
         TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
-        TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-        CreateTestOlapStore(sender, Sprintf(R"(
+        CreateTestOlapStore(Sprintf(R"(
              Name: "%s"
              ColumnShardCount: %d
              SchemaPresets {
@@ -72,7 +71,7 @@ public:
             shardingColumns = "[\"uid\"]";
         }
 
-        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        TBase::CreateTestOlapTable(storeName, Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             Sharding {
@@ -88,8 +87,7 @@ public:
         TString storeName = "olapStore", ui32 storeShardsCount = 4,
         TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
 
-        TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-        CreateTestOlapStore(sender, Sprintf(R"(
+        CreateTestOlapStore(Sprintf(R"(
              Name: "%s"
              ColumnShardCount: %d
              SchemaPresets {
@@ -105,7 +103,7 @@ public:
             shardingColumns = "[\"uid\"]";
         }
 
-        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        TBase::CreateTestOlapTable(storeName, Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             TtlSettings: {
@@ -277,6 +275,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
 
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
@@ -414,6 +413,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
         auto& runtime = *server->GetRuntime();
+        runtime.DisableBreakOnStopCondition();
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 //        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
 
@@ -441,6 +441,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         lHelper.CreateTestOlapTable("olapTable", 2);
+        lHelper.StartSchemaRequest(
+            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`))"
+        );
         lHelper.StartSchemaRequest(
             R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval("P20D") TO EXTERNAL DATA SOURCE `/Root/tier2` ON timestamp)");
         Cerr << "Wait tables" << Endl;

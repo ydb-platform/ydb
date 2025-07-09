@@ -6,6 +6,7 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_curtain.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_envs.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -96,7 +97,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
 
             auto cu0 = cook.Make(Mass0().Saved, 3, (7 + (len >> 1) - 3) >> 1);
             auto cu = cook.Make(Mass0().Saved, 7 + (len >> 1), 13 + len);
-            Y_ABORT_UNLESS(cu0.End != cu.Begin);
+            Y_ENSURE(cu0.End != cu.Begin);
 
             for (int joined = 0; joined < 2; ++joined) {
                 auto screen = joined ? TScreen::Join(cu0.Screen, cu.Screen) : cu.Screen;
@@ -166,7 +167,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
                     iter.Seek(*it, ESeek::Lower).Is(EReady::Gone);
                     iter.Seek(*it, ESeek::Upper).Is(EReady::Gone);
                 } else {
-                    Y_ABORT("Got AnyOff row within the range");
+                    Y_TABLET_ERROR("Got AnyOff row within the range");
                 }
             }
         }

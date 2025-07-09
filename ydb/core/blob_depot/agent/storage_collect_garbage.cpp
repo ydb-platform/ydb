@@ -3,7 +3,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvCollectGarbage>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvCollectGarbage>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TCollectGarbageQuery : public TBlobStorageQuery<TEvBlobStorage::TEvCollectGarbage> {
             ui32 KeepIndex = 0;
             ui32 NumKeep;
@@ -110,7 +111,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TCollectGarbageQuery(*this, std::move(ev));
+        return new TCollectGarbageQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

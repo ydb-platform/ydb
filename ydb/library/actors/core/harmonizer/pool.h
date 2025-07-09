@@ -31,9 +31,14 @@ struct TPoolInfo {
     i16 MinFullThreadCount = 0;
     i16 MaxFullThreadCount = 0;
 
+    float ThreadQuota = 0;
     float DefaultThreadCount = 0;
     float MinThreadCount = 0;
     float MaxThreadCount = 0;
+
+    ui16 LocalQueueSize;
+    ui16 MaxLocalQueueSize = 0;
+    ui16 MinLocalQueueSize = 0;
 
     i16 Priority = 0;
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounter;
@@ -42,7 +47,6 @@ struct TPoolInfo {
     ui64 LastUpdateTs = 0;
     ui64 NotEnoughCpuExecutions = 0;
     ui64 NewNotEnoughCpuExecutions = 0;
-    ui16 LocalQueueSize;
 
     std::atomic<float> SharedCpuQuota = 0;
     std::atomic<i64> LastFlags = 0; // 0 - isNeedy; 1 - isStarved; 2 - isHoggish
@@ -51,13 +55,7 @@ struct TPoolInfo {
     std::atomic<ui64> DecreasingThreadsByStarvedState = 0;
     std::atomic<ui64> DecreasingThreadsByHoggishState = 0;
     std::atomic<ui64> DecreasingThreadsByExchange = 0;
-    std::atomic<i16> PotentialMaxThreadCount = 0;
-    std::atomic<ui64> ReceivedHalfThreadByNeedyState = 0;
-    std::atomic<ui64> GivenHalfThreadByOtherStarvedState = 0;
-    std::atomic<ui64> GivenHalfThreadByHoggishState = 0;
-    std::atomic<ui64> GivenHalfThreadByOtherNeedyState = 0;
-    std::atomic<ui64> ReturnedHalfThreadByStarvedState = 0;
-    std::atomic<ui64> ReturnedHalfThreadByOtherHoggishState = 0;
+    std::atomic<float> PotentialMaxThreadCount = 0;
 
     TValueHistory<16> UsedCpu;
     TValueHistory<16> ElapsedCpu;

@@ -12,7 +12,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationCardFetchOptionsTest
+class TReplicationCardFetchOptionsContainsTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
         TReplicationCardFetchOptions,
@@ -20,7 +20,7 @@ class TReplicationCardFetchOptionsTest
         bool>>
 { };
 
-TEST_P(TReplicationCardFetchOptionsTest, Contains)
+TEST_P(TReplicationCardFetchOptionsContainsTest, Contains)
 {
     const auto& params = GetParam();
     auto self = std::get<0>(params);
@@ -36,8 +36,8 @@ TEST_P(TReplicationCardFetchOptionsTest, Contains)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    TReplicationCardFetchOptionsTest,
-    TReplicationCardFetchOptionsTest,
+    TReplicationCardFetchOptionsContainsTest,
+    TReplicationCardFetchOptionsContainsTest,
     ::testing::Values(
         std::tuple(
             TReplicationCardFetchOptions {
@@ -94,8 +94,93 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeHistory = true,
                 .IncludeReplicatedTableOptions = false,
             },
-            false)
-));
+            false)));
+
+
+class TReplicationCardFetchOptionsOrTest
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        TReplicationCardFetchOptions,
+        TReplicationCardFetchOptions,
+        TReplicationCardFetchOptions>>
+{ };
+
+TEST_P(TReplicationCardFetchOptionsOrTest, Or)
+{
+    const auto& params = GetParam();
+    auto self = std::get<0>(params);
+    auto& other = std::get<1>(params);
+    auto expected = std::get<2>(params);
+
+
+    EXPECT_EQ(self |= other, expected)
+        << "progress: " << std::get<0>(params) << std::endl
+        << "update: " << std::get<1>(params) << std::endl
+        << "expected: " << std::get<2>(params) << std::endl
+        << "actual: " << self.Contains(other) << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TReplicationCardFetchOptionsOrTest,
+    TReplicationCardFetchOptionsOrTest,
+    ::testing::Values(
+        std::tuple(
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = false,
+                .IncludeProgress = false,
+                .IncludeHistory = false,
+                .IncludeReplicatedTableOptions = false,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            }),
+        std::tuple(
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            }),
+        std::tuple(
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = false,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = false,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = false,
+                .IncludeProgress = false,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = false,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            })));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -192,8 +277,7 @@ INSTANTIATE_TEST_SUITE_P(
             ETableReplicaMode::Async,
             ETableReplicaState::Enabled,
             std::vector<TReplicaHistoryItem>(),
-            false)
-));
+            false)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -324,8 +408,7 @@ INSTANTIATE_TEST_SUITE_P(
     TReplicationCardComputeReplicasLagTest,
     ::testing::Values(
         TReplicationCardComputeReplicasLagTest::CreateTestDataNormal1(),
-        TReplicationCardComputeReplicasLagTest::CreateTestDataLaggingSyncReplica()
-));
+        TReplicationCardComputeReplicasLagTest::CreateTestDataLaggingSyncReplica()));
 
 ////////////////////////////////////////////////////////////////////////////////
 

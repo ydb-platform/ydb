@@ -6,7 +6,6 @@ SRCS(
     kqp_effects.cpp
     kqp_output_stream.cpp
     kqp_program_builder.cpp
-    kqp_compute_scheduler.cpp
     kqp_read_actor.cpp
     kqp_read_iterator_common.cpp
     kqp_read_table.cpp
@@ -26,6 +25,12 @@ SRCS(
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp
+
+    scheduler/new/kqp_compute_scheduler_service.cpp
+    scheduler/new/kqp_schedulable_actor.cpp
+    scheduler/new/tree/dynamic.cpp
+    scheduler/new/tree/snapshot.cpp
+    scheduler/old/kqp_compute_scheduler.cpp
 )
 
 PEERDIR(
@@ -45,7 +50,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
-    yql/essentials/minikql/computation/llvm14
+    yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils
 )

@@ -165,13 +165,13 @@ namespace NKikimr::NPrivate {
                 Deadline = now + CommonLiveTime;
             }
 
-            Y_ABORT_UNLESS(record.HasOriginalBlobId());
+            Y_VERIFY_S(record.HasOriginalBlobId(), VDiskLogPrefix);
             OriginalBlobId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
-            Y_ABORT_UNLESS(record.HasPatchedBlobId());
+            Y_VERIFY_S(record.HasPatchedBlobId(), VDiskLogPrefix);
             PatchedBlobId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
-            Y_ABORT_UNLESS(record.HasVDiskID());
+            Y_VERIFY_S(record.HasVDiskID(), VDiskLogPrefix);
             VDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-            Y_ABORT_UNLESS(record.HasCookie());
+            Y_VERIFY_S(record.HasCookie(), VDiskLogPrefix);
             FoundPartsEvent = std::make_unique<TEvBlobStorage::TEvVPatchFoundParts>(
                     NKikimrProto::OK, OriginalBlobId, PatchedBlobId, VDiskId, record.GetCookie(), now, ErrorReason, &record,
                     SkeletonFrontIDPtr, VPatchFoundPartsMsgsPtr, getHistogram, IncarnationGuid);
@@ -236,7 +236,7 @@ namespace NKikimr::NPrivate {
             AddMark((FoundOriginalParts.size() ? "Found parts" : "Parts were not found"));
             CurrentEventTrace = nullptr;
 #endif
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, FoundPartsEvent.release(), Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, FoundPartsEvent.release(), Cookie, VCtx, {});
         }
 
         void PullOriginalPart(ui64 pullingPart) {
@@ -257,7 +257,7 @@ namespace NKikimr::NPrivate {
         void HandleVGetRangeResult(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
             Become(&TThis::WaitState);
             NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
-            Y_ABORT_UNLESS(record.HasStatus());
+            Y_VERIFY_S(record.HasStatus(), VCtx->VDiskLogPrefix);
 
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP06,
                     VDiskLogPrefix << " TEvVPatch: received parts index;",
@@ -287,7 +287,7 @@ namespace NKikimr::NPrivate {
             // it has to have only one result
             auto &item = record.GetResult(0);
             FoundOriginalParts.reserve(item.PartsSize());
-            Y_ABORT_UNLESS(item.HasStatus());
+            Y_VERIFY_S(item.HasStatus(), VDiskLogPrefix);
             if (item.GetStatus() == NKikimrProto::OK) {
                 for (ui32 partId : item.GetParts()) {
                     FoundOriginalParts.push_back(partId);
@@ -313,7 +313,7 @@ namespace NKikimr::NPrivate {
                     (PatchedPartId, (ui32)PatchedPartId),
                     (Status, status),
                     (ErrorReason, ErrorReason));
-            Y_ABORT_UNLESS(ResultEvent);
+            Y_VERIFY_S(ResultEvent, VDiskLogPrefix);
             ResultEvent->SetStatus(status, ErrorReason);
 #if VDISK_SKELETON_TRACE
             if (CurrentEventTrace) {
@@ -325,13 +325,13 @@ namespace NKikimr::NPrivate {
             if (forceEnd) {
                 ResultEvent->SetForceEndResponse();
             }
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, ResultEvent.release(), Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, ResultEvent.release(), Cookie, VCtx, {});
         }
 
         void HandleVGetResult(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
             NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
             AddMark("Recieve VGetResult");
-            Y_ABORT_UNLESS(record.HasStatus());
+            Y_VERIFY_S(record.HasStatus(), VDiskLogPrefix);
             if (record.GetStatus() != NKikimrProto::OK) {
                 ErrorReason = TStringBuilder() << "Recieve not OK status from VGetResult,"
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
@@ -352,7 +352,7 @@ namespace NKikimr::NPrivate {
             }
 
             auto &item = *record.MutableResult(0);
-            Y_ABORT_UNLESS(item.HasStatus());
+            Y_VERIFY_S(item.HasStatus(), VDiskLogPrefix);
             if (item.GetStatus() != NKikimrProto::OK) {
                 ErrorReason = TStringBuilder() << "Recieve not OK status from VGetResult,"
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
@@ -364,10 +364,10 @@ namespace NKikimr::NPrivate {
                 return;
             }
 
-            Y_ABORT_UNLESS(item.HasBlobID());
+            Y_VERIFY_S(item.HasBlobID(), VDiskLogPrefix);
             TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
 
-            Y_ABORT_UNLESS(ev->Get()->HasBlob(item));
+            Y_VERIFY_S(ev->Get()->HasBlob(item), VDiskLogPrefix);
             Buffer = ev->Get()->GetBlobData(item);
 
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP08,
@@ -470,15 +470,15 @@ namespace NKikimr::NPrivate {
                         TLogoBlobID(PatchedBlobId, xorReceiver.PartId),
                         xorReceiver.VDiskId, OriginalPartId, Deadline, 0);
                 for (auto &diff : xorDiffs) {
-                    Y_ABORT_UNLESS(diff.Offset < GType.PartSize(PatchedBlobId));
-                    Y_ABORT_UNLESS(diff.Offset + diff.GetDiffLength() <= GType.PartSize(PatchedBlobId));
+                    Y_VERIFY_S(diff.Offset < GType.PartSize(PatchedBlobId), VDiskLogPrefix);
+                    Y_VERIFY_S(diff.Offset + diff.GetDiffLength() <= GType.PartSize(PatchedBlobId), VDiskLogPrefix);
                     xorDiff->AddDiff(diff.Offset, diff.Buffer);
                 }
                 TVDiskIdShort shortId(xorReceiver.VDiskId);
-                Y_ABORT_UNLESS(VPatchCtx);
-                Y_ABORT_UNLESS(VPatchCtx->AsyncBlobQueues);
+                Y_VERIFY_S(VPatchCtx, VDiskLogPrefix);
+                Y_VERIFY_S(VPatchCtx->AsyncBlobQueues, VDiskLogPrefix);
                 auto it = VPatchCtx->AsyncBlobQueues.find(shortId);
-                Y_ABORT_UNLESS(it != VPatchCtx->AsyncBlobQueues.end());
+                Y_VERIFY_S(it != VPatchCtx->AsyncBlobQueues.end(), VDiskLogPrefix);
 
                 TInstant now = TActivationContext::Now();
                 NKikimrBlobStorage::TEvVPatchXorDiff &record = xorDiff->Record;
@@ -545,7 +545,7 @@ namespace NKikimr::NPrivate {
                 CurrentEventTrace->AdditionalTrace = PatchActorTrace;
             }
 #endif
-            Y_ABORT_UNLESS(record.HasCookie());
+            Y_VERIFY_S(record.HasCookie(), VDiskLogPrefix);
             AddMark("Receive TEvVPatchDiff");
 
             TLogoBlobID originalPartBlobId = LogoBlobIDFromLogoBlobID(record.GetOriginalPartBlobId());
@@ -576,7 +576,7 @@ namespace NKikimr::NPrivate {
                     (ParityPart, (PatchedPartId <= GType.DataParts() ? "no" : "yes")),
                     (ForceEnd, (forceEnd ? "yes" : "no")));
 
-            Y_ABORT_UNLESS(!ResultEvent);
+            Y_VERIFY_S(!ResultEvent, VDiskLogPrefix);
             TInstant now = TActivationContext::Now();
 
             ResultEvent = std::make_unique<TEvBlobStorage::TEvVPatchResult>(
@@ -594,8 +594,8 @@ namespace NKikimr::NPrivate {
             }
 
             for (auto &protoXorReceiver : record.GetXorReceivers()) {
-                Y_ABORT_UNLESS(protoXorReceiver.HasVDiskID());
-                Y_ABORT_UNLESS(protoXorReceiver.HasPartId());
+                Y_VERIFY_S(protoXorReceiver.HasVDiskID(), VDiskLogPrefix);
+                Y_VERIFY_S(protoXorReceiver.HasPartId(), VDiskLogPrefix);
                 XorReceivers.emplace_back(
                         VDiskIDFromVDiskID(protoXorReceiver.GetVDiskID()),
                         protoXorReceiver.GetPartId());
@@ -616,7 +616,7 @@ namespace NKikimr::NPrivate {
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev) {
             NKikimrBlobStorage::TEvVPutResult &record = ev->Get()->Record;
-            Y_ABORT_UNLESS(record.HasStatus());
+            Y_VERIFY_S(record.HasStatus(), VDiskLogPrefix);
 
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP10,
                     VDiskLogPrefix << " TEvVPatch: received put result;",
@@ -653,12 +653,12 @@ namespace NKikimr::NPrivate {
                 ev->Get()->VDiskSkeletonTrace->AddMark("Error: HandleError TEvVPatchXorDiff");
             }
 #endif
-            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VCtx, ev->Get()->Record.GetHandleClass());
         }
 
         void Handle(TEvBlobStorage::TEvVPatchXorDiff::TPtr &ev) {
             NKikimrBlobStorage::TEvVPatchXorDiff &record = ev->Get()->Record;
-            Y_ABORT_UNLESS(record.HasFromPartId());
+            Y_VERIFY_S(record.HasFromPartId(), VDiskLogPrefix);
             ui8 fromPart = record.GetFromPartId();
             ui8 toPart = OriginalPartId;
             TVector<TDiff> xorDiffs = PullDiff(record, true);
@@ -691,7 +691,7 @@ namespace NKikimr::NPrivate {
             }
 #endif
 
-            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VCtx, ev->Get()->Record.GetHandleClass());
 
             if (!CheckDiff(xorDiffs, "XorDiff from datapart")) {
                 AddMark("Error: Incorrect xor diff");

@@ -24,14 +24,14 @@ COPY --chmod=0644 /liblibaio-dynamic.so /lib/liblibaio-dynamic.so
 ###
 # Base image with google brekpad assets
 ###
+
 FROM ${BREAKPAD_INIT_IMAGE}:${BREAKPAD_INIT_IMAGE_TAG} AS breakpad_init
-
-
 FROM base AS breakpad-setuid
 COPY --from=breakpad_init /usr/lib/libbreakpad_init.so /usr/lib/libbreakpad_init.so
 # workaround for old docker versions
 # https://github.com/moby/buildkit/issues/3920
 RUN /usr/bin/chmod 4644 /usr/lib/libbreakpad_init.so
+
 
 FROM base AS base-breakpad
 RUN \

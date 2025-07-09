@@ -5,8 +5,8 @@
 #include "pretty_table.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/set.h>
@@ -74,7 +74,7 @@ private:
 
 class TCommandWithOutput: virtual public TCommandWithFormat {
 protected:
-    void AddOutputFormats(TClientCommand::TConfig& config, 
+    void AddOutputFormats(TClientCommand::TConfig& config,
                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::Pretty);
     void ParseOutputFormats();
 
@@ -158,7 +158,7 @@ private:
     void PrintPretty(const NJson::TJsonValue& plan);
     void PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets);
     void PrintPrettyTable(const NJson::TJsonValue& plan);
-    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table);
+    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast = true, TVector<bool> hasMore = TVector<bool>());
     void PrintJson(const TString& plan);
     void PrintSimplifyJson(const NJson::TJsonValue& plan);
     TString JsonToString(const NJson::TJsonValue& jsonValue);

@@ -31,7 +31,7 @@ namespace NUtil {
 
     class ILogged {
     public:
-        virtual void LogLn(ELnLev, const TString&) const noexcept = 0;
+        virtual void LogLn(ELnLev, const TString&) const = 0;
     };
 
     class TLogLn : public TStringOutput {
@@ -73,7 +73,7 @@ namespace NUtil {
     class ILogger {
     public:
         virtual ~ILogger() = default;
-        virtual TLogLn Log(ELnLev) const noexcept = 0;
+        virtual TLogLn Log(ELnLev) const = 0;
     };
 
 }

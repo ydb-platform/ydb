@@ -33,6 +33,10 @@ namespace NMonitoring {
         virtual void OnHistogram(TInstant time, IHistogramSnapshotPtr snapshot) = 0;
         virtual void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) = 0;
         virtual void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) = 0;
+
+        virtual void OnMemOnly(bool isMemOnly) {
+            Y_UNUSED(isMemOnly);
+        }
     };
 
     using IMetricConsumerPtr = THolder<IMetricConsumer>;

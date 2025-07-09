@@ -47,6 +47,8 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
+        auto &peer = Request->Get()->Record.GetPeerName();
+
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxRemoveTenant: "
                     << Request->Get()->Record.ShortDebugString());
 
@@ -79,6 +81,7 @@ public:
 
         Self->DbUpdateTenantState(Tenant, TTenant::REMOVING_SUBDOMAIN, txc, ctx);
         Self->DbUpdateTenantUserToken(Tenant, token, txc, ctx);
+        Self->DbUpdateTenantPeerName(Tenant, peer, txc, ctx);
 
         return true;
     }

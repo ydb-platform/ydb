@@ -383,6 +383,14 @@ public:
         for (const TDataCenterId& dc : tablet.NodeFilter.AllowedDataCenters) {
             allowedDataCenters.push_back(DataCenterFromString(dc));
         }
+
+        TDomainInfo* domain = Self->FindDomain(ObjectDomain);
+        if (domain && domain->Stopped) {
+            tablet.State = ETabletState::Stopped;
+            tablet.BecomeStopped();
+            tablet.StoppedByTenant = true;
+        }
+
         db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::Owner>(tablet.Owner),
                                                         NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet.NodeId),
                                                         NIceDb::TUpdate<Schema::Tablet::TabletType>(tablet.Type),
@@ -398,7 +406,8 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::ObjectID>(tablet.ObjectId.second),
                                                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(ObjectDomain),
                                                         NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics),
-                                                        NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy));
+                                                        NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy),
+                                                        NIceDb::TUpdate<Schema::Tablet::StoppedByTenant>(tablet.StoppedByTenant));
 
         Self->PendingCreateTablets.erase({OwnerId, OwnerIdx});
 

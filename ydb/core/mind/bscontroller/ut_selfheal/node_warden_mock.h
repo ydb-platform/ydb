@@ -180,7 +180,8 @@ public:
     }
 
     void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-        Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr, false));
+        Send(ev->Sender, new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(),
+            nullptr, false, nullptr));
     }
 
     STRICT_STFUNC(StateFunc, {
@@ -191,5 +192,8 @@ public:
         cFunc(EvUpdateDriveStatus, UpdateDriveStatus);
         cFunc(TEvents::TSystem::Wakeup, Connect);
         hFunc(TEvNodeWardenQueryStorageConfig, Handle);
+        IgnoreFunc(NStorage::TEvNodeWardenUpdateCache);
+        IgnoreFunc(NStorage::TEvNodeWardenQueryCache);
+        IgnoreFunc(NStorage::TEvNodeWardenUnsubscribeFromCache);
     })
 };

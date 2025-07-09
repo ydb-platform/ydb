@@ -91,9 +91,9 @@ protected:
             : TBase(mutables, source, StateKind)
             , TLLVMBase(source, inWidth, outWidth, {
                 .ThisPtr = reinterpret_cast<uintptr_t>(this),
-                .InitStateMethPtr = GetMethodPtr(&TDerived::InitState),
-                .PrepareInputMethPtr = GetMethodPtr(&TDerived::PrepareInput),
-                .DoProcessMethPtr = GetMethodPtr(&TDerived::DoProcess)
+                .InitStateMethPtr = GetMethodPtr<&TDerived::InitState>(),
+                .PrepareInputMethPtr = GetMethodPtr<&TDerived::PrepareInput>(),
+                .DoProcessMethPtr = GetMethodPtr<&TDerived::DoProcess>()
             }) {}
 
 #ifndef MKQL_DISABLE_CODEGEN

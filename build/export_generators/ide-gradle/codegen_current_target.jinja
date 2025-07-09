@@ -1,0 +1,18 @@
+{%- set current_target_object_indexes = [] -%}
+
+{%- set copy_files = current_target.target_commands|selectattr("macro", "eq", "copy_file") -%}
+{%- if copy_files|length -%}
+{%-    set current_target_object_indexes = current_target_object_indexes + copy_files|map(attribute='_object_index') -%}
+{%- endif -%}
+
+
+{%- set move_files = current_target.target_commands|selectattr("macro", "eq", "move_file") -%}
+{%- if move_files|length -%}
+{%-    set current_target_object_indexes = current_target_object_indexes + move_files|map(attribute='_object_index') -%}
+{%- endif -%}
+
+{%- include "[generator]/codegen_run_program.jinja" -%}
+{%- include "[generator]/codegen_run_java_program.jinja" -%}
+{%- include "[generator]/codegen_copy_file.jinja" -%}
+{%- include "[generator]/codegen_move_file.jinja" -%}
+{%- include "[generator]/codegen_depends.jinja" -%}

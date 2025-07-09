@@ -9,6 +9,7 @@ SRCS(
     yql_simple_udf_resolver.h
     yql_udf_resolver_with_index.cpp
     yql_udf_resolver_with_index.h
+    yql_udf_resolver_logger.cpp
 )
 
 PEERDIR(

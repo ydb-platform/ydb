@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/lib/secret_masker/secret_masker.h>
 
 #include <yql/essentials/core/file_storage/file_storage.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -21,6 +22,7 @@ struct TYtNativeServices {
     // allow anonymous access for tests
     bool DisableAnonymousClusterAccess = false;
     IMetricsRegistryPtr Metrics;
+    ISecretMasker::TPtr SecretMasker;
 };
 
 IYtGateway::TPtr CreateYtNativeGateway(const TYtNativeServices& services);

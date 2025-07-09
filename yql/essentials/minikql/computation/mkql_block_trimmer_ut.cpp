@@ -13,6 +13,8 @@
 using namespace NYql::NUdf;
 using namespace NKikimr;
 
+namespace {
+
 struct TBlockTrimmerTestData {
     TBlockTrimmerTestData()
         : FunctionRegistry(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry()))
@@ -31,6 +33,22 @@ struct TBlockTrimmerTestData {
     NMiniKQL::TMemoryUsageInfo MemInfo;
     arrow::MemoryPool* const ArrowPool;
 };
+
+void CheckTrimmedSlice(std::shared_ptr<arrow::ArrayData> array) {
+    UNIT_ASSERT_VALUES_EQUAL(array->offset, 0);
+    for (const auto& buffer : array->buffers) {
+        if (buffer) {
+            UNIT_ASSERT_GE(buffer->size(), 1);
+        }
+    }
+    for (const auto& childData : array->child_data) {
+        if (childData) {
+            CheckTrimmedSlice(childData);
+        }
+    }
+}
+
+}  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
     Y_UNIT_TEST(TestFixedSize) {
@@ -60,6 +78,7 @@ Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
         for (size_t sliceIdx = 0; sliceIdx < testSize / sliceSize; sliceIdx++) {
             auto slice = Chop(array, sliceSize);
             auto trimmedSlice = trimmer->Trim(slice);
+            CheckTrimmedSlice(trimmedSlice);
 
             for (size_t elemIdx = 0; elemIdx < sliceSize; elemIdx++) {
                 TBlockItem lhs = reader->GetItem(*slice, elemIdx);
@@ -105,6 +124,7 @@ Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
         for (size_t sliceIdx = 0; sliceIdx < testSize / sliceSize; sliceIdx++) {
             auto slice = Chop(array, sliceSize);
             auto trimmedSlice = trimmer->Trim(slice);
+            CheckTrimmedSlice(trimmedSlice);
 
             for (size_t elemIdx = 0; elemIdx < sliceSize; elemIdx++) {
                 TBlockItem lhs = reader->GetItem(*slice, elemIdx);
@@ -145,6 +165,7 @@ Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
         for (size_t sliceIdx = 0; sliceIdx < testSize / sliceSize; sliceIdx++) {
             auto slice = Chop(array, sliceSize);
             auto trimmedSlice = trimmer->Trim(slice);
+            CheckTrimmedSlice(trimmedSlice);
 
             for (size_t elemIdx = 0; elemIdx < sliceSize; elemIdx++) {
                 TBlockItem lhs = reader->GetItem(*slice, elemIdx);
@@ -191,6 +212,7 @@ Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
         for (size_t sliceIdx = 0; sliceIdx < testSize / sliceSize; sliceIdx++) {
             auto slice = Chop(array, sliceSize);
             auto trimmedSlice = trimmer->Trim(slice);
+            CheckTrimmedSlice(trimmedSlice);
 
             for (size_t elemIdx = 0; elemIdx < sliceSize; elemIdx++) {
                 TBlockItem lhs = reader->GetItem(*slice, elemIdx);
@@ -256,6 +278,7 @@ Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
         for (size_t sliceIdx = 0; sliceIdx < testSize / sliceSize; sliceIdx++) {
             auto slice = Chop(array, sliceSize);
             auto trimmedSlice = trimmer->Trim(slice);
+            CheckTrimmedSlice(trimmedSlice);
 
             for (size_t elemIdx = 0; elemIdx < sliceSize; elemIdx++) {
                 TBlockItem lhs = reader->GetItem(*slice, elemIdx);
@@ -305,6 +328,7 @@ Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
         for (size_t sliceIdx = 0; sliceIdx < testSize / sliceSize; sliceIdx++) {
             auto slice = Chop(array, sliceSize);
             auto trimmedSlice = trimmer->Trim(slice);
+            CheckTrimmedSlice(trimmedSlice);
 
             for (size_t elemIdx = 0; elemIdx < sliceSize; elemIdx++) {
                 TBlockItem lhs = reader->GetItem(*slice, elemIdx);
@@ -357,6 +381,7 @@ Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
             for (size_t sliceIdx = 0; sliceIdx < testSize / sliceSize; sliceIdx++) {
                 auto slice = Chop(array, sliceSize);
                 auto trimmedSlice = trimmer->Trim(slice);
+                CheckTrimmedSlice(trimmedSlice);
 
                 for (size_t elemIdx = 0; elemIdx < sliceSize; elemIdx++) {
                     TBlockItem lhs = reader->GetItem(*slice, elemIdx);

@@ -131,7 +131,7 @@ static bool is_utc_time_zone(const char *str) {
     size_t len = strlen(str);
 
     if (len > 0) {
-        if (str[0] == 'Z') {
+        if (tolower((uint8_t)str[0]) == 'z') {
             return true;
         }
 
@@ -207,232 +207,7 @@ enum parser_state {
     FINISHED,
 };
 
-static int s_parse_iso_8601_basic(const struct aws_byte_cursor *date_str_cursor, struct tm *parsed_time) {
-    size_t index = 0;
-    size_t state_start_index = 0;
-    enum parser_state state = ON_YEAR;
-    bool error = false;
-
-    AWS_ZERO_STRUCT(*parsed_time);
-
-    while (state < FINISHED && !error && index < date_str_cursor->len) {
-        char c = date_str_cursor->ptr[index];
-        size_t sub_index = index - state_start_index;
-        switch (state) {
-            case ON_YEAR:
-                if (aws_isdigit(c)) {
-                    parsed_time->tm_year = parsed_time->tm_year * 10 + (c - '0');
-                    if (sub_index == 3) {
-                        state = ON_MONTH;
-                        state_start_index = index + 1;
-                        parsed_time->tm_year -= 1900;
-                    }
-                } else {
-                    error = true;
-                }
-                break;
-
-            case ON_MONTH:
-                if (aws_isdigit(c)) {
-                    parsed_time->tm_mon = parsed_time->tm_mon * 10 + (c - '0');
-                    if (sub_index == 1) {
-                        state = ON_MONTH_DAY;
-                        state_start_index = index + 1;
-                        parsed_time->tm_mon -= 1;
-                    }
-                } else {
-                    error = true;
-                }
-                break;
-
-            case ON_MONTH_DAY:
-                if (c == 'T' && sub_index == 2) {
-                    state = ON_HOUR;
-                    state_start_index = index + 1;
-                } else if (aws_isdigit(c)) {
-                    parsed_time->tm_mday = parsed_time->tm_mday * 10 + (c - '0');
-                } else {
-                    error = true;
-                }
-                break;
-
-            case ON_HOUR:
-                if (aws_isdigit(c)) {
-                    parsed_time->tm_hour = parsed_time->tm_hour * 10 + (c - '0');
-                    if (sub_index == 1) {
-                        state = ON_MINUTE;
-                        state_start_index = index + 1;
-                    }
-                } else {
-                    error = true;
-                }
-                break;
-
-            case ON_MINUTE:
-                if (aws_isdigit(c)) {
-                    parsed_time->tm_min = parsed_time->tm_min * 10 + (c - '0');
-                    if (sub_index == 1) {
-                        state = ON_SECOND;
-                        state_start_index = index + 1;
-                    }
-                } else {
-                    error = true;
-                }
-                break;
-
-            case ON_SECOND:
-                if (aws_isdigit(c)) {
-                    parsed_time->tm_sec = parsed_time->tm_sec * 10 + (c - '0');
-                    if (sub_index == 1) {
-                        state = ON_TZ;
-                        state_start_index = index + 1;
-                    }
-                } else {
-                    error = true;
-                }
-                break;
-
-            case ON_TZ:
-                if (c == 'Z' && (sub_index == 0 || sub_index == 3)) {
-                    state = FINISHED;
-                } else if (!aws_isdigit(c) || sub_index > 3) {
-                    error = true;
-                }
-                break;
-
-            default:
-                error = true;
-                break;
-        }
-
-        index++;
-    }
-
-    /* ISO8601 supports date only with no time portion. state ==ON_MONTH_DAY catches this case. */
-    return (state == FINISHED || state == ON_MONTH_DAY) && !error ? AWS_OP_SUCCESS : AWS_OP_ERR;
-}
-
-static int s_parse_iso_8601(const struct aws_byte_cursor *date_str_cursor, struct tm *parsed_time) {
-    size_t index = 0;
-    size_t state_start_index = 0;
-    enum parser_state state = ON_YEAR;
-    bool error = false;
-    bool advance = true;
-
-    AWS_ZERO_STRUCT(*parsed_time);
-
-    while (state < FINISHED && !error && index < date_str_cursor->len) {
-        char c = date_str_cursor->ptr[index];
-        switch (state) {
-            case ON_YEAR:
-                if (c == '-' && index - state_start_index == 4) {
-                    state = ON_MONTH;
-                    state_start_index = index + 1;
-                    parsed_time->tm_year -= 1900;
-                } else if (aws_isdigit(c)) {
-                    parsed_time->tm_year = parsed_time->tm_year * 10 + (c - '0');
-                } else {
-                    error = true;
-                }
-                break;
-            case ON_MONTH:
-                if (c == '-' && index - state_start_index == 2) {
-                    state = ON_MONTH_DAY;
-                    state_start_index = index + 1;
-                    parsed_time->tm_mon -= 1;
-                } else if (aws_isdigit(c)) {
-                    parsed_time->tm_mon = parsed_time->tm_mon * 10 + (c - '0');
-                } else {
-                    error = true;
-                }
-
-                break;
-            case ON_MONTH_DAY:
-                if (c == 'T' && index - state_start_index == 2) {
-                    state = ON_HOUR;
-                    state_start_index = index + 1;
-                } else if (aws_isdigit(c)) {
-                    parsed_time->tm_mday = parsed_time->tm_mday * 10 + (c - '0');
-                } else {
-                    error = true;
-                }
-                break;
-            /* note: no time portion is spec compliant. */
-            case ON_HOUR:
-                /* time parts can be delimited by ':' or just concatenated together, but must always be 2 digits. */
-                if (index - state_start_index == 2) {
-                    state = ON_MINUTE;
-                    state_start_index = index + 1;
-                    if (aws_isdigit(c)) {
-                        state_start_index = index;
-                        advance = false;
-                    } else if (c != ':') {
-                        error = true;
-                    }
-                } else if (aws_isdigit(c)) {
-                    parsed_time->tm_hour = parsed_time->tm_hour * 10 + (c - '0');
-                } else {
-                    error = true;
-                }
-
-                break;
-            case ON_MINUTE:
-                /* time parts can be delimited by ':' or just concatenated together, but must always be 2 digits. */
-                if (index - state_start_index == 2) {
-                    state = ON_SECOND;
-                    state_start_index = index + 1;
-                    if (aws_isdigit(c)) {
-                        state_start_index = index;
-                        advance = false;
-                    } else if (c != ':') {
-                        error = true;
-                    }
-                } else if (aws_isdigit(c)) {
-                    parsed_time->tm_min = parsed_time->tm_min * 10 + (c - '0');
-                } else {
-                    error = true;
-                }
-
-                break;
-            case ON_SECOND:
-                if (c == 'Z' && index - state_start_index == 2) {
-                    state = FINISHED;
-                    state_start_index = index + 1;
-                } else if (c == '.' && index - state_start_index == 2) {
-                    state = ON_TZ;
-                    state_start_index = index + 1;
-                } else if (aws_isdigit(c)) {
-                    parsed_time->tm_sec = parsed_time->tm_sec * 10 + (c - '0');
-                } else {
-                    error = true;
-                }
-
-                break;
-            case ON_TZ:
-                if (c == 'Z') {
-                    state = FINISHED;
-                    state_start_index = index + 1;
-                } else if (!aws_isdigit(c)) {
-                    error = true;
-                }
-                break;
-            default:
-                error = true;
-                break;
-        }
-
-        if (advance) {
-            index++;
-        } else {
-            advance = true;
-        }
-    }
-
-    /* ISO8601 supports date only with no time portion. state ==ON_MONTH_DAY catches this case. */
-    return (state == FINISHED || state == ON_MONTH_DAY) && !error ? AWS_OP_SUCCESS : AWS_OP_ERR;
-}
-
-static int s_parse_rfc_822(
+static bool s_parse_rfc_822(
     const struct aws_byte_cursor *date_str_cursor,
     struct tm *parsed_time,
     struct aws_date_time *dt) {
@@ -446,7 +221,7 @@ static int s_parse_rfc_822(
     AWS_ZERO_STRUCT(*parsed_time);
 
     while (!error && index < len) {
-        char c = date_str_cursor->ptr[index];
+        char c = (char)date_str_cursor->ptr[index];
 
         switch (state) {
             /* week day abbr is optional. */
@@ -564,7 +339,186 @@ static int s_parse_rfc_822(
         }
     }
 
-    return error || state != ON_TZ ? AWS_OP_ERR : AWS_OP_SUCCESS;
+    return error || state != ON_TZ ? false : true;
+}
+
+/* Returns true if the next N characters are digits, advancing the string and getting their numeric value */
+static bool s_read_n_digits(struct aws_byte_cursor *str, size_t n, int *out_val) {
+    int val = 0;
+    if (str->len < n) {
+        return false;
+    }
+
+    for (size_t i = 0; i < n; ++i) {
+        uint8_t c = str->ptr[i];
+        if (aws_isdigit(c)) {
+            val = val * 10 + (c - '0');
+        } else {
+            return false;
+        }
+    }
+
+    aws_byte_cursor_advance(str, n);
+    *out_val = val;
+    return true;
+}
+
+/* Returns true if there's 1 more character, advancing the string and getting the character's value. */
+static bool s_read_1_char(struct aws_byte_cursor *str, uint8_t *out_c) {
+    if (str->len == 0) {
+        return false;
+    }
+
+    *out_c = str->ptr[0];
+    aws_byte_cursor_advance(str, 1);
+    return true;
+}
+
+/* Returns true (and advances str) if next character is c */
+static bool s_advance_if_next_char_is(struct aws_byte_cursor *str, uint8_t c) {
+    if (str->len == 0 || str->ptr[0] != c) {
+        return false;
+    }
+
+    aws_byte_cursor_advance(str, 1);
+    return true;
+}
+
+/* If the (optional) fractional seconds (".123" or ",123") are next, str is advanced.
+ * Returns false if there was an error */
+static bool s_skip_optional_fractional_seconds(struct aws_byte_cursor *str) {
+    if (str->len == 0) {
+        return true;
+    }
+
+    uint8_t c = str->ptr[0];
+    if (c != '.' && c != ',') {
+        return true;
+    }
+
+    size_t num_digits = 0;
+    for (size_t i = 1; i < str->len; ++i) {
+        if (aws_isdigit(str->ptr[i])) {
+            ++num_digits;
+        } else {
+            break;
+        }
+    }
+
+    if (num_digits == 0) {
+        return false;
+    }
+
+    aws_byte_cursor_advance(str, 1 + num_digits);
+    return true;
+}
+
+/* Parses ISO 8601, both extended and basic format are accepted.
+ * Returns true if successful. */
+static bool s_parse_iso_8601(struct aws_byte_cursor str, struct tm *parsed_time, time_t *seconds_offset) {
+    AWS_ZERO_STRUCT(*parsed_time);
+    *seconds_offset = 0;
+    uint8_t c = 0;
+
+    /* read year */
+    if (!s_read_n_digits(&str, 4, &parsed_time->tm_year)) {
+        return false;
+    }
+    parsed_time->tm_year -= 1900;
+
+    /* be lenient, allow date with separator or not */
+    bool has_date_separator = s_advance_if_next_char_is(&str, '-');
+
+    /* read month */
+    if (!s_read_n_digits(&str, 2, &parsed_time->tm_mon)) {
+        return false;
+    }
+    parsed_time->tm_mon -= 1;
+
+    if (has_date_separator) {
+        if (!s_read_1_char(&str, &c) || c != '-') {
+            return false;
+        }
+    }
+
+    /* read month-day */
+    if (!s_read_n_digits(&str, 2, &parsed_time->tm_mday)) {
+        return false;
+    }
+
+    /* ISO8601 supports date only with no time portion */
+    if (str.len == 0) {
+        return true;
+    }
+
+    /* followed by T or space (allowed by rfc3339#section-5.6) */
+    if (!s_read_1_char(&str, &c) || (tolower(c) != 't' && c != ' ')) {
+        return false;
+    }
+
+    /* read hours */
+    if (!s_read_n_digits(&str, 2, &parsed_time->tm_hour)) {
+        return false;
+    }
+
+    /* be lenient, allow time with separator or not */
+    bool has_time_separator = s_advance_if_next_char_is(&str, ':');
+
+    /* read minutes */
+    if (!s_read_n_digits(&str, 2, &parsed_time->tm_min)) {
+        return false;
+    }
+
+    if (has_time_separator) {
+        if (!s_read_1_char(&str, &c) || c != ':') {
+            return false;
+        }
+    }
+
+    /* read seconds */
+    if (!s_read_n_digits(&str, 2, &parsed_time->tm_sec)) {
+        return false;
+    }
+
+    /* fractional seconds are optional (discard value since tm struct has no corresponding field) */
+    if (!s_skip_optional_fractional_seconds(&str)) {
+        return false;
+    }
+
+    /* read final Z, or (+/-) indicating there will be an offset */
+    if (!s_read_1_char(&str, &c)) {
+        return false;
+    }
+
+    if (tolower(c) == 'z') {
+        /* Success! */
+        return true;
+    }
+
+    if (c != '+' && c != '-') {
+        return false;
+    }
+
+    bool negative_offset = c == '-';
+
+    /* read hours offset */
+    int hours_offset = 0;
+    if (!s_read_n_digits(&str, 2, &hours_offset)) {
+        return false;
+    }
+
+    /* be lenient, allow offset with separator or not */
+    s_advance_if_next_char_is(&str, ':');
+
+    /* read minutes offset */
+    int minutes_offset = 0;
+    if (!s_read_n_digits(&str, 2, &minutes_offset)) {
+        return false;
+    }
+
+    /* Success! */
+    *seconds_offset = (time_t)(hours_offset * 3600 + minutes_offset * 60) * (negative_offset ? -1 : 1);
+    return true;
 }
 
 int aws_date_time_init_from_str_cursor(
@@ -579,22 +533,16 @@ int aws_date_time_init_from_str_cursor(
     bool successfully_parsed = false;
 
     time_t seconds_offset = 0;
-    if (fmt == AWS_DATE_FORMAT_ISO_8601 || fmt == AWS_DATE_FORMAT_AUTO_DETECT) {
-        if (!s_parse_iso_8601(date_str_cursor, &parsed_time)) {
-            dt->utc_assumed = true;
-            successfully_parsed = true;
-        }
-    }
-
-    if (fmt == AWS_DATE_FORMAT_ISO_8601_BASIC || (fmt == AWS_DATE_FORMAT_AUTO_DETECT && !successfully_parsed)) {
-        if (!s_parse_iso_8601_basic(date_str_cursor, &parsed_time)) {
+    if (fmt == AWS_DATE_FORMAT_ISO_8601 || fmt == AWS_DATE_FORMAT_ISO_8601_BASIC ||
+        fmt == AWS_DATE_FORMAT_AUTO_DETECT) {
+        if (s_parse_iso_8601(*date_str_cursor, &parsed_time, &seconds_offset)) {
             dt->utc_assumed = true;
             successfully_parsed = true;
         }
     }
 
     if (fmt == AWS_DATE_FORMAT_RFC822 || (fmt == AWS_DATE_FORMAT_AUTO_DETECT && !successfully_parsed)) {
-        if (!s_parse_rfc_822(date_str_cursor, &parsed_time, dt)) {
+        if (s_parse_rfc_822(date_str_cursor, &parsed_time, dt)) {
             successfully_parsed = true;
 
             if (dt->utc_assumed) {

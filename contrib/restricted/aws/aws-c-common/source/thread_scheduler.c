@@ -32,7 +32,7 @@ struct cancellation_node {
 
 static void s_destroy_callback(void *arg) {
     struct aws_thread_scheduler *scheduler = arg;
-    aws_atomic_store_int(&scheduler->should_exit, 1u);
+    aws_atomic_store_int(&scheduler->should_exit, 1U);
     aws_condition_variable_notify_all(&scheduler->thread_data.c_var);
     aws_thread_join(&scheduler->thread);
     aws_task_scheduler_clean_up(&scheduler->scheduler);
@@ -138,7 +138,7 @@ struct aws_thread_scheduler *aws_thread_scheduler_new(
     }
 
     scheduler->allocator = allocator;
-    aws_atomic_init_int(&scheduler->should_exit, 0u);
+    aws_atomic_init_int(&scheduler->should_exit, 0U);
     aws_ref_count_init(&scheduler->ref_count, scheduler, s_destroy_callback);
     aws_linked_list_init(&scheduler->thread_data.scheduling_queue);
     aws_linked_list_init(&scheduler->thread_data.cancel_queue);
@@ -182,7 +182,7 @@ void aws_thread_scheduler_schedule_future(
     aws_condition_variable_notify_one(&scheduler->thread_data.c_var);
 }
 void aws_thread_scheduler_schedule_now(struct aws_thread_scheduler *scheduler, struct aws_task *task) {
-    aws_thread_scheduler_schedule_future(scheduler, task, 0u);
+    aws_thread_scheduler_schedule_future(scheduler, task, 0U);
 }
 
 void aws_thread_scheduler_cancel_task(struct aws_thread_scheduler *scheduler, struct aws_task *task) {

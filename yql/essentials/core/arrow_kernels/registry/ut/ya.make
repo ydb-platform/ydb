@@ -17,6 +17,7 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/json2
+    yql/essentials/udfs/common/string
 )
 
 END()

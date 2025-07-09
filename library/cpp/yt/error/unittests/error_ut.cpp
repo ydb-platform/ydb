@@ -202,7 +202,7 @@ void IterateTestOverEveryRightOperand(TOverloadTest& tester)
 }
 
 template <class T>
-void SetErrorAttribute(TError* error, TString key, const T& value)
+void SetErrorAttribute(TError* error, const std::string& key, const T& value)
 {
     *error <<= TErrorAttribute(key, value);
 }
@@ -357,7 +357,7 @@ TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroExpression)
         EXPECT_EQ(outerError.GetMessage(), "Outer error");
         EXPECT_EQ(outerError.InnerErrors().size(), 1u);
         EXPECT_EQ(outerError.InnerErrors()[0].GetMessage(), "Inner error");
-        EXPECT_EQ(outerError.InnerErrors()[0].Attributes().Get<TString>("attr"), "attr_value");
+        EXPECT_EQ(outerError.InnerErrors()[0].Attributes().Get<std::string>("attr"), "attr_value");
     }
 }
 
@@ -397,6 +397,22 @@ TEST(TErrorTest, FormatCtor)
     EXPECT_EQ("Some error hello", TError("Some error %v", "hello").GetMessage());
 }
 
+TEST(TErrorTest, ExceptionCtor)
+{
+    {
+        auto error = TError(std::runtime_error("Some error"));
+        EXPECT_EQ(error.GetMessage(), "Some error");
+        EXPECT_EQ(error.Attributes().Get<std::string>("exception_type"), "std::runtime_error");
+    }
+    EXPECT_EQ(TError(std::runtime_error("Some bad char sequences: %v %Qv {}")).GetMessage(),
+        "Some bad char sequences: %v %Qv {}");
+
+    EXPECT_EQ(TError(TSimpleException("Some error")).GetMessage(),
+        "Some error");
+    EXPECT_EQ(TError(TSimpleException("Some bad char sequences: %v %d {}")).GetMessage(),
+        "Some bad char sequences: %v %d {}");
+}
+
 TEST(TErrorTest, FindRecursive)
 {
     auto inner = TError("Inner")
@@ -427,7 +443,7 @@ TEST(TErrorTest, TruncateSimple)
     EXPECT_EQ(error.GetPid(), truncatedError.GetPid());
     EXPECT_EQ(error.GetTid(), truncatedError.GetTid());
     EXPECT_EQ(error.GetDatetime(), truncatedError.GetDatetime());
-    EXPECT_EQ(error.Attributes().Get<TString>("my_attr"), truncatedError.Attributes().Get<TString>("my_attr"));
+    EXPECT_EQ(error.Attributes().Get<std::string>("my_attr"), truncatedError.Attributes().Get<std::string>("my_attr"));
     EXPECT_EQ(error.InnerErrors().size(), truncatedError.InnerErrors().size());
     EXPECT_EQ(error.InnerErrors()[0].GetMessage(), truncatedError.InnerErrors()[0].GetMessage());
 }
@@ -444,7 +460,7 @@ TEST(TErrorTest, TruncateLarge)
     auto truncatedError = error.Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ("Some long ...<message truncated>", truncatedError.GetMessage());
-    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<TString>("my_attr"));
+    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<std::string>("my_attr"));
     EXPECT_EQ(truncatedError.InnerErrors().size(), 3u);
 
     EXPECT_EQ("First inne...<message truncated>", truncatedError.InnerErrors()[0].GetMessage());
@@ -466,7 +482,7 @@ TEST(TErrorTest, TruncateSimpleRValue)
     EXPECT_EQ(error.GetPid(), truncatedError.GetPid());
     EXPECT_EQ(error.GetTid(), truncatedError.GetTid());
     EXPECT_EQ(error.GetDatetime(), truncatedError.GetDatetime());
-    EXPECT_EQ(error.Attributes().Get<TString>("my_attr"), truncatedError.Attributes().Get<TString>("my_attr"));
+    EXPECT_EQ(error.Attributes().Get<std::string>("my_attr"), truncatedError.Attributes().Get<std::string>("my_attr"));
     EXPECT_EQ(error.InnerErrors().size(), truncatedError.InnerErrors().size());
     EXPECT_EQ(error.InnerErrors()[0].GetMessage(), truncatedError.InnerErrors()[0].GetMessage());
 }
@@ -486,7 +502,7 @@ TEST(TErrorTest, TruncateLargeRValue)
 
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ("Some long ...<message truncated>", truncatedError.GetMessage());
-    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<TString>("my_attr"));
+    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<std::string>("my_attr"));
     EXPECT_EQ(truncatedError.InnerErrors().size(), 3u);
 
     EXPECT_EQ("First inne...<message truncated>", truncatedError.InnerErrors()[0].GetMessage());
@@ -524,8 +540,8 @@ TEST(TErrorTest, TruncateWhitelist)
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
 
-    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<TString>("attr1"));
-    EXPECT_EQ("Some long long attr", truncatedError.Attributes().Get<TString>("attr2"));
+    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<std::string>("attr1"));
+    EXPECT_EQ("Some long long attr", truncatedError.Attributes().Get<std::string>("attr2"));
 }
 
 TEST(TErrorTest, TruncateWhitelistRValue)
@@ -543,8 +559,8 @@ TEST(TErrorTest, TruncateWhitelistRValue)
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
 
-    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<TString>("attr1"));
-    EXPECT_EQ("Some long long attr", truncatedError.Attributes().Get<TString>("attr2"));
+    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<std::string>("attr1"));
+    EXPECT_EQ("Some long long attr", truncatedError.Attributes().Get<std::string>("attr2"));
 }
 
 TEST(TErrorTest, TruncateWhitelistInnerErrors)
@@ -563,8 +579,8 @@ TEST(TErrorTest, TruncateWhitelistInnerErrors)
     auto truncatedInnerError = truncatedError.InnerErrors()[0];
     EXPECT_EQ(truncatedInnerError.GetCode(), innerError.GetCode());
     EXPECT_EQ(truncatedInnerError.GetMessage(), innerError.GetMessage());
-    EXPECT_EQ("...<attribute truncated>...", truncatedInnerError.Attributes().Get<TString>("attr1"));
-    EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<TString>("attr2"));
+    EXPECT_EQ("...<attribute truncated>...", truncatedInnerError.Attributes().Get<std::string>("attr1"));
+    EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<std::string>("attr2"));
 }
 
 TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
@@ -585,8 +601,8 @@ TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
     auto truncatedInnerError = truncatedError.InnerErrors()[0];
     EXPECT_EQ(truncatedInnerError.GetCode(), innerError.GetCode());
     EXPECT_EQ(truncatedInnerError.GetMessage(), innerError.GetMessage());
-    EXPECT_EQ("...<attribute truncated>...", truncatedInnerError.Attributes().Get<TString>("attr1"));
-    EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<TString>("attr2"));
+    EXPECT_EQ("...<attribute truncated>...", truncatedInnerError.Attributes().Get<std::string>("attr1"));
+    EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<std::string>("attr2"));
 }
 
 TEST(TErrorTest, TruncateWhitelistSaveInnerError)
@@ -668,7 +684,7 @@ TEST(TErrorTest, YTExceptionWithAttributesToError)
         EXPECT_TRUE(boolValue);
         EXPECT_EQ(*boolValue, false);
 
-        auto stringValue = error.Attributes().Find<TString>("String value");
+        auto stringValue = error.Attributes().Find<std::string>("String value");
         EXPECT_TRUE(stringValue);
         EXPECT_EQ(*stringValue, "FooBar");
     }
@@ -677,19 +693,19 @@ TEST(TErrorTest, YTExceptionWithAttributesToError)
 TEST(TErrorTest, AttributeSerialization)
 {
     auto getWeededText = [] (const TError& err) {
-        std::vector<TString> lines;
+        std::vector<std::string> lines;
         for (const auto& line : StringSplitter(ToString(err)).Split('\n')) {
             if (!line.Contains("origin") && !line.Contains("datetime")) {
-                lines.push_back(TString{line});
+                lines.push_back(std::string{line});
             }
         }
         return JoinSeq("\n", lines);
     };
 
-    EXPECT_EQ(getWeededText(TError("E1") << TErrorAttribute("A1", "V1")), TString(
+    EXPECT_EQ(getWeededText(TError("E1") << TErrorAttribute("A1", "V1")), std::string(
         "E1\n"
         "    A1              V1\n"));
-    EXPECT_EQ(getWeededText(TError("E1") << TErrorAttribute("A1", "L1\nL2\nL3")), TString(
+    EXPECT_EQ(getWeededText(TError("E1") << TErrorAttribute("A1", "L1\nL2\nL3")), std::string(
         "E1\n"
         "    A1\n"
         "        L1\n"
@@ -771,6 +787,61 @@ TEST(TErrorTest, MacroStaticAnalysisBrokenFormat)
     // swallow([] {
     //     THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, TErrorCode{}, "Foo%v");
     // });
+}
+
+TEST(TErrorTest, Enrichers)
+{
+    static auto getAttribute = [] (const TError& error) {
+        return error.Attributes().Get<TString>("test_attribute", "");
+    };
+
+    {
+        static thread_local bool testEnricherEnabled = false;
+        testEnricherEnabled = true;
+
+        TError::RegisterEnricher([](TError* error) {
+            if (testEnricherEnabled) {
+                *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+            }
+        });
+
+        // Not from exception.
+        EXPECT_EQ(getAttribute(TError("E")), "X");
+        EXPECT_EQ(getAttribute(TError(NYT::EErrorCode::Generic, "E")), "X");
+
+        // std::exception.
+        EXPECT_EQ(getAttribute(TError(std::runtime_error("E"))), "X");
+
+        // Copying.
+        EXPECT_EQ(getAttribute(TError(TError(std::runtime_error("E")))), "X");
+        EXPECT_EQ(getAttribute(TError(TErrorException() <<= TError(std::runtime_error("E")))), "X");
+
+        testEnricherEnabled = false;
+    }
+
+    {
+        static thread_local bool testFromExceptionEnricherEnabled = false;
+        testFromExceptionEnricherEnabled = true;
+
+        TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {
+            if (testFromExceptionEnricherEnabled) {
+                *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+            }
+        });
+
+        // Not from exception.
+        EXPECT_EQ(getAttribute(TError("E")), "");
+        EXPECT_EQ(getAttribute(TError(NYT::EErrorCode::Generic, "E")), "");
+
+        // From exception.
+        EXPECT_EQ(getAttribute(TError(std::runtime_error("E"))), "X");
+        EXPECT_EQ(getAttribute(TError(TError(std::runtime_error("E")))), "X");
+
+        // From exception twice.
+        EXPECT_EQ(getAttribute(TError(TErrorException() <<= TError(std::runtime_error("E")))), "XX");
+
+        testFromExceptionEnricherEnabled = false;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

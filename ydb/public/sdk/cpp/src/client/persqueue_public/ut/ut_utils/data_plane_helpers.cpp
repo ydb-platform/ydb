@@ -1,6 +1,6 @@
 #include "data_plane_helpers.h"
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 namespace NKikimr::NPersQueueTests {
 

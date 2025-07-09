@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap {
 
 const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo) {
-    if (Snapshots.empty()) {
+    if (SnapshotByVersion.empty()) {
         PrimaryKey = indexInfo->GetPrimaryKey();
     } else {
         Y_ABORT_UNLESS(PrimaryKey->Equals(indexInfo->GetPrimaryKey()));
@@ -16,9 +16,8 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     const bool needActualization = indexInfo->GetSchemeNeedActualization();
     auto newVersion = indexInfo->GetVersion();
     auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
-    if (!itVersion.second) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("message", "Skip registered version")("version", LastSchemaVersion);
-    } else if (needActualization) {
+    AFL_VERIFY(itVersion.second)("message", "duplication for registered version")("version", LastSchemaVersion);
+    if (needActualization) {
         if (!SchemeVersionForActualization || *SchemeVersionForActualization < newVersion) {
             SchemeVersionForActualization = newVersion;
             SchemeForActualization = itVersion.first->second;
@@ -27,11 +26,11 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
     Y_ABORT_UNLESS(itSnap.second);
     LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
-    return &itSnap.first->second->GetIndexInfo();
+    return &itVersion.first->second->GetIndexInfo();
 }
 
 bool TVersionedIndex::LoadShardingInfo(IDbWrapper& db) {
-    TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> shardingLocal = db.LoadGranulesShardingInfo();
+    TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> shardingLocal = db.LoadGranulesShardingInfo();
     if (shardingLocal.IsFail()) {
         return false;
     }
@@ -39,7 +38,7 @@ bool TVersionedIndex::LoadShardingInfo(IDbWrapper& db) {
     return true;
 }
 
-std::optional<NKikimr::NOlap::TGranuleShardingInfo> TVersionedIndex::GetShardingInfoActual(const ui64 pathId) const {
+std::optional<NKikimr::NOlap::TGranuleShardingInfo> TVersionedIndex::GetShardingInfoActual(const TInternalPathId pathId) const {
     auto it = ShardingInfo.find(pathId);
     if (it == ShardingInfo.end() || it->second.empty()) {
         return std::nullopt;

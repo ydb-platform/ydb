@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/core/fq/libs/common/iceberg_processor.h>
 
 namespace NFq {
 namespace NPrivate {
@@ -276,8 +277,26 @@ TString MakeCreateExternalDataSourceQuery(
                 "location"_a = common.GetObjectStorageEndpoint() + "/" + EscapeString(bucketName, '"') + "/");
             break;
         }
-        case FederatedQuery::ConnectionSetting::kMonitoring:
-        break;
+        case FederatedQuery::ConnectionSetting::kMonitoring: {
+            auto project = connectionContent.setting().monitoring().project();
+            auto cluster = connectionContent.setting().monitoring().cluster();
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="Solomon",
+                    LOCATION={http_location},
+                    GRPC_LOCATION={grpc_location},
+                    USE_TLS="{use_tls}",
+                    PROJECT={project},
+                    CLUSTER={cluster}
+                )",
+                "http_location"_a = EncloseAndEscapeString(common.GetMonitoringReadHttpEndpoint(), '"'),
+                "grpc_location"_a = EncloseAndEscapeString(common.GetMonitoringReadGrpcEndpoint(), '"'),
+                "use_tls"_a = "true",
+                "project"_a = EncloseAndEscapeString(project, '"'),
+                "cluster"_a = EncloseAndEscapeString(cluster, '"')
+            );
+            break;
+        }
         case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
             const auto pgschema = connectionContent.setting().postgresql_cluster().schema();
             properties = fmt::format(
@@ -293,8 +312,8 @@ TString MakeCreateExternalDataSourceQuery(
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
                 "schema"_a =  pgschema ? ", SCHEMA=" + EncloseAndEscapeString(pgschema, '"') : TString{});
+            break;
         }
-        break;
         case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
             const auto gpschema = connectionContent.setting().greenplum_cluster().schema();
             properties = fmt::format(
@@ -309,8 +328,13 @@ TString MakeCreateExternalDataSourceQuery(
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().greenplum_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
                 "schema"_a =  gpschema ? ", SCHEMA=" + EncloseAndEscapeString(gpschema, '"') : TString{});
+            break;
         }
-        break;
+        case FederatedQuery::ConnectionSetting::kIceberg: {
+            auto settings = connectionContent.setting().iceberg();
+            properties = NFq::MakeIcebergCreateExternalDataSourceProperties(common, settings);
+            break;
+        }
         case FederatedQuery::ConnectionSetting::kMysqlCluster: {
             properties = fmt::format(
                 R"(
@@ -322,6 +346,7 @@ TString MakeCreateExternalDataSourceQuery(
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
+            break;
         }
         case FederatedQuery::ConnectionSetting::kLogging: {
             properties = fmt::format(
@@ -332,7 +357,6 @@ TString MakeCreateExternalDataSourceQuery(
                 "folder_id"_a = EncloseAndEscapeString(connectionContent.setting().logging().folder_id(), '"'));
             break;
         }
-        break;
     }
 
     auto sourceName = connectionContent.name();

@@ -135,9 +135,18 @@ struct Schema : NIceDb::Schema {
         struct RequestID : Column<2, NScheme::NTypeIds::Utf8> {};
         struct Owner : Column<3, NScheme::NTypeIds::Utf8> {};
         struct HasSingleCompositeActionGroup : Column<4, NScheme::NTypeIds::Bool> {};
+        struct CreateTime : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct LastRefreshTime : Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<TaskID>;
-        using TColumns = TableColumns<TaskID, RequestID, Owner, HasSingleCompositeActionGroup>;
+        using TColumns = TableColumns<
+            TaskID,
+            RequestID,
+            Owner,
+            HasSingleCompositeActionGroup,
+            CreateTime,
+            LastRefreshTime
+        >;
     };
 
     using TTables = SchemaTables<Param, Permission, Request, WalleTask, Notification, NodeTenant,

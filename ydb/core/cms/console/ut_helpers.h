@@ -294,8 +294,8 @@ inline void CheckEqualsIgnoringVersion(NKikimrConfig::TAppConfig config1, NKikim
 }
 
 inline void CheckReplaceConfig(TTenantTestRuntime &runtime,
-                             Ydb::StatusIds::StatusCode code,
-                             TString yamlConfig)
+                               Ydb::StatusIds::StatusCode code,
+                               TString yamlConfig)
 {
         TAutoPtr<IEventHandle> handle;
         auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
@@ -355,5 +355,23 @@ inline void CheckRemoveVolatileConfig(TTenantTestRuntime &runtime,
         runtime.GrabEdgeEventRethrow<TEvConsole::TEvRemoveVolatileConfigResponse>(handle);
         Y_UNUSED(code);
 }
+
+inline void CheckReplaceDatabaseConfig(TTenantTestRuntime &runtime,
+                                       Ydb::StatusIds::StatusCode code,
+                                       TString yamlConfig,
+                                       bool allowNoDb = false)
+{
+        TAutoPtr<IEventHandle> handle;
+        auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
+        event->Record.MutableRequest()->set_config(yamlConfig);
+        if (allowNoDb) {
+            event->Record.MutableRequest()->set_allow_absent_database(true);
+        }
+        runtime.SendToConsole(event);
+
+        runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceYamlConfigResponse>(handle);
+        Y_UNUSED(code);
+}
+
 
 } // namesapce NKikimr::NConsole::NUT

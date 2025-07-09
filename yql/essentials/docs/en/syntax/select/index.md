@@ -24,7 +24,7 @@ The `SELECT` query result is calculated as follows:
 * Apply [SAMPLE](sample.md)/[TABLESAMPLE](sample.md) to input tables.
 * Execute [FLATTEN COLUMNS](../flatten.md#flatten-columns) or [FLATTEN BY](../flatten.md); aliases set in `FLATTEN BY` become visible after this point.
 * Execute every [JOIN](../join.md).
-* Add to (or replace in) the data the columns listed in [GROUP BY ... AS ...](../group_by.md).
+* Add to (or replace in) the data the columns listed in [GROUP BY ... AS ...](../group_by.md) (this clause executes after `WHERE` since version [2025.02](../../changelog/2025.02.md#group-by-expr-alias-where)).
 * Execute [WHERE](where.md) - discard all the data mismatching the predicate.
 * Execute [GROUP BY](../group_by.md), evaluate aggregate functions.
 * Apply the filter [HAVING](../group_by.md#having).
@@ -32,7 +32,7 @@ The `SELECT` query result is calculated as follows:
 * Evaluate expressions in `SELECT`.
 * Assign names set by aliases to expressions in `SELECT`.
 * Apply top-level [DISTINCT](distinct.md) to the resulting columns.
-* Execute similarly every subquery inside [UNION ALL](union.md#union-all), combine them (see [PRAGMA AnsiOrderByLimitInUnionAll](../pragma.md#pragmas)).
+* Execute similarly every subquery inside [UNION ALL](union.md#union-all).
 * Perform sorting with [ORDER BY](order_by.md).
 * Apply [OFFSET and LIMIT](limit_offset.md) to the result.
 

@@ -18,18 +18,18 @@ struct ITvmService
 
     //! Get TVM service ticket from us to serviceAlias. Service mapping must be in config.
     //! Throws on failure.
-    virtual TString GetServiceTicket(const TString& serviceAlias) = 0;
+    virtual std::string GetServiceTicket(const std::string& serviceAlias) = 0;
 
     //! Get TVM service ticket from us to serviceId. Service ID must be known (either during
     //! construction or explicitly added in dynamic service).
     //! Throws on failure.
-    virtual TString GetServiceTicket(TTvmId serviceId) = 0;
+    virtual std::string GetServiceTicket(TTvmId serviceId) = 0;
 
     //! Decode user ticket contents. Throws on failure.
-    virtual TParsedTicket ParseUserTicket(const TString& ticket) = 0;
+    virtual TParsedTicket ParseUserTicket(const std::string& ticket) = 0;
 
     //! Decode service ticket contents. Throws on failure.
-    virtual TParsedServiceTicket ParseServiceTicket(const TString& ticket) = 0;
+    virtual TParsedServiceTicket ParseServiceTicket(const std::string& ticket) = 0;
 };
 
 struct IDynamicTvmService
@@ -62,7 +62,7 @@ IServiceTicketAuthPtr CreateServiceTicketAuth(
 
 IServiceTicketAuthPtr CreateServiceTicketAuth(
     ITvmServicePtr tvmService,
-    TString dstServiceAlias);
+    std::string dstServiceAlias);
 
 ////////////////////////////////////////////////////////////////////////////////
 

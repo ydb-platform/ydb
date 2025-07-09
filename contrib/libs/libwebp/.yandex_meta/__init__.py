@@ -1,44 +1,90 @@
-import os
-import os.path as P
-
-from devtools.yamaker.fileutil import re_sub_dir
-from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.project import GNUMakeNixProject
 
 
-def libwebp_post_install(self):
-    # Update includes to supported stripped src.
-    re_sub_dir(self.dstdir, '#include "src/', '#include "../')
-    # Match current style of relative includes.
-    for d in os.listdir(self.dstdir):
-        absd = P.join(self.dstdir, d)
-        if P.isdir(absd):
-            re_sub_dir(absd, '#include "../' + d + "/", '#include "./')
-    # Deduplicate SRCS.
-    for s in "dsp/webpdsp", "utils/webputils":
-        with self.yamakes[s] as m:
-            m.PEERDIR.add(self.arcdir + "/" + s + "decode")
-            m.SRCS -= self.yamakes[s + "decode"].SRCS
-    # Support NEON on 32-bit Androids.
-    self.yamakes["dsp/webpdspdecode"].after(
-        "PEERDIR",
-        Switch(
-            OS_ANDROID=Linkable(
-                PEERDIR=["contrib/libs/android_cpufeatures"],
-                ADDINCL=["contrib/libs/android_cpufeatures"],
-            )
-        ),
-    )
+SHARPYUV_SUBLIBS = [
+    "libsharpyuv_neon",
+    "libsharpyuv_sse2",
+]
+
+
+WEBP_SUBLIBS = [
+    # "libexample_util",
+    # "libimageio_util",
+    "libwebp",
+    "libwebpdecode",
+    "libwebpdecoder",
+    "libwebpdemux",
+    "libwebpdsp",
+    "libwebpdsp_mips32",
+    "libwebpdsp_mips_dsp_r2",
+    "libwebpdsp_msa",
+    "libwebpdsp_neon",
+    "libwebpdsp_sse2",
+    "libwebpdsp_sse41",
+    "libwebpdspdecode",
+    "libwebpdspdecode_mips32",
+    "libwebpdspdecode_mips_dsp_r2",
+    "libwebpdspdecode_msa",
+    "libwebpdspdecode_neon",
+    "libwebpdspdecode_sse2",
+    "libwebpdspdecode_sse41",
+    "libwebpencode",
+    "libwebpmux",
+    "libwebputils",
+    "libwebputilsdecode",
+]
+
+
+def post_install(self):
+    with self.yamakes["."] as libwebp:
+        libwebp.ADDINCL.add(self.arcdir)
+
+    for path in (".", "sharpyuv"):
+        # Support Android build
+        self.yamakes[path].after(
+            "PEERDIR",
+            """
+            IF (OS_ANDROID)
+                PEERDIR(
+                    contrib/libs/android_cpufeatures
+                )
+                ADDINCL(
+                    contrib/libs/android_cpufeatures
+                )
+            ENDIF()
+            """,
+        )
 
 
 libwebp = GNUMakeNixProject(
     arcdir="contrib/libs/libwebp",
     nixattr="libwebp",
-    license="BSD-3-Clause",
-    makeflags=["-C", "src"],
-    install_subdir="src",
-    copy_sources=["dsp/mips_macro.h", "dsp/msa_macro.h", "dsp/neon.h"],
-    platform_dispatchers=["webp/config.h"],
-    put={"webp": "."},
-    post_install=libwebp_post_install,
+    copy_sources=[
+        "src/dsp/mips_macro.h",
+        "src/dsp/msa_macro.h",
+        "src/dsp/neon.h",
+    ],
+    platform_dispatchers=[
+        "src/webp/config.h",
+    ],
+    use_full_libnames=True,
+    # fmt: off
+    install_targets=[
+        "libwebp",
+        "libsharpyuv"
+    ] + SHARPYUV_SUBLIBS + WEBP_SUBLIBS,
+    # fmt: on
+    put={
+        "libwebp": ".",
+        "libsharpyuv": "sharpyuv",
+    },
+    put_with={
+        "libwebp": WEBP_SUBLIBS,
+        "libsharpyuv": SHARPYUV_SUBLIBS,
+    },
+    inclink={
+        # put public includes to top-level
+        "webp": ["src/webp/*.h"],
+    },
+    post_install=post_install,
 )

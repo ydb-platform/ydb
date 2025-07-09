@@ -6,17 +6,11 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
-/**
- * DEVELOPER PREVIEW DISCLAIMER
- *
- * MQTT5 support is currently in **developer preview**.  We encourage feedback at all times, but feedback during the
- * preview window is especially valuable in shaping the final product.  During the preview period we may make
- * backwards-incompatible changes to the public API, but in general, this is something we will try our best to avoid.
- */
-
 #include <aws/mqtt/mqtt.h>
 
 #include <aws/mqtt/v5/mqtt5_types.h>
+
+AWS_PUSH_SANE_WARNING_LEVEL
 
 struct aws_mqtt5_user_property_set {
     struct aws_array_list properties;
@@ -332,5 +326,6 @@ AWS_MQTT_API void aws_mqtt5_packet_unsuback_storage_clean_up(
     struct aws_mqtt5_packet_unsuback_storage *unsuback_storage);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_MQTT_MQTT5_PACKET_STORAGE_H */

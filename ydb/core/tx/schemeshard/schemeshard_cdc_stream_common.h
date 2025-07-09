@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
+#include <ydb/core/tx/schemeshard/schemeshard_path.h>
 
 namespace NKikimr {
 

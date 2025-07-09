@@ -356,6 +356,10 @@ public:
     void LoadFromFile(const TString& path);
     void StoreToFile(const TString& path);
 
+    ui64 GetDeviceSize() const {
+        return DeviceSize;
+    }
+
     NSectorMap::TSectorOperationThrottler::TDiskModeParams* GetDiskModeParams() {
         if (SectorOperationThrottler) {
             return SectorOperationThrottler->GetDiskModeParams();

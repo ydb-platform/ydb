@@ -22,9 +22,19 @@ void TQueryFile::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TQuerySecret::Register(TRegistrar registrar)
+{
+    registrar.Parameter("id", &TThis::Id).NonEmpty();
+    registrar.Parameter("category", &TThis::Category).Optional(true);
+    registrar.Parameter("subcategory", &TThis::Subcategory).Optional(true);
+    registrar.Parameter("ypath", &TThis::YPath).NonEmpty();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer)
 {
-    static_assert(pfr::tuple_size<TQuery>::value == 16);
+    static_assert(pfr::tuple_size<TQuery>::value == 17);
     BuildYsonFluently(consumer)
         .BeginMap()
             .OptionalItem("id", query.Id)
@@ -42,6 +52,7 @@ void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer)
             .OptionalItem("progress", query.Progress)
             .OptionalItem("annotations", query.Annotations)
             .OptionalItem("error", query.Error)
+            .OptionalItem("secrets", query.Secrets)
             .DoIf(static_cast<bool>(query.OtherAttributes), [&] (TFluentMap fluent) {
                 for (const auto& [key, value] : query.OtherAttributes->ListPairs()) {
                     fluent.Item(key).Value(value);

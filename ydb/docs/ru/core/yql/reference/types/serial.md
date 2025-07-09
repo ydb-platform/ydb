@@ -24,11 +24,11 @@ REPLACE INTO users (name, email) VALUES ('John', 'john@example.com');
 SELECT * FROM users;
 ```
 
-email | name | user_id
------ | ----- | -----
-`alice@example.com` | Alice | 1
-`bob@example.com` | Bob | 2
-`john@example.com` | John | 3
+| email               | name  | user_id |
+|---------------------|-------|---------|
+| `alice@example.com` | Alice | 1       |
+| `bob@example.com`   | Bob   | 2       |
+|  `john@example.com` | John  | 3       |
 
 Можно самостоятельно указать значение `Serial` колонки при вставке, в этом случае вставка будет выполняться, как с обычной целочисленной колонкой, и `Sequence` затрагиваться при таком запросе никак не будет:
 
@@ -44,14 +44,14 @@ UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com'
 
 Значения последовательности начинаются с единицы, выдаются с шагом, равным единице, и ограничены в зависимости от используемого типа.
 
-Тип | Максимальное значение | Тип значения
------ | ----- | -----
-`SmallSerial` | $2^{15}–1$ | `Int16`
-`Serial2` | $2^{15}–1$ | `Int16`
-`Serial` | $2^{31}–1$ | `Int32`
-`Serial4` | $2^{31}–1$ | `Int32`
-`Serial8` | $2^{63}–1$ | `Int64`
-`BigSerial` | $2^{63}–1$ | `Int64`
+| Тип           | Максимальное значение | Тип значения |
+|---------------|-----------------------|--------------|
+| `SmallSerial` | $2^{15}–1$            | `Int16`      |
+| `Serial2`     | $2^{15}–1$            | `Int16`      |
+| `Serial`      | $2^{31}–1$            | `Int32`      |
+| `Serial4`     | $2^{31}–1$            | `Int32`      |
+| `Serial8`     | $2^{63}–1$            | `Int64`      |
+|  `BigSerial`  | $2^{63}–1$            | `Int64`      |
 
 При переполнении `Sequence` на вставке будет возвращаться ошибка:
 

@@ -10,6 +10,8 @@
 
 #include <aws/common/statistics.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_crt_http_statistics_category {
     AWSCRT_STAT_CAT_HTTP1_CHANNEL = AWS_CRT_STATISTICS_CATEGORY_BEGIN_RANGE(AWS_C_HTTP_PACKAGE_ID),
     AWSCRT_STAT_CAT_HTTP2_CHANNEL,
@@ -71,5 +73,6 @@ AWS_HTTP_API
 void aws_crt_statistics_http2_channel_reset(struct aws_crt_statistics_http2_channel *stats);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_HTTP_STATISTICS_H */

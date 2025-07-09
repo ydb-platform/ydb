@@ -45,7 +45,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx) {
-            Y_ABORT_UNLESS(Index == Addition.size());
+            Y_VERIFY_S(Index == Addition.size(), VCtx->VDiskLogPrefix);
             auto msg = std::make_unique<TEvBulkSstEssenceLoaded>(RecoveryLogRecLsn);
             msg->Essence.Replace(std::move(Addition));
             ctx.Send(Recipient, msg.release());
@@ -90,7 +90,7 @@ namespace NKikimr {
         {
             for (const auto &x : proto) {
                 auto sst = MakeIntrusive<TLevelSegment>(VCtx, x.GetSst());
-                Y_ABORT_UNLESS(!sst->GetEntryPoint().Empty());
+                Y_VERIFY_S(!sst->GetEntryPoint().Empty(), VCtx->VDiskLogPrefix);
                 const ui32 recsNum = x.GetRecsNum();
                 Addition.emplace_back(std::move(sst), recsNum);
             }
@@ -151,13 +151,13 @@ namespace NKikimr {
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 ++RunActors;
             }
-            Y_ABORT_UNLESS(RunActors);
+            Y_VERIFY_S(RunActors, VCtx->VDiskLogPrefix);
             TThis::Become(&TThis::StateFunc);
         }
 
         void Handle(TEvBulkSstEssenceLoaded::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
-            Y_ABORT_UNLESS(RecoveryLogRecLsn == ev->Get()->RecoveryLogRecLsn);
+            Y_VERIFY_S(RecoveryLogRecLsn == ev->Get()->RecoveryLogRecLsn, VCtx->VDiskLogPrefix);
             Essence.DestructiveMerge(std::move(ev->Get()->Essence));
             --RunActors;
             if (RunActors == 0) {

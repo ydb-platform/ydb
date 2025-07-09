@@ -77,7 +77,7 @@ class TIncrRestoreChangeSenderMain
     }
 
     void NextState(TResolveUserTableState::TStateTag) {
-        Y_ABORT_UNLESS(MainColumnToTag.contains("__ydb_incrBackupImpl_deleted"));
+        Y_ENSURE(MainColumnToTag.contains("__ydb_incrBackupImpl_deleted"));
         ResolveTargetTable();
     }
 
@@ -166,7 +166,7 @@ class TIncrRestoreChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_ABORT_UNLESS(ev->Get()->PathId == GetChangeSenderIdentity());
+        Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
         PassAway();

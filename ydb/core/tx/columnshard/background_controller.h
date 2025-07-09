@@ -2,6 +2,7 @@
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
 #include <ydb/core/tx/columnshard/counters/counters_manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -11,9 +12,7 @@ namespace NKikimr::NColumnShard {
 
 class TBackgroundController {
 private:
-    THashMap<TString, TMonotonic> ActiveIndexationTasks;
-
-    using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
+    using TCurrentCompaction = THashMap<TInternalPathId, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
     std::optional<ui64> WaitingCompactionPriority;
 
@@ -21,6 +20,7 @@ private:
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
     bool ActiveCleanupInsertTable = false;
+    bool ActiveCleanupSchemas = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
@@ -28,6 +28,20 @@ public:
     }
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
+
+    bool IsCleanupSchemasActive() const {
+        return ActiveCleanupSchemas;
+    }
+
+    void OnCleanupSchemasStarted() {
+        AFL_VERIFY(!ActiveCleanupSchemas);
+        ActiveCleanupSchemas = true;
+    }
+
+    void OnCleanupSchemasFinished() {
+        AFL_VERIFY(ActiveCleanupSchemas);
+        ActiveCleanupSchemas = false;
+    }
 
     void UpdateWaitingPriority(const ui64 priority) {
         if (!WaitingCompactionPriority || *WaitingCompactionPriority < priority) {
@@ -44,26 +58,12 @@ public:
     }
 
     void CheckDeadlines();
-    void CheckDeadlinesIndexation();
 
-    bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
-    void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
-        auto it = ActiveCompactionInfo.find(info.GetPathId());
-        AFL_VERIFY(it != ActiveCompactionInfo.end());
-        if (it->second.Finish()) {
-            ActiveCompactionInfo.erase(it);
-        }
-        Counters->OnCompactionFinish(info.GetPathId());
-    }
+    bool StartCompaction(const TInternalPathId pathId, const TString& taskId);
+    void FinishCompaction(const TInternalPathId pathId);
+
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();
-    }
-
-    void StartIndexing(const NOlap::TColumnEngineChanges& changes);
-    void FinishIndexing(const NOlap::TColumnEngineChanges& changes);
-    TString DebugStringIndexation() const;
-    i64 GetIndexingActiveCount() const {
-        return ActiveIndexationTasks.size();
     }
 
     void StartCleanupPortions() {

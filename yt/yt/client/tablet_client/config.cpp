@@ -79,9 +79,19 @@ void TReplicatedTableOptions::Register(TRegistrar registrar)
 {
     registrar.Parameter("max_sync_replica_count", &TThis::MaxSyncReplicaCount)
         .Alias("sync_replica_count")
-        .Optional();
+        .Optional()
+        .GreaterThanOrEqual(0);
     registrar.Parameter("min_sync_replica_count", &TThis::MinSyncReplicaCount)
-        .Optional();
+        .Optional()
+        .GreaterThanOrEqual(0);
+    registrar.Parameter("max_sync_queue_replica_count", &TThis::MaxSyncQueueReplicaCount)
+        .Optional()
+        .GreaterThanOrEqual(2)
+        .DontSerializeDefault();
+    registrar.Parameter("min_sync_queue_replica_count", &TThis::MinSyncQueueReplicaCount)
+        .Optional()
+        .GreaterThanOrEqual(1)
+        .DontSerializeDefault();
 
     registrar.Parameter("enable_replicated_table_tracker", &TThis::EnableReplicatedTableTracker)
         .Default(false);
@@ -100,26 +110,55 @@ void TReplicatedTableOptions::Register(TRegistrar registrar)
         .Default(TDuration::Minutes(5));
 
     registrar.Postprocessor([] (TThis* config) {
-        if (config->MaxSyncReplicaCount && config->MinSyncReplicaCount && *config->MinSyncReplicaCount > *config->MaxSyncReplicaCount) {
+        if (config->MaxSyncReplicaCount &&
+            config->MinSyncReplicaCount &&
+            config->MinSyncReplicaCount > config->MaxSyncReplicaCount)
+        {
             THROW_ERROR_EXCEPTION("\"min_sync_replica_count\" must be less or equal to \"max_sync_replica_count\"");
+        }
+
+        if (config->MaxSyncQueueReplicaCount &&
+            config->MinSyncQueueReplicaCount &&
+            config->MinSyncQueueReplicaCount > config->MaxSyncQueueReplicaCount)
+        {
+            THROW_ERROR_EXCEPTION("\"min_sync_queue_replica_count\" must be less or equal to \"max_sync_queue_replica_count\"");
         }
     });
 }
 
-std::tuple<int, int> TReplicatedTableOptions::GetEffectiveMinMaxReplicaCount(int replicaCount) const
+std::tuple<int, int> TReplicatedTableOptions::GetEffectiveMinMaxReplicaCount(
+    ETableReplicaContentType contentType,
+    int replicaCount) const
 {
-    int maxSyncReplicas = 0;
-    int minSyncReplicas = 0;
+    auto getResult = [&] (auto minSyncReplicaCount, auto maxSyncReplicaCount) {
+        int maxSyncReplicas = 0;
+        int minSyncReplicas = 0;
 
-    if (!MaxSyncReplicaCount && !MinSyncReplicaCount) {
-        maxSyncReplicas = 1;
+        if (!maxSyncReplicaCount && !minSyncReplicaCount) {
+            maxSyncReplicas = 1;
+        } else {
+            maxSyncReplicas = maxSyncReplicaCount.value_or(replicaCount);
+        }
+
+        minSyncReplicas = minSyncReplicaCount.value_or(maxSyncReplicas);
+
+        return std::tuple(minSyncReplicas, maxSyncReplicas);
+    };
+
+    if (contentType == ETableReplicaContentType::Queue) {
+        int minSyncReplicas;
+        int maxSyncReplicas;
+        if (MinSyncQueueReplicaCount || MaxSyncQueueReplicaCount) {
+            std::tie(minSyncReplicas, maxSyncReplicas) = getResult(MinSyncQueueReplicaCount, MaxSyncQueueReplicaCount);
+        } else {
+            std::tie(minSyncReplicas, maxSyncReplicas) = getResult(MinSyncReplicaCount, MaxSyncReplicaCount);
+        }
+        return std::tuple(
+            std::max(minSyncReplicas, 1),
+            std::max(maxSyncReplicas, 2));
     } else {
-        maxSyncReplicas = MaxSyncReplicaCount.value_or(replicaCount);
+        return getResult(MinSyncReplicaCount, MaxSyncReplicaCount);
     }
-
-    minSyncReplicas = MinSyncReplicaCount.value_or(maxSyncReplicas);
-
-    return std::tuple(minSyncReplicas, maxSyncReplicas);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

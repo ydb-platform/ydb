@@ -1,8 +1,5 @@
 import pprint
 import reprlib
-from typing import Any
-from typing import Dict
-from typing import IO
 from typing import Optional
 
 
@@ -22,8 +19,8 @@ def _format_repr_exception(exc: BaseException, obj: object) -> str:
         raise
     except BaseException as exc:
         exc_info = f"unpresentable exception ({_try_repr_or_str(exc)})"
-    return "<[{} raised in repr()] {} object at 0x{:x}>".format(
-        exc_info, type(obj).__name__, id(obj)
+    return (
+        f"<[{exc_info} raised in repr()] {type(obj).__name__} object at 0x{id(obj):x}>"
     )
 
 
@@ -111,7 +108,6 @@ def saferepr(
     This function is a wrapper around the Repr/reprlib functionality of the
     stdlib.
     """
-
     return SafeRepr(maxsize, use_ascii).repr(obj)
 
 
@@ -132,49 +128,3 @@ def saferepr_unlimited(obj: object, use_ascii: bool = True) -> str:
         return repr(obj)
     except Exception as exc:
         return _format_repr_exception(exc, obj)
-
-
-class AlwaysDispatchingPrettyPrinter(pprint.PrettyPrinter):
-    """PrettyPrinter that always dispatches (regardless of width)."""
-
-    def _format(
-        self,
-        object: object,
-        stream: IO[str],
-        indent: int,
-        allowance: int,
-        context: Dict[int, Any],
-        level: int,
-    ) -> None:
-        # Type ignored because _dispatch is private.
-        p = self._dispatch.get(type(object).__repr__, None)  # type: ignore[attr-defined]
-
-        objid = id(object)
-        if objid in context or p is None:
-            # Type ignored because _format is private.
-            super()._format(  # type: ignore[misc]
-                object,
-                stream,
-                indent,
-                allowance,
-                context,
-                level,
-            )
-            return
-
-        context[objid] = 1
-        p(self, object, stream, indent, allowance, context, level + 1)
-        del context[objid]
-
-
-def _pformat_dispatch(
-    object: object,
-    indent: int = 1,
-    width: int = 80,
-    depth: Optional[int] = None,
-    *,
-    compact: bool = False,
-) -> str:
-    return AlwaysDispatchingPrettyPrinter(
-        indent=indent, width=width, depth=depth, compact=compact
-    ).pformat(object)

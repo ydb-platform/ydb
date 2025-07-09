@@ -1,15 +1,15 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
-#include <src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
 #include <atomic>
 #include <memory>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NSdkStats {
 
 // works only for case normal (foo_bar) underscore
@@ -160,7 +160,6 @@ struct TStatCollector {
     using TMetricRegistry = ::NMonitoring::TMetricRegistry;
 
 public:
-
     struct TEndpointElectorStatCollector {
 
         TEndpointElectorStatCollector(::NMonitoring::TIntGauge* endpointCount = nullptr
@@ -197,15 +196,19 @@ public:
 
         TClientRetryOperationStatCollector() : MetricRegistry_(), Database_() {}
 
-        TClientRetryOperationStatCollector(::NMonitoring::TMetricRegistry* registry, const std::string& database)
-        : MetricRegistry_(registry), Database_(database)
+        TClientRetryOperationStatCollector(::NMonitoring::TMetricRegistry* registry,
+                                           const std::string& database,
+                                           const std::string& clientType)
+            : MetricRegistry_(registry)
+            , Database_(database)
+            , ClientType_(clientType)
         { }
 
         void IncSyncRetryOperation(const EStatus& status) {
             if (auto registry = MetricRegistry_.Get()) {
                 std::string statusName = TStringBuilder() << status;
                 std::string sensor = TStringBuilder() << "RetryOperation/" << UnderscoreToUpperCamel(statusName);
-                registry->Rate({ {"database", Database_}, {"sensor", sensor} })->Inc();
+                registry->Rate({ {"database", Database_}, {"ydb_client", ClientType_}, {"sensor", sensor} })->Inc();
             }
         }
 
@@ -213,13 +216,14 @@ public:
             if (auto registry = MetricRegistry_.Get()) {
                 std::string statusName = TStringBuilder() << status;
                 std::string sensor = TStringBuilder() << "RetryOperation/" << UnderscoreToUpperCamel(statusName);
-                registry->Rate({ {"database", Database_}, {"sensor", sensor} })->Inc();
+                registry->Rate({ {"database", Database_}, {"ydb_client", ClientType_}, {"sensor", sensor} })->Inc();
             }
         }
 
     private:
         TAtomicPointer<::NMonitoring::TMetricRegistry> MetricRegistry_;
         std::string Database_;
+        std::string ClientType_;
     };
 
     struct TClientStatCollector {
@@ -264,22 +268,11 @@ public:
         RequestFailDueQueueOverflow_.Set(sensorsRegistry->Rate({ DatabaseLabel_,    {"sensor", "Request/FailedDiscoveryQueueOverflow"} }));
         RequestFailDueNoEndpoint_.Set(sensorsRegistry->Rate({ DatabaseLabel_,       {"sensor", "Request/FailedNoEndpoint"} }));
         RequestFailDueTransportError_.Set(sensorsRegistry->Rate({ DatabaseLabel_,   {"sensor", "Request/FailedTransportError"} }));
-        CacheMiss_.Set(sensorsRegistry->Rate({ DatabaseLabel_,                      {"sensor", "Request/ClientQueryCacheMiss"} }));
-        ActiveSessions_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,             {"sensor", "Sessions/InUse"} }));
-        InPoolSessions_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,             {"sensor", "Sessions/InPool"} }));
-        Waiters_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,                    {"sensor", "Sessions/WaitForReturn"} }));
         SessionCV_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,                  {"sensor", "SessionBalancer/Variation"} }));
-        SessionRemovedDueBalancing_.Set(sensorsRegistry->Rate({ DatabaseLabel_,     {"sensor", "SessionBalancer/SessionsRemoved"} }));
-        RequestMigrated_.Set(sensorsRegistry->Rate({ DatabaseLabel_,                {"sensor", "SessionBalancer/RequestsMigrated"} }));
-        FakeSessions_.Set(sensorsRegistry->Rate({ DatabaseLabel_,                   {"sensor", "Sessions/SessionsLimitExceeded"} }));
         GRpcInFlight_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,               {"sensor", "Grpc/InFlight"} }));
 
         RequestLatency_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/Latency"} },
             ::NMonitoring::ExponentialHistogram(20, 2, 1)));
-        QuerySize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/QuerySize"} },
-            ::NMonitoring::ExponentialHistogram(20, 2, 32)));
-        ParamsSize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/ParamsSize"} },
-            ::NMonitoring::ExponentialHistogram(10, 2, 32)));
         ResultSize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/ResultSize"} },
             ::NMonitoring::ExponentialHistogram(20, 2, 32)));
     }
@@ -336,31 +329,57 @@ public:
 
     TEndpointElectorStatCollector GetEndpointElectorStatCollector() {
         if (auto registry = MetricRegistryPtr_.Get()) {
-            auto endpointCoint = registry->IntGauge({ {"database", Database_},      {"sensor", "Endpoints/Total"} });
-            auto pessimizationRatio = registry->IntGauge({ {"database", Database_}, {"sensor", "Endpoints/BadRatio"} });
-            auto activeEndpoints = registry->IntGauge({ {"database", Database_},    {"sensor", "Endpoints/Good"} });
+            auto endpointCoint = registry->IntGauge({ DatabaseLabel_,      {"sensor", "Endpoints/Total"} });
+            auto pessimizationRatio = registry->IntGauge({ DatabaseLabel_, {"sensor", "Endpoints/BadRatio"} });
+            auto activeEndpoints = registry->IntGauge({ DatabaseLabel_,    {"sensor", "Endpoints/Good"} });
             return TEndpointElectorStatCollector(endpointCoint, pessimizationRatio, activeEndpoints);
-        } else {
-            return TEndpointElectorStatCollector();
         }
+
+        return TEndpointElectorStatCollector();
     }
 
-    TSessionPoolStatCollector GetSessionPoolStatCollector() {
-        if (!IsCollecting()) {
-            return TSessionPoolStatCollector();
+    TSessionPoolStatCollector GetSessionPoolStatCollector(const std::string& clientType) {
+        if (auto registry = MetricRegistryPtr_.Get()) {
+            auto activeSessions = registry->IntGauge({ DatabaseLabel_, {"ydb_client", clientType},
+                {"sensor", "Sessions/InUse"} });
+            auto inPoolSessions = registry->IntGauge({ DatabaseLabel_, {"ydb_client", clientType},
+                {"sensor", "Sessions/InPool"} });
+            auto fakeSessions = registry->Rate({ DatabaseLabel_, {"ydb_client", clientType},
+                {"sensor", "Sessions/SessionsLimitExceeded"} });
+            auto waiters = registry->IntGauge({ DatabaseLabel_, {"ydb_client", clientType},
+                {"sensor", "Sessions/WaitForReturn"} });
+
+            return TSessionPoolStatCollector(activeSessions, inPoolSessions, fakeSessions, waiters);
         }
 
-        return TSessionPoolStatCollector(ActiveSessions_.Get(), InPoolSessions_.Get(), FakeSessions_.Get(), Waiters_.Get());
+        return TSessionPoolStatCollector();
     }
 
-    TClientStatCollector GetClientStatCollector() {
-        if (IsCollecting()) {
-            return TClientStatCollector(CacheMiss_.Get(), QuerySize_.Get(), ParamsSize_.Get(),
-                SessionRemovedDueBalancing_.Get(), RequestMigrated_.Get(),
-                TClientRetryOperationStatCollector(MetricRegistryPtr_.Get(), Database_));
-        } else {
-            return TClientStatCollector();
+    TClientStatCollector GetClientStatCollector(const std::string& clientType) {
+        if (auto registry = MetricRegistryPtr_.Get()) {
+            ::NMonitoring::TRate* cacheMiss = nullptr;
+            ::NMonitoring::TRate* sessionRemovedDueBalancing = nullptr;
+            ::NMonitoring::TRate* requestMigrated = nullptr;
+
+            if (clientType == "Table") {
+                cacheMiss = registry->Rate({ DatabaseLabel_, {"ydb_client", clientType},
+                    {"sensor", "Request/ClientQueryCacheMiss"} });
+                sessionRemovedDueBalancing = registry->Rate({ DatabaseLabel_, {"ydb_client", clientType},
+                    {"sensor", "SessionBalancer/SessionsRemoved"} });
+                requestMigrated = registry->Rate({ DatabaseLabel_, {"ydb_client", clientType},
+                    {"sensor", "SessionBalancer/RequestsMigrated"} });
+            }
+
+            auto querySize = registry->HistogramRate({ DatabaseLabel_, {"ydb_client", clientType},
+                {"sensor", "Request/QuerySize"} }, ::NMonitoring::ExponentialHistogram(20, 2, 32));
+            auto paramsSize = registry->HistogramRate({ DatabaseLabel_, {"ydb_client", clientType},
+                {"sensor", "Request/ParamsSize"} }, ::NMonitoring::ExponentialHistogram(10, 2, 32));
+
+            return TClientStatCollector(cacheMiss, querySize, paramsSize, sessionRemovedDueBalancing, requestMigrated,
+                TClientRetryOperationStatCollector(MetricRegistryPtr_.Get(), Database_, clientType));
         }
+
+        return TClientStatCollector();
     }
 
     bool IsCollecting() {
@@ -374,6 +393,7 @@ public:
 
     void IncGRpcInFlightByHost(const std::string& host);
     void DecGRpcInFlightByHost(const std::string& host);
+
 private:
     const std::string Database_;
     const ::NMonitoring::TLabel DatabaseLabel_;
@@ -384,18 +404,9 @@ private:
     TAtomicCounter<::NMonitoring::TRate> RequestFailDueNoEndpoint_;
     TAtomicCounter<::NMonitoring::TRate> RequestFailDueTransportError_;
     TAtomicCounter<::NMonitoring::TRate> DiscoveryFailDueTransportError_;
-    TAtomicPointer<::NMonitoring::TIntGauge> ActiveSessions_;
-    TAtomicPointer<::NMonitoring::TIntGauge> InPoolSessions_;
-    TAtomicPointer<::NMonitoring::TIntGauge> Waiters_;
     TAtomicCounter<::NMonitoring::TIntGauge> SessionCV_;
-    TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing_;
-    TAtomicCounter<::NMonitoring::TRate> RequestMigrated_;
-    TAtomicCounter<::NMonitoring::TRate> FakeSessions_;
-    TAtomicCounter<::NMonitoring::TRate> CacheMiss_;
     TAtomicCounter<::NMonitoring::TIntGauge> GRpcInFlight_;
     TAtomicHistogram<::NMonitoring::THistogram> RequestLatency_;
-    TAtomicHistogram<::NMonitoring::THistogram> QuerySize_;
-    TAtomicHistogram<::NMonitoring::THistogram> ParamsSize_;
     TAtomicHistogram<::NMonitoring::THistogram> ResultSize_;
 };
 

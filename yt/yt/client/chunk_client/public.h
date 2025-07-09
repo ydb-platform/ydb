@@ -156,28 +156,29 @@ struct TWrittenChunkReplicasInfo;
 
 class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
+using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
 
-extern const TString DefaultStoreAccountName;
-extern const TString DefaultStoreMediumName;
-extern const TString DefaultCacheMediumName;
-extern const TString DefaultSlotsMediumName;
+extern const std::string DefaultStoreAccountName;
+extern const std::string DefaultStoreMediumName;
+extern const std::string DefaultCacheMediumName;
+extern const std::string DefaultSlotsMediumName;
 
 DECLARE_REFCOUNTED_STRUCT(IReaderBase)
 
-DECLARE_REFCOUNTED_CLASS(TFetchChunkSpecConfig)
-DECLARE_REFCOUNTED_CLASS(TFetcherConfig)
-DECLARE_REFCOUNTED_CLASS(TChunkSliceFetcherConfig)
-DECLARE_REFCOUNTED_CLASS(TEncodingWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TErasureReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TMultiChunkReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TBlockFetcherConfig)
-DECLARE_REFCOUNTED_CLASS(TReplicationReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TReplicationWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TErasureWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TMultiChunkWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TEncodingWriterOptions)
-DECLARE_REFCOUNTED_CLASS(TBlockReordererConfig)
-DECLARE_REFCOUNTED_CLASS(TChunkFragmentReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TFetchChunkSpecConfig)
+DECLARE_REFCOUNTED_STRUCT(TFetcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TChunkSliceFetcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TEncodingWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TErasureReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TMultiChunkReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TBlockFetcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TReplicationReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TReplicationWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TErasureWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TMultiChunkWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TEncodingWriterOptions)
+DECLARE_REFCOUNTED_STRUCT(TBlockReordererConfig)
+DECLARE_REFCOUNTED_STRUCT(TChunkFragmentReaderConfig)
 
 struct TCodecDuration;
 class TCodecStatistics;
@@ -195,7 +196,7 @@ DEFINE_ENUM(EChunkAvailabilityPolicy,
     ((Repairable)                   (2))
 );
 
-// Keep in sync with NChunkServer::ETableChunkFormat.
+// Keep in sync with SerializeChunkFormatAsTableChunkFormat.
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
     // Sentinels.
     ((Unknown)                             (-1))

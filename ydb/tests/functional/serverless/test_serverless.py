@@ -6,6 +6,13 @@ import time
 import copy
 import pytest
 import subprocess
+import datetime
+import random
+import string
+
+from ydb.retries import (
+    RetrySettings,
+)
 
 from hamcrest import assert_that, contains_inanyorder, not_none, not_, only_contains, is_in
 from tornado import gen
@@ -49,6 +56,9 @@ CLUSTER_CONFIG = dict(
     datashard_config={
         'keep_snapshot_timeout': 5000,
     },
+    column_shard_config={
+        'disabled_on_scheme_shard': False,
+    },
 )
 
 
@@ -57,7 +67,7 @@ def enable_alter_database_create_hive_first(request):
     return request.param
 
 
-# ydb_fixtures.ydb_cluster_configuration local override
+# fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
 def ydb_cluster_configuration(enable_alter_database_create_hive_first):
     conf = copy.deepcopy(CLUSTER_CONFIG)
@@ -365,7 +375,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
                         commit_tx=True,
                     )
         except ydb.Unavailable as e:
-            if not ignore_out_of_space or 'OUT_OF_SPACE' not in str(e):
+            if not ignore_out_of_space or 'DISK_SPACE_EXHAUSTED' not in str(e):
                 raise
 
     @restart_coro_on_bad_session
@@ -438,7 +448,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
 
         # Writes should be denied when database moves into DiskQuotaExceeded state
         time.sleep(1)
-        with pytest.raises(ydb.Unavailable, match=r'.*OUT_OF_SPACE.*'):
+        with pytest.raises(ydb.Unavailable, match=r'.*DISK_SPACE_EXHAUSTED.*'):
             IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
         with pytest.raises(ydb.Unavailable, match=r'.*out of disk space.*'):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
@@ -458,6 +468,90 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         # Writes should be allowed again when database moves out of DiskQuotaExceeded state
         time.sleep(1)
         IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
+
+
+def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_serverless_db, ydb_endpoint, ydb_cluster):
+    logger.debug(
+        "test for serverless db %s over hostel db %s", ydb_disk_small_quoted_serverless_db, ydb_hostel_db
+    )
+
+    database = ydb_disk_small_quoted_serverless_db
+
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint,
+        database
+    )
+    logger.info(" database is %s", database)
+
+    driver = ydb.Driver(driver_config)
+    driver.wait(120)
+
+    def create_table(session, path):
+        logger.debug("creating table %s", path)
+
+        session.execute_scheme(
+            f"""
+            CREATE TABLE `{path}` (
+            ts Timestamp NOT NULL,
+            value_string Utf8,
+            PRIMARY KEY(ts)
+            )
+            PARTITION BY HASH(ts)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                TTL=interval("PT1M") on ts
+            )
+        """
+        )
+
+    class BulkUpsertRow(object):
+        __slots__ = ('ts', 'value_string')
+
+        def __init__(self, ts):
+            self.ts = ts
+            self.value_string = ''.join(random.choices(string.ascii_lowercase, k=1024))
+
+    driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
+    with ydb.QuerySessionPool(driver) as qpool:
+        path = os.path.join(database, "dirA0", "table")
+        with ydb.SessionPool(driver) as pool:
+            pool.retry_operation_sync(create_table, None, path)
+
+        logger.info("Write data into table")
+        column_types = ydb.BulkUpsertColumns() \
+            .add_column('ts', ydb.OptionalType(ydb.PrimitiveType.Timestamp)) \
+            .add_column('value_string', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        now = datetime.datetime.now()
+        for i in range(1000):
+            bulk_size = 1000  # rows
+            rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt))) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
+            try:
+                driver.table_client.bulk_upsert(path, rows, column_types)
+            except ydb.issues.Overloaded:
+                described = ydb_cluster.client.describe(database, '')
+                logger.debug('database state when oveloaded: %s', described)
+                assert described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded, 'database did not move into DiskQuotaExceeded state'
+                break
+        else:
+            assert False, 'database did not move into Overloaded state'
+
+        logger.info("Upsert data whith SQL")
+        with pytest.raises(ydb.issues.Overloaded, match=r'.*overload data error.*'):
+            qpool.execute_with_retries(
+                "UPSERT INTO `{}` (ts, value_string) VALUES(Timestamp('2020-01-01T00:00:00.000000Z'), 'xxx')".format(path),
+                retry_settings=RetrySettings(max_retries=0))
+
+        logger.info("Waiting for data deleted by TTL")
+
+        for _ in range(30):
+            time.sleep(10)
+            described = ydb_cluster.client.describe(database, '')
+            logger.debug('database state when waiting for TTL: %s', described)
+            if not described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded:
+                break
+        else:
+            assert False, 'database did not move out of DiskQuotaExceeded state'
 
 
 def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):

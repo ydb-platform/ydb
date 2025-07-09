@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/interconnect/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <google/protobuf/text_format.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
@@ -348,6 +349,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     setup->Scheduler = new NActors::TBasicSchedulerThread(NActors::TSchedulerConfig(512, 100));
     setup->LocalServices.emplace_back(LoggerSettings->LoggerActorId, NActors::TActorSetupCmd(loggerActor, NActors::TMailboxType::HTSwap, 0));
+    setup->LocalServices.emplace_back(NActors::MakePollerActorId(), NActors::TActorSetupCmd(NActors::CreatePollerActor(), NActors::TMailboxType::HTSwap, 0));
     return setup;
 }
 

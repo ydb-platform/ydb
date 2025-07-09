@@ -53,7 +53,7 @@ TString PrintRow(const TMemIter& it)
 
 namespace NTest {
 
-    TString DumpPart(const TPartStore &partStore, ui32 depth) noexcept
+    TString DumpPart(const TPartStore &partStore, ui32 depth)
     {
         TStringStream out;
         TTestEnv env;

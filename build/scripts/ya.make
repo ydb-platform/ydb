@@ -16,13 +16,10 @@ IF (PY2)
         fetch_from_archive.py
         fetch_from_mds.py
         fetch_from_sandbox.py
-        fetch_resource.py
-        fix_py2_protobuf.py
         gen_java_codenav_entry.py
         gen_py3_reg.py
         go_tool.py
         ios_wrapper.py
-        link_dyn_lib.py
         mangle_typeinfo_names.py
         pack_ios.py
         pack_jcoverage_resources.py
@@ -61,6 +58,7 @@ ELSEIF (PY3)
         copy_to_dir.py
         cpp_flatc_wrapper.py
         decimal_md5.py
+        docs_proto_wrapper.py
         error.py
         extract_asrc.py
         extract_docs.py
@@ -71,7 +69,6 @@ ELSEIF (PY3)
         find_time_trace.py
         fix_java_command_file_cp.py
         fix_msvc_output.py
-        fix_py2_protobuf.py
         fs_tools.py
         gen_aar_gradle_script.py
         gen_java_codenav_protobuf.py
@@ -90,6 +87,7 @@ ELSEIF (PY3)
         jni_swig.py
         kt_copy.py
         link_asrc.py
+        link_dyn_lib.py
         link_exe.py
         link_fat_obj.py
         link_jsrc.py

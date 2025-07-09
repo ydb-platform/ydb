@@ -98,7 +98,7 @@ Yson::From(T) -> Resource<'Yson2.Node'>
 
 `Yson::From` is a polymorphic function that converts most primitive data types and containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource. The source object type must be Yson-compatible. For example, in dictionary keys, you can only use the `String` or `Utf8` data types, but not `String?` or `Utf8?` .
 
-### Example
+#### Example
 
 ```yql
 SELECT Yson::Serialize(Yson::From(TableRow())) FROM table1;
@@ -182,7 +182,7 @@ These functions do not do implicit type casting by default, that is, the value i
 
 `Yson::ConvertTo` is a polymorphic function that converts the data type that is specified in the second argument and supports containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource.
 
-### Example
+#### Example
 
 ```yql
 $data = Yson(@@{
@@ -284,23 +284,23 @@ It's passed in the last optional argument (omitted for brevity) to the methods `
 * **AutoConvert**: If the value passed to Yson doesn't match the result data type exactly, the value is converted where possible. For example, `Yson::ConvertToInt64` in this mode will convert even Double numbers to Int64.
 * **Strict**: By default, all functions from the Yson library return an error in case of issues during query execution (for example, an attempt to parse a string that is not Yson/Json, or an attempt to search by a key in a scalar type, or when a conversion to an incompatible data type has been requested, and so on). If you disable the strict mode, `NULL` is returned instead of an error in most cases. When converting to a dictionary or list (`ConvertTo<Type>Dict` or `ConvertTo<Type>List`), improper items are excluded from the resulting collection.
 
-### Example
+#### Example
 
 ```yql
 $yson = @@{y = true; x = 5.5}@@y;
 SELECT Yson::LookupBool($yson, "z"); --- null
 SELECT Yson::LookupBool($yson, "y"); --- true
 
-SELECT Yson::LookupInt64($yson, "x"); --- Error
+-- SELECT Yson::LookupInt64($yson, "x"); --- Error
 SELECT Yson::LookupInt64($yson, "x", Yson::Options(false as Strict)); --- null
 SELECT Yson::LookupInt64($yson, "x", Yson::Options(true as AutoConvert)); --- 5
 
-SELECT Yson::ConvertToBoolDict($yson); --- Error
+-- SELECT Yson::ConvertToBoolDict($yson); --- Error
 SELECT Yson::ConvertToBoolDict($yson, Yson::Options(false as Strict)); --- { "y": true }
 SELECT Yson::ConvertToDoubleDict($yson, Yson::Options(false as Strict)); --- { "x": 5.5 }
 ```
 
-If you need to use the same Yson library settings throughout the query, it's more convenient to use [PRAGMA yson.AutoConvert;](../../syntax/pragma.md#yson.autoconvert) and/or [PRAGMA yson.Strict;](../../syntax/pragma.md#yson.strict). Only with these `PRAGMA` you can affect implicit calls to the Yson library occurring when you work with Yson/Json data types.
+If you need to use the same Yson library settings throughout the query, it's more convenient to use [PRAGMA yson.AutoConvert;](../../syntax/pragma/yson.md#autoconvert) and/or [PRAGMA yson.Strict;](../../syntax/pragma/yson.md#strict). Only with these `PRAGMA` you can affect implicit calls to the Yson library occurring when you work with Yson/Json data types.
 
 ## See also
 

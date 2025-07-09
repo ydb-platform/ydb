@@ -8,11 +8,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "ScaleRecommenderPolicies",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "SchemeshardId",
                 "ColumnType": "Uint64"
@@ -41,19 +36,30 @@
                 "ColumnId": 6,
                 "ColumnName": "ServerlessComputeResourcesMode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "ScaleRecommenderPolicies",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "Stopped",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -245,6 +251,11 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 124,
+                "ColumnName": "StoppedByTenant",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 11,
                 "ColumnName": "ActorToNotify",
                 "ColumnType": "ActorID"
@@ -314,6 +325,7 @@
                     122,
                     123,
                     7,
+                    124,
                     11,
                     13,
                     17,
@@ -707,6 +719,11 @@
                 "ColumnId": 12,
                 "ColumnName": "DrainSeqNo",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "BridgePileId",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -724,7 +741,70 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 22,
+        "TableName": "BridgePile",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "State",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "IsPrimary",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "IsPromoted",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Drain",
+                "ColumnType": "Bool"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1113,6 +1193,11 @@
                 "ColumnId": 102,
                 "ColumnName": "MaximumNetwork",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "UsageImpact",
+                "ColumnType": "Double"
             }
         ],
         "ColumnsDropped": [],
@@ -1124,7 +1209,8 @@
                     2,
                     101,
                     3,
-                    102
+                    102,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

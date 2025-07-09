@@ -25,6 +25,15 @@ struct TSchemeCacheHelpers {
         return entry;
     }
 
+    inline static TNavigate::TEntry MakeNavigateEntry(const TString& path, TNavigate::EOp op) {
+        TNavigate::TEntry entry;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+        entry.Path = SplitPath(path);
+        entry.Operation = op;
+        entry.ShowPrivatePath = true;
+        return entry;
+    }
+
     template <typename T>
     static bool CheckNotEmpty(const TStringBuf marker, const TAutoPtr<T>& result, TCheckFailFunc onFailure) {
         if (result) {

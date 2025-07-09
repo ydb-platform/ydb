@@ -21,7 +21,7 @@ TTopicOperationsScenario::TTopicOperationsScenario() :
 {
 }
 
-int TTopicOperationsScenario::Run(const TConfig& config)
+int TTopicOperationsScenario::Run(TConfig& config)
 {
     InitLog(config);
     InitDriver(config);
@@ -54,19 +54,24 @@ TString TTopicOperationsScenario::GetWriteOnlyTableName() const
     return TableName;
 }
 
+ui32 TTopicOperationsScenario::GetTopicMaxPartitionCount() const
+{
+    return TopicMaxPartitionCount >= TopicPartitionCount ? TopicMaxPartitionCount : (TopicPartitionCount << 3);
+}
+
 THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(TConfig::EVerbosityLevel level)
 {
     return CreateLogBackend("cerr",
                             TConfig::VerbosityLevelToELogPriority(level));
 }
 
-void TTopicOperationsScenario::InitLog(const TConfig& config)
+void TTopicOperationsScenario::InitLog(TConfig& config)
 {
     Log = std::make_shared<TLog>(MakeLogBackend(config.VerbosityLevel));
     Log->SetFormatter(GetPrefixLogFormatter(""));
 }
 
-void TTopicOperationsScenario::InitDriver(const TConfig& config)
+void TTopicOperationsScenario::InitDriver(TConfig& config)
 {
     Driver =
         std::make_unique<NYdb::TDriver>(TYdbCommand::CreateDriver(config,
@@ -234,7 +239,7 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .CommitMessages = CommitMessages
             };
 
-            threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));
+            threads.push_back(std::async([readerParams = std::move(readerParams)]() { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));
         }
     }
 
@@ -244,8 +249,8 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
 }
 
 /*!
- * This method starts producers threads specified in -t option, that will write to topic in parallel. Every producer thread will create 
- * WriteSession for every partition in the topic and will write in partitions in round robin manner. 
+ * This method starts producers threads specified in -t option, that will write to topic in parallel. Every producer thread will create
+ * WriteSession for every partition in the topic and will write in partitions in round robin manner.
  * */
 void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void>>& threads,
                                                     ui32 partitionCount,
@@ -284,7 +289,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .UseCpuTimestamp = UseCpuTimestamp
         };
 
-        threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));
+        threads.push_back(std::async([writerParams = std::move(writerParams)]() { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));
     }
 
     while (*count != ProducerThreadCount) {

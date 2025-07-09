@@ -159,6 +159,7 @@ def get(
     retry_count=5,
     headers=None,
     return_none_for_not_found_error=False,
+    timeout=_METADATA_DEFAULT_TIMEOUT,
 ):
     """Fetch a resource from the metadata server.
 
@@ -178,6 +179,7 @@ def get(
         headers (Optional[Mapping[str, str]]): Headers for the request.
         return_none_for_not_found_error (Optional[bool]): If True, returns None
             for 404 error instead of throwing an exception.
+        timeout (int): How long to wait, in seconds for the metadata server to respond.
 
     Returns:
         Union[Mapping, str]: If the metadata server returns JSON, a mapping of
@@ -201,10 +203,12 @@ def get(
     url = _helpers.update_query(base_url, query_params)
 
     backoff = ExponentialBackoff(total_attempts=retry_count)
-
+    failure_reason = None
     for attempt in backoff:
         try:
-            response = request(url=url, method="GET", headers=headers_to_use)
+            response = request(
+                url=url, method="GET", headers=headers_to_use, timeout=timeout
+            )
             if response.status in transport.DEFAULT_RETRYABLE_STATUS_CODES:
                 _LOGGER.warning(
                     "Compute Engine Metadata server unavailable on "
@@ -212,6 +216,11 @@ def get(
                     attempt,
                     retry_count,
                     response.status,
+                )
+                failure_reason = (
+                    response.data.decode("utf-8")
+                    if hasattr(response.data, "decode")
+                    else response.data
                 )
                 continue
             else:
@@ -225,10 +234,13 @@ def get(
                 retry_count,
                 e,
             )
+            failure_reason = e
     else:
         raise exceptions.TransportError(
             "Failed to retrieve {} from the Google Compute Engine "
-            "metadata service. Compute Engine Metadata server unavailable".format(url)
+            "metadata service. Compute Engine Metadata server unavailable due to {}".format(
+                url, failure_reason
+            )
         )
 
     content = _helpers.from_bytes(response.data)

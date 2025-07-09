@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NDiscovery {
 
 TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discovery::ListEndpointsResult& proto)
@@ -77,7 +77,8 @@ TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     , Address(info.address())
     , Location(info.location())
     , Expire(info.expire())
-    {}
+    , BridgePileId(info.has_bridge_pile_id() ? std::make_optional(info.bridge_pile_id()) : std::nullopt)
+{}
 
 TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto)
     : TStatus(std::move(status))
@@ -207,6 +208,9 @@ public:
         request.set_fixed_node_id(settings.FixedNodeId_);
         if (!settings.Path_.empty()) {
             request.set_path(TStringType{settings.Path_});
+        }
+        if (!settings.BridgePileName_.empty()) {
+            request.set_bridge_pile_name(TStringType{settings.BridgePileName_});
         }
 
         auto requestLocation = request.mutable_location();

@@ -259,7 +259,7 @@ Value* GenEqualsFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCod
     const auto& info = NUdf::GetDataTypeInfo(slot);
 
     if ((info.Features & NUdf::EDataTypeFeatures::CommonType) && (info.Features & NUdf::EDataTypeFeatures::StringType || NUdf::EDataSlot::Uuid == slot || NUdf::EDataSlot::DyNumber == slot)) {
-        return CallBinaryUnboxedValueFunction(&MyEquteStrings, Type::getInt1Ty(context), lv, rv, ctx.Codegen, block);
+        return CallBinaryUnboxedValueFunction<&MyEquteStrings>(Type::getInt1Ty(context), lv, rv, ctx.Codegen, block);
     }
 
     const auto lhs = GetterFor(slot, lv, context, block);
@@ -338,7 +338,7 @@ Value* GenCompareFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCo
     const auto& info = NUdf::GetDataTypeInfo(slot);
 
     if ((info.Features & NUdf::EDataTypeFeatures::CommonType) && (info.Features & NUdf::EDataTypeFeatures::StringType || NUdf::EDataSlot::Uuid == slot || NUdf::EDataSlot::DyNumber == slot)) {
-        return CallBinaryUnboxedValueFunction(&MyCompareStrings, Type::getInt32Ty(context), lv, rv, ctx.Codegen, block);
+        return CallBinaryUnboxedValueFunction<&MyCompareStrings>(Type::getInt32Ty(context), lv, rv, ctx.Codegen, block);
     }
 
     const bool extra = info.Features & (NUdf::EDataTypeFeatures::FloatType | NUdf::EDataTypeFeatures::TzDateType);
@@ -507,7 +507,7 @@ Value* GenHashFunction<false>(NUdf::EDataSlot slot, Value* value, TCodegenContex
     const auto& info = NUdf::GetDataTypeInfo(slot);
 
     if ((info.Features & NUdf::EDataTypeFeatures::CommonType) && (info.Features & NUdf::EDataTypeFeatures::StringType || NUdf::EDataSlot::Uuid == slot || NUdf::EDataSlot::DyNumber == slot)) {
-        return CallUnaryUnboxedValueFunction(&MyHashString, Type::getInt64Ty(context), value, ctx.Codegen, block);
+        return CallUnaryUnboxedValueFunction<&MyHashString>(Type::getInt64Ty(context), value, ctx.Codegen, block);
     }
 
     const auto val = GetterFor(slot, value, context, block);
@@ -1008,7 +1008,7 @@ TUnboxedImmutableCodegeneratorNode::TUnboxedImmutableCodegeneratorNode(TMemoryUs
 {}
 
 Value* TUnboxedImmutableCodegeneratorNode::CreateGetValue(const TCodegenContext& ctx, BasicBlock*&) const {
-    return ConstantInt::get(Type::getInt128Ty(ctx.Codegen.GetContext()), APInt(128, 2, reinterpret_cast<const uint64_t*>(&UnboxedValue)));
+    return ConstantInt::get(Type::getInt128Ty(ctx.Codegen.GetContext()), APInt(128, 2, reinterpret_cast<const uint64_t*>(&UnboxedValue_)));
 }
 
 TExternalCodegeneratorNode::TExternalCodegeneratorNode(TComputationMutables& mutables, EValueRepresentation kind)
@@ -1123,11 +1123,11 @@ Value* TExternalCodegeneratorNode::CreateGetValue(const TCodegenContext& ctx, Ba
         return LoadIfPointer(temporaryValue, itemType, block);
     }
 
-    MKQL_ENSURE(!Getter, "Wrong LLVM function generation order.");
+    MKQL_ENSURE(!Getter_, "Wrong LLVM function generation order.");
     auto& context = ctx.Codegen.GetContext();
     const auto indexType = Type::getInt32Ty(context);
     const auto valueType = Type::getInt128Ty(context);
-    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, ValueIndex)}, "value_ptr", block);
+    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, ValueIndex_)}, "value_ptr", block);
     const auto value = new LoadInst(valueType, valuePtr, "value", block);
     return value;
 }
@@ -1139,7 +1139,7 @@ Value* TExternalCodegeneratorNode::CreateRefValue(const TCodegenContext& ctx, Ba
     const auto indexType = Type::getInt32Ty(context);
     const auto valueType = Type::getInt128Ty(context);
     const auto values = ctx.GetMutables();
-    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex)}, "value_ptr", block);
+    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex_)}, "value_ptr", block);
     return valuePtr;
 }
 
@@ -1148,16 +1148,16 @@ void TExternalCodegeneratorNode::CreateSetValue(const TCodegenContext& ctx, Basi
     const auto indexType = Type::getInt32Ty(context);
     const auto valueType = Type::getInt128Ty(context);
     const auto values = ctx.GetMutables();
-    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex)}, "value_ptr", block);
+    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex_)}, "value_ptr", block);
 
 
     if (value->getType()->isPointerTy()) {
-        ValueUnRef(RepresentationKind, valuePtr, ctx, block);
+        ValueUnRef(RepresentationKind_, valuePtr, ctx, block);
         const auto load = new LoadInst(valueType, value, "value", block);
         new StoreInst(load, valuePtr, block);
         new StoreInst(ConstantInt::get(load->getType(), 0), value, block);
     } else {
-        if (EValueRepresentation::Embedded == RepresentationKind) {
+        if (EValueRepresentation::Embedded == RepresentationKind_) {
             new StoreInst(value, valuePtr, block);
         } else {
             const auto load = new LoadInst(valueType, valuePtr, "value", block);
@@ -1168,9 +1168,9 @@ void TExternalCodegeneratorNode::CreateSetValue(const TCodegenContext& ctx, Basi
             BranchInst::Create(skip, refs, equal, block);
 
             block = refs;
-            ValueUnRef(RepresentationKind, valuePtr, ctx, block);
+            ValueUnRef(RepresentationKind_, valuePtr, ctx, block);
             new StoreInst(value, valuePtr, block);
-            ValueAddRef(RepresentationKind, valuePtr, ctx, block);
+            ValueAddRef(RepresentationKind_, valuePtr, ctx, block);
 
             BranchInst::Create(skip, block);
             block = skip;
@@ -1185,16 +1185,16 @@ Value* TExternalCodegeneratorNode::CreateSwapValue(const TCodegenContext& ctx, B
     const auto indexType = Type::getInt32Ty(context);
     const auto valueType = Type::getInt128Ty(context);
     const auto values = ctx.GetMutables();
-    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex)}, "value_ptr", block);
+    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex_)}, "value_ptr", block);
     const auto output = new LoadInst(valueType, valuePtr, "output", block);
-    ValueRelease(RepresentationKind, output, ctx, block);
+    ValueRelease(RepresentationKind_, output, ctx, block);
 
     if (value->getType()->isPointerTy()) {
         const auto load = new LoadInst(valueType, value, "load", block);
         new StoreInst(load, valuePtr, block);
         new StoreInst(ConstantInt::get(load->getType(), 0), value, block);
     } else {
-        ValueAddRef(RepresentationKind, value, ctx, block);
+        ValueAddRef(RepresentationKind_, value, ctx, block);
         new StoreInst(value, valuePtr, block);
     }
 
@@ -1203,7 +1203,7 @@ Value* TExternalCodegeneratorNode::CreateSwapValue(const TCodegenContext& ctx, B
 }
 
 void TExternalCodegeneratorNode::CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const {
-    GenInvalidate(ctx, InvalidationSet, block);
+    GenInvalidate(ctx, InvalidationSet_, block);
 }
 
 void TExternalCodegeneratorNode::SetValueBuilder(TValueBuilder valueBuilder)
@@ -1217,7 +1217,7 @@ void TExternalCodegeneratorNode::SetValueGetterBuilder(TValueGetterBuilder value
 }
 
 void TWideFlowProxyCodegeneratorNode::CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const {
-    GenInvalidate(ctx, InvalidationSet, block);
+    GenInvalidate(ctx, InvalidationSet_, block);
 }
 
 void TWideFlowProxyCodegeneratorNode::SetGenerator(TGenerator&& generator) {
@@ -1738,13 +1738,12 @@ void SafeUnRefUnboxedOne(Value* pointer, const TCodegenContext& ctx, BasicBlock*
 }
 
 void SafeUnRefUnboxedArray(Value* pointer, ArrayType* arrayType, const TCodegenContext& ctx, BasicBlock*& block) {
-    auto itemType = arrayType->getElementType();
     const auto indexType = Type::getInt64Ty(ctx.Codegen.GetContext());
-    Value* zeros = UndefValue::get(itemType);
+    Value* zeros = UndefValue::get(arrayType);
     for (ui32 idx = 0U; idx < arrayType->getNumElements(); ++idx) {
-        const auto item = GetElementPtrInst::CreateInBounds(itemType, pointer, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx) }, (TString("item_") += ToString(idx)).c_str(), block);
+        const auto item = GetElementPtrInst::CreateInBounds(arrayType, pointer, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx) }, (TString("item_") += ToString(idx)).c_str(), block);
         UnRefUnboxed(item, ctx, block);
-        zeros = InsertValueInst::Create(zeros, ConstantInt::get(itemType->getArrayElementType(), 0), {idx}, (TString("zero_") += ToString(idx)).c_str(), block);
+        zeros = InsertValueInst::Create(zeros, ConstantInt::get(arrayType->getArrayElementType(), 0), {idx}, (TString("zero_") += ToString(idx)).c_str(), block);
     }
     new StoreInst(zeros, pointer, block);
 }
@@ -1866,7 +1865,7 @@ Value* MakeVariant(Value* item, Value* variant, const TCodegenContext& ctx, Basi
         block = boxed;
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateBoxedVariantHolder));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateBoxedVariantHolder>());
 
         const auto signature = FunctionType::get(item->getType(), {factory->getType(), item->getType(), variant->getType()}, false);
         const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
@@ -1944,7 +1943,7 @@ ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlow
 Value* GenNewArray(const TCodegenContext& ctx, Value* size, Value* items, BasicBlock* block) {
     auto& context = ctx.Codegen.GetContext();
     const auto fact = ctx.GetFactory();
-    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateDirectArrayHolder));
+    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateDirectArrayHolder>());
     const auto valueType = Type::getInt128Ty(context);
     const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
     const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
@@ -1958,7 +1957,7 @@ Value* GetMemoryUsed(ui64 limit, const TCodegenContext& ctx, BasicBlock* block) 
 
     auto& context = ctx.Codegen.GetContext();
     const auto fact = ctx.GetFactory();
-    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetMemoryUsed));
+    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::GetMemoryUsed>());
     const auto funType = FunctionType::get(Type::getInt64Ty(context), {fact->getType()}, false);
     const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "get_used", block);
     return CallInst::Create(funType, funcPtr, {fact}, "mem_used", block);
@@ -1988,7 +1987,7 @@ Value* CheckAdjustedMemLimit(ui64 limit, Value* init, const TCodegenContext& ctx
         BranchInst::Create(call, skip, now, block);
 
         block = call;
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TComputationContext::UpdateUsageAdjustor));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TComputationContext::UpdateUsageAdjustor>());
         const auto funType = FunctionType::get(Type::getVoidTy(context), {ctx.Ctx->getType(), Type::getInt64Ty(context)}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "update", block);
         CallInst::Create(funType, funcPtr, {ctx.Ctx, ConstantInt::get(init->getType(), limit)}, "", block);

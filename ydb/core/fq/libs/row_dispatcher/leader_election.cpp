@@ -180,7 +180,7 @@ TLeaderElection::TLeaderElection(
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
-    , YdbConnection(NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
+    , YdbConnection(config.GetLocalMode() ? nullptr : NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
     , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
     , CoordinationNodePath(JoinPath(TablePathPrefix, tenant))
     , ParentId(parentId)

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "change_exchange.h"
+#include "visitor.h"
 
-#include <ydb/core/change_exchange/visitor.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/mon.h>
 

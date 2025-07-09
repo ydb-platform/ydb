@@ -6,15 +6,25 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
+#include <util/system/spinlock.h>
+#include <library/cpp/cache/cache.h>
+
+
+TSpinLock TKeepAliveHttpClient::ConnectionQuarantineMutex;
+TQueue<THolder<NPrivate::THttpConnection>> TKeepAliveHttpClient::ConnectionQuarantine;
 
 TKeepAliveHttpClient::TKeepAliveHttpClient(const TString& host,
                                            ui32 port,
                                            TDuration socketTimeout,
-                                           TDuration connectTimeout)
+                                           TDuration connectTimeout,
+                                           bool useKeepAlive,
+                                           bool useConnectionPool)
     : Host(CutHttpPrefix(host))
     , Port(port)
     , SocketTimeout(socketTimeout)
     , ConnectTimeout(connectTimeout)
+    , UseKeepAlive(useKeepAlive)
+    , UseConnectionPool(useConnectionPool)
     , IsHttps(host.StartsWith("https"))
     , IsClosingRequired(false)
     , HttpsVerification(TVerifyCert{Host})
@@ -25,26 +35,30 @@ TKeepAliveHttpClient::TKeepAliveHttpClient(const TString& host,
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoGet(const TStringBuf relativeUrl,
                                                             IOutputStream* output,
                                                             const THeaders& headers,
-                                                            THttpHeaders* outHeaders) {
+                                                            THttpHeaders* outHeaders,
+                                                            NThreading::TCancellationToken cancellation) {
     return DoRequest(TStringBuf("GET"),
                      relativeUrl,
                      {},
                      output,
                      headers,
-                     outHeaders);
+                     outHeaders,
+                     std::move(cancellation));
 }
 
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoPost(const TStringBuf relativeUrl,
                                                              const TStringBuf body,
                                                              IOutputStream* output,
                                                              const THeaders& headers,
-                                                             THttpHeaders* outHeaders) {
+                                                             THttpHeaders* outHeaders,
+                                                             NThreading::TCancellationToken cancellation) {
     return DoRequest(TStringBuf("POST"),
                      relativeUrl,
                      body,
                      output,
                      headers,
-                     outHeaders);
+                     outHeaders,
+                     std::move(cancellation));
 }
 
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequest(const TStringBuf method,
@@ -52,15 +66,17 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequest(const TStringBuf
                                                                 const TStringBuf body,
                                                                 IOutputStream* output,
                                                                 const THeaders& inHeaders,
-                                                                THttpHeaders* outHeaders) {
+                                                                THttpHeaders* outHeaders,
+                                                                NThreading::TCancellationToken cancellation) {
     const TString contentLength = IntToString<10, size_t>(body.size());
-    return DoRequestReliable(FormRequest(method, relativeUrl, body, inHeaders, contentLength), output, outHeaders);
+    return DoRequestReliable(FormRequest(method, relativeUrl, body, inHeaders, contentLength), output, outHeaders, std::move(cancellation));
 }
 
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestRaw(const TStringBuf raw,
                                                                    IOutputStream* output,
-                                                                   THttpHeaders* outHeaders) {
-    return DoRequestReliable(raw, output, outHeaders);
+                                                                   THttpHeaders* outHeaders,
+                                                                   NThreading::TCancellationToken cancellation) {
+    return DoRequestReliable(raw, output, outHeaders, std::move(cancellation));
 }
 
 void TKeepAliveHttpClient::DisableVerificationForHttps() {
@@ -153,11 +169,27 @@ bool TKeepAliveHttpClient::CreateNewConnectionIfNeeded() {
                                                            ConnectTimeout,
                                                            IsHttps,
                                                            ClientCertificate,
-                                                           HttpsVerification);
+                                                           HttpsVerification,
+                                                           UseKeepAlive);
         IsClosingRequired = false;
         return true;
     }
     return false;
+}
+
+TKeepAliveHttpClient::~TKeepAliveHttpClient() {
+    if (UseConnectionPool) {
+        THolder<NPrivate::THttpConnection> oldConnection;
+        with_lock(ConnectionQuarantineMutex) {
+            while (ConnectionQuarantine.size() > 100) {
+                oldConnection = std::move(ConnectionQuarantine.front());
+
+                ConnectionQuarantine.pop();
+                oldConnection.Reset();
+            }
+            ConnectionQuarantine.push(std::move(Connection));
+        }
+    }
 }
 
 THttpRequestException::THttpRequestException(int statusCode)
@@ -174,6 +206,8 @@ TSimpleHttpClient::TSimpleHttpClient(const TOptions& options)
     , Port(options.Port())
     , SocketTimeout(options.SocketTimeout())
     , ConnectTimeout(options.ConnectTimeout())
+    , UseKeepAlive(options.UseKeepAlive())
+    , UseConnectionPool(options.UseConnectionPool())
 {
 }
 
@@ -189,28 +223,28 @@ void TSimpleHttpClient::EnableVerificationForHttps() {
     HttpsVerification = true;
 }
 
-void TSimpleHttpClient::DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers) const {
+void TSimpleHttpClient::DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers, THttpHeaders* outHeaders, NThreading::TCancellationToken cancellation) const {
     TKeepAliveHttpClient cl = CreateClient();
 
-    TKeepAliveHttpClient::THttpCode code = cl.DoGet(relativeUrl, output, headers);
+    TKeepAliveHttpClient::THttpCode code = cl.DoGet(relativeUrl, output, headers, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
     ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
 }
 
-void TSimpleHttpClient::DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THashMap<TString, TString>& headers) const {
+void TSimpleHttpClient::DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THashMap<TString, TString>& headers, THttpHeaders* outHeaders, NThreading::TCancellationToken cancellation) const {
     TKeepAliveHttpClient cl = CreateClient();
 
-    TKeepAliveHttpClient::THttpCode code = cl.DoPost(relativeUrl, body, output, headers);
+    TKeepAliveHttpClient::THttpCode code = cl.DoPost(relativeUrl, body, output, headers, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
     ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
 }
 
-void TSimpleHttpClient::DoPostRaw(const TStringBuf relativeUrl, const TStringBuf rawRequest, IOutputStream* output) const {
+void TSimpleHttpClient::DoPostRaw(const TStringBuf relativeUrl, const TStringBuf rawRequest, IOutputStream* output, THttpHeaders* outHeaders, NThreading::TCancellationToken cancellation) const {
     TKeepAliveHttpClient cl = CreateClient();
 
-    TKeepAliveHttpClient::THttpCode code = cl.DoRequestRaw(rawRequest, output);
+    TKeepAliveHttpClient::THttpCode code = cl.DoRequestRaw(rawRequest, output, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
     ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
@@ -223,7 +257,8 @@ namespace NPrivate {
                                      TDuration connTimeout,
                                      bool isHttps,
                                      const TMaybe<TOpenSslClientIO::TOptions::TClientCert>& clientCert,
-                                     const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert)
+                                     const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert,
+                                     bool keepAlive)
         : Addr(Resolve(host, port))
         , Socket(Connect(Addr, sockTimeout, connTimeout, host, port))
         , SocketIn(Socket)
@@ -243,8 +278,9 @@ namespace NPrivate {
         } else {
             HttpOut = MakeHolder<THttpOutput>(&SocketOut);
         }
-
-        HttpOut->EnableKeepAlive(true);
+        if (keepAlive) {
+            HttpOut->EnableKeepAlive(true);
+        }
     }
 
     TNetworkAddress THttpConnection::Resolve(const TString& host, ui32 port) {
@@ -286,7 +322,7 @@ TSimpleHttpClient::~TSimpleHttpClient() {
 }
 
 TKeepAliveHttpClient TSimpleHttpClient::CreateClient() const {
-    TKeepAliveHttpClient cl(Host, Port, SocketTimeout, ConnectTimeout);
+    TKeepAliveHttpClient cl(Host, Port, SocketTimeout, ConnectTimeout, UseKeepAlive, UseConnectionPool);
 
     if (!HttpsVerification) {
         cl.DisableVerificationForHttps();

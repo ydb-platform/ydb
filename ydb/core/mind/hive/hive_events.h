@@ -38,6 +38,7 @@ struct TEvPrivate {
         EvGenerateTestData,
         EvRefreshScaleRecommendation,
         EvUpdateFollowers,
+        EvUpdateBalanceCounters,
         EvEnd
     };
 
@@ -51,7 +52,9 @@ struct TEvPrivate {
         {}
     };
 
-    struct TEvProcessBootQueue : TEventLocal<TEvProcessBootQueue, EvProcessBootQueue> {};
+    struct TEvProcessBootQueue : TEventLocal<TEvProcessBootQueue, EvProcessBootQueue> {
+        bool ProcessWaitQueue = false; // Only for use in tests
+    };
 
     struct TEvPostponeProcessBootQueue : TEventLocal<TEvPostponeProcessBootQueue, EvPostponeProcessBootQueue> {};
 
@@ -140,6 +143,8 @@ struct TEvPrivate {
 
     struct TEvUpdateFollowers : TEventLocal<TEvUpdateFollowers, EvUpdateFollowers> {
     };
+
+    struct TEvUpdateBalanceCounters : TEventLocal<TEvUpdateBalanceCounters, EvUpdateBalanceCounters> {};
 };
 
 } // NHive

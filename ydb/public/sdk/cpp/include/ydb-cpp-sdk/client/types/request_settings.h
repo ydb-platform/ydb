@@ -8,8 +8,9 @@
 
 #include <vector>
 #include <utility>
+#include <string>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 template<typename TDerived>
 struct TRequestSettings {
@@ -20,6 +21,7 @@ struct TRequestSettings {
     FLUENT_SETTING(std::string, RequestType);
     FLUENT_SETTING(THeader, Header);
     FLUENT_SETTING(TDuration, ClientTimeout);
+    FLUENT_SETTING(std::string, TraceParent);
 
     TRequestSettings() = default;
 
@@ -29,6 +31,7 @@ struct TRequestSettings {
         , RequestType_(other.RequestType_)
         , Header_(other.Header_)
         , ClientTimeout_(other.ClientTimeout_)
+        , TraceParent_(other.TraceParent_)
     {}
 };
 

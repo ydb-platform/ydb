@@ -71,7 +71,7 @@ namespace NDataShard {
 
     public:
         void SetKeyTypes(const TVector<NScheme::TTypeInfo>& keyTypes) {
-            Y_ABORT_UNLESS(keyTypes.size() >= KeyTypes.size(), "Number of key columns must not decrease over time");
+            Y_ENSURE(keyTypes.size() >= KeyTypes.size(), "Number of key columns must not decrease over time");
             KeyTypes = keyTypes;
         }
 
@@ -101,7 +101,7 @@ namespace NDataShard {
             }
         };
 
-        int CompareBorders(const TBorder& a, const TBorder& b) const noexcept {
+        int CompareBorders(const TBorder& a, const TBorder& b) const {
             ++Stats_.Comparisons;
             return ComparePrefixBorders(KeyTypes, a.Key, a.Mode, b.Key, b.Mode);
         }

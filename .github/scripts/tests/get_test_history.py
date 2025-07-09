@@ -16,7 +16,7 @@ DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
-def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
+def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, branch):
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
@@ -48,27 +48,64 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
         DECLARE $test_names AS List<Utf8>;
         DECLARE $rn_max AS Int32;
         DECLARE $build_type AS Utf8;
-        
-        $test_names=[{','.join("'{0}'".format(x) for x in test_names_batch)}];
+        DECLARE $branch AS Utf8;
+
+        $test_names = [{','.join("'{0}'".format(x) for x in test_names_batch)}];
         $rn_max = {last_n_runs_of_test_amount};
         $build_type = '{build_type}';
+        $branch = '{branch}';
 
-        $tests=(
+        -- Оптимизированный запрос с учетом особенностей YDB
+        $filtered_tests = (
             SELECT 
-                suite_folder ||'/' || test_name as full_name,test_name,build_type, commit, branch, run_timestamp, status, status_description,
+                suite_folder || '/' || test_name AS full_name,
+                test_name,
+                build_type, 
+                commit, 
+                branch, 
+                run_timestamp, 
+                status, 
+                status_description,
+                job_id,
+                job_name,
                 ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
             FROM 
-                `test_results/test_runs_column`
-            where (job_name ='Nightly-run' or job_name like 'Postcommit%') and
-            build_type = $build_type and
-            suite_folder ||'/' || test_name in  $test_names
-            and status != 'skipped'
+                `test_results/test_runs_column` AS t
+            WHERE 
+                t.build_type = $build_type
+                AND t.branch = $branch
+                AND t.job_name IN (
+                    'Nightly-run',
+                    'Regression-run',
+                    'Regression-whitelist-run',
+                    'Postcommit_relwithdebinfo', 
+                    'Postcommit_asan'
+                )
+                AND t.status != 'skipped'
+                AND suite_folder || '/' || test_name IN $test_names
         );
 
-        select full_name,test_name,build_type, commit, branch, run_timestamp, status, status_description,rn
-        from  $tests
-        WHERE rn <= $rn_max
-        ORDER BY test_name, run_timestamp;  
+        -- Финальный запрос с ограничением по количеству запусков
+        SELECT 
+            full_name,
+            test_name,
+            build_type, 
+            commit, 
+            branch, 
+            run_timestamp, 
+            status, 
+            status_description,
+            job_id,
+            job_name,
+            rn
+        FROM 
+            $filtered_tests
+        WHERE 
+            rn <= $rn_max
+        ORDER BY 
+            test_name, 
+            run_timestamp;
+
     """
             query = ydb.ScanQuery(history_query, {})
             it = driver.table_client.scan_query(query)
@@ -86,10 +123,13 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
                     results[row["full_name"].decode("utf-8")] = {}
 
                 results[row["full_name"].decode("utf-8")][row["run_timestamp"]] = {
+                    "branch": row["branch"],
                     "status": row["status"],
                     "commit": row["commit"],
                     "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%H:%m %B %d %Y"),
-                    "status_description": row["status_description"],
+                    "status_description": row["status_description"].replace(';;','\n'),
+                    "job_id": row["job_id"],
+                    "job_name": row["job_name"]
                 }
         end_time = time.time()
         print(
@@ -98,4 +138,4 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
 
 
 if __name__ == "__main__":
-    get_test_history(test_names_array, last_n_runs_of_test_amount, build_type)
+    get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, branch)

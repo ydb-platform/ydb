@@ -133,9 +133,9 @@ namespace NFake {
         }
 
     protected:
-        bool RegisterTable(ui32 table) noexcept
+        bool RegisterTable(ui32 table)
         {
-            Y_ABORT_UNLESS(table < 8 * sizeof(Tables));
+            Y_ENSURE(table < 8 * sizeof(Tables));
 
             auto slot = Tables | (ui64(1) << table);
 

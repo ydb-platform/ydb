@@ -342,6 +342,9 @@ private:
     void SendAddIndexOpToSS(const TActorContext& ctx, ui64 schemeShardId) {
         SetSchemeShardId(schemeShardId);
         auto ev = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, DatabaseName, std::move(IndexBuildSettings));
+        if (UserToken) {
+            ev->Record.SetUserSID(UserToken->GetUserSID());
+        }
         ForwardToSchemeShard(ctx, std::move(ev));
     }
 

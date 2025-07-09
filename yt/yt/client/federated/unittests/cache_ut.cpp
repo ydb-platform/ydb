@@ -52,7 +52,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch1)
 {
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     auto connectionConfig = New<TConnectionConfig>();
-    connectionConfig->BundleName = TString{"my_bundle"};
+    connectionConfig->BundleName = "my_bundle";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
     connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
@@ -72,7 +72,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch2)
 {
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     auto connectionConfig = New<TConnectionConfig>();
-    connectionConfig->BundleName = TString{"my_bundle"};
+    connectionConfig->BundleName = "my_bundle";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
     connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
@@ -94,7 +94,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationMissingCluster)
 {
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     auto connectionConfig = New<TConnectionConfig>();
-    connectionConfig->BundleName = TString{"my_bundle"};
+    connectionConfig->BundleName = "my_bundle";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
     connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());

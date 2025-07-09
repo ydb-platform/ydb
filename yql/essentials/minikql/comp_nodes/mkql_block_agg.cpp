@@ -742,8 +742,8 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         return DoGenGetValuesImpl(ctx, statePtr, block, Flow_, Width_, AggsParams_.size(),
-            GetMethodPtr(&TState::Get), GetMethodPtr(&TBlockCombineAllWrapperFromFlow::MakeState),
-            GetMethodPtr(&TState::ProcessInput), GetMethodPtr(&TState::MakeOutput));
+            GetMethodPtr<&TState::Get>(), GetMethodPtr<&TBlockCombineAllWrapperFromFlow::MakeState>(),
+            GetMethodPtr<&TState::ProcessInput>(), GetMethodPtr<&TState::MakeOutput>());
     }
 #endif
 private:
@@ -1198,7 +1198,7 @@ public:
         , Builders_(keys.size())
         , Arena_(TlsAllocState)
     {
-        Pointer_ = Values_.data();
+        Pointer = Values_.data();
         for (size_t i = 0; i < Keys_.size(); ++i) {
             auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
             Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
@@ -1719,9 +1719,9 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         return DoGenGetValuesImpl(ctx, statePtr, block, Flow_, Width_, OutputWidth_,
-            GetMethodPtr(&TState::Get), GetMethodPtr(&THashedWrapperBaseFromFlow::MakeState),
-            GetMethodPtr(&TState::ProcessInput), GetMethodPtr(&TState::Finish),
-            GetMethodPtr(&TState::FillOutput), GetMethodPtr(&TState::Slice));
+            GetMethodPtr<&TState::Get>(), GetMethodPtr<&THashedWrapperBaseFromFlow::MakeState>(),
+            GetMethodPtr<&TState::ProcessInput>(), GetMethodPtr<&TState::Finish>(),
+            GetMethodPtr<&TState::FillOutput>(), GetMethodPtr<&TState::Slice>());
     }
 #endif
 private:

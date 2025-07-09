@@ -57,7 +57,7 @@ namespace {
 
         static void SetLocation(TPage* page, EClockProPageLocation location) {
             ui32 location_ = static_cast<ui32>(location);
-            Y_ABORT_UNLESS(location_ < (1 << 4));
+            Y_ENSURE(location_ < (1 << 4));
             page->CacheFlags1 = location_;
         }
 

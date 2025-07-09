@@ -1,17 +1,17 @@
 #include "federated_write_session.h"
 
-#include <src/client/topic/common/log_lazy.h>
-#include <src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <library/cpp/threading/future/future.h>
 
 #include <algorithm>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 constexpr TDuration UPDATE_FEDERATION_STATE_DELAY = TDuration::Seconds(10);
 
@@ -467,4 +467,4 @@ bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
     }
 }
 
-}  // namespace NYdb::V3::NFederatedTopic
+}  // namespace NYdb::NFederatedTopic

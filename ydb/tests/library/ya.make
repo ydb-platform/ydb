@@ -32,7 +32,6 @@ PY_SRCS(
     harness/param_constants.py
     harness/util.py
     harness/tls_tools.py
-    harness/ydb_fixtures.py
     matchers/__init__.py
     matchers/collection.py
     matchers/datashard_matchers.py
@@ -70,15 +69,6 @@ IF (NOT PYTHON3)
     )
 ENDIF()
 
-IF (PYTHON3)
-    PEERDIR(
-        ydb/tools/ydbd_slice
-    )
-    PY_SRCS(
-        harness/ydbd_slice.py
-    )
-ENDIF()
-
 PEERDIR(
     contrib/python/PyHamcrest
     contrib/python/PyYAML
@@ -108,7 +98,9 @@ END()
 RECURSE(
     compatibility
     clients
+    flavours
     serializability
+    test_meta
     wardens
     sqs
 )

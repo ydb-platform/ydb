@@ -64,8 +64,7 @@ struct TSingletonConfigHelpers
         return [=] (NYTree::TYsonStructRegistrar<TManagerConfig> registrar) {
             SetupSingletonConfigParameter(
                 registrar.template ParameterWithUniversalAccessor<TIntrusivePtr<TSingletonConfig>>(
-                    // TODO(babenko): switch to std::string
-                    TString(singletonName),
+                    singletonName,
                     [=] (TManagerConfig* config) -> auto& {
                         auto it = config->NameToConfig_.find(singletonName);
                         if (it == config->NameToConfig_.end()) {

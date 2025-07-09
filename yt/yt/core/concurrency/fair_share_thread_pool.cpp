@@ -21,7 +21,7 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -477,8 +477,8 @@ public:
     TFairShareThread(
         TFairShareQueuePtr queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName,
+        const std::string& threadGroupName,
+        const std::string& threadName,
         NThreading::EThreadPriority threadPriority,
         int index)
         : TSchedulerThread(
@@ -520,7 +520,7 @@ class TFairShareThreadPool
 public:
     TFairShareThreadPool(
         int threadCount,
-        const TString& threadNamePrefix)
+        const std::string& threadNamePrefix)
         : TThreadPoolBase(threadNamePrefix)
         , Queue_(New<TFairShareQueue>(
             CallbackEventCount_,
@@ -586,7 +586,7 @@ private:
 
 IFairShareThreadPoolPtr CreateFairShareThreadPool(
     int threadCount,
-    const TString& threadNamePrefix)
+    const std::string& threadNamePrefix)
 {
     return New<TFairShareThreadPool>(
         threadCount,

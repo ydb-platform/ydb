@@ -1,6 +1,7 @@
 #include "controller_impl.h"
 #include "logging.h"
 #include "private_events.h"
+#include "target_base.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -150,7 +151,7 @@ public:
             return true;
         }
 
-        if (record.GetIncludeStats()) {
+        if (record.GetIncludeStats() && !Replication->GetConfig().HasTransferSpecific()) {
             for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
                 auto* target = Replication->FindTarget(tid);
                 if (!target) {
@@ -196,16 +197,30 @@ public:
             totalScanProgress = std::make_optional<TInitialScanProgress>();
         }
 
+        bool isTransfer = replication->GetConfig().HasTransferSpecific();
         for (ui64 tid = 0; tid < replication->GetNextTargetId(); ++tid) {
             auto* target = replication->FindTarget(tid);
             if (!target) {
                 continue;
             }
 
+            if (isTransfer) {
+                // transfer always has one target
+                auto& specific = replication->GetConfig().GetTransferSpecific();
+
+                auto& transferSpecific = *Result->Record.MutableTransferSpecific();
+                transferSpecific.MutableTarget()->SetSrcPath(target->GetSrcPath());
+                transferSpecific.MutableTarget()->SetDstPath(target->GetDstPath());
+                transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
+                transferSpecific.MutableTarget()->SetTransformLambda(specific.GetTarget().GetTransformLambda());
+                transferSpecific.MutableBatching()->CopyFrom(specific.GetBatching());
+            }
+
             auto& item = *Result->Record.AddTargets();
             item.SetId(target->GetId());
             item.SetSrcPath(target->GetSrcPath());
             item.SetDstPath(target->GetDstPath());
+
             if (target->GetStreamName()) {
                 item.SetSrcStreamName(target->GetStreamName());
             }
@@ -253,6 +268,9 @@ public:
             break;
         case TReplication::EState::Done:
             state.MutableDone();
+            break;
+        case TReplication::EState::Paused:
+            state.MutablePaused();
             break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {

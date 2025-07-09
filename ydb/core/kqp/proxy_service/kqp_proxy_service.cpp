@@ -30,6 +30,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/sys_view/common/schema.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -59,10 +60,6 @@ namespace {
 #define KQP_PROXY_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
 #define KQP_PROXY_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
 #define KQP_PROXY_LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-
-TString MakeKqpProxyBoardPath(const TString& database) {
-    return "kqpprx+" + database;
-}
 
 
 static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(5000);
@@ -135,14 +132,11 @@ private:
 class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     struct TEvPrivate {
         enum EEv {
-            EvReadyToPublishResources = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvCollectPeerProxyData,
+            EvCollectPeerProxyData = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvOnRequestTimeout,
             EvCloseIdleSessions,
-            EvResourcesSnapshot,
         };
 
-        struct TEvReadyToPublishResources : public TEventLocal<TEvReadyToPublishResources, EEv::EvReadyToPublishResources> {};
         struct TEvCollectPeerProxyData: public TEventLocal<TEvCollectPeerProxyData, EEv::EvCollectPeerProxyData> {};
 
         struct TEvOnRequestTimeout: public TEventLocal<TEvOnRequestTimeout, EEv::EvOnRequestTimeout> {
@@ -167,13 +161,6 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         };
 
         struct TEvCloseIdleSessions : public TEventLocal<TEvCloseIdleSessions, EEv::EvCloseIdleSessions> {};
-
-        struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EEv::EvResourcesSnapshot> {
-            TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
-
-            TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
-                : Snapshot(std::move(snapshot)) {}
-        };
     };
 
     enum class EDelayedRequestType {
@@ -202,6 +189,7 @@ public:
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
         , FeatureFlags()
+        , WorkloadManagerConfig()
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , QueryReplayFactory(std::move(queryReplayFactory))
@@ -216,12 +204,16 @@ public:
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         FeatureFlags = AppData()->FeatureFlags;
+        WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
+        ExecuterConfig = MakeIntrusive<TExecuterMutableConfig>();
+        ExecuterConfig->ApplyFromTableServiceConfig(TableServiceConfig);
+
         RandomProvider = AppData()->RandomProvider;
         if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
             TStringStream errorStream;
@@ -240,13 +232,15 @@ public:
         ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem;
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         ui32 featureFlagsKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
+        ui32 workloadManagerKind = (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem;
+        ui32 queryServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {tableServiceConfigKind, logConfigKind, featureFlagsKind}),
+                {tableServiceConfigKind, logConfigKind, featureFlagsKind, workloadManagerKind, queryServiceConfigKind}),
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
+        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             TString spillingRoot = cfg.GetRoot();
@@ -292,9 +286,11 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
+        auto scheduler = AppData()->ComputeScheduler = std::make_shared<NScheduler::TComputeScheduler>(Counters);
+
         ResourceManager_ = GetKqpResourceManager();
         CaFactory_ = NComputeActor::MakeKqpCaFactory(
-            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, FederatedQuerySetup);
+            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, scheduler->CreateSchedulableTaskFactory(), FederatedQuerySetup);
 
         KqpNodeService = TActivationContext::Register(CreateKqpNodeService(TableServiceConfig, ResourceManager_, CaFactory_, Counters, AsyncIoFactory, FederatedQuerySetup));
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -303,6 +299,13 @@ public:
         KqpWorkloadService = TActivationContext::Register(CreateKqpWorkloadService(Counters->GetWorkloadManagerCounters()));
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
+
+        NScheduler::TOptions schedulerOptions {
+            .UpdateFairSharePeriod = TDuration::MicroSeconds(500'000),
+        };
+        auto kqpSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(scheduler, schedulerOptions));
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            MakeKqpSchedulerServiceId(SelfId().NodeId()), kqpSchedulerService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -317,9 +320,7 @@ public:
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
-        PublishResourceUsage();
         AskSelfNodeInfo();
-        SendWhiteboardRequest();
         ScheduleIdleSessionCheck(TDuration::Seconds(2));
     }
 
@@ -382,98 +383,10 @@ public:
         } else {
             SelfDataCenterId = TString();
         }
-
-        NodeResources.SetNodeId(SelfId().NodeId());
-        NodeResources.SetDataCenterNumId(DataCenterFromString(*SelfDataCenterId));
-        NodeResources.SetDataCenterId(*SelfDataCenterId);
-        PublishResourceUsage();
     }
 
     void StartCollectPeerProxyData() {
         Send(SelfId(), new TEvPrivate::TEvCollectPeerProxyData());
-    }
-
-    void SendBoardPublishPoison(){
-        if (BoardPublishActor) {
-            Send(BoardPublishActor, new TEvents::TEvPoison);
-            BoardPublishActor = TActorId();
-            PublishBoardPath = TString();
-        }
-    }
-
-    void SendWhiteboardRequest() {
-        auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
-        Send(WhiteBoardService, ev.release(), IEventHandle::FlagTrackDelivery, SelfId().NodeId());
-    }
-
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        if (record.SystemStateInfoSize() != 1)  {
-            KQP_PROXY_LOG_C("Unexpected whiteboard info");
-            return;
-        }
-
-        const auto& info = record.GetSystemStateInfo(0);
-        if (AppData()->UserPoolId >= info.PoolStatsSize()) {
-            KQP_PROXY_LOG_D("Unexpected whiteboard info: pool size is smaller than user pool id"
-                << ", pool size: " << info.PoolStatsSize()
-                << ", user pool id: " << AppData()->UserPoolId);
-            return;
-        }
-
-        const auto& pool = info.GetPoolStats(AppData()->UserPoolId);
-
-        KQP_PROXY_LOG_D("Received node white board pool stats: " << pool.usage());
-        NodeResources.SetCpuUsage(pool.usage());
-        NodeResources.SetThreads(pool.threads());
-
-        PublishResourceUsage();
-    }
-
-    void DoPublishResources() {
-        SendWhiteboardRequest();
-
-        if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            KQP_PROXY_LOG_I("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
-            return;
-        }
-
-        SendBoardPublishPoison();
-
-        if (TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
-            LastPublishResourcesAt = TAppData::TimeProvider->Now();
-            Send(KqpRmServiceActor, std::make_unique<TEvKqp::TEvKqpProxyPublishRequest>());
-            return;
-        }
-
-        NodeResources.SetActiveWorkersCount(LocalSessions->size());
-        PublishBoardPath = MakeKqpProxyBoardPath(AppData()->TenantName);
-        auto actor = CreateBoardPublishActor(PublishBoardPath, NodeResources.SerializeAsString(), SelfId(), 0, true);
-        BoardPublishActor = Register(actor);
-        LastPublishResourcesAt = TAppData::TimeProvider->Now();
-    }
-
-    void PublishResourceUsage() {
-        if (ResourcesPublishScheduled) {
-            return;
-        }
-
-        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-        auto now = TAppData::TimeProvider->Now();
-        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
-
-        if (LastPublishResourcesAt && now - *LastPublishResourcesAt < batchingInterval) {
-            ResourcesPublishScheduled = true;
-            Schedule(batchingInterval, new TEvPrivate::TEvReadyToPublishResources());
-            return;
-        }
-
-        DoPublishResources();
-    }
-
-    void Handle(TEvPrivate::TEvReadyToPublishResources::TPtr&) {
-        ResourcesPublishScheduled = false;
-        DoPublishResources();
     }
 
     void PassAway() override {
@@ -487,9 +400,6 @@ public:
 
         Send(SpillingService, new TEvents::TEvPoison);
         Send(KqpNodeService, new TEvents::TEvPoison);
-        if (BoardPublishActor) {
-            Send(BoardPublishActor, new TEvents::TEvPoison);
-        }
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
 
@@ -513,15 +423,21 @@ public:
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         KQP_PROXY_LOG_D("Updated table service config.");
 
+        ExecuterConfig->ApplyFromTableServiceConfig(TableServiceConfig);
+
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
 
         FeatureFlags.Swap(event.MutableConfig()->MutableFeatureFlags());
-        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
+        WorkloadManagerConfig.Swap(event.MutableConfig()->MutableWorkloadManagerConfig());
+        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
+
+        if (event.GetConfig().HasQueryServiceConfig()) {
+            QueryServiceConfig.Swap(event.MutableConfig()->MutableQueryServiceConfig());
+        }
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
-        PublishResourceUsage();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -655,6 +571,13 @@ public:
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
         }
+
+#if defined(USE_HDRF_SCHEDULER)
+        // TODO: not the best place for adding database.
+        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
+        addDatabaseEvent->Id = ev->Get()->GetDatabaseId();
+        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
+#endif
 
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
@@ -961,81 +884,31 @@ public:
             << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId() << ", source: " << ev->Sender);
     }
 
-    void LookupPeerProxyData() {
-        if (!SelfDataCenterId || BoardLookupActor || AppData()->TenantName.empty()) {
-            return;
-        }
-
-        if (PublishBoardPath) {
-            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), EBoardLookupMode::Majority);
-            BoardLookupActor = Register(actor);
-        }
-    }
-
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
-        if (!TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
-            LookupPeerProxyData();
-        } else {
-            if (SelfDataCenterId && !AppData()->TenantName.empty() && !IsLookupByRmScheduled) {
-                IsLookupByRmScheduled = true;
-                GetKqpResourceManager()->RequestClusterResourcesInfo(
-                    [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                        TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
-                        as->Send(eh);
-                    });
-            }
-        }
         if (!ShutdownRequested) {
             const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
             ui64 millis = sbs.GetBoardLookupIntervalMs();
             TDuration d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
             Schedule(d, new TEvPrivate::TEvCollectPeerProxyData());
         }
+
+        if (SelfDataCenterId && !AppData()->TenantName.empty()) {
+            ProcessClusterResources();
+        }
     }
 
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        auto boardInfo = ev->Get();
-        BoardLookupActor = TActorId();
-
-        if (boardInfo->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok || PublishBoardPath != boardInfo->Path) {
-            PeerProxyNodeResources.clear();
-            KQP_PROXY_LOG_D("Received unexpected data from board: " << boardInfo->Path << ", current board path "
-                << PublishBoardPath << ", status: " << (int) boardInfo->Status);
-            return;
-        }
-
-        Y_ABORT_UNLESS(SelfDataCenterId);
-        PeerProxyNodeResources.resize(boardInfo->InfoEntries.size());
-        size_t idx = 0;
-        auto getDataCenterId = [](const auto& entry) {
-            return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
-        };
-
-        LocalDatacenterProxies.clear();
-        for(auto& [ownerId, entry] : boardInfo->InfoEntries) {
-            Y_PROTOBUF_SUPPRESS_NODISCARD PeerProxyNodeResources[idx].ParseFromString(entry.Payload);
-            if (getDataCenterId(PeerProxyNodeResources[idx]) == *SelfDataCenterId) {
-                LocalDatacenterProxies.emplace_back(PeerProxyNodeResources[idx].GetNodeId());
-            }
-            ++idx;
-        }
-
-        PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
-        TryKickSession();
-    }
-
-    void Handle(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
-        IsLookupByRmScheduled = false;
+    void ProcessClusterResources() {
+        auto snapshot = GetKqpResourceManager()->GetClusterResources();
 
         TVector<NKikimrKqp::TKqpProxyNodeResources> proxyResources;
         std::vector<ui64> localDatacenterProxies;
-        proxyResources.reserve(ev->Get()->Snapshot.size());
+        proxyResources.reserve(snapshot.size());
 
         auto getDataCenterId = [](const auto& entry) {
             return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
         };
 
-        for(auto& nodeResources : ev->Get()->Snapshot) {
+        for(auto& nodeResources : snapshot) {
             auto* proxyNodeResources = nodeResources.MutableKqpProxyNodeResources();
 
             if (proxyNodeResources->HasNodeId()) {
@@ -1111,28 +984,14 @@ public:
         Y_ABORT_UNLESS(PeerStats);
 
         bool isReasonableToKick = false;
-
-        ui32 strategy = static_cast<ui32>(sbs.GetStrategy());
-        ui32 balanceByCpu = strategy & TTableServiceConfig_TSessionBalancerSettings::BALANCE_BY_CPU;
-        ui32 balanceByCount = strategy & TTableServiceConfig_TSessionBalancerSettings::BALANCE_BY_COUNT;
-
         if (sbs.GetLocalDatacenterPolicy()) {
-            if (balanceByCount) {
-                isReasonableToKick |= ShouldStartBalancing(PeerStats->LocalSessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions->size()));
-            }
-
-            if (balanceByCpu) {
-                isReasonableToKick |= ShouldStartBalancing(PeerStats->LocalCpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
-            }
-
+            isReasonableToKick |= ShouldStartBalancing(
+                PeerStats->LocalSessionCount, static_cast<double>(sbs.GetMinNodeSessions()),
+                static_cast<double>(LocalSessions->size()));
         } else {
-            if (balanceByCount) {
-                isReasonableToKick |= ShouldStartBalancing(PeerStats->CrossAZSessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions->size()));
-            }
-
-            if (balanceByCpu) {
-                isReasonableToKick |= ShouldStartBalancing(PeerStats->CrossAZCpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
-            }
+            isReasonableToKick |= ShouldStartBalancing(
+                PeerStats->CrossAZSessionCount, static_cast<double>(sbs.GetMinNodeSessions()),
+                static_cast<double>(LocalSessions->size()));
         }
 
         if (!isReasonableToKick) {
@@ -1219,19 +1078,6 @@ public:
                 str << "MaxCVTreshold: " << sbs.GetMaxCVTreshold() << Endl;
                 str << "MinCVTreshold: " << sbs.GetMinCVTreshold() << Endl;
                 str << "Balance strategy: " << TTableServiceConfig_TSessionBalancerSettings_EBalancingStrategy_Name(sbs.GetStrategy()) << Endl;
-
-                str << Endl;
-
-                if (BoardPublishActor) {
-                    str << "Publish status: " << Endl;
-                    if (LastPublishResourcesAt) {
-                        str << "Last published resources at " << *LastPublishResourcesAt << Endl;
-                    }
-
-                    if (PublishBoardPath) {
-                        str << "Publish board path: " << PublishBoardPath << Endl;
-                    }
-                }
 
                 str << Endl;
 
@@ -1353,9 +1199,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvPrivate::TEvCollectPeerProxyData, Handle);
-            hFunc(TEvPrivate::TEvReadyToPublishResources, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
@@ -1373,8 +1217,6 @@ public:
             hFunc(TEvKqp::TEvPingSessionResponse, ForwardEvent);
             hFunc(TEvKqp::TEvInitiateShutdownRequest, Handle);
             hFunc(TEvPrivate::TEvOnRequestTimeout, Handle);
-            hFunc(TEvPrivate::TEvResourcesSnapshot, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
             hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
             hFunc(TEvScriptExecutionsTablesCreationFinished, Handle);
@@ -1505,7 +1347,7 @@ private:
 
         auto dbCounters = Counters->GetDbCounters(database);
 
-        TKqpWorkerSettings workerSettings(cluster, database, clientApplicationName, clientUserName, TableServiceConfig, QueryServiceConfig, dbCounters);
+        TKqpWorkerSettings workerSettings(cluster, database, clientApplicationName, clientUserName, ExecuterConfig, TableServiceConfig, QueryServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
         auto config = CreateConfig(KqpSettings, workerSettings);
@@ -1535,7 +1377,6 @@ private:
         result.YdbStatus = Ydb::StatusIds::SUCCESS;
         result.Error.clear();
         result.Value = sessionInfo;
-        PublishResourceUsage();
         return true;
     }
 
@@ -1568,7 +1409,6 @@ private:
         if (!sessionId.empty()) {
             auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
             KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
-            PublishResourceUsage();
             if (ShutdownRequested) {
                 ShutdownState->Update(LocalSessions->size());
             }
@@ -1591,17 +1431,16 @@ private:
 
         LocalSessions->Erase(workerId);
         KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
-        PublishResourceUsage();
         if (ShutdownRequested) {
             ShutdownState->Update(LocalSessions->size());
         }
     }
 
     bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
-        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
+        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)) {
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || (ev->Get()->IsInternalCall() && WorkloadManagerConfig.GetEnabled())) {
             ev->Get()->SetPoolId("");
             return true;
         }
@@ -1613,6 +1452,7 @@ private:
 
         const auto& poolId = ev->Get()->GetPoolId();
         const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
+
         if (!poolInfo) {
             return true;
         }
@@ -1633,6 +1473,11 @@ private:
         if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
             ev->Get()->SetPoolConfig(poolConfig);
         }
+
+#if defined(USE_HDRF_SCHEDULER)
+        Y_ASSERT(!poolId.empty());
+        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
+#endif
 
         return true;
     }
@@ -1894,6 +1739,7 @@ private:
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TFeatureFlags FeatureFlags;
+    NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     TKqpSettings::TConstPtr KqpSettings;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
@@ -1911,6 +1757,8 @@ private:
     TIntrusivePtr<TKqpShutdownState> ShutdownState;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
 
+    TIntrusivePtr<TExecuterMutableConfig> ExecuterConfig;
+
     TIntrusivePtr<TKqpCounters> Counters;
     std::unique_ptr<TLocalSessionsRegistry> LocalSessions;
     std::shared_ptr<TKqpProxySharedResources> KqpProxySharedResources;
@@ -1923,20 +1771,14 @@ private:
     TIntrusivePtr<IRandomProvider> RandomProvider;
     std::vector<ui64> LocalDatacenterProxies;
     TVector<NKikimrKqp::TKqpProxyNodeResources> PeerProxyNodeResources;
-    bool ResourcesPublishScheduled = false;
-    TString PublishBoardPath;
-    std::optional<TInstant> LastPublishResourcesAt;
 
     TActorId KqpRmServiceActor;
-    TActorId BoardLookupActor;
-    TActorId BoardPublishActor;
     TActorId CompileService;
     TActorId CompileComputationPatternService;
     TActorId KqpNodeService;
     TActorId SpillingService;
     TActorId WhiteBoardService;
     TActorId KqpWorkloadService;
-    NKikimrKqp::TKqpProxyNodeResources NodeResources;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {
@@ -1946,7 +1788,6 @@ private:
     };
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
     std::deque<TDatabasesCache::TDelayedEvent> DelayedEventsQueue;
-    bool IsLookupByRmScheduled = false;
     TActorId KqpTempTablesAgentActor;
 
     TResourcePoolsCache ResourcePoolsCache;

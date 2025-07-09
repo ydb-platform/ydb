@@ -1,8 +1,8 @@
 #include "write_session.h"
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSession
@@ -46,7 +46,7 @@ void TWriteSession::WriteEncoded(TContinuationToken&& token, std::string_view da
 }
 
 void TWriteSession::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message,
-                                 NTable::TTransaction* tx)
+                                 TTransactionBase* tx)
 {
     if (tx) {
         message.Tx(*tx);
@@ -65,7 +65,7 @@ void TWriteSession::Write(TContinuationToken&& token, std::string_view data, std
 }
 
 void TWriteSession::Write(TContinuationToken&& token, TWriteMessage&& message,
-                          NTable::TTransaction* tx) {
+                          TTransactionBase* tx) {
     if (tx) {
         message.Tx(*tx);
     }
@@ -124,7 +124,7 @@ bool TSimpleBlockingWriteSession::Write(
 }
 
 bool TSimpleBlockingWriteSession::Write(
-        TWriteMessage&& message, NTable::TTransaction* tx, const TDuration& blockTimeout
+        TWriteMessage&& message, TTransactionBase* tx, const TDuration& blockTimeout
 ) {
     auto continuationToken = WaitForToken(blockTimeout);
     if (continuationToken.has_value()) {

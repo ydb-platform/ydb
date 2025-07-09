@@ -285,7 +285,7 @@ template<class T, class U> intrusive_ptr<T> dynamic_pointer_cast( intrusive_ptr<
 
 // operator<<
 
-template<class Y> std::ostream & operator<< (std::ostream & os, intrusive_ptr<Y> const & p)
+template<class E, class T, class Y> std::basic_ostream<E, T> & operator<< (std::basic_ostream<E, T> & os, intrusive_ptr<Y> const & p)
 {
     os << p.get();
     return os;

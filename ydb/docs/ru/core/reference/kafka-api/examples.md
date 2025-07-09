@@ -27,7 +27,7 @@
 
 Поэтому в конфигурации читателя всегда нужно указывать **имя группы читателей** и параметры:
 
-- `check.crc=false`
+- `check.crcs=false`
 - `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
 Ниже даны примеры чтения по Kafka протоколу для разных приложений, языков программирования и фреймворков подключения без аутентификации.
@@ -39,21 +39,21 @@
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  {% include [index.md](../../../_includes/bash/kafka-api-console-read-no-auth.md) %}
+  {% include [index.md](_includes/bash/kafka-api-console-read-no-auth.md) %}
 
 - kcat
 
-  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-no-auth.md) %}
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-no-auth.md) %}
 
 - Java
 
-  {% include [index.md](../../../_includes/java/kafka-api-java-read-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-java-read-no-auth.md) %}
 
 - Spark
 
   {% include [index.md](_includes/spark-constraints.md) %}
 
-  {% include [index.md](../../../_includes/java/kafka-api-spark-read-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-spark-read-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
@@ -61,7 +61,7 @@
 
   {% include [index.md](_includes/flink-constraints.md) %}
 
-  {% include [index.md](../../../_includes/java/kafka-api-flink-read-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-flink-read-no-auth.md) %}
 
   {% include [index.md](_includes/flink-version-notice.md) %}
 
@@ -98,21 +98,21 @@ Unexpected error in join group response: This most likely occurs because of a re
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  {% include [index.md](../../../_includes/bash/kafka-api-console-write-no-auth.md) %}
+  {% include [index.md](_includes/bash/kafka-api-console-write-no-auth.md) %}
 
 - kcat
 
-  {% include [index.md](../../../_includes/bash/kafka-api-kcat-write-no-auth.md) %}
+  {% include [index.md](_includes/bash/kafka-api-kcat-write-no-auth.md) %}
 
 - Java
 
-  {% include [index.md](../../../_includes/java/kafka-api-java-write-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-java-write-no-auth.md) %}
 
 - Spark
 
   {% include [index.md](_includes/spark-constraints.md) %}
 
-  {% include [index.md](../../../_includes/java/kafka-api-spark-write-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-spark-write-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
@@ -120,17 +120,17 @@ Unexpected error in join group response: This most likely occurs because of a re
 
   {% include [index.md](_includes/flink-constraints.md) %}
 
-  {% include [index.md](../../../_includes/java/kafka-api-flink-write-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-flink-write-no-auth.md) %}
 
   {% include [index.md](_includes/flink-version-notice.md) %}
 
 - Logstash
 
-  {% include [index.md](../../../_includes/logs-to-kafka/kafka-api-logstash.md) %}
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-logstash.md) %}
 
 - Fluent Bit
 
-  {% include [index.md](../../../_includes/logs-to-kafka/kafka-api-fluent-bit.md) %}
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-fluent-bit.md) %}
 
 {% endlist %}
 
@@ -149,7 +149,7 @@ Unexpected error in join group response: This most likely occurs because of a re
 
 Для того, чтобы проверить работу с аутентификацией в локальной базе:
 
-1. Создайте пользователя. [Как это сделать в YQL](../../yql/reference/syntax/create-user.md). [Как выполнить YQL из CLI](../ydb-cli/yql.md).
+1. Создайте пользователя. [Как это сделать в YQL](../../yql/reference/syntax/create-user.md). [Как выполнить YQL из CLI](../ydb-cli/sql.md).
 2. Подключитесь к Kafka API, как в примерах ниже. Во всех примерах предполагается, что:
 
   - YDB запущен локально с переменной окружения YDB_KAFKA_PROXY_PORT=9092 - то есть Kafka API доступен по адресу localhost:9092. Например можно поднять YDB в докере, как указано [здесь](../../quickstart.md#install).
@@ -164,14 +164,14 @@ Unexpected error in join group response: This most likely occurs because of a re
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  {% include [index.md](../../../_includes/bash/kafka-api-console-read-with-sasl-creds-on-prem.md) %}
+  {% include [index.md](_includes/bash/kafka-api-console-read-with-sasl-creds-on-prem.md) %}
 
 - kcat
 
-  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-with-sasl-creds-on-prem.md) %}
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-with-sasl-creds-on-prem.md) %}
 
 - Java
 
-  {% include [index.md](../../../_includes/java/kafka-api-java-read-with-sasl-creds-on-prem.md) %}
+  {% include [index.md](_includes/java/kafka-api-java-read-with-sasl-creds-on-prem.md) %}
 
 {% endlist %}

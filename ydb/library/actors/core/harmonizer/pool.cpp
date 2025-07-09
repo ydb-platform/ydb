@@ -12,7 +12,6 @@ namespace NActors {
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 TPoolInfo::TPoolInfo()
-    : LocalQueueSize(NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE)
 {}
 
 double TPoolInfo::GetCpu(i16 threadIdx) const {

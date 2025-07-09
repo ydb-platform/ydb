@@ -15,14 +15,14 @@
 class TLogBackend;
 class TLog;
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TDriver;
 class TParams;
 
 }
 
-namespace NYdb::inline V3::NTable {
+namespace NYdb::inline Dev::NTable {
 
 class TSession;
 class TTableClient;
@@ -37,13 +37,15 @@ class TTopicOperationsScenario {
 public:
     TTopicOperationsScenario();
 
-    int Run(const TClientCommand::TConfig& config);
+    int Run(TClientCommand::TConfig& config);
 
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;
+
+    ui32 GetTopicMaxPartitionCount() const;
 
     TDuration TotalSec;
     TDuration WindowSec;
@@ -54,7 +56,7 @@ public:
     TString TopicName;
     ui32 TopicPartitionCount = 1;
     bool TopicAutoscaling = false;
-    ui32 TopicMaxPartitionCount = 100;
+    ui32 TopicMaxPartitionCount = 1;
     ui32 StabilizationWindowSeconds = 15;
     ui32 UpUtilizationPercent = 90;
     ui32 DownUtilizationPercent = 30;
@@ -132,8 +134,8 @@ private:
 
     static THolder<TLogBackend> MakeLogBackend(TClientCommand::TConfig::EVerbosityLevel level);
 
-    void InitLog(const TClientCommand::TConfig& config);
-    void InitDriver(const TClientCommand::TConfig& config);
+    void InitLog(TClientCommand::TConfig& config);
+    void InitDriver(TClientCommand::TConfig& config);
     void InitStatsCollector();
 };
 

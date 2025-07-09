@@ -51,7 +51,8 @@ TExprNode::TPtr ApplyExtractMembersToExtend(const TExprNode::TPtr& node, const T
     return ctx.NewCallable(node->Pos(), node->Content(), std::move(inputs));
 }
 
-TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+namespace {
+TExprNode::TPtr ApplyExtractMembersToSkipNullMembersLegacy(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoSkipNullMembers skipNullMembers(node);
     const auto& filtered = skipNullMembers.Members();
     if (!filtered) {
@@ -85,7 +86,7 @@ TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node
         .Done().Ptr();
 }
 
-TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+TExprNode::TPtr ApplyExtractMembersToFilterNullMembersLegacy(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoFilterNullMembers filterNullMembers(node);
     if (!filterNullMembers.Input().Maybe<TCoAssumeAllMembersNullableAtOnce>()) {
         return {};
@@ -176,42 +177,127 @@ TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& no
         .Done().Ptr();
 }
 
-TExprNode::TPtr ApplyExtractMembersToSort(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
-    TCoSortBase sort(node);
+} // namespace
+
+TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx,
+    TOptimizeContext& optCtx, TStringBuf logSuffix)
+{
+    static const char optName[] = "MemberNthOverFlatMap";
+    YQL_ENSURE(optCtx.Types);
+    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        return node->IsCallable("FilterNullMembers") ?
+            ApplyExtractMembersToFilterNullMembersLegacy(node, members, ctx, logSuffix) :
+            ApplyExtractMembersToSkipNullMembersLegacy(node, members, ctx, logSuffix);
+    }
+
+    TCoFilterNullMembersBase self(node);
+    TSet<TStringBuf> filteredMembers = GetFilteredMembers(self);
+    YQL_ENSURE(!filteredMembers.empty());
+    TSet<TStringBuf> extractedMembers;
+    for (const auto& atom : members->ChildrenList()) {
+        extractedMembers.insert(atom->Content());
+    }
+
+    TSet<TStringBuf> filteredAndExtracted;
+    std::set_intersection(filteredMembers.begin(), filteredMembers.end(),
+        extractedMembers.begin(), extractedMembers.end(),
+        std::inserter(filteredAndExtracted, filteredAndExtracted.end()));
+
+    auto filterInput = self.Input();
+    bool hasAssume = false;
+    if (auto maybeAssume = filterInput.Maybe<TCoAssumeAllMembersNullableAtOnce>()) {
+        filterInput = maybeAssume.Cast().Input();
+        hasAssume = true;
+    }
+
+    if (filteredAndExtracted == filteredMembers || (hasAssume && !filteredAndExtracted.empty())) {
+        // simple pushdown
+        YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << self.CallableName() << logSuffix;
+        auto newInput = ctx.NewCallable(self.Pos(), "ExtractMembers", { filterInput.Ptr(), members });
+        return ctx.NewCallable(self.Pos(), self.CallableName(), {
+            ctx.WrapByCallableIf(hasAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(newInput)),
+            MakeAtomList(self.Pos(), filteredAndExtracted, ctx)
+        });
+    }
+
+    TSet<TStringBuf> innerExtracted = extractedMembers;
+    if (hasAssume) {
+        YQL_ENSURE(filteredAndExtracted.empty());
+        // just leave single member
+        filteredMembers = { *filteredMembers.begin() };
+    }
+    innerExtracted.insert(filteredMembers.begin(), filteredMembers.end());
+
+    const auto inputType = GetSequenceItemType(filterInput, false);
+    YQL_ENSURE(inputType);
+    const size_t inputWidth = inputType->Cast<TStructExprType>()->GetSize();
+    YQL_ENSURE(inputWidth >= innerExtracted.size());
+
+    if (inputWidth == innerExtracted.size()) {
+        return {};
+    }
+
+    YQL_CLOG(DEBUG, Core) << "Push ExtractMembers over " << self.CallableName() << logSuffix;
+    auto newInput = ctx.NewCallable(self.Pos(), "ExtractMembers", { filterInput.Ptr(), MakeAtomList(self.Pos(), innerExtracted, ctx) });
+    auto newFilter = ctx.Builder(self.Pos())
+        .Callable(self.CallableName())
+            .Add(0, ctx.WrapByCallableIf(hasAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(newInput)))
+            .Add(1, MakeAtomList(self.Pos(), filteredMembers, ctx))
+        .Seal()
+        .Build();
+    return ctx.NewCallable(self.Pos(), "ExtractMembers", { newFilter, members });
+}
+
+
+TExprNode::TPtr ApplyExtractMembersToSortOrPruneKeys(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
+    auto nodeIsPruneKeys = node->IsCallable("PruneKeys") || node->IsCallable("PruneAdjacentKeys");
+    auto nodeIsSort = !nodeIsPruneKeys;
+    auto keyExtractorLambdaIndex = nodeIsSort ? 2 : 1;
+
+    TCoLambda keyExtractorLambda(node->ChildPtr(keyExtractorLambdaIndex));
+
     TSet<TStringBuf> extractFields;
     for (const auto& x : members->ChildrenList()) {
         extractFields.emplace(x->Content());
     }
-    TSet<TStringBuf> sortKeys;
-    bool fieldSubset = HaveFieldsSubset(sort.KeySelectorLambda().Body().Ptr(), sort.KeySelectorLambda().Args().Arg(0).Ref(), sortKeys, parentsMap);
+    TSet<TStringBuf> usedKeys;
+    bool fieldSubset = HaveFieldsSubset(keyExtractorLambda.Body().Ptr(), keyExtractorLambda.Args().Arg(0).Ref(), usedKeys, parentsMap);
     bool allExist = true;
-    if (!sortKeys.empty()) {
-        for (const auto& key : sortKeys) {
+    if (!usedKeys.empty()) {
+        for (const auto& key : usedKeys) {
             auto ret = extractFields.emplace(key);
             if (ret.second) {
                 allExist = false;
             }
         }
     }
-    if (allExist && sortKeys.size() == extractFields.size()) {
+    if (allExist && usedKeys.size() == extractFields.size()) {
         YQL_CLOG(DEBUG, Core) << "Force `fieldSubset` for ExtractMembers over " << node->Content();
         fieldSubset = true;
     }
     if (fieldSubset && allExist) {
         YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
-        return ctx.Builder(sort.Pos())
+        auto result = ctx.Builder(node->Pos())
             .Callable(node->Content())
-                .Callable(0, TCoExtractMembers::CallableName())
-                    .Add(0, sort.Input().Ptr())
-                    .Add(1, members)
-                .Seal()
-                .Add(1, sort.SortDirections().Ptr())
-                .Add(2, ctx.DeepCopyLambda(sort.KeySelectorLambda().Ref()))
             .Seal()
             .Build();
+
+        TExprNode::TListType children;
+        children.push_back(ctx.Builder(node->Pos())
+            .Callable(TCoExtractMembers::CallableName())
+                .Add(0, node->HeadPtr())
+                .Add(1, members)
+            .Seal()
+            .Build());
+        if (nodeIsSort) {
+            children.push_back(node->ChildPtr(1));
+        }
+        children.push_back(ctx.DeepCopyLambda(keyExtractorLambda.Ref()));
+
+        return ctx.ChangeChildren(*result, std::move(children));
     }
     else if (fieldSubset) {
-        const auto structType = GetSeqItemType(*sort.Ref().GetTypeAnn()).Cast<TStructExprType>();
+        const auto structType = GetSeqItemType(node->GetTypeAnn())->Cast<TStructExprType>();
         if (structType->GetSize() <= extractFields.size()) {
             return {};
         }
@@ -221,16 +307,26 @@ TExprNode::TPtr ApplyExtractMembersToSort(const TExprNode::TPtr& node, const TEx
             totalExtracted.emplace_back(ctx.NewAtom(members->Pos(), field));
         }
 
-        return ctx.Builder(sort.Pos())
+        TExprNode::TListType children;
+        children.push_back(ctx.Builder(node->Pos())
             .Callable(TCoExtractMembers::CallableName())
-                .Callable(0, node->Content())
-                    .Callable(0, TCoExtractMembers::CallableName())
-                        .Add(0, sort.Input().Ptr())
-                        .Add(1, ctx.NewList(members->Pos(), std::move(totalExtracted)))
-                    .Seal()
-                    .Add(1, sort.SortDirections().Ptr())
-                    .Add(2, ctx.DeepCopyLambda(sort.KeySelectorLambda().Ref()))
-                .Seal()
+                .Add(0, node->HeadPtr())
+                .Add(1, ctx.NewList(members->Pos(), std::move(totalExtracted)))
+            .Seal()
+            .Build());
+        if (nodeIsSort) {
+            children.push_back(node->ChildPtr(1));
+        }
+        children.push_back(ctx.DeepCopyLambda(keyExtractorLambda.Ref()));
+
+        auto internalPartOfExtractMembers = ctx.Builder(node->Pos())
+            .Callable(node->Content())
+            .Seal()
+            .Build();
+
+        return ctx.Builder(node->Pos())
+            .Callable(TCoExtractMembers::CallableName())
+                .Add(0, ctx.ChangeChildren(*internalPartOfExtractMembers, std::move(children)))
                 .Add(1, members)
             .Seal()
             .Build();

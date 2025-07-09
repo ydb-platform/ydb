@@ -1,0 +1,11 @@
+--- a/include/boost/range/sub_range.hpp	(index)
++++ b/include/boost/range/sub_range.hpp	(working tree)
+@@ -185,6 +185,8 @@ public:
+             : base(impl::adl_begin(const_cast<base&>(static_cast<const base&>(r))),
+                    impl::adl_end(const_cast<base&>(static_cast<const base&>(r))))
+         { }  
++#else
++        sub_range(const sub_range& r) = default;
+ #endif
+ 
+         template< class ForwardRange2 >

@@ -9,6 +9,8 @@ namespace NActors {
         Max<ui64>(), Max<ui64>()
     };
 
+    const TEventSerializedData IEventHandle::EmptyBuffer;
+
     TString IEventHandle::GetTypeName() const {
         return HasEvent() ? TypeName(*(const_cast<IEventHandle*>(this)->GetBase())) : TypeName(*this);
     }
@@ -49,15 +51,6 @@ namespace NActors {
             return Buffer;
         }
         return new TEventSerializedData;
-    }
-
-    bool IEventBase::DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
-        Y_DEBUG_ABORT_UNLESS(false);
-        return false;
-    }
-
-    bool IEventBase::Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) {
-        return DoExecute(actor, std::move(eventPtr));
     }
 
 #ifndef NDEBUG

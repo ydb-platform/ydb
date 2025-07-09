@@ -9,6 +9,7 @@
 #include "flat_page_blobs.h"
 #include "flat_sausage_solid.h"
 #include "flat_table_committed.h"
+#include "util_fmt_abort.h"
 #include "util_pool.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
@@ -90,7 +91,7 @@ namespace NMem {
         explicit TTreeAllocatorState(size_t pageSize)
             : PageSize(pageSize)
         {
-            Y_ABORT_UNLESS(PageSize >= sizeof(TFreeItem));
+            Y_ENSURE(PageSize >= sizeof(TFreeItem));
         }
 
         ~TTreeAllocatorState() noexcept {
@@ -209,7 +210,7 @@ namespace NMem {
                 rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,
                 "Unexpected row operation");
 
-            Y_ABORT_UNLESS(ops.size() < Max<ui16>(), "Too large update ops array");
+            Y_ENSURE(ops.size() < Max<ui16>(), "Too large update ops array");
 
             // Filter legacy empty values and re-order them in tag order
             ScratchUpdateTags.clear();
@@ -333,7 +334,7 @@ namespace NMem {
             }
 
             const size_t mergedSize = ScratchUpdateTags.size() + ScratchMergeTags.size();
-            Y_ABORT_UNLESS(mergedSize < Max<ui16>(), "Merged row update is too large");
+            Y_ENSURE(mergedSize < Max<ui16>(), "Merged row update is too large");
 
             auto *update = NewUpdate(mergedSize);
 
@@ -363,8 +364,10 @@ namespace NMem {
                 } else if (TCellOp::HaveNoPayload(ops[it].NormalizedCellOp())) {
                     /* Payloadless ECellOp types may have zero type value */
                 } else if (info->TypeInfo.GetTypeId() != ops[it].Value.Type()) {
-                    Y_ABORT("Got an unexpected column type %" PRIu16 " in cell update for tag %" PRIu32 " (expected %" PRIu16 ")",
-                        ops[it].Value.Type(), ops[it].Tag, info->TypeInfo.GetTypeId());
+                    Y_TABLET_ERROR(
+                        "Got an unexpected column type " << ops[it].Value.Type()
+                        << " in cell update for tag " << ops[it].Tag
+                        << " (expected " << info->TypeInfo.GetTypeId() << ")");
                 }
 
                 auto cell = ops[it].AsCell();
@@ -380,7 +383,7 @@ namespace NMem {
                     cell = TCell::Make<ui64>(ref);
 
                 } else if (ops[it].Op != ELargeObj::Inline) {
-                    Y_ABORT("Got an unexpected ELargeObj reference in update ops");
+                    Y_TABLET_ERROR("Got an unexpected ELargeObj reference in update ops");
                 } else if (!cell.IsInline()) {
                     cell = Clone(cell.Data(), cell.Size());
                 }
@@ -460,7 +463,8 @@ namespace NMem {
             return TxIdStats;
         }
 
-        void CommitTx(ui64 txId, TRowVersion rowVersion) {
+        bool CommitTx(ui64 txId, TRowVersion rowVersion) {
+            bool newRef = false;
             auto it = Committed.find(txId);
             bool toInsert = (it == Committed.end());
 
@@ -480,12 +484,16 @@ namespace NMem {
                             UndoBuffer.push_back(TUndoOpInsertRemoved{ txId });
                         }
                         Removed.erase(itRemoved);
+                    } else {
+                        newRef = true;
                     }
                 }
             }
+            return newRef;
         }
 
-        void RemoveTx(ui64 txId) {
+        bool RemoveTx(ui64 txId) {
+            bool newRef = false;
             auto it = Committed.find(txId);
             if (it == Committed.end()) {
                 auto itRemoved = Removed.find(txId);
@@ -494,8 +502,10 @@ namespace NMem {
                         UndoBuffer.push_back(TUndoOpEraseRemoved{ txId });
                     }
                     Removed.insert(txId);
+                    newRef = true;
                 }
             }
+            return newRef;
         }
 
         const absl::flat_hash_map<ui64, TRowVersion>& GetCommittedTransactions() const {
@@ -507,7 +517,7 @@ namespace NMem {
         }
 
     private:
-        NMem::TTreeKey NewKey(const TCell* src) noexcept {
+        NMem::TTreeKey NewKey(const TCell* src) {
             const size_t items = Scheme->Keys->Size();
             const size_t bytes = sizeof(TCell) * items;
 
@@ -522,14 +532,14 @@ namespace NMem {
             return NMem::TTreeKey(key);
         }
 
-        NMem::TUpdate* NewUpdate(ui32 cols) noexcept
+        NMem::TUpdate* NewUpdate(ui32 cols)
         {
             const size_t bytes = sizeof(NMem::TUpdate) + cols * sizeof(NMem::TColumnUpdate);
 
             return (NMem::TUpdate*)Pool.Allocate(bytes);
         }
 
-        TCell Clone(const char *data, ui32 size) noexcept
+        TCell Clone(const char *data, ui32 size)
         {
             const bool small = TCell::CanInline(size);
 

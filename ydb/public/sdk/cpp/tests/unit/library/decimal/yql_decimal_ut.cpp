@@ -1,4 +1,4 @@
-#include <src/library/decimal/yql_decimal.h>
+#include <ydb/public/sdk/cpp/src/library/decimal/yql_decimal.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

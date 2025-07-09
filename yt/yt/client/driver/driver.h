@@ -13,6 +13,7 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/address.h>
 
@@ -77,6 +78,9 @@ struct TDriverRequest
     //! Invoked after driver is done producing response parameters and
     //! before first write to output stream.
     std::function<void()> ResponseParametersFinishedCallback;
+
+    //! Memory usage tracker.
+    IMemoryUsageTrackerPtr MemoryUsageTracker = GetNullMemoryUsageTracker();
 
     void Reset();
 
@@ -152,9 +156,7 @@ struct IDriver
     //! Returns the underlying connection.
     virtual NApi::IConnectionPtr GetConnection() = 0;
 
-    virtual NSignature::TSignatureGeneratorBasePtr GetSignatureGenerator() = 0;
-
-    virtual NSignature::TSignatureValidatorBasePtr GetSignatureValidator() = 0;
+    virtual NSignature::ISignatureValidatorPtr GetSignatureValidator() = 0;
 
     //! Terminates the underlying connection.
     virtual void Terminate() = 0;
@@ -167,8 +169,7 @@ DEFINE_REFCOUNTED_TYPE(IDriver)
 IDriverPtr CreateDriver(
     NApi::IConnectionPtr connection,
     TDriverConfigPtr config,
-    NSignature::TSignatureGeneratorBasePtr signatureGenerator,
-    NSignature::TSignatureValidatorBasePtr signatureValidator);
+    NSignature::ISignatureValidatorPtr signatureValidator);
 
 ////////////////////////////////////////////////////////////////////////////////
 

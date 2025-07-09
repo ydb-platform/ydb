@@ -309,7 +309,7 @@ class Factory:
                 specifier=specifier,
                 hashes=hashes,
             )
-            icans = list(result.iter_applicable())
+            icans = result.applicable_candidates
 
             # PEP 592: Yanked releases are ignored unless the specifier
             # explicitly pins a version (via '==' or '===') that can be
@@ -748,7 +748,7 @@ class Factory:
         # The simplest case is when we have *one* cause that can't be
         # satisfied. We just report that case.
         if len(e.causes) == 1:
-            req, parent = e.causes[0]
+            req, parent = next(iter(e.causes))
             if req.name not in constraints:
                 return self._report_single_requirement_conflict(req, parent)
 

@@ -53,12 +53,12 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
 
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const NTable::TPartView &partView)
 {
-    Y_ABORT_UNLESS(partView, "Cannot make bundle dump from empty NTable::TPartView");
+    Y_ENSURE(partView, "Cannot make bundle dump from empty NTable::TPartView");
 
     auto *part = partView.As<NTable::TPartStore>();
 
-    Y_ABORT_UNLESS(part, "Cannot cast TPart to page collection backed up part");
-    Y_ABORT_UNLESS(part->Label == part->PageCollections[0]->PageCollection->Label());
+    Y_ENSURE(part, "Cannot cast TPart to page collection backed up part");
+    Y_ENSURE(part->Label == part->PageCollections[0]->PageCollection->Label());
 
     bundle->MutablePageCollections()->Reserve(part->PageCollections.size());
 
@@ -78,12 +78,12 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const NTable::TPartView &pa
 
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const TIntrusiveConstPtr<NTable::TColdPart> &part)
 {
-    Y_ABORT_UNLESS(part, "Cannot make bundle dump from empty NTable::TColdPart");
+    Y_ENSURE(part, "Cannot make bundle dump from empty NTable::TColdPart");
 
     auto *partStore = dynamic_cast<const NTable::TColdPartStore*>(part.Get());
 
-    Y_ABORT_UNLESS(partStore, "Cannot cast TColdPart to page collection backed up part");
-    Y_ABORT_UNLESS(partStore->Label == partStore->LargeGlobIds[0].Lead);
+    Y_ENSURE(partStore, "Cannot cast TColdPart to page collection backed up part");
+    Y_ENSURE(partStore->Label == partStore->LargeGlobIds[0].Lead);
 
     bundle->MutablePageCollections()->Reserve(partStore->LargeGlobIds.size());
 
@@ -128,7 +128,7 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
     TVector<NTable::TPageCollectionComponents> components;
 
     for (auto &pageCollection: proto.GetPageCollections()) {
-        Y_ABORT_UNLESS(pageCollection.HasLargeGlobId(), "Got page collection without TLargeGlobId");
+        Y_ENSURE(pageCollection.HasLargeGlobId(), "Got page collection without TLargeGlobId");
 
         auto& item = components.emplace_back();
         item.LargeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());

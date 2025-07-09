@@ -29,6 +29,9 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec)
 
 constexpr TStringBuf ErrorMessageTruncatedSuffix = "...<message truncated>";
 
+TError::TEnricher TError::Enricher_;
+TError::TFromExceptionEnricher TError::FromExceptionEnricher_;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TError::TImpl
@@ -46,14 +49,14 @@ public:
         , InnerErrors_(other.InnerErrors_)
     { }
 
-    explicit TImpl(TString message)
+    explicit TImpl(std::string message)
         : Code_(NYT::EErrorCode::Generic)
         , Message_(std::move(message))
     {
         OriginAttributes_.Capture();
     }
 
-    TImpl(TErrorCode code, TString message)
+    TImpl(TErrorCode code, std::string message)
         : Code_(code)
         , Message_(std::move(message))
     {
@@ -77,12 +80,12 @@ public:
         Code_ = code;
     }
 
-    const TString& GetMessage() const noexcept
+    const std::string& GetMessage() const noexcept
     {
         return Message_;
     }
 
-    TString* MutableMessage() noexcept
+    std::string* MutableMessage() noexcept
     {
         return &Message_;
     }
@@ -164,7 +167,7 @@ public:
 
 private:
     TErrorCode Code_;
-    TString Message_;
+    std::string Message_;
 
     TOriginAttributes OriginAttributes_{
         .Pid = 0,
@@ -242,6 +245,13 @@ TError::TErrorOr(TError&& other) noexcept
     : Impl_(std::move(other.Impl_))
 { }
 
+TError::TErrorOr(const TErrorException& errorEx) noexcept
+{
+    *this = errorEx.Error();
+    // NB: TErrorException verifies that error not IsOK at throwing end.
+    EnrichFromException(errorEx);
+}
+
 TError::TErrorOr(const std::exception& ex)
 {
     if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
@@ -267,17 +277,23 @@ TError::TErrorOr(const std::exception& ex)
         *this = errorEx->Error();
     } else {
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{ex.what()});
+        *this <<= TErrorAttribute("exception_type", TypeName(ex));
     }
+    EnrichFromException(ex);
     YT_VERIFY(!IsOK());
 }
 
-TError::TErrorOr(TString message, TDisableFormat)
+TError::TErrorOr(std::string message, TDisableFormat)
     : Impl_(std::make_unique<TImpl>(std::move(message)))
-{ }
+{
+    Enrich();
+}
 
-TError::TErrorOr(TErrorCode code, TString message, TDisableFormat)
+TError::TErrorOr(TErrorCode code, std::string message, TDisableFormat)
     : Impl_(std::make_unique<TImpl>(code, std::move(message)))
-{ }
+{
+    Enrich();
+}
 
 TError& TError::operator = (const TError& other)
 {
@@ -357,16 +373,16 @@ THashSet<TErrorCode> TError::GetDistinctNonTrivialErrorCodes() const
     return result;
 }
 
-const TString& TError::GetMessage() const
+const std::string& TError::GetMessage() const
 {
     if (!Impl_) {
-        static const TString Result;
+        static const std::string Result;
         return Result;
     }
     return Impl_->GetMessage();
 }
 
-TError& TError::SetMessage(TString message)
+TError& TError::SetMessage(std::string message)
 {
     MakeMutable();
     *Impl_->MutableMessage() = std::move(message);
@@ -416,7 +432,7 @@ NThreading::TThreadId TError::GetTid() const
 TStringBuf TError::GetThreadName() const
 {
     if (!Impl_) {
-        static TString empty;
+        static std::string empty;
         return empty;
     }
     return Impl_->GetThreadName();
@@ -476,7 +492,7 @@ void TError::UpdateOriginAttributes()
     Impl_->UpdateOriginAttributes();
 }
 
-const TString InnerErrorsTruncatedKey("inner_errors_truncated");
+const std::string InnerErrorsTruncatedKey("inner_errors_truncated");
 
 TError TError::Truncate(
     int maxInnerErrorCount,
@@ -507,8 +523,7 @@ TError TError::Truncate(
 
     auto result = std::make_unique<TImpl>();
     result->SetCode(GetCode());
-    *result->MutableMessage()
-        = std::move(TruncateString(GetMessage(), stringLimit, ErrorMessageTruncatedSuffix));
+    *result->MutableMessage() = TruncateString(GetMessage(), stringLimit, ErrorMessageTruncatedSuffix);
     if (Impl_->HasAttributes()) {
         truncateAttributes(Impl_->Attributes(), result->MutableAttributes());
     }
@@ -602,13 +617,13 @@ TError TError::Wrap() &&
     return std::move(*this);
 }
 
-Y_WEAK TString GetErrorSkeleton(const TError& /*error*/)
+Y_WEAK std::string GetErrorSkeleton(const TError& /*error*/)
 {
     // Proper implementation resides in yt/yt/library/error_skeleton/skeleton.cpp.
     THROW_ERROR_EXCEPTION("Error skeleton implementation library is not linked; consider PEERDIR'ing yt/yt/library/error_skeleton");
 }
 
-TString TError::GetSkeleton() const
+std::string TError::GetSkeleton() const
 {
     return GetErrorSkeleton(*this);
 }
@@ -627,6 +642,37 @@ std::optional<TError> TError::FindMatching(const THashSet<TErrorCode>& codes) co
     });
 }
 
+void TError::RegisterEnricher(TEnricher enricher)
+{
+    // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
+    // if the number grows.
+    if (!Enricher_) {
+        Enricher_ = std::move(enricher);
+        return;
+    }
+    Enricher_ = [first = std::move(Enricher_), second = std::move(enricher)] (TError* error) {
+        first(error);
+        second(error);
+    };
+}
+
+void TError::RegisterFromExceptionEnricher(TFromExceptionEnricher enricher)
+{
+    // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
+    // if the number grows.
+    if (!FromExceptionEnricher_) {
+        FromExceptionEnricher_ = std::move(enricher);
+        return;
+    }
+    FromExceptionEnricher_ = [
+        first = std::move(FromExceptionEnricher_),
+        second = std::move(enricher)
+    ] (TError* error, const std::exception& exception) {
+        first(error, exception);
+        second(error, exception);
+    };
+}
+
 TError::TErrorOr(std::unique_ptr<TImpl> impl)
     : Impl_(std::move(impl))
 { }
@@ -635,6 +681,20 @@ void TError::MakeMutable()
 {
     if (!Impl_) {
         Impl_ = std::make_unique<TImpl>();
+    }
+}
+
+void TError::Enrich()
+{
+    if (Enricher_) {
+        Enricher_(this);
+    }
+}
+
+void TError::EnrichFromException(const std::exception& exception)
+{
+    if (FromExceptionEnricher_) {
+        FromExceptionEnricher_(this, exception);
     }
 }
 
@@ -769,7 +829,7 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
         AppendAttribute(
             builder,
             "host",
-            TString{originAttributes->Host},
+            std::string{originAttributes->Host},
             indent);
     }
 

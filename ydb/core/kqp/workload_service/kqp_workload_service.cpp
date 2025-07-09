@@ -14,6 +14,7 @@
 
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -66,15 +67,16 @@ public:
     void Bootstrap() {
         Become(&TKqpWorkloadService::MainState);
 
-        // Subscribe for FeatureFlags
+        // Subscribe for FeatureFlags and WorkloadManagerConfig
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
-            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem
+            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem, (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem
         }), IEventHandle::FlagTrackDelivery);
 
         CpuQuotaManager = std::make_unique<TCpuQuotaManagerState>(Counters.Counters->GetSubgroup("subcomponent", "CpuQuotaManager"));
 
-        EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools();
-        EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless();
+        WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
+        EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
+        EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = AppData()->FeatureFlags.GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
             InitializeWorkloadService();
@@ -101,8 +103,9 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& event = ev->Get()->Record;
 
-        EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools();
-        EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless();
+        WorkloadManagerConfig = event.GetConfig().GetWorkloadManagerConfig();
+        EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
+        EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enanbled");
@@ -556,7 +559,7 @@ private:
             return &databaseIt->second;
         }
         LOG_I("Creating new database state for id " << databaseId);
-        return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless}}).first->second;
+        return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless, .WorkloadManagerConfig = WorkloadManagerConfig}}).first->second;
     }
 
     TPoolState* GetOrCreatePoolState(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig) {
@@ -604,6 +607,7 @@ private:
     bool EnableResourcePoolsCounters = false;
     bool ServiceInitialized = false;
     bool IdleChecksStarted = false;
+    NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
     std::unordered_set<TString> PendingHandlers;  // DatabaseID/PoolID
 

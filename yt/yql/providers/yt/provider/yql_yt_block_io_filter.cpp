@@ -21,8 +21,10 @@ public:
         , Finalizer_(std::move(finalizer))
     {
 #define HNDL(name) "YtBlockIOFilter-"#name, Hndl(&YtBlockIOFilterTransformer::name)
-        AddHandler(0, &TYtMap::Match, HNDL(HandleMapInput));
+        AddHandler(0, &TYtMap::Match, HNDL(HandleMapInput<TYtMap>));
         AddHandler(0, &TYtMap::Match, HNDL(HandleMapOutput));
+        AddHandler(0, &TYtMapReduce::Match, HNDL(HandleMapInput<TYtMapReduce>));
+        AddHandler(0, &TYtTableContent::Match, HNDL(HandleTableContent));
 #undef HNDL
     }
 
@@ -39,28 +41,29 @@ private:
         TOptimizeTransformerBase::Rewind();
     }
 
+    template<typename TYtOpWithMap>
     TMaybeNode<TExprBase> HandleMapInput(TExprBase node, TExprContext& ctx) const {
-        auto map = node.Cast<TYtMap>();
-        if (NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied)) {
-            return map;
+        auto op = node.Cast<TYtOpWithMap>();
+        if (NYql::HasSetting(op.Settings().Ref(), EYtSettingType::BlockInputApplied)) {
+            return op;
         }
 
         if (!State_->Configuration->JobBlockInput.Get().GetOrElse(Types->UseBlocks)) {
-            return map;
+            return op;
         }
 
-        auto settings = map.Settings().Ptr();
-        bool canUseBlockInput = CanUseBlockInputForMap(map);
+        auto settings = op.Settings().Ptr();
+        bool canUseBlockInput = CanUseBlockInputForMap(op);
         bool hasSetting = HasSetting(*settings, EYtSettingType::BlockInputReady);
         if (canUseBlockInput && !hasSetting) {
             settings = AddSetting(*settings, EYtSettingType::BlockInputReady, TExprNode::TPtr(), ctx);
         } else if (!canUseBlockInput && hasSetting) {
             settings = RemoveSetting(*settings, EYtSettingType::BlockInputReady, ctx);
         } else {
-            return map;
+            return op;
         }
-        return Build<TYtMap>(ctx, node.Pos())
-            .InitFrom(map)
+        return Build<TYtOpWithMap>(ctx, node.Pos())
+            .InitFrom(op)
             .Settings(settings)
             .Done();
     }
@@ -97,26 +100,32 @@ private:
             .Done();
     }
 
-    bool CanUseBlockInputForMap(const TYtMap& map) const {
-        if (!NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Flow)) {
+    bool CanUseBlockInputForMap(const TYtWithUserJobsOpBase& op) const {
+        auto mapLambda = GetMapLambda(op);
+        if (!mapLambda) {
             return false;
         }
 
-        if (map.Input().Size() > 1) {
+        if (!NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Flow)) {
             return false;
         }
 
-        for (auto path : map.Input().Item(0).Paths()) {
+        if (op.Input().Size() > 1) {
+            return false;
+        }
+
+        for (auto path : op.Input().Item(0).Paths()) {
             if (!IsYtTableSuitableForArrowInput(path.Table(), [](const TString&) {})) {
                 return false;
             }
         }
 
+        auto wideFlowLimit = State_->Configuration->WideFlowLimit.Get().GetOrElse(DEFAULT_WIDE_FLOW_LIMIT);
         auto supportedTypes = State_->Configuration->JobBlockInputSupportedTypes.Get().GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES);
         auto supportedDataTypes = State_->Configuration->JobBlockInputSupportedDataTypes.Get().GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES);
 
-        auto lambdaInputType = map.Mapper().Args().Arg(0).Ref().GetTypeAnn();
-        if (!CheckBlockIOSupportedTypes(*lambdaInputType, supportedTypes, supportedDataTypes, [](const TString&) {})) {
+        auto lambdaInputType = mapLambda.Cast().Args().Arg(0).Ref().GetTypeAnn();
+        if (!CheckBlockIOSupportedTypes(*lambdaInputType, supportedTypes, supportedDataTypes, [](const TString&) {}, wideFlowLimit)) {
             return false;
         }
 
@@ -128,11 +137,12 @@ private:
             return false;
         }
 
+        auto wideFlowLimit = State_->Configuration->WideFlowLimit.Get().GetOrElse(DEFAULT_WIDE_FLOW_LIMIT);
         auto supportedTypes = State_->Configuration->JobBlockOutputSupportedTypes.Get().GetOrElse(DEFAULT_BLOCK_OUTPUT_SUPPORTED_TYPES);
         auto supportedDataTypes = State_->Configuration->JobBlockOutputSupportedDataTypes.Get().GetOrElse(DEFAULT_BLOCK_OUTPUT_SUPPORTED_DATA_TYPES);
 
         auto lambdaOutputType = map.Mapper().Ref().GetTypeAnn();
-        if (!CheckBlockIOSupportedTypes(*lambdaOutputType, supportedTypes, supportedDataTypes, [](const TString&) {}, false)) {
+        if (!CheckBlockIOSupportedTypes(*lambdaOutputType, supportedTypes, supportedDataTypes, [](const TString&) {}, wideFlowLimit, false)) {
             return false;
         }
 
@@ -148,6 +158,66 @@ private:
         } else {
             return EBlockOutputMode::Disable;
         }
+    }
+
+    TMaybeNode<TExprBase> HandleTableContent(TExprBase node, TExprContext& ctx) const {
+        auto tableContent = node.Cast<TYtTableContent>();
+        if (NYql::HasSetting(tableContent.Settings().Ref(), EYtSettingType::BlockInputReady)) {
+            return tableContent;
+        }
+
+        if (!State_->Configuration->JobBlockTableContent.Get().GetOrElse(Types->UseBlocks)) {
+            return tableContent;
+        }
+
+        auto settings = tableContent.Settings().Ptr();
+        bool canUseBlockInput = CanUseBlockInputForTableContent(tableContent);
+        bool hasSetting = HasSetting(*settings, EYtSettingType::BlockInputReady);
+        if (canUseBlockInput && !hasSetting) {
+            settings = AddSetting(*settings, EYtSettingType::BlockInputReady, TExprNode::TPtr(), ctx);
+        } else if (!canUseBlockInput && hasSetting) {
+            settings = RemoveSetting(*settings, EYtSettingType::BlockInputReady, ctx);
+        } else {
+            return tableContent;
+        }
+        return Build<TYtTableContent>(ctx, node.Pos())
+            .InitFrom(tableContent)
+            .Settings(settings)
+            .Done();
+    }
+
+    bool CanUseBlockInputForTableContent(const TYtTableContent& tableContent) const {
+        if (auto readTable = tableContent.Input().Maybe<TYtReadTable>()) {
+            if (readTable.Cast().Input().Size() > 1) {
+                return false;
+            }
+
+            for (auto path : readTable.Cast().Input().Item(0).Paths()) {
+                if (!IsYtTableSuitableForArrowInput(path.Table(), [](const TString&) {})) {
+                    return false;
+                }
+            }
+
+        } else if (auto output = tableContent.Input().Maybe<TYtOutput>()) {
+            auto outTable = GetOutTable(output.Cast());
+            if (!IsYtTableSuitableForArrowInput(outTable, [](const TString&) {})) {
+                return false;
+            }
+
+        } else {
+            YQL_ENSURE(false, "Expected " << TYtReadTable::CallableName() << " or " << TYtOutput::CallableName());
+        }
+
+        auto wideFlowLimit = State_->Configuration->WideFlowLimit.Get().GetOrElse(DEFAULT_WIDE_FLOW_LIMIT);
+        auto supportedTypes = State_->Configuration->JobBlockInputSupportedTypes.Get().GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES);
+        auto supportedDataTypes = State_->Configuration->JobBlockInputSupportedDataTypes.Get().GetOrElse(DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES);
+
+        auto inputType = tableContent.Ref().GetTypeAnn();
+        if (!CheckBlockIOSupportedTypes(*inputType, supportedTypes, supportedDataTypes, [](const TString&) {}, wideFlowLimit)) {
+            return false;
+        }
+
+        return true;
     }
 
 private:

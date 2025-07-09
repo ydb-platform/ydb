@@ -591,7 +591,7 @@ struct TJsonToJsonDocumentConvert {
     static Value* Generate(Value* json, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonToJsonDocument));
+        const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&JsonToJsonDocument>());
         const auto functionType = FunctionType::get(json->getType(), {json->getType()}, /* isVarArg */ false);
         const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block);
         return CallInst::Create(functionType, functionPtr, {json}, "jsonToJsonDocument", block);
@@ -614,7 +614,7 @@ struct TJsonDocumentToJsonConvert {
     static Value* Generate(Value* jsonDocument, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonDocumentToJson));
+        const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&JsonDocumentToJson>());
         const auto functionType = FunctionType::get(jsonDocument->getType(), {jsonDocument->getType()}, /* isVarArg */ false);
         const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block);
         return CallInst::Create(functionType, functionPtr, {jsonDocument}, "jsonDocumentToJson", block);

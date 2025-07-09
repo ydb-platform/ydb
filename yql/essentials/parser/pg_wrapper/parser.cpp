@@ -2,7 +2,9 @@
 
 #include "arena_ctx.h"
 
+#include <util/charset/utf8.h>
 #include <util/generic/scope.h>
+
 #include <fcntl.h>
 #include <stdint.h>
 
@@ -219,7 +221,7 @@ void PGParse(const TString& input, IPGParseEvents& events) {
                     break;
                 }
 
-                if (!TTextWalker::IsUtf8Intermediate(input[i])) {
+                if (!IsUTF8ContinuationByte(input[i])) {
                     ++codepoints;
                 }
                 walker.Advance(input[i]);

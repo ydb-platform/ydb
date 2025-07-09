@@ -1,15 +1,16 @@
 #include "portions.h"
+
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 
 namespace NKikimr::NOlap::NReader::NSysView::NPortions {
 
-void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const {
-    NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
-    const std::string prod = ::ToString(portion.GetMeta().Produced);
+void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion, const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
+    NArrow::Append<arrow::UInt64Type>(*builders[0], schemeShardLocalPathId.GetRawValue());
+    const std::string prod = ::ToString(portion.GetProduced());
     NArrow::Append<arrow::StringType>(*builders[1], prod);
-    NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+    NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
     NArrow::Append<arrow::UInt64Type>(*builders[3], portion.GetRecordsCount());
     NArrow::Append<arrow::UInt64Type>(*builders[4], portion.GetColumnRawBytes());
     NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetIndexRawBytes());
@@ -44,7 +45,8 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     ui64 recordsCount = 0;
     while (auto portion = granule.PopFrontPortion()) {
         recordsCount += 1;
-        AppendStats(builders, *portion);
+        AFL_VERIFY(portion->GetPathId() == granule.GetPathId().InternalPathId);
+        AppendStats(builders, *portion, granule.GetPathId().SchemeShardLocalPathId);
         if (recordsCount >= 10000) {
             break;
         }
@@ -60,11 +62,11 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata:
     return GetColumns(TStatsIterator::StatsSchema, TStatsIterator::StatsSchema.KeyColumns);
 }
 
-std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(
+    const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto* index = self->GetIndexOptional();
-    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
-        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
-        read.GetProgram(), index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
+    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(), Sorting, read.GetProgram(),
+        index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NSysView::NPortions

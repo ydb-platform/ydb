@@ -15,7 +15,7 @@
 #include <ydb/library/actors/util/queue_oneone_inplace.h>
 
 #include <util/generic/maybe.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/random/mersenne.h>
 #include <util/string/printf.h>
 #include <typeinfo>
@@ -1293,7 +1293,7 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                            if (checkStopConditions(/* perMessage */ true)) {
+                                            if (AllowBreakOnStopCondition && checkStopConditions(/* perMessage */ true)) {
                                                 stopCondition = true;
                                             }
                                             break;
@@ -1599,7 +1599,7 @@ namespace NActors {
         if (!actor) {
             return {};
         }
-        return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(actor->GetActivityType());
+        return actor->GetActivityType().GetName();
     }
 
     void TTestActorRuntimeBase::EnableScheduleForActor(const TActorId& actorId, bool allow) {
@@ -1722,6 +1722,9 @@ namespace NActors {
         if (!actor) {
             actor = mailbox->FindAlias(localId);
         }
+        if (!actor && node->LocalServicesActors.contains(actorId)) {
+            actor = node->LocalServicesActors[actorId];
+        }
         return actor;
     }
 
@@ -1731,7 +1734,7 @@ namespace NActors {
 
         IHarmonizer* harmonizer = nullptr;
         if (node) {
-            node->Harmonizer.reset(MakeHarmonizer(GetCycleCountFast()));
+            node->Harmonizer = MakeHarmonizer(GetCycleCountFast());
             harmonizer = node->Harmonizer.get();
         }
 
@@ -1975,7 +1978,6 @@ namespace NActors {
                 ctx.Send(GetForwardedEvent().Release());
             } else {
                 while (Context->Queue->Head()) {
-                    HasReply = false;
                     ctx.Send(GetForwardedEvent().Release());
                     int count = 100;
                     while (!HasReply && count > 0) {
@@ -1983,7 +1985,7 @@ namespace NActors {
                             Runtime->DispatchEvents(DelegateeOptions);
                         } catch (TEmptyEventQueueException&) {
                             count--;
-                            Cerr << "No reply" << Endl;
+                            Cerr << "No reply RequestType# " << RequestType << Endl;
                         }
                     }
 
@@ -1994,11 +1996,15 @@ namespace NActors {
 
         TAutoPtr<IEventHandle> GetForwardedEvent() {
             IEventHandle* ev = Context->Queue->Head();
-            ReplyChecker->OnRequest(ev);
+            RequestType = ev->GetTypeRewrite();
+            HasReply = !ReplyChecker->OnRequest(ev);
             TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
                     ? new IEventHandle(Delegatee, ReplyId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
                     : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
 
+            if (HasReply) {
+                delete Context->Queue->Pop();
+            }
             return forwardedEv;
         }
     private:
@@ -2011,6 +2017,7 @@ namespace NActors {
         TDispatchOptions DelegateeOptions;
         TTestActorRuntimeBase* Runtime;
         THolder<IReplyChecker> ReplyChecker;
+        ui32 RequestType;
     };
 
     void TStrandingActorDecorator::TReplyActor::StateFunc(STFUNC_SIG) {

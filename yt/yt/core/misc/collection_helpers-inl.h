@@ -87,6 +87,13 @@ std::vector<typename T::key_type> GetKeys(const T& collection, size_t sizeLimit)
 }
 
 template <class T>
+THashSet<typename T::key_type> GetKeySet(const T& collection, size_t sizeLimit)
+{
+    auto vec = GetKeys(collection, sizeLimit);
+    return THashSet<typename T::key_type>(vec.begin(), vec.end());
+}
+
+template <class T>
 std::vector<typename T::mapped_type> GetValues(const T& collection, size_t sizeLimit)
 {
     return GetIthsImpl<typename T::mapped_type>(
@@ -206,6 +213,15 @@ auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
     auto [it, emplaced] = container.emplace(std::forward<TArgs>(args)...);
     YT_VERIFY(emplaced);
     return it;
+}
+
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key)
+{
+    return map.emplace(
+        std::piecewise_construct_t{},
+        std::tuple<TKey&&>{std::forward<TKey>(key)},
+        std::tuple{});
 }
 
 template <class T, class... TVariantArgs>

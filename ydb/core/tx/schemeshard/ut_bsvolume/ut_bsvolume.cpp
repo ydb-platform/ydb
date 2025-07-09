@@ -1,6 +1,5 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -9,7 +8,7 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(TBSV) {
     Y_UNIT_TEST(CleanupDroppedVolumesOnRestart) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         runtime.GetAppData().DisableSchemeShardCleanupOnDropForTest = true;
@@ -55,7 +54,7 @@ Y_UNIT_TEST_SUITE(TBSV) {
 
     Y_UNIT_TEST(ShardsNotLeftInShardsToDelete) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;

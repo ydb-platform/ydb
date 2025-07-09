@@ -9,16 +9,16 @@ using namespace NYql;
 using namespace NKikimr::NMiniKQL;
 
 template <typename F>
-void TestOne(F&& f) {
+void TestOne(F&& f, TLangVersion langver = MinLangVersion) {
     TExprContext ctx;
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
     FillStaticModules(*functionRegistry);
     auto nodeFactory = GetBuiltinFactory();
-    TKernelRequestBuilder b(*functionRegistry);
+    TKernelRequestBuilder b(*functionRegistry, langver);
     auto index = f(b, ctx);
     UNIT_ASSERT_VALUES_EQUAL(index, 0);
     auto s = b.Serialize();
-    auto v = LoadKernels(s, *functionRegistry, nodeFactory);
+    auto v = LoadKernels(s, *functionRegistry, nodeFactory, langver);
     UNIT_ASSERT_VALUES_EQUAL(v.size(), 1);
 }
 
@@ -245,6 +245,21 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
                 ctx.template MakeType<TDataExprType>(EDataSlot::String)));
             return b.Udf("Url.GetHost", false, { blockOptStringType }, blockOptStringType) ;
         });
+    }
+
+    Y_UNIT_TEST(TestUdfLangVer) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockBoolType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::Bool));
+
+            auto blockStringType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::String));
+
+            auto blockOptStringType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TOptionalExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::String)));
+            return b.Udf("String.AsciiContainsIgnoreCase", false, { blockOptStringType, blockStringType }, blockBoolType) ;
+        }, MakeLangVersion(2025, 2));
     }
 
     Y_UNIT_TEST(TestScalarApply) {

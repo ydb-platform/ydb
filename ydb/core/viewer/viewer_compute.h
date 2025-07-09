@@ -160,7 +160,7 @@ public:
             RequestSchemeCacheNavigate(DomainPath);
         }
         RootHiveId = domains->GetHive();
-        if (Requests == 0) {
+        if (!WaitingForResponse()) {
             ReplyAndPassAway();
         }
 

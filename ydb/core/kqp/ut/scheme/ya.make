@@ -5,15 +5,16 @@ SPLIT_FACTOR(50)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 SRCS(
     kqp_acl_ut.cpp
-    kqp_scheme_ut.cpp
     kqp_constraints_ut.cpp
+    kqp_scheme_ut.cpp
+    kqp_secrets_ut.cpp
 )
 
 PEERDIR(

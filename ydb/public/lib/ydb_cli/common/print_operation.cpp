@@ -1,8 +1,8 @@
 #include "print_operation.h"
 #include "pretty_table.h"
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -414,6 +414,9 @@ void Out<NYdb::NQuery::EExecStatus>(IOutputStream& o, NYdb::NQuery::EExecStatus 
     switch (status) {
         case EExecStatus::Starting:
             o << TStringBuf("starting");
+            return;
+        case EExecStatus::Running:
+            o << TStringBuf("running");
             return;
         case EExecStatus::Aborted:
             o << TStringBuf("aborted");

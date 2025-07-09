@@ -1,14 +1,14 @@
 services:
   fq-connector-go:
-    command: |
+    container_name: fq-tests-ydb-fq-connector-go
+    entrypoint: |
       sh -c "
         apk add dnsmasq bind;
         echo \"address=/fq-tests-ydb-ydb/$$(dig fq-tests-ydb-ydb +short)\" >> /etc/dnsmasq.conf;
         echo \"nameserver 127.0.0.1\" > /etc/resolv.conf;
         dnsmasq;
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
-    container_name: fq-tests-ydb-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.6.2@sha256:a79b73f31d6ad37ca32d9212fe588e13bef30b56b3d29bbf49e450270c5e11f7
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.7.2-rc.4@sha256:3dd675ebdba9ff4a1933443d801ba121d11a9eec20a6da8f0fa5dddc4ba97c0f
     ports:
       - 2130
     volumes:

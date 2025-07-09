@@ -114,6 +114,14 @@ void FromProto(
     NApi::TJobTraceEvent* result,
     const NProto::TJobTraceEvent& proto);
 
+void ToProto(
+    NProto::TOperationEvent* proto,
+    const NApi::TOperationEvent& result);
+
+void FromProto(
+    NApi::TOperationEvent* result,
+    const NProto::TOperationEvent& proto);
+
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
 
@@ -196,6 +204,10 @@ void ToProto(
     NProto::TMultiTablePartition* protoMultiTablePartition,
     const NApi::TMultiTablePartition& multiTablePartition);
 
+void ToProto(
+    TProtobufString* protoCookie,
+    const TTablePartitionCookiePtr& cookie);
+
 void FromProto(
     NApi::TMultiTablePartition* multiTablePartition,
     const NProto::TMultiTablePartition& protoMultiTablePartition);
@@ -203,6 +215,10 @@ void FromProto(
 void FromProto(
     NApi::TMultiTablePartitions* multiTablePartitions,
     const NProto::TRspPartitionTables& protoRspPartitionTables);
+
+void FromProto(
+    TTablePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie);
 
 void ToProto(
     NProto::TRowBatchReadOptions* proto,
@@ -255,6 +271,18 @@ NProto::EOperationState ConvertOperationStateToProto(
 
 NScheduler::EOperationState ConvertOperationStateFromProto(
     NProto::EOperationState proto);
+
+NProto::EOperationEventType ConvertOperationEventTypeToProto(
+    NApi::EOperationEventType operationEventType);
+
+NApi::EOperationEventType ConvertOperationEventTypeFromProto(
+    NProto::EOperationEventType proto);
+
+NProto::EIncarnationSwitchReason ConvertIncarnationSwitchReasonToProto(
+    NControllerAgent::EOperationIncarnationSwitchReason operationEventType);
+
+NControllerAgent::EOperationIncarnationSwitchReason ConvertIncarnationSwitchReasonFromProto(
+    NProto::EIncarnationSwitchReason proto);
 
 NProto::EJobType ConvertJobTypeToProto(
     NJobTrackerClient::EJobType jobType);
@@ -320,10 +348,7 @@ void ParseRequest(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsRetriableError(
-    const TError& error,
-    bool retryProxyBanned = true,
-    bool retrySequoiaErrorsOnly = false);
+bool IsRetriableError(const TError& error, bool retryProxyBanned = true);
 
 ////////////////////////////////////////////////////////////////////////////////
 

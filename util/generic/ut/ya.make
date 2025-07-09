@@ -12,6 +12,7 @@ SRCS(
     generic/buffer_ut.cpp
     generic/cast_ut.cpp
     generic/deque_ut.cpp
+    generic/enum_cast_ut.cpp
     generic/explicit_type_ut.cpp
     generic/flags_ut.cpp
     generic/function_ref_ut.cpp
@@ -60,7 +61,10 @@ SRCS(
 INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc)
 
 PEERDIR(
+    library/cpp/case_insensitive_string
     library/cpp/containers/absl_flat_hash
 )
+
+GENERATE_ENUM_SERIALIZATION(generic/enum_cast_ut.h)
 
 END()

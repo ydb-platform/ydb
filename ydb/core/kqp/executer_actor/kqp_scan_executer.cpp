@@ -1,6 +1,5 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_partition_helper.h"
 #include "kqp_tasks_graph.h"
 #include "kqp_tasks_validate.h"
 
@@ -44,12 +43,12 @@ public:
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         TPreparedQueryHolder::TConstPtr preparedQuery,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
-        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, counters, tableServiceConfig,
+        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database, userToken, counters, executerConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
             false
         )
@@ -185,7 +184,6 @@ private:
                         case NKqpProto::TKqpSource::kReadRangesSource:
                             BuildScanTasksFromSource(
                                 stageInfo,
-                                /* shardsResolved */ true,
                                 /* limitTasksPerNode */ false);
                             break;
                         default:
@@ -197,7 +195,7 @@ private:
                     BuildSysViewScanTasks(stageInfo);
                 } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
                     HasOlapTable = true;
-                    BuildScanTasksFromShards(stageInfo);
+                    BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
                 } else {
                     YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
                 }
@@ -220,7 +218,7 @@ private:
                 }
 
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling);
+                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
             }
 
             ResponseEv->InitTxResult(tx.Body);
@@ -330,13 +328,13 @@ private:
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, counters, tableServiceConfig, std::move(asyncIoFactory),
+    return new TKqpScanExecuter(std::move(request), database, userToken, counters, executerConfig, std::move(asyncIoFactory),
         preparedQuery, userRequestContext, statementResultIndex,
         federatedQuerySetup, GUCSettings);
 }

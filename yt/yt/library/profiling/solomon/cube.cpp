@@ -462,6 +462,10 @@ int TCube<T>::ReadSensors(
                         consumer->OnDouble(time, value.SecondsFloat());
                     }
                 } else {
+                    if (!options.ReportTimestampsForRateMetrics) {
+                        time = TInstant::Zero();
+                    }
+
                     // TODO(prime@): RATE is incompatible with windowed read.
                     if constexpr (std::is_same_v<T, i64>) {
                         consumer->OnInt64(time, Rollup(*window, indices.back()));

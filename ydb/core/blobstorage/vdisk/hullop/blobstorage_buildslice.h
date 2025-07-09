@@ -29,11 +29,13 @@ namespace NKikimr {
 
         // Find removed huge blobs
         static TDiskPartVec FindRemovedHugeBlobsAfterLevelCompaction(
+                const TString& prefix,
                 const TActorContext &ctx,
                 TSliceSstIterator oldSliceIt,
                 const TLevelSlice *newSlice);
 
         static TDiskPartVec FindRemovedHugeBlobsAfterFreshCompaction(
+                const TString& prefix,
                 const TActorContext &ctx,
                 const TIntrusivePtr<TFreshSegment> &freshSeg,
                 const TOrderedLevelSegmentsPtr &segVec);
@@ -79,11 +81,9 @@ namespace NKikimr {
         TLevelSlicePtr res(new TLevelSlice(settings, slice->Ctx));
 
         ui32 levelsSize = slice->SortedLevels.size();
-        if (ctask.Action == NHullComp::ActCompactSsts &&
-            ctask.CompactSsts.TargetLevel != ui32(-1) &&
-            ctask.CompactSsts.TargetLevel > levelsSize) {
-            // resize levels
-            levelsSize = ctask.CompactSsts.TargetLevel;
+        if (ctask.Action == NHullComp::ActCompactSsts) {
+            Y_VERIFY_S(ctask.CompactSsts.TargetLevel != (ui32)-1, vctx->VDiskLogPrefix);
+            levelsSize = Max(levelsSize, ctask.CompactSsts.TargetLevel); // levelsSize is size of sorted levels, excluding level 0
         }
 
         res->SortedLevels.reserve(levelsSize);
@@ -136,9 +136,9 @@ namespace NKikimr {
             str << "}";
             return str.Str();
         };
-        Y_ABORT_UNLESS(checkOrder(addIt), "addIt# %s", dump(addIt).data());
-        Y_ABORT_UNLESS(checkOrder(delIt), "delIt# %s", dump(delIt).data());
-        Y_ABORT_UNLESS(checkOrder(sliceIt), "sliceIt# %s", dump(sliceIt).data());
+        Y_VERIFY_S(checkOrder(addIt), vctx->VDiskLogPrefix << "addIt# " << dump(addIt));
+        Y_VERIFY_S(checkOrder(delIt), vctx->VDiskLogPrefix << "delIt# " << dump(delIt));
+        Y_VERIFY_S(checkOrder(sliceIt), vctx->VDiskLogPrefix << "sliceIt# " << dump(sliceIt));
 
 #ifdef HULL_COMPACT_APPLY
         TStringStream debugOutput;
@@ -193,7 +193,7 @@ namespace NKikimr {
                 debugOutput << "  BOTH        sliceIt: " << sliceIt.Get().ToString() << " addIt: "
                             << addIt.Get().ToString() << "\n";
 #endif
-                Y_ABORT_UNLESS(delIt.Valid() && sliceIt.Get().IsSameSst(delIt.Get()));
+                Y_VERIFY_S(delIt.Valid() && sliceIt.Get().IsSameSst(delIt.Get()), vctx->VDiskLogPrefix);
                 delIt.Next();
                 sliceIt.Next();
                 TLevelSstPtr item = addIt.Get();
@@ -231,9 +231,9 @@ namespace NKikimr {
             addIt.Next();
         }
 
-        Y_ABORT_UNLESS(!sliceIt.Valid());
-        Y_ABORT_UNLESS(!addIt.Valid());
-        Y_ABORT_UNLESS(!delIt.Valid()); // ensure we didn't miss something
+        Y_VERIFY_S(!sliceIt.Valid(), vctx->VDiskLogPrefix);
+        Y_VERIFY_S(!addIt.Valid(), vctx->VDiskLogPrefix);
+        Y_VERIFY_S(!delIt.Valid(), vctx->VDiskLogPrefix); // ensure we didn't miss something
 
 #ifdef HULL_COMPACT_APPLY
         debugOutput << " RESULT\n" << res->ToString("  ");
@@ -244,13 +244,13 @@ namespace NKikimr {
 
         TSliceSstIterator resIt(res.Get(), res->Level0CurSstsNum());
         resIt.SeekToFirst();
-        Y_ABORT_UNLESS(checkOrder(resIt), "resIt# %s", dump(resIt).data());
-
+        Y_VERIFY_S(checkOrder(resIt), vctx->VDiskLogPrefix << "resIt# " << dump(resIt));
 
         // additional check
         TDiskPartVec removedHugeBlobs;
         if (findRemovedHugeBlobs) {
-            removedHugeBlobs = FindRemovedHugeBlobsAfterLevelCompaction(ctx, sliceIt, res.Get());
+            removedHugeBlobs = FindRemovedHugeBlobsAfterLevelCompaction(
+                vctx->VDiskLogPrefix, ctx, sliceIt, res.Get());
         }
 
         return TBuiltSlice{ res, removedHugeBlobs };
@@ -259,6 +259,7 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     TDiskPartVec
     THullOpUtil<TKey, TMemRec>::FindRemovedHugeBlobsAfterLevelCompaction(
+            const TString& prefix,
             const TActorContext &ctx,
             TSliceSstIterator oldSliceIt,
             const TLevelSlice *newSlice)
@@ -275,10 +276,10 @@ namespace NKikimr {
                 TMemIterator c(p.SstPtr.Get());
                 c.SeekToFirst();
                 while (c.Valid()) {
-                    TBlobType::EType type = c->MemRec.GetType();
+                    TBlobType::EType type = c.GetMemRec().GetType();
                     if (type == TBlobType::HugeBlob || type == TBlobType::ManyHugeBlobs) {
                         TDiskDataExtractor extr;
-                        c->MemRec.GetDiskData(&extr, p.SstPtr->GetOutbound());
+                        c.GetMemRec().GetDiskData(&extr, p.SstPtr->GetOutbound());
                         for (const TDiskPart *hb = extr.Begin; hb != extr.End; ++hb) {
                             func(*hb);
                         }
@@ -290,14 +291,14 @@ namespace NKikimr {
             }
         };
 
-        auto addHugeBlob = [&hugeBlobs] (const TDiskPart &part) {
+        auto addHugeBlob = [&hugeBlobs, &prefix] (const TDiskPart &part) {
             bool inserted = hugeBlobs.insert(part).second;
-            Y_ABORT_UNLESS(inserted);
+            Y_VERIFY_S(inserted, prefix);
         };
 
-        auto removeHugeBlob = [&hugeBlobs] (const TDiskPart &part) {
+        auto removeHugeBlob = [&hugeBlobs, &prefix] (const TDiskPart &part) {
             auto num = hugeBlobs.erase(part);
-            Y_ABORT_UNLESS(num == 1, "num=%u", unsigned(num));
+            Y_VERIFY_S(num == 1, prefix << "num=" << unsigned(num));
         };
 
 
@@ -320,6 +321,7 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     TDiskPartVec
     THullOpUtil<TKey, TMemRec>::FindRemovedHugeBlobsAfterFreshCompaction(
+            const TString& prefix,
             const TActorContext &ctx,
             const TIntrusivePtr<TFreshSegment> &freshSeg,
             const TOrderedLevelSegmentsPtr &segVec)
@@ -336,10 +338,10 @@ namespace NKikimr {
             TMemIterator c(seg.Get());
             c.SeekToFirst();
             while (c.Valid()) {
-                TBlobType::EType type = c->MemRec.GetType();
+                TBlobType::EType type = c.GetMemRec().GetType();
                 if (type == TBlobType::HugeBlob || type == TBlobType::ManyHugeBlobs) {
                     TDiskDataExtractor extr;
-                    c->MemRec.GetDiskData(&extr, seg->GetOutbound());
+                    c.GetMemRec().GetDiskData(&extr, seg->GetOutbound());
                     for (const TDiskPart *hb = extr.Begin; hb != extr.End; ++hb) {
                         func(*hb);
                     }
@@ -349,9 +351,9 @@ namespace NKikimr {
         };
 
         // remove huge blob from the set
-        auto removeHugeBlob = [&hugeBlobs] (const TDiskPart &part) {
+        auto removeHugeBlob = [&hugeBlobs, &prefix] (const TDiskPart &part) {
             auto num = hugeBlobs.erase(part);
-            Y_ABORT_UNLESS(num == 1, "num=%u", unsigned(num));
+            Y_VERIFY_S(num == 1, prefix << "num=" << unsigned(num));
         };
 
         // leave only deleted huge blobs in hugeBlobs

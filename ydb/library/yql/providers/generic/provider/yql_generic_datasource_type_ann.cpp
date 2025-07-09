@@ -50,7 +50,7 @@ namespace NYql {
         }
 
         TStatus HandleTable(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 2, ctx)) {
+            if (!EnsureArgsCount(*input, 1, ctx)) {
                 return TStatus::Error;
             }
 
@@ -59,6 +59,7 @@ namespace NYql {
             }
 
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+
             return TStatus::Ok;
         }
 
@@ -95,16 +96,18 @@ namespace NYql {
                 columnSet.insert(child->Content());
             }
 
-            auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
-            if (issue.has_value()) {
-                ctx.AddError(issue.value());
+            auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
+            if (issues) {
+                for (const auto& issue : issues) {
+                    ctx.AddError(issue);
+                }
                 return TStatus::Error;
             }
 
             // Create type annotation
             TVector<const TItemExprType*> blockRowTypeItems;
 
-            const auto structExprType = tableMeta.value()->ItemType;
+            const auto structExprType = tableMeta->ItemType;
             for (const auto& item : structExprType->GetItems()) {
                 // Filter out columns that are not required in this query
                 if (columnSet.contains(item->GetName())) {
@@ -186,14 +189,16 @@ namespace NYql {
             const auto tableName = table.Name().StringValue();
 
             // Extract table metadata
-            auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
-            if (issue.has_value()) {
-                ctx.AddError(issue.value());
+            auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
+            if (issues) {
+                for (const auto& issue : issues) {
+                    ctx.AddError(issue);
+                }
                 return TStatus::Error;
             }
 
-            auto itemType = tableMeta.value()->ItemType;
-            auto columnOrder = tableMeta.value()->ColumnOrder;
+            auto itemType = tableMeta->ItemType;
+            auto columnOrder = tableMeta->ColumnOrder;
 
             if (columnSet) {
                 YQL_CLOG(INFO, ProviderGeneric) << "custom column set" << ColumnSetToString(*columnSet.Get());

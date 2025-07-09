@@ -1,6 +1,6 @@
-#include <ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>

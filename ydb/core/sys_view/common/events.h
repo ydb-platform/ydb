@@ -78,7 +78,15 @@ struct TEvSysView {
         EvCalculateStorageStatsRequest,
         EvCalculateStorageStatsResponse,
 
+        EvRosterUpdateFinished,
+
         EvEnd,
+    };
+
+    struct TEvRosterUpdateFinished : public TEventLocal<
+        TEvRosterUpdateFinished,
+        EvRosterUpdateFinished>
+    {
     };
 
     struct TEvSendPartitionStats : public TEventLocal<

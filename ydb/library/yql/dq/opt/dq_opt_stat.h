@@ -6,11 +6,13 @@
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
+enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };
 
 void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
-void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
@@ -22,9 +24,24 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
 void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints = {});
 void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForSortBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 bool InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
-std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats);
-std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
+void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForUnionAll(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats);
+std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
+
+struct TOrderingInfo {
+    std::int64_t OrderingIdx = -1;
+    std::vector<TOrdering::TItem::EDirection> Directions{};
+    TVector<TJoinColumn> Ordering{};
+};
+
+TOrderingInfo GetTopBaseSortingOrderingInfo(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
+TOrderingInfo GetSortBaseSortingOrderingInfo(const NNodes::TCoSortBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
+TOrderingInfo GetAggregationBaseShuffleOrderingInfo(const NNodes::TCoAggregateBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM, TTableAliasMap*);
 
 class TPredicateSelectivityComputer {
 public:
@@ -49,10 +66,18 @@ public:
 
         TVector<TColumnStatisticsUsedMember> Data{};
     };
+
 public:
-    TPredicateSelectivityComputer(const std::shared_ptr<TOptimizerStatistics>& stats, bool collectColumnsStatUsedMembers = false)
-        : Stats(stats)
+    TPredicateSelectivityComputer(
+        std::shared_ptr<TOptimizerStatistics> stats,
+        bool collectColumnsStatUsedMembers = false,
+        bool collectMemberEqualities = false,
+        bool collectConstantMembers = false
+    )
+        : Stats(std::move(stats))
         , CollectColumnsStatUsedMembers(collectColumnsStatUsedMembers)
+        , CollectMemberEqualities(collectMemberEqualities)
+        , CollectConstantMembers(collectConstantMembers)
     {}
 
     double Compute(const NNodes::TExprBase& input);
@@ -62,19 +87,53 @@ public:
         return ColumnStatsUsedMembers;
     }
 
-protected:
-    double ComputeEqualitySelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right);
+    TVector<std::pair<NNodes::TCoMember, NNodes::TCoMember>> GetMemberEqualities() {
+        return MemberEqualities;
+    }
 
-    double ComputeComparisonSelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right);
+    TVector<NNodes::TCoMember> GetConstantMembers() {
+        return ConstantMembers;
+    }
+
+protected:
+    double ComputeImpl(
+        const NNodes::TExprBase& input,
+        bool underNot,
+        bool collectConstantMembers
+    );
+
+    double ComputeEqualitySelectivity(
+        const NYql::NNodes::TExprBase& left,
+        const NYql::NNodes::TExprBase& right,
+        bool collectConstantMembers
+    );
+
+    double ComputeInequalitySelectivity(
+        const NYql::NNodes::TExprBase& left,
+        const NYql::NNodes::TExprBase& right,
+        EInequalityPredicateType predicate
+    );
+
+    double ComputeComparisonSelectivity(
+        const NYql::NNodes::TExprBase& left,
+        const NYql::NNodes::TExprBase& right
+    );
 
 private:
-    const std::shared_ptr<TOptimizerStatistics>& Stats;
-    TColumnStatisticsUsedMembers ColumnStatsUsedMembers{};
+    std::shared_ptr<TOptimizerStatistics> Stats;
+
     bool CollectColumnsStatUsedMembers = false;
+    TColumnStatisticsUsedMembers ColumnStatsUsedMembers{};
+
+    bool CollectMemberEqualities = false;
+    TVector<std::pair<NNodes::TCoMember, NNodes::TCoMember>> MemberEqualities{};
+
+    bool CollectConstantMembers = false;
+    TVector<NNodes::TCoMember> ConstantMembers{};
 };
 
 bool NeedCalc(NNodes::TExprBase node);
-bool IsConstantExpr(const TExprNode::TPtr& input);
+bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
 
 } // namespace NYql::NDq {

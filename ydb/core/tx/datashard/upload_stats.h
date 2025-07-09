@@ -56,7 +56,10 @@ struct TUploadStatus {
     }
 
     bool IsRetriable() const {
-        return StatusCode == Ydb::StatusIds::UNAVAILABLE || StatusCode == Ydb::StatusIds::OVERLOADED;
+        return StatusCode == Ydb::StatusIds::UNAVAILABLE
+            || StatusCode == Ydb::StatusIds::OVERLOADED
+            || StatusCode == Ydb::StatusIds::TIMEOUT
+            ;
     }
 
     TString ToString() const {
@@ -66,20 +69,6 @@ struct TUploadStatus {
                << " Issues: " << Issues.ToString()
                << " }";
     }
-};
-
-struct TUploadRetryLimits {
-    ui32 MaxUploadRowsRetryCount = 50;
-    ui32 BackoffCeiling = 3;
-
-    TDuration GetTimeoutBackouff(ui32 retryNo) const {
-        return TDuration::Seconds(1u << Max(retryNo, BackoffCeiling));
-    }
-};
-
-struct TUploadLimits: TUploadRetryLimits {
-    ui64 BatchRowsLimit = 500;
-    ui64 BatchBytesLimit = 1u << 23; // 8MB
 };
 
 }

@@ -9,6 +9,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -55,6 +56,7 @@ using TResourceRawValues = std::tuple<i64, i64, i64, i64>; // CPU, Memory, Netwo
 using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
 using TSubActorId = ui64; // = LocalId part of TActorId
+using TDataCenterPriority = std::unordered_map<TDataCenterId, i32>;
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
 
@@ -284,10 +286,13 @@ struct THiveSharedSettings {
     }
 };
 
+using TDrainTarget = std::variant<TNodeId, TBridgePileId>;
+
 struct TDrainSettings {
     bool Persist = true;
     NKikimrHive::EDrainDownPolicy DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART;
     ui32 DrainInFlight = 0;
+    bool Forward = true;
 };
 
 struct TBalancerSettings {
@@ -330,6 +335,8 @@ struct TNodeFilter {
     TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
 
     bool IsAllowedDataCenter(TDataCenterId dc) const;
+
+    bool IsAllowedPile(TBridgePileId pile) const;
 };
 
 struct TFollowerUpdates {
@@ -383,7 +390,7 @@ inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const 
             if (it != n.Notifications.begin()) {
                 o << ',';
             }
-            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient;
+            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient << " " << it->first->ToString();
         }
     }
 }

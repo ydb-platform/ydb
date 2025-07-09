@@ -32,6 +32,20 @@ TYdbSdkRetryPolicy::TPtr MakeCreateSchemaRetryPolicy() {
 
 } // namespace
 
+TControlPlaneStorageBase::TControlPlaneStorageBase(
+    const NConfig::TControlPlaneStorageConfig& config,
+    const NYql::TS3GatewayConfig& s3Config,
+    const NConfig::TCommonConfig& common,
+    const NConfig::TComputeConfig& computeConfig,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const TString& tenantName)
+    : TBase(config, s3Config, common, computeConfig)
+    , Counters(counters, *Config)
+    , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("FinalFailedStatusCode", counters->GetSubgroup("component", "QueryDiagnostic")))
+    , TenantName(tenantName)
+{
+}
+
 void TYdbControlPlaneStorageActor::Bootstrap() {
     CPS_LOG_I("Starting ydb control plane storage service. Actor id: " << SelfId());
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
@@ -323,7 +337,7 @@ void TYdbControlPlaneStorageActor::AfterTablesCreated() {
     // Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
 }
 
-bool TControlPlaneStorageUtils::IsSuperUser(const TString& user)
+bool TControlPlaneStorageUtils::IsSuperUser(const TString& user) const
 {
     return AnyOf(Config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
         return superUser == user;
@@ -412,7 +426,7 @@ TAsyncStatus TDbRequester::Validate(
     const TValidationQuery& validatonItem = validators[item];
     CollectDebugInfo(validatonItem.Query, validatonItem.Params, session, debugInfo);
     auto result = session.ExecuteDataQuery(validatonItem.Query, item == 0 ? TTxControl::BeginTx(transactionMode) : TTxControl::Tx(**transaction), validatonItem.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-    return result.Apply([=, validator=validatonItem.Validator, query=validatonItem.Query] (const TFuture<TDataQueryResult>& future) {
+    return result.Apply([=, this, validator=validatonItem.Validator, query=validatonItem.Query] (const TFuture<TDataQueryResult>& future) {
         NYdb::NTable::TDataQueryResult result = future.GetValue();
         *transaction = result.GetTransaction();
         auto status = static_cast<TStatus>(result);
@@ -462,7 +476,7 @@ TAsyncStatus TDbRequester::Write(
         });
     };
 
-    auto handler = [=, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
@@ -606,7 +620,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
         });
     };
 
-    auto handler = [=, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }

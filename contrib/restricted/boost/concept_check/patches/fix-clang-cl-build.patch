@@ -1,0 +1,25 @@
+--- a/include/boost/concept/detail/msvc.hpp	(index)
++++ b/include/boost/concept/detail/msvc.hpp	(working tree)
+@@ -18,6 +18,11 @@
+ #  pragma warning(disable:4100)
+ # endif
+ 
++# if defined(__clang__)
++#  pragma clang diagnostic push
++#  pragma clang diagnostic ignored "-Wnon-virtual-dtor"
++# endif
++
+ namespace boost { namespace concepts {
+ 
+ 
+@@ -116,6 +121,10 @@ enum                                                    \
+ # endif
+ }}
+ 
++# if defined(__clang__)
++#  pragma clang diagnostic pop
++# endif
++
+ # ifdef BOOST_MSVC
+ #  pragma warning(pop)
+ # endif

@@ -6,14 +6,19 @@
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/actions/invoker_util.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
 #include <library/cpp/yt/system/exit.h>
 
+#include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/folder/iterator.h>
 #include <util/folder/filelist.h>
 #include <util/string/split.h>
+#include <util/system/env.h>
+#include <util/system/fs.h>
+#include <util/system/maxlen.h>
 #include <util/system/shellcommand.h>
 
 #include <array>
@@ -28,8 +33,8 @@
     #include <mntent.h>
     #include <sys/vfs.h>
     #include <sys/quota.h>
-    #include <sys/types.h>
     #include <sys/sendfile.h>
+    #include <sys/sysmacros.h>
 #elif defined(_freebsd_) || defined(_darwin_)
     #include <sys/param.h>
     #include <sys/mount.h>
@@ -383,7 +388,7 @@ TPathStatistics GetPathStatistics(const TString& path)
     statistics.ModificationTime = TInstant::Seconds(fileStat.st_mtime);
     statistics.AccessTime = TInstant::Seconds(fileStat.st_atime);
     statistics.INode = fileStat.st_ino;
-    statistics.DeviceId = fileStat.st_dev;
+    statistics.DeviceId = {major(fileStat.st_dev), minor(fileStat.st_dev)};
 
     return statistics;
 #else
@@ -1158,14 +1163,54 @@ TError AttachFindOutput(TError error, const TString& path)
         << TErrorAttribute("find_output", findOutput);
 }
 
-int GetDeviceId(const TString& path)
+TDeviceId GetDeviceId(const TString& path)
 {
 #ifdef _linux_
-    return Stat(path).st_dev;
+    auto deviceId = Stat(path).st_dev;
+    return {major(deviceId), minor(deviceId)};
 #else
     Y_UNUSED(path);
     YT_UNIMPLEMENTED();
 #endif
+}
+
+std::optional<TString> FindBinaryPath(const TString& binary)
+{
+    if (NFs::Exists(binary)) {
+        return (TFsPath(NFs::CurrentWorkingDirectory()) / binary).GetPath();
+    }
+
+    // If this is an absolute path, stop here.
+    if (binary.empty() || binary[0] == '/') {
+        return std::nullopt;
+    }
+
+    std::array<char, MAX_PATH> buffer;
+
+    auto envPathStr = GetEnv("PATH");
+    TStringBuf envPath(envPathStr);
+    TStringBuf envPathItem;
+
+    while (envPath.NextTok(':', envPathItem)) {
+        if (buffer.size() < 2 + envPathItem.size() + binary.size()) {
+            continue;
+        }
+
+        size_t index = 0;
+        std::copy(envPathItem.begin(), envPathItem.end(), buffer.begin() + index);
+        index += envPathItem.size();
+        buffer[index] = '/';
+        index += 1;
+        std::copy(binary.begin(), binary.end(), buffer.begin() + index);
+        index += binary.size();
+        buffer[index] = 0;
+
+        if (NFs::Exists(buffer.data())) {
+            return TString(buffer.data(), index);
+        }
+    }
+
+    return std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -13,7 +13,7 @@
 /* Define to 1 if you have a compatible version of check available */
 #define HAVE_COMPATIBLE_CHECK 0
 
-/* Define to 1 if you have the declaration of `environ', and to 0 if you
+/* Define to 1 if you have the declaration of 'environ', and to 0 if you
    don't. */
 #define HAVE_DECL_ENVIRON 1
 
@@ -50,7 +50,7 @@
 /* Define to 1 if you have sphinx (and all required packages) available */
 #define HAVE_SPHINX 0
 
-/* Define to 1 if the system has the type `ssize_t'. */
+/* Define to 1 if the system has the type 'ssize_t'. */
 #define HAVE_SSIZE_T 1
 
 /* Define to 1 if static linking is available */
@@ -114,15 +114,15 @@
    your system. */
 /* #undef PTHREAD_CREATE_JOINABLE */
 
-/* Define as the return type of signal handlers (`int' or `void'). */
+/* Define as the return type of signal handlers ('int' or 'void'). */
 #define RETSIGTYPE void
 
-/* Define to 1 if all of the C90 standard headers exist (not just the ones
+/* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
 
-/* Enable extensions on AIX 3, Interix.  */
+/* Enable extensions on AIX, Interix, z/OS.  */
 #ifndef _ALL_SOURCE
 # define _ALL_SOURCE 1
 #endif
@@ -183,11 +183,15 @@
 #ifndef __STDC_WANT_IEC_60559_DFP_EXT__
 # define __STDC_WANT_IEC_60559_DFP_EXT__ 1
 #endif
+/* Enable extensions specified by C23 Annex F.  */
+#ifndef __STDC_WANT_IEC_60559_EXT__
+# define __STDC_WANT_IEC_60559_EXT__ 1
+#endif
 /* Enable extensions specified by ISO/IEC TS 18661-4:2015.  */
 #ifndef __STDC_WANT_IEC_60559_FUNCS_EXT__
 # define __STDC_WANT_IEC_60559_FUNCS_EXT__ 1
 #endif
-/* Enable extensions specified by ISO/IEC TS 18661-3:2015.  */
+/* Enable extensions specified by C23 Annex H and ISO/IEC TS 18661-3:2015.  */
 #ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
 # define __STDC_WANT_IEC_60559_TYPES_EXT__ 1
 #endif
@@ -225,23 +229,23 @@
 # endif
 #endif
 
-/* Define to empty if `const' does not conform to ANSI C. */
+/* Define to empty if 'const' does not conform to ANSI C. */
 /* #undef const */
 
-/* Define to `int' if <sys/types.h> doesn't define. */
+/* Define as 'int' if <sys/types.h> doesn't define. */
 /* #undef gid_t */
 
-/* Define to `long int' if <sys/types.h> does not define. */
+/* Define to 'long int' if <sys/types.h> does not define. */
 /* #undef off_t */
 
 /* Define as a signed integer type capable of holding a process identifier. */
 /* #undef pid_t */
 
-/* Define to `unsigned int' if <sys/types.h> does not define. */
+/* Define as 'unsigned int' if <stddef.h> doesn't define. */
 /* #undef size_t */
 
 /* Define ssize_t if it is not done by the standard libs. */
 /* #undef ssize_t */
 
-/* Define to `int' if <sys/types.h> doesn't define. */
+/* Define as 'int' if <sys/types.h> doesn't define. */
 /* #undef uid_t */

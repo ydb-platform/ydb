@@ -18,6 +18,7 @@ using namespace NTable;
 
 class TIncrementalRestoreScan
     : public IActorCallback
+    , public IActorExceptionHandler
     , public NTable::IScan
     , protected TChangeRecordBodySerializer
 {
@@ -60,7 +61,7 @@ public:
     {}
 
     static TVector<TTag> InitValueTags(TUserTable::TCPtr table) {
-        Y_VERIFY(table->Columns.size() >= 2);
+        Y_ENSURE(table->Columns.size() >= 2);
         TVector<TTag> valueTags;
         valueTags.reserve(table->Columns.size() - 1);
         bool deletedMarkerColumnFound = false;
@@ -73,7 +74,7 @@ public:
             }
         }
 
-        Y_VERIFY(deletedMarkerColumnFound);
+        Y_ENSURE(deletedMarkerColumnFound);
 
         return valueTags;
     }
@@ -105,7 +106,7 @@ public:
 
         for (const auto& record : ev->Get()->Records) {
             auto it = PendingRecords.find(record.Order);
-            Y_ABORT_UNLESS(it != PendingRecords.end());
+            Y_ENSURE(it != PendingRecords.end());
             records.emplace_back(it->second);
         }
 
@@ -137,15 +138,15 @@ public:
         }
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
         Driver = driver;
-        Y_ABORT_UNLESS(!LastKey || LastKey->GetCells().size() == scheme->Tags(true).size());
+        Y_ENSURE(!LastKey || LastKey->GetCells().size() == scheme->Tags(true).size());
 
         return {EScan::Sleep, {}};
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         LOG_D("Seek");
 
         if (LastKey) {
@@ -157,7 +158,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         Buffer.AddRow(key, *row);
         if (Buffer.Bytes() < Limits.BatchMaxBytes) {
             if (Buffer.Rows() < Limits.BatchMaxRows) {
@@ -173,7 +174,7 @@ public:
         return EScan::Sleep;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         LOG_D("Exhausted");
 
         NoMoreData = true;
@@ -186,11 +187,11 @@ public:
         return Progress();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        LOG_D("Finish " << static_cast<ui64>(abort));
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        LOG_D("Finish " << status);
 
-        if (abort != EAbort::None) {
-            // FIXME
+        if (status != EStatus::Done) {
+            // TODO: https://github.com/ydb-platform/ydb/issues/18797
         }
 
         Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
@@ -199,7 +200,15 @@ public:
         return nullptr;
     }
 
-    void Describe(IOutputStream& o) const noexcept override {
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
+    }
+
+    void Describe(IOutputStream& o) const override {
         o << "IncrRestoreScan {"
           << " TxId: " << TxId
           << " SourcePathId: " << SourcePathId

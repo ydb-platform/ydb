@@ -1,14 +1,14 @@
 import ast
 import dataclasses
 import inspect
-import os
-import re
-import sys
-import traceback
 from inspect import CO_VARARGS
 from inspect import CO_VARKEYWORDS
 from io import StringIO
+import os
 from pathlib import Path
+import re
+import sys
+import traceback
 from traceback import format_exception_only
 from types import CodeType
 from types import FrameType
@@ -17,18 +17,21 @@ from typing import Any
 from typing import Callable
 from typing import ClassVar
 from typing import Dict
+from typing import Final
+from typing import final
 from typing import Generic
 from typing import Iterable
 from typing import List
+from typing import Literal
 from typing import Mapping
 from typing import Optional
 from typing import overload
 from typing import Pattern
 from typing import Sequence
 from typing import Set
+from typing import SupportsIndex
 from typing import Tuple
 from typing import Type
-from typing import TYPE_CHECKING
 from typing import TypeVar
 from typing import Union
 
@@ -42,21 +45,16 @@ from _pytest._code.source import Source
 from _pytest._io import TerminalWriter
 from _pytest._io.saferepr import safeformat
 from _pytest._io.saferepr import saferepr
-from _pytest.compat import final
 from _pytest.compat import get_real_func
 from _pytest.deprecated import check_ispytest
 from _pytest.pathlib import absolutepath
 from _pytest.pathlib import bestrelpath
 
-if TYPE_CHECKING:
-    from typing_extensions import Final
-    from typing_extensions import Literal
-    from typing_extensions import SupportsIndex
-
-    _TracebackStyle = Literal["long", "short", "line", "no", "native", "value", "auto"]
 
 if sys.version_info[:2] < (3, 11):
     from exceptiongroup import BaseExceptionGroup
+
+_TracebackStyle = Literal["long", "short", "line", "no", "native", "value", "auto"]
 
 
 class Code:
@@ -396,11 +394,11 @@ class Traceback(List[TracebackEntry]):
 
     def filter(
         self,
-        # TODO(py38): change to positional only.
-        _excinfo_or_fn: Union[
+        excinfo_or_fn: Union[
             "ExceptionInfo[BaseException]",
             Callable[[TracebackEntry], bool],
         ],
+        /,
     ) -> "Traceback":
         """Return a Traceback instance with certain items removed.
 
@@ -411,10 +409,10 @@ class Traceback(List[TracebackEntry]):
         ``TracebackEntry`` instance, and should return True when the item should
         be added to the ``Traceback``, False when not.
         """
-        if isinstance(_excinfo_or_fn, ExceptionInfo):
-            fn = lambda x: not x.ishidden(_excinfo_or_fn)  # noqa: E731
+        if isinstance(excinfo_or_fn, ExceptionInfo):
+            fn = lambda x: not x.ishidden(excinfo_or_fn)  # noqa: E731
         else:
-            fn = _excinfo_or_fn
+            fn = excinfo_or_fn
         return Traceback(filter(fn, self))
 
     def recursionindex(self) -> Optional[int]:
@@ -489,9 +487,10 @@ class ExceptionInfo(Generic[E]):
 
         .. versionadded:: 7.4
         """
-        assert (
-            exception.__traceback__
-        ), "Exceptions passed to ExcInfo.from_exception(...) must have a non-None __traceback__."
+        assert exception.__traceback__, (
+            "Exceptions passed to ExcInfo.from_exception(...)"
+            " must have a non-None __traceback__."
+        )
         exc_info = (type(exception), exception, exception.__traceback__)
         return cls.from_exc_info(exc_info, exprinfo)
 
@@ -590,9 +589,7 @@ class ExceptionInfo(Generic[E]):
     def __repr__(self) -> str:
         if self._excinfo is None:
             return "<ExceptionInfo for raises contextmanager>"
-        return "<{} {} tblen={}>".format(
-            self.__class__.__name__, saferepr(self._excinfo[1]), len(self.traceback)
-        )
+        return f"<{self.__class__.__name__} {saferepr(self._excinfo[1])} tblen={len(self.traceback)}>"
 
     def exconly(self, tryshort: bool = False) -> str:
         """Return the exception as a string.
@@ -633,7 +630,7 @@ class ExceptionInfo(Generic[E]):
     def getrepr(
         self,
         showlocals: bool = False,
-        style: "_TracebackStyle" = "long",
+        style: _TracebackStyle = "long",
         abspath: bool = False,
         tbfilter: Union[
             bool, Callable[["ExceptionInfo[BaseException]"], Traceback]
@@ -700,6 +697,25 @@ class ExceptionInfo(Generic[E]):
         )
         return fmt.repr_excinfo(self)
 
+    def _stringify_exception(self, exc: BaseException) -> str:
+        try:
+            notes = getattr(exc, "__notes__", [])
+        except KeyError:
+            # Workaround for https://github.com/python/cpython/issues/98778 on
+            # Python <= 3.9, and some 3.10 and 3.11 patch versions.
+            HTTPError = getattr(sys.modules.get("urllib.error", None), "HTTPError", ())
+            if sys.version_info[:2] <= (3, 11) and isinstance(exc, HTTPError):
+                notes = []
+            else:
+                raise
+
+        return "\n".join(
+            [
+                str(exc),
+                *notes,
+            ]
+        )
+
     def match(self, regexp: Union[str, Pattern[str]]) -> "Literal[True]":
         """Check whether the regular expression `regexp` matches the string
         representation of the exception using :func:`python:re.search`.
@@ -707,13 +723,76 @@ class ExceptionInfo(Generic[E]):
         If it matches `True` is returned, otherwise an `AssertionError` is raised.
         """
         __tracebackhide__ = True
-        value = str(self.value)
+        value = self._stringify_exception(self.value)
         msg = f"Regex pattern did not match.\n Regex: {regexp!r}\n Input: {value!r}"
         if regexp == value:
             msg += "\n Did you mean to `re.escape()` the regex?"
         assert re.search(regexp, value), msg
         # Return True to allow for "assert excinfo.match()".
         return True
+
+    def _group_contains(
+        self,
+        exc_group: BaseExceptionGroup[BaseException],
+        expected_exception: Union[Type[BaseException], Tuple[Type[BaseException], ...]],
+        match: Union[str, Pattern[str], None],
+        target_depth: Optional[int] = None,
+        current_depth: int = 1,
+    ) -> bool:
+        """Return `True` if a `BaseExceptionGroup` contains a matching exception."""
+        if (target_depth is not None) and (current_depth > target_depth):
+            # already descended past the target depth
+            return False
+        for exc in exc_group.exceptions:
+            if isinstance(exc, BaseExceptionGroup):
+                if self._group_contains(
+                    exc, expected_exception, match, target_depth, current_depth + 1
+                ):
+                    return True
+            if (target_depth is not None) and (current_depth != target_depth):
+                # not at the target depth, no match
+                continue
+            if not isinstance(exc, expected_exception):
+                continue
+            if match is not None:
+                value = self._stringify_exception(exc)
+                if not re.search(match, value):
+                    continue
+            return True
+        return False
+
+    def group_contains(
+        self,
+        expected_exception: Union[Type[BaseException], Tuple[Type[BaseException], ...]],
+        *,
+        match: Union[str, Pattern[str], None] = None,
+        depth: Optional[int] = None,
+    ) -> bool:
+        """Check whether a captured exception group contains a matching exception.
+
+        :param Type[BaseException] | Tuple[Type[BaseException]] expected_exception:
+            The expected exception type, or a tuple if one of multiple possible
+            exception types are expected.
+
+        :param str | Pattern[str] | None match:
+            If specified, a string containing a regular expression,
+            or a regular expression object, that is tested against the string
+            representation of the exception and its `PEP-678 <https://peps.python.org/pep-0678/>` `__notes__`
+            using :func:`re.search`.
+
+            To match a literal string that may contain :ref:`special characters
+            <re-syntax>`, the pattern can first be escaped with :func:`re.escape`.
+
+        :param Optional[int] depth:
+            If `None`, will search for a matching exception at any nesting depth.
+            If >= 1, will only match an exception if it's at the specified depth (depth = 1 being
+            the exceptions contained within the topmost exception group).
+        """
+        msg = "Captured exception is not an instance of `BaseExceptionGroup`"
+        assert isinstance(self.value, BaseExceptionGroup), msg
+        msg = "`depth` must be >= 1 if specified"
+        assert (depth is None) or (depth >= 1), msg
+        return self._group_contains(self.value, expected_exception, match, depth)
 
 
 @dataclasses.dataclass
@@ -725,7 +804,7 @@ class FormattedExcinfo:
     fail_marker: ClassVar = "E"
 
     showlocals: bool = False
-    style: "_TracebackStyle" = "long"
+    style: _TracebackStyle = "long"
     abspath: bool = True
     tbfilter: Union[bool, Callable[[ExceptionInfo[BaseException]], Traceback]] = True
     funcargs: bool = False
@@ -938,13 +1017,8 @@ class FormattedExcinfo:
             extraline: Optional[str] = (
                 "!!! Recursion error detected, but an error occurred locating the origin of recursion.\n"
                 "  The following exception happened when comparing locals in the stack frame:\n"
-                "    {exc_type}: {exc_msg}\n"
-                "  Displaying first and last {max_frames} stack frames out of {total}."
-            ).format(
-                exc_type=type(e).__name__,
-                exc_msg=str(e),
-                max_frames=max_frames,
-                total=len(traceback),
+                f"    {type(e).__name__}: {str(e)}\n"
+                f"  Displaying first and last {max_frames} stack frames out of {len(traceback)}."
             )
             # Type ignored because adding two instances of a List subtype
             # currently incorrectly has type List instead of the subtype.
@@ -1090,7 +1164,7 @@ class ReprExceptionInfo(ExceptionRepr):
 class ReprTraceback(TerminalRepr):
     reprentries: Sequence[Union["ReprEntry", "ReprEntryNative"]]
     extraline: Optional[str]
-    style: "_TracebackStyle"
+    style: _TracebackStyle
 
     entrysep: ClassVar = "_ "
 
@@ -1124,7 +1198,7 @@ class ReprTracebackNative(ReprTraceback):
 class ReprEntryNative(TerminalRepr):
     lines: Sequence[str]
 
-    style: ClassVar["_TracebackStyle"] = "native"
+    style: ClassVar[_TracebackStyle] = "native"
 
     def toterminal(self, tw: TerminalWriter) -> None:
         tw.write("".join(self.lines))
@@ -1136,7 +1210,7 @@ class ReprEntry(TerminalRepr):
     reprfuncargs: Optional["ReprFuncArgs"]
     reprlocals: Optional["ReprLocals"]
     reprfileloc: Optional["ReprFileLocation"]
-    style: "_TracebackStyle"
+    style: _TracebackStyle
 
     def _write_entry_lines(self, tw: TerminalWriter) -> None:
         """Write the source code portions of a list of traceback entries with syntax highlighting.
@@ -1151,7 +1225,6 @@ class ReprEntry(TerminalRepr):
         the "E" prefix) using syntax highlighting, taking care to not highlighting the ">"
         character, as doing so might break line continuations.
         """
-
         if not self.lines:
             return
 

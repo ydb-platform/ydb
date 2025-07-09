@@ -1,4 +1,5 @@
 #include "test_env.h"
+
 #include "helpers.h"
 
 #include <ydb/core/base/tablet_resolver.h>
@@ -11,11 +12,13 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+
 #include <ydb/services/metadata/ds_table/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -133,8 +136,9 @@ private:
 
 class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
 public:
-    TFakeConfigDispatcher()
+    TFakeConfigDispatcher(const NKikimrConfig::TAppConfig& config = NKikimrConfig::TAppConfig())
         : TActor<TFakeConfigDispatcher>(&TFakeConfigDispatcher::StateWork)
+        , Config(config)
     {
     }
 
@@ -146,8 +150,12 @@ public:
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationRequest(), 0, ev->Cookie);
+        auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *event->Record.MutableConfig() = Config;
+        ctx.Send(ev->Sender, event.Release(), 0, ev->Cookie);
     }
+private:
+    NKikimrConfig::TAppConfig Config;
 };
 
 // Automatically resend notification requests to Schemeshard if it gets restarted
@@ -587,7 +595,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
-    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);    
+    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
@@ -606,8 +614,12 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
-    app.SetEnableExportChecksums(true);
+    app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
+    app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
+    app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
+    app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
+    app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -653,7 +665,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name);
     }
 
-    SetupTabletServices(runtime, &app);
+    SetupTabletServices(runtime, &app, !opts.DSProxies_.empty(), {}, nullptr, false, opts.DSProxies_);
     if (opts.EnablePipeRetries_) {
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
     }
@@ -661,7 +673,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.RunFakeConfigDispatcher_) {
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.RegisterService(NConsole::MakeConfigsDispatcherID(runtime.GetNodeId(node)),
-                runtime.Register(new TFakeConfigDispatcher(), node), node);
+                runtime.Register(new TFakeConfigDispatcher(GetAppConfig()), node), node);
         }
     }
 
@@ -670,12 +682,23 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         runtime.GetAppData().YdbDriver = YdbDriver.Get();
     }
 
+    // Create Observer to catch an event of system views update finished.
+    // For more info, see comments in ydb/core/testlib/test_client.cpp
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        AddSysViewsRosterUpdateObserver(runtime);
+    }
+
     TActorId sender = runtime.AllocateEdgeActor();
     //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::BSController), &CreateFlatBsController);
     BootSchemeShard(runtime, schemeRoot);
     BootTxAllocator(runtime, txAllocator);
     BootFakeCoordinator(runtime, coordinator, CoordinatorState);
     BootFakeHive(runtime, hive, HiveState, &GetTabletCreationFunc);
+
+    // Wait until schemeshard completes creating system view paths
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        WaitForSysViewsRosterUpdate(runtime);
+    }
 
     InitRootStoragePools(runtime, schemeRoot, sender, TTestTxConfig::DomainUid);
 
@@ -707,11 +730,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 }
 
 NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 nchannels, bool enablePipeRetries,
-        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory, bool enableSystemViews)
+        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
     : TTestEnv(runtime, TTestEnvOptions()
         .NChannels(nchannels)
-        .EnablePipeRetries(enablePipeRetries)
-        .EnableSystemViews(enableSystemViews), ssFactory)
+        .EnablePipeRetries(enablePipeRetries), ssFactory)
 {
 }
 
@@ -916,6 +938,24 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
     TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
 }
 
+void NSchemeShardUT_Private::TTestEnv::AddSysViewsRosterUpdateObserver(NActors::TTestActorRuntime& runtime) {
+    if (!runtime.IsRealThreads()) {
+        SysViewsRosterUpdateFinished = false;
+        SysViewsRosterUpdateObserver = runtime.AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
+            SysViewsRosterUpdateFinished = true;
+        });
+    }
+}
+
+void NSchemeShardUT_Private::TTestEnv::WaitForSysViewsRosterUpdate(NActors::TTestActorRuntime& runtime) {
+    if (!runtime.IsRealThreads()) {
+        runtime.WaitFor("SysViewsRoster update finished", [this] {
+            return SysViewsRosterUpdateFinished;
+        });
+        SysViewsRosterUpdateObserver.Remove();
+    }
+}
+
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
     runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
@@ -1017,6 +1057,13 @@ void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntim
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TxAllocator), &CreateTxAllocator);
 }
 
+NKikimrConfig::TAppConfig NSchemeShardUT_Private::TTestEnv::GetAppConfig() const {
+    NKikimrConfig::TAppConfig appConfig;
+    auto* queryServiceConfig = appConfig.MutableQueryServiceConfig();
+    queryServiceConfig->SetAllExternalDataSourcesAreAvailable(true);
+    return appConfig;
+}
+
 NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
     : EnvOpts(GetDefaultTestEnvOptions())
     , SchemeShardFactory(ssFactory)
@@ -1041,6 +1088,22 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     TabletIds.push_back(datashard+6);
     TabletIds.push_back(datashard+7);
     TabletIds.push_back(datashard+8);
+
+    NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvDescribeScheme);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletion);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvMeasureSelfResponseTime);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvWakeupToMeasureSelfResponseTime);
+    NoRebootEventTypes.insert(TEvTablet::EvLocalMKQL);
+    NoRebootEventTypes.insert(TEvFakeHive::EvSubscribeToTabletDeletion);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvCancelTx);
+    NoRebootEventTypes.insert(TEvExport::EvCreateExportRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvCreateRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
+    // without it, ut_vector_index_build_reboots test hangs on GetRequest on the very first reboot
+    NoRebootEventTypes.insert(TEvTablet::EvCommitResult);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
@@ -1075,9 +1138,10 @@ struct NSchemeShardUT_Private::TTestWithReboots::TFinalizer {
 };
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    RunTestWithReboots(TabletIds,
-                       [&]() {
-        return PassUserRequests;
+    RunTestWithReboots(TabletIds, [&]() {
+        return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            return PassUserRequests(runtime, event);
+        };
     },
     [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(*this);
@@ -1091,7 +1155,9 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::functio
 void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
     RunTestWithPipeResets(TabletIds,
                           [&]() {
-        return PassUserRequests;
+        return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            return PassUserRequests(runtime, event);
+        };
     },
     [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(*this);
@@ -1118,7 +1184,7 @@ void NSchemeShardUT_Private::TTestWithReboots::RestoreLogging() {
 }
 
 NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() {
-    return new TTestEnv(*Runtime, GetTestEnvOptions());
+    return new TTestEnv(*Runtime, GetTestEnvOptions().RunFakeConfigDispatcher(true));
 }
 
 
@@ -1160,20 +1226,7 @@ void NSchemeShardUT_Private::TTestWithReboots::Finalize() {
 
 bool NSchemeShardUT_Private::TTestWithReboots::PassUserRequests(TTestActorRuntimeBase &runtime, TAutoPtr<IEventHandle> &event) {
     Y_UNUSED(runtime);
-    return event->Type == TEvSchemeShard::EvModifySchemeTransaction ||
-           event->Type == TEvSchemeShard::EvDescribeScheme ||
-           event->Type == TEvSchemeShard::EvNotifyTxCompletion ||
-           event->Type == TEvSchemeShard::EvMeasureSelfResponseTime ||
-           event->Type == TEvSchemeShard::EvWakeupToMeasureSelfResponseTime ||
-           event->Type == TEvTablet::EvLocalMKQL ||
-           event->Type == TEvFakeHive::EvSubscribeToTabletDeletion ||
-           event->Type == TEvSchemeShard::EvCancelTx ||
-           event->Type == TEvExport::EvCreateExportRequest ||
-           event->Type == TEvIndexBuilder::EvCreateRequest ||
-           event->Type == TEvIndexBuilder::EvGetRequest ||
-           event->Type == TEvIndexBuilder::EvCancelRequest ||
-           event->Type == TEvIndexBuilder::EvForgetRequest
-        ;
+    return NoRebootEventTypes.contains(event->Type);
 }
 
 NSchemeShardUT_Private::TTestEnvOptions& NSchemeShardUT_Private::TTestWithReboots::GetTestEnvOptions() {

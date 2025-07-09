@@ -123,6 +123,11 @@ void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
     const TOriginalArray& originalArray);
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void ToProto(
+    ::google::protobuf::Map<TSerializedKey, TSerializedValue>* serializedMap,
+    const THashMap<TKey, TValue>& originalMap);
+
 template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
@@ -143,6 +148,11 @@ template <class TOriginal, class TSerialized>
 void CheckedHashSetFromProto(
     THashSet<TOriginal>* originalHashSet,
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet);
+
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void FromProto(
+    THashMap<TKey, TValue>* originalMap,
+    const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -347,7 +357,7 @@ struct TProtobufExtensionDescriptor
 {
     const google::protobuf::Descriptor* MessageDescriptor;
     const int Tag;
-    const TString Name;
+    const std::string Name;
 };
 
 struct IProtobufExtensionRegistry
@@ -368,7 +378,7 @@ struct IProtobufExtensionRegistry
     virtual const TProtobufExtensionDescriptor* FindDescriptorByTag(int tag) = 0;
 
     //! Finds a descriptor by name.
-    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const TString& name) = 0;
+    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const std::string& name) = 0;
 
     //! Returns the singleton instance.
     static IProtobufExtensionRegistry* Get();
@@ -427,7 +437,7 @@ NYT::NProto::TExtensionSet FilterProtoExtensions(
 ////////////////////////////////////////////////////////////////////////////////
 
 THashSet<int> GetExtensionTagSet(const NYT::NProto::TExtensionSet& source);
-std::optional<TString> FindExtensionName(int tag);
+std::optional<std::string> FindExtensionName(int tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -464,13 +474,33 @@ google::protobuf::Timestamp GetProtoNow();
 //! field. Macro accepts desired target type as optional third parameter.
 //! Usage:
 //!     // Get as is.
-//!     int instantInt = YT_PROTO_OPTIONAL(message, instant);
+//!     int instantInt = YT_OPTIONAL_FROM_PROTO(message, instant);
 //!     // Get with conversion.
-//!     TInstant instant = YT_PROTO_OPTIONAL(message, instant, TInstant);
-#define YT_PROTO_OPTIONAL(message, field, ...) \
+//!     TInstant instant = YT_OPTIONAL_FROM_PROTO(message, instant, TInstant);
+#define YT_OPTIONAL_FROM_PROTO(message, field, ...) \
     (((message).has_##field()) \
-        ? std::optional(YT_PROTO_OPTIONAL_CONVERT(__VA_ARGS__)((message).field())) \
+        ? std::optional(YT_OPTIONAL_FROM_PROTO_CONVERT(__VA_ARGS__)((message).field())) \
         : std::nullopt)
+
+#define YT_OPTIONAL_TO_PROTO(message, field, original) \
+    do {\
+        if (original.has_value()) {\
+            ToProto((message)->mutable_##field(), *original);\
+        } else {\
+            (message)->clear_##field();\
+        }\
+    } while (false)
+
+#define YT_OPTIONAL_SET_PROTO(message, field, original) \
+    do {\
+        /* Avoid unnecessary computation if <original> is a return value of a call*/\
+        const auto& originalRef = (original);\
+        if (originalRef.has_value()) {\
+            (message)->set_##field(ToProto(*originalRef));\
+        } else {\
+            (message)->clear_##field();\
+        }\
+    } while (false)
 
 // TODO(cherepashka): to remove after std::optional::and_then is here.
 //! This macro may be used to extract std::optional<T> from protobuf message field of type T and to apply some function to value if it is present.

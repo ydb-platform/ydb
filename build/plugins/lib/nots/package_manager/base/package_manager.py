@@ -2,7 +2,6 @@ import os
 import subprocess
 import sys
 from abc import ABCMeta, abstractmethod
-from six import add_metaclass
 
 from .constants import NPM_REGISTRY_URL
 from .package_json import PackageJson
@@ -25,8 +24,7 @@ class PackageManagerCommandError(PackageManagerError):
         super(PackageManagerCommandError, self).__init__(msg)
 
 
-@add_metaclass(ABCMeta)
-class BasePackageManager(object):
+class BasePackageManager(object, metaclass=ABCMeta):
     def __init__(
         self,
         build_root,
@@ -88,7 +86,7 @@ class BasePackageManager(object):
         pass
 
     @abstractmethod
-    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):
+    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False):
         pass
 
     @abstractmethod
@@ -102,7 +100,7 @@ class BasePackageManager(object):
         pass
 
     @abstractmethod
-    def calc_node_modules_inouts(self, local_cli: bool, has_deps: bool) -> tuple[list[str], list[str]]:
+    def calc_node_modules_inouts(self, nm_bundle: bool) -> tuple[list[str], list[str]]:
         pass
 
     @abstractmethod
@@ -127,7 +125,7 @@ class BasePackageManager(object):
         return [p[prefix_len:] for p in pj.get_workspace_map(ignore_self=True).keys()]
 
     @timeit
-    def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env=None):
+    def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env={}):
         if not self.nodejs_bin_path:
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 

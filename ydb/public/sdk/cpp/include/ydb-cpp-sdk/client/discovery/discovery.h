@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
 namespace Discovery {
@@ -12,7 +12,7 @@ namespace Discovery {
 } // namespace Discovery
 } // namespace Ydb
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NDiscovery {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,6 +48,7 @@ struct TNodeRegistrationSettings : public TSimpleRequestSettings<TNodeRegistrati
     FLUENT_SETTING(std::string, DomainPath);
     FLUENT_SETTING_DEFAULT(bool, FixedNodeId, false);
     FLUENT_SETTING(std::string, Path);
+    FLUENT_SETTING(std::string, BridgePileName);
 };
 
 struct TEndpointInfo {
@@ -96,6 +97,7 @@ struct TNodeInfo {
     std::string Address;
     TNodeLocation Location;
     uint64_t Expire;
+    std::optional<uint32_t> BridgePileId;
 };
 
 class TNodeRegistrationResult : public TStatus {

@@ -27,7 +27,8 @@ public:
         Y_ABORT_UNLESS(rec.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
         SubscriptionId = rec.GetSubscriptionId();
-        Self->DbUpdateConfigSubscription(SubscriptionId, txc);
+        Self->Dirty.DbUpdateConfigSubscription(SubscriptionId, txc);
+        Self->Dirty.ConfigSubscriptionId = SubscriptionId;
 
         return true;
     }
@@ -39,9 +40,9 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "Using new subscription id=" << SubscriptionId);
 
-        Self->ConfigSubscriptionId = SubscriptionId;
+        Self->Committed.ConfigSubscriptionId = SubscriptionId;
 
-        Self->TxCompleted(0, this, ctx);
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

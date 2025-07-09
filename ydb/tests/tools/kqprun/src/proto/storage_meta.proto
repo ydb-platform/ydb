@@ -13,6 +13,7 @@ message TStorageMeta {
         EType Type = 1;
         uint32 NodesCount = 2;
         string SharedTenant = 3;  // Only for serverless tenants
+        bool CreationInProgress = 4;
     }
 
     uint64 StorageGeneration = 1;

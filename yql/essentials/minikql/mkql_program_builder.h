@@ -4,6 +4,7 @@
 #include "mkql_node.h"
 #include "mkql_node_builder.h"
 #include "mkql_type_builder.h"
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/core/sql_types/match_recognize.h>
 
@@ -17,6 +18,9 @@ class TBuiltinFunctionRegistry;
 
 constexpr std::string_view RandomMTResource = "MTRand";
 constexpr std::string_view ResourceQueuePrefix = "TResourceQueue:";
+constexpr std::string_view BlockStorageResourcePrefix = "TBlockStorage:";
+constexpr std::string_view BlockMapJoinIndexResourcePrefix = "TBlockMapJoinIndex:";
+constexpr std::string_view BlockMapJoinIndexResourceSeparator = ":$YqlKeyColumns:";
 
 enum class EJoinKind {
     Min = 1,
@@ -133,12 +137,14 @@ struct TAggInfo {
     std::vector<ui32> ArgsColumns;
 };
 
+std::vector<TType*> ValidateBlockType(const TType* type, bool unwrap = true);
 std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap = true);
 std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = true);
 
 class TProgramBuilder : public TTypeBuilder {
 public:
-    TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
+    TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false,
+        NYql::TLangVersion langver = NYql::UnknownLangVersion);
 
     const TTypeEnvironment& GetTypeEnvironment() const;
     const IFunctionRegistry& GetFunctionRegistry() const;
@@ -154,7 +160,7 @@ public:
 
     template <typename T, typename = std::enable_if_t<NUdf::TKnownDataType<T>::Result>>
     TRuntimeNode NewDataLiteral(T data) const {
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env), true);
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env_), true);
     }
 
 
@@ -162,7 +168,7 @@ public:
     TRuntimeNode NewTzDataLiteral(typename NUdf::TDataType<T>::TLayout value, ui16 tzId) const {
         auto data = NUdf::TUnboxedValuePod(value);
         data.SetTimezoneId(tzId);
-        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env), true);
+        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env_), true);
     }
 
     template <NUdf::EDataSlot Type>
@@ -237,8 +243,10 @@ public:
 
     TRuntimeNode ToBlocks(TRuntimeNode flow);
     TRuntimeNode WideToBlocks(TRuntimeNode flow);
+    TRuntimeNode ListToBlocks(TRuntimeNode list);
     TRuntimeNode FromBlocks(TRuntimeNode flow);
     TRuntimeNode WideFromBlocks(TRuntimeNode flow);
+    TRuntimeNode ListFromBlocks(TRuntimeNode list);
     TRuntimeNode WideSkipBlocks(TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
@@ -258,9 +266,12 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
-    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
+    TRuntimeNode BlockStorage(TRuntimeNode list, TType* returnType);
+    TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* listItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightListItemType, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
-        const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, bool rightAny, TType* returnType);
+        const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, TType* returnType
+    );
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);
@@ -853,12 +864,14 @@ private:
 
     TType* ChooseCommonType(TType* type1, TType* type2);
     TType* BuildArithmeticCommonType(TType* type1, TType* type2);
+    TType* BuildWideBlockType(const TArrayRef<TType* const>& wideComponents);
 
     bool IsNull(TRuntimeNode arg);
 protected:
-    const IFunctionRegistry& FunctionRegistry;
-    const bool VoidWithEffects;
-    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
+    const IFunctionRegistry& FunctionRegistry_;
+    const bool VoidWithEffects_;
+    const NYql::TLangVersion LangVer_;
+    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
 };
 
 bool CanExportType(TType* type, const TTypeEnvironment& env);

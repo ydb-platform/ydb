@@ -1,0 +1,17 @@
+--- a/include/boost/config/compiler/clang.hpp	(index)
++++ b/include/boost/config/compiler/clang.hpp	(working tree)
+@@ -103,1 +103,3 @@
+-#  define BOOST_SYMBOL_EXPORT __attribute__((__visibility__("default")))
++#  ifndef BOOST_SYMBOL_EXPORT
++#    define BOOST_SYMBOL_EXPORT __attribute__((__visibility__("default")))
++#  endif
+@@ -103,1 +103,3 @@
+-#  define BOOST_SYMBOL_VISIBLE __attribute__((__visibility__("default")))
++#  ifndef BOOST_SYMBOL_VISIBLE
++#    define BOOST_SYMBOL_VISIBLE __attribute__((__visibility__("default")))
++#  endif
+@@ -103,1 +103,3 @@
+-#  define BOOST_SYMBOL_IMPORT
++#  ifndef BOOST_SYMBOL_IMPORT
++#    define BOOST_SYMBOL_IMPORT
++#  endif

@@ -4,7 +4,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvDiscover>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvDiscover>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TDiscoverQuery : public TBlobStorageQuery<TEvBlobStorage::TEvDiscover> {
             bool DoneWithBlockedGeneration = false;
             bool DoneWithData = false;
@@ -182,7 +183,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TDiscoverQuery(*this, std::move(ev));
+        return new TDiscoverQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

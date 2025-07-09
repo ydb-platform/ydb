@@ -13,7 +13,10 @@ ENDIF()
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(1800)
     SIZE(LARGE)
-    TAG(ya:fat sb:ttl=2)
+    TAG(
+        ya:fat
+        sb:ttl=2
+    )
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -44,10 +47,6 @@ PEERDIR(
 )
 
 NO_CHECK_IMPORTS()
-
-IF (SANITIZER_TYPE == "memory")
-    TAG(ya:not_autocheck) # YQL-15385
-ENDIF()
 
 END()
 

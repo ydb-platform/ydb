@@ -6,18 +6,17 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NProfiling::TTagSet GetThreadTags(const TString& threadName);
+NProfiling::TTagSet GetThreadTags(const std::string& threadName);
 
 NProfiling::TTagSet GetBucketTags(
-    const TString& threadName,
-    const TString& bucketName);
+    const std::string& threadName,
+    const std::string& bucketName);
 
 NProfiling::TTagSet GetQueueTags(
-    const TString& threadName,
-    const TString& bucketName,
-    const TString& queueName);
+    const std::string& threadName,
+    const std::string& bucketName,
+    const std::string& queueName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-

@@ -1,5 +1,16 @@
 LIBRARY()
 
+IF (YDB_ENABLE_PDISK_SHRED) 
+    CFLAGS(
+        -DENABLE_PDISK_SHRED
+    )
+ENDIF()
+IF (YDB_DISABLE_PDISK_ENCRYPTION) 
+    CFLAGS(
+        -DDISABLE_PDISK_ENCRYPTION
+    )
+ENDIF()
+
 PEERDIR(
     contrib/libs/lz4
     ydb/library/actors/core
@@ -18,7 +29,7 @@ PEERDIR(
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/lwtrace_probes
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/driver_lib/version
     ydb/core/protos
     ydb/core/util
@@ -30,6 +41,7 @@ PEERDIR(
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_state.h)
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_defs.h)
+
 
 SRCS(
     blobstorage_pdisk.cpp

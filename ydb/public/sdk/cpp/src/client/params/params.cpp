@@ -1,14 +1,14 @@
 #include "impl.h"
 
-#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-#include <ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
 
 #include <util/string/builder.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 ////////////////////////////////////////////////////////////////////////////////
 

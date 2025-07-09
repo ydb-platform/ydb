@@ -41,6 +41,7 @@ _BASH_INDENTATION = "2"
 _GIT_COMMIT_SUBJECT_LENGTH = 65
 _INCLUDE_BASH_FILES_ONLY = [r".*\.sh$"]
 _INCLUDE_MAN_FILES_ONLY = [r"man/.+\.1$"]
+_INCLUDE_SOURCE_FILES_ONLY = [r".*\.[ch]$"]
 _LIBWEBP_MAX_LINE_LENGTH = 80
 
 
@@ -70,6 +71,35 @@ def _CheckCommitSubjectLength(input_api, output_api):
                                      (name, duration, failure_msg))
 
   return output_api.PresubmitResult("%s\n (%4.2fs) success" % (name, duration))
+
+
+def _CheckDuplicateFiles(input_api, output_api):
+  """Ensures there are not repeated filenames."""
+  all_files = []
+  for f in input_api.change.AllFiles():
+    for include_file in _INCLUDE_SOURCE_FILES_ONLY:
+      if re.match(include_file, f):
+        all_files.append(f)
+        break
+
+  basename_to_path = {}
+  for f in all_files:
+    basename_file = input_api.basename(f)
+    if basename_file in basename_to_path:
+      basename_to_path[basename_file].append(f)
+    else:
+      basename_to_path[basename_file] = [f]
+
+  dupes = []
+  for files in basename_to_path.values():
+    if len(files) > 1:
+      dupes.extend(files)
+
+  if dupes:
+    return output_api.PresubmitError(
+        "Duplicate source files, rebase or rename some to make them unique:\n%s"
+        % dupes)
+  return output_api.PresubmitResult("No duplicates, success\n")
 
 
 def _GetFilesToSkip(input_api):
@@ -154,6 +184,7 @@ def _CommonChecks(input_api, output_api):
       input_api.canned_checks.CheckChangeHasNoStrayWhitespace(
           input_api, output_api))
   results.append(_CheckCommitSubjectLength(input_api, output_api))
+  results.append(_CheckDuplicateFiles(input_api, output_api))
 
   source_file_filter = lambda x: input_api.FilterSourceFile(
       x, files_to_skip=_GetFilesToSkip(input_api))

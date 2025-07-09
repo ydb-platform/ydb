@@ -1,0 +1,264 @@
+name: Update Muted tests
+
+on:
+  schedule:
+    - cron: "0 6-20/2 * * *"  # Every 2 hours from 6:00 to 20:00 UTC
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: 'Comma-separated list of branches to process'
+        required: false
+        default: 'main,stable-25-1,stable-25-1-analytics'
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  BRANCH_FOR_PR: update-muted-ya
+  TITLE: "Update muted_ya.txt"
+  REVIEWERS: "['ci']"
+  LABELS: "mute-unmute,not-for-changelog,ok-to-test"
+  BUILD_TYPE: relwithdebinfo # Используем только один тип сборки
+
+jobs:
+  setup:
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    outputs:
+      matrix_branches: ${{ steps.set-matrix.outputs.branches }}
+    steps:
+      - id: set-matrix
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "branches=$(echo '${{ github.event.inputs.branches }}' | jq -R -s -c 'split(",")')" >> $GITHUB_OUTPUT
+          else
+            echo "branches=$(echo '["main","stable-25-1","stable-25-1-analytics"]' | jq -c .)" >> $GITHUB_OUTPUT
+          fi
+
+  update-muted-tests:
+    needs: setup
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    strategy:
+      fail-fast: false
+      matrix:
+        BASE_BRANCH: ${{ fromJson(needs.setup.outputs.matrix_branches) }}
+    steps:
+      - name: Set environment variables
+        run: |
+          echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> $GITHUB_ENV
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ydb[yc] PyGithub codeowners pandas
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    
+      - name: Collect test history data
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+      
+      - name: Update muted tests in DB
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} 
+      
+      - name: Update test monitor
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+
+      - name: Update branch for PR
+        run: |
+          # Устанавливаем имя ветки PR без суффикса build_type
+          PR_BRANCH="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}"
+          echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
+          
+          git config user.name YDBot
+          git config user.email ydbot@ydb.tech
+      
+          # Fetch the latest changes from remote
+          git fetch origin ${PR_BRANCH} || true
+      
+          # Checkout BRANCH_FOR_PR, create if it doesn't exist based on BASE_BRANCH
+          if git show-ref --quiet refs/remotes/origin/${PR_BRANCH}; then
+            echo "Branch ${PR_BRANCH} exists."
+            git checkout ${PR_BRANCH}
+          else
+            echo "Branch ${PR_BRANCH} does not exist. Creating based on ${{ env.BASE_BRANCH }}"
+            git checkout -b ${PR_BRANCH}
+          fi
+      
+          # Attempt to rebase PR branch onto BASE_BRANCH
+          if ! git rebase origin/${{ env.BASE_BRANCH }} -X theirs; then
+            echo "Rebase failed, resetting branch to match ${{ env.BASE_BRANCH }}..."
+            # Abort the rebase process
+            git rebase --abort
+            echo "Reset branch ${PR_BRANCH} to origin/${{ env.BASE_BRANCH }}"
+            git reset --hard origin/${{ env.BASE_BRANCH }}
+          fi
+                  
+      - name: Run create_new_muted_ya.py
+        run: |
+          .github/scripts/tests/create_new_muted_ya.py update_muted_ya --branch=${{ env.BASE_BRANCH }}
+
+      - name: Move new_muted_ya_with_flaky.txt to muted_ya.txt
+        run: |
+          cp mute_update/new_muted_ya_with_flaky.txt .github/config/muted_ya.txt
+
+      - name: Check if changes exist
+        id: changes_check
+        run: |
+          if git diff --quiet .github/config/muted_ya.txt; then
+            echo "No changes detected in muted_ya.txt"
+            echo "changes=false" >> $GITHUB_ENV
+          else
+            echo "Changes detected in muted_ya.txt"
+            echo "changes=true" >> $GITHUB_ENV
+          fi
+
+      - name: Collect PR description
+        if: env.changes == 'true'
+        id: pr_description
+        run: |
+          PR_BODY=''
+          PR_BODY_FILE="pr_body_content.txt"
+          
+          PR_BODY+=$'# Muted tests update for ${{ env.BASE_BRANCH }}\n\n'
+
+          if [ -s mute_update/deleted_tests_in_mute_debug.txt ]; then
+              DELETED_COUNT=$(wc -l < mute_update/deleted_tests_in_mute_debug.txt)
+              PR_BODY+=$'**Removed from mute: '"${DELETED_COUNT}**"$'\n\n'
+              PR_BODY+=$'```\n'
+              PR_BODY+=$(cat mute_update/deleted_tests_in_mute_debug.txt)
+              PR_BODY+=$'\n```\n\n'
+          fi
+          if [ -s mute_update/flaky_debug.txt ]; then
+              FLAKY_COUNT=$(wc -l < mute_update/flaky_debug.txt)
+              PR_BODY+=$'**Muted flaky: '"${FLAKY_COUNT}**"$'\n\n'
+              PR_BODY+=$'```\n'
+              PR_BODY+=$(cat mute_update/flaky_debug.txt)
+              PR_BODY+=$'\n```\n\n'
+
+              BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
+              MAX_TESTS=50
+              TEST_COUNT=0
+              
+              # Создаем переменную для хранения полного URL без переносов строк
+              FULL_URL="${BASE_URL}"
+              
+              # Для каждого теста из flaky.txt, добавляем его в URL
+              while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
+                # Заменяем ТОЛЬКО ПЕРВЫЙ пробел на "/"
+                formatted_name=$(echo "${test_name}" | sed 's/ /\//' )
+                # URL-кодируем имя теста и заменяем пробелы на %20
+                encoded_name=$(echo "${formatted_name}" | sed 's/ /%20/g' | sed 's/[\/]/%2F/g' | sed 's/\[/%5B/g' | sed 's/\]/%5D/g')
+                # Добавляем параметр в URL без переноса строки
+                FULL_URL="${FULL_URL}&full_name=${encoded_name}"
+                TEST_COUNT=$((TEST_COUNT+1))
+              done < mute_update/flaky.txt
+              
+              # Добавляем ссылку на дашборд в описание
+              PR_BODY+=$"[View history of flaky tests on Dashboard](${FULL_URL})"
+              PR_BODY+=$'\n'
+          fi
+          if [ -s mute_update/muted_stable_debug.txt ]; then
+              MUTED_STABLE_COUNT=$(wc -l < mute_update/muted_stable_debug.txt)
+              PR_BODY+=$'**Unmuted stable: '"${MUTED_STABLE_COUNT}**"$'\n\n'
+              PR_BODY+=$'```\n'
+              PR_BODY+=$(cat mute_update/muted_stable_debug.txt)
+              PR_BODY+=$'\n```\n\n'
+          fi
+
+          # Save PR_BODY to the file
+          echo "$PR_BODY" > "$PR_BODY_FILE"
+          # Export the path to the file to the GitHub environment
+          echo "PR_BODY_PATH=$PR_BODY_FILE" >> $GITHUB_ENV
+
+      - name: Stage changes if any
+        if: env.changes == 'true'
+        run: |
+          git add .github/config/muted_ya.txt
+
+      - name: Delete temporary files
+        run: |
+          rm -rf mute_update
+          rm -f dashboard_url.txt
+
+      - name: Commit changes
+        if: env.changes == 'true'
+        run: |
+          git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
+
+      - name: Push changes
+        if: env.changes == 'true'
+        uses: ad-m/github-push-action@v0.8.0
+        with:
+          github_token: ${{ secrets.YDBOT_TOKEN }}
+          branch: ${{ env.PR_BRANCH }}
+          force: true
+
+      - name: Create or update PR
+        if: env.changes == 'true'
+        id: create_or_update_pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: |
+          python .github/scripts/create_or_update_pr.py create_or_update \
+            --base_branch="${{ env.BASE_BRANCH }}" \
+            --branch_for_pr="${{ env.PR_BRANCH }}" \
+            --title="${{ env.TITLE }} in ${{ env.BASE_BRANCH }}" \
+            --body="${{ env.PR_BODY_PATH }}"
+        
+      - name: Comment PR
+        uses: actions/github-script@v7
+        if: env.changes == 'true'
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body_content.txt');
+            const bodyText = fs.readFileSync(filePath, 'utf8');
+            const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl}) for ${{ env.BASE_BRANCH }}\n\n${bodyText}`;
+      
+            github.rest.issues.createComment({
+              issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: completeBody
+            });
+            
+            const labelsToAdd = process.env.LABELS.split(',');
+            github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
+              labels: labelsToAdd
+            });
+
+      - name: Add reviewers
+        if: env.changes == 'true'
+        uses: octokit/request-action@v2.x
+        with:
+          route: POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
+          team_reviewers: ${{ env.REVIEWERS }}
+          token: ${{ secrets.YDBOT_TOKEN }}
+      - name: Enable auto-merge
+        if: env.changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr,
+              auto_merge: true
+            });
+

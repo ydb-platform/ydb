@@ -25,7 +25,8 @@ bool IsSequoiaNode(NObjectClient::EObjectType type)
 {
     return
         type == EObjectType::SequoiaMapNode ||
-        type == EObjectType::SequoiaLink;
+        type == EObjectType::SequoiaLink ||
+        type == EObjectType::Scion;
 }
 
 bool IsVersionedType(EObjectType type)
@@ -134,7 +135,8 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::SequoiaMapNode ||
         type == EObjectType::Pipeline ||
         type == EObjectType::QueueConsumer ||
-        type == EObjectType::QueueProducer;
+        type == EObjectType::QueueProducer ||
+        type == EObjectType::CypressProxyMap;
 }
 
 bool IsUserType(EObjectType type)
@@ -255,6 +257,16 @@ bool IsChaosTableReplicaType(EObjectType type)
     return type == EObjectType::ChaosTableReplica;
 }
 
+bool IsReplicationCardType(EObjectType type)
+{
+    return type == EObjectType::ReplicationCard;
+}
+
+bool IsChaosLeaseType(EObjectType type)
+{
+    return type == EObjectType::ChaosLease;
+}
+
 bool IsCollocationType(EObjectType type)
 {
     return
@@ -308,6 +320,7 @@ bool IsCompositeNodeType(EObjectType type)
         type == EObjectType::MapNode ||
         type == EObjectType::Scion ||
         type == EObjectType::PortalExit ||
+        type == EObjectType::SysNode ||
         type == EObjectType::ListNode;
 }
 
@@ -332,9 +345,11 @@ bool IsSchemaType(EObjectType type)
     return (static_cast<ui32>(type) & SchemaObjectTypeMask) != 0;
 }
 
-TString FormatObjectType(EObjectType type)
+std::string FormatObjectType(EObjectType type)
 {
-    return IsSchemaType(type) ? Format("schema:%v", TypeFromSchemaType(type)) : FormatEnum(type);
+    return IsSchemaType(type)
+        ? std::string(Format("schema:%v", TypeFromSchemaType(type)))
+        : FormatEnum(type);
 }
 
 bool IsGlobalCellId(TCellId cellId)

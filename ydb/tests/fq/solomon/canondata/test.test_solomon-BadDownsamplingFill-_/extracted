@@ -1,0 +1,10 @@
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>: Error: Execution, code: 1060
+    <main>:1:15: Error: downsampling.fill must be one of NONE, NULL, PREVIOUS, but has ABC
+<main>: Error: Execution, code: 1060
+    <main>:1:15: Error: downsampling.fill must be one of NONE, NULL, PREVIOUS, but has ABC
+
+
+

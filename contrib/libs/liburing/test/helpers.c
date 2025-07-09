@@ -364,3 +364,124 @@ unsigned long long utime_since_now(struct timeval *tv)
 	gettimeofday(&end, NULL);
 	return utime_since(tv, &end);
 }
+
+void *t_aligned_alloc(size_t alignment, size_t size)
+{
+	void *ret;
+
+	if (posix_memalign(&ret, alignment, size))
+		return NULL;
+
+	return ret;
+}
+
+int t_create_socketpair_ip(struct sockaddr_storage *addr,
+				int *sock_client, int *sock_server,
+				bool ipv6, bool client_connect,
+				bool msg_zc, bool tcp, const char *name)
+{
+	socklen_t addr_size;
+	int family, sock, listen_sock = -1;
+	int ret;
+
+	memset(addr, 0, sizeof(*addr));
+	if (ipv6) {
+		struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
+
+		family = AF_INET6;
+		saddr->sin6_family = family;
+		saddr->sin6_port = htons(0);
+		addr_size = sizeof(*saddr);
+	} else {
+		struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+
+		family = AF_INET;
+		saddr->sin_family = family;
+		saddr->sin_port = htons(0);
+		saddr->sin_addr.s_addr = htonl(INADDR_ANY);
+		addr_size = sizeof(*saddr);
+	}
+
+	/* server sock setup */
+	if (tcp) {
+		sock = listen_sock = socket(family, SOCK_STREAM, IPPROTO_TCP);
+	} else {
+		sock = *sock_server = socket(family, SOCK_DGRAM, 0);
+	}
+	if (sock < 0) {
+		perror("socket");
+		return 1;
+	}
+
+	ret = bind(sock, (struct sockaddr *)addr, addr_size);
+	if (ret < 0) {
+		perror("bind");
+		return 1;
+	}
+
+	ret = getsockname(sock, (struct sockaddr *)addr, &addr_size);
+	if (ret < 0) {
+		fprintf(stderr, "getsockname failed %i\n", errno);
+		return 1;
+	}
+
+	if (tcp) {
+		ret = listen(sock, 128);
+		assert(ret != -1);
+	}
+
+	if (ipv6) {
+		struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
+
+		inet_pton(AF_INET6, name, &(saddr->sin6_addr));
+	} else {
+		struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+
+		inet_pton(AF_INET, name, &saddr->sin_addr);
+	}
+
+	/* client sock setup */
+	if (tcp) {
+		*sock_client = socket(family, SOCK_STREAM, IPPROTO_TCP);
+		assert(client_connect);
+	} else {
+		*sock_client = socket(family, SOCK_DGRAM, 0);
+	}
+	if (*sock_client < 0) {
+		perror("socket");
+		return 1;
+	}
+	if (client_connect) {
+		ret = connect(*sock_client, (struct sockaddr *)addr, addr_size);
+		if (ret < 0) {
+			perror("connect");
+			return 1;
+		}
+	}
+	if (msg_zc) {
+#ifdef SO_ZEROCOPY
+		int val = 1;
+
+		/*
+		 * NOTE: apps must not set SO_ZEROCOPY when using io_uring zc.
+		 * It's only here to test interactions with MSG_ZEROCOPY.
+		 */
+		if (setsockopt(*sock_client, SOL_SOCKET, SO_ZEROCOPY, &val, sizeof(val))) {
+			perror("setsockopt zc");
+			return 1;
+		}
+#else
+		fprintf(stderr, "no SO_ZEROCOPY\n");
+		return 1;
+#endif
+	}
+	if (tcp) {
+		*sock_server = accept(listen_sock, NULL, NULL);
+		if (!*sock_server) {
+			fprintf(stderr, "can't accept\n");
+			return 1;
+		}
+		close(listen_sock);
+	}
+	return 0;
+}

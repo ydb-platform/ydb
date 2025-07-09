@@ -5,16 +5,17 @@ RECURSE(
     backup
     benchmarks_init
     blobstorage
+    bridge
     canonical
     clickbench
     cms
-    compatibility
     config
     encryption
     hive
     kqp
     large_serializable
     limits
+    minidumps
     postgresql
     query_cache
     rename
@@ -24,6 +25,7 @@ RECURSE(
     scheme_tests
     script_execution
     sdk/cpp/sdk_credprovider
+    security
     serializable
     serverless
     sqs

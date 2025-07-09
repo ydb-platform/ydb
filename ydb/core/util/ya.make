@@ -13,6 +13,8 @@ SRCS(
     console.cpp
     console.h
     counted_leaky_bucket.h
+    cpuinfo.cpp
+    cpuinfo.h
     defs.h
     event_priority_queue.h
     failure_injection.cpp
@@ -22,6 +24,7 @@ SRCS(
     format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
+    frequently_called_hptimer.h
     gen_step.cpp
     gen_step.h
     hazard.cpp
@@ -78,6 +81,23 @@ PEERDIR(
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream
 )
+
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+    SRCS(
+        aws_windows_stub.cpp
+    )
+ELSE()
+    PEERDIR(
+        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
+        contrib/libs/curl
+    )
+    SRCS(
+        aws.cpp
+    )
+ENDIF()
 
 END()
 

@@ -1,6 +1,6 @@
 # Grafana dashboards for {{ ydb-short-name }}
 
-This page describes Grafana dashboards for {{ ydb-short-name }}. For information about how to install dashboards, see [{#T}](../../../devops/manual/monitoring.md#prometheus-grafana).
+This page describes Grafana dashboards for {{ ydb-short-name }}. For information about how to install dashboards, see [{#T}](../../../devops/observability/monitoring.md#prometheus-grafana).
 
 ## DB status {#dbstatus}
 
@@ -109,3 +109,26 @@ DataShard tablet metrics.
 | Other | Other metrics |
 
 Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/datashard.json) file with the **DataShard** dashboard.
+
+## Database Hive {#database-hive-detailed}
+
+[Hive](../../../contributor/hive.md) metrics for the selected database.
+
+The dashboard includes the following filters:
+
+* database – selects the database for which metrics are displayed;
+* ds – selects the Prometheus data source the dashboard will use;
+* Tx type – determines the transaction type for which "`{Tx type}` average time" panel is displayed.
+
+| Name | Description |
+|---|---|
+| CPU usage by HIVE_ACTOR, HIVE_BALANCER_ACTOR | CPU time utilized by `HIVE_ACTOR` and `HIVE_BALANCER_ACTOR`, two of the most important actors of the Hive tablet. |
+| Self-ping time | Time it takes Hive to respond to itself. High values indicate heavy load (and low responsiveness) of the Hive. |
+| Local transaction times | CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities. |
+| Tablet count | Total number of tablets in the database. |
+| Event queue size | Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough. |
+| `{Tx type}` average time | Average execution time of a single local transaction of the type specified in the `Tx type` selector on the dashboard. |
+| Versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
+| Hive node | Node where the database Hive is running. |
+
+Download the [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.

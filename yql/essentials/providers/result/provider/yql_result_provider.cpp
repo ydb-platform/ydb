@@ -29,75 +29,75 @@ namespace {
     {
     public:
         TYsonResultWriter(NYson::EYsonFormat format)
-            : Writer(new NYson::TYsonWriter(&PartialStream, format, ::NYson::EYsonType::Node, true))
+            : Writer_(new NYson::TYsonWriter(&PartialStream_, format, ::NYson::EYsonType::Node, true))
         {}
 
         void Init(bool discard, const TString& label, TMaybe<TPosition> pos, bool unordered) override {
-            Discard = discard;
-            Unordered = unordered;
-            if (!Discard) {
-                Writer->OnBeginMap();
+            Discard_ = discard;
+            Unordered_ = unordered;
+            if (!Discard_) {
+                Writer_->OnBeginMap();
                 if (label) {
-                    Writer->OnKeyedItem("Label");
-                    Writer->OnStringScalar(label);
+                    Writer_->OnKeyedItem("Label");
+                    Writer_->OnStringScalar(label);
                 }
 
                 if (pos) {
-                    Writer->OnKeyedItem("Position");
-                    Writer->OnBeginMap();
-                    Writer->OnKeyedItem("File");
-                    Writer->OnStringScalar(pos->File ? pos->File : "<main>");
-                    Writer->OnKeyedItem("Row");
-                    Writer->OnInt64Scalar(pos->Row);
-                    Writer->OnKeyedItem("Column");
-                    Writer->OnInt64Scalar(pos->Column);
-                    Writer->OnEndMap();
+                    Writer_->OnKeyedItem("Position");
+                    Writer_->OnBeginMap();
+                    Writer_->OnKeyedItem("File");
+                    Writer_->OnStringScalar(pos->File ? pos->File : "<main>");
+                    Writer_->OnKeyedItem("Row");
+                    Writer_->OnInt64Scalar(pos->Row);
+                    Writer_->OnKeyedItem("Column");
+                    Writer_->OnInt64Scalar(pos->Column);
+                    Writer_->OnEndMap();
                 }
 
-                Writer->OnKeyedItem("Write");
-                Writer->OnBeginList();
+                Writer_->OnKeyedItem("Write");
+                Writer_->OnBeginList();
             }
         }
 
         void Write(const TStringBuf& resultData) override {
-            if (!Discard) {
-                Writer->OnListItem();
-                Writer->OnRaw(resultData);
+            if (!Discard_) {
+                Writer_->OnListItem();
+                Writer_->OnRaw(resultData);
             }
         }
 
         void Commit(bool overflow) override {
-            if (!Discard) {
-                Writer->OnEndList();
+            if (!Discard_) {
+                Writer_->OnEndList();
                 if (overflow) {
-                    Writer->OnKeyedItem("Truncated");
-                    Writer->OnBooleanScalar(true);
+                    Writer_->OnKeyedItem("Truncated");
+                    Writer_->OnBooleanScalar(true);
                 }
-                if (Unordered) {
-                    Writer->OnKeyedItem("Unordered");
-                    Writer->OnBooleanScalar(true);
+                if (Unordered_) {
+                    Writer_->OnKeyedItem("Unordered");
+                    Writer_->OnBooleanScalar(true);
                 }
-                Writer->OnEndMap();
+                Writer_->OnEndMap();
             }
         }
 
         bool IsDiscard() const override {
-            return Discard;
+            return Discard_;
         }
 
         TStringBuf Str() override {
-            return PartialStream.Str();
+            return PartialStream_.Str();
         }
 
         ui64 Size() override {
-            return PartialStream.Size();
+            return PartialStream_.Size();
         }
 
     private:
-        TStringStream PartialStream;
-        TAutoPtr<NYson::TYsonWriter> Writer;
-        bool Discard = false;
-        bool Unordered = false;
+        TStringStream PartialStream_;
+        TAutoPtr<NYson::TYsonWriter> Writer_;
+        bool Discard_ = false;
+        bool Unordered_ = false;
     };
 
     IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TTypeAnnotationNode* listType, TExprContext& ctx) {
@@ -234,9 +234,9 @@ namespace {
     class TResultCallableExecutionTransformer : public TGraphTransformerBase {
     public:
         TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
-            : Config(config)
+            : Config_(config)
         {
-            YQL_ENSURE(!Config->Types.AvailablePureResultDataSources.empty());
+            YQL_ENSURE(!Config_->Types.AvailablePureResultDataSources.empty());
         }
 
         TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -248,7 +248,7 @@ namespace {
             YQL_ENSURE(input->Type() == TExprNode::Callable);
             TExprBase node(input);
             if (node.Maybe<TResFill>() || node.Maybe<TResPull>() || node.Maybe<TResIf>() || node.Maybe<TResFor>()) {
-                auto provider = Config->Types.DataSourceMap.FindPtr(input->Child(5)->Content());
+                auto provider = Config_->Types.DataSourceMap.FindPtr(input->Child(5)->Content());
                 Y_ENSURE(provider, "DataSource not exist: " << input->Child(5)->Content());
                 if (node.Maybe<TResPull>()) {
                     return HandleFillOrPull<TPull>(node, output, ctx, *(*provider));
@@ -258,19 +258,19 @@ namespace {
             }
 
             if (input->Content() == CommitName) {
-                if (ResultWriter) {
+                if (ResultWriter_) {
                     TExprBase commitChild(input->ChildPtr(0));
 
-                    bool overflow = commitChild.Maybe<TResPull>() ? PullOverflow : FillOverflow;
-                    ui64& committedSize = commitChild.Maybe<TResPull>() ? CommittedPullSize : CommittedFillSize;
+                    bool overflow = commitChild.Maybe<TResPull>() ? PullOverflow_ : FillOverflow_;
+                    ui64& committedSize = commitChild.Maybe<TResPull>() ? CommittedPullSize_ : CommittedFillSize_;
 
-                    if (!ResultWriter->IsDiscard()) {
-                        ResultWriter->Commit(overflow);
-                        Config->CommittedResults.push_back(TString(ResultWriter->Str()));
-                        committedSize += Config->CommittedResults.back().size();
+                    if (!ResultWriter_->IsDiscard()) {
+                        ResultWriter_->Commit(overflow);
+                        Config_->CommittedResults.push_back(TString(ResultWriter_->Str()));
+                        committedSize += Config_->CommittedResults.back().size();
                     }
 
-                    ResultWriter.Reset();
+                    ResultWriter_.Reset();
                 }
 
                 input->SetState(TExprNode::EState::ExecutionComplete);
@@ -290,22 +290,22 @@ namespace {
 
         NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
             Y_UNUSED(input);
-            YQL_ENSURE(DelegatedProvider);
-            YQL_ENSURE(DelegatedNode);
-            YQL_ENSURE(DelegatedNodeOutput);
-            return DelegatedProvider->GetCallableExecutionTransformer()
-                .GetAsyncFuture(*DelegatedNode);
+            YQL_ENSURE(DelegatedProvider_);
+            YQL_ENSURE(DelegatedNode_);
+            YQL_ENSURE(DelegatedNodeOutput_);
+            return DelegatedProvider_->GetCallableExecutionTransformer()
+                .GetAsyncFuture(*DelegatedNode_);
         }
 
         TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             output = input;
-            YQL_ENSURE(DelegatedProvider);
-            YQL_ENSURE(DelegatedNode);
-            YQL_ENSURE(DelegatedNodeOutput);
-            auto status = DelegatedProvider->GetCallableExecutionTransformer()
-                .ApplyAsyncChanges(DelegatedNode, DelegatedNodeOutput, ctx);
-            if (status == TStatus::Repeat && input != DelegatedNodeOutput->TailPtr()) {
-                output = DelegatedNodeOutput->TailPtr();
+            YQL_ENSURE(DelegatedProvider_);
+            YQL_ENSURE(DelegatedNode_);
+            YQL_ENSURE(DelegatedNodeOutput_);
+            auto status = DelegatedProvider_->GetCallableExecutionTransformer()
+                .ApplyAsyncChanges(DelegatedNode_, DelegatedNodeOutput_, ctx);
+            if (status == TStatus::Repeat && input != DelegatedNodeOutput_->TailPtr()) {
+                output = DelegatedNodeOutput_->TailPtr();
             } else {
                 FinishNode(*input, ctx, status);
             }
@@ -313,17 +313,17 @@ namespace {
         }
 
         void Rewind() final {
-            DelegatedProvider = nullptr;
-            DelegatedNode = nullptr;
-            DelegatedNodeOutput = nullptr;
+            DelegatedProvider_ = nullptr;
+            DelegatedNode_ = nullptr;
+            DelegatedNodeOutput_ = nullptr;
 
-            CommittedPullSize = 0;
-            PullOverflow = false;
+            CommittedPullSize_ = 0;
+            PullOverflow_ = false;
 
-            CommittedFillSize = 0;
-            FillOverflow = false;
+            CommittedFillSize_ = 0;
+            FillOverflow_ = false;
 
-            ResultWriter.Drop();
+            ResultWriter_.Drop();
         }
 
    private:
@@ -521,9 +521,9 @@ namespace {
                 options = input.Cast<TResWriteBase>().Settings();
             }
 
-            DelegatedProvider = &provider;
-            auto fillSettings = Config->FillSettings;
-            auto resultSize = ResultWriter ? ResultWriter->Size() : 0;
+            DelegatedProvider_ = &provider;
+            auto fillSettings = Config_->FillSettings;
+            auto resultSize = ResultWriter_ ? ResultWriter_->Size() : 0;
 
             ui64 committedSize;
             bool& overflow = GetOverflowFlagAndCommitedSize<TTarget>(committedSize);
@@ -563,14 +563,14 @@ namespace {
             }
 
             TString publicId;
-            if (auto id = Config->Types.TranslateOperationId(input.Ref().UniqueId())) {
+            if (auto id = Config_->Types.TranslateOperationId(input.Ref().UniqueId())) {
                 publicId = ToString(*id);
             }
 
-            if (needWriter && !ResultWriter) {
-                YQL_ENSURE(Config->WriterFactory);
-                ResultWriter = Config->WriterFactory();
-                ResultWriter->Init(discard, label, Config->SupportsResultPosition ?
+            if (needWriter && !ResultWriter_) {
+                YQL_ENSURE(Config_->WriterFactory);
+                ResultWriter_ = Config_->WriterFactory();
+                ResultWriter_->Init(discard, label, Config_->SupportsResultPosition ?
                     TMaybe<TPosition>(ctx.GetPosition(input.Pos())) : Nothing(), unordered);
             }
 
@@ -584,7 +584,7 @@ namespace {
                 rowsLimit.Clear();
             }
 
-            DelegatedNode = Build<TTarget>(ctx, input.Pos())
+            DelegatedNode_ = Build<TTarget>(ctx, input.Pos())
                 .Input(dataNode.Cast())
                 .BytesLimit()
                     .Value(fillSettings.AllResultsBytesLimit ? ToString(*fillSettings.AllResultsBytesLimit) : TString())
@@ -610,14 +610,14 @@ namespace {
 
             for (auto idx: {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
                 TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) {
-                DelegatedNode->Child(idx)->SetTypeAnn(atomType);
-                DelegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
+                DelegatedNode_->Child(idx)->SetTypeAnn(atomType);
+                DelegatedNode_->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
             }
 
-            DelegatedNode->SetTypeAnn(input.Ref().GetTypeAnn());
-            DelegatedNode->SetState(TExprNode::EState::ConstrComplete);
+            DelegatedNode_->SetTypeAnn(input.Ref().GetTypeAnn());
+            DelegatedNode_->SetState(TExprNode::EState::ConstrComplete);
             input.Ptr()->SetState(TExprNode::EState::ExecutionInProgress);
-            auto status = DelegatedProvider->GetCallableExecutionTransformer().Transform(DelegatedNode, DelegatedNodeOutput, ctx);
+            auto status = DelegatedProvider_->GetCallableExecutionTransformer().Transform(DelegatedNode_, DelegatedNodeOutput_, ctx);
             if (status.Level != TStatus::Async) {
                 status = FinishNode(*input.Ptr(), ctx, status);
             }
@@ -627,11 +627,11 @@ namespace {
 
         IGraphTransformer::TStatus FinishNode(TExprNode& input, TExprContext& ctx, IGraphTransformer::TStatus status) {
             if (status.Level == TStatus::Ok) {
-                auto data = DelegatedNode->GetResult().Content();
+                auto data = DelegatedNode_->GetResult().Content();
                 const bool needWriter = input.Content() != TResIf::CallableName()
                     && input.Content() != TResFor::CallableName();
                 if (needWriter) {
-                    ResultWriter->Write(data);
+                    ResultWriter_->Write(data);
 
                     input.SetResult(ctx.NewAtom(input.Pos(), ""));
                     input.SetState(TExprNode::EState::ExecutionComplete);
@@ -641,73 +641,73 @@ namespace {
                     status = IGraphTransformer::TStatus::Repeat;
                 }
             } else if (status.Level == TStatus::Error) {
-                if (const auto issies = ctx.AssociativeIssues.extract(DelegatedNode.Get())) {
+                if (const auto issies = ctx.AssociativeIssues.extract(DelegatedNode_.Get())) {
                     ctx.IssueManager.RaiseIssues(issies.mapped());
                 }
             } else {
                 input.SetState(TExprNode::EState::ExecutionRequired);
             }
 
-            DelegatedProvider = nullptr;
-            DelegatedNode = nullptr;
-            DelegatedNodeOutput = nullptr;
+            DelegatedProvider_ = nullptr;
+            DelegatedNode_ = nullptr;
+            DelegatedNodeOutput_ = nullptr;
             return status;
         }
 
     private:
-        const TIntrusivePtr<TResultProviderConfig> Config;
-        IDataProvider* DelegatedProvider = nullptr;
-        TExprNode::TPtr DelegatedNode;
-        TExprNode::TPtr DelegatedNodeOutput;
+        const TIntrusivePtr<TResultProviderConfig> Config_;
+        IDataProvider* DelegatedProvider_ = nullptr;
+        TExprNode::TPtr DelegatedNode_;
+        TExprNode::TPtr DelegatedNodeOutput_;
 
-        ui64 CommittedPullSize = 0;
-        bool PullOverflow = false;
+        ui64 CommittedPullSize_ = 0;
+        bool PullOverflow_ = false;
 
-        ui64 CommittedFillSize = 0;
-        bool FillOverflow = false;
+        ui64 CommittedFillSize_ = 0;
+        bool FillOverflow_ = false;
 
-        TIntrusivePtr<IResultWriter> ResultWriter;
+        TIntrusivePtr<IResultWriter> ResultWriter_;
     };
 
     template <class TTarget>
     bool& TResultCallableExecutionTransformer::GetOverflowFlagAndCommitedSize(ui64& committed) {
-        committed = CommittedFillSize;
-        return FillOverflow;
+        committed = CommittedFillSize_;
+        return FillOverflow_;
     }
 
     template<>
     bool& TResultCallableExecutionTransformer::GetOverflowFlagAndCommitedSize<TPull>(ui64& committed) {
-        committed = CommittedPullSize;
-        return PullOverflow;
+        committed = CommittedPullSize_;
+        return PullOverflow_;
     }
 
     class TResultTrackableNodeProcessor : public TTrackableNodeProcessorBase {
     public:
         TResultTrackableNodeProcessor(const TIntrusivePtr<TResultProviderConfig>& config)
-            : Config(config)
+            : Config_(config)
         {}
 
         void GetUsedNodes(const TExprNode& input, TVector<TString>& usedNodeIds) override {
             usedNodeIds.clear();
             if (TMaybeNode<TResFill>(&input) || TMaybeNode<TResPull>(&input) || TMaybeNode<TResIf>(&input)
                 || TMaybeNode<TResFor>(&input)) {
-                auto provider = Config->Types.DataSourceMap.FindPtr(input.Child(5)->Content());
+                auto provider = Config_->Types.DataSourceMap.FindPtr(input.Child(5)->Content());
                 Y_ENSURE(provider, "DataSource not exist: " << input.Child(5)->Content());
                 (*provider)->GetTrackableNodeProcessor().GetUsedNodes(input, usedNodeIds);
             }
         }
     private:
-        const TIntrusivePtr<TResultProviderConfig> Config;
+        const TIntrusivePtr<TResultProviderConfig> Config_;
     };
 
     class TPhysicalFinalizingTransformer final : public TSyncTransformerBase {
     public:
         TPhysicalFinalizingTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
-            : Config(config) {}
+            : Config_(config) {}
 
         TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-            TOptimizeExprSettings settings(&Config->Types);
-            settings.ProcessedNodes = &PhysicalOptProcessedNodes;
+            TOptimizeExprSettings settings(&Config_->Types);
+            settings.ProcessedNodes = &PhysicalOptProcessedNodes_;
             TStatus status = OptimizeExprEx(input, output,
                 [&](const TExprNode::TPtr& node, TExprContext& ctx, IOptimizationContext& optCtx) -> TExprNode::TPtr {
                 auto ret = node;
@@ -726,7 +726,7 @@ namespace {
                     }
 
                     auto writeInput = resWrite.Data();
-                    for (auto& source : Config->Types.DataSources) {
+                    for (auto& source : Config_->Types.DataSources) {
                         TSyncMap syncList;
                         bool canRef;
                         if (source->CanPullResult(writeInput.Ref(), syncList, canRef)) {
@@ -738,7 +738,7 @@ namespace {
                                 return nullptr;
                             }
 
-                            auto fillSettings = Config->FillSettings;
+                            auto fillSettings = Config_->FillSettings;
                             if (!isRef && (!isAutoRef || !canRef)) {
                                 for (auto setting: resWrite.Settings()) {
                                     if (setting.Name().Value() == "take") {
@@ -795,7 +795,7 @@ namespace {
                                 .Data(cleanup)
                                 .Settings(resWrite.Settings())
                                 .DelegatedSource()
-                                    .Value(Config->Types.GetDefaultDataSource())
+                                    .Value(Config_->Types.GetDefaultDataSource())
                                 .Build()
                                 .Done().Ptr();
 
@@ -803,7 +803,7 @@ namespace {
                             return ret;
                         }
 
-                        for (auto& source : Config->Types.DataSources) {
+                        for (auto& source : Config_->Types.DataSources) {
                             TSyncMap syncList;
                             if (source->CanBuildResult(writeInput.Ref(), syncList)) {
                                 auto cleanup = source->CleanupWorld(data.Ptr(), ctx);
@@ -831,7 +831,7 @@ namespace {
                     TSyncMap syncList;
                     auto foundDataSource = FindDataSource(*node->Child(1), syncList);
                     if (!foundDataSource.empty()) {
-                        auto provider = Config->Types.DataSourceMap.FindPtr(foundDataSource);
+                        auto provider = Config_->Types.DataSourceMap.FindPtr(foundDataSource);
                         Y_ENSURE(provider, "DataSource doesn't exist: " << foundDataSource);
                         auto cleanup = (*provider)->CleanupWorld(node->ChildPtr(1), ctx);
                         if (!cleanup) {
@@ -859,7 +859,7 @@ namespace {
                     TSyncMap syncList;
                     auto foundDataSource = FindDataSource(*node->Child(1), syncList);
                     if (!foundDataSource.empty()) {
-                        auto provider = Config->Types.DataSourceMap.FindPtr(foundDataSource);
+                        auto provider = Config_->Types.DataSourceMap.FindPtr(foundDataSource);
                         Y_ENSURE(provider, "DataSource doesn't exist: " << foundDataSource);
                         auto cleanup = (*provider)->CleanupWorld(node->ChildPtr(1), ctx);
                         if (!cleanup) {
@@ -900,7 +900,7 @@ namespace {
         }
 
         void Rewind() final {
-            PhysicalOptProcessedNodes.clear();
+            PhysicalOptProcessedNodes_.clear();
         }
 
     private:
@@ -908,11 +908,11 @@ namespace {
             syncList.clear();
             TString foundDataSource;
             if (IsPureIsolatedLambda(node)) {
-                foundDataSource = Config->Types.GetDefaultDataSource();
+                foundDataSource = Config_->Types.GetDefaultDataSource();
             }
 
             if (foundDataSource.empty()) {
-                for (auto& source : Config->Types.DataSources) {
+                for (auto& source : Config_->Types.DataSources) {
                     syncList.clear();
                     if (source->CanBuildResult(node, syncList)) {
                         foundDataSource = TString(source->GetName());
@@ -925,8 +925,8 @@ namespace {
         }
 
     private:
-        const TIntrusivePtr<TResultProviderConfig> Config;
-        TProcessedNodesSet PhysicalOptProcessedNodes;
+        const TIntrusivePtr<TResultProviderConfig> Config_;
+        TProcessedNodesSet PhysicalOptProcessedNodes_;
     };
 
     class TResultProvider : public TDataProviderBase {
@@ -944,8 +944,8 @@ namespace {
         };
 
         TResultProvider(const TIntrusivePtr<TResultProviderConfig>& config)
-            : Config(config)
-            , TrackableNodeProcessor(config)
+            : Config_(config)
+            , TrackableNodeProcessor_(config)
         {}
 
         TStringBuf GetName() const override {
@@ -971,8 +971,8 @@ namespace {
 
         IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
             Y_UNUSED(instantOnly);
-            if (!TypeAnnotationTransformer) {
-                TypeAnnotationTransformer = CreateFunctorTransformer(
+            if (!TypeAnnotationTransformer_) {
+                TypeAnnotationTransformer_ = CreateFunctorTransformer(
                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx)->IGraphTransformer::TStatus {
                     output = input;
 
@@ -1112,13 +1112,13 @@ namespace {
                                 if (source.Ref().Type() == TExprNode::Callable || source.Ref().ChildrenSize() >= 2) {
                                     if (source.Ref().Child(1)->IsCallable("DataSource")) {
                                         auto name = source.Ref().Child(1)->Child(0)->Content();
-                                        provider = Config->Types.DataSourceMap.FindPtr(name);
+                                        provider = Config_->Types.DataSourceMap.FindPtr(name);
                                         Y_ENSURE(provider, "DataSource doesn't exist: " << name);
                                     }
 
                                     if (source.Ref().Child(1)->IsCallable("DataSink")) {
                                         auto name = source.Ref().Child(1)->Child(0)->Content();
-                                        provider = Config->Types.DataSinkMap.FindPtr(name);
+                                        provider = Config_->Types.DataSinkMap.FindPtr(name);
                                         Y_ENSURE(provider, "DataSink doesn't exist: " << name);
                                     }
                                 }
@@ -1136,16 +1136,16 @@ namespace {
                                 return IGraphTransformer::TStatus::Error;
                             }
 
-                            if (!Config->Types.DataSourceMap.FindPtr(resTransient.DelegatedSource().Value())) {
+                            if (!Config_->Types.DataSourceMap.FindPtr(resTransient.DelegatedSource().Value())) {
                                 ctx.AddError(TIssue(ctx.GetPosition(resTransient.DelegatedSource().Pos()),
                                     TStringBuilder() << "DataSource is not found: " << resTransient.DelegatedSource().Value()));
                                 return IGraphTransformer::TStatus::Error;
                             }
                         }
 
-                        if (res.Data().Ref().IsCallable("AssumeColumnOrder")) {
+                        if (Config_->Types.OrderedColumns && res.Data().Ref().IsCallable("AssumeColumnOrder")) {
                             if (!HasSetting(res.Settings().Ref(), "freezeColumns")) {
-                                auto dataOrder = Config->Types.LookupColumnOrder(res.Data().Ref());
+                                auto dataOrder = Config_->Types.LookupColumnOrder(res.Data().Ref());
                                 YQL_ENSURE(dataOrder);
 
                                 YQL_CLOG(INFO, ProviderResult) << "Setting result column order: " << FormatColumnOrder(dataOrder);
@@ -1194,7 +1194,7 @@ namespace {
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!Config->Types.DataSourceMap.FindPtr(input->Child(TResIf::idx_DelegatedSource)->Content())) {
+                        if (!Config_->Types.DataSourceMap.FindPtr(input->Child(TResIf::idx_DelegatedSource)->Content())) {
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TResIf::idx_DelegatedSource)->Pos()),
                                 TStringBuilder() << "DataSource is not found: " << input->Child(TResIf::idx_DelegatedSource)->Content()));
                             return IGraphTransformer::TStatus::Error;
@@ -1271,7 +1271,7 @@ namespace {
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!Config->Types.DataSourceMap.FindPtr(input->Child(TResFor::idx_DelegatedSource)->Content())) {
+                        if (!Config_->Types.DataSourceMap.FindPtr(input->Child(TResFor::idx_DelegatedSource)->Content())) {
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TResFor::idx_DelegatedSource)->Pos()),
                                 TStringBuilder() << "DataSource is not found: " << input->Child(TResFor::idx_DelegatedSource)->Content()));
                             return IGraphTransformer::TStatus::Error;
@@ -1373,10 +1373,10 @@ namespace {
                                 return IGraphTransformer::TStatus::Error;
                             }
 
-                            if (Config->FillSettings.AllResultsBytesLimit) {
-                                Config->FillSettings.AllResultsBytesLimit = Min(*Config->FillSettings.AllResultsBytesLimit, limit);
+                            if (Config_->FillSettings.AllResultsBytesLimit) {
+                                Config_->FillSettings.AllResultsBytesLimit = Min(*Config_->FillSettings.AllResultsBytesLimit, limit);
                             } else {
-                                Config->FillSettings.AllResultsBytesLimit = limit;
+                                Config_->FillSettings.AllResultsBytesLimit = limit;
                             }
 
                         } else {
@@ -1393,7 +1393,7 @@ namespace {
                 });
             }
 
-            return *TypeAnnotationTransformer;
+            return *TypeAnnotationTransformer_;
         }
 
         TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
@@ -1420,11 +1420,11 @@ namespace {
         }
 
         IGraphTransformer& GetPhysicalFinalizingTransformer() override {
-            if (!PhysicalFinalizingTransformer) {
-                PhysicalFinalizingTransformer = new TPhysicalFinalizingTransformer(Config);
+            if (!PhysicalFinalizingTransformer_) {
+                PhysicalFinalizingTransformer_ = new TPhysicalFinalizingTransformer(Config_);
             }
 
-            return *PhysicalFinalizingTransformer;
+            return *PhysicalFinalizingTransformer_;
         }
 
         bool CanExecute(const TExprNode& node) override {
@@ -1453,7 +1453,7 @@ namespace {
 
         bool ValidateExecution(const TExprNode& node, TExprContext& ctx) override {
             auto getDataProvider = [&]() {
-                auto provider = Config->Types.DataSourceMap.FindPtr(node.Child(5)->Content());
+                auto provider = Config_->Types.DataSourceMap.FindPtr(node.Child(5)->Content());
                 Y_ENSURE(provider, "DataSource doesn't exist: " << node.Child(5)->Content());
                 return *provider;
             };
@@ -1471,19 +1471,19 @@ namespace {
         }
 
         IGraphTransformer& GetCallableExecutionTransformer() override {
-            if (!CallableExecutionTransformer) {
-                CallableExecutionTransformer = new TResultCallableExecutionTransformer(Config);
+            if (!CallableExecutionTransformer_) {
+                CallableExecutionTransformer_ = new TResultCallableExecutionTransformer(Config_);
             }
 
-            return *CallableExecutionTransformer;
+            return *CallableExecutionTransformer_;
         }
 
         void Reset() final {
             TDataProviderBase::Reset();
-            if (CallableExecutionTransformer) {
-                CallableExecutionTransformer.Reset();
+            if (CallableExecutionTransformer_) {
+                CallableExecutionTransformer_.Reset();
             }
-            Config->CommittedResults.clear();
+            Config_->CommittedResults.clear();
         }
 
         bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
@@ -1500,7 +1500,7 @@ namespace {
                         children.push_back(active);
                     }
                 } else if (auto resFill = TMaybeNode<TResFill>(&node)) {
-                    const auto provider = Config->Types.DataSourceMap.FindPtr(resFill.Cast().DelegatedSource().Value());
+                    const auto provider = Config_->Types.DataSourceMap.FindPtr(resFill.Cast().DelegatedSource().Value());
                     Y_ENSURE(provider, "DataSource not exist: " << resFill.Cast().DelegatedSource().Value());
                     (*provider)->GetPlanFormatter().GetResultDependencies(resFill.Cast().Data().Ptr(), children, compact);
                 }
@@ -1515,7 +1515,7 @@ namespace {
             Y_UNUSED(withLimits);
             if (auto resPull = TMaybeNode<TResPull>(&node)) {
                 auto dataSourceName = resPull.Cast().DelegatedSource().Value();
-                auto dataSource = Config->Types.DataSourceMap.FindPtr(dataSourceName);
+                auto dataSource = Config_->Types.DataSourceMap.FindPtr(dataSourceName);
                 YQL_ENSURE(dataSource);
 
                 (*dataSource)->GetPlanFormatter().WritePullDetails(resPull.Cast().Data().Ref(), writer);
@@ -1549,15 +1549,15 @@ namespace {
         }
 
         ITrackableNodeProcessor& GetTrackableNodeProcessor() override {
-            return TrackableNodeProcessor;
+            return TrackableNodeProcessor_;
         }
 
     private:
-        const TIntrusivePtr<TResultProviderConfig> Config;
-        TResultTrackableNodeProcessor TrackableNodeProcessor;
-        TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
-        TAutoPtr<IGraphTransformer> PhysicalFinalizingTransformer;
-        TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
+        const TIntrusivePtr<TResultProviderConfig> Config_;
+        TResultTrackableNodeProcessor TrackableNodeProcessor_;
+        TAutoPtr<IGraphTransformer> TypeAnnotationTransformer_;
+        TAutoPtr<IGraphTransformer> PhysicalFinalizingTransformer_;
+        TAutoPtr<IGraphTransformer> CallableExecutionTransformer_;
     };
 }
 

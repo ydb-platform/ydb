@@ -9,6 +9,8 @@ SRCS(
     udf_data_type.h
     udf_helpers.cpp
     udf_helpers.h
+    udf_log.h
+    udf_log.cpp
     udf_pg_type_description.h
     udf_ptr.h
     udf_registrator.cpp
@@ -57,7 +59,6 @@ RECURSE(
     arrow
     service
     support
-    tz
 )
 
 RECURSE_FOR_TESTS(

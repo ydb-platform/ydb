@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/change_exchange/visitor.h>
+#include "visitor.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -18,10 +18,11 @@ public:
     };
 
     enum class EKind: ui8 {
-        AsyncIndex,
-        CdcDataChange,
-        CdcHeartbeat,
-        IncrementalRestore,
+        AsyncIndex = 0,
+        CdcDataChange = 1,
+        CdcHeartbeat = 2 ,
+        IncrementalRestore = 3,
+        CdcSchemaChange = 4,
     };
 
 public:

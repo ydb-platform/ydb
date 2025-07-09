@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: pyasn1_modules
-Version: 0.4.1
+Version: 0.4.2
 Summary: A collection of ASN.1-based protocols modules
 Home-page: https://github.com/pyasn1/pyasn1-modules
 Author: Ilya Etingof
@@ -36,7 +36,8 @@ Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 License-File: LICENSE.txt
-Requires-Dist: pyasn1 <0.7.0,>=0.4.6
+Requires-Dist: pyasn1<0.7.0,>=0.6.1
+Dynamic: license-file
 
 
 ASN.1 modules for Python

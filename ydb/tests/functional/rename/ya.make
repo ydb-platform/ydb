@@ -1,6 +1,6 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 PY_SRCS (
     conftest.py
     common.py
@@ -27,11 +27,11 @@ ELSE()
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/fixtures
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python
     contrib/python/tornado/tornado-4

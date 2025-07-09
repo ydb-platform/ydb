@@ -42,42 +42,42 @@ void SanitizeNonAscii(TString& s) {
 
 TTextWalker& TTextWalker::Advance(char c) {
     if (c == '\n') {
-        HaveCr = false;
-        ++LfCount;
+        HaveCr_ = false;
+        ++LfCount_;
         return *this;
     }
 
 
-    if (c == '\r' && !HaveCr) {
-        HaveCr = true;
+    if (c == '\r' && !HaveCr_) {
+        HaveCr_ = true;
         return *this;
     }
 
     ui32 charDistance = 1;
-    if (Utf8Aware && IsUtf8Intermediate(c)) {
+    if (Utf8Aware_ && IsUTF8ContinuationByte(c)) {
         charDistance = 0;
     }
 
     // either not '\r' or second '\r'
-    if (LfCount) {
-        Position.Row += LfCount;
-        Position.Column = charDistance;
-        LfCount = 0;
+    if (LfCount_) {
+        Position_.Row += LfCount_;
+        Position_.Column = charDistance;
+        LfCount_ = 0;
     } else {
-        Position.Column += charDistance + (HaveCr && c != '\r');
+        Position_.Column += charDistance + (HaveCr_ && c != '\r');
     }
-    HaveCr = (c == '\r');
+    HaveCr_ = (c == '\r');
     return *this;
 }
 
 void TIssue::PrintTo(IOutputStream& out, bool oneLine) const {
     out << Range() << ": " << SeverityToString(GetSeverity()) << ": ";
     if (oneLine) {
-        TString message = StripString(Message);
+        TString message = StripString(Message_);
         SubstGlobal(message, '\n', ' ');
         out << message;
     } else {
-        out << Message;
+        out << Message_;
     }
     if (GetCode()) {
         out << ", code: " << GetCode();
@@ -199,7 +199,8 @@ void TIssues::PrintTo(IOutputStream& out, bool oneLine) const
 void TIssues::PrintWithProgramTo(
         IOutputStream& out,
         const TString& programFilename,
-        const TString& programText) const
+        const TString& programText,
+        bool colorize) const
 {
     using namespace NColorizer;
 
@@ -210,11 +211,41 @@ void TIssues::PrintWithProgramTo(
         WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
             auto shift = level * 4;
             Indent(out, shift);
-            out << DarkGray() << programFilename << Old() << ':';
-            out << Purple() << issue.Range() << Old();
-            auto color = (issue.GetSeverity() ==  TSeverityIds::S_WARNING) ? Yellow() : LightRed();
+            if (colorize) {
+                out << DarkGray();
+            }
+            out << programFilename;
+            if (colorize) {
+                out << Old();
+            }
+
+            out << ':';
+            if (colorize) {
+                out << Purple();
+            }
+
+            out << issue.Range();
+            if (colorize) {
+                out << Old();
+            }
+
             auto severityName = SeverityToString(issue.GetSeverity());
-            out << color << ": "<< severityName << ": " << issue.GetMessage() << Old() << '\n';
+            if (colorize) {
+                if (issue.GetSeverity() == TSeverityIds::S_INFO) {
+                    out << LightGreen();
+                } else if (issue.GetSeverity() == TSeverityIds::S_WARNING) {
+                    out << Yellow();
+                } else {
+                    out << LightRed();
+                }
+            }
+
+            out << ": "<< severityName << ": " << issue.GetMessage();
+            if (colorize) {
+                out << Old();
+            }
+
+            out << '\n';
             Indent(out, shift);
             if (issue.Position.HasValue()) {
                 out << '\t' << lines[issue.Position.Row] << '\n';

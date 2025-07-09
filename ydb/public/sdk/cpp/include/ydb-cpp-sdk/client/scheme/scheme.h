@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
     class VirtualTimestamp;
@@ -11,7 +11,7 @@ namespace Ydb {
     }
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NScheme {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -50,6 +50,8 @@ enum class ESchemeEntryType : i32 {
     ExternalDataSource = 19,
     View = 20,
     ResourcePool = 21,
+    SysView = 22,
+    Transfer = 23,
 };
 
 struct TVirtualTimestamp {

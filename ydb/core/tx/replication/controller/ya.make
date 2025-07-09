@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
+    ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator_client
     ydb/core/util
@@ -31,12 +32,14 @@ SRCS(
     replication.cpp
     secret_resolver.cpp
     session_info.cpp
+    stream_consumer_remover.cpp
     stream_creator.cpp
     stream_remover.cpp
     sys_params.cpp
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp
+    target_transfer.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
     tx_assign_tx_id.cpp

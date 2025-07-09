@@ -161,8 +161,8 @@ public:
     void SetCluster(const std::string& value);
 
     // "clusters"
-    std::optional<std::vector<TString>> GetClusters() const;
-    void SetClusters(const std::vector<TString>& value);
+    std::optional<std::vector<std::string>> GetClusters() const;
+    void SetClusters(const std::vector<std::string>& value);
 
     // "create"
     bool GetCreate() const;
@@ -172,6 +172,9 @@ public:
 
     // "versioned_write_options"
     NTableClient::TVersionedWriteOptions GetVersionedWriteOptions() const;
+
+    // "access_method"
+    std::optional<TString> GetAccessMethod() const;
 
 private:
     TYPath Path_;

@@ -66,6 +66,8 @@ extend google.protobuf.FileOptions {
 //
 enum ETxTypeSimpleCounters {
     COUNTER_TT_SIMPLE_IGNORE = 0;
+
+    COUNTER_TT_INFLY = 1                                 [(CounterOpts) = {Name: "InFly"}];
 }
 
 enum ETxTypeCumulativeCounters {

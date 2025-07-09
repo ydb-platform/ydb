@@ -277,9 +277,12 @@ static void s_clear_reusable_components(struct aws_symmetric_cipher *cipher) {
     }
 
     aws_byte_buf_secure_zero(&cipher_impl->overflow);
-    aws_byte_buf_secure_zero(&cipher_impl->working_mac_buffer);
-    /* windows handles this, just go ahead and tell the API it's got a length. */
-    cipher_impl->working_mac_buffer.len = AWS_AES_256_CIPHER_BLOCK_SIZE;
+
+    if (cipher_impl->working_mac_buffer.capacity != 0) {
+        aws_byte_buf_secure_zero(&cipher_impl->working_mac_buffer);
+        /* windows handles this, just go ahead and tell the API it's got a length. */
+        cipher_impl->working_mac_buffer.len = AWS_AES_256_CIPHER_BLOCK_SIZE;
+    }
 }
 
 static int s_reset_cbc_cipher(struct aws_symmetric_cipher *cipher) {

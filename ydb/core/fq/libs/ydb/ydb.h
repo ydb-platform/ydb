@@ -4,10 +4,10 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 
-#include <ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/stream/file.h>
 #include <util/string/strip.h>
@@ -80,6 +80,8 @@ struct TGenerationContext : public TThrRefBase {
     // result of Select
     ui64 GenerationRead = 0;
 
+    NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
+
     TGenerationContext(NYdb::NTable::TSession session,
                        bool commitTx,
                        const TString& tablePathPrefix,
@@ -87,7 +89,8 @@ struct TGenerationContext : public TThrRefBase {
                        const TString& primaryKeyColumn,
                        const TString& generationColumn,
                        const TString& primaryKey,
-                       ui64 generation)
+                       ui64 generation,
+                       const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
         : Session(session)
         , CommitTx(commitTx)
         , TablePathPrefix(tablePathPrefix)
@@ -96,6 +99,7 @@ struct TGenerationContext : public TThrRefBase {
         , GenerationColumn(generationColumn)
         , PrimaryKey(primaryKey)
         , Generation(generation)
+        , ExecDataQuerySettings(execDataQuerySettings)
     {
     }
 };
@@ -154,6 +158,11 @@ TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
     if (config.GetCertificateFile()) {
         auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll());
         settings.SslCredentials(NYdb::TSslCredentials(true, cert));
+    }
+    if constexpr (std::is_same_v<TSettings, NYdb::NTable::TClientSettings>) {
+        auto maxActiveSessions = config.GetTableClientMaxActiveSessions();
+        settings.SessionPoolSettings(NYdb::NTable::TSessionPoolSettings()
+            .MaxActiveSessions(maxActiveSessions ? maxActiveSessions : 50));    // 50 - default in TSessionPoolSettings
     }
 
     return settings;

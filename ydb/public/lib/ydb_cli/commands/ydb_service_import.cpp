@@ -6,7 +6,6 @@
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
-#include <ydb/public/lib/ydb_cli/import/import.h>
 #include <ydb/library/backup/util.h>
 
 #include <util/string/builder.h>
@@ -126,6 +125,10 @@ void TCommandImportFromS3::Parse(TConfig& config) {
         throw TMisuseException() << "At least one item should be provided";
     }
 
+}
+
+void TCommandImportFromS3::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Destination, config);
     }
@@ -222,7 +225,7 @@ TCommandImportFromFile::TCommandImportFromFile()
 void TCommandImportFileBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    config.Opts->SetTrailingArgTitle("<input files...>",
+    config.Opts->GetOpts().SetTrailingArgTitle("<input files...>",
             "One or more file paths to import from");
     config.Opts->AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
             "There could also be a delay up to 200ms to receive timeout error from server")
@@ -234,7 +237,9 @@ void TCommandImportFileBase::Config(TConfig& config) {
 
     const TImportFileSettings defaults;
     config.Opts->AddLongOption("batch-bytes",
-            "Use portions of this size in bytes to parse and upload file data")
+            "Use portions of this size in bytes to parse and upload file data."
+            " Remember that in worse case memory consumption will be: \n"
+            "    batch-bytes * (threads * 2 + max-in-flight)")
         .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
     config.Opts->AddLongOption("max-in-flight",
         "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")
@@ -246,7 +251,6 @@ void TCommandImportFileBase::Config(TConfig& config) {
 
 void TCommandImportFileBase::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    AdjustPath(config);
 
     if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
         if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) {
@@ -275,6 +279,11 @@ void TCommandImportFileBase::Parse(TConfig& config) {
     }
 }
 
+void TCommandImportFileBase::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    AdjustPath(config);
+}
+
 /// Import CSV
 
 void TCommandImportFromCsv::Config(TConfig& config) {
@@ -292,6 +301,17 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("newline-delimited",
             "No newline characters inside records, enables some import optimizations (see docs)")
         .StoreTrue(&NewlineDelimited);
+    TStringStream description;
+    description << "Format that data will be serialized to before sending to YDB. Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    description << "\n  " << colors.BoldColor() << "tvalue" << colors.OldColor()
+        << "\n    " << "A default YDB protobuf format";
+    description << "\n  " << colors.BoldColor() << "arrow" << colors.OldColor()
+        << "\n    " << "Apache Arrow format";
+    description << "\nDefault: " << colors.CyanColor() << "\"" << "tvalue" << "\"" << colors.OldColor() << ".";
+    config.Opts->AddLongOption("send-format", description.Str())
+        .RequiredArgument("STRING").StoreResult(&SendFormat)
+        .Hidden();
     if (InputFormat == EDataFormat::Csv) {
         config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
             .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);
@@ -315,6 +335,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.HeaderRow(HeaderRow);
     settings.NullValue(NullValue);
     settings.Verbose(config.IsVerbose());
+    settings.SendFormat(SendFormat);
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()

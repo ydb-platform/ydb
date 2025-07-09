@@ -1,17 +1,17 @@
 #include "write_session_impl.h"
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
-#include <ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
 
 #include <util/generic/store_policy.h>
 #include <util/generic/utility.h>
 #include <util/stream/buffer.h>
 
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 

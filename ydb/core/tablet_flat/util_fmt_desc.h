@@ -47,7 +47,7 @@ namespace NKikimr {
             TDesc(const Type *ob, TArg&& ...args)
                 : Ob(ob), Args(std::forward<TArg>(args)...) { }
 
-            inline TOut& Do(TOut &out) const noexcept
+            inline TOut& Do(TOut &out) const
             {
                 using Tups = std::tuple_size<std::tuple<TArg...>>;
 
@@ -73,7 +73,7 @@ namespace NKikimr {
         struct TArr {
             TArr(TIter begin, TIter end) : Begin(begin), End(end) { }
 
-            TOut& Do(TOut &out) const noexcept
+            TOut& Do(TOut &out) const
             {
                 out << "{ ";
 
@@ -100,7 +100,7 @@ namespace NKikimr {
         }
 
         template<typename Type, typename ...TArg>
-        inline TString Ln(const Type &ob, TArg&& ...args) noexcept
+        inline TString Ln(const Type &ob, TArg&& ...args)
         {
             TStringStream ss;
 
@@ -111,7 +111,7 @@ namespace NKikimr {
 
         template<typename Type,
             typename It = decltype(std::declval<const Type>().begin())>
-        inline TArr<It> Arr(const Type &arr) noexcept
+        inline TArr<It> Arr(const Type &arr)
         {
             return { arr.begin(), arr.end() };
         }

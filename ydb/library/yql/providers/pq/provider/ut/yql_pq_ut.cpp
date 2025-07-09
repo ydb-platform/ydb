@@ -34,7 +34,7 @@
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <util/stream/tee.h>
 #include <util/string/cast.h>

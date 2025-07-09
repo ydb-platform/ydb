@@ -72,7 +72,7 @@
 #include "multiif.h"
 #include "select.h"
 #include "warnless.h"
-#error #include "curl_path.h"
+#include "curl_path.h"
 
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>

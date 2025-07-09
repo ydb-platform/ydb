@@ -43,7 +43,7 @@ namespace NPageCollection {
 
         void PushInplace(ui32 page, TArrayRef<const char> body)
         {
-            Y_ABORT_UNLESS(Index && page == Index.size() - 1);
+            Y_ENSURE(Index && page == Index.size() - 1);
 
             Inbound.append(body.data(), body.size());
             Index.back().Inplace = Inbound.size();
@@ -77,7 +77,7 @@ namespace NPageCollection {
                 ptr += sizeof(crc);
             }
 
-            Y_ABORT_UNLESS(ptr == raw.mutable_end());
+            Y_ENSURE(ptr == raw.mutable_end());
             NSan::CheckMemIsInitialized(raw.data(), raw.size());
 
             Blobs.clear();

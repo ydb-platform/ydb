@@ -14,6 +14,8 @@ YT_DEFINE_ERROR_ENUM(
     ((InvalidEpoch)                      (3101))
     ((ZombieEpoch)                       (3102))
     ((InvalidRowSequenceNumbers)         (3103))
+    ((QueueAgentRetriableError)          (3104))
+    ((QueueAgentObjectIsNotMapped)       (3105))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,9 +31,9 @@ DECLARE_REFCOUNTED_STRUCT(IProducerClient)
 DECLARE_REFCOUNTED_STRUCT(IProducerSession)
 
 DECLARE_REFCOUNTED_STRUCT(IPartitionReader)
-DECLARE_REFCOUNTED_CLASS(TPartitionReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TQueueStaticExportConfig)
-DECLARE_REFCOUNTED_CLASS(TQueueStaticExportDestinationConfig)
+DECLARE_REFCOUNTED_STRUCT(TPartitionReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TQueueStaticExportConfig)
+DECLARE_REFCOUNTED_STRUCT(TQueueStaticExportDestinationConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

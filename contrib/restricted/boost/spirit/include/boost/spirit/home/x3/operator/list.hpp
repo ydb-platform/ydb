@@ -1,6 +1,8 @@
 /*=============================================================================
     Copyright (c) 2001-2014 Joel de Guzman
     Copyright (c) 2001-2011 Hartmut Kaiser
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -11,6 +13,7 @@
 #include <boost/spirit/home/x3/core/parser.hpp>
 #include <boost/spirit/home/x3/support/traits/container_traits.hpp>
 #include <boost/spirit/home/x3/support/traits/attribute_of.hpp>
+#include <boost/spirit/home/x3/support/expectation.hpp>
 #include <boost/spirit/home/x3/core/detail/parse_into_container.hpp>
 
 namespace boost { namespace spirit { namespace x3
@@ -42,7 +45,7 @@ namespace boost { namespace spirit { namespace x3
                 first = iter;
             }
 
-            return true;
+            return !has_expectation_failure(context);
         }
     };
 

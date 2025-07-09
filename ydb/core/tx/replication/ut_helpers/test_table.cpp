@@ -9,6 +9,12 @@ void TTestTableDescription::TColumn::SerializeTo(NKikimrSchemeOp::TColumnDescrip
     proto.SetType(Type);
 }
 
+void TTestTableDescription::TColumn::SerializeTo(NKikimrSchemeOp::TOlapColumnDescription& proto) const {
+    proto.SetName(Name);
+    proto.SetType(Type);
+    proto.SetNotNull(true);
+}
+
 void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
     switch (Mode) {
     case MODE_NONE:
@@ -63,8 +69,26 @@ void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TTableDescription& prot
     }
 }
 
+void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TColumnTableDescription& proto) const {
+    proto.SetName(Name);
+
+    for (const auto& keyColumn : KeyColumns) {
+        proto.MutableSchema()->AddKeyColumnNames(keyColumn);
+    }
+
+    for (const auto& column : Columns) {
+        column.SerializeTo(*proto.MutableSchema()->AddColumns());
+    }
+}
+
 THolder<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc) {
     auto result = MakeHolder<NKikimrSchemeOp::TTableDescription>();
+    desc.SerializeTo(*result);
+    return result;
+}
+
+THolder<NKikimrSchemeOp::TColumnTableDescription> MakeColumnTableDescription(const TTestTableDescription& desc) {
+    auto result = MakeHolder<NKikimrSchemeOp::TColumnTableDescription>();
     desc.SerializeTo(*result);
     return result;
 }

@@ -4,6 +4,7 @@
 #include "rpc_parameters_serialization.h"
 
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/common/retry_lib.h>
 
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
@@ -18,6 +19,8 @@
 #include <yt/cpp/mapreduce/io/helpers.h>
 
 #include <library/cpp/yson/node/node_io.h>
+
+#include <library/cpp/yt/yson_string/string.h>
 
 namespace NYT::NDetail {
 
@@ -566,10 +569,10 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
 {
     TMutationId mutationId;
     THttpHeader header("GET", GetReadFileCommand(Context_.Config->ApiVersion));
-    header.AddTransactionId(transactionId);
     header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
-    header.MergeParameters(FormIORequestParameters(path, options));
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    header.MergeParameters(NRawClient::SerializeParamsForReadFile(transactionId, options));
+    header.MergeParameters(FormIORequestParameters(path, options));
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -716,9 +719,7 @@ TNode::TListType THttpRawClient::LookupRows(
             fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
         })
         .Item("keep_missing_rows").Value(options.KeepMissingRows_)
-        .DoIf(options.Versioned_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("versioned").Value(*options.Versioned_);
-        })
+        .Item("versioned").Value(options.Versioned_)
         .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("column_names").Value(*options.Columns_);
         })
@@ -739,23 +740,7 @@ TNode::TListType THttpRawClient::SelectRows(
     THttpHeader header("GET", "select_rows");
     header.SetInputFormat(TFormat::YsonBinary());
     header.SetOutputFormat(TFormat::YsonBinary());
-
-    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
-        .Item("query").Value(query)
-        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
-        })
-        .DoIf(options.InputRowLimit_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("input_row_limit").Value(*options.InputRowLimit_);
-        })
-        .DoIf(options.OutputRowLimit_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("output_row_limit").Value(*options.OutputRowLimit_);
-        })
-        .Item("range_expansion_limit").Value(options.RangeExpansionLimit_)
-        .Item("fail_on_incomplete_result").Value(options.FailOnIncompleteResult_)
-        .Item("verbose_logging").Value(options.VerboseLogging_)
-        .Item("enable_code_cache").Value(options.EnableCodeCache_)
-    .EndMap());
+    header.MergeParameters(NRawClient::SerializeParamsForSelectRows(query, options));
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -775,6 +760,66 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
     header.MergeParameters(NRawClient::SerializeParamsForReadTable(transactionId, options));
     header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
+struct THttpRequestStream
+    : public IOutputStream
+{
+public:
+    THttpRequestStream(NHttpClient::IHttpRequestPtr request)
+        : Request_(std::move(request))
+        , Underlying_(Request_->GetStream())
+    { }
+
+private:
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Request_->Finish()->GetResponse();
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    IOutputStream* Underlying_;
+};
+
+std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options)
+{
+    THttpHeader header("PUT", GetWriteFileCommand(Context_.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetRequestCompression(ToString(Context_.Config->ContentEncoding));
+    header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto request = StartRequestWithoutRetry(Context_, header, config);
+    return std::make_unique<THttpRequestStream>(std::move(request));
+}
+
+std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
+    const TString& cookie,
+    const TMaybe<TFormat>& format,
+    const TTablePartitionReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "api/v4/read_table_partition", /*isApi*/ false);
+    header.SetOutputFormat(format);
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    auto params = NRawClient::SerializeParamsForReadTablePartition(cookie, options);
+    header.MergeParameters(params);
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -931,6 +976,16 @@ ui64 THttpRawClient::GenerateTimestamp()
 IRawBatchRequestPtr THttpRawClient::CreateRawBatchRequest()
 {
     return MakeIntrusive<NRawClient::THttpRawBatchRequest>(Context_, /*retryPolicy*/ nullptr);
+}
+
+IRawClientPtr THttpRawClient::Clone()
+{
+    return ::MakeIntrusive<THttpRawClient>(Context_);
+}
+
+IRawClientPtr THttpRawClient::Clone(const TClientContext& context)
+{
+    return ::MakeIntrusive<THttpRawClient>(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

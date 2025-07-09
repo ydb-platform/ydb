@@ -178,7 +178,7 @@ protected:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         THolder<NSchemeCache::TSchemeCacheNavigate> navigate = std::move(ev->Get()->Request);
         if (navigate->ResultSet.size() != 1 || navigate->ErrorCount > 0) {
-            this->Reply(StatusIds::INTERNAL_ERROR, this->ActorContext());
+            this->Reply(StatusIds::SCHEME_ERROR, this->ActorContext());
             return;
         }
 
@@ -548,7 +548,7 @@ public:
         if (kesusError.GetStatus() == Ydb::StatusIds::SUCCESS) {
             Ydb::RateLimiter::DescribeResourceResult result;
             if (ev->Get()->Record.ResourcesSize() == 0) {
-                this->Reply(StatusIds::INTERNAL_ERROR, "No resource properties found.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
+                this->Reply(StatusIds::SCHEME_ERROR, "No resource properties found.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
                 return;
             }
             CopyProps(ev->Get()->Record.GetResources(0), *result.mutable_resource());

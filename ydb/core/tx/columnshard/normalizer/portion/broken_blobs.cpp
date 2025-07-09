@@ -31,8 +31,8 @@ public:
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")(
                 "portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString());
             auto copy = portionInfo.GetPortionInfo().MakeCopy();
-            copy.SetRemoveSnapshot(TSnapshot(1, 1));
-            copy.SaveMetaToDatabase(db);
+            copy->SetRemoveSnapshot(TSnapshot(1, 1));
+            db.WritePortion({}, *copy);
         }
         if (BrokenPortions.size()) {
             NIceDb::TNiceDb db(txc.DB);

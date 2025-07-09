@@ -13,8 +13,15 @@ namespace NKqp {
 class IDataBatch : public TThrRefBase {
 public:
     virtual TString SerializeToString() const = 0;
+    virtual i64 GetSerializedMemory() const = 0;
     virtual i64 GetMemory() const = 0;
     virtual bool IsEmpty() const = 0;
+
+    virtual std::shared_ptr<void> ExtractBatch() = 0;
+
+    virtual void AttachAlloc(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) = 0;
+    virtual void DetachAlloc() = 0;
+    virtual bool AttachedAlloc() const = 0;
 };
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;
@@ -31,11 +38,27 @@ using IDataBatcherPtr = TIntrusivePtr<IDataBatcher>;
 
 IDataBatcherPtr CreateRowDataBatcher(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    std::vector<ui32> writeIndex);
+    std::vector<ui32> writeIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
 
 IDataBatcherPtr CreateColumnDataBatcher(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    std::vector<ui32> writeIndex);
+    std::vector<ui32> writeIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
+
+class IDataBatchProjection : public TThrRefBase {
+public:
+    virtual IDataBatchPtr Project(const IDataBatchPtr& data) const = 0;
+};
+
+using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
+
+IDataBatchProjectionPtr CreateDataBatchProjection(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const TConstArrayRef<ui32> inputWriteIndex,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+    const TConstArrayRef<ui32> outputWriteIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 class IShardedWriteController : public TThrRefBase {
 public:
@@ -50,7 +73,8 @@ public:
     // For two writes A and B:
     // A happend before B <=> Close(A) happend before Open(B) otherwise Priority(A) < Priority(B).
 
-    virtual TWriteToken Open(
+    virtual void Open(
+        const TWriteToken token,
         const TTableId TableId,
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
@@ -59,6 +83,8 @@ public:
         const i64 priority) = 0;
     virtual void Write(TWriteToken token, IDataBatchPtr&& data) = 0;
     virtual void Close(TWriteToken token) = 0;
+
+    virtual void CleanupClosedTokens() = 0;
 
     virtual void FlushBuffers() = 0;
 
@@ -70,7 +96,9 @@ public:
         ui64 ShardId;
         bool HasRead;
     };
-    virtual TVector<TPendingShardInfo> GetPendingShards() const = 0;
+    virtual void ForEachPendingShard(std::function<void(const TPendingShardInfo&)>&& callback) const = 0;
+    virtual std::vector<TPendingShardInfo> ExtractShardUpdates() = 0;
+
     virtual ui64 GetShardsCount() const = 0;
     virtual TVector<ui64> GetShardsIds() const = 0;
 
@@ -112,15 +140,12 @@ using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 
 
 struct TShardedWriteControllerSettings {
-    i64 MemoryLimitTotal;
-    i64 MemoryLimitPerMessage;
-    i64 MaxBatchesPerMessage;
-    bool Inconsistent;
+    i64 MemoryLimitTotal = 0;
+    bool Inconsistent = false;
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(
     const TShardedWriteControllerSettings& settings,
-    const NMiniKQL::TTypeEnvironment& typeEnv,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 }

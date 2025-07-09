@@ -79,27 +79,31 @@ private:
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
 
 private:
-    const ui32 StateIndex;
-    const TComputationNodePtrVector ArgsNodes;
-    const std::vector<arrow::ValueDescr> ArgsValuesDescr;
-    const arrow::compute::ScalarKernel& Kernel;
-    const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder;
-    const arrow::compute::FunctionOptions* const Options;
-    const bool ScalarOutput;
-    const TString Name;
+    const ui32 StateIndex_;
+    const TComputationNodePtrVector ArgsNodes_;
+    const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
+    const arrow::compute::ScalarKernel& Kernel_;
+    const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder_;
+    const arrow::compute::FunctionOptions* const Options_;
+    const bool ScalarOutput_;
+    const TString Name_;
 };
 
 struct TBlockState : public TComputationValue<TBlockState> {
+    static constexpr i64 LAST_COLUMN_MARKER = -1;
+
     using TBase = TComputationValue<TBlockState>;
 
     ui64 Count = 0;
-    NUdf::TUnboxedValue* Pointer_ = nullptr;
+    NUdf::TUnboxedValue* Pointer = nullptr;
 
     TUnboxedValueVector Values;
     std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Deques;
     std::vector<std::shared_ptr<arrow::ArrayData>> Arrays;
 
-    TBlockState(TMemoryUsageInfo* memInfo, size_t width);
+    ui64 BlockLengthIndex = 0;
+
+    TBlockState(TMemoryUsageInfo* memInfo, size_t width, i64 blockLengthIndex = LAST_COLUMN_MARKER);
 
     void ClearValues();
 

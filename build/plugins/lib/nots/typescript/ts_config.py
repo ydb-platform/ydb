@@ -118,7 +118,6 @@ class TsConfig(object):
 
         if ext_value.startswith("."):
             base_config_path = ext_value
-
         else:
             dep_name = utils.extract_package_name_from_path(ext_value)
             # the rest part is the ext config path
@@ -127,22 +126,30 @@ class TsConfig(object):
             dep_path = dep_paths.get(dep_name)
             if dep_path is None:
                 raise Exception(
-                    "referenceing from {}, data: {}\n: Dependency '{}' not found in dep_paths: {}".format(
-                        self.path, str(self.data), dep_name, dep_paths
+                    "referencing from {}, data: {}\n: Dependency '{}' not found in dep_paths: {}. "
+                    "Cannot use 'extends' with npm-package reference '{}' in the config '{}' because dependencies are not yet installed during configuration. "
+                    "Please use file-based extends (relative path) instead of package references. "
+                    "See details: https://docs.yandex-team.ru/frontend-in-arcadia/references/tsconfig-json#extends".format(
+                        self.path,
+                        str(self.data),
+                        dep_name,
+                        dep_paths,
+                        self.data.get(RootFields.extends, '<unknown>'),
+                        self.path,
                     )
                 )
             base_config_path = os.path.join(dep_path, file_path)
 
         rel_path = os.path.dirname(base_config_path)
-        tsconfig_curdir_path = os.path.join(os.path.dirname(self.path), base_config_path)
-        if os.path.isdir(tsconfig_curdir_path):
+        base_config_path = os.path.normpath(os.path.join(os.path.dirname(self.path), base_config_path))
+        if os.path.isdir(base_config_path):
             base_config_path = os.path.join(base_config_path, DEFAULT_TS_CONFIG_FILE)
 
         # processing the base file recursively
-        base_config = TsConfig.load(os.path.join(os.path.dirname(self.path), base_config_path))
+        base_config = TsConfig.load(base_config_path)
         paths = [base_config_path] + base_config.inline_extend(dep_paths)
-
         self.merge(rel_path, base_config)
+
         return paths
 
     def inline_extend(self, dep_paths):

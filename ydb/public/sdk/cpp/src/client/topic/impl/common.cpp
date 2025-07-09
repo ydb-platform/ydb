@@ -2,7 +2,7 @@
 
 #include <util/charset/unidata.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 ERetryErrorClass GetRetryErrorClass(EStatus status) {
     switch (status) {

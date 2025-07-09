@@ -18,11 +18,25 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/system/info.h>
 #include <util/system/mutex.h>
 #include <util/thread/pool.h>
 
 namespace NYdb {
-namespace NDump {
+
+bool operator<(const TUuidValue& lhs, const TUuidValue& rhs) {
+    // Lexicographical comparison of UUIDs for TValue comparison.
+    // It works just like TCell::CompareCellsAsByteString.
+    // We need it since RPC Import Data expects keys to be sorted.
+    const char* pa = lhs.Buf_.Bytes;
+    const char* pb = rhs.Buf_.Bytes;
+    int cmp = memcmp(pa, pb, 16);
+    return cmp < 0;
+}
+
+}
+
+namespace NYdb::NDump {
 
 using namespace NImport;
 using namespace NTable;
@@ -44,6 +58,7 @@ class TValue {
         Null,
         String,
         Pod,
+        Uuid
     };
 
     inline EType GetType() const {
@@ -54,6 +69,8 @@ class TValue {
             return EType::Null;
         case 2:
             return EType::String;
+        case 9:
+            return EType::Uuid;
         default:
             return EType::Pod;
         }
@@ -110,7 +127,8 @@ private:
         i32,
         ui32,
         i64,
-        ui64
+        ui64,
+        TUuidValue
     > Value;
 
 }; // TValue
@@ -149,6 +167,8 @@ class TValueConverter {
             return TValue(Parser.GetString());
         case EPrimitiveType::Utf8:
             return TValue(Parser.GetUtf8());
+        case EPrimitiveType::Uuid:
+            return TValue(Parser.GetUuid());
         default:
             Y_ENSURE(false, "Unexpected primitive type: " << type);
         }
@@ -288,6 +308,10 @@ public:
 
     TString GetUtf8() const {
         return CheckedUnescape();
+    }
+
+    TUuidValue GetUuid() const {
+        return TUuidValue(std::string(Value));
     }
 
     bool IsNull() const {
@@ -903,6 +927,7 @@ public:
     explicit TDataWriter(
             const TString& path,
             const TTableDescription& desc,
+            ui32 partitionCount,
             const TRestoreSettings& settings,
             TImportClient& importClient,
             TTableClient& tableClient,
@@ -925,11 +950,17 @@ public:
         }
 
         TasksQueue = MakeHolder<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
-        TasksQueue->Start(settings.InFly_, settings.InFly_ + 1);
+
+        size_t threadCount = settings.MaxInFlight_;
+        if (!threadCount) {
+            threadCount = Min<size_t>(partitionCount, NSystemInfo::CachedNumberOfCpus());
+        }
+
+        TasksQueue->Start(threadCount, threadCount + 1);
     }
 
     bool Push(NPrivate::TBatch&& data) override {
-        if (data.size() > TRestoreSettings::MaxBytesPerRequest) {
+        if (data.size() > TRestoreSettings::MaxImportDataBytesPerRequest) {
             LOG_E("Too much data: " << data.GetLocation());
             return false;
         }
@@ -989,14 +1020,14 @@ NPrivate::IDataAccumulator* CreateImportDataAccumulator(
 NPrivate::IDataWriter* CreateImportDataWriter(
         const TString& path,
         const TTableDescription& desc,
+        ui32 partitionCount,
         TImportClient& importClient,
         TTableClient& tableClient,
         const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
         const TRestoreSettings& settings,
         const std::shared_ptr<TLog>& log)
 {
-    return new TDataWriter(path, desc, settings, importClient, tableClient, accumulators, log);
+    return new TDataWriter(path, desc, partitionCount, settings, importClient, tableClient, accumulators, log);
 }
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

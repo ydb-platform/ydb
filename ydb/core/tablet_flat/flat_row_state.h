@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flat_row_eggs.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -50,9 +51,9 @@ namespace NTable {
             return Rop;
         }
 
-        bool Touch(ERowOp op) noexcept
+        bool Touch(ERowOp op)
         {
-            Y_ABORT_UNLESS(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
+            Y_ENSURE(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
                 "Sequence for row state is already finalized");
 
             switch (op) {
@@ -64,13 +65,13 @@ namespace NTable {
                     Rop = (Rop == ERowOp::Absent ? ERowOp::Erase : ERowOp::Reset);
                     return false; /* current row shouldn't be processed */
                 default:
-                    Y_ABORT("Unexpected row rolling operation code: %" PRIu8, ui8(op));
+                    Y_TABLET_ERROR("Unexpected row rolling operation code: " << ui8(op));
             }
         }
 
-        void Set(TPos on, TCellOp code, const TCell &cell) noexcept
+        void Set(TPos on, TCellOp code, const TCell &cell)
         {
-            Y_ABORT_UNLESS(State[on] == ECellOp::Empty, "Updating cell that already has a value assigned");
+            Y_ENSURE(State[on] == ECellOp::Empty, "Updating cell that already has a value assigned");
 
             if (Y_UNLIKELY(code == ECellOp::Empty)) {
                 // Source column is not set, nothing to update
@@ -78,7 +79,7 @@ namespace NTable {
                 return;
             }
 
-            Y_ABORT_UNLESS(Left_ > 0, "Cells update counter is out of sync");
+            Y_ENSURE(Left_ > 0, "Cells update counter is out of sync");
             --Left_;
 
             if (Y_UNLIKELY(code == ECellOp::Reset)) {
@@ -101,8 +102,8 @@ namespace NTable {
             }
         }
 
-        void Merge(const TRowState& other) noexcept {
-            Y_ABORT_UNLESS(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
+        void Merge(const TRowState& other) {
+            Y_ENSURE(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
                 "Sequence for row state is already finalized");
 
             if (Y_UNLIKELY(other.Rop == ERowOp::Absent)) {

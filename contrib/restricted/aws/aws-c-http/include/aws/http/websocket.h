@@ -7,6 +7,8 @@
 
 #include <aws/http/http.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_http_header;
 struct aws_http_message;
 
@@ -183,7 +185,7 @@ struct aws_websocket_client_connection_options {
      * Optional.
      * Defaults to 443 if tls_options is present, 80 if it is not.
      */
-    uint16_t port;
+    uint32_t port;
 
     /**
      * Required.
@@ -280,6 +282,12 @@ struct aws_websocket_client_connection_options {
      * a single thread.
      */
     struct aws_event_loop *requested_event_loop;
+
+    /**
+     * Optional
+     * Host resolution override that allows the user to override DNS behavior for this particular connection.
+     */
+    const struct aws_host_resolution_config *host_resolution_config;
 };
 
 /**
@@ -479,5 +487,6 @@ struct aws_http_message *aws_http_message_new_websocket_handshake_request(
     struct aws_byte_cursor host);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_HTTP_WEBSOCKET_H */

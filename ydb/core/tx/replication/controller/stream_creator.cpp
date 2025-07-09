@@ -65,6 +65,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendAddChangefeeds(Changefeed)));
             break;
+        case TReplication::ETargetKind::Transfer:
+            return CreateConsumer();
         }
 
         Become(&TThis::StateCreateStream);
@@ -106,6 +108,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             return CanonizePath(ChildPath(SplitPath(SrcPath), TString{Changefeed.GetName()}));
         case TReplication::ETargetKind::IndexTable:
             return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
+        case TReplication::ETargetKind::Transfer:
+            return CanonizePath(SplitPath(SrcPath));
         }
     }
 
@@ -113,7 +117,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         const auto streamPath = BuildStreamPath();
         const auto settings = NYdb::NTopic::TAlterTopicSettings()
             .BeginAddConsumer()
-                .ConsumerName(ReplicationConsumerName)
+                .ConsumerName(SrcConsumerName)
             .EndAddConsumer();
 
         Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(streamPath, settings));
@@ -169,10 +173,9 @@ public:
             const TActorId& proxy,
             ui64 rid,
             ui64 tid,
-            TReplication::ETargetKind kind,
-            const TString& srcPath,
-            const TString& dstPath,
+            const TReplication::ITarget::IConfig::TPtr& config,
             const TString& streamName,
+            const TString& consumerName,
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
             bool supportsTopicAutopartitioning)
@@ -180,10 +183,11 @@ public:
         , YdbProxy(proxy)
         , ReplicationId(rid)
         , TargetId(tid)
-        , Kind(kind)
-        , SrcPath(srcPath)
+        , Kind(config->GetKind())
+        , SrcPath(config->GetSrcPath())
+        , SrcConsumerName(consumerName)
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
-            {"path", dstPath},
+            {"path", config->GetDstPath()},
             {"id", ToString(rid)},
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
         }))
@@ -208,6 +212,7 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
+    const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const TActorLogPrefix LogPrefix;
 
@@ -223,20 +228,20 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         : std::nullopt;
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(),
-        target->GetSrcPath(), target->GetDstPath(), target->GetStreamName(),
+        replication->GetId(), target->GetId(),
+        target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication());
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        const TString& streamName, const TDuration& retentionPeriod,
+        const TReplication::ITarget::IConfig::TPtr& config,
+        const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning)
 {
-    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstPath,
-        streamName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning);
+    return new TStreamCreator(parent, proxy, rid, tid, config,
+        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning);
 }
 
 }

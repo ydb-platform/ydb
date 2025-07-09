@@ -8,12 +8,14 @@ class TTxResumeTablet : public TTransactionBase<THive> {
     const TTabletId TabletId;
     const TActorId ActorToNotify;
     TSideEffects SideEffects;
+    bool ByTenant;
 
 public:
-    TTxResumeTablet(ui64 tabletId, const TActorId &actorToNotify, THive *hive)
+    TTxResumeTablet(ui64 tabletId, const TActorId &actorToNotify, bool fromStopByTenant, THive *hive)
         : TBase(hive)
         , TabletId(tabletId)
         , ActorToNotify(actorToNotify)
+        , ByTenant(fromStopByTenant)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_RESUME_TABLET; }
@@ -23,6 +25,12 @@ public:
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
+            if (ByTenant) {
+                TDomainInfo* domain = Self->FindDomain(tablet->NodeFilter.ObjectDomain);
+                if (domain == nullptr || domain->Stopped || !tablet->StoppedByTenant) {
+                    return true;
+                }
+            }
             NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
             ETabletState State = tablet->State;
             ETabletState NewState = State;
@@ -58,7 +66,9 @@ public:
             if (status == NKikimrProto::OK) {
                 if (NewState != State) {
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(NewState);
+                    db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::StoppedByTenant>(false);
                     tablet->State = NewState;
+                    tablet->StoppedByTenant = false;
                 }
                 if (tablet->IsReadyToBoot()) {
                     tablet->InitiateBoot();
@@ -66,7 +76,7 @@ public:
                     tablet->InitiateAssignTabletGroups();
                 }
             }
-            if (status != NKikimrProto::UNKNOWN) {
+            if (status != NKikimrProto::UNKNOWN && ActorToNotify) {
                 SideEffects.Send(ActorToNotify, new TEvHive::TEvResumeTabletResult(status, TabletId), 0, 0);
             }
             Self->ProcessBootQueue();
@@ -77,11 +87,18 @@ public:
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxResumeTablet::Complete TabletId: " << TabletId);
         SideEffects.Complete(ctx);
+        if (ByTenant) {
+            Self->ProcessPendingResumeTablet();
+        }
     }
 };
 
 ITransaction* THive::CreateResumeTablet(TTabletId tabletId, const TActorId &actorToNotify) {
-    return new TTxResumeTablet(tabletId, actorToNotify, this);
+    return new TTxResumeTablet(tabletId, actorToNotify, false, this);
+}
+
+ITransaction* THive::CreateResumeTabletByTenant(TTabletId tabletId) {
+    return new TTxResumeTablet(tabletId, {}, true, this);
 }
 
 } // NHive

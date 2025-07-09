@@ -14,92 +14,135 @@
 
 #include "tcmalloc/span.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 
+#include <new>
+#include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/base/internal/spinlock.h"
+#include "absl/base/optimization.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/random/random.h"
+#include "absl/types/span.h"
 #include "tcmalloc/common.h"
+#include "tcmalloc/experiment.h"
+#include "tcmalloc/experiment_config.h"
 #include "tcmalloc/internal/logging.h"
+#include "tcmalloc/pages.h"
 #include "tcmalloc/static_vars.h"
 
 namespace tcmalloc {
 namespace tcmalloc_internal {
 namespace {
 
+constexpr uint64_t kSpanAllocTime = 1234;
+
 class RawSpan {
  public:
-  void Init(size_t cl) {
-    size_t size = Static::sizemap().class_to_size(cl);
-    auto npages = Length(Static::sizemap().class_to_pages(cl));
+  void Init(size_t size_class, uint32_t max_cache_array_size,
+            uint32_t max_cache_size) {
+    size_t size = tc_globals.sizemap().class_to_size(size_class);
+    auto npages = Length(tc_globals.sizemap().class_to_pages(size_class));
     size_t objects_per_span = npages.in_bytes() / size;
 
-    void *mem;
-    int res = posix_memalign(&mem, kPageSize, npages.in_bytes());
-    CHECK_CONDITION(res == 0);
-    span_.set_first_page(PageIdContaining(mem));
-    span_.set_num_pages(npages);
-    span_.BuildFreelist(size, objects_per_span, nullptr, 0);
+    // Dynamically allocate so ASan can flag if we run out of bounds.
+    size_t span_size = Span::CalcSizeOf(max_cache_array_size);
+    buf_ = ::operator new(span_size, std::align_val_t(alignof(Span)));
+
+    int res = posix_memalign(&mem_, kPageSize, npages.in_bytes());
+    TC_CHECK_EQ(res, 0);
+
+    span_ = new (buf_) Span(Range(PageIdContaining(mem_), npages));
+    TC_CHECK_EQ(span_->BuildFreelist(size, objects_per_span, {}, max_cache_size,
+                                     kSpanAllocTime),
+                0);
   }
 
-  ~RawSpan() { free(span_.start_address()); }
+  ~RawSpan() {
+    free(mem_);
+    ::operator delete(buf_, std::align_val_t(alignof(Span)));
+  }
 
-  Span &span() { return span_; }
+  Span& span() { return *span_; }
 
  private:
-  Span span_;
+  void* buf_ = nullptr;
+  void* mem_ = nullptr;
+  Span* span_;
 };
 
-class SpanTest : public testing::TestWithParam<size_t> {
+class SpanTest : public testing::TestWithParam<std::tuple<size_t, size_t>> {
  protected:
-  size_t cl_;
+  size_t size_class_;
   size_t size_;
   size_t npages_;
   size_t batch_size_;
   size_t objects_per_span_;
+  uint32_t reciprocal_;
+  uint32_t max_cache_size_;
+  uint32_t max_cache_array_size_;
   RawSpan raw_span_;
 
  private:
   void SetUp() override {
-    cl_ = GetParam();
-    size_ = Static::sizemap().class_to_size(cl_);
+    size_class_ = std::get<0>(GetParam());
+    max_cache_array_size_ = std::get<1>(GetParam());
+    max_cache_size_ = max_cache_array_size_ == Span::kCacheSize
+                          ? Span::kCacheSize
+                          : Span::kLargeCacheSize;
+    ASSERT_THAT(max_cache_array_size_,
+                testing::AnyOf(testing::Eq(Span::kCacheSize),
+                               testing::Eq(Span::kLargeCacheArraySize)));
+    ASSERT_LE(max_cache_size_, max_cache_array_size_);
+
+    size_ = tc_globals.sizemap().class_to_size(size_class_);
     if (size_ == 0) {
       GTEST_SKIP() << "Skipping empty size class.";
     }
 
-    npages_ = Static::sizemap().class_to_pages(cl_);
-    batch_size_ = Static::sizemap().num_objects_to_move(cl_);
+    npages_ = tc_globals.sizemap().class_to_pages(size_class_);
+    batch_size_ = tc_globals.sizemap().num_objects_to_move(size_class_);
     objects_per_span_ = npages_ * kPageSize / size_;
+    reciprocal_ = Span::CalcReciprocal(size_);
 
-    raw_span_.Init(cl_);
+    raw_span_.Init(size_class_, max_cache_array_size_, max_cache_size_);
   }
 
   void TearDown() override {}
 };
 
 TEST_P(SpanTest, FreelistBasic) {
-  Span &span_ = raw_span_.span();
+  Span& span_ = raw_span_.span();
 
   EXPECT_FALSE(span_.FreelistEmpty(size_));
-  void *batch[kMaxObjectsToMove];
+  void* batch[kMaxObjectsToMove];
   size_t popped = 0;
   size_t want = 1;
-  char *start = static_cast<char *>(span_.start_address());
+  char* start = static_cast<char*>(span_.start_address());
   std::vector<bool> objects(objects_per_span_);
   for (size_t x = 0; x < 2; ++x) {
     // Pop all objects in batches of varying size and ensure that we've got
     // all objects.
     for (;;) {
-      size_t n = span_.FreelistPopBatch(batch, want, size_);
+      size_t n = span_.FreelistPopBatch(absl::MakeSpan(batch, want), size_);
       popped += n;
+      EXPECT_NEAR(
+          span_.Fragmentation(size_),
+          static_cast<double>(objects_per_span_) / static_cast<double>(popped) -
+              1.,
+          1e-5);
       EXPECT_EQ(span_.FreelistEmpty(size_), popped == objects_per_span_);
       for (size_t i = 0; i < n; ++i) {
-        void *p = batch[i];
-        uintptr_t off = reinterpret_cast<char *>(p) - start;
+        void* p = batch[i];
+        uintptr_t off = reinterpret_cast<char*>(p) - start;
         EXPECT_LT(off, span_.bytes_in_span());
         EXPECT_EQ(off % size_, 0);
         size_t idx = off / size_;
@@ -115,13 +158,14 @@ TEST_P(SpanTest, FreelistBasic) {
       }
     }
     EXPECT_TRUE(span_.FreelistEmpty(size_));
-    EXPECT_EQ(span_.FreelistPopBatch(batch, 1, size_), 0);
+    EXPECT_EQ(span_.FreelistPopBatch(absl::MakeSpan(batch, 1), size_), 0);
     EXPECT_EQ(popped, objects_per_span_);
 
     // Push all objects back except the last one (which would not be pushed).
     for (size_t idx = 0; idx < objects_per_span_ - 1; ++idx) {
       EXPECT_TRUE(objects[idx]);
-      bool ok = span_.FreelistPush(start + idx * size_, size_);
+      bool ok = span_.FreelistPush(start + idx * size_, size_, reciprocal_,
+                                   max_cache_size_);
       EXPECT_TRUE(ok);
       EXPECT_FALSE(span_.FreelistEmpty(size_));
       objects[idx] = false;
@@ -129,26 +173,36 @@ TEST_P(SpanTest, FreelistBasic) {
     }
     // On the last iteration we can actually push the last object.
     if (x == 1) {
-      bool ok =
-          span_.FreelistPush(start + (objects_per_span_ - 1) * size_, size_);
+      bool ok = span_.FreelistPush(start + (objects_per_span_ - 1) * size_,
+                                   size_, reciprocal_, max_cache_size_);
       EXPECT_FALSE(ok);
     }
   }
 }
 
-TEST_P(SpanTest, FreelistRandomized) {
-  Span &span_ = raw_span_.span();
+TEST_P(SpanTest, AllocTime) {
+  Span& span_ = raw_span_.span();
+  if (span_.UseBitmapForSize(size_) ||
+      max_cache_size_ != Span::kLargeCacheSize) {
+    EXPECT_EQ(span_.AllocTime(size_, max_cache_size_), 0);
+  } else {
+    EXPECT_EQ(span_.AllocTime(size_, max_cache_size_), kSpanAllocTime);
+  }
+}
 
-  char *start = static_cast<char *>(span_.start_address());
+TEST_P(SpanTest, FreelistRandomized) {
+  Span& span_ = raw_span_.span();
+
+  char* start = static_cast<char*>(span_.start_address());
 
   // Do a bunch of random pushes/pops with random batch size.
   absl::BitGen rng;
-  absl::flat_hash_set<void *> objects;
-  void *batch[kMaxObjectsToMove];
+  absl::flat_hash_set<void*> objects;
+  void* batch[kMaxObjectsToMove];
   for (size_t x = 0; x < 10000; ++x) {
     if (!objects.empty() && absl::Bernoulli(rng, 1.0 / 2)) {
-      void *p = *objects.begin();
-      if (span_.FreelistPush(p, size_)) {
+      void* p = *objects.begin();
+      if (span_.FreelistPush(p, size_, reciprocal_, max_cache_size_)) {
         objects.erase(objects.begin());
       } else {
         EXPECT_EQ(objects.size(), 1);
@@ -156,7 +210,7 @@ TEST_P(SpanTest, FreelistRandomized) {
       EXPECT_EQ(span_.FreelistEmpty(size_), objects_per_span_ == 1);
     } else {
       size_t want = absl::Uniform<int32_t>(rng, 0, batch_size_) + 1;
-      size_t n = span_.FreelistPopBatch(batch, want, size_);
+      size_t n = span_.FreelistPopBatch(absl::MakeSpan(batch, want), size_);
       if (n < want) {
         EXPECT_TRUE(span_.FreelistEmpty(size_));
       }
@@ -165,9 +219,13 @@ TEST_P(SpanTest, FreelistRandomized) {
       }
     }
   }
+
+  EXPECT_TRUE(span_.AllocTime(size_, max_cache_size_) == 0 ||
+              span_.AllocTime(size_, max_cache_size_) == kSpanAllocTime);
   // Now pop everything what's there.
   for (;;) {
-    size_t n = span_.FreelistPopBatch(batch, batch_size_, size_);
+    size_t n =
+        span_.FreelistPopBatch(absl::MakeSpan(batch, batch_size_), size_);
     for (size_t i = 0; i < n; ++i) {
       EXPECT_TRUE(objects.insert(batch[i]).second);
     }
@@ -177,14 +235,62 @@ TEST_P(SpanTest, FreelistRandomized) {
   }
   // Check that we have collected all objects.
   EXPECT_EQ(objects.size(), objects_per_span_);
-  for (void *p : objects) {
-    uintptr_t off = reinterpret_cast<char *>(p) - start;
+  for (void* p : objects) {
+    uintptr_t off = reinterpret_cast<char*>(p) - start;
     EXPECT_LT(off, span_.bytes_in_span());
     EXPECT_EQ(off % size_, 0);
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(All, SpanTest, testing::Range(size_t(1), kNumClasses));
+INSTANTIATE_TEST_SUITE_P(
+    All, SpanTest,
+    testing::Combine(testing::Range(size_t(1), kNumClasses),
+                     testing::Values(Span::kCacheSize,
+                                     Span::kLargeCacheArraySize)));
+
+TEST(SpanAllocatorTest, Alignment) {
+  Range r(PageId{1}, Length{2});
+
+  constexpr int kNumSpans = 1000;
+  std::vector<Span*> spans;
+  spans.reserve(kNumSpans);
+
+  {
+#ifdef TCMALLOC_INTERNAL_LEGACY_LOCKING
+    PageHeapSpinLockHolder l;
+#endif  // TCMALLOC_INTERNAL_LEGACY_LOCKING
+    for (int i = 0; i < kNumSpans; ++i) {
+      spans.push_back(Span::New(r));
+    }
+  }
+
+  absl::flat_hash_map<uintptr_t, int> address_mod_cacheline;
+  for (Span* s : spans) {
+    ++address_mod_cacheline[reinterpret_cast<uintptr_t>(s) %
+                            ABSL_CACHELINE_SIZE];
+  }
+
+  // TODO(b/304135905): Remove the opt out.
+  if (tcmalloc_big_span()) {
+    EXPECT_EQ(address_mod_cacheline[0], kNumSpans);
+  } else {
+    EXPECT_LT(address_mod_cacheline[0], kNumSpans);
+  }
+
+  // Verify alignof is respected.
+  for (auto [alignment, count] : address_mod_cacheline) {
+    EXPECT_EQ(alignment % alignof(Span), 0);
+  }
+
+  {
+#ifdef TCMALLOC_INTERNAL_LEGACY_LOCKING
+    PageHeapSpinLockHolder l;
+#endif  // TCMALLOC_INTERNAL_LEGACY_LOCKING
+    for (Span* s : spans) {
+      Span::Delete(s);
+    }
+  }
+}
 
 }  // namespace
 }  // namespace tcmalloc_internal

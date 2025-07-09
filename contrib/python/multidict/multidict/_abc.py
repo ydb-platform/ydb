@@ -1,48 +1,69 @@
 import abc
-import sys
-import types
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
+from typing import TYPE_CHECKING, Protocol, TypeVar, Union, overload
+
+if TYPE_CHECKING:
+    from ._multidict_py import istr
+else:
+    istr = str
+
+_V = TypeVar("_V")
+_V_co = TypeVar("_V_co", covariant=True)
+_T = TypeVar("_T")
 
 
-class _TypingMeta(abc.ABCMeta):
-    # A fake metaclass to satisfy typing deps in runtime
-    # basically MultiMapping[str] and other generic-like type instantiations
-    # are emulated.
-    # Note: real type hints are provided by __init__.pyi stub file
-    if sys.version_info >= (3, 9):
-
-        def __getitem__(self, key):
-            return types.GenericAlias(self, key)
-
-    else:
-
-        def __getitem__(self, key):
-            return self
+class SupportsKeys(Protocol[_V_co]):
+    def keys(self) -> Iterable[str]: ...
+    def __getitem__(self, key: str, /) -> _V_co: ...
 
 
-class MultiMapping(Mapping, metaclass=_TypingMeta):
+class SupportsIKeys(Protocol[_V_co]):
+    def keys(self) -> Iterable[istr]: ...
+    def __getitem__(self, key: istr, /) -> _V_co: ...
+
+
+MDArg = Union[SupportsKeys[_V], SupportsIKeys[_V], Iterable[tuple[str, _V]], None]
+
+
+class MultiMapping(Mapping[str, _V_co]):
+    @overload
+    def getall(self, key: str) -> list[_V_co]: ...
+    @overload
+    def getall(self, key: str, default: _T) -> Union[list[_V_co], _T]: ...
     @abc.abstractmethod
-    def getall(self, key, default=None):
-        raise KeyError
+    def getall(self, key: str, default: _T = ...) -> Union[list[_V_co], _T]:
+        """Return all values for key."""
+
+    @overload
+    def getone(self, key: str) -> _V_co: ...
+    @overload
+    def getone(self, key: str, default: _T) -> Union[_V_co, _T]: ...
+    @abc.abstractmethod
+    def getone(self, key: str, default: _T = ...) -> Union[_V_co, _T]:
+        """Return first value for key."""
+
+
+class MutableMultiMapping(MultiMapping[_V], MutableMapping[str, _V]):
+    @abc.abstractmethod
+    def add(self, key: str, value: _V) -> None:
+        """Add value to list."""
 
     @abc.abstractmethod
-    def getone(self, key, default=None):
-        raise KeyError
+    def extend(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
+        """Add everything from arg and kwargs to the mapping."""
 
-
-class MutableMultiMapping(MultiMapping, MutableMapping):
+    @overload
+    def popone(self, key: str) -> _V: ...
+    @overload
+    def popone(self, key: str, default: _T) -> Union[_V, _T]: ...
     @abc.abstractmethod
-    def add(self, key, value):
-        raise NotImplementedError
+    def popone(self, key: str, default: _T = ...) -> Union[_V, _T]:
+        """Remove specified key and return the corresponding value."""
 
+    @overload
+    def popall(self, key: str) -> list[_V]: ...
+    @overload
+    def popall(self, key: str, default: _T) -> Union[list[_V], _T]: ...
     @abc.abstractmethod
-    def extend(self, *args, **kwargs):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def popone(self, key, default=None):
-        raise KeyError
-
-    @abc.abstractmethod
-    def popall(self, key, default=None):
-        raise KeyError
+    def popall(self, key: str, default: _T = ...) -> Union[list[_V], _T]:
+        """Remove all occurrences of key and return the list of corresponding values."""

@@ -4,13 +4,14 @@
 
 #include "table_enum.h"
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/retry/retry.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/query_stats/stats.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
 #include <variant>
 
@@ -22,12 +23,15 @@ class ColumnFamily;
 class CreateTableRequest;
 class Changefeed;
 class ChangefeedDescription;
+class DescribeExternalDataSourceResult;
+class DescribeExternalTableResult;
 class DescribeTableResult;
 class ExplicitPartitions;
 class GlobalIndexSettings;
 class VectorIndexSettings;
 class KMeansTreeSettings;
 class PartitioningSettings;
+class ReadReplicasSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
 class TtlTier;
@@ -39,7 +43,7 @@ class EvictionToExternalStorageSettings;
 } // namespace Table
 } // namespace Ydb
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace NRetry::Async {
 template <typename TClient, typename TStatusType>
@@ -197,11 +201,33 @@ struct TExplicitPartitions {
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
 };
 
+//! Represents table read replicas settings
+class TReadReplicasSettings {
+public:
+    enum class EMode {
+        PerAz = 0,
+        AnyAz = 1
+    };
+
+    TReadReplicasSettings(EMode mode, uint64_t readReplicasCount);
+
+    EMode GetMode() const;
+    uint64_t GetReadReplicasCount() const;
+
+    static std::optional<TReadReplicasSettings> FromProto(const Ydb::Table::ReadReplicasSettings& proto);
+    void SerializeTo(Ydb::Table::ReadReplicasSettings& proto) const;
+
+private:
+    EMode Mode_;
+    uint64_t ReadReplicasCount_;
+};
+
 struct TGlobalIndexSettings {
     using TUniformOrExplicitPartitions = std::variant<std::monostate, uint64_t, TExplicitPartitions>;
 
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
+    std::optional<TReadReplicasSettings> ReadReplicasSettings;
 
     static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
 
@@ -270,7 +296,7 @@ public:
 
 //! Represents index description
 class TIndexDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TIndexDescription(
@@ -347,7 +373,7 @@ private:
 
 //! Represents changefeed description
 class TChangefeedDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     class TInitialScanProgress {
@@ -371,6 +397,8 @@ public:
 
     // Enable virtual timestamps
     TChangefeedDescription& WithVirtualTimestamps();
+    // Enable schema changes
+    TChangefeedDescription& WithSchemaChanges();
     // Enable resolved timestamps
     TChangefeedDescription& WithResolvedTimestamps(const TDuration& interval);
     // Customise retention period of underlying topic (24h by default).
@@ -389,6 +417,7 @@ public:
     EChangefeedFormat GetFormat() const;
     EChangefeedState GetState() const;
     bool GetVirtualTimestamps() const;
+    bool GetSchemaChanges() const;
     const std::optional<TDuration>& GetResolvedTimestamps() const;
     bool GetInitialScan() const;
     const std::unordered_map<std::string, std::string>& GetAttributes() const;
@@ -416,6 +445,7 @@ private:
     EChangefeedFormat Format_;
     EChangefeedState State_ = EChangefeedState::Unknown;
     bool VirtualTimestamps_ = false;
+    bool SchemaChanges_ = false;
     std::optional<TDuration> ResolvedTimestamps_;
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;
@@ -627,24 +657,6 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-//! Represents table read replicas settings
-class TReadReplicasSettings {
-public:
-    enum class EMode {
-        PerAz = 0,
-        AnyAz = 1
-    };
-
-    TReadReplicasSettings(EMode mode, uint64_t readReplicasCount);
-
-    EMode GetMode() const;
-    uint64_t GetReadReplicasCount() const;
-
-private:
-    EMode Mode_;
-    uint64_t ReadReplicasCount_;
-};
-
 enum class EStoreType {
     Row = 0,
     Column = 1
@@ -653,7 +665,7 @@ enum class EStoreType {
 //! Represents table description
 class TTableDescription {
     friend class TTableBuilder;
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -1068,11 +1080,16 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDescribeExternalDataSourceResult;
+class TDescribeExternalTableResult;
+
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
 using TAsyncDataQueryResult = NThreading::TFuture<TDataQueryResult>;
 using TAsyncPrepareQueryResult = NThreading::TFuture<TPrepareQueryResult>;
 using TAsyncExplainDataQueryResult = NThreading::TFuture<TExplainQueryResult>;
 using TAsyncDescribeTableResult = NThreading::TFuture<TDescribeTableResult>;
+using TAsyncDescribeExternalDataSourceResult = NThreading::TFuture<TDescribeExternalDataSourceResult>;
+using TAsyncDescribeExternalTableResult = NThreading::TFuture<TDescribeExternalTableResult>;
 using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult>;
 using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResult>;
 using TAsyncTablePartIterator = NThreading::TFuture<TTablePartIterator>;
@@ -1085,8 +1102,8 @@ using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {};
 
-using TBackoffSettings = NYdb::V3::NRetry::TBackoffSettings;
-using TRetryOperationSettings = NYdb::V3::NRetry::TRetryOperationSettings;
+using TBackoffSettings = NYdb::NRetry::TBackoffSettings;
+using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
 
 struct TSessionPoolSettings {
     using TSelf = TSessionPoolSettings;
@@ -1145,6 +1162,8 @@ struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSetting
     // Format setting proto serialized into string. If not set format defaults are used.
     // I.e. it's Ydb.Table.CsvSettings for CSV.
     FLUENT_SETTING_DEFAULT(std::string, FormatSettings, "");
+    google::protobuf::Arena* Arena_ = nullptr;
+    TBulkUpsertSettings& Arena(google::protobuf::Arena* arena) { Arena_ = arena; return *this; }
 };
 
 struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
@@ -1157,6 +1176,7 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
     // Collect runtime statistics with a given detalization mode
     FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
 
+    // Deprecated. Use CollectQueryStats >= ECollectQueryStatsMode::Full to get QueryMeta in QueryStats
     // Collect full query compilation diagnostics
     FLUENT_SETTING_DEFAULT(bool, CollectFullDiagnostics, false);
 };
@@ -1694,6 +1714,10 @@ struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableS
     FLUENT_SETTING_DEFAULT(bool, WithShardNodesInfo, false);
 };
 
+struct TDescribeExternalDataSourceSettings : public TOperationRequestSettings<TDescribeExternalDataSourceSettings> {};
+
+struct TDescribeExternalTableSettings : public TOperationRequestSettings<TDescribeExternalTableSettings> {};
+
 struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {
     FLUENT_SETTING_DEFAULT(bool, WithCollectFullDiagnostics, false);
 };
@@ -1743,8 +1767,6 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
 
-using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
-
 //! Represents all session operations
 //! Session is transparent logic representation of connection
 class TSession {
@@ -1777,6 +1799,12 @@ public:
 
     TAsyncDescribeTableResult DescribeTable(const std::string& path,
         const TDescribeTableSettings& settings = TDescribeTableSettings());
+
+    TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path,
+        const TDescribeExternalDataSourceSettings& settings = {});
+
+    TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path,
+        const TDescribeExternalTableSettings& settings = {});
 
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings = TTxSettings(),
         const TBeginTxSettings& settings = TBeginTxSettings());
@@ -1879,22 +1907,24 @@ TAsyncStatus TTableClient::RetryOperation(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents data transaction
-class TTransaction {
+class TTransaction : public TTransactionBase {
     friend class TTableClient;
+
 public:
-    const std::string& GetId() const;
     bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
     TSession GetSession() const;
-    void AddPrecommitCallback(TPrecommitTransactionCallback cb);
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb) override;
+    void AddOnFailureCallback(TOnFailureTransactionCallback cb) override;
 
 private:
     TTransaction(const TSession& session, const std::string& txId);
 
     TAsyncStatus Precommit() const;
+    NThreading::TFuture<void> ProcessFailure() const;
 
     class TImpl;
 
@@ -1937,6 +1967,7 @@ public:
     const std::string& GetId() const;
     const std::optional<std::string>& GetText() const;
     TParamsBuilder GetParamsBuilder() const;
+    std::map<std::string, TType> GetParameterTypes() const;
 
     TAsyncDataQueryResult Execute(const TTxControl& txControl,
         const TExecDataQuerySettings& settings = TExecDataQuerySettings());
@@ -2043,6 +2074,8 @@ private:
     uint64_t TxId_;
 };
 
+using TVirtualTimestamp = TReadTableSnapshot;
+
 template<typename TPart>
 class TSimpleStreamPart : public TStreamPartStatus {
 public:
@@ -2092,9 +2125,14 @@ public:
     const TQueryStats& GetQueryStats() const { return *QueryStats_; }
     TQueryStats ExtractQueryStats() { return std::move(*QueryStats_); }
 
+    // Deprecated. Use GetMeta() of TQueryStats
     bool HasDiagnostics() const { return Diagnostics_.has_value(); }
     const std::string& GetDiagnostics() const { return *Diagnostics_; }
     std::string&& ExtractDiagnostics() { return std::move(*Diagnostics_); }
+
+    bool HasVirtualTimestamp() const { return Vt_.has_value(); }
+    const TVirtualTimestamp& GetVirtualTimestamp() const { return *Vt_; }
+    TVirtualTimestamp&& ExtractVirtualTimestamp() { return std::move(*Vt_); }
 
     TScanQueryPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
@@ -2106,17 +2144,20 @@ public:
         , Diagnostics_(diagnostics)
     {}
 
-    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const std::optional<TQueryStats>& queryStats, const std::optional<std::string>& diagnostics)
+    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const std::optional<TQueryStats>& queryStats,
+        const std::optional<std::string>& diagnostics, std::optional<TVirtualTimestamp>&& vt)
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , QueryStats_(queryStats)
         , Diagnostics_(diagnostics)
+        , Vt_(std::move(vt))
     {}
 
 private:
     std::optional<TResultSet> ResultSet_;
     std::optional<TQueryStats> QueryStats_;
     std::optional<std::string> Diagnostics_;
+    std::optional<TVirtualTimestamp> Vt_;
 };
 
 using TAsyncScanQueryPart = NThreading::TFuture<TScanQueryPart>;
@@ -2192,6 +2233,58 @@ class TReadRowsResult : public TStatus {
     TResultSet GetResultSet() {
         return std::move(ResultSet);
     }
+};
+
+class TExternalDataSourceDescription {
+public:
+    TExternalDataSourceDescription(Ydb::Table::DescribeExternalDataSourceResult&& description);
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+
+    friend class NYdb::TProtoAccessor;
+    const Ydb::Table::DescribeExternalDataSourceResult& GetProto() const;
+};
+
+//! Represents the result of a DescribeExternalDataSource call.
+class TDescribeExternalDataSourceResult : public NScheme::TDescribePathResult {
+public:
+    TDescribeExternalDataSourceResult(
+        TStatus&& status,
+        Ydb::Table::DescribeExternalDataSourceResult&& description
+    );
+
+    TExternalDataSourceDescription GetExternalDataSourceDescription() const;
+
+private:
+    TExternalDataSourceDescription ExternalDataSourceDescription_;
+};
+
+class TExternalTableDescription {
+public:
+    TExternalTableDescription(Ydb::Table::DescribeExternalTableResult&& description);
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+
+    friend class NYdb::TProtoAccessor;
+    const Ydb::Table::DescribeExternalTableResult& GetProto() const;
+};
+
+//! Represents the result of a DescribeExternalTable call.
+class TDescribeExternalTableResult : public NScheme::TDescribePathResult {
+public:
+    TDescribeExternalTableResult(
+        TStatus&& status,
+        Ydb::Table::DescribeExternalTableResult&& description
+    );
+
+    TExternalTableDescription GetExternalTableDescription() const;
+
+private:
+    TExternalTableDescription ExternalTableDescription_;
 };
 
 } // namespace NTable

@@ -5,10 +5,9 @@
 namespace NKikimr::NReplication::NController {
 
 TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry::TAddEntry(
-        const TString& srcPath, const TString& dstPath, TReplication::ETargetKind kind)
-    : SrcPath(srcPath)
-    , DstPath(dstPath)
-    , Kind(kind)
+        TReplication::ETargetKind kind, const TReplication::ITarget::IConfig::TPtr& config)
+    : Kind(kind)
+    , Config(config)
 {
 }
 
@@ -193,7 +192,7 @@ TString TEvPrivate::TEvDescribeTargetsResult::ToString() const {
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry, stream, value) {
-    stream << value.SrcPath << " (" << value.Kind << ")";
+    stream << value.Config->GetSrcPath() << " (" << value.Kind << ")";
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry, stream, value) {

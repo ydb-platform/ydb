@@ -1,7 +1,12 @@
 #pragma once
+#include "counters.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/portion.h>
 
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
@@ -13,6 +18,7 @@ class TColumnEngineChanges;
 class IStoragesManager;
 class TGranuleMeta;
 class TPortionInfo;
+class TPortionAccessorConstructor;
 namespace NDataLocks {
 class TManager;
 }
@@ -78,14 +84,24 @@ public:
     }
 };
 
+using TPortionInfoForCompaction = NPortion::TPortionInfoForCompaction;
+
 class IOptimizerPlanner {
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 
+    virtual bool DoIsOverloaded() const {
+        return false;
+    }
+    const ui32 NodePortionsCountLimit = 0;
+    static inline TAtomicCounter NodePortionsCounter = 0;
+    TPositiveControlInteger LocalPortionsCount;
+    std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
+
 protected:
-    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
-        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
+    virtual void DoModifyPortions(
+        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
@@ -103,10 +119,21 @@ protected:
     }
 
 public:
-    IOptimizerPlanner(const ui64 pathId)
-        : PathId(pathId) {
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& /*info*/) const {
+        return baseLevel;
     }
 
+    IOptimizerPlanner(const TInternalPathId pathId, const ui32 nodePortionsCountLimit)
+        : PathId(pathId)
+        , NodePortionsCountLimit(nodePortionsCountLimit) {
+        Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit);
+    }
+    bool IsOverloaded() const {
+        if (NodePortionsCountLimit <= NodePortionsCounter.Val()) {
+            return true;
+        }
+        return DoIsOverloaded();
+    }
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
     }
@@ -137,7 +164,10 @@ public:
         return TModificationGuard(*this);
     }
 
-    virtual ~IOptimizerPlanner() = default;
+    virtual ~IOptimizerPlanner() {
+        NodePortionsCounter.Sub(LocalPortionsCount.Val());
+        Counters->NodePortionsCount->Set(NodePortionsCounter.Val());
+    }
     TString DebugString() const {
         return DoDebugString();
     }
@@ -148,9 +178,13 @@ public:
         return DoSerializeToJsonVisual();
     }
 
-    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
-        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
+    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+        LocalPortionsCount.Add(add.size());
+        LocalPortionsCount.Sub(remove.size());
+        NodePortionsCounter.Add(add.size());
+        NodePortionsCounter.Sub(remove.size());
+        Counters->NodePortionsCount->Set(NodePortionsCounter.Val());
         DoModifyPortions(add, remove);
     }
 
@@ -167,17 +201,25 @@ public:
 
 class IOptimizerPlannerConstructor {
 public:
+    enum class EOptimizerStrategy {
+        Default,   //use One Layer levels to avoid portion intersections
+        Logs,   // use Zero Levels only for performance
+        LogsInStore
+    };
     class TBuildContext {
     private:
-        YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
+        YDB_READONLY_DEF(EOptimizerStrategy, DefaultStrategy);
 
     public:
-        TBuildContext(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(
+            const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
             : PathId(pathId)
             , Storages(storages)
-            , PKSchema(pkSchema) {
+            , PKSchema(pkSchema)
+            , DefaultStrategy(EOptimizerStrategy::Default) {   //TODO configure me via DDL
         }
     };
 
@@ -185,16 +227,21 @@ public:
     using TProto = NKikimrSchemeOp::TCompactionPlannerConstructorContainer;
 
 private:
+    ui32 NodePortionsCountLimit = 1000000;
+
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
-    virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
 public:
+    ui32 GetNodePortionsCountLimit() const {
+        return NodePortionsCountLimit;
+    }
+
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("l-buckets");
+        auto result = TFactory::MakeHolder("lc-buckets");
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }
@@ -209,6 +256,13 @@ public:
     }
 
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+        if (jsonInfo.Has("node_portions_count_limit")) {
+            const auto& jsonValue = jsonInfo["node_portions_count_limit"];
+            if (!jsonValue.IsUInteger()) {
+                return TConclusionStatus::Fail("incorrect node_portions_count_limit value have to be unsigned int");
+            }
+            NodePortionsCountLimit = jsonValue.GetUInteger();
+        }
         return DoDeserializeFromJson(jsonInfo);
     }
 
@@ -218,6 +272,7 @@ public:
 
     virtual TString GetClassName() const = 0;
     void SerializeToProto(TProto& proto) const {
+        proto.SetNodePortionsCountLimit(NodePortionsCountLimit);
         DoSerializeToProto(proto);
     }
 
@@ -226,10 +281,17 @@ public:
         if (GetClassName() != item->GetClassName()) {
             return false;
         }
-        return DoIsEqualTo(*item);
+        TProto selfProto;
+        TProto itemProto;
+        SerializeToProto(selfProto);
+        item->SerializeToProto(itemProto);
+        return selfProto.SerializeAsString() == itemProto.SerializeAsString();
     }
 
     bool DeserializeFromProto(const TProto& proto) {
+        if (proto.HasNodePortionsCountLimit()) {
+            NodePortionsCountLimit = proto.GetNodePortionsCountLimit();
+        }
         return DoDeserializeFromProto(proto);
     }
 };

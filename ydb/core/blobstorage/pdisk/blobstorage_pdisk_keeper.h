@@ -26,6 +26,8 @@ protected:
     TFreeChunks TrimmedFreeChunks; // Trimmed free chunk list for fast allocation
 
     TChunkTracker ChunkTracker;
+
+    friend class TPDisk;
 public:
 
     TKeeper(TPDiskMon &mon, TIntrusivePtr<TPDiskConfig> cfg)
@@ -56,8 +58,12 @@ public:
     // Add/remove owner
     //
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId) {
-        ChunkTracker.AddOwner(owner, vdiskId);
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight) {
+        ChunkTracker.AddOwner(owner, vdiskId, weight);
+    }
+
+    void SetOwnerWeight(TOwner owner, ui32 weight) {
+        ChunkTracker.SetOwnerWeight(owner, weight);
     }
 
     void RemoveOwner(TOwner owner) {
@@ -89,6 +95,10 @@ public:
 
     i64 GetLogChunkCount() const {
         return ChunkTracker.GetLogChunkCount();
+    }
+
+    ui32 GetNumActiveSlots() const {
+        return ChunkTracker.GetNumActiveSlots();
     }
 
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {
@@ -123,7 +133,7 @@ public:
     }
 
     void PushFreeOwnerChunk(TOwner owner, TChunkIdx chunkIdx) {
-        Y_ABORT_UNLESS(chunkIdx != 0);
+        Y_VERIFY(chunkIdx != 0);
         UntrimmedFreeChunks.Push(chunkIdx);
         ChunkTracker.Release(owner, 1);
     }

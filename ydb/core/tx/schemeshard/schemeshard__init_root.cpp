@@ -3,6 +3,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/security/util.h>
 
@@ -58,7 +59,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                    Schema::LoginSids::SidHash,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.PasswordHash, ToMicroSeconds(sid.CreatedAt));
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }
@@ -69,7 +70,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             auto response = Self->LoginProvider.CreateGroup({
                 .Group = defaultGroup.GetName(),
                 .Options = {
-                    .CheckName = false
+                    .StrongCheckName = false
                 }
             });
             if (response.Error) {
@@ -81,7 +82,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultGroup.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToMicroSeconds(sid.CreatedAt));
                 for (const auto& member : defaultGroup.GetMembers()) {
                     auto response = Self->LoginProvider.AddGroupMembership({
                         .Group = defaultGroup.GetName(),
@@ -144,7 +145,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
         Self->PersistStoragePools(db, Self->RootPathId(), *newDomain);
-        Self->PersistSchemeLimit(db, Self->RootPathId(), *newDomain);
+        Self->PersistSchemeLimits(db, Self->RootPathId(), *newDomain);
         Self->PersistACL(db, newPath);
 
         Self->InitState = TTenantInitState::Done;
@@ -440,7 +441,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->ApplyAndPersistUserAttrs(db, newPath->PathId);
 
         Self->PersistSubDomain(db, Self->RootPathId(), *subdomain);
-        Self->PersistSchemeLimit(db, Self->RootPathId(), *subdomain);
+        Self->PersistSchemeLimits(db, Self->RootPathId(), *subdomain);
         Self->PersistSubDomainSchemeQuotas(db, Self->RootPathId(), *subdomain);
 
         Self->PersistUpdateNextPathId(db);

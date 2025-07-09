@@ -163,13 +163,13 @@ public:
     TDuration GetTimeout() const override;
 
     TFuture<void> Ping(
-        const NApi::TTransactionPingOptions& options) override;
+        const NApi::TPrerequisitePingOptions& options) override;
 
     TFuture<TTransactionCommitResult> Commit(
-        const TTransactionCommitOptions& options = TTransactionCommitOptions()) override;
+        const TTransactionCommitOptions& options = {}) override;
 
     TFuture<void> Abort(
-        const TTransactionAbortOptions& options = TTransactionAbortOptions()) override;
+        const TTransactionAbortOptions& options) override;
 
     void Detach() override;
     TFuture<TTransactionFlushResult> Flush() override;

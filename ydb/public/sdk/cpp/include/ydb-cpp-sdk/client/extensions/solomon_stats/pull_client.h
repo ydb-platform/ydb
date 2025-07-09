@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/extension_common/extension.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
 #include <library/cpp/monlib/metrics/metric_consumer.h>
 #include <library/cpp/monlib/encode/json/json.h>
@@ -8,7 +8,7 @@
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/monservice.h>
 
-namespace NSolomonStatExtension::inline V3 {
+namespace NSolomonStatExtension::inline Dev {
 
 class TSolomonStatPullExtension: public NYdb::IExtension {
 public:

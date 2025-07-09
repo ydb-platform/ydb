@@ -1,14 +1,15 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     common.h
     common.cpp
     counters_logger.h
     deferred_commit.cpp
+    direct_reader.h
+    direct_reader.cpp
     event_handlers.cpp
     offsets_collector.cpp
+    proto_accessor.cpp
     read_session_event.cpp
     read_session_impl.ipp
     read_session.h
@@ -34,6 +35,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/topic/common
     ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
     ydb/public/sdk/cpp/src/client/proto

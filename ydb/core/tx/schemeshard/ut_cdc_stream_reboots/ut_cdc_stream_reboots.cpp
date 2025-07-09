@@ -1,6 +1,6 @@
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
@@ -172,6 +172,40 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
                     NLs::StreamResolvedTimestamps(TDuration::MilliSeconds(1000)),
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithSchemaChanges) {
+        T t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatJson
+                  SchemaChanges: true
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::StreamSchemaChanges(true),
                 });
             }
         });

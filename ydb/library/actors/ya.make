@@ -1,6 +1,5 @@
 RECURSE(
     core
-    cppcoro
     dnsresolver
     examples
     helpers

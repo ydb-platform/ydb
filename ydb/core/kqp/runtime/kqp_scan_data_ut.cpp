@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, rows.front().Columns());
 
-        scanData.AddData(batch, {}, factory);
+        scanData.AddData(batch, {}, factory, 0, false);
 
         std::vector<NUdf::TUnboxedValue> container;
         container.resize(TDataRow::MakeArrowSchema()->num_fields());
@@ -352,13 +352,13 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[9 ].Get<float >(), row.Float32);
             UNIT_ASSERT_EQUAL(container[10].Get<double>(), row.Float64);
             auto tmpString = container[11];
-            UNIT_ASSERT_EQUAL(TString(tmpString.AsStringRef().Data()), row.String);
+            UNIT_ASSERT_EQUAL(TString(tmpString.AsStringRef()), row.String);
             auto tmpUtf8 = container[12];
-            UNIT_ASSERT_EQUAL(TString(tmpUtf8.AsStringRef().Data()), row.Utf8);
+            UNIT_ASSERT_EQUAL(TString(tmpUtf8.AsStringRef()), row.Utf8);
             auto tmpJson = container[13];
-            UNIT_ASSERT_EQUAL(TString(tmpJson.AsStringRef().Data()), row.Json);
+            UNIT_ASSERT_EQUAL(TString(tmpJson.AsStringRef()), row.Json);
             auto tmpYson = container[14];
-            UNIT_ASSERT_EQUAL(TString(tmpYson.AsStringRef().Data()), row.Yson);
+            UNIT_ASSERT_EQUAL(TString(tmpYson.AsStringRef()), row.Yson);
             UNIT_ASSERT_EQUAL(container[15].Get<i32 >(), row.Date     );
             UNIT_ASSERT_EQUAL(container[16].Get<i64 >(), row.Datetime );
             UNIT_ASSERT_EQUAL(container[17].Get<i64 >(), row.Timestamp);
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         resultCols.push_back(resCol);
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, resultCols);
 
-        scanData.AddData(batch, {}, factory);
+        scanData.AddData(batch, {}, factory, 0, false);
 
         std::vector<NUdf::TUnboxedValue> container;
         container.resize(1);
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {});
         TVector<TOwnedCellVec> emptyBatch(1000);
-        auto bytes = scanData.AddData(emptyBatch, {}, factory);
+        auto bytes = scanData.AddData(emptyBatch, {}, factory, 0, false);
         UNIT_ASSERT(bytes > 0);
 
         std::vector<NUdf::TUnboxedValue*> containerPtr;
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         TVector<TDataRow> rows = TestRows();
         std::shared_ptr<arrow::RecordBatch> anotherEmptyBatch = VectorToBatch(rows, rows.front().MakeArrowSchema());
 
-        auto bytes = scanData.AddData(anotherEmptyBatch, {}, factory);
+        auto bytes = scanData.AddData(anotherEmptyBatch, {}, factory, 0, false);
         UNIT_ASSERT(bytes > 0);
         std::vector<NUdf::TUnboxedValue*> containerPtr;
         for (const auto& row: rows) {
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         auto flushResult = batchBuilder->Flush(&batch);
         UNIT_ASSERT(flushResult.ok());
 
-        UNIT_ASSERT_EXCEPTION(scanData.AddData(batch, {}, factory), NYql::TYqlPanic);
+        UNIT_ASSERT_EXCEPTION(scanData.AddData(batch, {}, factory, 0, false), NYql::TYqlPanic);
     }
 }
 

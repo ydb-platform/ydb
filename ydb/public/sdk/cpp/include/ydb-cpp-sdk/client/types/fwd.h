@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 template<typename TDerived>
 struct TRequestSettings;

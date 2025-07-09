@@ -1,3 +1,5 @@
+#include "ydb_grpc_helpers.h"
+
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
@@ -11,6 +13,8 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " << stream)
@@ -76,9 +80,10 @@ public:
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
         const auto& request = *ev.Get()->Get();
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
+        forwardRequest->Request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
         forwardRequest->Request.mutable_serverless_resources()->set_shared_database_path(request.BasePath);
         forwardRequest->Request.set_path(request.Path);
-        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvCreateDatabaseRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvCreateDatabaseRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TCreateDatabaseGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;
@@ -109,6 +114,18 @@ public:
             return;
         }
 
+        const auto& operation = ev->Get()->Response.operation();
+        if (operation.status() != Ydb::StatusIds::SUCCESS && operation.status() != Ydb::StatusIds::ALREADY_EXISTS) {
+            forwardResponse->Issues.AddIssue(TStringBuilder() << "YDB operation status: " << operation.status());
+
+            NYql::TIssues operationIssues;
+            NYql::IssuesFromMessage(operation.issues(), operationIssues);
+            forwardResponse->Issues.AddIssues(std::move(operationIssues));
+
+            Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
+            return;
+        }
+
         forwardResponse->Result.set_id(request.Get()->Get()->Path);
         forwardResponse->Result.mutable_connection()->set_endpoint(request->Get()->ExecutionConnection.GetEndpoint());
         forwardResponse->Result.mutable_connection()->set_database(request.Get()->Get()->Path);
@@ -119,7 +136,7 @@ public:
 
     void Handle(TEvYdbCompute::TEvListDatabasesRequest::TPtr& ev) {
         auto forwardRequest = std::make_unique<TEvPrivate::TEvListDatabasesRequest>();
-        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvListDatabasesRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvListDatabasesRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TListDatabasesGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;

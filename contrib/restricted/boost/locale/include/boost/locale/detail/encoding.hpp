@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022-2023 Alexander Grund
+// Copyright (c) 2022-2025 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -9,7 +9,7 @@
 
 #include <boost/locale/config.hpp>
 #include <boost/locale/encoding_errors.hpp>
-#include <boost/utility/string_view.hpp>
+#include <boost/core/detail/string_view.hpp>
 #include <memory>
 #include <string>
 
@@ -24,7 +24,7 @@ namespace boost { namespace locale { namespace conv { namespace detail {
 
         virtual ~charset_converter() = default;
         virtual string_type convert(const CharIn* begin, const CharIn* end) = 0;
-        string_type convert(const boost::basic_string_view<CharIn>& text)
+        string_type convert(const core::basic_string_view<CharIn> text)
         {
             return convert(text.data(), text.data() + text.length());
         }

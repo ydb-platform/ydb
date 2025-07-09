@@ -1,7 +1,5 @@
 UNITTEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -27,6 +25,8 @@ PEERDIR(
 
     ydb/public/sdk/cpp/src/client/federated_topic
     ydb/public/sdk/cpp/src/client/federated_topic/impl
+
+    ydb/public/sdk/cpp/tests/integration/topic/utils
 )
 
 YQL_LAST_ABI_VERSION()

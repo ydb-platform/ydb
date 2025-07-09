@@ -31,5 +31,6 @@ void MergeInferredSchemeWithSort(NYT::TNode& schema, TYTSortInfo& sortInfo);
 NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCompatibility, const NYT::TNode& columnGroupsSpec = {});
 NYT::TSortColumns ToYTSortColumns(const TVector<std::pair<TString, bool>>& sortColumns);
 TString GetTypeV3String(const TTypeAnnotationNode& type, ui64 nativeTypeCompatibility = NTCF_ALL);
+TString GetColumnGroupSpecFromSchema(const NYT::TNode& schema);
 
 } // NYql

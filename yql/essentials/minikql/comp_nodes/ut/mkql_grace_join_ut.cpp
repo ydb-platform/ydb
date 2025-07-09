@@ -1,11 +1,10 @@
 #include "mkql_computation_node_ut.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
-#include <chrono>
-#include <iostream>
 #include <cstring>
 #include <vector>
 #include <cassert>
@@ -16,8 +15,6 @@
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
 #include <util/system/mem_info.h>
-
-#include <cstdint>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -194,6 +191,67 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
     constexpr ui64 SmallTableTuples = 150000;
     constexpr ui64 BigTupleSize = 40;
 
+    Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
+        TSetup<false> setup;
+        ui64 tuple[11] = {0,1,2,3,4,5,6,7,8,9,10};
+        ui32 strSizes[2] = {4, 4};
+        char * strVals[] = {(char *)"aaaaa", (char *)"bbbb"};
+
+        char * bigStrVal[] = {(char *)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                             (char *)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+        ui32 bigStrSize[2] = {151, 151};
+
+
+        GraceJoin::TTable bigTable(nullptr,0,1,1,1,1);
+        GraceJoin::TTable smallTable(nullptr,0,1,1,1,1);
+        GraceJoin::TTable joinTable(nullptr,0,1,1,1,1);
+
+        const ui64 TupleSize = 1024;
+
+        ui64 bigTuple[TupleSize];
+
+        std::mt19937_64 rng; // deterministic PRNG
+
+        std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
+        for (ui64 i = 0; i < TupleSize; i++) {
+            bigTuple[i] = dist(rng);
+        }
+
+
+        std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
+
+        smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+
+        for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
+            tuple[1] = smallDist(rng);
+            tuple[2] = tuple[1];
+            smallTable.AddTuple(tuple, strVals, strSizes);
+        }
+
+
+        for ( ui64 i = 0; i < BigTableTuples; i++) {
+            tuple[1] = smallDist(rng);
+            tuple[2] = tuple[1];
+            bigTable.AddTuple(tuple, strVals, strSizes);
+        }
+
+        ui64 allocationsCount = 0;
+        if (EXCEPTION) {
+            TlsAllocState->SetLimit(1);
+            TlsAllocState->SetIncreaseMemoryLimitCallback([&allocationsCount](ui64, ui64 required) {
+                // Preallocate memory for some buckets before fail
+                if (allocationsCount++ > 5) {
+                    throw TMemoryLimitExceededException();
+                }
+                TlsAllocState->SetLimit(required);
+            });
+        }
+
+        bool preallocationResult = joinTable.TryToPreallocateMemoryForJoin(smallTable, bigTable, EJoinKind::Inner, true, true);
+        UNIT_ASSERT_EQUAL(preallocationResult, !EXCEPTION);
+    }
+
     Y_UNIT_TEST_LLVM(TestImp1) {
             TSetup<LLVM> setup;
             ui64 tuple[11] = {0,1,2,3,4,5,6,7,8,9,10};
@@ -208,9 +266,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
             CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-            GraceJoin::TTable bigTable(1,1,1,1);
-            GraceJoin::TTable smallTable(1,1,1,1);
-            GraceJoin::TTable joinTable(1,1,1,1);
+            GraceJoin::TTable bigTable(nullptr,0,1,1,1,1);
+            GraceJoin::TTable smallTable(nullptr,0,1,1,1,1);
+            GraceJoin::TTable joinTable(nullptr,0,1,1,1,1);
 
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -381,9 +439,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
             CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-            GraceJoin::TTable bigTable(1,1,1,1);
-            GraceJoin::TTable smallTable(1,1,1,1);
-            GraceJoin::TTable joinTable(1,1,1,1);
+            GraceJoin::TTable bigTable(nullptr,0,1,1,1,1);
+            GraceJoin::TTable smallTable(nullptr,0,1,1,1,1);
+            GraceJoin::TTable joinTable(nullptr,0,1,1,1,1);
 
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -564,9 +622,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
 
 
 
-            GraceJoin::TTable bigTable  (1,1,1,1,0,0,1, nullptr, true);
-            GraceJoin::TTable smallTable(1,1,1,1,0,0,1, nullptr, true);
-            GraceJoin::TTable joinTable (1,1,1,1,0,0,1, nullptr, true);
+            GraceJoin::TTable bigTable  (nullptr, 0, 1,1,1,1,0,0,1, nullptr, true);
+            GraceJoin::TTable smallTable(nullptr, 0, 1,1,1,1,0,0,1, nullptr, true);
+            GraceJoin::TTable joinTable (nullptr, 0, 1,1,1,1,0,0,1, nullptr, true);
 
             std::mt19937_64 rng;
             std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
@@ -702,9 +760,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 
 
 
-            GraceJoin::TTable bigTable  (1,1,1,1,0,0,1, nullptr, false);
-            GraceJoin::TTable smallTable(1,1,1,1,0,0,1, nullptr, false);
-            GraceJoin::TTable joinTable (1,1,1,1,0,0,1, nullptr, false);
+            GraceJoin::TTable bigTable  (nullptr, 0, 1,1,1,1,0,0,1, nullptr, false);
+            GraceJoin::TTable smallTable(nullptr, 0, 1,1,1,1,0,0,1, nullptr, false);
+            GraceJoin::TTable joinTable (nullptr, 0, 1,1,1,1,0,0,1, nullptr, false);
 
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -825,7 +883,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
     }
 }
 
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 40u
 Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
     Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
@@ -983,7 +1040,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
 
 }
-#endif
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
@@ -2572,7 +2628,173 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 }
 
+constexpr std::string_view LeftStreamName = "LeftTestStream";
+constexpr std::string_view RightStreamName = "RightTestStream";
 
+struct TTestStreamParams {
+    ui64 MaxAllowedNumberOfFetches;
+    ui64 StreamSize;
+};
+
+class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
+using TBaseComputation = TMutableComputationNode<TTestStreamWrapper>;
+public:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    public:
+        using TBase = TComputationValue<TStreamValue>;
+
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
+            : TBase(memInfo), CompCtx(compCtx), Params(params)
+        {}
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            ++TotalFetches;
+
+            UNIT_ASSERT_LE(TotalFetches, Params.MaxAllowedNumberOfFetches);
+
+            if (TotalFetches > Params.StreamSize) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            NUdf::TUnboxedValue* items = nullptr;
+            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
+            items[0] = NUdf::TUnboxedValuePod(TotalFetches);
+            items[1] = MakeString(ToString(TotalFetches) * 5);
+
+            return NUdf::EFetchStatus::Ok;
+        }
+
+    private:
+        TComputationContext& CompCtx;
+        TTestStreamParams& Params;
+        ui64 TotalFetches = 0;
+    };
+
+    TTestStreamWrapper(TComputationMutables& mutables, TTestStreamParams& params)
+        : TBaseComputation(mutables)
+        , Params(params)
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params);
+    }
+private:
+    void RegisterDependencies() const final {}
+
+    TTestStreamParams& Params;
+};
+
+IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TTestStreamParams& params) {
+    return new TTestStreamWrapper(ctx.Mutables, params);
+}
+
+TComputationNodeFactory GetNodeFactory(TTestStreamParams& leftParams, TTestStreamParams& rightParams) {
+    return [&leftParams, &rightParams](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+        if (callable.GetType()->GetName() == LeftStreamName) {
+            return WrapTestStream(ctx, leftParams);
+        } else if (callable.GetType()->GetName() == RightStreamName) {
+            return WrapTestStream(ctx, rightParams);
+        }
+        return GetBuiltinFactory()(callable, ctx);
+    };
+}
+
+TRuntimeNode MakeStream(TSetup<false>& setup, bool isRight) {
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    TCallableBuilder callableBuilder(*setup.Env, isRight ? RightStreamName : LeftStreamName,
+            pb.NewStreamType(
+                pb.NewTupleType({
+                    pb.NewDataType(NUdf::TDataType<ui32>::Id),
+                    pb.NewDataType(NUdf::TDataType<char*>::Id)
+                    })
+                ));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
+
+    void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRight) {
+        const ui64 streamSize = 5;
+
+        ui64 leftStreamSize = streamSize;
+        ui64 rightStreamSize = streamSize;
+        ui64 maxExpectedFetchesFromLeftStream = leftStreamSize + 1;
+        ui64 maxExpectedFetchesFromRightStream = rightStreamSize + 1;
+
+        if (emptyLeft) {
+            leftStreamSize = 0;
+            if (GraceJoin::ShouldSkipRightIfLeftEmpty(joinKind)) {
+                maxExpectedFetchesFromRightStream = 1;
+            }
+        }
+
+        if (emptyRight) {
+            rightStreamSize = 0;
+            if (GraceJoin::ShouldSkipLeftIfRightEmpty(joinKind)) {
+                maxExpectedFetchesFromLeftStream = 1;
+            }
+        }
+
+        TTestStreamParams leftParams(maxExpectedFetchesFromLeftStream, leftStreamSize);
+        TTestStreamParams rightParams(maxExpectedFetchesFromRightStream, rightStreamSize);
+        TSetup<false> setup(GetNodeFactory(leftParams, rightParams));
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto leftStream = MakeStream(setup, false);
+        const auto rightStream = MakeStream(setup, true);
+
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({
+            pb.NewDataType(NUdf::TDataType<char*>::Id),
+            pb.NewDataType(NUdf::TDataType<char*>::Id)
+        }));
+
+        const auto joinFlow = pb.GraceJoin(
+            pb.ExpandMap(pb.ToFlow(leftStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
+            }),
+            pb.ExpandMap(pb.ToFlow(rightStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
+            }),
+            joinKind,
+            {0U}, {0U},
+            {1U, 0U}, {1U, 1U},
+            resultType);
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(joinFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pb.NewTuple(items);
+        }));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+
+        NUdf::TUnboxedValue tuple;
+        while (iterator.Next(tuple)) {
+            // Consume results if any
+        }
+    }
+
+#define ADD_JOIN_TESTS_FOR_KIND(Kind)                               \
+    Y_UNIT_TEST(Kind##_EmptyLeft) {                                 \
+        RunGraceJoinEmptyCaseTest(EJoinKind::Kind, true, false);    \
+    }                                                               \
+    Y_UNIT_TEST(Kind##_EmptyRight) {                                \
+        RunGraceJoinEmptyCaseTest(EJoinKind::Kind, false, true);    \
+    }                                                               \
+
+    ADD_JOIN_TESTS_FOR_KIND(Inner)
+    ADD_JOIN_TESTS_FOR_KIND(Left)
+    ADD_JOIN_TESTS_FOR_KIND(LeftOnly)
+    ADD_JOIN_TESTS_FOR_KIND(LeftSemi)
+    ADD_JOIN_TESTS_FOR_KIND(Right)
+    ADD_JOIN_TESTS_FOR_KIND(RightOnly)
+    ADD_JOIN_TESTS_FOR_KIND(RightSemi)
+    ADD_JOIN_TESTS_FOR_KIND(Full)
+    ADD_JOIN_TESTS_FOR_KIND(Exclusion)
+
+#undef ADD_JOIN_TESTS_FOR_KIND
+}
 }
 
 }

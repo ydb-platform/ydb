@@ -4,7 +4,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/memory_controller/memory_controller.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -12,6 +12,8 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <ydb/core/protos/key.pb.h>
+
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 
 namespace NKikimr {
     struct TAppData;
@@ -71,6 +73,7 @@ namespace NActors {
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntime(ui32 nodeCount = 1, bool useRealThreads = false);
+        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends);
 
         ~TTestActorRuntime();
 
@@ -138,6 +141,11 @@ namespace NActors {
         }
 
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
+
+    public:
+        NKikimr::NAudit::TAuditLogBackends AuditLogBackends;
+    protected:
+        void AddAuditLogStuff();
 
     private:
         void Initialize() override;

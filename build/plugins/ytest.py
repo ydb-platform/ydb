@@ -6,7 +6,6 @@ import copy
 import json
 import os
 import re
-import six
 import subprocess
 
 try:
@@ -141,7 +140,18 @@ def validate_test(unit, kw):
     if valid_kw.get('SCRIPT-REL-PATH') == 'boost.test':
         project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
         if not project_path.startswith(
-            ("contrib", "mail", "maps", "tools/idl", "metrika", "devtools", "mds", "yandex_io", "smart_devices")
+            (
+                "contrib",
+                "mail",
+                "maps",
+                "mobile/geo/maps",
+                "tools/idl",
+                "metrika",
+                "devtools",
+                "mds",
+                "yandex_io",
+                "smart_devices",
+            )
         ):
             errors.append("BOOSTTEST is not allowed here")
 
@@ -257,8 +267,11 @@ def validate_test(unit, kw):
         if in_autocheck and size == consts.TestSize.Large:
             errors.append("LARGE test must have ya:fat tag")
 
-    if consts.YaTestTags.Privileged in tags and 'container' not in requirements:
-        errors.append("Only tests with 'container' requirement can have 'ya:privileged' tag")
+    if 'container' in requirements and 'porto_layers' in requirements:
+        errors.append("Only one of 'container', 'porto_layers' can be set, not both")
+
+    if consts.YaTestTags.Privileged in tags and 'container' not in requirements and 'porto_layers' not in requirements:
+        errors.append("Only tests with 'container' or 'porto_layers' requirement can have 'ya:privileged' tag")
 
     if size not in size_timeout:
         errors.append(
@@ -295,7 +308,7 @@ def validate_test(unit, kw):
             errors.append("Error when parsing test timeout: [[bad]]{}[[rst]]".format(e))
 
         requirements_list = []
-        for req_name, req_value in six.iteritems(requirements):
+        for req_name, req_value in requirements.items():
             requirements_list.append(req_name + ":" + req_value)
         valid_kw['REQUIREMENTS'] = serialize_list(sorted(requirements_list))
 
@@ -401,8 +414,8 @@ def dump_test(unit, kw):
     if valid_kw is None:
         return None
     string_handler = StringIO()
-    for k, v in six.iteritems(valid_kw):
-        print(k + ': ' + six.ensure_str(v), file=string_handler)
+    for k, v in valid_kw.items():
+        print(k + ': ' + (v if isinstance(v, str) else str(v, encoding='utf-8')), file=string_handler)
     print(BLOCK_SEPARATOR, file=string_handler)
     data = string_handler.getvalue()
     string_handler.close()
@@ -862,6 +875,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestEnv.value,
         df.TestData.java_test,
         df.ForkMode.test_fork_mode,
+        df.TestExperimentalFork.value,
         df.SplitFactor.from_unit,
         df.CustomDependencies.test_depends_only,
         df.Tag.from_macro_args_and_unit,
@@ -977,7 +991,7 @@ def onsetup_exectest(fields, unit, *args):
     command = command.replace("$EXECTEST_COMMAND_VALUE", "")
     if "PYTHON_BIN" in command:
         unit.ondepends('contrib/tools/python')
-    unit.set(["TEST_BLOB_DATA", base64.b64encode(six.ensure_binary(command))])
+    unit.set(["TEST_BLOB_DATA", base64.b64encode(command.encode('utf-8'))])
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
@@ -1021,7 +1035,6 @@ def on_add_cpp_linter_check(fields, unit, *args):
         "LINTER": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
-        "CUSTOM_CONFIG": 1,
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
@@ -1069,9 +1082,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
-        "PROJECT_TO_CONFIG_MAP": 1,
         "FLAKE_MIGRATIONS_CONFIG": 1,
-        "CUSTOM_CONFIG": 1,
         "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)

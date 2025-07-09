@@ -1,0 +1,20 @@
+items:
+- name: Конфигурация V1
+  href: configuration-v1/index.md
+  include:
+    mode: link
+    path: configuration-v1/toc_p.yaml
+- name: Конфигурация V2
+  href: configuration-v2/index.md
+  include:
+    mode: link
+    path: configuration-v2/toc_p.yaml
+- name: Миграции
+  href: migration/index.md
+  include:
+    mode: link
+    path: migration/toc_p.yaml
+- name: Проверка версии конфигурации
+  href: check-config-version.md
+- name: Сравнение конфигураций V1 и V2
+  href: compare-configs.md

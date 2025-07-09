@@ -15,14 +15,15 @@
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/config.h>
 
+#include <util/generic/hash.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConnectionConfig
+struct TConnectionConfig
     : public NApi::TConnectionConfig
 {
-public:
     static TConnectionConfigPtr CreateFromClusterUrl(
         const std::string& clusterUrl,
         const std::optional<std::string>& proxyRole = {});
@@ -36,6 +37,7 @@ public:
     NRpc::TServiceDiscoveryEndpointsConfigPtr ProxyEndpoints;
     std::optional<std::string> ProxyUnixDomainSocket;
     bool EnableProxyDiscovery;
+    THashMap<std::string, std::string> ProxyUrlAliasingRules;
 
     NRpc::TDynamicChannelPoolConfigPtr DynamicChannelPool;
 
@@ -56,6 +58,7 @@ public:
     TDuration DefaultTotalStreamingTimeout;
     TDuration DefaultStreamingStallTimeout;
     TDuration DefaultPingPeriod;
+    TDuration DefaultChaosLeaseTimeout;
 
     NBus::TBusConfigPtr BusClient;
     TDuration IdleChannelTtl;

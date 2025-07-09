@@ -10,12 +10,10 @@ from typing import cast
 from typing import final
 from typing import Generic
 from typing import Optional
-from typing import Tuple
-from typing import Type
 from typing import TypeVar
 
 
-_ExcInfo = Tuple[Type[BaseException], BaseException, Optional[TracebackType]]
+_ExcInfo = tuple[type[BaseException], BaseException, Optional[TracebackType]]
 ResultType = TypeVar("ResultType")
 
 
@@ -28,7 +26,7 @@ class Result(Generic[ResultType]):
     """An object used to inspect and set the result in a :ref:`hook wrapper
     <hookwrappers>`."""
 
-    __slots__ = ("_result", "_exception")
+    __slots__ = ("_result", "_exception", "_traceback")
 
     def __init__(
         self,
@@ -38,6 +36,8 @@ class Result(Generic[ResultType]):
         """:meta private:"""
         self._result = result
         self._exception = exception
+        # Exception __traceback__ is mutable, this keeps the original.
+        self._traceback = exception.__traceback__ if exception is not None else None
 
     @property
     def excinfo(self) -> _ExcInfo | None:
@@ -46,7 +46,7 @@ class Result(Generic[ResultType]):
         if exc is None:
             return None
         else:
-            return (type(exc), exc, exc.__traceback__)
+            return (type(exc), exc, self._traceback)
 
     @property
     def exception(self) -> BaseException | None:
@@ -75,6 +75,7 @@ class Result(Generic[ResultType]):
         """
         self._result = result
         self._exception = None
+        self._traceback = None
 
     def force_exception(self, exception: BaseException) -> None:
         """Force the result to fail with ``exception``.
@@ -85,6 +86,7 @@ class Result(Generic[ResultType]):
         """
         self._result = None
         self._exception = exception
+        self._traceback = exception.__traceback__ if exception is not None else None
 
     def get_result(self) -> ResultType:
         """Get the result(s) for this hook call.
@@ -94,10 +96,11 @@ class Result(Generic[ResultType]):
         """
         __tracebackhide__ = True
         exc = self._exception
+        tb = self._traceback
         if exc is None:
             return cast(ResultType, self._result)
         else:
-            raise exc.with_traceback(exc.__traceback__)
+            raise exc.with_traceback(tb)
 
 
 # Historical name (pluggy<=1.2), kept for backward compatibility.

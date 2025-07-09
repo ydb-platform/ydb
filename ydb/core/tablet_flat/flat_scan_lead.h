@@ -24,7 +24,7 @@ namespace NTable {
 
         void Until(TArrayRef<const TCell> key, bool inclusive)
         {
-            Y_ABORT_UNLESS(Valid, "Until must be called after To");
+            Y_ENSURE(Valid, "Until must be called after To");
             StopKey = TSerializedCellVec(key);
             StopKeyInclusive = inclusive;
         }

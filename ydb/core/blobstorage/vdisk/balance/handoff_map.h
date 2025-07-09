@@ -59,10 +59,10 @@ namespace NKikimr {
 
         // Transforms record according to the built handoff map. It returns item we need to write, pointer is
         // valid until next call. Nullptr indicates that item is to be removed completely.
-        void Transform(const TKey& /*key*/, TMemRec& /*memRec*/, TDataMerger& dataMerger, bool /*keepData*/) {
+        void Transform(const TKey& /*key*/, TMemRec& /*memRec*/, TDataMerger& dataMerger) {
             // do nothing by default, all work is done in template specialization for logo blobs
             Counter++;
-            Y_DEBUG_ABORT_UNLESS(dataMerger.Empty());
+            Y_VERIFY_DEBUG_S(dataMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
         }
 
     private:
@@ -78,21 +78,14 @@ namespace NKikimr {
 
     template<>
     inline void THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::Transform(const TKeyLogoBlob& key, TMemRecLogoBlob& memRec,
-            TDataMerger& dataMerger, bool keepData) {
+            TDataMerger& dataMerger) {
         Y_DEFER { Counter++; };
-
-        if (!keepData) {
-            memRec.SetNoBlob();
-            memRec.ClearLocalParts(Top->GType);
-            dataMerger.MakeEmpty(); // collect all huge blobs in the merger
-            return;
-        }
 
         if (!RunHandoff) {
             return;
         }
 
-        Y_VERIFY(Counter < DelMap.size());
+        Y_VERIFY_S(Counter < DelMap.size(), HullCtx->VCtx->VDiskLogPrefix);
         TIngress ingress = memRec.GetIngress(); // ingress we are going to change
         ui8 vecSize = Top->GType.TotalPartCount();
 
@@ -110,18 +103,15 @@ namespace NKikimr {
         }
 
         // update merger with the filtered parts (only remaining local parts are kept)
-        TBlobType::EType type;
-        ui32 inplacedDataSize = 0;
-        dataMerger.FilterLocalParts(ingress.LocalParts(Top->GType), key.LogoBlobID(), &type, &inplacedDataSize);
+        dataMerger.FilterLocalParts(ingress.LocalParts(Top->GType));
 
         // reinstate memRec
         memRec = TMemRecLogoBlob(ingress);
-        memRec.SetType(type);
-        if (type == TBlobType::DiskBlob && inplacedDataSize) { // update inplaced data size for inplace blob
-            memRec.SetDiskBlob(TDiskPart(0, 0, inplacedDataSize));
-        }
+        memRec.SetDiskBlob(TDiskPart(0, 0, dataMerger.GetInplacedBlobSize(key.LogoBlobID())));
+        memRec.SetType(dataMerger.GetType());
 
-        Y_ABORT_UNLESS(memRec.GetLocalParts(Top->GType) == dataMerger.GetParts());
+        Y_VERIFY_S(memRec.GetLocalParts(Top->GType) == dataMerger.GetParts(),
+            HullCtx->VCtx->VDiskLogPrefix);
     }
 
     template<>

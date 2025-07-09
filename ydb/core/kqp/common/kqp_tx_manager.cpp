@@ -51,6 +51,7 @@ public:
         if (action & EAction::WRITE) {
             ReadOnly = false;
         }
+        ++ActionsCount;
     }
 
     void AddTopic(ui64 topicId, const TString& path) override {
@@ -91,7 +92,6 @@ public:
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
             if (lock.Proto.GetHasWrites()) {
-                AFL_ENSURE(!ReadOnly);
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
 
@@ -163,6 +163,14 @@ public:
         return nullptr;
     }
 
+    void AddParticipantNode(const ui32 nodeId) override {
+        ParticipantNodes.insert(nodeId);
+    }
+
+    const THashSet<ui32>& GetParticipantNodes() const override {
+        return ParticipantNodes;
+    }
+
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
         TopicOperations = std::move(topicOperations);
     }
@@ -200,6 +208,29 @@ public:
             locks.push_back(lockInfo.Lock.Proto);
         }
         return locks;
+    }
+
+    void Reattached(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Reattaching = false;
+    }
+
+    void SetRestarting(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Restarting = true;
+    }
+
+    bool ShouldReattach(ui64 shardId, TInstant now) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        if (!std::exchange(shardInfo.Restarting, false) && !shardInfo.Reattaching) {
+            return false;
+        }
+        return ::NKikimr::NKqp::ShouldReattach(now, shardInfo.ReattachState.ReattachInfo);;
+    }
+
+    TReattachState& GetReattachState(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        return shardInfo.ReattachState;
     }
 
     bool IsTxPrepared() const override {
@@ -280,14 +311,20 @@ public:
     }
 
     bool NeedCommit() const override {
-        const bool dontNeedCommit = IsReadOnly() && (IsSingleShard() || HasSnapshot());
+        AFL_ENSURE(ActionsCount != 1 || IsSingleShard()); // ActionsCount == 1 then IsSingleShard()
+        const bool dontNeedCommit = IsEmpty() || (IsReadOnly() && ((ActionsCount == 1) || HasSnapshot()));
         return !dontNeedCommit;
+    }
+
+    virtual ui64 GetCoordinator() const override {
+        return Coordinator;
     }
 
     void StartPrepare() override {
         AFL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(NeedCommit());
+        AFL_ENSURE(!BrokenLocks());
 
         THashSet<ui64> sendingColumnShardsSet;
         THashSet<ui64> receivingColumnShardsSet;
@@ -302,7 +339,7 @@ public:
                     SendingShards.insert(shardId);
                 }
             }
-            if (!shardInfo.Locks.empty()) {
+            if (!shardInfo.Locks.empty() || (shardInfo.Flags & EAction::READ)) {
                 SendingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
                     sendingColumnShardsSet.insert(shardId);
@@ -394,6 +431,7 @@ public:
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));
         AFL_ENSURE(NeedCommit());
+        AFL_ENSURE(!BrokenLocks());
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {
@@ -454,11 +492,16 @@ private:
 
         bool IsOlap = false;
         THashSet<TStringBuf> Pathes;
+
+        bool Restarting = false;
+        bool Reattaching = false;
+        TReattachState ReattachState;
     };
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
         TStringBuilder message;
-        message << "Transaction locks invalidated. Tables: ";
+        message << "Transaction locks invalidated. ";
+        message << (shardInfo.Pathes.size() == 1 ? "Table: " : "Tables: ");
         bool first = true;
         // TODO: add error by pathid
         for (const auto& path : shardInfo.Pathes) {
@@ -474,6 +517,9 @@ private:
     THashSet<ui64> ShardsIds;
     THashMap<ui64, TShardInfo> ShardsInfo;
     std::unordered_set<TString> TablePathes;
+    ui64 ActionsCount = 0;
+
+    THashSet<ui32> ParticipantNodes;
 
     THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
 

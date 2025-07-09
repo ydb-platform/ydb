@@ -64,7 +64,7 @@ kafka_proxy_config:
 
 ### HTTP
 
-{{ ydb-short-name }} открывает отдельный HTTP порт для работы [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд.
+{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
 
 Пример включения TLS на HTTP-порту, что делает его использования HTTPS:
 
@@ -103,7 +103,7 @@ auth_config:
   scheme: "ldaps"
 ```
 
-Подробнее этот механизм описан в [{#T}](index.md#ldap-auth-config).
+Подробнее этот механизм описан в [{#T}](../../devops/configuration-management/configuration-v1/#ldap-auth-config).
 
 ### Федеративные запросы
 

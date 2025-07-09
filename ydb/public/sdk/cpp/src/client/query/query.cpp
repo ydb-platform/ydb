@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode) {
     if (statsMode == "unspecified") {
@@ -53,7 +53,7 @@ TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Oper
         for (const auto& column : resultSetMeta.columns()) {
             columns.emplace_back(column.name(), column.type());
         }
-        Metadata_.ResultSetsMeta.emplace_back(std::move(columns)); 
+        Metadata_.ResultSetsMeta.emplace_back(std::move(columns), resultSetMeta.number_rows(), resultSetMeta.finished()); 
     }
 
     if (metadata.has_script_content()) {

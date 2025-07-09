@@ -21,8 +21,9 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsFinish())
-            return NUdf::TUnboxedValuePod::MakeFinish();
+        if (state.IsFinish()) {
+            return state;
+        }
 
         const auto pos = state.IsInvalid() ? 0ULL : state.Get<ui64>();
         if (!pos) {
@@ -152,19 +153,19 @@ private:
         }
 
         ui64 GetListLength() const final {
-            if (!Length) {
-                Length = List.GetListLength() * NewItems.size();
+            if (!Length_) {
+                Length_ = List.GetListLength() * NewItems.size();
             }
 
-            return *Length;
+            return *Length_;
         }
 
         bool HasListItems() const final {
-            if (!HasItems) {
-                HasItems = List.HasListItems();
+            if (!HasItems_) {
+                HasItems_ = List.HasListItems();
             }
 
-            return *HasItems;
+            return *HasItems_;
         }
 
         bool HasFastListLength() const final {
@@ -230,7 +231,7 @@ public:
             block = hard;
 
             const auto size = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), list, ctx.Codegen, block);
-            const auto itemsPtr = *Stateless || ctx.AlwaysInline ?
+            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
                 new AllocaInst(elementsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
                 new AllocaInst(elementsType, 0U, "items_ptr", block);
             const auto full = BinaryOperator::CreateMul(size, ConstantInt::get(size->getType(), NewItems.size()), "full", block);
@@ -279,7 +280,7 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListMultiMapWrapper::MakeLazyList));
+            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListMultiMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
             const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
@@ -412,8 +413,9 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsFinish())
-            return NUdf::TUnboxedValuePod::MakeFinish();
+        if (state.IsFinish()) {
+            return state;
+        }
 
         const auto pos = state.IsInvalid() ? 0ULL : state.Get<ui64>();
         if (!pos) {

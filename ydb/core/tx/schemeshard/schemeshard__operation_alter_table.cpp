@@ -1,11 +1,11 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/subdomain.h>
 
 namespace {
 
@@ -29,18 +29,6 @@ bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchem
     }
 
     return false;
-}
-
-bool IsSuperUser(const NACLib::TUserToken* userToken) {
-    if (!userToken)
-        return false;
-
-    const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-    auto hasSid = [userToken](const TString& sid) -> bool {
-        return userToken->IsExist(sid);
-    };
-    auto it = std::find_if(adminSids.begin(), adminSids.end(), hasSid);
-    return (it != adminSids.end());
 }
 
 template <typename TMessage>
@@ -155,9 +143,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
     const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
-        .EnableTablePgTypes = context.SS->EnableTablePgTypes,
-        .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
-        .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+        .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+        .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
+        .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),        
     };
 
 
@@ -753,12 +741,15 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    // Admins can alter indexImplTable unconditionally.
-    // Regular users can only alter allowed fields.
-    if (!IsSuperUser(context.UserToken.Get())
+    // Index table (indexImplTable) altering:
+    // - regular users can only alter a list of allowed fields
+    // - as a special case, admins can alter index table unconditionally:
+    //   - but only cluster admins
+    //   - and only the real ones, no "all users are admins by default" trick can be used here
+    if (!(IsAdministrator(AppData(), context.UserToken.Get()) && !AppData()->AdministrationAllowedSIDs.empty())
         && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"})
             || (alter.HasPartitionConfig()
-                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
+                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy", "FollowerCount", "FollowerGroups"})
             )
         )
     ) {

@@ -56,6 +56,11 @@ namespace NFake {
             SetupModelServices();
         }
 
+        TTestActorRuntime& operator*() noexcept
+        {
+            return Env;
+        }
+
         TTestActorRuntime* operator->() noexcept
         {
             return &Env;
@@ -82,7 +87,7 @@ namespace NFake {
             Env.AddLocalService(service, TActorSetupCmd(actor, box, 0), 0);
         }
 
-        void RunTest(TAutoPtr<IActor> actor) noexcept
+        void RunTest(TAutoPtr<IActor> actor)
         {
             return RunOn(8, { }, actor.Release(), EMail::Simple);
         }
@@ -135,9 +140,11 @@ namespace NFake {
 
                 TIntrusivePtr<TStateStorageInfo> info(new TStateStorageInfo());
 
-                info->NToSelect = 1;
-                info->Rings.resize(1);
-                info->Rings[0].Replicas.push_back(replica);
+                info->RingGroups.resize(1);
+                auto &group = info->RingGroups.back();
+                group.NToSelect = 1;
+                group.Rings.resize(1);
+                group.Rings[0].Replicas.push_back(replica);
 
                 {
                     auto *actor = CreateStateStorageReplica(info, 0);
@@ -187,12 +194,12 @@ namespace NFake {
             }
         }
 
-        static TVector<TString> MakeComponentsNames() noexcept
+        static TVector<TString> MakeComponentsNames()
         {
             const auto begin = ui32(NKikimrServices::EServiceKikimr_MIN);
             const auto end = ui32(NKikimrServices::EServiceKikimr_MAX) + 1;
 
-            Y_ABORT_UNLESS(end < 8192, "Looks like there is too many services");
+            Y_ENSURE(end < 8192, "Looks like there is too many services");
 
             TVector<TString> names(end);
 

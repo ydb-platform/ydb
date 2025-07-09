@@ -65,6 +65,8 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
+        auto &peer = Request->Get()->Record.GetPeerName();
+
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxCreateTenant: "
                     << Request->Get()->Record.ShortDebugString());
 
@@ -121,7 +123,7 @@ public:
             attrNames.insert(key);
         }
 
-        Tenant = new TTenant(path, TTenant::CREATING_POOLS, token);
+        Tenant = new TTenant(path, TTenant::CREATING_POOLS, token, peer);
 
         Tenant->IsExternalSubdomain = Self->FeatureFlags.GetEnableExternalSubdomains();
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
@@ -136,6 +138,16 @@ public:
 
         if (rec.options().plan_resolution()) {
             Tenant->PlanResolution = rec.options().plan_resolution();
+        }
+
+        if (rec.options().coordinators()) {
+            Tenant->Coordinators = rec.options().coordinators();
+        } else if (rec.resources_kind_case() == Ydb::Cms::CreateDatabaseRequest::kServerlessResources) {
+            Tenant->Coordinators = 1;
+        }
+
+        if (rec.options().mediators()) {
+            Tenant->Mediators = rec.options().mediators();
         }
 
         if (rec.options().disable_tx_service()) {
@@ -251,7 +263,6 @@ public:
 
                     Tenant->IsExternalHive = false;
                     Tenant->IsGraphShardEnabled = false;
-                    Tenant->Coordinators = 1;
                     Tenant->SlotsAllocationConfirmed = true;
                 } else {
                     return Error(Ydb::StatusIds::BAD_REQUEST,

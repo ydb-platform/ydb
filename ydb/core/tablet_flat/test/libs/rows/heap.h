@@ -26,19 +26,19 @@ namespace NTest {
         TRowsHeap(TIntrusivePtr<TGrowHeap> heap) : Heap(std::move(heap)) { }
 
         template<typename TRand>
-        TIter Any(TRand &rnd) const noexcept
+        TIter Any(TRand &rnd) const
         {
             return begin() + rnd.Uniform(Rows.size());
         }
 
         template<typename TRand>
-        TIter AnyIn(TRand &rnd, TIter it, const TIter end) const noexcept
+        TIter AnyIn(TRand &rnd, TIter it, const TIter end) const
         {
             return it + rnd.Uniform(std::distance(it, end));
         }
 
         template<typename TRand>
-        TIter AnyOff(TRand &rnd, TIter it, const TIter end) const noexcept
+        TIter AnyOff(TRand &rnd, TIter it, const TIter end) const
         {
             size_t on = rnd.Uniform(Size() - std::distance(it, end));
 
@@ -62,9 +62,9 @@ namespace NTest {
             return Rows.size();
         }
 
-        const TRow& operator[](size_t on) const noexcept
+        const TRow& operator[](size_t on) const
         {
-            Y_ABORT_UNLESS(on < Rows.size(), "Row index is out of hole scope");
+            Y_ENSURE(on < Rows.size(), "Row index is out of hole scope");
 
             return Rows[on];
         }

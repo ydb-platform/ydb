@@ -10,6 +10,8 @@
 #include <map>
 #include <sstream>
 
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+
 namespace NYql {
 
 /**
@@ -173,6 +175,7 @@ struct TJoinOrderHints {
 };
 
 struct TOptimizerHints {
+    std::shared_ptr<TCardinalityHints> BytesHints = std::make_shared<TCardinalityHints>();
     std::shared_ptr<TCardinalityHints> CardinalityHints = std::make_shared<TCardinalityHints>();
     std::shared_ptr<TJoinAlgoHints> JoinAlgoHints = std::make_shared<TJoinAlgoHints>();
     std::shared_ptr<TJoinOrderHints> JoinOrderHints = std::make_shared<TJoinOrderHints>();
@@ -180,10 +183,11 @@ struct TOptimizerHints {
     TVector<TString> GetUnappliedString();
 
     /*
-     *   The function accepts string with three type of expressions: array of (JoinAlgo | Card | JoinOrder):
+     *   The function accepts string with four type of expressions: array of (JoinAlgo | Rows | Bytes | JoinOrder):
      *   1) JoinAlgo(t1 t2 ... tn Map | Grace | Lookup) to change join algo for join, where these labels take part
-     *   2) Card(t1 t2 ... tn (*|/|+|-) Number) to change cardinality for join, where these labels take part or labels only
-     *   3) JoinOrder( (t1 t2) (t3 (t4 ...)) ) - fixate this join subtree in the general join tree
+     *   2) Rows(t1 t2 ... tn (*|/|+|-|#) Number) to change cardinality for join, where these labels take part or labels only
+     *   3) Bytes(t1 t2 ... tn (*|/|+|-|#) Number) to change byte size for join, where these labels take part or labels only
+     *   4) JoinOrder( (t1 t2) (t3 (t4 ...)) ) - fixate this join subtree in the general join tree
      */
     static TOptimizerHints Parse(const TString&);
 };
@@ -196,7 +200,13 @@ struct TOptimizerHints {
 struct IProviderContext {
     virtual ~IProviderContext() = default;
 
-    virtual double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgol) const = 0;
+    virtual double ComputeJoinCost(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const double outputRows,
+        const double outputByteSize,
+        EJoinAlgoType joinAlgo
+    ) const = 0;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
@@ -205,14 +215,41 @@ struct IProviderContext {
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
-        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const = 0;
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr
+    ) const = 0;
+
+    virtual TOptimizerStatistics ComputeJoinStatsV1(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint,
+        bool shuffleLeftSide,
+        bool shuffleRightSide
+    ) const = 0;
+
+    virtual TOptimizerStatistics ComputeJoinStatsV2(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint,
+        bool shuffleLeftSide,
+        bool shuffleRightSide,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
+    ) const = 0;
 
     virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TVector<NDq::TJoinColumn>& leftJoinKeys,
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
-        EJoinKind joinKin) = 0;
+        EJoinKind joinKind
+    ) = 0;
 };
 
 /**
@@ -222,7 +259,13 @@ struct IProviderContext {
 struct TBaseProviderContext : public IProviderContext {
     TBaseProviderContext() {}
 
-    double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const override;
+    double ComputeJoinCost(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const double outputRows,
+        const double outputByteSize,
+        EJoinAlgoType joinAlgo
+    ) const override;
 
     bool IsJoinApplicable(
         const std::shared_ptr<IBaseOptimizerNode>& leftStats,
@@ -230,16 +273,43 @@ struct TBaseProviderContext : public IProviderContext {
         const TVector<NDq::TJoinColumn>& leftJoinKeys,
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
-        EJoinKind joinKind) override;
+        EJoinKind joinKind
+    ) override;
 
-    virtual TOptimizerStatistics ComputeJoinStats(
+    TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
         const TVector<NDq::TJoinColumn>& leftJoinKeys,
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
-        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr
+    ) const override;
+
+    TOptimizerStatistics ComputeJoinStatsV1(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint,
+        bool shuffleLeftSide,
+        bool shuffleRightSide
+    ) const override;
+
+    TOptimizerStatistics ComputeJoinStatsV2(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint,
+        bool shuffleLeftSide,
+        bool shuffleRightSide,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
+    ) const override;
 
     static const TBaseProviderContext& Instance();
 };
@@ -251,13 +321,9 @@ struct TBaseProviderContext : public IProviderContext {
 struct TRelOptimizerNode : public IBaseOptimizerNode {
     TString Label;
 
-    // Temporary solution to check if a LookupJoin is possible in KQP
-    //void* Expr;
-
     TRelOptimizerNode(TString label, TOptimizerStatistics stats) :
         IBaseOptimizerNode(RelNodeType, std::move(stats)), Label(label) { }
-    //TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, const TExprNode::TPtr expr) :
-    //    IBaseOptimizerNode(RelNodeType, stats), Label(label), Expr(expr) { }
+
     virtual ~TRelOptimizerNode() {}
 
     virtual TVector<TString> Labels();

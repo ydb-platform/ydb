@@ -72,6 +72,9 @@ struct TCacheBlobL2 {
     TPartitionId Partition;
     ui64 Offset;
     ui16 PartNo;
+    ui32 Count;
+    ui16 InternalPartsCount;
+    TMaybe<char> Suffix;
     TCacheValue::TPtr Value;
 };
 
@@ -83,6 +86,7 @@ struct TCacheL2Request {
     TVector<TCacheBlobL2> RemovedBlobs;
     TVector<TCacheBlobL2> ExpectedBlobs;
     TVector<TCacheBlobL2> MissedBlobs;
+    TVector<std::pair<TCacheBlobL2, TCacheBlobL2>> RenamedBlobs;
 
     explicit TCacheL2Request(ui64 tabletId)
         : TabletId(tabletId)
@@ -102,7 +106,8 @@ struct TEvPqCache {
     enum EEv {
         EvCacheRequest = EventSpaceBegin(TKikimrEvents::ES_PQ_L2_CACHE),
         EvCacheResponse,
-
+        EvCacheKeysRequest,
+        EvCacheKeysResponse,
         EvEnd
     };
 
@@ -122,6 +127,13 @@ struct TEvPqCache {
         TEvCacheL2Response(TAutoPtr<TCacheL2Response> data)
             : Data(data)
         {}
+    };
+
+    struct TEvCacheKeysRequest : TEventLocal<TEvCacheKeysRequest, EvCacheKeysRequest> {
+    };
+
+    struct TEvCacheKeysResponse : TEventLocal<TEvCacheKeysResponse, EvCacheKeysResponse> {
+        size_t RenamedKeys = 0;
     };
 };
 

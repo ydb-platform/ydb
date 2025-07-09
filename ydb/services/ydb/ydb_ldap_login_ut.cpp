@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
 
 #include <ydb/core/testlib/test_client.h>

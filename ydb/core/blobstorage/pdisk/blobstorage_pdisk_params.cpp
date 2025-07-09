@@ -9,11 +9,14 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TPDiskParams
     ////////////////////////////////////////////////////////////////////////////
-    TPDiskParams::TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize,
+    TPDiskParams::TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 OwnerWeight, ui32 slotSizeInUnits,
+                               ui32 chunkSize, ui32 appendBlockSize,
                                ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
                                ui64 writeBlockSize, ui64 bulkWriteBlockSize, NPDisk::EDeviceType trueMediaType)
         : Owner(owner)
         , OwnerRound(ownerRound)
+        , OwnerWeight(OwnerWeight)
+        , SlotSizeInUnits(slotSizeInUnits)
         , ChunkSize(chunkSize)
         , AppendBlockSize(appendBlockSize)
         , RecommendedReadSize(CalculateRecommendedReadSize(seekTimeUs, readSpeedBps, appendBlockSize))
@@ -27,7 +30,7 @@ namespace NKikimr {
         , GlueRequestDistanceBytes(CalculateGlueRequestDistanceBytes(seekTimeUs, readSpeedBps))
         , TrueMediaType(trueMediaType)
     {
-        Y_DEBUG_ABORT_UNLESS(AppendBlockSize <= ChunkSize);
+        Y_VERIFY_DEBUG(AppendBlockSize <= ChunkSize);
     }
 
     // Read size that allows pdisk to spend at least 50% actually reading the data (not seeking)
@@ -58,6 +61,8 @@ namespace NKikimr {
         TStringStream str;
         str << "{TPDiskParams ownerId# " << Owner;
         str << " ownerRound# " << OwnerRound;
+        str << " OwnerWeight# " << OwnerWeight;
+        str << " SlotSizeInUnits# " << SlotSizeInUnits;
         str << " ChunkSize# " << ChunkSize;
         str << " AppendBlockSize# " << AppendBlockSize;
         str << " RecommendedReadSize# " << RecommendedReadSize;
@@ -86,6 +91,14 @@ namespace NKikimr {
                     TABLER() {
                         TABLED() {str << "Owner";}
                         TABLED() {str << Owner;}
+                    }
+                    TABLER() {
+                        TABLED() {str << "OwnerWeight";}
+                        TABLED() {str << OwnerWeight;}
+                    }
+                    TABLER() {
+                        TABLED() {str << "SlotSizeInUnits";}
+                        TABLED() {str << SlotSizeInUnits;}
                     }
                     TABLER() {
                         TABLED() {str << "ChunkSize";}

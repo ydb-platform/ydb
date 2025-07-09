@@ -20,14 +20,12 @@ SRCS(
     actor_coroutine.h
     actor.cpp
     actor.h
-    actor_virtual.cpp
     actorid.cpp
     actorid.h
     actorsystem.cpp
     actorsystem.h
     ask.cpp
     ask.h
-    av_bootstrapped.cpp
     buffer.cpp
     buffer.h
     callstack.cpp
@@ -131,6 +129,7 @@ END()
 
 RECURSE(
     harmonizer
+    manual_test
 )
 
 RECURSE_FOR_TESTS(

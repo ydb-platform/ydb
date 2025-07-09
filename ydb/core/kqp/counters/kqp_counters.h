@@ -332,6 +332,7 @@ public:
     void ReportCompileRequestTimeout(TKqpDbCountersPtr dbCounters);
     void ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuration duration, TDuration cpuTime);
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
+    void ReportCompileQueueWaitTime(const TDuration& duration);
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
@@ -365,6 +366,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
+    ::NMonitoring::THistogramPtr CompileQueueWaitTime;
 
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;
@@ -419,6 +421,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWritesRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorPrepareWrites;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWriteOnlyOperations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorReadWriteOperations;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorDistributedCommits;
@@ -467,6 +472,24 @@ public:
     TConcurrentRWHashMap<TString, TKqpDbCountersPtr, 256> DbCounters;
     TActorSystem* ActorSystem = nullptr;
     TActorId DbWatcherActorId;
+
+    // Statistics CPU usage
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuCollectUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuFinishUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuConvertUs;
+    // Statistics MEM inflight (non deriv)
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemCollectInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemFinishInflightBytes;
+    // Statistics MEM output (deriv)
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemFinishBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemConvertBytes;
+
+    // Statistics batch operations
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationRetries;
 };
 
 struct TKqpRequestCounters : public TThrRefBase {

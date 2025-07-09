@@ -46,10 +46,10 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         auto data = runtime.GrabEdgeEventRethrow<TEvWorker::TEvData>(handle);
         UNIT_ASSERT_VALUES_EQUAL(data->Source, PARTITION_STR);
         UNIT_ASSERT_VALUES_EQUAL(data->Records.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(data->Records[0].Offset, INITIAL_OFFSET + dataPatternCookie * 2);
-        UNIT_ASSERT_VALUES_EQUAL(data->Records[0].Data, Sprintf("1-%d", dataPatternCookie));
-        UNIT_ASSERT_VALUES_EQUAL(data->Records[1].Offset, INITIAL_OFFSET + dataPatternCookie * 2 + 1);
-        UNIT_ASSERT_VALUES_EQUAL(data->Records[1].Data, Sprintf("2-%d", dataPatternCookie));
+        UNIT_ASSERT_VALUES_EQUAL(data->Records[0].GetOffset(), INITIAL_OFFSET + dataPatternCookie * 2);
+        UNIT_ASSERT_VALUES_EQUAL(data->Records[0].GetData(), Sprintf("1-%d", dataPatternCookie));
+        UNIT_ASSERT_VALUES_EQUAL(data->Records[1].GetOffset(), INITIAL_OFFSET + dataPatternCookie * 2 + 1);
+        UNIT_ASSERT_VALUES_EQUAL(data->Records[1].GetData(), Sprintf("2-%d", dataPatternCookie));
     }
 
     TEvPersQueue::TEvResponse* GenerateData(ui32 dataPatternCookie) {

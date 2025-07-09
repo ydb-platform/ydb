@@ -28,6 +28,7 @@ namespace NKikimr {
                 const TVDiskID &selfVDisk,
                 TActorSystem *as, // as can be nullptr for tests
                 NPDisk::EDeviceType type,
+                ui32 pDiskId,
                 bool donorMode,
                 TReplQuoter::TPtr replPDiskReadQuoter,
                 TReplQuoter::TPtr replPDiskWriteQuoter,
@@ -42,7 +43,7 @@ namespace NKikimr {
         , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)
-        , VDiskLogPrefix(GenerateVDiskLogPrefix(selfVDisk, donorMode))
+        , VDiskLogPrefix(GenerateVDiskLogPrefix(pDiskId, selfVDisk, donorMode))
         , NodeId(as ? as->NodeId : 0)
         , FreshIndex(VDiskMemCounters->GetCounter("MemTotal:FreshIndex"))
         , FreshData(VDiskMemCounters->GetCounter("MemTotal:FreshData"))
@@ -61,6 +62,7 @@ namespace NKikimr {
         , ReplNodeResponseQuoter(std::move(replNodeResponseQuoter))
         , CostTracker()
         , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
+        , ResponseStatusMonGroup(std::make_shared<NMonGroup::TResponseStatusGroup>(VDiskCounters))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
         , CostMonGroup(vdiskCounters, "subsystem", "cost")
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())

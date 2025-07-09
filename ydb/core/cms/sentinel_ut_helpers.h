@@ -83,7 +83,7 @@ class TTestEnv: public TCmsTestEnv {
     }
 
 public:
-    explicit TTestEnv(ui32 nodeCount, ui32 pdisks)
+    explicit TTestEnv(ui32 nodeCount, ui32 pdisks, const NKikimrCms::TCmsConfig &config = {})
         : TCmsTestEnv(nodeCount, pdisks)
     {
         SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
@@ -123,12 +123,21 @@ public:
         });
 
         State = new TCmsState;
+        State->Config.Deserialize(config);
         MockClusterInfo(State->ClusterInfo);
         State->CmsActorId = GetSender();
 
         Sentinel = Register(CreateSentinel(State));
         EnableScheduleForActor(Sentinel, true);
         WaitForSentinelBoot();
+    }
+
+    void MockBridgeModePiles(ui32 numPiles) {
+        auto& nodes = State->ClusterInfo->AllNodes();
+        for (auto& [id, info] : nodes) {
+            info->PileId = id % numPiles;
+            State->ClusterInfo->NodeIdToPileId[id] = *info->PileId;
+        }
     }
 
     TPDiskID RandomPDiskID() const {
@@ -158,6 +167,20 @@ public:
         return res;
     }
 
+    TSet<TPDiskID> PDisksForRandomPile() const {
+        auto nodes = State->ClusterInfo->AllNodes();
+        size_t idx = RandomNumber(nodes.size() - 1);
+        auto target = std::next(nodes.begin(), idx)->second;
+
+        TSet<TPDiskID> res;
+        for (const auto& [id, info] : nodes) {
+            if (info->PileId == target->PileId) {
+                std::copy(info->PDisks.begin(), info->PDisks.end(), std::inserter(res, res.begin()));
+            }
+        }
+        return res;
+    }
+
     TSet<TPDiskID> PDisksForRandomNode() const {
         auto nodes = State->ClusterInfo->AllNodes();
         size_t idx = RandomNumber(nodes.size() - 1);
@@ -165,6 +188,26 @@ public:
         auto info = std::next(nodes.begin(), idx)->second;
         Y_ABORT_UNLESS(info);
         return info->PDisks;
+    }
+
+    void SetNodeFaulty(ui32 nodeId, bool faulty) {
+        if (faulty) {
+            auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
+            v.push_back({
+                .NodeId = nodeId,
+                .Markers = {NKikimrCms::EMarker::MARKER_DISK_FAULTY},
+            });
+
+            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
+        } else {
+            auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
+            v.push_back({
+                .NodeId = nodeId,
+                .Markers = {},
+            });
+
+            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
+        }
     }
 
     void SetPDiskState(const TSet<TPDiskID>& pdisks, EPDiskState state) {

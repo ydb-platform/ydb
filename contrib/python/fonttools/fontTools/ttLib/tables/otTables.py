@@ -11,6 +11,7 @@ from functools import reduce
 from math import radians
 import itertools
 from collections import defaultdict, namedtuple
+from fontTools.ttLib import OPTIMIZE_FONT_SPEED
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
 from fontTools.ttLib.tables.otTraverse import dfs_base_table
 from fontTools.misc.arrayTools import quantizeRect
@@ -236,6 +237,8 @@ class VarComponent:
         return data[i:]
 
     def compile(self, font):
+        optimizeSpeed = font.cfg[OPTIMIZE_FONT_SPEED]
+
         data = []
 
         flags = self.flags
@@ -259,7 +262,8 @@ class VarComponent:
             data.append(_write_uint32var(self.axisIndicesIndex))
             data.append(
                 TupleVariation.compileDeltaValues_(
-                    [fl2fi(v, 14) for v in self.axisValues]
+                    [fl2fi(v, 14) for v in self.axisValues],
+                    optimizeSize=not optimizeSpeed,
                 )
             )
         else:
@@ -2226,24 +2230,28 @@ _equivalents = {
 def fixLookupOverFlows(ttf, overflowRecord):
     """Either the offset from the LookupList to a lookup overflowed, or
     an offset from a lookup to a subtable overflowed.
-    The table layout is:
-    GPSO/GUSB
-            Script List
-            Feature List
-            LookUpList
-                    Lookup[0] and contents
-                            SubTable offset list
-                                    SubTable[0] and contents
-                                    ...
-                                    SubTable[n] and contents
-                    ...
-                    Lookup[n] and contents
-                            SubTable offset list
-                                    SubTable[0] and contents
-                                    ...
-                                    SubTable[n] and contents
+
+    The table layout is::
+
+      GPSO/GUSB
+              Script List
+              Feature List
+              LookUpList
+                      Lookup[0] and contents
+                              SubTable offset list
+                                      SubTable[0] and contents
+                                      ...
+                                      SubTable[n] and contents
+                      ...
+                      Lookup[n] and contents
+                              SubTable offset list
+                                      SubTable[0] and contents
+                                      ...
+                                      SubTable[n] and contents
+
     If the offset to a lookup overflowed (SubTableIndex is None)
-            we must promote the *previous*	lookup to an Extension type.
+            we must promote the *previous* lookup to an Extension type.
+
     If the offset from a lookup to subtable overflowed, then we must promote it
             to an Extension Lookup type.
     """

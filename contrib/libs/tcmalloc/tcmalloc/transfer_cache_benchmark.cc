@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <atomic>
+#include <cstddef>
+#include <optional>
 
+#include "absl/random/distributions.h"
+#include "absl/random/random.h"
 #include "absl/types/optional.h"
 #include "benchmark/benchmark.h"
-#include "tcmalloc/central_freelist.h"
-#include "tcmalloc/common.h"
+#include "tcmalloc/internal/config.h"
 #include "tcmalloc/mock_central_freelist.h"
 #include "tcmalloc/mock_transfer_cache.h"
 #include "tcmalloc/transfer_cache_internals.h"
@@ -28,12 +30,12 @@ namespace tcmalloc {
 namespace tcmalloc_internal {
 namespace {
 
+using TransferCacheWithRealCFLEnv =
+    FakeTransferCacheEnvironment<internal_transfer_cache::TransferCache<
+        RealCentralFreeListForTesting, FakeTransferCacheManager>>;
 using TransferCacheEnv =
     FakeTransferCacheEnvironment<internal_transfer_cache::TransferCache<
         MinimalFakeCentralFreeList, FakeTransferCacheManager>>;
-using RingBufferTransferCacheEnv = FakeTransferCacheEnvironment<
-    internal_transfer_cache::RingBufferTransferCache<MinimalFakeCentralFreeList,
-                                                     FakeTransferCacheManager>>;
 static constexpr int kSizeClass = 0;
 
 template <typename Env>
@@ -50,32 +52,32 @@ void BM_CrossThread(benchmark::State& state) {
   };
 
   static CrossThreadState* s = nullptr;
-  if (state.thread_index == 0) {
+  if (state.thread_index() == 0) {
     s = new CrossThreadState();
     for (int i = 0; i < ::tcmalloc::tcmalloc_internal::internal_transfer_cache::
                                 kInitialCapacityInBatches /
                             2;
          ++i) {
       for (Cache& c : s->c) {
-        c.freelist().AllocateBatch(batch, kBatchSize);
+        c.freelist().AllocateBatch({batch, kBatchSize});
         c.InsertRange(kSizeClass, {batch, kBatchSize});
       }
     }
   }
 
-  int src = state.thread_index % 2;
+  int src = state.thread_index() % 2;
   int dst = (src + 1) % 2;
   for (auto iter : state) {
     benchmark::DoNotOptimize(batch);
-    (void)s->c[src].RemoveRange(kSizeClass, batch, kBatchSize);
+    (void)s->c[src].RemoveRange(kSizeClass, {batch, kBatchSize});
     benchmark::DoNotOptimize(batch);
     s->c[dst].InsertRange(kSizeClass, {batch, kBatchSize});
     benchmark::DoNotOptimize(batch);
   }
-  if (state.thread_index == 0) {
+  if (state.thread_index() == 0) {
     TransferCacheStats stats{};
     for (Cache& c : s->c) {
-      TransferCacheStats other = c.GetHitRateStats();
+      TransferCacheStats other = c.GetStats();
       stats.insert_hits += other.insert_hits;
       stats.insert_misses += other.insert_misses;
       stats.remove_hits += other.remove_hits;
@@ -100,12 +102,12 @@ void BM_InsertRange(benchmark::State& state) {
 
   // optional to have more precise control of when the destruction occurs, as
   // we want to avoid polluting the timing with the dtor.
-  absl::optional<Env> e;
+  std::optional<Env> e;
   void* batch[kMaxObjectsToMove];
   for (auto iter : state) {
     state.PauseTiming();
     e.emplace();
-    e->central_freelist().AllocateBatch(batch, kBatchSize);
+    e->central_freelist().AllocateBatch({batch, kBatchSize});
     benchmark::DoNotOptimize(e);
     benchmark::DoNotOptimize(batch);
     state.ResumeTiming();
@@ -121,7 +123,7 @@ void BM_RemoveRange(benchmark::State& state) {
 
   // optional to have more precise control of when the destruction occurs, as
   // we want to avoid polluting the timing with the dtor.
-  absl::optional<Env> e;
+  std::optional<Env> e;
   void* batch[kMaxObjectsToMove];
   for (auto iter : state) {
     state.PauseTiming();
@@ -130,18 +132,104 @@ void BM_RemoveRange(benchmark::State& state) {
     benchmark::DoNotOptimize(e);
     state.ResumeTiming();
 
-    (void)e->transfer_cache().RemoveRange(kSizeClass, batch, kBatchSize);
+    (void)e->transfer_cache().RemoveRange(kSizeClass, {batch, kBatchSize});
     benchmark::DoNotOptimize(batch);
   }
 }
 
+template <typename Env>
+void BM_RealisticBatchNonBatchMutations(benchmark::State& state) {
+  const int kBatchSize = Env::kBatchSize;
+
+  Env e;
+  absl::BitGen gen;
+
+  for (auto iter : state) {
+    state.PauseTiming();
+    const double choice = absl::Uniform(gen, 0.0, 1.0);
+    state.ResumeTiming();
+
+    // These numbers have been determined by looking at production data.
+    if (choice < 0.424) {
+      e.Insert(kBatchSize);
+    } else if (choice < 0.471) {
+      e.Insert(1);
+    } else if (choice < 0.959) {
+      e.Remove(kBatchSize);
+    } else {
+      e.Remove(1);
+    }
+  }
+
+  const TransferCacheStats stats = e.transfer_cache().GetStats();
+  state.counters["insert_hit_ratio"] =
+      static_cast<double>(stats.insert_hits) /
+      (stats.insert_hits + stats.insert_misses);
+  state.counters["remove_hit_ratio"] =
+      static_cast<double>(stats.remove_hits) /
+      (stats.remove_hits + stats.remove_misses);
+}
+
+template <typename Env>
+void BM_RealisticHitRate(benchmark::State& state) {
+  const int kBatchSize = Env::kBatchSize;
+
+  Env e;
+  absl::BitGen gen;
+  // We switch between insert-heavy and remove-heavy access pattern every 5k
+  // iterations. kBias specifies the fraction of insert (or remove) operations
+  // during insert-heavy (or remove-heavy) phase of the microbenchmark. These
+  // constants have been determined through experimentation so that the
+  // resulting insert and remove miss rate matches that of the production.
+  constexpr int kInterval = 5000;
+  constexpr double kBias = 0.85;
+  bool insert_heavy = true;
+  unsigned int iterations = 0;
+  for (auto iter : state) {
+    state.PauseTiming();
+    const double partial = absl::Uniform(gen, 0.0, 1.0);
+    // We perform insert (or remove) operations with a probability specified by
+    // kBias during the insert-heavy (or remove-heavy) phase of this benchmark.
+    const bool insert = absl::Bernoulli(gen, kBias) == insert_heavy;
+    state.ResumeTiming();
+
+    if (insert) {
+      // These numbers have been determined by looking at production data.
+      if (partial < 0.65) {
+        e.Insert(kBatchSize);
+      } else {
+        e.Insert(1);
+      }
+    } else {
+      // These numbers have been determined by looking at production data.
+      if (partial < 0.99) {
+        e.Remove(kBatchSize);
+      } else {
+        e.Remove(1);
+      }
+    }
+    ++iterations;
+    if (iterations % kInterval == 0) {
+      insert_heavy = !insert_heavy;
+    }
+  }
+
+  const TransferCacheStats stats = e.transfer_cache().GetStats();
+  const size_t total_inserts = stats.insert_hits + stats.insert_misses;
+  state.counters["insert_aggregate_miss_ratio"] =
+      static_cast<double>(stats.insert_misses) / total_inserts;
+
+  const size_t total_removes = stats.remove_hits + stats.remove_misses;
+  state.counters["remove_aggregate_miss_ratio"] =
+      static_cast<double>(stats.remove_misses) / total_removes;
+}
+
 BENCHMARK_TEMPLATE(BM_CrossThread, TransferCacheEnv)->ThreadRange(2, 64);
-BENCHMARK_TEMPLATE(BM_CrossThread, RingBufferTransferCacheEnv)
-    ->ThreadRange(2, 64);
 BENCHMARK_TEMPLATE(BM_InsertRange, TransferCacheEnv);
-BENCHMARK_TEMPLATE(BM_InsertRange, RingBufferTransferCacheEnv);
 BENCHMARK_TEMPLATE(BM_RemoveRange, TransferCacheEnv);
-BENCHMARK_TEMPLATE(BM_RemoveRange, RingBufferTransferCacheEnv);
+BENCHMARK_TEMPLATE(BM_RealisticBatchNonBatchMutations, TransferCacheEnv);
+BENCHMARK_TEMPLATE(BM_RealisticHitRate, TransferCacheEnv);
+BENCHMARK_TEMPLATE(BM_RealisticHitRate, TransferCacheWithRealCFLEnv);
 
 }  // namespace
 }  // namespace tcmalloc_internal

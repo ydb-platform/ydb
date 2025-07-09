@@ -1,7 +1,5 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     aliases.h
     common.h
@@ -32,7 +30,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/topic/common
     ydb/public/sdk/cpp/src/client/topic/impl
-    
+    ydb/public/sdk/cpp/src/client/scheme
+
 )
 
 END()

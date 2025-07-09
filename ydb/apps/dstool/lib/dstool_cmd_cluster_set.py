@@ -40,11 +40,11 @@ def create_request(args):
 
     cmd = request.Command.add().UpdateSettings
     if args.default_max_slots is not None:
-        cmd.DefaultMaxSlots.append(args.default_max_slots)
+        cmd.DefaultMaxSlots = args.default_max_slots
     if args.self_heal is not None:
-        cmd.EnableSelfHeal.append(args.self_heal)
+        cmd.EnableSelfHeal = args.self_heal
     if args.donor_mode is not None:
-        cmd.EnableDonorMode.append(args.donor_mode)
+        cmd.EnableDonorMode = args.donor_mode
     if args.scrub_periodicity is not None:
         if args.scrub_periodicity == 'disable':
             d = timedelta()
@@ -53,21 +53,21 @@ def create_request(args):
             if m is None:
                 raise Exception('Incorrect scrub periodicity format %s' % args.scrub_periodicity)
             d = timedelta(**dict(zip(['days', 'hours', 'minutes', 'seconds'], map(lambda x: int(x or 0), m.group(2, 4, 6, 8)))))
-        cmd.ScrubPeriodicitySeconds.append(int(d.total_seconds()))
+        cmd.ScrubPeriodicitySeconds = int(d.total_seconds())
     if args.pdisk_space_margin_promille is not None:
         if args.pdisk_space_margin_promille < 0 or args.pdisk_space_margin_promille > 1000:
             raise Exception('Incorrect PDisk space margin setting %f' % args.pdisk_space_margin_promille)
-        cmd.PDiskSpaceMarginPromille.append(args.pdisk_space_margin_promille)
+        cmd.PDiskSpaceMarginPromille = args.pdisk_space_margin_promille
     if args.group_reserve_min is not None:
-        cmd.GroupReserveMin.append(args.group_reserve_min)
+        cmd.GroupReserveMin = args.group_reserve_min
     if args.group_reserve_part_ppm is not None:
-        cmd.GroupReservePartPPM.append(args.group_reserve_part_ppm)
+        cmd.GroupReservePartPPM = args.group_reserve_part_ppm
     if args.max_scrubbed_disks_at_once is not None:
-        cmd.MaxScrubbedDisksAtOnce.append(args.max_scrubbed_disks_at_once)
+        cmd.MaxScrubbedDisksAtOnce = args.max_scrubbed_disks_at_once
     if args.pdisk_space_color_border is not None:
-        cmd.PDiskSpaceColorBorder.append(disk_color.TPDiskSpaceColor.E.Value(args.pdisk_space_color_border))
+        cmd.PDiskSpaceColorBorder = disk_color.TPDiskSpaceColor.E.Value(args.pdisk_space_color_border)
     if args.self_heal_local_policy is not None:
-        cmd.UseSelfHealLocalPolicy.append(args.self_heal_local_policy)
+        cmd.UseSelfHealLocalPolicy = args.self_heal_local_policy
 
     return request
 

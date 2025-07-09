@@ -1,4 +1,5 @@
 #include "impl.h"
+#include "cluster_balancing.h"
 
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/util/json_util.h>
@@ -1058,6 +1059,41 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                         }
                     }
                 }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Cluster Balancing Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Status"; }
+                                    TABLED() { out << (ClusterBalancingSettings.Enable ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Iteration interval (ms)"; }
+                                    TABLED() { out << ClusterBalancingSettings.IterationIntervalMs; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating PDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingPDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating VDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingVDisks; }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1388,6 +1424,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TAG_ATTRS(TTableH, {{"title", "PutUserData Latency"}}) { out << "PutUserData<br/>Latency"; }
                     TAG_ATTRS(TTableH, {{"title", "GetFast Latency"}}) { out << "GetFast<br/>Latency"; }
                     TABLEH() { out << "Seen operational"; }
+                    TABLEH() { out << "Layout correct"; }
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
                     TABLEH() { out << "Donors"; }
@@ -1448,6 +1485,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             renderLatency(group.LatencyStats.PutUserData);
             renderLatency(group.LatencyStats.GetFast);
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
+            TABLED() { out << (group.LayoutCorrect ? "" : "NO"); }
 
             const auto& status = group.Status;
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }

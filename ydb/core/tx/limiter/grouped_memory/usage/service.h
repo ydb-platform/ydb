@@ -3,6 +3,7 @@
 #include "config.h"
 #include "events.h"
 
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/limiter/grouped_memory/service/actor.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -29,6 +30,10 @@ private:
         return TMemoryLimiterPolicy::Name;
     }
 
+    static NMemory::EMemoryConsumerKind GetConsumerKind() {
+        return TMemoryLimiterPolicy::ConsumerKind;
+    }
+
 public:
     static std::shared_ptr<TStageFeatures> BuildStageFeatures(const TString& name, const ui64 limit) {
         if (!IsEnabled()) {
@@ -36,7 +41,7 @@ public:
         } else {
             AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
             return std::make_shared<TStageFeatures>(
-                name, limit, Max<ui64>(), Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
+                name, limit, std::nullopt, Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
         }
     }
 
@@ -89,15 +94,24 @@ public:
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals) {
         Register(config, signals);
-        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), Singleton<TSelf>()->Counters, Singleton<TSelf>()->DefaultStageFeatures);
+        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), Singleton<TSelf>()->Counters, Singleton<TSelf>()->DefaultStageFeatures, GetConsumerKind());
     }
 };
 
 class TScanMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Scan";
+    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ScanGroupedMemoryLimiter;
 };
 
 using TScanMemoryLimiterOperator = TServiceOperatorImpl<TScanMemoryLimiterPolicy>;
+
+class TCompMemoryLimiterPolicy {
+public:
+    static const inline TString Name = "Comp";
+    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::CompGroupedMemoryLimiter;
+};
+
+using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy>;
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

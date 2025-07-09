@@ -32,6 +32,7 @@ public:
     using TSpecProvider = std::function<NYT::TNode()>;
 
     struct TEntry : public TThrRefBase {
+        TString Cluster;
         TString Server;
         NYT::IClientPtr Client;
         NYT::ITransactionPtr Tx;
@@ -42,7 +43,7 @@ public:
         THashMap<NYT::TTransactionId, NYT::ITransactionPtr> SnapshotTxs;
         THashMap<NYT::TTransactionId, NYT::ITransactionPtr> WriteTxs;
         NYT::ITransactionPtr LastSnapshotTx;
-        THashSet<TString> TablesToDeleteAtFinalize;
+        THashMap<TString, bool> TablesToDeleteAtFinalize;  // table -> assumed as deleted
         THashSet<TString> TablesToDeleteAtCommit;
         ui32 InflightTempTablesLimit = Max<ui32>();
         bool KeepTables = false;
@@ -83,6 +84,19 @@ public:
 
         void RemoveInternal(const TString& table);
         void Finalize(const TString& clusterName);
+
+        template<typename T>
+        T AssumeAsDeletedAtFinalize(const T& range) {
+            T filteredRange;
+            with_lock(Lock_) {
+                for (const auto& i : range) {
+                    if (AssumeAsDeletedAtFinalizeUnlocked(i)) {
+                        filteredRange.insert(filteredRange.end(), i);
+                    }
+                }
+            }
+            return filteredRange;
+        }
 
         template<typename T>
         T CancelDeleteAtFinalize(const T& range) {
@@ -144,6 +158,7 @@ public:
 
         void DeleteAtFinalizeUnlocked(const TString& table, bool isInternal);
         bool CancelDeleteAtFinalizeUnlocked(const TString& table, bool isInternal);
+        bool AssumeAsDeletedAtFinalizeUnlocked(const TString& table);
         void DoRemove(const TString& table);
 
         size_t ExternalTempTablesCount = 0;
@@ -152,7 +167,7 @@ public:
     TTransactionCache(const TString& userName);
 
     TEntry::TPtr GetEntry(const TString& server);
-    TEntry::TPtr GetOrCreateEntry(const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics);
+    TEntry::TPtr GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics);
     TEntry::TPtr TryGetEntry(const TString& server);
 
     void Commit(const TString& server);

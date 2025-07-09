@@ -2,14 +2,18 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 
-#include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tx/data_events/common/error_codes.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr::NEvents {
 
@@ -64,7 +68,8 @@ struct TDataEvents {
 
         NKikimrDataEvents::TEvWrite::TOperation& AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
             const TTableId& tableId, const std::vector<ui32>& columnIds,
-            ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat) {
+            ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat,
+            const ui32 defaultFilledColumnCount = 0) {
             Y_ABORT_UNLESS(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
             Y_ABORT_UNLESS(payloadFormat != NKikimrDataEvents::FORMAT_UNSPECIFIED);
 
@@ -76,6 +81,7 @@ struct TDataEvents {
             operation->MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
             operation->MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
             operation->MutableColumnIds()->Assign(columnIds.begin(), columnIds.end());
+            operation->SetDefaultFilledColumnCount(defaultFilledColumnCount);
             return *operation;
         }
 
@@ -100,8 +106,11 @@ struct TDataEvents {
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(status);
-            auto issue = result->Record.AddIssues();
-            issue->set_message(errorMsg);
+            NYql::TIssue issue(errorMsg);
+            if (const auto statusConclusion = NKikimr::NEvWrite::NErrorCodes::TOperator::GetStatusInfo(status); statusConclusion.IsSuccess()) {
+                NYql::SetIssueCode(statusConclusion->GetIssueCode(), issue);
+            }
+            NYql::IssueToMessage(issue, result->Record.AddIssues());
             return result;
         }
 

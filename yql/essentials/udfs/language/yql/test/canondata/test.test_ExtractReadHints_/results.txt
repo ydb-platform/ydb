@@ -1,0 +1,80 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "q";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "TupleType";
+                                            [
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "Uint64"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "select * from foo.bar with (inline, infer_scheme)";
+                        [
+                            [
+                                [
+                                    "READ_HINT";
+                                    "infer_scheme";
+                                    "1"
+                                ];
+                                [
+                                    "READ_HINT";
+                                    "inline";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "select * from foo.bar with xlock";
+                        [
+                            [
+                                [
+                                    "READ_HINT";
+                                    "xlock";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

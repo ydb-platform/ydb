@@ -1,6 +1,5 @@
 #include "actor.h"
 #include "debug.h"
-#include "actor_virtual.h"
 #include "actorsystem.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
@@ -103,7 +102,7 @@ namespace NActors {
         return (double)Min(passed, used) / passed;
     }
 
-    void IActor::Describe(IOutputStream &out) const noexcept {
+    void IActor::Describe(IOutputStream &out) const {
         SelfActorId.Out(out);
     }
 
@@ -268,13 +267,39 @@ namespace NActors {
         return NHPTimer::GetSeconds(ElapsedTicks);
     }
 
-    void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev) {
-        (actor->*StateFunc)(ev);
+    void IActor::Receive(TAutoPtr<IEventHandle>& ev) {
+#ifndef NDEBUG
+        if (ev->Flags & IEventHandle::FlagDebugTrackReceive) {
+            YaDebugBreak();
+        }
+#endif
+        ++HandledEvents;
+        LastReceiveTimestamp = TActivationContext::Monotonic();
+
+        try {
+            (this->*StateFunc_)(ev);
+        } catch (const std::exception& exc) {
+            if (!OnUnhandledExceptionSafe(exc)) {
+                throw;
+            }
+        }
     }
 
-    void TActorVirtualBehaviour::Receive(IActor* actor, std::unique_ptr<IEventHandle> ev) {
-        Y_ABORT_UNLESS(!!ev && ev->GetBase());
-        ev->GetBase()->Execute(actor, std::move(ev));
+    bool IActor::OnUnhandledExceptionSafe(const std::exception& originalExc) {
+        auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
+        if (!handler) {
+            return false;
+        }
+
+        try {
+            return handler->OnUnhandledException(originalExc);
+        } catch (const std::exception& handleExc) {
+            Cerr << "OnUnhandledException throws unhandled exception " 
+                << TypeName(handleExc) << ": " << handleExc.what() << Endl
+                << TBackTrace::FromCurrentException().PrintToString()
+                << Endl;
+            return false;
+        }
     }
 
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
@@ -541,4 +566,9 @@ namespace NActors {
     void TActivationContext::SetOverwrittenTimePerMailboxTs(ui64 value) {
         TlsActivationContext->ExecutorThread.SetOverwrittenTimePerMailboxTs(value);
     }
+}
+
+template <>
+void Out<NActors::TActorActivityType>(IOutputStream& o, const NActors::TActorActivityType& x) {
+    o << x.GetName();
 }

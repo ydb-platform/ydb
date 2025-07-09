@@ -70,6 +70,7 @@ DECLARE_REFCOUNTED_STRUCT(IChannelFactory)
 DECLARE_REFCOUNTED_STRUCT(IRoamingChannelProvider)
 DECLARE_REFCOUNTED_STRUCT(IAuthenticator)
 DECLARE_REFCOUNTED_STRUCT(IResponseKeeper)
+DECLARE_REFCOUNTED_STRUCT(IOverloadController)
 
 DECLARE_REFCOUNTED_CLASS(TClientContext)
 DECLARE_REFCOUNTED_CLASS(TServiceBase)
@@ -77,6 +78,7 @@ DECLARE_REFCOUNTED_CLASS(TChannelWrapper)
 DECLARE_REFCOUNTED_CLASS(TStaticChannelFactory)
 DECLARE_REFCOUNTED_CLASS(TClientRequestControlThunk)
 DECLARE_REFCOUNTED_CLASS(TCachingChannelFactory)
+DECLARE_REFCOUNTED_CLASS(TCongestionController)
 
 DECLARE_REFCOUNTED_CLASS(TAttachmentsInputStream)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsOutputStream)
@@ -108,25 +110,29 @@ using TTypedServiceContext = TGenericTypedServiceContext<
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(THistogramExponentialBounds)
-DECLARE_REFCOUNTED_CLASS(TTimeHistogramConfig)
-DECLARE_REFCOUNTED_CLASS(TServerConfig)
-DECLARE_REFCOUNTED_CLASS(TServiceCommonConfig)
-DECLARE_REFCOUNTED_CLASS(TServerDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TServiceCommonDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TServiceConfig)
-DECLARE_REFCOUNTED_CLASS(TMethodConfig)
-DECLARE_REFCOUNTED_CLASS(TRetryingChannelConfig)
-DECLARE_REFCOUNTED_CLASS(TViablePeerRegistryConfig)
-DECLARE_REFCOUNTED_CLASS(TDynamicChannelPoolConfig)
-DECLARE_REFCOUNTED_CLASS(TServiceDiscoveryEndpointsConfig)
-DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfigBase)
-DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfig)
-DECLARE_REFCOUNTED_CLASS(TThrottlingChannelConfig)
-DECLARE_REFCOUNTED_CLASS(TThrottlingChannelDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TResponseKeeperConfig)
-DECLARE_REFCOUNTED_CLASS(TDispatcherConfig)
-DECLARE_REFCOUNTED_CLASS(TDispatcherDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(THistogramExponentialBounds)
+DECLARE_REFCOUNTED_STRUCT(TTimeHistogramConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceCommonConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceCommonDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceConfig)
+DECLARE_REFCOUNTED_STRUCT(TMethodConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetryingChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TViablePeerRegistryConfig)
+DECLARE_REFCOUNTED_STRUCT(TDynamicChannelPoolConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceDiscoveryEndpointsConfig)
+DECLARE_REFCOUNTED_STRUCT(TBalancingChannelConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TBalancingChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TThrottlingChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TThrottlingChannelDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TResponseKeeperConfig)
+DECLARE_REFCOUNTED_STRUCT(TDispatcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TDispatcherDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceMethodConfig)
+DECLARE_REFCOUNTED_STRUCT(TOverloadTrackerMeanWaitTimeConfig)
+DECLARE_REFCOUNTED_STRUCT(TOverloadTrackerBacklogQueueFillFractionConfig)
+DECLARE_REFCOUNTED_STRUCT(TOverloadControllerConfig)
 
 struct TRequestQueueThrottlerConfigs
 {
@@ -158,18 +164,21 @@ extern const std::string RootUserName;
 
 constexpr int TypicalMessagePartCount = 8;
 
+// COMPAT(nadya02): remove it when all timeouts are set
+constexpr TDuration DefaultRpcRequestTimeout = TDuration::Hours(24);
+
 using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int featureId)>*;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString RequestIdAnnotation;
-extern const TString EndpointAnnotation;
-extern const TString RequestInfoAnnotation;
-extern const TString RequestUser;
-extern const TString ResponseInfoAnnotation;
+extern const std::string RequestIdAnnotation;
+extern const std::string EndpointAnnotation;
+extern const std::string RequestInfoAnnotation;
+extern const std::string RequestUser;
+extern const std::string ResponseInfoAnnotation;
 
-extern const TString FeatureIdAttributeKey;
-extern const TString FeatureNameAttributeKey;
+extern const std::string FeatureIdAttributeKey;
+extern const std::string FeatureNameAttributeKey;
 
 ////////////////////////////////////////////////////////////////////////////////
 

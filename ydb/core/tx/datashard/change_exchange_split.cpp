@@ -300,10 +300,10 @@ class TCdcWorker
             return Ack();
         }
 
-        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+        Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 
-        Y_ABORT_UNLESS(topic.Kind == TNavigate::KindTopic);
+        Y_ENSURE(topic.Kind == TNavigate::KindTopic);
         ResolveTopic(topic.PathId);
     }
 
@@ -359,6 +359,10 @@ class TCdcWorker
         for (const auto& partition : entry.PQGroupInfo->Description.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
             const auto tabletId = partition.GetTabletId();
+
+            if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
+                continue;
+            }
 
             auto it = Workers.find(partitionId);
             if (it != Workers.end()) {
@@ -522,7 +526,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
         case EWorkerType::CdcStream:
             return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards));
         case EWorkerType::AsyncIndex:
-            Y_ABORT("unreachable");
+            Y_ENSURE(false, "unreachable");
         }
     }
 

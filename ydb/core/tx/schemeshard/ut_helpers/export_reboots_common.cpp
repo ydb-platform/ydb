@@ -1,30 +1,39 @@
 #include "export_reboots_common.h"
 
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-#include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/core/protos/msgbus_kv.pb.h>
 
 using namespace NKikimrSchemeOp;
 
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
+void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NKikimrSchemeOp::EPathType pathType) {
+    using TTestCreateFunc = ui64(*)(TTestActorRuntime&, ui64, const TString&, const TString&, 
+        const TVector<TExpectedResult>&, const TApplyIf&);
+
+    static const THashMap<NKikimrSchemeOp::EPathType, TTestCreateFunc> functions = {
+        {EPathTypeTable, &TestSimpleCreateTable},
+        {EPathTypeView, &TestCreateView},
+        {EPathTypeCdcStream, &TestCreateCdcStream},
+        {EPathTypePersQueueGroup, &TestCreatePQGroup}
+    };
+
+    auto it = functions.find(pathType);
+    if (it != functions.end()) {
+        it->second(runtime, txId, "/MyRoot", scheme, {NKikimrScheme::StatusAccepted}, {});
+    } else {
+        UNIT_FAIL("export is not implemented for the scheme object type: " << pathType);
+    }
+}
+
 void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
     TSet<ui64> toWait;
-    for (const auto& [type, scheme] : schemeObjects) {
-        switch (type) {
-            case EPathTypeTable:
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", scheme);
-                break;
-            case EPathTypeView:
-                TestCreateView(runtime, ++t.TxId, "/MyRoot", scheme);
-                break;
-            default:
-                UNIT_FAIL("export is not implemented for the scheme object type: " << type);
-                return;
-        }
+    for (const auto& [type, scheme, _] : schemeObjects) {
+        TestCreate(runtime, ++t.TxId, scheme, type);
         toWait.insert(t.TxId);
     }
     t.TestEnv->TestWaitNotification(runtime, toWait);

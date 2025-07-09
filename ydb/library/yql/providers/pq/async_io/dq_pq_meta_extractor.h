@@ -5,7 +5,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_value.h>
 
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/string.h>
 

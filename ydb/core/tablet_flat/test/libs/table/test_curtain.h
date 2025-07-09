@@ -30,7 +30,7 @@ namespace NTest {
 
         TRes Make(const TRowsHeap &heap, size_t offset, size_t len)
         {
-            Y_ABORT_UNLESS(offset < heap.Size(), "Hole offset is out of the heap");
+            Y_ENSURE(offset < heap.Size(), "Hole offset is out of the heap");
 
             const auto on = heap.begin() + offset;
 
@@ -61,7 +61,7 @@ namespace NTest {
     struct TSlicer {
         TSlicer(const TRowScheme &scheme) : Scheme(scheme) { }
 
-        TIntrusiveConstPtr<TSlices> Cut(const TPartStore &partStore, const TScreen &screen) noexcept
+        TIntrusiveConstPtr<TSlices> Cut(const TPartStore &partStore, const TScreen &screen)
         {
             TTestEnv env;
             TPartIter first(&partStore, { }, Scheme.Keys, &env);
@@ -71,9 +71,9 @@ namespace NTest {
             TRowId lastEnd = 0;
 
             for (const auto &hole : screen) {
-                Y_ABORT_UNLESS(lastEnd <= hole.Begin, "Screen is not sorted correctly");
-                Y_ABORT_UNLESS(first.Seek(hole.Begin) != EReady::Page);
-                Y_ABORT_UNLESS(last.Seek(hole.End) != EReady::Page);
+                Y_ENSURE(lastEnd <= hole.Begin, "Screen is not sorted correctly");
+                Y_ENSURE(first.Seek(hole.Begin) != EReady::Page);
+                Y_ENSURE(last.Seek(hole.End) != EReady::Page);
                 if (first.GetRowId() < last.GetRowId()) {
                     TArrayRef<const TCell> firstKey;
                     if (first.IsValid()) {

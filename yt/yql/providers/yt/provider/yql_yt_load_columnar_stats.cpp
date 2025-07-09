@@ -29,22 +29,21 @@ public:
         YQL_ENSURE(PathStatResults.empty());
     }
 
-    TNodeMap<IYtGateway::TPathStatResult> PullPathStatResults() {
-        TNodeMap<IYtGateway::TPathStatResult> results;
+    TNodeMap<TVector<IYtGateway::TPathStatResult>> PullPathStatResults() {
+        TNodeMap<TVector<IYtGateway::TPathStatResult>> results;
         TGuard<TMutex> guard(Lock);
         results.swap(PathStatResults);
         return results;
     }
 
-    void MarkReady(TExprNode* node, const IYtGateway::TPathStatResult& result) {
+    void AddResult(TExprNode* node, const IYtGateway::TPathStatResult& result) {
         TGuard<TMutex> guard(Lock);
-        YQL_ENSURE(PathStatResults.count(node) == 0);
-        PathStatResults[node] = result;
+        PathStatResults[node].push_back(result);
     }
 
 private:
     mutable TMutex Lock;
-    TNodeMap<IYtGateway::TPathStatResult> PathStatResults;
+    TNodeMap<TVector<IYtGateway::TPathStatResult>> PathStatResults;
 };
 
 class TYtLoadColumnarStatsTransformer : public TGraphTransformerBase {
@@ -65,7 +64,7 @@ private:
         output = input;
 
         PathStatusState->EnsureNoInflightRequests();
-        TVector<std::pair<IYtGateway::TPathStatOptions, TExprNode*>> pathStatArgs;
+        TVector<std::pair<TVector<IYtGateway::TPathStatOptions>, TExprNode*>> pathStatArgs;
         bool hasError = false;
         TNodeOnNodeOwnedMap sectionRewrites;
         VisitExpr(input, [this, &pathStatArgs, &hasError, &sectionRewrites, &ctx](const TExprNode::TPtr& node) {
@@ -75,10 +74,9 @@ private:
                 if (NYql::HasSetting(section.Settings().Ref(), EYtSettingType::StatColumns)) {
                     auto columnList = NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::StatColumns);
 
-                    TMaybe<TString> cluster;
-                    TVector<IYtGateway::TPathStatReq> pathStatReqs;
+                    TMap<TString, TVector<IYtGateway::TPathStatReq>> pathStatReqsByCluster;
                     size_t idx = 0;
-                    ui64 totalChunkCount = 0;
+                    THashMap<TString, ui64> totalChunkCountByCluster;
                     for (auto path: section.Paths()) {
                         bool hasStat = false;
                         if (path.Table().Maybe<TYtTable>().Stat().Maybe<TYtStat>()) {
@@ -108,30 +106,18 @@ private:
                         }
 
                         TYtPathInfo pathInfo(path);
+                        const TString cluster = pathInfo.Table->Cluster;
+                        YQL_ENSURE(cluster);
                         YQL_ENSURE(pathInfo.Table->Stat);
-                        totalChunkCount += pathInfo.Table->Stat->ChunkCount;
+                        totalChunkCountByCluster[cluster] += pathInfo.Table->Stat->ChunkCount;
 
-                        TString currCluster;
-                        if (auto ytTable = path.Table().Maybe<TYtTable>()) {
-                            currCluster = TString{ytTable.Cast().Cluster().Value()};
-                        } else {
-                            currCluster = TString{GetOutputOp(path.Table().Cast<TYtOutput>()).DataSink().Cluster().Value()};
-                        }
-                        YQL_ENSURE(currCluster);
-
-                        if (cluster) {
-                            YQL_ENSURE(currCluster == *cluster);
-                        } else {
-                            cluster = currCluster;
-                        }
-
-                        auto ytPath = BuildYtPathForStatRequest(*cluster, pathInfo, columnList, *State_, ctx);
+                        auto ytPath = BuildYtPathForStatRequest(pathInfo, columnList, *State_, ctx);
                         if (!ytPath) {
                             hasError = true;
                             return false;
                         }
 
-                        pathStatReqs.push_back(
+                        pathStatReqsByCluster[cluster].push_back(
                             IYtGateway::TPathStatReq()
                                 .Path(*ytPath)
                                 .IsTemp(pathInfo.Table->IsTemp)
@@ -142,20 +128,27 @@ private:
                         ++idx;
                     }
 
-                    bool requestExtendedStats = maxChunkCountExtendedStats &&
-                        (*maxChunkCountExtendedStats == 0 || totalChunkCount <= *maxChunkCountExtendedStats);
-
-                    if (pathStatReqs) {
-                        auto pathStatOptions = IYtGateway::TPathStatOptions(State_->SessionId)
-                            .Cluster(*cluster)
+                    TVector<IYtGateway::TPathStatOptions> pathStatOptions;
+                    for (auto& [cluster, pathStatReqs] : pathStatReqsByCluster) {
+                        auto itCount = totalChunkCountByCluster.find(cluster);
+                        YQL_ENSURE(itCount != totalChunkCountByCluster.end());
+                        const ui64 totalChunkCount = itCount->second;
+                        bool requestExtendedStats = maxChunkCountExtendedStats &&
+                            (*maxChunkCountExtendedStats == 0 || totalChunkCount <= *maxChunkCountExtendedStats);
+                        YQL_ENSURE(!pathStatReqs.empty());
+                        auto options = IYtGateway::TPathStatOptions(State_->SessionId)
+                            .Cluster(cluster)
                             .Paths(pathStatReqs)
                             .Config(State_->Configuration->Snapshot())
                             .Extended(requestExtendedStats);
-
-                        auto tryResult = State_->Gateway->TryPathStat(IYtGateway::TPathStatOptions(pathStatOptions));
+                        auto tryResult = State_->Gateway->TryPathStat(IYtGateway::TPathStatOptions(options));
                         if (!tryResult.Success()) {
-                            pathStatArgs.emplace_back(std::move(pathStatOptions), node.Get());
+                            pathStatOptions.push_back(std::move(options));
                         }
+                    }
+
+                    if (pathStatOptions) {
+                        pathStatArgs.emplace_back(std::move(pathStatOptions), node.Get());
                     }
                 }
             }
@@ -177,16 +170,20 @@ private:
         }
 
         TVector<NThreading::TFuture<void>> futures;
-        YQL_CLOG(INFO, ProviderYt) << "Starting " << pathStatArgs.size() << " requests for columnar stats";
+        size_t reqCount = 0;
+        for (const auto& arg : pathStatArgs) {
+            reqCount += arg.first.size();
+        }
+        YQL_CLOG(INFO, ProviderYt) << "Starting " << reqCount << " requests for columnar stats";
         for (auto& arg : pathStatArgs) {
-            IYtGateway::TPathStatOptions& options = arg.first;
+            TVector<IYtGateway::TPathStatOptions>& options = arg.first;
             TExprNode* node = arg.second;
-
-            auto future = State_->Gateway->PathStat(std::move(options));
-
-            futures.push_back(future.Apply([pathStatusState = PathStatusState, node](const NThreading::TFuture<IYtGateway::TPathStatResult>& result) {
-                pathStatusState->MarkReady(node, result.GetValueSync());
-            }));
+            for (auto& opt : options) {
+                auto future = State_->Gateway->PathStat(std::move(opt));
+                futures.push_back(future.Apply([pathStatusState = PathStatusState, node](const NThreading::TFuture<IYtGateway::TPathStatResult>& result) {
+                    pathStatusState->AddResult(node, result.GetValueSync());
+                }));
+            }
         }
 
         AsyncFuture = WaitExceptionOrAll(futures);
@@ -201,26 +198,32 @@ private:
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         output = input;
 
-        TNodeMap<IYtGateway::TPathStatResult> results = PathStatusState->PullPathStatResults();
+        TNodeMap<TVector<IYtGateway::TPathStatResult>> results = PathStatusState->PullPathStatResults();
         YQL_ENSURE(!results.empty());
 
+        size_t applied = 0;
+        TStatus status = TStatus::Repeat;
         for (auto& item : results) {
             auto& node = item.first;
-            auto& result = item.second;
-            if (!result.Success()) {
-                TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-                    return MakeIntrusive<TIssue>(
-                        ctx.GetPosition(node->Pos()),
-                        TStringBuilder() << "Execution of node: " << node->Content()
-                    );
-                });
-                result.ReportIssues(ctx.IssueManager);
-                return TStatus::Error;
+            auto& batch = item.second;
+            TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+                return MakeIntrusive<TIssue>(
+                    ctx.GetPosition(node->Pos()),
+                    TStringBuilder() << "Execution of node: " << node->Content()
+                );
+            });
+            for (auto& result : batch) {
+                if (!result.Success()) {
+                    result.ReportIssues(ctx.IssueManager);
+                    status = status.Combine(TStatus::Error);
+                }
+                ++applied;
             }
         }
 
-        YQL_CLOG(INFO, ProviderYt) << "Applied " << results.size() << " results of columnar stats";
-        return TStatus::Repeat;
+        YQL_CLOG(INFO, ProviderYt) << "Applied " << applied << " results of columnar stats "
+                                   << (status == TStatus::Error ? "with errors" : "successfully");
+        return status;
     }
 
     TYtState::TPtr State_;

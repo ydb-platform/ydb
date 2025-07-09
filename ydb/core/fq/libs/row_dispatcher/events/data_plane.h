@@ -155,6 +155,7 @@ struct TEvRowDispatcher {
         NFq::NRowDispatcherProto::TEvSessionError, EEv::EvSessionError> {
         TEvSessionError() = default;
         NActors::TActorId ReadActorId;
+        bool IsFatalError = false;      // session is no longer valid if true (need to send TEvPoisonPill).
     };
 
     struct TEvSessionStatistic : public NActors::TEventLocal<TEvSessionStatistic, EEv::EvSessionStatistic> {
@@ -163,11 +164,12 @@ struct TEvRowDispatcher {
         TTopicSessionStatistic Stat;
     };
 
-// Network events (without seqNo checks)
-
+    // two purposes: confirm seqNo and check the availability of the recipient actor (wait TEvUndelivered)
     struct TEvHeartbeat : public NActors::TEventPB<TEvHeartbeat, NFq::NRowDispatcherProto::TEvHeartbeat, EEv::EvHeartbeat> {
         TEvHeartbeat() = default;
     };
+
+// Network events (without seqNo checks)
 
     struct TEvNoSession : public NActors::TEventPB<TEvNoSession, NFq::NRowDispatcherProto::TEvNoSession, EEv::EvNoSession> {
         TEvNoSession() = default;

@@ -8,10 +8,9 @@ namespace NYT::NDns {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAresDnsResolverConfig
+struct TAresDnsResolverConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     int Retries;
     TDuration RetryDelay;
     TDuration ResolveTimeout;

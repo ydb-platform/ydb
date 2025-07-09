@@ -1,4 +1,4 @@
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/hash.h>
 #include <util/string/cast.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
@@ -176,8 +176,8 @@ public:
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         TUnboxedValue* items = nullptr;
-        auto result = valueBuilder->NewArray(Argc, items);
-        for (size_t i = 0; i < Argc; ++i) {
+        auto result = valueBuilder->NewArray(Argc_, items);
+        for (size_t i = 0; i < Argc_; ++i) {
             items[i] = std::move(args[i]);
         }
         return result;
@@ -189,7 +189,7 @@ public:
     }
 
     TGenericAsStruct(size_t argc)
-        : Argc(argc)
+        : Argc_(argc)
     {}
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -236,9 +236,53 @@ public:
         }
     }
 private:
-    const size_t Argc;
+    const size_t Argc_;
 };
 
+class TLogging : public TBoxedValue {
+public:
+    TLogging(TLoggerPtr logger, TLogComponentId component)
+        : Logger_(logger)
+        , Component_(component)
+    {}
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(valueBuilder);
+        auto level = Min(args[0].Get<ui32>(),static_cast<ui32>(ELogLevel::Trace));
+        Logger_->Log(Component_, (ELogLevel)level, args[1].AsStringRef());
+        return TUnboxedValue::Void();
+    }
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("Logging");
+        return name;
+    }
+
+    static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        Y_UNUSED(userType);
+        if (Name() == name) {
+            auto argBuilder = builder.Args();
+            argBuilder->Add<ui32>();
+            argBuilder->Add<char*>();
+            argBuilder->Done().Returns<TVoid>();
+
+            auto logger = builder.MakeLogger(false);
+            auto component = logger->RegisterComponent(Name());
+            logger->Log(component, ELogLevel::Debug, "DeclareSignature");
+            if (!typesOnly) {
+                builder.Implementation(new TLogging(logger, component));
+            }
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
+private:
+    const TLoggerPtr Logger_;
+    const TLogComponentId Component_;
+};
 
 SIMPLE_MODULE(TSimpleUdfModule,
                 TCrash,
@@ -259,7 +303,8 @@ SIMPLE_MODULE(TSimpleUdfModule,
                 TIncrement,
                 TIncrementOpt,
                 TIncrementWithCounters,
-                TGenericAsStruct
+                TGenericAsStruct,
+                TLogging
               )
 
 } // namespace

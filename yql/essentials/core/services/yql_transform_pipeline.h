@@ -21,7 +21,8 @@ namespace NYql {
 class TTransformationPipeline
 {
 public:
-    TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx);
+    TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx,
+        TTypeAnnCallableFactory typeAnnCallableFactory = {});
 
     TTransformationPipeline& AddServiceTransformers(EYqlIssueCode issueCode = TIssuesIds::CORE_GC);
     TTransformationPipeline& AddParametersEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, EYqlIssueCode issueCode = TIssuesIds::CORE_PARAM_EVALUATION);
@@ -32,7 +33,7 @@ public:
     TTransformationPipeline& AddIOAnnotation(bool withEpochsTransformer = true, EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddTypeAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN, bool twoStages = false);
     TTransformationPipeline& AddPostTypeAnnotation(bool forSubGraph = false, bool disableConstraintCheck = false, EYqlIssueCode issueCode = TIssuesIds::CORE_POST_TYPE_ANN);
-    TTransformationPipeline& AddCommonOptimization(EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
+    TTransformationPipeline& AddCommonOptimization(bool forPeephole = false, EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
     TTransformationPipeline& AddFinalCommonOptimization(EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
     TTransformationPipeline& AddOptimization(bool checkWorld = true, bool withFinalOptimization = true, EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
     TTransformationPipeline& AddLineageOptimization(TMaybe<TString>& lineageOut, EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
@@ -59,6 +60,7 @@ public:
 
 private:
     TIntrusivePtr<TTypeAnnotationContext> TypeAnnotationContext_;
+    TTypeAnnCallableFactory TypeAnnCallableFactory_;
     TVector<TTransformStage> Transformers_;
 };
 

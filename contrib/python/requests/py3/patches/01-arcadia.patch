@@ -1,23 +1,11 @@
 --- contrib/python/requests/py3/requests/adapters.py	(index)
 +++ contrib/python/requests/py3/requests/adapters.py	(working tree)
-@@ -259,7 +259,7 @@ class HTTPAdapter(BaseAdapter):
-             if not cert_loc:
-                 cert_loc = extract_zipped_paths(DEFAULT_CA_BUNDLE_PATH)
- 
--            if not cert_loc or not os.path.exists(cert_loc):
-+            if not cert_loc or isinstance(cert_loc, basestring) and not os.path.exists(cert_loc):
-                 raise OSError(
-                     f"Could not find a suitable TLS CA certificate bundle, "
-                     f"invalid path: {cert_loc}"
-@@ -267,7 +267,7 @@ class HTTPAdapter(BaseAdapter):
- 
-             conn.cert_reqs = "CERT_REQUIRED"
- 
--            if not os.path.isdir(cert_loc):
-+            if not isinstance(cert_loc, basestring) or not os.path.isdir(cert_loc):
-                 conn.ca_certs = cert_loc
-             else:
-                 conn.ca_cert_dir = cert_loc
+@@ -259,1 +259,1 @@ class HTTPAdapter(BaseAdapter):
+-                if not os.path.exists(cert_loc):
++                if isinstance(cert_loc, str) and not os.path.exists(cert_loc):
+@@ -267,1 +267,1 @@ class HTTPAdapter(BaseAdapter):
+-                if not os.path.isdir(cert_loc):
++                if not isinstance(cert_loc, str) or not os.path.isdir(cert_loc):
 --- contrib/python/requests/py3/requests/utils.py	(index)
 +++ contrib/python/requests/py3/requests/utils.py	(working tree)
 @@ -260,7 +260,7 @@ def extract_zipped_paths(path):

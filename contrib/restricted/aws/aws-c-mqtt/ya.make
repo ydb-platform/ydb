@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.8.8)
+VERSION(0.13.2)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-mqtt/archive/v0.8.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-mqtt/archive/v0.13.2.tar.gz)
 
 PEERDIR(
     contrib/restricted/aws/aws-c-common
@@ -31,7 +31,6 @@ CFLAGS(
     -DAWS_HTTP_USE_IMPORT_EXPORT
     -DAWS_IO_USE_IMPORT_EXPORT
     -DAWS_MQTT_USE_IMPORT_EXPORT
-    -DAWS_MQTT_WITH_WEBSOCKETS
     -DAWS_USE_EPOLL
     -DHAVE_SYSCONF
     -DINTEL_NO_ITTNOTIFY_API
@@ -46,10 +45,18 @@ ENDIF()
 SRCS(
     source/client.c
     source/client_channel_handler.c
+    source/client_impl_shared.c
     source/fixed_header.c
     source/mqtt.c
+    source/mqtt311_decoder.c
+    source/mqtt311_listener.c
+    source/mqtt_subscription_set.c
     source/packets.c
-    source/shared_constants.c
+    source/request-response/protocol_adapter.c
+    source/request-response/request_response_client.c
+    source/request-response/request_response_subscription_set.c
+    source/request-response/subscription_manager.c
+    source/shared.c
     source/topic_tree.c
     source/v5/mqtt5_callbacks.c
     source/v5/mqtt5_client.c
@@ -57,6 +64,7 @@ SRCS(
     source/v5/mqtt5_encoder.c
     source/v5/mqtt5_listener.c
     source/v5/mqtt5_options_storage.c
+    source/v5/mqtt5_to_mqtt3_adapter.c
     source/v5/mqtt5_topic_alias.c
     source/v5/mqtt5_types.c
     source/v5/mqtt5_utils.c

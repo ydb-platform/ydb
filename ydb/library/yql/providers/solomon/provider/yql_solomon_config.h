@@ -9,7 +9,16 @@ namespace NYql {
 
 struct TSolomonSettings {
     using TConstPtr = std::shared_ptr<const TSolomonSettings>;
-    NCommon::TConfSetting<bool, false> _EnableReading;
+private:
+    static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+public:
+    NCommon::TConfSetting<bool, Static> _EnableReading;
+    NCommon::TConfSetting<bool, Static> _EnableRuntimeListing;
+    NCommon::TConfSetting<ui64, Static> MetricsQueuePageSize;
+    NCommon::TConfSetting<ui64, Static> MetricsQueuePrefetchSize;
+    NCommon::TConfSetting<ui64, Static> MetricsQueueBatchCountLimit;
+    NCommon::TConfSetting<TString, Static> SolomonClientDefaultReplica;
+    NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
 };
 
 struct TSolomonConfiguration

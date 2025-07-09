@@ -26,7 +26,6 @@ SRCS(
     flat_executor_compaction_logic.h
     flat_executor_counters.cpp
     flat_executor_counters.h
-    flat_executor_data_cleanup_logic.cpp
     flat_executor_db_mon.cpp
     flat_executor_gclogic.cpp
     flat_executor_gclogic.h
@@ -36,6 +35,7 @@ SRCS(
     flat_executor_tx_env.h
     flat_executor_txloglogic.cpp
     flat_executor_txloglogic.h
+    flat_executor_vacuum_logic.cpp
     flat_fwd_misc.cpp
     flat_iterator.h
     flat_load_blob_queue.cpp
@@ -73,6 +73,7 @@ SRCS(
     flat_update_op.h
     probes.cpp
     shared_handle.cpp
+    shared_cache_counters.cpp
     shared_sausagecache.cpp
     shared_sausagecache.h
     tablet_flat_executor.h
@@ -83,12 +84,13 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
-
-GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
-
 GENERATE_ENUM_SERIALIZATION(flat_executor_compaction_logic.h)
-
+GENERATE_ENUM_SERIALIZATION(flat_page_iface.h)
+GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
 GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)
+GENERATE_ENUM_SERIALIZATION(flat_scan_iface.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache_events.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache_tiers.h)
 
 IF (KIKIMR_TABLET_BORROW_WITHOUT_META)
     CFLAGS(
@@ -99,6 +101,8 @@ ENDIF()
 PEERDIR(
     contrib/libs/protobuf
     ydb/library/actors/util
+    ydb/library/actors/core
+    ydb/library/services
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/intrusive_rb_tree
     library/cpp/containers/stack_vector
@@ -107,7 +111,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/core/base
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat/protos

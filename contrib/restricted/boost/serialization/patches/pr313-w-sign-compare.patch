@@ -1,0 +1,32 @@
+From 2a2973183824e1ab35efd8f536491cdd7bd316ed Mon Sep 17 00:00:00 2001
+From: Peter Dimov <pdimov@gmail.com>
+Date: Thu, 11 Apr 2024 02:40:21 +0300
+Subject: [PATCH] Fix -Wsign-compare warnings in variant.hpp; also catches the
+ case when `which` is negative
+
+---
+ include/boost/serialization/variant.hpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/include/boost/serialization/variant.hpp b/include/boost/serialization/variant.hpp
+index 692276646..b888a5941 100644
+--- a/include/boost/serialization/variant.hpp
++++ b/include/boost/serialization/variant.hpp
+@@ -216,7 +216,7 @@ void load(
+     int which;
+     typedef typename boost::variant<Types...>::types types;
+     ar >> BOOST_SERIALIZATION_NVP(which);
+-    if(which >=  sizeof...(Types)){
++    if(static_cast<std::size_t>(which) >= sizeof...(Types)){
+         // this might happen if a type was removed from the list of variant types
+         boost::serialization::throw_exception(
+             boost::archive::archive_exception(
+@@ -238,7 +238,7 @@ void load(
+     int which;
+     typedef typename boost::variant<Types...>::types types;
+     ar >> BOOST_SERIALIZATION_NVP(which);
+-    if(which >=  sizeof...(Types)){
++    if(static_cast<std::size_t>(which) >= sizeof...(Types)){
+         // this might happen if a type was removed from the list of variant types
+         boost::serialization::throw_exception(
+             boost::archive::archive_exception(

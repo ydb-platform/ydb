@@ -69,11 +69,11 @@ static int64_t parse_uint(const uint8_t *s, size_t len) {
   }
   for (i = 0; i < len; ++i) {
     if ('0' <= s[i] && s[i] <= '9') {
-      if (n > INT64_MAX / 10) {
+      if (n > (int64_t)NGHTTP3_MAX_VARINT / 10) {
         return -1;
       }
       n *= 10;
-      if (n > INT64_MAX - (s[i] - '0')) {
+      if (n > (int64_t)NGHTTP3_MAX_VARINT - (s[i] - '0')) {
         return -1;
       }
       n += s[i] - '0';
@@ -549,6 +549,9 @@ static int http_request_on_header(nghttp3_http_state *http,
     break;
   case NGHTTP3_QPACK_TOKEN_PRIORITY:
     if (!nghttp3_check_header_value(nv->value->base, nv->value->len)) {
+      http->flags &= ~NGHTTP3_HTTP_FLAG_PRIORITY;
+      http->flags |= NGHTTP3_HTTP_FLAG_BAD_PRIORITY;
+
       return NGHTTP3_ERR_REMOVE_HTTP_HEADER;
     }
 
@@ -992,7 +995,11 @@ int nghttp3_check_header_value(const uint8_t *value, size_t len) {
   case 0:
     return 1;
   case 1:
-    return !is_ws(*value);
+    if (is_ws(*value)) {
+      return 0;
+    }
+
+    break;
   default:
     if (is_ws(*value) || is_ws(*(value + len - 1))) {
       return 0;

@@ -24,7 +24,7 @@ def add_options(p):
     p.add_argument('--only-from-overpopulated-pdisks', action='store_true', help='Move vdisks out only from pdisks with over expected slot count')
     p.add_argument(
         '--sort-by',
-        choices=['slots', 'space_ratio', 'group_slots'],
+        choices=['slots', 'space_ratio'],
         default='slots',
         help='First to reassign disks with the most slots or with the highest space ratio or with the most vslots in the group'
     )

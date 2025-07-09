@@ -4,6 +4,8 @@
 #include "client_method_options.h"
 #include "operation.h"
 
+#include <yt/cpp/mapreduce/http/context.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,10 +200,16 @@ public:
         const TGetJobTraceOptions& options = {}) = 0;
 
     // Files
+
     virtual std::unique_ptr<IInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IOutputStream> WriteFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileWriterOptions& options = {}) = 0;
 
     // File cache
 
@@ -279,6 +287,11 @@ public:
         const TMaybe<TFormat>& format,
         const TTableReaderOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IInputStream> ReadTablePartition(
+        const TString& cookie,
+        const TMaybe<TFormat>& format,
+        const TTablePartitionReaderOptions& options = {}) = 0;
+
     virtual std::unique_ptr<IInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
@@ -331,6 +344,12 @@ public:
     // Batch
 
     virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
+
+    // Other
+
+    virtual IRawClientPtr Clone() = 0;
+
+    virtual IRawClientPtr Clone(const TClientContext& context) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

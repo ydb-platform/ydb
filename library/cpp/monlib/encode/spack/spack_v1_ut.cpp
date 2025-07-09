@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
 
     ui8 expectedMetric1[] = {
         0x0C, // types (RATE | NONE)                     (fixed ui8)
-        0x00, // flags                                   (fixed ui8)
+        0x01, // flags                                   (fixed ui8)
         0x01, // metric labels count                     (varint)
         0x00, // label name index                        (varint)
         0x01, // label value index                       (varint)
@@ -282,6 +282,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
                 e->OnLabelsBegin();
                 e->OnLabel("name", "q1");
                 e->OnLabelsEnd();
+                e->OnMemOnly(true);
             }
             e->OnMetricEnd();
         }
@@ -513,12 +514,14 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         {
             const NProto::TMultiSample& s = samples.GetSamples(0);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::RATE);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), true);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "name", "q1");
         }
         {
             const NProto::TMultiSample& s = samples.GetSamples(1);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), false);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "name", "q2");
 
@@ -528,6 +531,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         {
             const NProto::TMultiSample& s = samples.GetSamples(2);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), false);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "name", "q3");
 
@@ -537,6 +541,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         {
             const NProto::TMultiSample& s = samples.GetSamples(3);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), false);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "name", "answer");
 
@@ -547,6 +552,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         {
             const NProto::TMultiSample& s = samples.GetSamples(4);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::HISTOGRAM);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), false);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "name", "responseTimeMillis");
 
@@ -570,6 +576,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         {
             const NProto::TMultiSample& s = samples.GetSamples(5);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::IGAUGE);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), false);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "name", "bytes");
 
@@ -579,6 +586,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         {
             const NProto::TMultiSample& s = samples.GetSamples(6);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::DSUMMARY);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), false);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "name", "temperature");
 
@@ -601,6 +609,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         {
             const NProto::TMultiSample& s = samples.GetSamples(7);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::LOGHISTOGRAM);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), false);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "name", "ms");
 

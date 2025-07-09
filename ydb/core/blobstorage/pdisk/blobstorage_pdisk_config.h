@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
@@ -137,6 +137,7 @@ struct TPDiskConfig : public TThrRefBase {
     bool UseSpdkNvmeDriver;
 
     ui64 ExpectedSlotCount = 0;
+    ui32 SlotSizeInUnits = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -166,6 +167,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui32 CompletionThreadsCount = 1;
     bool UseNoopScheduler = false;
+
+    bool PlainDataChunks = false;
 
     bool MetadataOnly = false;
 
@@ -229,8 +232,8 @@ struct TPDiskConfig : public TThrRefBase {
         MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
-        Y_ABORT_UNLESS(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
-                "SPDK NVMe driver can be used only with NVMe devices!");
+        Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
+                "PDiskId# " << PDiskId << " SPDK NVMe driver can be used only with NVMe devices!");
     }
 
     TString GetDevicePath() {
@@ -314,6 +317,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
         str << " InsaneLogChunksMultiplier# " << InsaneLogChunksMultiplier << x;
@@ -325,6 +329,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
+        str << " PlainDataChunks# " << PlainDataChunks << x;
         str << "}";
         return str.Str();
     }
@@ -417,6 +422,23 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
         }
+        if (cfg->HasPlainDataChunks()) {
+            PlainDataChunks = cfg->GetPlainDataChunks();
+        }
+
+        if (cfg->HasSlotSizeInUnits()) {
+            SlotSizeInUnits = cfg->GetSlotSizeInUnits();
+        }
+    }
+
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
+    }
+
+    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
+        ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
+        ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
+        return int(vu / pu) + !!(vu % pu);
     }
 };
 

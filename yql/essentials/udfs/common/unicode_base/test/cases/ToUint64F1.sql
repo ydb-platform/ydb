@@ -1,3 +1,6 @@
+/* syntax version 1 */
 SELECT
-    Unicode::ToUint64("01238");
+    value as value,
+    Unicode::ToUint64(value),
+FROM Input
 

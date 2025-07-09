@@ -1,8 +1,9 @@
 #pragma once
+
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -27,7 +28,7 @@ private:
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
 
     struct TLockHash {
-        bool operator()(const NKikimrDataEvents::TLock& lock) {
+        size_t operator()(const NKikimrDataEvents::TLock& lock) {
             return MultiHash(
                 lock.GetLockId(),
                 lock.GetDataShard(),
@@ -68,7 +69,7 @@ public:
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }
 
-    TKqpScanComputeActor(TComputeActorSchedulingOptions, const TActorId& executerId, ui64 txId,
+    TKqpScanComputeActor(TSchedulableOptions schedulableOptions, const TActorId& executerId, ui64 txId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);
@@ -87,6 +88,7 @@ public:
             TBase::OnMemoryLimitExceptionHandler();
         } catch (const yexception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR, e.what());
+            FreeComputeCtxData();
         }
 
         TBase::ReportEventElapsedTime();
@@ -127,7 +129,12 @@ public:
 
     void PollSources(ui64 prevFreeSpace);
 
-    void PassAway() override {
+    void DoTerminateImpl() override {
+        FreeComputeCtxData();
+        TBase::DoTerminateImpl();
+    }
+
+    void FreeComputeCtxData() {
         if (TaskRunner) {
             if (TaskRunner->IsAllocatorAttached()) {
                 ComputeCtx.Clear();
@@ -135,9 +142,8 @@ public:
                 auto guard = TaskRunner->BindAllocator(TBase::GetMkqlMemoryLimit());
                 ComputeCtx.Clear();
             }
+            ScanData = nullptr;
         }
-
-        TBase::PassAway();
     }
 
     void TerminateSources(const NYql::TIssues& issues, bool success) override {

@@ -4,6 +4,8 @@
 
 #include <util/datetime/base.h>
 
+#include <google/protobuf/arena.h>
+
 #include <optional>
 #include <memory>
 
@@ -12,7 +14,7 @@ namespace Ydb {
     class Value;
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TResultSetParser;
 
@@ -262,20 +264,33 @@ struct TUuidValue {
     } Buf_;
 };
 
+namespace NTable {
+
+class TTableClient;
+
+} // namespace NTable
+
 //! Representation of YDB value.
 class TValue {
     friend class TValueParser;
     friend class TProtoAccessor;
+    friend class NTable::TTableClient;
 public:
     TValue(const TType& type, const Ydb::Value& valueProto);
     TValue(const TType& type, Ydb::Value&& valueProto);
+    /**
+    * Lifetime of the arena, and hence the `Ydb::Value`, is expected to be managed by the caller.
+    * The `Ydb::Value` is expected to be arena-allocated.
+    *
+    * See: https://protobuf.dev/reference/cpp/arenas
+    */
+    TValue(const TType& type, Ydb::Value* arenaAllocatedValueProto);
 
     const TType& GetType() const;
-    TType & GetType();
+    TType& GetType();
 
     const Ydb::Value& GetProto() const;
     Ydb::Value& GetProto();
-
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -515,7 +530,7 @@ public:
 protected:
     TValueBuilderBase(TValueBuilderBase&&);
 
-    TValueBuilderBase();
+    TValueBuilderBase(google::protobuf::Arena* arena = nullptr);
 
     TValueBuilderBase(const TType& type);
 
@@ -531,7 +546,7 @@ private:
 
 class TValueBuilder : public TValueBuilderBase<TValueBuilder> {
 public:
-    TValueBuilder();
+    TValueBuilder(google::protobuf::Arena* arena = nullptr);
 
     TValueBuilder(const TType& type);
 
@@ -539,3 +554,6 @@ public:
 };
 
 } // namespace NYdb
+
+template<>
+void Out<NYdb::TUuidValue>(IOutputStream& o, const NYdb::TUuidValue& value);

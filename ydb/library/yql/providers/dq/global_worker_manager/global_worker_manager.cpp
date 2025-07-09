@@ -671,7 +671,7 @@ private:
             Send(value.ActorId, new TEvents::TEvPoison());
         }
         for (const auto sender : Scheduler->Cleanup()) {
-            Send(sender, new TEvAllocateWorkersResponse("StartFollower", NYql::NDqProto::StatusIds::UNSPECIFIED));
+            Send(sender, new TEvAllocateWorkersResponse("Worker reallocation is required because of DQ leader change", NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
         AllocatedResources.clear();
         for (auto& [k, v] : LiteralQueries) {

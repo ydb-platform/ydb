@@ -2,12 +2,12 @@
 
 #include <library/cpp/logger/log.h>
 
-#include <src/client/impl/ydb_internal/internal_header.h>
-#include <src/client/impl/ydb_internal/common/types.h>
-#include <ydb-cpp-sdk/client/common_client/ssl_credentials.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/types.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class IConnectionsParams {
 public:
@@ -17,6 +17,7 @@ public:
     virtual size_t GetClientThreadsNum() const = 0;
     virtual size_t GetMaxQueuedResponses() const = 0;
     virtual TSslCredentials GetSslCredentials() const = 0;
+    virtual bool GetUsePerChannelTcpConnection() const = 0;
     virtual std::string GetDatabase() const = 0;
     virtual std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const = 0;
     virtual EDiscoveryMode GetDiscoveryMode() const = 0;

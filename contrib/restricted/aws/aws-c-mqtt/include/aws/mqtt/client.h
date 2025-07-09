@@ -17,11 +17,14 @@
 
 #include <aws/mqtt/mqtt.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /* forward declares */
 struct aws_client_bootstrap;
 struct aws_http_header;
 struct aws_http_message;
 struct aws_http_proxy_options;
+struct aws_mqtt5_client;
 struct aws_socket_options;
 struct aws_tls_connection_options;
 
@@ -61,6 +64,27 @@ typedef void(aws_mqtt_client_on_connection_complete_fn)(
     int error_code,
     enum aws_mqtt_connect_return_code return_code,
     bool session_present,
+    void *userdata);
+
+/* Called when a connection attempt succeed (with a successful CONNACK)
+ *
+ * The callback is derived from aws_mqtt_client_on_connection_complete_fn.
+ * It gets triggered when connection succeed (with a successful CONNACK)
+ */
+typedef void(aws_mqtt_client_on_connection_success_fn)(
+    struct aws_mqtt_client_connection *connection,
+    enum aws_mqtt_connect_return_code return_code,
+    bool session_present,
+    void *userdata);
+
+/* Called if the connection attempt failed.
+ *
+ * The callback is derived from aws_mqtt_client_on_connection_complete_fn.
+ * It gets triggered when connection failed.
+ */
+typedef void(aws_mqtt_client_on_connection_failure_fn)(
+    struct aws_mqtt_client_connection *connection,
+    int error_code,
     void *userdata);
 
 /* Called if the connection to the server is lost. */
@@ -136,6 +160,11 @@ typedef void(aws_mqtt_client_publish_received_fn)(
 
 /** Called when a connection is closed, right before any resources are deleted */
 typedef void(aws_mqtt_client_on_disconnect_fn)(struct aws_mqtt_client_connection *connection, void *userdata);
+
+/**
+ * Signature of callback invoked on a connection destruction.
+ */
+typedef void(aws_mqtt_client_on_connection_termination_fn)(void *userdata);
 
 /**
  * Function to invoke when the websocket handshake request transformation completes.
@@ -225,7 +254,7 @@ struct aws_mqtt_topic_subscription {
  */
 struct aws_mqtt_connection_options {
     struct aws_byte_cursor host_name;
-    uint16_t port;
+    uint32_t port;
     struct aws_socket_options *socket_options;
     struct aws_tls_connection_options *tls_options;
     struct aws_byte_cursor client_id;
@@ -308,6 +337,16 @@ AWS_MQTT_API
 struct aws_mqtt_client_connection *aws_mqtt_client_connection_new(struct aws_mqtt_client *client);
 
 /**
+ * Creates a new MQTT311 connection object that uses an MQTT5 client under the hood
+ *
+ * \param[in] client    The mqtt5 client to create the connection from
+ *
+ * \returns a new mqtt (311) connection on success, NULL otherwise
+ */
+AWS_MQTT_API
+struct aws_mqtt_client_connection *aws_mqtt_client_connection_new_from_mqtt5_client(struct aws_mqtt5_client *client);
+
+/**
  * Increments the ref count to an mqtt client connection, allowing the caller to take a reference to it
  *
  * \param[in] connection    The connection object
@@ -387,6 +426,14 @@ int aws_mqtt_client_connection_set_http_proxy_options(
     struct aws_http_proxy_options *proxy_options);
 
 /**
+ * Set host resolution ooptions for the connection.
+ */
+AWS_MQTT_API
+int aws_mqtt_client_connection_set_host_resolution_options(
+    struct aws_mqtt_client_connection *connection,
+    const struct aws_host_resolution_config *host_resolution_config);
+
+/**
  * Sets the minimum and maximum reconnect timeouts.
  *
  * The time between reconnect attempts will start at min and multiply by 2 until max is reached.
@@ -400,6 +447,23 @@ int aws_mqtt_client_connection_set_reconnect_timeout(
     struct aws_mqtt_client_connection *connection,
     uint64_t min_timeout,
     uint64_t max_timeout);
+
+/**
+ * Sets the callbacks to call when a connection succeeds or fails
+ *
+ * \param[in] connection                The connection object
+ * \param[in] on_connection_success     The function to call when a connection is successful or gets resumed
+ * \param[in] on_connection_success_ud  Userdata for on_connection_success
+ * \param[in] on_connection_failure     The function to call when a connection fails
+ * \param[in] on_connection_failure_ud  Userdata for on_connection_failure
+ */
+AWS_MQTT_API
+int aws_mqtt_client_connection_set_connection_result_handlers(
+    struct aws_mqtt_client_connection *connection,
+    aws_mqtt_client_on_connection_success_fn *on_connection_success,
+    void *on_connection_success_ud,
+    aws_mqtt_client_on_connection_failure_fn *on_connection_failure,
+    void *on_connection_failure_ud);
 
 /**
  * Sets the callbacks to call when a connection is interrupted and resumed.
@@ -446,6 +510,19 @@ int aws_mqtt_client_connection_set_on_any_publish_handler(
     struct aws_mqtt_client_connection *connection,
     aws_mqtt_client_publish_received_fn *on_any_publish,
     void *on_any_publish_ud);
+
+/**
+ * Sets the callback to call on a connection destruction.
+ *
+ * \param[in] connection        The connection object.
+ * \param[in] on_termination    The function to call when a connection is destroyed.
+ * \param[in] on_termination_ud Userdata for on_termination.
+ */
+AWS_MQTT_API
+int aws_mqtt_client_connection_set_connection_termination_handler(
+    struct aws_mqtt_client_connection *connection,
+    aws_mqtt_client_on_connection_termination_fn *on_termination,
+    void *on_termination_ud);
 
 /**
  * Opens the actual connection defined by aws_mqtt_client_connection_new.
@@ -547,32 +624,6 @@ uint16_t aws_mqtt_client_connection_subscribe(
     void *on_suback_ud);
 
 /**
- * Subscribe to a single topic filter WITHOUT sending a SUBSCRIBE packet.
- * This is useful if you expect the broker to send PUBLISHES without first subscribing.
- * on_publish will be called when a PUBLISH matching topic_filter is received.
- *
- * \param[in] connection    The connection to subscribe on
- * \param[in] topic_filter  The topic filter to subscribe on.  This resource must persist until on_suback.
- * \param[in] on_publish    (nullable) Called when a PUBLISH packet matching topic_filter is received
- * \param[in] on_publish_ud (nullable) Passed to on_publish
- * \param[in] on_ud_cleanup (nullable) Called when a subscription is removed, on_publish_ud is passed.
- * \param[in] on_suback     (nullable) Called when a SUBACK has been received from the server and the subscription is
- *                          complete
- * \param[in] on_suback_ud  (nullable) Passed to on_suback
- *
- * \returns The "packet id" of the operation if successfully initiated, otherwise 0.
- */
-AWS_MQTT_API
-uint16_t aws_mqtt_client_connection_subscribe_local(
-    struct aws_mqtt_client_connection *connection,
-    const struct aws_byte_cursor *topic_filter,
-    aws_mqtt_client_publish_received_fn *on_publish,
-    void *on_publish_ud,
-    aws_mqtt_userdata_cleanup_fn *on_ud_cleanup,
-    aws_mqtt_suback_fn *on_suback,
-    void *on_suback_ud);
-
-/**
  * Resubscribe to all topics currently subscribed to. This is to help when resuming a connection with a clean session.
  *
  * \param[in] connection    The connection to subscribe on
@@ -643,5 +694,6 @@ int aws_mqtt_client_connection_get_stats(
     struct aws_mqtt_connection_operation_statistics *stats);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_MQTT_CLIENT_H */

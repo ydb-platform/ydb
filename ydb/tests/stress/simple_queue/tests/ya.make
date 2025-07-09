@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
     test_workload.py
@@ -12,13 +12,12 @@ ENDIF()
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
-    ydb/apps/ydb
-    ydb/tests/stress/simple_queue
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/stress
+    ydb/tests/stress/simple_queue/workload
 )
 
 

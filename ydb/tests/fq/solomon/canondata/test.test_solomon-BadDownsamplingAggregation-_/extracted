@@ -1,0 +1,10 @@
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>: Error: Execution, code: 1060
+    <main>:1:15: Error: downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC
+<main>: Error: Execution, code: 1060
+    <main>:1:15: Error: downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC
+
+
+

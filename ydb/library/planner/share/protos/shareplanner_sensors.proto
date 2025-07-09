@@ -1,0 +1,88 @@
+import "library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.proto";
+
+package NScheduling;
+
+option java_package = "ru.yandex.scheduling.proto";
+
+message TShareNodeSensors {
+    optional string Name = 1;
+    optional string ParentName = 2;
+
+    // Planner outcome stats for requests
+    optional uint64 NDone = 11            [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 NSpoiled = 12         [ (NMonProto.Metric).Type = RATE ];
+
+    // Resource usage [cluster-power * sec]
+    optional double ResDone = 13          [ (NMonProto.Metric).Type = RATE ];
+    optional double ResSpoiled = 14       [ (NMonProto.Metric).Type = RATE ];
+    optional double MoneySpent = 29       [ (NMonProto.Metric).Type = RATE ];
+    optional double Proficit = 15         [ (NMonProto.Metric).Type = GAUGE ];
+    //optional uint64 ResDone = 16        [ (NMonProto.Metric).Type = RATE ]; DEPRECATED
+    //optional int64 Deficit = 17         [ (NMonProto.Metric).Type = GAUGE ]; DEPRECATED
+
+    // Lag is proficit normalized for account's parent group
+    optional double Lag = 18              [ (NMonProto.Metric).Type = GAUGE ];
+    optional double FloatingLag = 19      [ (NMonProto.Metric).Type = GAUGE ];
+
+    // Consumer status count (0 - is not current state; 1 - is current state)
+    optional uint64 Idle = 20             [ (NMonProto.Metric).Type = GAUGE ];
+    optional uint64 Active = 21           [ (NMonProto.Metric).Type = GAUGE ];
+    optional uint64 IdleRetard = 22       [ (NMonProto.Metric).Type = GAUGE ];
+    optional uint64 ActiveRetard = 23     [ (NMonProto.Metric).Type = GAUGE ];
+
+    // Consumer event stats
+    optional uint64 Activations = 30      [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 Deactivations = 31    [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 Retardations = 32     [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 Overtakes = 33        [ (NMonProto.Metric).Type = RATE ];
+
+    // Global shares [between 0 and 1]
+    optional double DefShare = 40         [ (NMonProto.Metric).Type = GAUGE ];
+    optional double RealShare = 41        [ (NMonProto.Metric).Type = GAUGE ];
+    optional double AvgRealShare = 42     [ (NMonProto.Metric).Type = GAUGE ];
+    optional double DynamicShare = 43     [ (NMonProto.Metric).Type = GAUGE ];
+
+    // Group shares [between 0 and 1]
+    optional double GrpDefShare = 60      [ (NMonProto.Metric).Type = GAUGE ];
+    optional double GrpRealShare = 61     [ (NMonProto.Metric).Type = GAUGE ];
+    optional double GrpAvgRealShare = 62  [ (NMonProto.Metric).Type = GAUGE ];
+    optional double GrpDynamicShare = 63  [ (NMonProto.Metric).Type = GAUGE ];
+
+    // Weights information
+    optional double DefWeight = 51        [ (NMonProto.Metric).Type = GAUGE ];
+    optional double MaxWeight = 52        [ (NMonProto.Metric).Type = GAUGE ];
+    optional double MinWeight = 53        [ (NMonProto.Metric).Type = GAUGE ];
+    optional double DynamicWeight = 54    [ (NMonProto.Metric).Type = GAUGE ];
+
+    // Density model specific
+    optional double Usage = 70            [ (NMonProto.Metric).Type = GAUGE ];
+    optional double InstantUsage = 74     [ (NMonProto.Metric).Type = GAUGE ];
+    optional double Tariff = 71           [ (NMonProto.Metric).Type = GAUGE ];
+    optional double InstantTariff = 76    [ (NMonProto.Metric).Type = GAUGE ];
+    optional double Boost = 72            [ (NMonProto.Metric).Type = GAUGE ];
+    optional double FloatingOrigin = 73   [ (NMonProto.Metric).Type = GAUGE ];
+    optional double InstantOrigin = 75    [ (NMonProto.Metric).Type = GAUGE ];
+    optional double PullStretch = 77      [ (NMonProto.Metric).Type = GAUGE ];
+    optional double Retardness = 78       [ (NMonProto.Metric).Type = GAUGE ];
+    optional double RetardShare = 79      [ (NMonProto.Metric).Type = GAUGE ];
+
+    // Parent-specific sensors (set only for groups)
+    optional double TotalCredit = 100     [ (NMonProto.Metric).Type = GAUGE ];
+}
+
+message TSharePlannerSensors {
+    repeated TShareNodeSensors Accounts = 1 [ (NMonProto.Metric).Path = false, (NMonProto.Metric).Keys = "account:Name" ];
+    repeated TShareNodeSensors Groups = 2   [ (NMonProto.Metric).Path = false, (NMonProto.Metric).Keys = "group:Name" ];
+    repeated TShareNodeSensors Nodes = 4    [ (NMonProto.Metric).Path = false, (NMonProto.Metric).Keys = "node:Name parent:ParentName" ];
+    optional TShareNodeSensors Total = 3    [ (NMonProto.Metric).Path = true ]; // All accounts w/o groups
+
+    // Resource totals
+    optional double ResUsed = 10             [ (NMonProto.Metric).Type = RATE ];
+    optional double ResWasted = 11           [ (NMonProto.Metric).Type = RATE ];
+
+    // Utilization measuments
+    optional double ResUsedInWindow = 20     [ (NMonProto.Metric).Type = GAUGE ];
+    optional double ResWastedInWindow  = 21  [ (NMonProto.Metric).Type = GAUGE ];
+    optional double Utilization = 22         [ (NMonProto.Metric).Type = GAUGE ];
+}
+

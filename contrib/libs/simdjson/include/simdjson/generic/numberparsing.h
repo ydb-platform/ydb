@@ -137,7 +137,7 @@ simdjson_inline bool compute_float_64(int64_t power, uint64_t i, bool negative, 
   // floor(log(5**power)/log(2))
   //
   // Note that this is not magic: 152170/(1<<16) is
-  // approximatively equal to log(5)/log(2).
+  // approximately equal to log(5)/log(2).
   // The 1<<16 value is a power of two; we could use a
   // larger power of 2 if we wanted to.
   //
@@ -647,7 +647,16 @@ simdjson_inline error_code parse_number(const uint8_t *const src, W &writer) {
   if (i > uint64_t(INT64_MAX)) {
     WRITE_UNSIGNED(i, src, writer);
   } else {
-    WRITE_INTEGER(negative ? (~i+1) : i, src, writer);
+#if SIMDJSON_MINUS_ZERO_AS_FLOAT
+    if(i == 0 && negative) {
+      // We have to write -0.0 instead of 0
+      WRITE_DOUBLE(-0.0, src, writer);
+    } else {
+      WRITE_INTEGER(negative ? (~i+1) : i, src, writer);
+    }
+#else
+  WRITE_INTEGER(negative ? (~i+1) : i, src, writer);
+#endif
   }
   if (jsoncharutils::is_not_structural_or_whitespace(*p)) { return INVALID_NUMBER(src); }
   return SUCCESS;
@@ -1108,6 +1117,12 @@ simdjson_unused simdjson_inline simdjson_result<number_type> get_number_type(con
       if (simdjson_unlikely(digit_count == 19 && memcmp(src, smaller_big_integer, 19) > 0)) {
         return number_type::big_integer;
       }
+#if SIMDJSON_MINUS_ZERO_AS_FLOAT
+      if(digit_count == 1 && src[0] == '0') {
+        // We have to write -0.0 instead of 0
+        return number_type::floating_point_number;
+      }
+#endif
       return number_type::signed_integer;
     }
     // Let us check if we have a big integer (>=2**64).

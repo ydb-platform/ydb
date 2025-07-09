@@ -10,6 +10,8 @@
 #include <aws/common/byte_buf.h>
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_ecc_curve_name {
     AWS_CAL_ECDSA_P256,
     AWS_CAL_ECDSA_P384,
@@ -62,7 +64,7 @@ AWS_CAL_API void aws_ecc_key_pair_acquire(struct aws_ecc_key_pair *key_pair);
 AWS_CAL_API void aws_ecc_key_pair_release(struct aws_ecc_key_pair *key_pair);
 
 /**
- * Creates a Eliptic Curve private key that can be used for signing.
+ * Creates an Elliptic Curve private key that can be used for signing.
  * Returns a new instance of aws_ecc_key_pair if the key was successfully built.
  * Otherwise returns NULL. Note: priv_key::len must match the appropriate length
  * for the selected curve_name.
@@ -74,9 +76,14 @@ AWS_CAL_API struct aws_ecc_key_pair *aws_ecc_key_pair_new_from_private_key(
 
 #if !defined(AWS_OS_IOS)
 /**
- * Creates a Eliptic Curve public/private key pair that can be used for signing and verifying.
+ * Creates an Elliptic Curve public/private key pair that can be used for signing and verifying.
  * Returns a new instance of aws_ecc_key_pair if the key was successfully built.
  * Otherwise returns NULL.
+ * Note: On Apple platforms this function is only supported on MacOS. This is
+ * due to usage of SecItemExport, which is only available on MacOS 10.7+
+ * (yes, MacOS only and no other Apple platforms). There are alternatives for
+ * ios and other platforms, but they are ugly to use. Hence for now it only
+ * supports this call on MacOS.
  */
 AWS_CAL_API struct aws_ecc_key_pair *aws_ecc_key_pair_new_generate_random(
     struct aws_allocator *allocator,
@@ -84,7 +91,7 @@ AWS_CAL_API struct aws_ecc_key_pair *aws_ecc_key_pair_new_generate_random(
 #endif /* !AWS_OS_IOS */
 
 /**
- * Creates a Eliptic Curve public key that can be used for verifying.
+ * Creates an Elliptic Curve public key that can be used for verifying.
  * Returns a new instance of aws_ecc_key_pair if the key was successfully built.
  * Otherwise returns NULL. Note: public_key_x::len and public_key_y::len must
  * match the appropriate length for the selected curve_name.
@@ -96,7 +103,7 @@ AWS_CAL_API struct aws_ecc_key_pair *aws_ecc_key_pair_new_from_public_key(
     const struct aws_byte_cursor *public_key_y);
 
 /**
- * Creates a Eliptic Curve public/private key pair from a DER encoded key pair.
+ * Creates an Elliptic Curve public/private key pair from a DER encoded key pair.
  * Returns a new instance of aws_ecc_key_pair if the key was successfully built.
  * Otherwise returns NULL. Whether or not signing or verification can be perform depends
  * on if encoded_keys is a public/private pair or a public key.
@@ -173,5 +180,6 @@ AWS_CAL_API void aws_ecc_key_pair_get_private_key(
 AWS_CAL_API size_t aws_ecc_key_coordinate_byte_size_from_curve_name(enum aws_ecc_curve_name curve_name);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_CAL_ECC_H */

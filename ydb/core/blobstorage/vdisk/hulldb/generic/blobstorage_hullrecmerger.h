@@ -23,6 +23,14 @@ namespace NKikimr {
             return MergeData;
         }
 
+        TIngress GetCurrentIngress() const {
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                return MemRec.GetIngress();
+            } else {
+                return {};
+            }
+        }
+
         ui32 GetNumKeepFlags() const { return NumKeepFlags; }
         ui32 GetNumDoNotKeepFlags() const { return NumDoNotKeepFlags >> 1; }
 
@@ -49,7 +57,7 @@ namespace NKikimr {
             Finished = false;
         }
 
-        void AddBasic(const TMemRec &memRec, const TKey &key) {
+        void AddBasic(const TMemRec &memRec, const TKey &key, bool clearLocal = false) {
             if constexpr (std::is_same_v<TMemRec, TMemRecLogoBlob>) {
                 const int mode = memRec.GetIngress().GetCollectMode(TIngress::IngressMode(GType));
                 static_assert(CollectModeKeep == 1);
@@ -58,10 +66,14 @@ namespace NKikimr {
                 NumDoNotKeepFlags += mode & CollectModeDoNotKeep;
             }
             if (MemRecsMerged == 0) {
-                MemRec = memRec;
+                if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                    MemRec = clearLocal ? TMemRec(memRec.GetIngress().CopyWithoutLocal(GType)) : memRec;
+                } else {
+                    MemRec = memRec;
+                }
                 MemRec.SetNoBlob();
             } else {
-                MemRec.Merge(memRec, key);
+                MemRec.Merge(memRec, key, clearLocal, GType);
             }
             ++MemRecsMerged;
         }
@@ -93,7 +105,8 @@ namespace NKikimr {
         using TBase::GetMemRec;
         using TBase::HaveToMergeData;
 
-        void AddFromSegment(const TMemRec &memRec, const TDiskPart* /*outbound*/, const TKey &key, ui64 /*circaLsn*/) {
+        void AddFromSegment(const TMemRec &memRec, const TDiskPart* /*outbound*/, const TKey &key, ui64 /*circaLsn*/,
+                const void* /*sst*/) {
             AddBasic(memRec, key);
         }
 
@@ -134,12 +147,14 @@ namespace NKikimr {
             TBase::Clear();
             DataMerger.Clear();
             Key = {};
+            ExternalDataStage = false;
         }
 
         using TBase::GetMemRec;
         using TBase::HaveToMergeData;
 
-        void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn) {
+        void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn,
+                const void* /*sst*/) {
             Add(memRec, outbound, key, circaLsn);
         }
 
@@ -150,33 +165,26 @@ namespace NKikimr {
         void Add(const TMemRec& memRec, std::variant<const TRope*, const TDiskPart*> dataOrOutbound, const TKey& key, ui64 lsn) {
             Y_DEBUG_ABORT_UNLESS(Key == TKey{} || Key == key);
             Key = key;
-            AddBasic(memRec, key);
+            AddBasic(memRec, key, /*clearLocal=*/ ExternalDataStage);
             if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-                DataMerger.Add(memRec, dataOrOutbound, lsn, key.LogoBlobID());
+                if (ExternalDataStage) {
+                    const TDiskPart **outbound = std::get_if<const TDiskPart*>(&dataOrOutbound);
+                    DataMerger.CheckExternalData(memRec, outbound ? *outbound : nullptr, lsn);
+                } else {
+                    DataMerger.Add(memRec, dataOrOutbound, lsn, key.LogoBlobID());
+                }
             }
         }
 
-        void Finish(bool targetingHugeBlob) {
+        void Finish(bool targetingHugeBlob, bool keepData) {
             Y_DEBUG_ABORT_UNLESS(!Finished);
             Y_DEBUG_ABORT_UNLESS(!Empty());
 
-            MemRec.SetNoBlob();
-
             if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-                TBlobType::EType type = TBlobType::DiskBlob;
-                ui32 inplacedDataSize = 0;
-                DataMerger.Finish(targetingHugeBlob, Key.LogoBlobID(), &type, &inplacedDataSize);
-
-                const NMatrix::TVectorType localParts = MemRec.GetLocalParts(GType);
-                Y_ABORT_UNLESS(localParts == DataMerger.GetParts());
-
-                MemRec.SetType(type);
-
-                if (type == TBlobType::DiskBlob && inplacedDataSize) {
-                    Y_ABORT_UNLESS(inplacedDataSize == TDiskBlob::CalculateBlobSize(GType, Key.LogoBlobID(),
-                        localParts, AddHeader));
-                    MemRec.SetDiskBlob(TDiskPart(0, 0, inplacedDataSize));
-                }
+                DataMerger.Finish(targetingHugeBlob, Key.LogoBlobID(), keepData);
+                MemRec.ReplaceLocalParts(GType, DataMerger.GetParts());
+                MemRec.SetDiskBlob(TDiskPart(0, 0, DataMerger.GetInplacedBlobSize(Key.LogoBlobID())));
+                MemRec.SetType(DataMerger.GetType());
             }
 
             Finished = true;
@@ -187,10 +195,24 @@ namespace NKikimr {
             return DataMerger;
         }
 
+        bool IsDataMergerEmpty() const {
+            return DataMerger.Empty();
+        }
+
+        void SetExternalDataStage() {
+            Y_DEBUG_ABORT_UNLESS(!ExternalDataStage);
+            ExternalDataStage = true;
+        }
+
+        const TMemRec& GetMemRecForBarriers() const {
+            return MemRec;
+        }
+
     protected:
         const bool AddHeader;
         TDataMerger DataMerger;
         TKey Key;
+        bool ExternalDataStage = false;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -219,7 +241,8 @@ namespace NKikimr {
             LastWriteWinsMerger.Clear();
         }
 
-        void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn) {
+        void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn,
+                const void* /*sst*/) {
             AddBasic(memRec, key);
             TDiskDataExtractor extr;
             memRec.GetDiskData(&extr, outbound);

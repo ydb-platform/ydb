@@ -52,6 +52,12 @@ public:
         return result;
     }
 
+    static const std::set<std::string>& GetSnapshotColumnNamesSet() {
+        static const std::set<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
+            std::string(SPEC_COL_WRITE_ID) };
+        return result;
+    }
+
     static const std::vector<ui32>& GetSnapshotColumnIds() {
         static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
         return result;
@@ -139,7 +145,12 @@ public:
         return result;
     }
 
-    std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
+    static std::optional<ui32> GetColumnIdOptional(const std::string& name);
+    static ui32 GetColumnIdVerified(const std::string& name) {
+        auto result = GetColumnIdOptional(name);
+        AFL_VERIFY(!!result);
+        return *result;
+    }
     std::optional<ui32> GetColumnIndexOptional(const std::string& name, const ui32 shift) const;
     TString GetColumnName(const ui32 id, const bool required) const;
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);

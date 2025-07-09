@@ -1,41 +1,18 @@
 # KNN
 
-## Introduction
+## Introduction {#introduction}
 
-[Nearest Neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) is an optimization task that consists of finding the closest point in a given dataset to a given query point. Closeness can be defined in terms of distance or similarity metrics.
-A generalization of the NN problem is the [k-NN problem](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), where it's required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
+One specific case of [vector search](../../../../concepts/vector_search.md) is the [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm) problem, where it is required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
 
 The k-NN problem solution is divided into two major subclasses of methods: exact and approximate.
 
-### Exact method
+### Exact method {#exact-method}
 
-The exact method is based on calculating the distance from the query point to every other point in the database. This algorithm, also known as the naive approach, has a complexity of `O(dn)`, where `n` is the number of points in the dataset, and `d` is its dimension.
+{% include [vector_search_exact.md](../../_includes/vector_search_exact.md) %}
 
-The advantage of the method is that there is no need for additional data structures, such as specialized vector indexes.
-The disadvantage is the need for a full data scan. But this disadvantage is insignificant in cases where data has been pre-filtered, for example, by user ID.
+### Approximate methods {#approximate-methods}
 
-Example:
-
-```yql
-$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
-
-SELECT id, fact, embedding FROM Facts
-WHERE user="Williams"
-ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
-LIMIT 10;
-```
-
-### Approximate methods
-
-Approximate methods do not perform a complete search of the source data. Due to this, they work significantly faster, although they may result in some loss of quality.
-
-This document provides an [example of approximate search](#approximate-search-examples) using scalar quantization. This example does not require the creation of a secondary vector index.
-
-**Scalar quantization** is a method to compress vectors by mapping coordinates to a smaller space.
-This module supports exact search for `Float`, `Int8`, `Uint8`, `Bit` vectors.
-So, it's possible to apply scalar quantization from `Float` to one of these other types.
-
-Scalar quantization decreases read/write times by reducing vector size in bytes. For example, after quantization from `Float` to `Bit,` each vector becomes 32 times smaller.
+{% include [vector_search_approximate.md](../../_includes/vector_search_approximate.md) %}
 
 {% note info %}
 
@@ -43,26 +20,40 @@ It is recommended to measure if such quantization provides sufficient accuracy/r
 
 {% endnote %}
 
-## Data types
+## Data types {#data-types}
 
 In mathematics, a vector of real or integer numbers is used to store points.
 In this module, vectors are stored in the `String` data type, which is a binary serialized representation of a vector.
 
-## Functions
+## Functions {#functions}
 
 Vector functions are implemented as user-defined functions (UDF) in the `Knn` module.
 
-### Functions for converting between vector and binary representations
+### Functions for converting between vector and binary representations {#functions-convert}
 
 Conversion functions are needed to serialize vectors into an internal binary representation and vice versa.
 
 All serialization functions wrap returned `String` data into [Tagged](../../types/special.md) types.
 
 {% if backend_name == "YDB" %}
-The binary representation of the vector can be stored in the {{ ydb-short-name }} table column. Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
+
+The binary representation of the vector can be stored in the {{ ydb-short-name }} table column.
+
+{% note info %}
+
+Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
+
+{% endnote %}
+
+{% note info %}
+
+Currently {{ ydb-short-name }} does not support building an index for vectors with bit quantization `BitVector`.
+
+{% endnote %}
+
 {% endif %}
 
-#### Function signatures
+#### Function signatures {#functions-convert-signature}
 
 ```yql
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
@@ -75,11 +66,11 @@ Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
 
-#### Implementation details
+#### Implementation details {#functions-convert-details}
 
 The `ToBinaryStringBit` function maps coordinates that are greater than `0` to `1`. All other coordinates are mapped to `0`.
 
-### Distance and similarity functions
+### Distance and similarity functions {#functions-distance}
 
 The distance and similarity functions take two lists of real numbers as input and return the distance/similarity between them.
 
@@ -100,7 +91,7 @@ Distance functions:
 * manhattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate differences)
 * euclidean distance `EuclideanDistance`, also known as `L2 distance` (square root of the sum of squares of coordinate differences)
 
-#### Function signatures
+#### Function signatures {#functions-distance-signatures}
 
 ```yql
 Knn::InnerProductSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
@@ -126,11 +117,11 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 
 {% endnote %}
 
-## Еxact search examples
+## Exact search examples {#exact-vector-search-examples}
 
 {% if backend_name == "YDB" %}
 
-### Creating a table
+### Creating a table {#exact-vector-search-examples-create}
 
 ```yql
 CREATE TABLE Facts (
@@ -142,7 +133,7 @@ CREATE TABLE Facts (
 );
 ```
 
-### Adding vectors
+### Adding vectors {#exact-vector-search-examples-upsert}
 
 ```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
@@ -152,7 +143,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 
 {% else %}
 
-### Data declaration
+### Data declaration {#exact-vector-search-examples-create-list}
 
 ```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
@@ -168,7 +159,7 @@ $facts = AsList(
 
 {% endif %}
 
-### Exact search of K nearest vectors
+### Exact search of K nearest vectors {#exact-vector-search-k-nearest}
 
 {% if backend_name == "YDB" %}
 
@@ -196,7 +187,7 @@ LIMIT $K;
 
 {% endif %}
 
-### Exact search of vectors in radius R
+### Exact search of vectors in radius R {#exact-vector-search-radius}
 
 {% if backend_name == "YDB" %}
 
@@ -220,28 +211,28 @@ WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 
 {% endif %}
 
-## Approximate search examples
+## Approximate search examples {#approximate-vector-search-examples}
 
-This example differs from the [exact search example](#еxact-search-examples) by using bit quantization.
+This example differs from the [exact search example](#exact-vector-search-examples) by using bit quantization.
 
 This allows to first do a approximate preliminary search by the `embedding_bit` column, and then refine the results by the original vector column `embegging`.
 
 {% if backend_name == "YDB" %}
 
-### Creating a table
+### Creating a table {#approximate-vector-search-examples-create}
 
 ```yql
 CREATE TABLE Facts (
-    id Uint64,        -- Id of fact
-    user Utf8,        -- User name
-    fact Utf8,        -- Human-readable description of a user fact
-    embedding String, -- Binary representation of embedding vector (result of Knn::ToBinaryStringFloat)
+    id Uint64,            -- Id of fact
+    user Utf8,            -- User name
+    fact Utf8,            -- Human-readable description of a user fact
+    embedding String,     -- Binary representation of embedding vector (result of Knn::ToBinaryStringFloat)
     embedding_bit String, -- Binary representation of embedding vector (result of Knn::ToBinaryStringBit)
     PRIMARY KEY (id)
 );
 ```
 
-### Adding vectors
+### Adding vectors {#approximate-vector-search-examples-upsert}
 
 ```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
@@ -251,7 +242,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 
 {% else %}
 
-### Data declaration
+### Data declaration {#approximate-vector-search-examples-create-list}
 
 ```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
@@ -268,13 +259,13 @@ $facts = AsList(
 
 {% endif %}
 
-### Scalar quantization
+### Scalar quantization {#approximate-vector-search-scalar-quantization}
 
 An ML model can do quantization, or it can be done manually with YQL.
 
 Below there is a quantization example in YQL.
 
-#### Float -> Int8
+#### Float -> Int8 {#approximate-vector-search-scalar-quantization-map}
 
 ```yql
 $MapInt8 = ($x) -> {
@@ -288,7 +279,7 @@ $FloatList = [-1.2f, 2.3f, 3.4f, -4.7f];
 SELECT ListMap($FloatList, $MapInt8);
 ```
 
-### Approximate search of K nearest vectors: bit quantization
+### Approximate search of K nearest vectors: bit quantization {#approximate-vector-search-scalar-quantization-example}
 
 Approximate search algorithm:
 

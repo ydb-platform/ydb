@@ -30,11 +30,11 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
@@ -5703,8 +5703,10 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
 #endif
 
 Y_UNIT_TEST_SUITE(LocalityOperation) {
-Y_UNIT_TEST(LocksFromAnotherTenants) {
-    TKikimrWithGrpcAndRootSchema server;
+Y_UNIT_TEST_TWIN(LocksFromAnotherTenants, UseSink) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+    TKikimrWithGrpcAndRootSchema server(appConfig);
     //server.Server_->SetupLogging(
 
     auto connection = NYdb::TDriver(

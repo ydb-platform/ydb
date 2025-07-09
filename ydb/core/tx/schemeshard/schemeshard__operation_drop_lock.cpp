@@ -1,5 +1,5 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -164,7 +164,7 @@ public:
         const auto pathId = dstPath.Base()->PathId;
         result->SetPathId(pathId.LocalPathId);
 
-        if (!dstPath.LockedBy()) {
+        if (!dstPath.IsLocked()) {
             result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, TStringBuilder() << "path checks failed"
                 << ", path already unlocked"
                 << ", path: " << dstPath.PathString());

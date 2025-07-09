@@ -2,7 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>

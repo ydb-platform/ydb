@@ -7,6 +7,8 @@
 #define AWS_SDKUTILS_AWS_PROFILE_H
 #include <aws/sdkutils/sdkutils.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_allocator;
 struct aws_string;
 struct aws_byte_buf;
@@ -214,5 +216,6 @@ AWS_SDKUTILS_API
 struct aws_string *aws_get_profile_name(struct aws_allocator *allocator, const struct aws_byte_cursor *override_name);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_SDKUTILS_AWS_PROFILE_H */

@@ -2,19 +2,19 @@
 
 #include "aliases.h"
 
-#include <ydb-cpp-sdk/client/topic/codecs.h>
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 
 #include <util/generic/size_literals.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TProtoAccessor;
 }
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
     
 enum class EFormat {
     BASE = 1,
@@ -45,7 +45,7 @@ private:
 
 // Result for describe resource request.
 struct TDescribeTopicResult : public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     struct TTopicSettings {
         TTopicSettings(const Ydb::PersQueue::V1::TopicSettings&);

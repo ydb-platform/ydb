@@ -11,17 +11,20 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/utils/resetable_setting.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -202,8 +205,12 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return true;
+                return false;
         }
+    }
+
+    std::span<const std::string_view> GetImplTables() const {
+        return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
     }
 };
 
@@ -482,6 +489,12 @@ struct TKikimrTableMetadata : public TThrRefBase {
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
     EStoreType StoreType = EStoreType::Row;
+    TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
+    bool IsIndexImplTable = false;
+
+    // If writes are disabled, query that writes to table must finish with error.
+    bool WritesToTableAreDisabled = false;
+    TString DisableWritesReason;
 
     ui64 RecordsCount = 0;
     ui64 DataSize = 0;
@@ -505,6 +518,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
 
     TExternalSource ExternalSource;
     TViewPersistedData ViewPersistedData;
+
+    TVector<TString> PartitionedByColumns;
 
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
@@ -547,11 +562,15 @@ struct TKikimrTableMetadata : public TThrRefBase {
         auto it = message->GetSecondaryGlobalIndexMetadata().begin();
         ImplTables.reserve(indexesCount);
         for(int i = 0; i < indexesCount; ++i) {
-            YQL_ENSURE(it != message->GetSecondaryGlobalIndexMetadata().end());
-            auto& implTable = ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
-            if (Indexes[i].Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            decltype(ImplTables)::value_type* implTable = nullptr;
+            for (const auto& _ : Indexes[i].GetImplTables()) {
                 YQL_ENSURE(it != message->GetSecondaryGlobalIndexMetadata().end());
-                implTable->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
+                if (implTable) {
+                    (*implTable)->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
+                    implTable = &(*implTable)->Next;
+                } else {
+                    implTable = &ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
+                }
             }
         }
         YQL_ENSURE(it == message->GetSecondaryGlobalIndexMetadata().end());
@@ -656,6 +675,12 @@ struct TKikimrTableMetadata : public TThrRefBase {
     bool IsOlap() const {
         return Kind == EKikimrTableKind::Olap;
     }
+};
+
+struct TAlterDatabaseSettings {
+    TString DatabasePath;
+    std::optional<TString> Owner;
+    std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 };
 
 struct TCreateUserSettings {
@@ -826,6 +851,8 @@ struct TReplicationSettingsBase {
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
     TMaybe<TStateDone> StateDone;
+    bool StatePaused = false;
+    bool StateStandBy = false;
 
     using EFailoverMode = TStateDone::EFailoverMode;
     TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
@@ -902,11 +929,27 @@ struct TDropReplicationSettings {
 };
 
 struct TTransferSettings : public TReplicationSettingsBase {
+
+    struct TBatching {
+        TDuration FlushInterval;
+        std::optional<ui64> BatchSizeBytes;
+    };
+
+    TMaybe<TString> ConsumerName;
+    TMaybe<TBatching> Batching;
+
+    TBatching& EnsureBatching() {
+        if (!Batching) {
+            Batching = TBatching();
+        }
+
+        return *Batching;
+    }
 };
 
 struct TCreateTransferSettings {
     TString Name;
-    TVector<std::tuple<TString, TString, TString>> Targets;
+    std::tuple<TString, TString, TString> Target;
     TTransferSettings Settings;
 };
 
@@ -1081,12 +1124,18 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithSysViewRewritten(bool enable) {
+            SysViewRewritten_ = enable;
+            return *this;
+        }
+
         NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
         THashMap<TString, TString> ReadAttributes;
         bool RequestStats_ = false;
         bool WithPrivateTables_ = false;
         bool WithExternalDatasources_ = false;
         bool RequestAuthInfo_ = true;
+        bool SysViewRewritten_ = false;
     };
 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {
@@ -1113,6 +1162,8 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 

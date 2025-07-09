@@ -43,7 +43,7 @@ public:
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto joinFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TJoinDictWrapper::JoinDicts));
+        const auto joinFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TJoinDictWrapper::JoinDicts>());
         const auto joinFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
 
         const auto one = GetNodeValue(Dict1, ctx, block);

@@ -6,10 +6,10 @@ namespace NYT::NHttps {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TServerCredentialsConfig)
-DECLARE_REFCOUNTED_CLASS(TClientCredentialsConfig)
-DECLARE_REFCOUNTED_CLASS(TServerConfig)
-DECLARE_REFCOUNTED_CLASS(TClientConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerCredentialsConfig)
+DECLARE_REFCOUNTED_STRUCT(TClientCredentialsConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerConfig)
+DECLARE_REFCOUNTED_STRUCT(TClientConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

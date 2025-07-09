@@ -1,6 +1,4 @@
 PY3_LIBRARY()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 
 PY_SRCS(
     test_base.py
@@ -11,6 +9,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/test_meta
     library/python/testing/recipe
     library/recipes/common
     contrib/python/moto

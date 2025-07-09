@@ -5,10 +5,11 @@
 #include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -860,6 +861,44 @@ public:
         }
     }
 
+    TVector<TString> GetPQTabletKeys(TTestActorRuntime* runtime, const TString& topic, ui32 partitionId) {
+        ui64 tabletId = Max<ui64>();
+
+        auto res = Ls("/Root/PQ/" + topic);
+        const auto& pq = res->Record.GetPathDescription().GetPersQueueGroup();
+        for (ui32 i = 0; i < pq.PartitionsSize(); ++i) {
+            const auto& partition = pq.GetPartitions(i);
+            if (partition.GetPartitionId() == partitionId) {
+                tabletId = partition.GetTabletId();
+                break;
+            }
+        }
+
+        Y_ABORT_UNLESS(tabletId != Max<ui64>());
+
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto* cmd = request->Record.AddCmdReadRange();
+        auto* range = cmd->MutableRange();
+        range->SetFrom("\x00");
+        range->SetTo("\xFF");
+
+        TActorId sender = runtime->AllocateEdgeActor();
+        ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0);
+        auto response = runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+
+        TVector<TString> keys;
+
+        for (size_t i = 0; i < response->Record.ReadRangeResultSize(); ++i) {
+            const auto& result = response->Record.GetReadRangeResult(i);
+            for (size_t j = 0; j < result.PairSize(); ++j) {
+                const auto& pair = result.GetPair(j);
+                keys.push_back(pair.GetKey());
+            }
+        }
+
+        return keys;
+    }
+
     bool IsTopicDeleted(const TString& name) {
         auto response = RequestTopicMetadata(name);
 
@@ -1416,6 +1455,7 @@ public:
     struct CreateTopicNoLegacyParams {
         TString Name;
         ui32 PartsCount;
+        TDuration RetentionPeriod = TDuration::Hours(18);
         bool DoWait = true;
         bool CanWrite = true;
         std::optional<TString> Dc = std::nullopt;
@@ -1438,6 +1478,7 @@ public:
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
         settings.FederationAccount(params.Account);
         settings.SupportedCodecs(params.Codecs);
+        settings.RetentionPeriod(params.RetentionPeriod);
         //settings.MaxPartitionWriteSpeed(50_MB);
         //settings.MaxPartitionWriteBurst(50_MB);
         TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;

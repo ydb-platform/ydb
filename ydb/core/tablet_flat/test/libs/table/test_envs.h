@@ -32,12 +32,12 @@ namespace NTest {
 
         TNoEnv(bool pages, ELargeObjNeed lobs) : Pages(pages) , Lobs(lobs) { }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return TTestEnv::Locate(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             const bool pass = Lobs == ELargeObjNeed::Has;
             const bool need = Lobs == ELargeObjNeed::Yes;
@@ -60,15 +60,15 @@ namespace NTest {
         struct TSeen {
             TSeen() = default;
 
-            TSeen(const void *token, ui64 ref) noexcept
+            TSeen(const void *token, ui64 ref)
                 : Token(token) , Ref(ref) { }
 
-            bool operator==(const TSeen &seen) const noexcept
+            bool operator==(const TSeen &seen) const
             {
                 return Token == seen.Token && Ref == seen.Ref;
             }
             
-            bool operator<(const TSeen &seen) const noexcept
+            bool operator<(const TSeen &seen) const
             {
                 return Token < seen.Token || Token == seen.Token && Ref < seen.Ref;
             }
@@ -89,16 +89,16 @@ namespace NTest {
         ~TFailEnv()
         {
             if (Touches == 0 || (Rate < 1. && Success == Touches)) {
-                Y_Fail("Fail env was touched " << Touches << " times w/o fails");
+                Y_ABORT_S("Fail env was touched " << Touches << " times w/o fails");
             }
         }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return TTestEnv::Locate(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             if (ShouldPass((const void*)part->Large.Get(), ref, false)) {
                 return TTestEnv::Locate(part, ref, lob);
@@ -135,7 +135,7 @@ namespace NTest {
             return pass;
         }
 
-        bool IsRecent(TSeen seen, bool isIndex) noexcept
+        bool IsRecent(TSeen seen, bool isIndex)
         {
             if (isIndex) {
                 auto it = IndexTraceTtl.find(seen);
@@ -151,7 +151,7 @@ namespace NTest {
             }
         }
 
-        bool AmILucky() noexcept
+        bool AmILucky()
         {
             return Rate >= 1. || Rnd.GenRandReal4() <= Rate;
         }
@@ -174,7 +174,7 @@ namespace NTest {
             {
             }
 
-            TResult DoLoad(TPageId pageId, EPage type, ui64 lower, ui64 upper) noexcept
+            TResult DoLoad(TPageId pageId, EPage type, ui64 lower, ui64 upper)
             {
                 if (std::exchange(Grow, false)) {
                     PageLoadingLogic->Forward(this, upper);
@@ -194,13 +194,13 @@ namespace NTest {
 
                 auto got = PageLoadingLogic->Get(this, pageId, type, lower);
 
-                Y_ABORT_UNLESS((Grow = got.Grow) || IndexFetch || GroupFetch || got.Page);
+                Y_ENSURE((Grow = got.Grow) || IndexFetch || GroupFetch || got.Page);
 
                 return { got.Need, got.Page };
             }
 
         private:
-            ui64 AddToQueue(TPageId pageId, EPage type) noexcept override
+            ui64 AddToQueue(TPageId pageId, EPage type) override
             {
                 if (IsIndexPage(type)) {
                     IndexFetch.push_back(pageId);
@@ -240,7 +240,7 @@ namespace NTest {
 
         }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return
                 MemTable
@@ -248,14 +248,14 @@ namespace NTest {
                     : MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             InitPart(part);
 
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-                Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+                Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
 
             const auto room = (lob == ELargeObj::Extern)
@@ -271,7 +271,7 @@ namespace NTest {
 
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
-            Y_ABORT_UNLESS(groupId.Index < partStore->Store->GetGroupCount());
+            Y_ENSURE(groupId.Index < partStore->Store->GetGroupCount());
 
             auto type = partStore->GetPageType(pageId, groupId);
             if (groupId.IsMain() && IsIndexPage(type)) {
@@ -284,12 +284,12 @@ namespace NTest {
         }
 
     private:
-        TPartGroupLoadingQueue& Get(const TPart *part, ui32 queueIndex) noexcept
+        TPartGroupLoadingQueue& Get(const TPart *part, ui32 queueIndex)
         {
             auto& partGroupQueues = PartGroupQueues[part];
 
-            Y_ABORT_UNLESS(queueIndex < partGroupQueues.size());
-            Y_ABORT_UNLESS(partGroupQueues[queueIndex]);
+            Y_ENSURE(queueIndex < partGroupQueues.size());
+            Y_ENSURE(partGroupQueues[queueIndex]);
 
             return *partGroupQueues[queueIndex];
         }
@@ -304,13 +304,13 @@ namespace NTest {
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
                     if (room < partStore->Store->GetGroupCount()) {
                         NPage::TGroupId groupId(room);
-                        partGroupQueues.push_back(Settle(partStore, room, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId)));
+                        partGroupQueues.push_back(Settle(partStore, room, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId, partStore->Slices)));
                     } else if (room == partStore->Store->GetOuterRoom()) {
                         partGroupQueues.push_back(Settle(partStore, room, MakeOuter(partStore)));
                     } else if (room == partStore->Store->GetExternRoom()) {
                         partGroupQueues.push_back(Settle(partStore, room, MakeExtern(partStore)));
                     } else {
-                        Y_ABORT("Don't know how to work with room %" PRIu32, room);
+                        Y_TABLET_ERROR("Don't know how to work with room " << room);
                     }
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {
@@ -330,10 +330,10 @@ namespace NTest {
             }
         }
 
-        THolder<NFwd::IPageLoadingLogic> MakeExtern(const TPartStore *part) const noexcept
+        THolder<NFwd::IPageLoadingLogic> MakeExtern(const TPartStore *part) const
         {
             if (auto &large = part->Large) {
-                Y_ABORT_UNLESS(part->Blobs, "Part has frames but not blobs");
+                Y_ENSURE(part->Blobs, "Part has frames but not blobs");
 
                 TVector<ui32> edges(large->Stats().Tags.size(), Edge);
 
@@ -342,7 +342,7 @@ namespace NTest {
                 return nullptr;
         }
 
-        THolder<NFwd::IPageLoadingLogic> MakeOuter(const TPart *part) const noexcept
+        THolder<NFwd::IPageLoadingLogic> MakeOuter(const TPart *part) const
         {
             if (auto &small = part->Small) {
                 TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());

@@ -71,6 +71,9 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
+        if (commitOffset.Defined()) {
+            SetFirstNotReadOffset(*commitOffset);
+        }
         sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
     }
 }

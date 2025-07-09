@@ -126,6 +126,10 @@
 #include <span>  // NOLINT
 #endif           // GTEST_INTERNAL_HAS_STD_SPAN
 
+#if GTEST_INTERNAL_HAS_COMPARE_LIB
+#include <compare>  // NOLINT
+#endif              // GTEST_INTERNAL_HAS_COMPARE_LIB
+
 namespace testing {
 
 // Definitions in the internal* namespaces are subject to change without notice.
@@ -791,6 +795,41 @@ void PrintTo(const std::shared_ptr<T>& ptr, std::ostream* os) {
   (PrintSmartPointer<T>)(ptr, os, 0);
 }
 
+#if GTEST_INTERNAL_HAS_COMPARE_LIB
+template <typename T>
+void PrintOrderingHelper(T ordering, std::ostream* os) {
+  if (ordering == T::less) {
+    *os << "(less)";
+  } else if (ordering == T::greater) {
+    *os << "(greater)";
+  } else if (ordering == T::equivalent) {
+    *os << "(equivalent)";
+  } else {
+    *os << "(unknown ordering)";
+  }
+}
+
+inline void PrintTo(std::strong_ordering ordering, std::ostream* os) {
+  if (ordering == std::strong_ordering::equal) {
+    *os << "(equal)";
+  } else {
+    PrintOrderingHelper(ordering, os);
+  }
+}
+
+inline void PrintTo(std::partial_ordering ordering, std::ostream* os) {
+  if (ordering == std::partial_ordering::unordered) {
+    *os << "(unordered)";
+  } else {
+    PrintOrderingHelper(ordering, os);
+  }
+}
+
+inline void PrintTo(std::weak_ordering ordering, std::ostream* os) {
+  PrintOrderingHelper(ordering, os);
+}
+#endif
+
 // Helper function for printing a tuple.  T must be instantiated with
 // a tuple type.
 template <typename T>
@@ -827,6 +866,11 @@ void PrintTo(const ::std::pair<T1, T2>& value, ::std::ostream* os) {
   *os << ", ";
   UniversalPrinter<T2>::Print(value.second, os);
   *os << ')';
+}
+
+template <typename C, typename D>
+void PrintTo(const ::std::chrono::time_point<C, D>& value, ::std::ostream* os) {
+	*os << "TimeStamp(" << static_cast<int64_t>(value.time_since_epoch().count()) << ")";
 }
 
 // Implements printing a non-reference type T by letting the compiler

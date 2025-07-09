@@ -10,6 +10,8 @@
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <yt/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -311,14 +313,30 @@ private:
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
+                .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
+                .LangVer(State_->Types->LangVer)
                 .AdditionalSecurityTags(addSecTags)
             );
     }
 
+    bool AssignRuntimeCluster(const TYtOpBase& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (input.DataSink().Cluster().StringValue() == YtUnspecifiedCluster) {
+            TString cluster = GetRuntimeCluster(input.Ref(), State_);
+            YQL_CLOG(DEBUG, ProviderYt) << "Assigning runtime cluster " << cluster << " for node " << input.Ref().Content();
+            output = ctx.ChangeChild(input.Ref(), TYtOpBase::idx_DataSink, NPrivate::MakeDataSink(input.DataSink().Pos(), cluster, ctx).Ptr());
+            return true;
+        }
+        return false;
+    }
+
     template <bool MarkFinished>
-    TStatusCallbackPair HandleOutputOp(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatusCallbackPair HandleOutputOp(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (input->HasResult() && input->GetResult().Type() == TExprNode::World) {
             return SyncOk();
+        }
+
+        if (AssignRuntimeCluster(TYtOpBase(input), output, ctx)) {
+            return SyncRepeatWithRestart();
         }
 
         TString operationHash;
@@ -362,15 +380,19 @@ private:
         return SyncStatus(TStatus(TStatus::Repeat, true));
     }
 
-    TStatusCallbackPair HandleReduce(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatusCallbackPair HandleReduce(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         TYtReduce reduce(input);
 
         if (!NYql::HasSetting(reduce.Settings().Ref(), EYtSettingType::FirstAsPrimary)) {
-            return HandleOutputOp<true>(input, ctx);
+            return HandleOutputOp<true>(input, output, ctx);
         }
 
         if (input->HasResult() && input->GetResult().Type() == TExprNode::World) {
             return SyncOk();
+        }
+
+        if (AssignRuntimeCluster(TYtOpBase(input), output, ctx)) {
+            return SyncRepeatWithRestart();
         }
 
         TString operationHash;
@@ -585,11 +607,15 @@ private:
         );
     }
 
-    TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         const TYtDqProcessWrite op(input);
         const auto section = op.Output().Cast<TYtOutSection>();
         Y_ENSURE(section.Size() == 1, "TYtDqProcessWrite expects 1 output table but got " << section.Size());
         const TYtOutTable tmpTable = section.Item(0);
+
+        if (AssignRuntimeCluster(op, output, ctx)) {
+            return SyncRepeatWithRestart();
+        }
 
         if (!input->HasResult()) {
             if (!tmpTable.Name().Value().empty()) {
@@ -684,7 +710,7 @@ private:
         TString operationHash;
         if (const auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable); queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
-                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*input);
+                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
             }
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote() << ", cache mode: " << queryCacheMode;
         }
@@ -733,10 +759,9 @@ private:
         }
 
         if (!delegatedNode) {
-            const auto cluster = op.DataSink().Cluster();
+            const auto clusterStr = op.DataSink().Cluster().StringValue();
             const auto config = State_->Configuration->GetSettingsForNode(*input);
-            const auto tmpFolder = GetTablesTmpFolder(*config);
-            auto clusterStr = TString{cluster.Value()};
+            const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr);
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
 

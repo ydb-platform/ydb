@@ -604,6 +604,33 @@ TWriteReplicationSettings ParseWriteReplicationSettings(TExprList node, TExprCon
     return ret;
 }
 
+TDatabaseSettings ParseDatabaseSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TVector<TCoNameValueTuple> other;
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TDatabaseSettings ret(otherSettings);
+    ret.Mode = mode;
+
+    return ret;
+}
+
 TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> source;
@@ -1057,7 +1084,7 @@ bool FillUsedFilesImpl(
     return childrenOk;
 }
 
-static void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type) {
+void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type) {
     auto separator = string.find(":");
     const auto p0 = string.substr(0, separator);
     if (p0 == "api") {
@@ -1299,7 +1326,11 @@ TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) 
 }
 
 TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr) {
-    auto ast = ConvertToAst(expr, ctx, TExprAnnotationFlags::None, true);
+    TConvertToAstSettings settings;
+    settings.AnnotationFlags = TExprAnnotationFlags::None;
+    settings.RefAtoms = true;
+    settings.AllowFreeArgs = true;
+    auto ast = ConvertToAst(expr, ctx, settings);
     TStringStream exprStream;
     YQL_ENSURE(ast.Root);
     ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);

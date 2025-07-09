@@ -10,6 +10,8 @@
 
 #include <aws/common/byte_buf.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_client_bootstrap;
 struct aws_http_connection;
 struct aws_http_connection_manager;
@@ -78,7 +80,7 @@ struct aws_http_connection_manager_options {
 
     const struct aws_http_connection_monitoring_options *monitoring_options;
     struct aws_byte_cursor host;
-    uint16_t port;
+    uint32_t port;
 
     /**
      * Optional.
@@ -190,5 +192,6 @@ void aws_http_connection_manager_fetch_metrics(
     struct aws_http_manager_metrics *out_metrics);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_HTTP_CONNECTION_MANAGER_H */

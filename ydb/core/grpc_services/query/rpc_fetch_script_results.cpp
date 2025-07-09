@@ -125,9 +125,10 @@ private:
     }
 
     bool GetExecutionIdFromRequest() {
-        TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id());
+        TString error;
+        TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id(), error);
         if (!executionId) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid operation id");
+            Reply(Ydb::StatusIds::BAD_REQUEST, error);
             return false;
         }
         ExecutionId = *executionId;

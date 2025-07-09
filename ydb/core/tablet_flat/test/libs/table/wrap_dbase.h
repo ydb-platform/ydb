@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -38,15 +39,16 @@ namespace NTest {
             return Iter->Remap;
         }
 
-        void Make(IPages*) noexcept
+        void Make(IPages*)
         {
             Iter = nullptr;
         }
 
-        EReady Seek(TRawVals key, ESeek seek) noexcept
+        EReady Seek(TRawVals key, ESeek seek)
         {
-            if (seek == ESeek::Upper && !key)
-                Y_ABORT("Cannot cast ESeek::Upper with empty key to ELookup");
+            if (seek == ESeek::Upper && !key) {
+                Y_TABLET_ERROR("Cannot cast ESeek::Upper with empty key to ELookup");
+            }
 
             TKeyRange range;
             range.MinKey = key;
@@ -80,12 +82,12 @@ namespace NTest {
             return Iter->Next(Mode);
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             return Iter->Next(Mode);
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
             return Iter->Row();
         }

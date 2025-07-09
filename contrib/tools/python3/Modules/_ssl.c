@@ -651,6 +651,11 @@ PySSL_SetError(PySSLSocket *sslsock, int ret, const char *filename, int lineno)
                         ERR_GET_REASON(e) == SSL_R_CERTIFICATE_VERIFY_FAILED) {
                     type = state->PySSLCertVerificationErrorObject;
                 }
+                if (ERR_GET_LIB(e) == ERR_LIB_SYS) {
+                    // A system error is being reported; reason is set to errno
+                    errno = ERR_GET_REASON(e);
+                    return PyErr_SetFromErrno(PyExc_OSError);
+                }
                 p = PY_SSL_ERROR_SYSCALL;
             }
             break;
@@ -676,6 +681,11 @@ PySSL_SetError(PySSLSocket *sslsock, int ret, const char *filename, int lineno)
                 errstr = "EOF occurred in violation of protocol";
             }
 #endif
+            if (ERR_GET_LIB(e) == ERR_LIB_SYS) {
+                // A system error is being reported; reason is set to errno
+                errno = ERR_GET_REASON(e);
+                return PyErr_SetFromErrno(PyExc_OSError);
+            }
             break;
         }
         default:
@@ -4125,6 +4135,12 @@ _ssl__SSLContext_load_dh_params(PySSLContext *self, PyObject *filepath)
 {
     FILE *f;
     DH *dh;
+
+#if defined(MS_WINDOWS) && defined(_DEBUG)
+    PyErr_SetString(PyExc_NotImplementedError,
+                    "load_dh_params: unavailable on Windows debug build");
+    return NULL;
+#endif
 
     f = _Py_fopen_obj(filepath, "rb");
     if (f == NULL)

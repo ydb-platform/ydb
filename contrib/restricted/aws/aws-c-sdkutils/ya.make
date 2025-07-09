@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.1.9)
+VERSION(0.1.16)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-sdkutils/archive/v0.1.9.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-sdkutils/archive/v0.1.16.tar.gz)
 
 PEERDIR(
     contrib/restricted/aws/aws-c-common
@@ -31,6 +31,7 @@ CFLAGS(
 
 SRCS(
     source/aws_profile.c
+    source/endpoints_regex.c
     source/endpoints_rule_engine.c
     source/endpoints_ruleset.c
     source/endpoints_standard_lib.c

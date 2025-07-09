@@ -51,7 +51,8 @@ private:
                      TIntrusivePtr<TControlBoard> board);
     void ApplyConfig(const ::google::protobuf::Message &cfg,
                      const TString &prefix,
-                     TIntrusivePtr<TControlBoard> board);
+                     TIntrusivePtr<TControlBoard> board,
+                     bool allowDynamicFields = false);
     TString MakePrefix(const TString &prefix,
                        const TString &name);
 
@@ -114,6 +115,11 @@ void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard>
 {
     for (int i = 0; i < desc->field_count(); ++i) {
         auto *fieldDesc = desc->field(i);
+        auto name = MakePrefix(prefix, fieldDesc->name());
+
+        if (fieldDesc->is_map()) {
+            continue;
+        }
 
         Y_ABORT_UNLESS(!fieldDesc->is_repeated(),
                  "Repeated fields are not allowed in Immediate Controls Config");
@@ -171,17 +177,50 @@ void TImmediateControlsConfigurator::ApplyConfig(const NKikimrConfig::TImmediate
 
 void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Message &cfg,
                                                  const TString &prefix,
-                                                 TIntrusivePtr<TControlBoard> board)
+                                                 TIntrusivePtr<TControlBoard> board,
+                                                 bool allowDynamicFields)
 {
     auto *desc = cfg.GetDescriptor();
     auto *reflection = cfg.GetReflection();
     for (int i = 0; i < desc->field_count(); ++i) {
-        auto *fieldDesc = desc->field(i);
+        const auto *fieldDesc = desc->field(i);
         auto fieldType = fieldDesc->type();
         auto name = MakePrefix(prefix, fieldDesc->name());
+
+        if (fieldDesc->is_map()) {
+            auto *mapDesc = fieldDesc->message_type();
+            auto *mapKey = mapDesc->map_key();
+            auto *mapValue = mapDesc->map_value();
+
+            auto keyType = mapKey->type();
+            auto valueType = mapValue->type();
+
+            Y_ABORT_UNLESS(keyType == google::protobuf::FieldDescriptor::TYPE_STRING,
+                     "Only string keys are allowed in Immediate Controls Config maps");
+
+            Y_ABORT_UNLESS(valueType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,
+                     "Only message value are allowed in Immediate Controls Config maps");
+
+            auto entryCount = reflection->FieldSize(cfg, fieldDesc);
+            for (int j = 0; j < entryCount; ++j) {
+                const auto &entry = reflection->GetRepeatedMessage(cfg, fieldDesc, j);
+                auto *entryReflection = entry.GetReflection();
+                auto key = entryReflection->GetString(entry, mapKey);
+                auto entryName = MakePrefix(name, key);
+                ApplyConfig(entryReflection->GetMessage(entry, mapValue), entryName, board, true);
+            }
+            continue;
+        }
+
         if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64
             || fieldType == google::protobuf::FieldDescriptor::TYPE_INT64) {
-            Y_ABORT_UNLESS(Controls.contains(name));
+            if (!Controls.contains(name)) {
+                if (!allowDynamicFields) {
+                    Y_ABORT("Missing control for field %s", name.c_str());
+                }
+                AddControl(board, fieldDesc, prefix, true);
+            }
+            
             if (reflection->HasField(cfg, fieldDesc)) {
                 TAtomicBase prev;
                 if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64)

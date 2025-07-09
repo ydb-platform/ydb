@@ -6,6 +6,17 @@
 
 namespace NKikimr::NDataShard {
 
+static void ParseBody(google::protobuf::Message& proto, const TString& body) {
+    Y_ENSURE(proto.ParseFromArray(body.data(), body.size()));
+}
+
+template <typename T>
+static T ParseBody(const TString& body) {
+    T proto;
+    ParseBody(proto, body);
+    return proto;
+}
+
 void TChangeRecord::Serialize(NKikimrChangeExchange::TChangeRecord& record) const {
     record.SetOrder(Order);
     record.SetGroup(Group);
@@ -15,28 +26,17 @@ void TChangeRecord::Serialize(NKikimrChangeExchange::TChangeRecord& record) cons
     record.SetLocalPathId(PathId.LocalPathId);
 
     switch (Kind) {
-        case EKind::AsyncIndex: {
-            Y_ABORT_UNLESS(record.MutableAsyncIndex()->ParseFromArray(Body.data(), Body.size()));
-            break;
-        }
-        case EKind::IncrementalRestore: {
-            Y_ABORT_UNLESS(record.MutableIncrementalRestore()->ParseFromArray(Body.data(), Body.size()));
-            break;
-        }
-        case EKind::CdcDataChange: {
-            Y_ABORT_UNLESS(record.MutableCdcDataChange()->ParseFromArray(Body.data(), Body.size()));
-            break;
-        }
-        case EKind::CdcHeartbeat: {
-            break;
-        }
+        case EKind::AsyncIndex:
+            return ParseBody(*record.MutableAsyncIndex(), Body);
+        case EKind::IncrementalRestore:
+            return ParseBody(*record.MutableIncrementalRestore(), Body);
+        case EKind::CdcDataChange:
+            return ParseBody(*record.MutableCdcDataChange(), Body);
+        case EKind::CdcSchemaChange:
+            return ParseBody(*record.MutableCdcSchemaChange(), Body);
+        case EKind::CdcHeartbeat:
+            return;
     }
-}
-
-static auto ParseBody(const TString& protoBody) {
-    NKikimrChangeExchange::TDataChange body;
-    Y_ABORT_UNLESS(body.ParseFromArray(protoBody.data(), protoBody.size()));
-    return body;
 }
 
 TConstArrayRef<TCell> TChangeRecord::GetKey() const {
@@ -48,26 +48,27 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
         case EKind::AsyncIndex:
         case EKind::IncrementalRestore:
         case EKind::CdcDataChange: {
-            const auto parsed = ParseBody(Body);
+            const auto parsed = ParseBody<NKikimrChangeExchange::TDataChange>(Body);
 
             TSerializedCellVec key;
-            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(parsed.GetKey().GetData(), key));
+            Y_ENSURE(TSerializedCellVec::TryParse(parsed.GetKey().GetData(), key));
 
             Key.ConstructInPlace(key.GetCells());
             break;
         }
 
+        case EKind::CdcSchemaChange:
         case EKind::CdcHeartbeat: {
-            Y_ABORT("Not supported");
+            Y_ENSURE(false, "Not supported");
         }
     }
 
-    Y_ABORT_UNLESS(Key);
+    Y_ENSURE(Key);
     return *Key;
 }
 
 i64 TChangeRecord::GetSeqNo() const {
-    Y_ABORT_UNLESS(Order <= Max<i64>());
+    Y_ENSURE(Order <= Max<i64>());
     return static_cast<i64>(Order);
 }
 
@@ -79,6 +80,7 @@ TInstant TChangeRecord::GetApproximateCreationDateTime() const {
 
 bool TChangeRecord::IsBroadcast() const {
     switch (Kind) {
+        case EKind::CdcSchemaChange:
         case EKind::CdcHeartbeat:
             return true;
         default:

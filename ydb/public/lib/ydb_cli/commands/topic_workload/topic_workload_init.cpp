@@ -4,13 +4,13 @@
 #include "topic_workload_describe.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 using namespace NYdb::NConsoleClient;
 
 int TCommandWorkloadTopicInit::TScenario::DoRun(const TConfig& config)
 {
-    CreateTopic(config.Database, TopicName, TopicPartitionCount, ConsumerCount, TopicAutoscaling, TopicMaxPartitionCount, StabilizationWindowSeconds, UpUtilizationPercent, DownUtilizationPercent);
+    CreateTopic(config.Database, TopicName, TopicPartitionCount, ConsumerCount, TopicAutoscaling, GetTopicMaxPartitionCount(), StabilizationWindowSeconds, UpUtilizationPercent, DownUtilizationPercent);
 
     return EXIT_SUCCESS;
 }
@@ -45,8 +45,10 @@ void TCommandWorkloadTopicInit::Config(TConfig& config)
         .DefaultValue(false)
         .StoreTrue(&Scenario.TopicAutoscaling);
     config.Opts->AddLongOption('m', "auto-partitioning-max-partitions-count", "Max number of partitions in the topic.")
+        .Optional()
         .StoreResult(&Scenario.TopicMaxPartitionCount);
     config.Opts->AddLongOption("auto-partitioning-stabilization-window-seconds", "Duration in seconds of high or low load before automatically scale the number of partitions")
+        .DefaultValue(15)
         .Optional()
         .StoreResult(&Scenario.StabilizationWindowSeconds);
     config.Opts->AddLongOption("auto-partitioning-up-utilization-percent", "The load percentage at which the number of partitions will increase")

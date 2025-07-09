@@ -258,6 +258,32 @@ Y_UNIT_TEST_SUITE(TImmediateControlsConfiguratorTests)
                                MakeAddAction(ITEM_CONTROLS_EXCEED_MAX));
         CompareControls(runtime, ITEM_CONTROLS_MAX.GetConfig().GetImmediateControlsConfig());
     }
+
+    Y_UNIT_TEST(TestDynamicMap)
+    {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        InitImmediateControlsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
+
+        NKikimrConsole::TConfigItem dynamicMapValue;
+        {
+            auto &cfg = *dynamicMapValue.MutableConfig()->MutableImmediateControlsConfig();
+            auto *grpcControls = cfg.MutableGRpcControls();
+
+            auto *requestConfigs = grpcControls->MutableRequestConfigs();
+            auto &r = (*requestConfigs)["FooBar"];
+            r.SetMaxInFlight(10);
+        }
+
+        ConfigureAndWaitUpdate(runtime, MakeAddAction(dynamicMapValue));
+
+        auto icb = runtime.GetAppData().Icb;
+
+        TControlWrapper wrapper;
+
+        icb->RegisterSharedControl(wrapper, "GRpcControls.RequestConfigs.FooBar.MaxInFlight");
+        UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, 10);
+    }
 }
 
 } // namespace NKikimr

@@ -157,6 +157,8 @@ struct TSelectRowsOptionsBase
     // COMPAT(lukyan)
     //! Use fixed and rewritten range inference.
     bool NewRangeInference = true;
+    //! Typed expression builder version.
+    int ExpressionBuilderVersion = 1;
 };
 
 struct TSelectRowsOptions
@@ -192,6 +194,9 @@ struct TSelectRowsOptions
     bool UseCanonicalNullRelations = false;
     //! Merge versioned rows from different stores when reading.
     bool MergeVersionedRows = true;
+    //! For internal use only.
+    //! Use original table schema in result rowset.
+    bool UseOriginalTableSchema = false;
 };
 
 struct TFallbackReplicaOptions

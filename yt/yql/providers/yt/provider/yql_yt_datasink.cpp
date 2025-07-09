@@ -616,6 +616,14 @@ public:
         return State_->DqIntegration_.Get();
     }
 
+    IYtflowIntegration* GetYtflowIntegration() override {
+        return State_->YtflowIntegration_.Get();
+    }
+
+    IYtflowOptimization* GetYtflowOptimization() override {
+        return State_->YtflowOptimization_.Get();
+    }
+
 private:
     static void WriteColumns(NYson::TYsonWriter& writer, TExprBase columns) {
         if (auto maybeList = columns.Maybe<TExprList>()) {

@@ -1,5 +1,7 @@
 /*=============================================================================
     Copyright (c) 2001-2014 Joel de Guzman
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -8,6 +10,7 @@
 #define BOOST_SPIRIT_X3_ALTERNATIVE_JAN_07_2013_1131AM
 
 #include <boost/spirit/home/x3/support/traits/attribute_of_binary.hpp>
+#include <boost/spirit/home/x3/support/expectation.hpp>
 #include <boost/spirit/home/x3/core/parser.hpp>
 #include <boost/spirit/home/x3/operator/detail/alternative.hpp>
 
@@ -29,7 +32,8 @@ namespace boost { namespace spirit { namespace x3
           , Context const& context, RContext& rcontext, unused_type) const
         {
             return this->left.parse(first, last, context, rcontext, unused)
-               || this->right.parse(first, last, context, rcontext, unused);
+                || (!has_expectation_failure(context)
+                    && this->right.parse(first, last, context, rcontext, unused));
         }
 
         template <typename Iterator, typename Context
@@ -39,7 +43,8 @@ namespace boost { namespace spirit { namespace x3
           , Context const& context, RContext& rcontext, Attribute& attr) const
         {
             return detail::parse_alternative(this->left, first, last, context, rcontext, attr)
-               || detail::parse_alternative(this->right, first, last, context, rcontext, attr);
+                || (!has_expectation_failure(context)
+                    && detail::parse_alternative(this->right, first, last, context, rcontext, attr));
         }
     };
 

@@ -12,6 +12,7 @@ SRCS(
     columnshard__propose_transaction.cpp
     columnshard__scan.cpp
     columnshard__statistics.cpp
+    columnshard_subdomain_path_id.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
     columnshard.cpp
@@ -32,7 +33,7 @@ GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/formats
     ydb/core/kqp
     ydb/core/protos
@@ -62,6 +63,8 @@ PEERDIR(
     ydb/core/tx/columnshard/transactions/operators
     ydb/core/tx/columnshard/tx_reader
     ydb/core/tx/conveyor/usage
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/general_cache/usage
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/priorities/service
     ydb/core/tx/tiering
@@ -87,6 +90,7 @@ END()
 RECURSE(
     engines
     splitter
+    tools/visualize_portions
 )
 
 RECURSE_FOR_TESTS(

@@ -85,11 +85,6 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         return done;
     } catch (const TNotReadyTabletException &) {
         return false;
-    } catch (const TSchemeErrorTabletException &ex) {
-        Y_UNUSED(ex);
-        Y_ABORT();
-    } catch (...) {
-        Y_ABORT("there must be no leaked exceptions");
     }
 }
 
@@ -288,7 +283,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);
         if (!rawProcessingParams.empty()) {
             Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
-            Y_ABORT_UNLESS(Self->ProcessingParams->ParseFromString(rawProcessingParams));
+            Y_ENSURE(Self->ProcessingParams->ParseFromString(rawProcessingParams));
         }
     }
 
@@ -310,7 +305,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             TString schema = rowset.GetValue<Schema::UserTables::Schema>();
             NKikimrSchemeOp::TTableDescription descr;
             bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-            Y_ABORT_UNLESS(parseOk);
+            Y_ENSURE(parseOk);
             Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
             if (!rowset.Next())
                 return false;
@@ -347,7 +342,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
             TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot = new NKikimrTxDataShard::TEvSplitTransferSnapshot;
             bool parseOk = ParseFromStringNoSizeLimit(*snapshot, snapBody);
-            Y_ABORT_UNLESS(parseOk);
+            Y_ENSURE(parseOk);
             Self->SplitSrcSnapshotSender.AddDst(dstTablet);
             Self->SplitSrcSnapshotSender.SaveSnapshotForSending(dstTablet, snapshot);
 
@@ -380,7 +375,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!splitDescr.empty()) {
             Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
             bool parseOk = ParseFromStringNoSizeLimit(*Self->DstSplitDescription, splitDescr);
-            Y_ABORT_UNLESS(parseOk);
+            Y_ENSURE(parseOk);
         }
 
         LOAD_SYS_BOOL(db, Schema::Sys_DstSplitSchemaInitialized, Self->DstSplitSchemaInitialized);
@@ -434,7 +429,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!splitDescr.empty()) {
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
             bool parseOk = ParseFromStringNoSizeLimit(*Self->SrcSplitDescription, splitDescr);
-            Y_ABORT_UNLESS(parseOk);
+            Y_ENSURE(parseOk);
 
             switch (Self->State) {
             case TShardState::SplitSrcWaitForNoTxInFlight:
@@ -451,15 +446,13 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    Y_ABORT_UNLESS(Self->State != TShardState::Unknown);
+    Y_ENSURE(Self->State != TShardState::Unknown);
 
-    Y_ABORT_UNLESS(Self->SplitSrcSnapshotSender.AllAcked() || Self->State == TShardState::SplitSrcSendingSnapshot,
-             "Unexpected state %s while having unsent split snapshots at datashard %" PRIu64,
-             DatashardStateName(Self->State).data(), Self->TabletID());
+    Y_ENSURE(Self->SplitSrcSnapshotSender.AllAcked() || Self->State == TShardState::SplitSrcSendingSnapshot,
+             "Unexpected state " << DatashardStateName(Self->State) << " while having unsent split snapshots at datashard " << Self->TabletID());
 
-    Y_ABORT_UNLESS(Self->ReceiveSnapshotsFrom.empty() || Self->State == TShardState::SplitDstReceivingSnapshot,
-             "Unexpected state %s while having non-received split snapshots at datashard %" PRIu64,
-             DatashardStateName(Self->State).data(), Self->TabletID());
+    Y_ENSURE(Self->ReceiveSnapshotsFrom.empty() || Self->State == TShardState::SplitDstReceivingSnapshot,
+             "Unexpected state " << DatashardStateName(Self->State) << " while having non-received split snapshots at datashard " << Self->TabletID());
 
     // Load unsent ReadSets
     if (!Self->OutReadSets.LoadReadSets(db))
@@ -765,7 +758,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     auto* userTablesSchema = scheme.GetTableInfo(Schema::UserTables::TableId);
-    Y_ABORT_UNLESS(userTablesSchema, "UserTables");
+    Y_ENSURE(userTablesSchema, "UserTables");
 
     // Check if tables changed since last time we synchronized them
     NTable::TDatabase::TChangeCounter lastSysUpdate = txc.DB.Head(Schema::Sys::TableId);
@@ -852,7 +845,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 TString schema = rowset.GetValue<Schema::UserTables::Schema>();
                 NKikimrSchemeOp::TTableDescription descr;
                 bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-                Y_ABORT_UNLESS(parseOk);
+                Y_ENSURE(parseOk);
                 tables.push_back(TRow{
                     TPathId(GetPathOwnerId(), tableId),
                     new TUserTable(localTid, descr, shadowTid),
@@ -875,7 +868,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 TString schema = rowset.GetValue<Schema::UserTables::Schema>();
                 NKikimrSchemeOp::TTableDescription descr;
                 bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-                Y_ABORT_UNLESS(parseOk);
+                Y_ENSURE(parseOk);
                 tables.push_back(TRow{
                     TPathId(GetPathOwnerId(), tableId),
                     new TUserTable(localTid, descr, shadowTid),

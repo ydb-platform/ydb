@@ -1,26 +1,9 @@
+/* syntax version 1 */
 SELECT
-    Unicode::TryToUint64("hell", 10);
-
-SELECT
-    Unicode::TryToUint64("01238", 8);
-
-SELECT
-    Unicode::TryToUint64("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16);
-
-SELECT
-    Unicode::TryToUint64("0", 1);
-
-SELECT
-    Unicode::TryToUint64("0x1234abcd", 16),
-    Unicode::TryToUint64("0X4", 16),
-    Unicode::TryToUint64("0644", 8),
-    Unicode::TryToUint64("0101010", 16),
-    Unicode::TryToUint64("0101010", 2),
-    Unicode::TryToUint64("0101010", 10),
-    Unicode::TryToUint64("101", 10);
-
-SELECT
-    Unicode::TryToUint64("0", 8),
-    Unicode::TryToUint64("0", 10),
-    Unicode::TryToUint64("0", 16),
-    Unicode::TryToUint64("0");
+    value as value,
+    Unicode::TryToUint64(value, 10),
+    Unicode::TryToUint64(value, 1),
+    Unicode::TryToUint64(value, 4),
+    Unicode::TryToUint64(value, 8),
+    Unicode::TryToUint64(value, 16)
+From Input

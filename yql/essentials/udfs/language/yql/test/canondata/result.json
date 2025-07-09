@@ -1,0 +1,57 @@
+{
+    "test.test[ExtractClusters]": [
+        {
+            "uri": "file://test.test_ExtractClusters_/results.txt"
+        }
+    ],
+    "test.test[ExtractFuncs]": [
+        {
+            "uri": "file://test.test_ExtractFuncs_/results.txt"
+        }
+    ],
+    "test.test[ExtractInFuncs]": [
+        {
+            "uri": "file://test.test_ExtractInFuncs_/results.txt"
+        }
+    ],
+    "test.test[ExtractInsertHints]": [
+        {
+            "uri": "file://test.test_ExtractInsertHints_/results.txt"
+        }
+    ],
+    "test.test[ExtractKeywords]": [
+        {
+            "uri": "file://test.test_ExtractKeywords_/results.txt"
+        }
+    ],
+    "test.test[ExtractPragmas]": [
+        {
+            "uri": "file://test.test_ExtractPragmas_/results.txt"
+        }
+    ],
+    "test.test[ExtractReadHints]": [
+        {
+            "uri": "file://test.test_ExtractReadHints_/results.txt"
+        }
+    ],
+    "test.test[ExtractTypes]": [
+        {
+            "uri": "file://test.test_ExtractTypes_/results.txt"
+        }
+    ],
+    "test.test[ObfuscateColumn]": [
+        {
+            "uri": "file://test.test_ObfuscateColumn_/results.txt"
+        }
+    ],
+    "test.test[ObfuscateLiterals]": [
+        {
+            "uri": "file://test.test_ObfuscateLiterals_/results.txt"
+        }
+    ],
+    "test.test[ObfuscateTable]": [
+        {
+            "uri": "file://test.test_ObfuscateTable_/results.txt"
+        }
+    ]
+}

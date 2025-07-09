@@ -99,7 +99,7 @@ struct TReadIteratorState {
         bool Ack(ui64 seqNo, ui64 rows, ui64 bytes) {
             if (LastAckSeqNo < seqNo && seqNo <= SeqNo) {
                 size_t ackedIndex = seqNo - LastAckSeqNo - 1;
-                Y_ABORT_UNLESS(ackedIndex < Queue.size());
+                Y_ENSURE(ackedIndex < Queue.size());
 
                 auto it = Queue.begin() + ackedIndex;
 
@@ -173,6 +173,7 @@ public:
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
     TLockInfo::TPtr Lock;
+    bool LockInconsistent = false;
 
     // note that will be always overwritten by values from request
     NKikimrDataEvents::EDataFormat Format = NKikimrDataEvents::FORMAT_CELLVEC;
@@ -218,6 +219,9 @@ public:
     TActorId ScanActorId;
     // temporary storage for forwarded events until scan has started
     std::vector<std::unique_ptr<IEventHandle>> ScanPendingEvents;
+
+    // May be used to cancel enqueued transactions
+    ui64 EnqueuedLocalTxId = 0;
 };
 
 using TReadIteratorsMap = THashMap<TReadIteratorId, TReadIteratorState, TReadIteratorId::THash>;

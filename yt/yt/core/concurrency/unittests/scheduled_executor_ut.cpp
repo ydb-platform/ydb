@@ -5,6 +5,7 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/scheduled_executor.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <atomic>
 
@@ -40,7 +41,7 @@ void CheckTimeSlotCorrectness(const TDuration& interval)
 TEST_W(TScheduledExecutorTest, Simple)
 {
     auto interval = TDuration::MilliSeconds(200);
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         CheckTimeSlotCorrectness(interval);
@@ -66,7 +67,7 @@ TEST_W(TScheduledExecutorTest, Simple)
 
 TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -95,7 +96,7 @@ TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
 
 TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithNonEmptyInterval)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -119,7 +120,7 @@ TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithNonEmptyInterval)
 
 TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithEmptyInterval)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -141,7 +142,7 @@ TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithEmptyInterval)
 TEST_W(TScheduledExecutorTest, ParallelStop)
 {
     auto interval = TDuration::MilliSeconds(10);
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         CheckTimeSlotCorrectness(interval);

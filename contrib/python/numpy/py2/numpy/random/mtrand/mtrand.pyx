@@ -813,7 +813,7 @@ cdef class RandomState:
         self.set_state(state)
 
     def __reduce__(self):
-        return (np.random.__RandomState_ctor, (), self.get_state())
+        return (np.random._RandomState_ctor, (), self.get_state())
 
     # Basic distributions:
     def random_sample(self, size=None):
@@ -990,7 +990,7 @@ cdef class RandomState:
             raise ValueError("high is out of bounds for %s" % dtype)
         if ilow >= ihigh and np.prod(size) != 0:
             raise ValueError("Range cannot be empty (low >= high) unless no samples are taken")
- 
+
         with self.lock:
             ret = randfunc(ilow, ihigh - 1, size, self.state_address)
 
@@ -4919,7 +4919,7 @@ cdef class RandomState:
             return arr
 
         arr = np.asarray(x)
-    
+
         # shuffle has fast-path for 1-d
         if arr.ndim == 1:
             # Return a copy if same memory
@@ -4932,7 +4932,7 @@ cdef class RandomState:
         idx = np.arange(arr.shape[0], dtype=np.intp)
         self.shuffle(idx)
         return arr[idx]
-        
+
 
 _rand = RandomState()
 seed = _rand.seed

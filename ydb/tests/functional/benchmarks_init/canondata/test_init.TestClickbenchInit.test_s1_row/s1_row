@@ -1,7 +1,7 @@
 Init tables ...
 --!syntax_v1
 
-CREATE TABLE `/Root/db/Root/db/clickbench/s1` (
+CREATE TABLE `/Root/db/clickbench/s1` (
     WatchID Int64,
     JavaEnable Int16,
     Title Utf8,
@@ -110,6 +110,8 @@ CREATE TABLE `/Root/db/Root/db/clickbench/s1` (
     PRIMARY KEY (CounterID, EventDate, UserID, EventTime, WatchID)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 128
 );
 

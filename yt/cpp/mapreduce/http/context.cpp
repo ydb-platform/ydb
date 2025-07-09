@@ -13,7 +13,10 @@ bool operator==(const TClientContext& lhs, const TClientContext& rhs)
            lhs.HttpClient == rhs.HttpClient &&
            lhs.UseTLS == rhs.UseTLS &&
            lhs.TvmOnly == rhs.TvmOnly &&
-           lhs.ProxyAddress == rhs.ProxyAddress;
+           lhs.ProxyAddress == rhs.ProxyAddress &&
+           lhs.RpcProxyRole == rhs.RpcProxyRole &&
+           lhs.JobProxySocketPath == rhs.JobProxySocketPath &&
+           lhs.MultiproxyTargetCluster == rhs.MultiproxyTargetCluster;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

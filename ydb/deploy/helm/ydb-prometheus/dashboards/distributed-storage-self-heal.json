@@ -10,7 +10,7 @@
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations \u0026 Alerts",
+        "name": "Annotations & Alerts",
         "target": {
           "limit": 100,
           "matchAny": false,
@@ -24,6 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
+  "id": 40,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -82,8 +83,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -102,6 +102,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -112,10 +113,12 @@
             "type": "prometheus",
             "uid": "$ds"
           },
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(PDisksTotal{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
+          "expr": "sum(tablets_PDisksTotal)",
           "interval": "",
           "legendFormat": "PDisksTotal",
+          "range": true,
           "refId": "A"
         }
       ],
@@ -177,8 +180,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -197,6 +199,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -207,10 +210,12 @@
             "type": "prometheus",
             "uid": "$ds"
           },
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(PDisksTotal{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
+          "expr": "sum(tablets_PDisksTotal)",
           "interval": "",
           "legendFormat": "PDisksTotal",
+          "range": true,
           "refId": "A"
         },
         {
@@ -218,10 +223,12 @@
             "type": "prometheus",
             "uid": "$ds"
           },
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(PDisksChanged{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
+          "expr": "sum(tablets_PDisksChanged)",
           "interval": "",
           "legendFormat": "PDisksChanged",
+          "range": true,
           "refId": "B"
         },
         {
@@ -229,10 +236,12 @@
             "type": "prometheus",
             "uid": "$ds"
           },
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(PDisksNotChanged{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
+          "expr": "sum(tablets_PDisksNotChanged)",
           "interval": "",
           "legendFormat": "PDisksNotChanged",
+          "range": true,
           "refId": "C"
         },
         {
@@ -240,11 +249,13 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "exemplar": false,
-          "expr": "sum(PDisksPendingChange{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
-          "interval": "",
+          "editorMode": "code",
+          "expr": "sum(tablets_PDisksPendingChange)",
+          "hide": false,
+          "instant": false,
           "legendFormat": "PDisksPendingChange",
-          "refId": "D"
+          "range": true,
+          "refId": "E"
         }
       ],
       "title": "CMS PDisk change",
@@ -305,8 +316,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -325,6 +335,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -335,11 +346,39 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "exemplar": false,
-          "expr": "sum by (name_label) (rate(label_replace({__workspace__=\"$workspace\",__bucket__=\"tablets\",__name__=~\"BSController_SelfHealReassignBsc.+\"}, \"name_label\", \"$1\", \"__name__\", \"BSController_(SelfHealReassignBsc.+)\")[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "{{name_label}}",
-          "refId": "A"
+          "editorMode": "code",
+          "expr": "sum(rate(tablets_BSController_SelfHealReassignBscErr[$__rate_interval]))",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "SelfHealReassignBscErr",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(tablets_BSController_SelfHealReassignBscOk[$__rate_interval]))",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "SelfHealReassignBscOk",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(tablets_BSController_SelfHealReassignBscRequests[$__rate_interval]))",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "SelfHealReassignBscRequests",
+          "range": true,
+          "refId": "D"
         }
       ],
       "title": "BSC Reassign requests/responses",
@@ -400,8 +439,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -420,6 +458,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -435,6 +474,19 @@
           "interval": "",
           "legendFormat": "UnreassignableGroups",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "expr": "max(tablets_MAX_BSController_SelfHealUnreassignableGroups_)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "UnreassignableGroups",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "BSC Unreassignable Groups",
@@ -442,7 +494,7 @@
     },
     {
       "datasource": {
-        "type": "victoriametrics-datasource",
+        "type": "prometheus",
         "uid": "$ds"
       },
       "fieldConfig": {
@@ -495,8 +547,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -517,6 +568,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
         }
@@ -527,7 +579,7 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "editorMode": "builder",
+          "editorMode": "code",
           "exemplar": false,
           "expr": "sum by(le) (rate(BSController_FaultyUnsettledPDisks_bucket{__workspace__=\"$workspace\", __bucket__=\"tablets\"}[$__rate_interval]))",
           "format": "heatmap",
@@ -535,6 +587,19 @@
           "legendFormat": "{{le}}",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "expr": "sum by(le) (rate(tablets_BSController_FaultyUnsettledPDisks_bucket[$__rate_interval]))",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "{{le}}",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "BSC Faulty Unsettled PDisks",
@@ -595,8 +660,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -615,6 +679,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -625,11 +690,26 @@
             "type": "prometheus",
             "uid": "$ds"
           },
+          "editorMode": "code",
           "exemplar": false,
           "expr": "sum(SUM_BSController_BytesOnFaultyDisks_{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
           "interval": "",
           "legendFormat": "BytesOnFaultyDisks",
+          "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "expr": "sum(tablets_SUM_BSController_BytesOnFaultyDisks_)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "BytesOnFaultyDisks",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "BSC bytes on faulty PDisks",
@@ -690,8 +770,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -710,6 +789,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -720,11 +800,13 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "exemplar": false,
-          "expr": "sum(SUM_BSController_SlotsOnFaultyDisks_{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
-          "interval": "",
+          "editorMode": "code",
+          "expr": "sum(tablets_SUM_BSController_SlotsOnFaultyDisks_)",
+          "hide": false,
+          "instant": false,
           "legendFormat": "SlotsOnFaultyDisks",
-          "refId": "A"
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "BSC vslots on faulty PDisks",
@@ -785,8 +867,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -805,6 +886,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -815,11 +897,26 @@
             "type": "prometheus",
             "uid": "$ds"
           },
+          "editorMode": "code",
           "exemplar": false,
           "expr": "sum(SUM_BSController_GroupsWithSlotsOnFaultyDisks_{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
           "interval": "",
           "legendFormat": "GroupsWithSlotsOnFaultyDisks",
+          "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "expr": "sum(tablets_SUM_BSController_GroupsWithSlotsOnFaultyDisks_)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "GroupsWithSlotsOnFaultyDisks",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "BSC groups with vslot on faulty PDisks",
@@ -827,7 +924,7 @@
     },
     {
       "datasource": {
-        "type": "victoriametrics-datasource",
+        "type": "prometheus",
         "uid": "$ds"
       },
       "fieldConfig": {
@@ -880,8 +977,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -902,6 +998,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
         }
@@ -912,14 +1009,13 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "editorMode": "builder",
-          "exemplar": false,
-          "expr": "sum by(le) (rate(BSController_ToBeRemovedUnsettledPDisks_bucket{__workspace__=\"$workspace\", __bucket__=\"tablets\"}[$__rate_interval]))",
-          "format": "heatmap",
-          "interval": "",
-          "legendFormat": "{{le}}",
+          "editorMode": "code",
+          "expr": "sum by(le) (rate(tablets_BSController_ToBeRemovedUnsettledPDisks_bucket[$__rate_interval]))",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "B"
         }
       ],
       "title": "BSC ToBeRemoved Unsettled PDisks",
@@ -980,8 +1076,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1000,6 +1095,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -1010,11 +1106,13 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "exemplar": false,
-          "expr": "sum(SUM_BSController_BytesOnToBeRemovedDisks_{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
-          "interval": "",
-          "legendFormat": "BytesOnToBeRemovedDisks",
-          "refId": "A"
+          "editorMode": "code",
+          "expr": "sum(tablets_SUM_BSController_BytesOnToBeRemovedDisks_)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "BSC bytes on ToBeRemoved PDisks",
@@ -1075,8 +1173,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1095,6 +1192,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -1105,11 +1203,13 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "exemplar": false,
-          "expr": "sum(SUM_BSController_SlotsOnToBeRemovedDisks_{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
-          "interval": "",
-          "legendFormat": "SlotsOnToBeRemovedDisks",
-          "refId": "A"
+          "editorMode": "code",
+          "expr": "sum(tablets_SUM_BSController_SlotsOnToBeRemovedDisks_)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "BSC vslots on ToBeRemoved PDisks",
@@ -1170,8 +1270,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1190,6 +1289,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "maxHeight": 600,
           "mode": "single",
           "sort": "none"
         }
@@ -1200,11 +1300,13 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "exemplar": false,
-          "expr": "sum(SUM_BSController_GroupsWithSlotsOnToBeRemovedDisks_{__workspace__=\"$workspace\",__bucket__=\"tablets\"})",
-          "interval": "",
+          "editorMode": "code",
+          "expr": "sum(tablets_SUM_BSController_GroupsWithSlotsOnToBeRemovedDisks_)",
+          "hide": false,
+          "instant": false,
           "legendFormat": "GroupsWithSlotsOnToBeRemovedDisks",
-          "refId": "A"
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "BSC groups with vslot on ToBeRemoved PDisks",
@@ -1218,49 +1320,21 @@
     "list": [
       {
         "current": {
-          "selected": false,
-          "text": "multitenant ds",
-          "value": "b0269287-b776-4e5e-b980-7a731fe272e8"
+          "selected": true,
+          "text": "prometheus",
+          "value": "bdps0jslu0ow0e"
         },
         "hide": 0,
         "includeAll": false,
         "multi": false,
         "name": "ds",
         "options": [],
-        "query": "victoriametrics-datasource",
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "type": "datasource"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "ydb-disks-int",
-          "value": "ydb-disks-int"
-        },
-        "hide": 1,
-        "includeAll": false,
-        "multi": false,
-        "name": "workspace",
-        "options": [
-          {
-            "selected": false,
-            "text": "ydb-global",
-            "value": "ydb-global"
-          },
-          {
-            "selected": true,
-            "text": "ydb-disks-int",
-            "value": "ydb-disks-int"
-          }
-        ],
-        "query": "ydb-global,ydb-disks-int,ydb-disks-int-a",
+        "query": "prometheus",
         "queryValue": "",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "type": "custom"
+        "type": "datasource"
       }
     ]
   },

@@ -37,7 +37,7 @@ public:
 
             TPathId tableId(Self->GetPathOwnerId(), createTable.GetId_Deprecated());
             if (createTable.HasPathId()) {
-                Y_ABORT_UNLESS(Self->GetPathOwnerId() == createTable.GetPathId().GetOwnerId() || Self->GetPathOwnerId() == INVALID_TABLET_ID);
+                Y_ENSURE(Self->GetPathOwnerId() == createTable.GetPathId().GetOwnerId() || Self->GetPathOwnerId() == INVALID_TABLET_ID);
                 tableId = TPathId::FromProto(createTable.GetPathId());
             } else if (tableId.OwnerId == INVALID_TABLET_ID) {
                 // Legacy schemeshard before migrations, shouldn't be possible
@@ -73,7 +73,7 @@ public:
         // Persist split description
         TString splitDescr;
         bool serilaizeOk = Self->DstSplitDescription->SerializeToString(&splitDescr);
-        Y_ABORT_UNLESS(serilaizeOk, "Failed to serialize split/merge description");
+        Y_ENSURE(serilaizeOk, "Failed to serialize split/merge description");
         Self->PersistSys(db, Schema::Sys_DstSplitDescription, splitDescr);
 
         if (initializeSchema) {
@@ -401,14 +401,14 @@ public:
         }
 
         const auto& userTables = Self->GetUserTables();
-        Y_ABORT_UNLESS(msg->PathId.OwnerId == Self->GetPathOwnerId());
+        Y_ENSURE(msg->PathId.OwnerId == Self->GetPathOwnerId());
         auto itUserTables = userTables.find(msg->PathId.LocalPathId);
-        Y_ABORT_UNLESS(itUserTables != userTables.end());
+        Y_ENSURE(itUserTables != userTables.end());
         TUserTable::TCPtr tableInfo = itUserTables->second;
         TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes = tableInfo->KeyColumnTypes;
 
         auto* replTable = Self->EnsureReplicatedTable(msg->PathId);
-        Y_ABORT_UNLESS(replTable);
+        Y_ENSURE(replTable);
 
         if (Self->SrcTabletToRange.empty()) {
             for (const auto& srcRange : Self->DstSplitDescription->GetSourceRanges()) {
@@ -518,7 +518,7 @@ public:
             // Find split keys that are in the (From, To) range
             auto itBegin = std::upper_bound(kvSource.second.begin(), kvSource.second.end(), range.From, leftLess);
             auto itEnd = std::lower_bound(kvSource.second.begin(), kvSource.second.end(), range.To, rightLess);
-            Y_ABORT_UNLESS(itBegin != kvSource.second.begin());
+            Y_ENSURE(itBegin != kvSource.second.begin());
 
             // Add the shard right border first
             if (!range.To.GetCells().empty() && !rightFull) {

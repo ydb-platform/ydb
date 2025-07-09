@@ -35,19 +35,33 @@ void TLogger::AddStructuredTag(TStringBuf key, TType value)
 }
 
 template <class... TArgs>
-TLogger TLogger::WithTag(const char* format, TArgs&&... args) const
+TLogger TLogger::WithTag(const char* format, TArgs&&... args) const &
 {
     auto result = *this;
     result.AddTag(format, std::forward<TArgs>(args)...);
     return result;
 }
 
+template <class... TArgs>
+TLogger TLogger::WithTag(const char* format, TArgs&&... args) &&
+{
+    AddTag(format, std::forward<TArgs>(args)...);
+    return std::move(*this);
+}
+
 template <class TType>
-TLogger TLogger::WithStructuredTag(TStringBuf key, TType value) const
+TLogger TLogger::WithStructuredTag(TStringBuf key, TType value) const &
 {
     auto result = *this;
     result.AddStructuredTag(key, value);
     return result;
+}
+
+template <class TType>
+TLogger TLogger::WithStructuredTag(TStringBuf key, TType value) &&
+{
+    AddStructuredTag(key, value);
+    return std::move(*this);
 }
 
 Y_FORCE_INLINE ELogLevel TLogger::GetEffectiveLoggingLevel(ELogLevel level, const TLoggingAnchor& anchor)
@@ -63,17 +77,26 @@ Y_FORCE_INLINE ELogLevel TLogger::GetEffectiveLoggingLevel(ELogLevel level, cons
 
 Y_FORCE_INLINE bool TLogger::IsLevelEnabled(ELogLevel level) const
 {
-    // This is the first check which is intended to be inlined next to
-    // logging invocation point. Check below is almost zero-cost due
-    // to branch prediction (which requires inlining for proper work).
-    if (level < MinLevel_) {
+    if (!Category_) {
         return false;
     }
 
-    // Next check is heavier and requires full log manager definition which
-    // is undesirable in -inl.h header file. This is why we extract it
-    // to a separate method which is implemented in cpp file.
-    return IsLevelEnabledHeavy(level);
+    [[unlikely]] if (
+        Category_->CurrentVersion.load(std::memory_order::relaxed) !=
+        Category_->ActualVersion->load(std::memory_order::relaxed))
+    {
+        UpdateCategory();
+    }
+
+    if (level < Category_->MinPlainTextLevel) {
+        return false;
+    }
+
+    if (level < GetThreadMinLogLevel()) {
+        return false;
+    }
+
+    return true;
 }
 
 Y_FORCE_INLINE const TLogger& TLogger::operator()() const
@@ -309,9 +332,11 @@ inline void LogEventImpl(
     event.SourceLine = sourceLocation.Line;
     event.Anchor = anchor;
     if (Y_UNLIKELY(event.Level >= ELogLevel::Alert)) {
+        logger.Write(TLogEvent(event));
         OnCriticalLogEvent(logger, event);
+    } else {
+        logger.Write(std::move(event));
     }
-    logger.Write(std::move(event));
 }
 
 } // namespace NDetail

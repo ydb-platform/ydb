@@ -15,7 +15,6 @@ IF (NOT OS_ANDROID)
         minidump_stackwalk
         minidump_upload
         src
-        src/third_party/libdisasm
         src/tools/linux/core2md
         src/tools/linux/dump_syms
         src/tools/linux/md2core

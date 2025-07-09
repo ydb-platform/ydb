@@ -3,7 +3,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 23u
+
 Y_UNIT_TEST_SUITE(TMiniKQLWideChain1MapTest) {
     Y_UNIT_TEST_LLVM(TestThinLambda) {
         TSetup<LLVM> setup;
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideChain1MapTest) {
         UNIT_ASSERT(NUdf::EFetchStatus::Finish == iterator.Fetch(item));
     }
 }
-#endif
+
 }
 }
 

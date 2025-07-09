@@ -4,15 +4,15 @@
 
 #include "stats.h"
 
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/threading/future/future.h>
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 enum class ESyntax {
     Unspecified = 0,
@@ -42,6 +42,7 @@ std::string_view StatsModeToString(const EStatsMode statsMode);
 enum class EExecStatus {
     Unspecified = 0,
     Starting = 10,
+    Running = 15,
     Aborted = 20,
     Canceled = 30,
     Completed = 40,
@@ -61,6 +62,12 @@ private:
     TExecuteQueryIterator(
         std::shared_ptr<TReaderImpl> impl,
         TPlainStatus&& status)
+    : TStatus(std::move(status))
+    , ReaderImpl_(impl) {}
+
+    TExecuteQueryIterator(
+        std::shared_ptr<TReaderImpl> impl,
+        TStatus&& status)
     : TStatus(std::move(status))
     , ReaderImpl_(impl) {}
 
@@ -118,15 +125,21 @@ class TResultSetMeta {
 public:
     TResultSetMeta() = default;
 
-    explicit TResultSetMeta(const std::vector<TColumn>& columns)
+    explicit TResultSetMeta(const std::vector<TColumn>& columns, uint64_t rowsCount = 0, bool finished = false)
         : Columns(columns)
+        , RowsCount(rowsCount)
+        , Finished(finished)
     {}
 
-    explicit TResultSetMeta(std::vector<TColumn>&& columns)
+    explicit TResultSetMeta(std::vector<TColumn>&& columns, uint64_t rowsCount = 0, bool finished = false)
         : Columns(std::move(columns))
+        , RowsCount(rowsCount)
+        , Finished(finished)
     {}
 
     std::vector<TColumn> Columns;
+    uint64_t RowsCount = 0;
+    bool Finished = false;
 };
 
 class TScriptExecutionOperation : public TOperation {
@@ -185,4 +198,4 @@ private:
 using TAsyncFetchScriptResultsResult = NThreading::TFuture<TFetchScriptResultsResult>;
 using TAsyncExecuteQueryResult = NThreading::TFuture<TExecuteQueryResult>;
 
-} // namespace NYdb::V3::NQuery
+} // namespace NYdb::NQuery

@@ -1,11 +1,11 @@
-#include <ydb-cpp-sdk/client/extension_common/extension.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
-#include <src/client/impl/ydb_internal/stats_extractor/extractor.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/stats_extractor/extractor.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 void IExtension::SelfRegister(TDriver driver) {
     CreateInternalInterface(driver)->RegisterExtension(this);

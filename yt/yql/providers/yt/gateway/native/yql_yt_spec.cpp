@@ -39,6 +39,24 @@ const TString& GetPersistentExecPathMd5()
     return md5;
 }
 
+void MergeAnnotations(
+    const NYT::TNode::TMapType& attrs,
+    const TString& attribute,
+    NYT::TNode& annotations)
+{
+    if (auto attrAnnotations = attrs.FindPtr(attribute)) {
+        if (!attrAnnotations->IsMap()) {
+            throw yexception() << "Operation attribute " << attribute.Quote() << " should be a map";
+        }
+        for (const auto& [k, v] : attrAnnotations->AsMap()) {
+            auto it = annotations.AsMap().find(k);
+            if (it == annotations.AsMap().end()) {
+                annotations[k] = v;
+            }
+        }
+    }
+}
+
 }
 
 TMaybe<TString> GetPool(
@@ -50,7 +68,7 @@ TMaybe<TString> GetPool(
     if (auto val = settings->Pool.Get(execCtx.Cluster_)) {
         pool = *val;
     }
-    else if (auto val = settings->StaticPool.Get()) {
+    else if (auto val = settings->StaticPool.Get(execCtx.Cluster_)) {
         pool = *val;
     }
     else if (settings->Auth.Get().GetOrElse(TString()).empty()) {
@@ -197,18 +215,9 @@ void FillSpec(NYT::TNode& spec,
 
     // merge annotations from attributes
     if (auto attrs = execCtx.Session_->OperationOptions_.AttrsYson.GetOrElse(TString())) {
-        NYT::TNode node = NYT::NodeFromYsonString(attrs);
-        if (auto attrAnnotations = node.AsMap().FindPtr("yt_annotations")) {
-            if (!attrAnnotations->IsMap()) {
-                throw yexception() << "Operation attribute \"yt_annotations\" should be a map";
-            }
-            for (const auto& [k, v] : attrAnnotations->AsMap()) {
-                auto it = annotations.AsMap().find(k);
-                if (it == annotations.AsMap().end()) {
-                    annotations[k] = v;
-                }
-            }
-        }
+        NYT::TNode attributes = NYT::NodeFromYsonString(attrs);
+        MergeAnnotations(attributes.AsMap(), "yt_annotations", annotations);
+        MergeAnnotations(attributes.AsMap(), "nirvana_yt_annotations", annotations);
     }
 
     if (!annotations.Empty()) {
@@ -328,7 +337,7 @@ void FillSpec(NYT::TNode& spec,
         if (auto val = settings->IntermediateAccount.Get(cluster)) {
             spec["intermediate_data_account"] = *val;
         }
-        else if (auto tmpFolder = GetTablesTmpFolder(*settings)) {
+        else if (auto tmpFolder = GetTablesTmpFolder(*settings, cluster)) {
             auto attrs = entry->Tx->Get(tmpFolder + "/@", NYT::TGetOptions().AttributeFilter(NYT::TAttributeFilter().AddAttribute(TString("account"))));
             if (attrs.HasKey("account")) {
                 spec["intermediate_data_account"] = attrs["account"];
@@ -395,6 +404,15 @@ void FillSpec(NYT::TNode& spec,
         if (opProps.HasFlags(EYtOpProp::WithReducer)) {
             spec["reducer"]["environment"]["TZ"] = TString("UTC0");
         }
+    }
+
+    auto probabily = TString(std::to_string(settings->_EnforceRegexpProbabilityFail.Get().GetOrElse(0)));
+    if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+        spec["mapper"]["environment"]["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = probabily;
+    }
+
+    if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+        spec["reducer"]["environment"]["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = probabily;
     }
 
     if (settings->SuspendIfAccountLimitExceeded.Get(cluster).GetOrElse(false)) {
@@ -492,7 +510,7 @@ void FillSpec(NYT::TNode& spec,
         spec["max_speculative_job_count_per_task"] = i64(*val);
     }
 
-    if (auto val = settings->NetworkProject.Get(cluster)) {
+    if (auto val = settings->NetworkProject.Get(cluster).OrElse(settings->StaticNetworkProject.Get(cluster))) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             spec["mapper"]["network_project"] = *val;
         }
@@ -520,6 +538,37 @@ void FillSpec(NYT::TNode& spec,
             secTagsNode.Add(tag);
         }
         spec["additional_security_tags"] = std::move(secTagsNode);
+    }
+}
+
+void CheckSpecForSecretsImpl(
+    const NYT::TNode& spec,
+    const ISecretMasker::TPtr& secretMasker,
+    const TYtSettings::TConstPtr& settings
+) {
+    if (!settings->_ForbidSensitiveDataInOperationSpec.Get().GetOrElse(DEFAULT_FORBID_SENSITIVE_DATA_IN_OPERATION_SPEC)) {
+        return;
+    }
+
+    YQL_ENSURE(secretMasker);
+
+    // Secure vault is guaranteed not to be exposed by YT
+    auto cleanSpec = spec.AsMap();
+    cleanSpec.erase("secure_vault");
+    auto maskedSpecStr = NYT::NodeToYsonString(cleanSpec);
+
+    auto secrets = secretMasker->Mask(maskedSpecStr);
+    if (!secrets.empty()) {
+        auto maskedSpecStrBuf = TStringBuf(maskedSpecStr);
+
+        TVector<TString> maskedSecrets;
+        for (auto& secret : secrets) {
+            maskedSecrets.push_back(TStringBuilder() << "\"" << maskedSpecStrBuf.substr(secret.From, secret.Len) << "\"");
+        }
+
+        YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_OP_SPEC_CONTAINS_SECRETS)
+            << "YT operation spec contains sensitive data (masked): "
+            << JoinSeq(", ", maskedSecrets);
     }
 }
 
@@ -598,7 +647,7 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         }
     }
 
-    const TString binTmpFolder = settings->BinaryTmpFolder.Get().GetOrElse(TString());
+    const TString binTmpFolder = settings->BinaryTmpFolder.Get(cluster).GetOrElse(TString());
     const TString binCacheFolder = settings->_BinaryCacheFolder.Get(cluster).GetOrElse(TString());
     if (!localRun && (binTmpFolder || binCacheFolder)) {
         TString bin = mrJobBin.empty() ? GetPersistentExecPath() : mrJobBin;
@@ -664,9 +713,10 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
 
     if (defaultMemoryLimit || fileMemUsage || llvmMemUsage || extraUsage.Memory || tmpFsSize) {
         const ui64 memIoBuffers = YQL_JOB_CODEC_MEM * (static_cast<size_t>(!execCtx.InputTables_.empty()) + execCtx.OutTables_.size());
+        const ui64 arrowMemoryPoolReserve = (execCtx.BlockStatus != TOperationProgress::EOpBlockStatus::None ? YQL_ARROW_MEMORY_POOL_RESERVE : 0);
         const ui64 finalMemLimit = Max<ui64>(
             defaultMemoryLimit,
-            128_MB + fileMemUsage + extraUsage.Memory + tmpFsSize + memIoBuffers,
+            128_MB + fileMemUsage + extraUsage.Memory + tmpFsSize + memIoBuffers + arrowMemoryPoolReserve,
             llvmMemUsage + memIoBuffers // LLVM consumes memory only once on job start, but after IO initialization
         );
         YQL_CLOG(DEBUG, ProviderYt) << "Job memory limit: " << finalMemLimit
@@ -676,6 +726,7 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
             << ", extra: " << extraUsage.Memory
             << ", extra tmpfs: " << tmpFsSize
             << ", I/O buffers: " << memIoBuffers
+            << ", Arrow pool reserve: " << arrowMemoryPoolReserve
             << ")";
         spec.MemoryLimit(static_cast<i64>(finalMemLimit));
     }
@@ -691,7 +742,7 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 {
     opOpts.UseTableFormats(true);
     opOpts.CreateOutputTables(false);
-    if (TString tmpFolder = settings->TmpFolder.Get().GetOrElse(TString())) {
+    if (TString tmpFolder = settings->TmpFolder.Get(entry->Cluster).GetOrElse(TString())) {
         opOpts.FileStorage(tmpFolder);
 
         if (!entry->CacheTxId.IsEmpty()) {

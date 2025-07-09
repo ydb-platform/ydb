@@ -157,7 +157,7 @@ bool TSnapshotManager::ReloadSnapshots(NIceDb::TNiceDb& db) {
             std::piecewise_construct,
             std::forward_as_tuple(key),
             std::forward_as_tuple(key, std::move(name), flags, TDuration::MilliSeconds(timeout_ms)));
-        Y_VERIFY_S(res.second, "Unexpected duplicate snapshot: " << key);
+        Y_ENSURE(res.second, "Unexpected duplicate snapshot: " << key);
 
         if (!rowset.Next()) {
             return false;
@@ -497,9 +497,9 @@ bool TSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& ke
     const TRowVersion newVersion(key.Step, key.TxId);
 
     // N.B. no colocated tables support for now
-    Y_ABORT_UNLESS(Self->GetUserTables().size() == 1, "Multiple co-located tables not supported");
+    Y_ENSURE(Self->GetUserTables().size() == 1, "Multiple co-located tables not supported");
 
-    Y_VERIFY_S(oldVersion <= newVersion,
+    Y_ENSURE(oldVersion <= newVersion,
         "DataShard " << Self->TabletID()
         << " adding new snapshot " << newVersion
         << " below previous min write version " << oldVersion);
@@ -539,7 +539,7 @@ bool TSnapshotManager::RemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey&
 
 void TSnapshotManager::DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key) {
     auto* tablePtr = Self->GetUserTables().FindPtr(key.PathId);
-    Y_VERIFY_S(tablePtr && *tablePtr, "DataShard " << Self->TabletID() << " missing table " << key.PathId);
+    Y_ENSURE(tablePtr && *tablePtr, "DataShard " << Self->TabletID() << " missing table " << key.PathId);
     const ui32 localTableId = (*tablePtr)->LocalTid;
 
     NIceDb::TNiceDb nicedb(db);
@@ -689,7 +689,7 @@ void TSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSnapshotKe
         std::piecewise_construct,
         std::forward_as_tuple(key),
         std::forward_as_tuple(key, name, flags, timeout));
-    Y_VERIFY_S(res.second, "Unexpected duplicate snapshot: " << key);
+    Y_ENSURE(res.second, "Unexpected duplicate snapshot: " << key);
 
     db.Table<Schema::Snapshots>()
         .Key(key.OwnerId, key.PathId, key.Step, key.TxId)
@@ -701,7 +701,7 @@ void TSnapshotManager::PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSnapsho
     using Schema = TDataShard::Schema;
 
     auto it = Snapshots.find(key);
-    Y_VERIFY_S(it != Snapshots.end(), "Removing unknown snapshot: " << key);
+    Y_ENSURE(it != Snapshots.end(), "Removing unknown snapshot: " << key);
 
     if (ExpireQueue.Has(&it->second)) {
         ExpireQueue.Remove(&it->second);
@@ -718,7 +718,7 @@ void TSnapshotManager::PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSn
     using Schema = TDataShard::Schema;
 
     auto it = Snapshots.find(key);
-    Y_VERIFY_S(it != Snapshots.end(), "Updating unknown snapshot: " << key);
+    Y_ENSURE(it != Snapshots.end(), "Updating unknown snapshot: " << key);
 
     if (it->second.HasFlags(TSnapshot::FlagRemoved)) {
         if (ExpireQueue.Has(&it->second)) {

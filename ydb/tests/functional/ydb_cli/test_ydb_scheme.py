@@ -6,7 +6,11 @@ import yatest
 
 from ydb.tests.oss.canonical import set_canondata_root
 
-CLUSTER_CONFIG = dict(extra_feature_flags=["enable_views"], extra_grpc_services=["view"])
+CLUSTER_CONFIG = dict(
+    extra_feature_flags=["enable_views", "enable_external_data_sources"],
+    extra_grpc_services=["view"],
+    query_service_config=dict(available_external_data_sources=["ObjectStorage"]),
+)
 
 
 def bin_from_env(var):
@@ -41,6 +45,34 @@ def create_view(session, view, query="SELECT 42"):
     )
 
 
+def create_external_data_source(session, external_data_source):
+    session.execute_scheme(
+        f"""
+        CREATE EXTERNAL DATA SOURCE {external_data_source} WITH (
+            SOURCE_TYPE = "ObjectStorage",
+            LOCATION = "localhost:1",
+            AUTH_METHOD = "NONE"
+        );
+        """
+    )
+
+
+def create_external_table(session, external_table, external_data_source):
+    session.execute_scheme(
+        f"""
+        CREATE EXTERNAL TABLE {external_table} (
+            key Int,
+            value Utf8
+        ) WITH (
+            DATA_SOURCE = "{external_data_source}",
+            LOCATION = "whatever",
+            FORMAT = "csv_with_names",
+            COMPRESSION = "gzip"
+        );
+        """
+    )
+
+
 class TestSchemeDescribe:
     @pytest.fixture(autouse=True, scope="function")
     def init_test(self, tmp_path):
@@ -68,3 +100,35 @@ class TestSchemeDescribe:
             )
             description = output.splitlines()[1]
             assert json.loads(description)["query_text"] == query
+
+    def test_describe_external_table_references_json(self, ydb_cluster, ydb_database, ydb_client_session):
+        database_path = ydb_database
+        external_data_source = "external_data_source"
+        external_table = "external_table"
+        session_pool = ydb_client_session(database_path)
+        with session_pool.checkout() as session:
+            create_external_data_source(session, external_data_source)
+            create_external_table(session, external_table, external_data_source)
+
+            output = execute_ydb_cli_command(
+                ydb_cluster.nodes[1],
+                database_path,
+                ["scheme", "describe", "--format", "proto-json-base64", external_table],
+            )
+            description = json.loads(output.splitlines()[1])
+            source = description["data_source_path"]
+            expected_source = database_path.rstrip("/") + "/" + external_data_source
+            assert source == expected_source
+
+            output = execute_ydb_cli_command(
+                ydb_cluster.nodes[1],
+                database_path,
+                ["scheme", "describe", "--format", "proto-json-base64", external_data_source],
+            )
+            description = json.loads(output.splitlines()[1])
+            print(description)
+            references = json.loads(description["properties"]["REFERENCES"])
+            expected_reference = database_path.rstrip("/") + "/" + external_table
+            assert isinstance(references, list)
+            assert len(references) == 1
+            assert references[0] == expected_reference

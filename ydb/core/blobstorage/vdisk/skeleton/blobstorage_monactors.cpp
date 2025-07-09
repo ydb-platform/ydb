@@ -23,7 +23,7 @@ namespace NKikimr {
         friend class TActorBootstrapped<TMonErrorActor>;
 
         void Bootstrap(const TActorContext &ctx) {
-            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Ev->Sender, NMonUtil::PrepareError(Explanation));
             Die(ctx);
         }
@@ -66,6 +66,7 @@ namespace NKikimr {
         TString AnubisRunnerInfo;
         TString DelayedCompactionDeleterInfo;
         TString ScrubInfo;
+        TString Shred;
 
         friend class TActorBootstrapped<TSkeletonMonMainPageActor>;
 
@@ -123,6 +124,9 @@ namespace NKikimr {
             ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::ScrubId));
             Counter++;
 
+            ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::Shred));
+            Counter++;
+
             if (Counter) {
                 // set up timeout, after which we reply
                 ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
@@ -153,6 +157,7 @@ namespace NKikimr {
                     DIV_CLASS("col-md-6") {Output(LocalRecovInfo, str, "Local Recovery Info");}
                     DIV_CLASS("col-md-6") {Output(DelayedCompactionDeleterInfo, str, "Delayed Compaction Deleter Info");}
                     DIV_CLASS("col-md-6") {Output(ScrubInfo, str, "Scrub Info");}
+                    DIV_CLASS("col-md-6") {Output(Shred, str, "Shred State");}
                     // uses column wrapping (sum is greater than 12)
                 }
                 Output(HullInfo, str, "Hull");
@@ -163,7 +168,7 @@ namespace NKikimr {
                 Output(HandoffInfo, str, "Handoff");
             }
 
-            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
             Die(ctx);
         }
@@ -192,6 +197,7 @@ namespace NKikimr {
                 {TDbMon::AnubisRunnerId,           &TThis::AnubisRunnerInfo},
                 {TDbMon::DelayedCompactionDeleterId, &TThis::DelayedCompactionDeleterInfo},
                 {TDbMon::ScrubId,                  &TThis::ScrubInfo},
+                {TDbMon::Shred,                    &TThis::Shred},
             };
 
             const auto it = names.find(ptr->SubRequestId);
@@ -355,7 +361,7 @@ namespace NKikimr {
             TSkeletonFrontMonLogoBlobsQueryParams params{
                 .DbName = "",
                 .Form = "",
-                .IndexOnly = true,
+                .IndexOnly = !record.need_data(),
                 .ShowInternals = record.show_internals(),
                 .SubmitButton = true,
                 .AllButton = false,
@@ -368,6 +374,9 @@ namespace NKikimr {
             auto &range = record.range();
             params.From = convert(range.from());
             params.To = convert(range.to());
+            if (params.To == params.From) {
+                params.To.Clear();
+            }
 
             return params;
         }
@@ -479,13 +488,17 @@ namespace NKikimr {
             }
         }
 
-        void OutputOneQueryResultToProto(NKikimrVDisk::GetLogoBlobResponse::LogoBlob *blob, const NKikimrBlobStorage::TQueryResult &q) {
+        void OutputOneQueryResultToProto(NKikimrVDisk::GetLogoBlobResponse::LogoBlob *blob, const NKikimrBlobStorage::TQueryResult &q,
+                TEvBlobStorage::TEvVGetResult *ev) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
             blob->set_id(id.ToString());
             blob->set_status(NKikimrProto::EReplyStatus_Name(q.GetStatus()));
             if (ShowInternals) {
                 TIngress ingress(q.GetIngress());
                 blob->set_ingress(ingress.ToString(Top.get(), TVDiskIdShort(SelfVDiskId), id));
+            }
+            if (TRope data = ev->GetBlobData(q)) {
+                blob->set_data_base64(Base64Encode(data.ConvertToString()));
             }
         }
 
@@ -521,7 +534,7 @@ namespace NKikimr {
             } else {
                 auto res = std::make_unique<TEvGetLogoBlobResponse>();
                 for (ui32 i = 0; i < size; i++) {
-                    OutputOneQueryResultToProto(res->Record.add_logoblobs(), rec.GetResult(i));
+                    OutputOneQueryResultToProto(res->Record.add_logoblobs(), rec.GetResult(i), ev->Get());
                 }
                 Finish(ctx, res.release());
             }
@@ -544,7 +557,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx, IEventBase *ev) {
-            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Ev->Sender, ev);
             this->Die(ctx);
         }
@@ -735,7 +748,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx, IEventBase *ev) {
-            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Ev->Sender, ev);
             Die(ctx);
         }
@@ -941,7 +954,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx, IEventBase *ev) {
-            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Ev->Sender, ev);
             Die(ctx);
         }
@@ -991,7 +1004,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             ctx.Send(WardenId, new TEvBlobStorage::TEvAskRestartVDisk(PDiskId, VDiskId));
-            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Sender, new NMon::TEvHttpInfoRes(MakeReply()));
             Die(ctx);
         }
@@ -1065,7 +1078,7 @@ namespace NKikimr {
                 Output(SkeletonAnswer, str, "Skeleton");
             }
 
-            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
             Die(ctx);
         }

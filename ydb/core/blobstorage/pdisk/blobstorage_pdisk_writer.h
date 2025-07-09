@@ -43,11 +43,13 @@ protected:
     TReqId LastReqId;
     TDriveModel *DriveModel;
 
+    std::shared_ptr<TPDiskCtx> PCtx;
+
     void WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *traceId,
             TCompletionAction *flushAction, ui32 chunkIdx);
 public:
     TBufferedWriter(ui64 sectorSize, IBlockDevice &blockDevice, TDiskFormat &format, TBufferPool *pool,
-        TActorSystem *actorSystem, TDriveModel *driveModel);
+        TActorSystem *actorSystem, TDriveModel *driveModel, std::shared_ptr<TPDiskCtx> pCtx);
     void SetupWithBuffer(ui64 startOffset, ui64 currentOffset, TBuffer *buffer, ui32 count, TReqId reqId);
     ui8* Seek(ui64 offset, ui32 count, ui32 reserve, TReqId reqId, NWilson::TTraceId *traceId, ui32 chunkIdx);
     ui8* Get() const;
@@ -130,17 +132,17 @@ public:
         , DriveModel(driveModel)
         , OnNewChunk(true)
     {
-        Y_ABORT_UNLESS(!LogChunkInfo || LogChunkInfo->ChunkIdx == ChunkIdx);
-        BufferedWriter.Reset(new TBufferedWriter(Format.SectorSize, BlockDevice, Format, pool, PCtx->ActorSystem,
-                    DriveModel));
+        Y_VERIFY_S(!LogChunkInfo || LogChunkInfo->ChunkIdx == ChunkIdx, PCtx->PDiskLogPrefix);
+        BufferedWriter.Reset(new TBufferedWriter(Format.SectorSize, BlockDevice, Format, pool,
+                PCtx->ActorSystem, DriveModel, PCtx));
 
         Cypher.SetKey(key);
         Cypher.StartMessage(Nonce);
 
         ui64 sectorOffset = Format.Offset(ChunkIdx, SectorIdx);
         if (buffer) {
-            Y_ABORT_UNLESS(IsLog);
-            Y_ABORT_UNLESS(!IsSysLog);
+            Y_VERIFY_S(IsLog, PCtx->PDiskLogPrefix);
+            Y_VERIFY_S(!IsSysLog, PCtx->PDiskLogPrefix);
             ui64 startOffset = Format.Offset(ChunkIdx, SectorIdx);
             BufferedWriter->SetupWithBuffer(startOffset, sectorOffset, buffer, 1,
                     TReqId(TReqId::CreateTSectorWriterWithBuffer, 0));
@@ -210,8 +212,8 @@ public:
 
     void SwitchToNewChunk(TReqId reqId, NWilson::TTraceId *traceId) {
         // Allocate next log chunk, write next log chunk pointer sectors, switch to that log chunk.
-        Y_ABORT_UNLESS(IsLog);
-        Y_ABORT_UNLESS(!NextChunks.empty());
+        Y_VERIFY_S(IsLog, PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(!NextChunks.empty(), PCtx->PDiskLogPrefix);
         ui32 nextChunk = NextChunks.front().Idx;
         TLogChunkInfo *nextLogChunkInfo = NextChunks.front().Info;
         NextChunks.pop_front();
@@ -252,8 +254,8 @@ public:
                 memcpy(sectorData, BufferedWriter->Get(), Format.SectorSize);
                 // Check sector CRC
                 const ui64 sectorHash = *(ui64*)(void*)(sectorData + Format.SectorSize - sizeof(ui64));
-                Y_ABORT_UNLESS(Hash.CheckSectorHash(sectorOffset, dataMagic, sectorData, Format.SectorSize, sectorHash),
-                        "Sector hash corruption detected!");
+                Y_VERIFY_S(Hash.CheckSectorHash(sectorOffset, dataMagic, sectorData, Format.SectorSize, sectorHash),
+                        PCtx->PDiskLogPrefix << "Sector hash corruption detected!");
             }
             BufferedWriter->MarkDirty();
             reserve = ReplicationFactor;
@@ -340,7 +342,7 @@ public:
     }
 
     void Write(const void* data, ui64 size, TReqId reqId, NWilson::TTraceId *traceId) {
-        Y_ABORT_UNLESS(data != nullptr);
+        Y_VERIFY_S(data != nullptr, PCtx->PDiskLogPrefix);
         Cypher.Encrypt(BufferedWriter->Get() + CurrentPosition, data, (ui32)size);
         FinalizeWrite(size, reqId, traceId);
     }
@@ -358,7 +360,7 @@ public:
     }
 
     void TerminateLog(TReqId reqId, NWilson::TTraceId *traceId) {
-        Y_ABORT_UNLESS(IsLog);
+        Y_VERIFY_S(IsLog, PCtx->PDiskLogPrefix);
         if (SectorBytesFree == 0 || SectorBytesFree == Format.SectorPayloadSize()) {
             P_LOG(PRI_DEBUG, BPD63, SelfInfo() << " TerminateLog Sector is full or free",
                     (SectorBytesFree, SectorBytesFree),
@@ -399,8 +401,8 @@ public:
 
     void LogHeader(TOwner owner, TLogSignature signature, ui64 ownerLsn, ui64 dataSize, TReqId reqId,
             NWilson::TTraceId *traceId) {
-        Y_ABORT_UNLESS(IsLog);
-        Y_ABORT_UNLESS(SectorBytesFree >= sizeof(TFirstLogPageHeader));
+        Y_VERIFY_S(IsLog, PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(SectorBytesFree >= sizeof(TFirstLogPageHeader), PCtx->PDiskLogPrefix);
         ui64 availableSize = SectorBytesFree - sizeof(TFirstLogPageHeader);
         bool isWhole = availableSize >= dataSize;
         bool isTornOffHeader = false;
@@ -433,10 +435,10 @@ public:
     }
 
     void LogDataPart(const void* data, ui64 size, TReqId reqId, NWilson::TTraceId *traceId) {
-        Y_ABORT_UNLESS(IsLog);
+        Y_VERIFY_S(IsLog, PCtx->PDiskLogPrefix);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(data, size);
-        Y_ABORT_UNLESS(data);
-        Y_ABORT_UNLESS(size > 0);
+        Y_VERIFY_S(data, PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(size > 0, PCtx->PDiskLogPrefix);
         while (RecordBytesLeft > SectorBytesFree && size >= SectorBytesFree) {
             const ui64 bytesToWrite = SectorBytesFree;
             Write(data, bytesToWrite, reqId, traceId);
@@ -467,7 +469,7 @@ public:
 protected:
     void FinalizeWrite(ui64 size, TReqId reqId, NWilson::TTraceId *traceId) {
         CurrentPosition += size;
-        Y_ABORT_UNLESS(SectorBytesFree >= size);
+        Y_VERIFY_S(SectorBytesFree >= size, PCtx->PDiskLogPrefix);
         SectorBytesFree -= size;
         RecordBytesLeft -= size;
         if (size) {

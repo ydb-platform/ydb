@@ -1,7 +1,7 @@
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/client/flat_ut_client.h>
@@ -367,7 +367,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         NKikimr::TAppData::TimeProvider = testTimeProvider;
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
         // Set min uptime before merge by load to 10h

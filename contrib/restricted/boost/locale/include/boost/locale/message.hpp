@@ -341,7 +341,7 @@ namespace boost { namespace locale {
     typedef basic_message<char> message;
     /// Convenience typedef for wchar_t
     typedef basic_message<wchar_t> wmessage;
-#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+#ifdef __cpp_lib_char8_t
     /// Convenience typedef for char8_t
     typedef basic_message<char8_t> u8message;
 #endif

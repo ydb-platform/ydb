@@ -74,25 +74,46 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
 TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
     auto name = internName.Str();
     const bool small = name.SkipPrefix("Small");
-    if (name == TYtTableContent::CallableName()) {
+    if (name == TYtTableContent::CallableName() || name == TYtBlockTableContent::CallableName()) {
+        bool useBlocks = (name == TYtBlockTableContent::CallableName());
 
         *TableContentFlag_ = true;
         *RemoteExecutionFlag_ = *RemoteExecutionFlag_ || !small;
 
         if (EPhase::Content == Phase_ || EPhase::All == Phase_) {
-            return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
-                YQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
+            return [&, name, useBlocks](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+                YQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
 
-                const TString cluster(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-                const TString& server = ExecCtx_.Clusters_->GetServer(cluster);
-                const TString tmpFolder = GetTablesTmpFolder(*Settings_);
-                TTransactionCache::TEntry::TPtr entry = ExecCtx_.Session_->TxCache_.GetEntry(server);
+                const TString cluster = ExecCtx_.Cluster_;
+                const TString tmpFolder = GetTablesTmpFolder(*Settings_, cluster);
+                TTransactionCache::TEntry::TPtr entry = ExecCtx_.GetEntry();
                 auto tx = entry->Tx;
 
+                TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(0));
+                YQL_ENSURE(groupList->GetItemsCount() == 1);
+                TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[0]);
+
+                TVector<NYT::TRichYPath> richPaths;
+                for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
+                    TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
+                    YQL_ENSURE(tuple->GetValuesCount() == 8, "Expect 8 elements in the Tuple item");
+
+                    NYT::TRichYPath richYPath;
+                    NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
+                    YQL_ENSURE(richYPath.Cluster_ && !richYPath.Cluster_->empty());
+
+                    YQL_ENSURE(*richYPath.Cluster_ == cluster,
+                        "Reading from remote cluster is not supported in " << name << ", runtime cluster = " << cluster.Quote() <<
+                        ", input[" << i << "] cluster = " << richYPath.Cluster_->Quote());
+                    richYPath.Cluster_.Clear();
+                    richPaths.push_back(richYPath);
+                }
+
                 auto deliveryMode = ForceLocalTableContent_ ? ETableContentDeliveryMode::File : Settings_->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
-                bool useSkiff = Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
+                bool useSkiff = !useBlocks && Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
                 const bool ensureOldTypesOnly = !useSkiff;
                 const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
+                const ui64 localDataSizeLimit = Settings_->_LocalTableContentLimit.Get().GetOrElse(DEFAULT_LOCAL_TABLE_CONTENT_LIMIT);
                 TString contentTmpFolder = ForceLocalTableContent_ ? TString() : Settings_->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
                 if (contentTmpFolder.StartsWith("//")) {
                     contentTmpFolder = contentTmpFolder.substr(2);
@@ -103,19 +124,15 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
 
                 TString uniqueId = GetGuidAsString(ExecCtx_.Session_->RandomProvider_->GenGuid());
 
-                TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(1));
-                YQL_ENSURE(groupList->GetItemsCount() == 1);
-                TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[0]);
-
                 NYT::TNode specNode = NYT::TNode::CreateMap();
                 NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
                 NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
                 THashMap<TString, TString> uniqSpecs;
-                TVector<NYT::TRichYPath> richPaths;
                 TVector<NYT::TNode> formats;
 
                 THashMap<TString, ui32> structColumns;
                 if (useSkiff) {
+                    YQL_ENSURE(!useBlocks);
                     auto itemType = AS_TYPE(TListType, callable.GetType()->GetReturnType())->GetItemType();
                     TStructType* itemTypeStruct = AS_TYPE(TStructType, itemType);
                     if (itemTypeStruct->GetMembersCount() == 0) {
@@ -127,16 +144,16 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                     }
                 }
 
+                ui64 totalDataSize = 0;
                 for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
                     TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
-                    YQL_ENSURE(tuple->GetValuesCount() == 7, "Expect 7 elements in the Tuple item");
+                    YQL_ENSURE(tuple->GetValuesCount() == 8, "Expect 8 elements in the Tuple item");
 
                     TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
                     TString specStr = TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef());
                     const auto specNode = NYT::NodeFromYsonString(specStr);
 
-                    NYT::TRichYPath richYPath;
-                    NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
+                    NYT::TRichYPath& richYPath = richPaths[i];
                     const bool isTemporary = AS_VALUE(TDataLiteral, tuple->GetValue(1))->AsValue().Get<bool>();
                     const bool isAnonymous = AS_VALUE(TDataLiteral, tuple->GetValue(5))->AsValue().Get<bool>();
                     const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
@@ -151,7 +168,10 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                         refName = res.first->second;
                     }
                     tablesNode.Add(refName);
-                    if (useSkiff) {
+                    if (useBlocks) {
+                        NYT::TNode formatNode("arrow");
+                        formats.push_back(formatNode);
+                    } else if (useSkiff) {
                         formats.push_back(SingleTableSpecToInputSkiff(specNode, structColumns, false, false, false));
                     } else {
                         if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute)) {
@@ -165,11 +185,12 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                     if (isTemporary && !isAnonymous) {
                         richYPath.Path_ = NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix);
                     } else {
-                        auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, epoch));
-                        YQL_ENSURE(p, "Table " << tablePath << " has no snapshot");
-                        richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
+                        with_lock (entry->Lock_) {
+                            auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, epoch));
+                            YQL_ENSURE(p, "Table " << tablePath << " has no snapshot");
+                            richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
+                        }
                     }
-                    richPaths.push_back(richYPath);
 
                     const ui64 chunkCount = AS_VALUE(TDataLiteral, tuple->GetValue(3))->AsValue().Get<ui64>();
                     if (chunkCount > maxChunksForNativeDelivery) {
@@ -177,6 +198,14 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                         YQL_CLOG(DEBUG, ProviderYt) << "Switching to file delivery mode, because table "
                             << tablePath.Quote() << " has too many chunks: " << chunkCount;
                     }
+
+                    totalDataSize += AS_VALUE(TDataLiteral, tuple->GetValue(7))->AsValue().Get<ui64>();
+                }
+
+                const bool localTableContent = ETableContentDeliveryMode::File == deliveryMode && !contentTmpFolder;
+                if (localTableContent && totalDataSize > localDataSizeLimit) {
+                    YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                        << "Tables are too big for local table content";
                 }
 
                 for (size_t i = 0; i < richPaths.size(); ++i) {
@@ -203,7 +232,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                             richYPath.TransactionId_.Clear();
                         }
 
-                        TTupleLiteral* samplingTuple = AS_VALUE(TTupleLiteral, callable.GetInput(2));
+                        TTupleLiteral* samplingTuple = AS_VALUE(TTupleLiteral, callable.GetInput(1));
                         if (samplingTuple->GetValuesCount() != 0) {
                             YQL_ENSURE(samplingTuple->GetValuesCount() == 3);
                             double samplingPercent = AS_VALUE(TDataLiteral, samplingTuple->GetValue(0))->AsValue().Get<double>();
@@ -304,15 +333,23 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                 }
 
                 TCallableBuilder call(env,
-                    TStringBuilder() << TYtTableContent::CallableName() << TStringBuf("Job"),
+                    TStringBuilder() << name << TStringBuf("Job"),
                     callable.GetType()->GetReturnType());
+                if (useBlocks) {
+                    call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
+                    call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
+                    call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
+                    call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
+                    call.Add(callable.GetInput(2)); // length
+                } else {
+                    call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
+                    call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
+                    call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
+                    call.Add(PgmBuilder_.NewDataLiteral(useSkiff));
+                    call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
+                    call.Add(callable.GetInput(2)); // length
+                }
 
-                call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
-                call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
-                call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
-                call.Add(PgmBuilder_.NewDataLiteral(useSkiff));
-                call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
-                call.Add(callable.GetInput(3)); // length
                 return TRuntimeNode(call.Build(), false);
             };
         }
@@ -443,7 +480,7 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
         opts.BypassArtifactCache(file.second.BypassArtifactCache);
         spec.AddLocalFile(file.first, opts);
     }
-    const TString binTmpFolder = Settings_->BinaryTmpFolder.Get().GetOrElse(TString());
+    const TString binTmpFolder = Settings_->BinaryTmpFolder.Get(ExecCtx_.Cluster_).GetOrElse(TString());
     const TString binCacheFolder = Settings_->_BinaryCacheFolder.Get(ExecCtx_.Cluster_).GetOrElse(TString());
     if (!localRun && binCacheFolder) {
         auto udfFiles = std::move(*DeferredUdfFiles_);

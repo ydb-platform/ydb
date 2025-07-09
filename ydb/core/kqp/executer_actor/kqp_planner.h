@@ -48,6 +48,7 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
         const Ydb::Table::QueryStatsCollection::Mode& StatsMode;
+        const bool WithProgressStats;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
@@ -64,6 +65,7 @@ public:
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
+        const TMaybe<size_t> BufferPageAllocSize;
         const bool VerboseMemoryLimitException;
     };
 
@@ -86,6 +88,9 @@ public:
     ui32 GetnScanTasks();
     ui32 GetnComputeTasks();
 
+    void PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates);
+    void CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates);
+
 private:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
@@ -107,6 +112,7 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
+    const bool WithProgressStats;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
@@ -135,6 +141,7 @@ private:
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
+    const TMaybe<size_t> BufferPageAllocSize;
     const bool VerboseMemoryLimitException;
 
 public:

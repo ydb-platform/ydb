@@ -67,6 +67,7 @@ struct TIndexInfo
     std::optional<TString> Predicate;
     std::optional<TString> UnfoldedColumn;
     ETableToIndexCorrespondence Correspondence;
+    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -132,6 +133,8 @@ struct TTableMountInfo final
     NHydra::TRevision SecondaryRevision;
 
     bool EnableDetailedProfiling = false;
+
+    NTableClient::ETabletTransactionSerializationType SerializationType = NTableClient::ETabletTransactionSerializationType::Coarse;
 
     bool IsSorted() const;
     bool IsOrdered() const;

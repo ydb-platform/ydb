@@ -33,34 +33,23 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1d2c160f5770ec8c125d130115e61d07
+KEEP     COPYRIGHT_SERVICE_LABEL 3de5bae94597d6fa92ce56fbe6fc21b9
 BELONGS ya.make
     License text:
-        // SPDX-FileCopyrightText: 2008-2009 Björn Hoehrmann <bjoern@hoehrmann.de>
-        // SPDX-FileCopyrightText: 2013-2023 Niels Lohmann <https://nlohmann.me>
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
+        // SPDX-FileCopyrightText: 2016 - 2021 Evan Nemerson <evan@nemerson.com>
         // SPDX-License-Identifier: MIT
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/nlohmann/detail/output/serializer.hpp [6:8]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 20253debf95df817809db34d2862371e
-BELONGS ya.make
-    License text:
-        Copyright &copy; 2013-2022 [Niels Lohmann](https://nlohmann.me)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        README.md [1386:1386]
+        include/nlohmann/thirdparty/hedley/hedley.hpp [8:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3fb410b721d46624abdaeb2473ffa5d6
 BELONGS ya.make
     License text:
-        // SPDX-FileCopyrightText: 2013-2023 Niels Lohmann <https://nlohmann.me>
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
         // SPDX-FileCopyrightText: 2018 The Abseil Authors
         // SPDX-License-Identifier: MIT
     Scancode info:
@@ -69,6 +58,41 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/nlohmann/detail/meta/cpp_future.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ff67c9bdbb15537628a2c59c3365bf6
+BELONGS ya.make
+    License text:
+        // SPDX-FileCopyrightText: 2008 - 2009 Björn Hoehrmann <bjoern@hoehrmann.de>
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/detail/output/serializer.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5b4a8a3da1fc1707e9cfad1a7ab52d63
+BELONGS ya.make
+    License text:
+        Copyright (c) 2013-2025 Niels Lohmann
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.MIT [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6738967b04c51108d809b85ac132d547
+BELONGS ya.make
+    License text:
+        Copyright &copy; 2013-2025 [Niels Lohmann](https://nlohmann.me)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [1323:1323]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 77db38c27b2cc781224c151d0f786162
 BELONGS ya.make
@@ -82,10 +106,67 @@ BELONGS ya.make
     Files with this license:
         include/nlohmann/detail/output/serializer.hpp [897:898]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 7f9096053ca3484b653eb1c83c7e777d
+KEEP     COPYRIGHT_SERVICE_LABEL 8076846a0e6cd4735d49dcb2ef1f094d
 BELONGS ya.make
     License text:
-        // SPDX-FileCopyrightText: 2013-2023 Niels Lohmann <https://nlohmann.me>
+                result["copyright"] = "(C) 2013-2025 Niels Lohmann";
+                result["name"] = "JSON for Modern C++";
+                result["url"] = "https://github.com/nlohmann/json";
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/json.hpp [255:257]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b2d024cee657b6d8a684658564761637
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [1333:1336]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8c3bf583dc390b261a3600ab20c9768
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [1333:1336]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce7525b41b9b057bb4906c82b576055d
+BELONGS ya.make
+    License text:
+        The code is distributed under the MIT license, Copyright (c) 2009 Florian Loitsch.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/detail/conversions/to_chars.hpp [33:33]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f00eba1ede61dd156c5c44c3700d4ca0
+BELONGS ya.make
+    License text:
+        // SPDX-FileCopyrightText: 2009 Florian Loitsch <https://florian.loitsch.com/>
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/detail/conversions/to_chars.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f259313a7a86a144164c66030872d5f6
+BELONGS ya.make
+    License text:
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
         // SPDX-License-Identifier: MIT
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -131,90 +212,10 @@ BELONGS ya.make
         include/nlohmann/detail/output/serializer.hpp [6:8]
         include/nlohmann/detail/string_concat.hpp [6:7]
         include/nlohmann/detail/string_escape.hpp [6:7]
+        include/nlohmann/detail/string_utils.hpp [6:7]
         include/nlohmann/detail/value_t.hpp [6:7]
         include/nlohmann/json.hpp [6:7]
         include/nlohmann/json_fwd.hpp [6:7]
         include/nlohmann/ordered_map.hpp [6:7]
         include/nlohmann/thirdparty/hedley/hedley.hpp [8:10]
         include/nlohmann/thirdparty/hedley/hedley_undef.hpp [6:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 940a6050b65ddf2560eacf6325aeedfa
-BELONGS ya.make
-    License text:
-        // SPDX-FileCopyrightText: 2013-2023 Niels Lohmann <https://nlohmann.me>
-        // SPDX-FileCopyrightText: 2016-2021 Evan Nemerson <evan@nemerson.com>
-        // SPDX-License-Identifier: MIT
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/nlohmann/thirdparty/hedley/hedley.hpp [8:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL a021d3bd6d6cbb97cbccc0ab1586c491
-BELONGS ya.make
-    License text:
-        Copyright (c) 2013-2022 Niels Lohmann
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE.MIT [3:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b2d024cee657b6d8a684658564761637
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        README.md [1398:1398]
-
-KEEP     COPYRIGHT_SERVICE_LABEL c8c3bf583dc390b261a3600ab20c9768
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        README.md [1396:1396]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ce7525b41b9b057bb4906c82b576055d
-BELONGS ya.make
-    License text:
-        The code is distributed under the MIT license, Copyright (c) 2009 Florian Loitsch.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/nlohmann/detail/conversions/to_chars.hpp [33:33]
-
-KEEP     COPYRIGHT_SERVICE_LABEL f00eba1ede61dd156c5c44c3700d4ca0
-BELONGS ya.make
-    License text:
-        // SPDX-FileCopyrightText: 2009 Florian Loitsch <https://florian.loitsch.com/>
-        // SPDX-FileCopyrightText: 2013-2023 Niels Lohmann <https://nlohmann.me>
-        // SPDX-License-Identifier: MIT
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/nlohmann/detail/conversions/to_chars.hpp [6:8]
-
-KEEP     COPYRIGHT_SERVICE_LABEL f797318120fd0e858229c71aa1f8455b
-BELONGS ya.make
-    License text:
-                result["copyright"] = "(C) 2013-2023 Niels Lohmann";
-                result["name"] = "JSON for Modern C++";
-                result["url"] = "https://github.com/nlohmann/json";
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/nlohmann/json.hpp [252:254]

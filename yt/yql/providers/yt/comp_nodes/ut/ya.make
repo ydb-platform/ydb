@@ -1,1 +1,3 @@
-RECURSE(llvm14 llvm16)
+RECURSE(
+    llvm16
+)

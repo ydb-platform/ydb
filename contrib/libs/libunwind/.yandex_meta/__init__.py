@@ -64,6 +64,7 @@ llvm_libunwind = CMakeNinjaNixProject(
         "src/UnwindRegistersRestore.S",
     ],
     disable_includes=[
+        "commpage_defs.h",
         "sys/debug.h",
         "sys/pseg.h",
         "System/pthread_machdep.h",

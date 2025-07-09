@@ -46,6 +46,8 @@ class IPlanFormatter {
 public:
     virtual ~IPlanFormatter() {}
 
+    virtual bool HasCustomPlan(const TExprNode& node) = 0;
+
     virtual void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     // returns visibility of node
     virtual bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) = 0;
@@ -81,6 +83,8 @@ public:
 
 class IDqIntegration;
 class IDqOptimization;
+class IYtflowIntegration;
+class IYtflowOptimization;
 
 class IOptimizationContext;
 
@@ -182,6 +186,10 @@ public:
     // DQ
     virtual IDqIntegration* GetDqIntegration() = 0;
     virtual IDqOptimization* GetDqOptimization() = 0;
+
+    // ytflow
+    virtual IYtflowIntegration* GetYtflowIntegration() = 0;
+    virtual IYtflowOptimization* GetYtflowOptimization() = 0;
 };
 
 struct IPipelineConfigurator;

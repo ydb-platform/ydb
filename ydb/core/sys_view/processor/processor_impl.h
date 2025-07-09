@@ -336,12 +336,16 @@ private:
     TResultStatsMap TopByRequestUnitsOneHour;
 
     // IntervalPartitionTops
-    TPartitionTop PartitionTopMinute;
-    TPartitionTop PartitionTopHour;
+    TPartitionTop PartitionTopByCpuMinute;
+    TPartitionTop PartitionTopByCpuHour;
+    TPartitionTop PartitionTopByTliMinute;
+    TPartitionTop PartitionTopByTliHour;
 
     // TopPartitions...
-    TResultPartitionsMap TopPartitionsOneMinute;
-    TResultPartitionsMap TopPartitionsOneHour;
+    TResultPartitionsMap TopPartitionsByCpuOneMinute;
+    TResultPartitionsMap TopPartitionsByCpuOneHour;
+    TResultPartitionsMap TopPartitionsByTliOneMinute;
+    TResultPartitionsMap TopPartitionsByTliOneHour;
 
     // limited queue of user requests
     static constexpr size_t PendingRequestsLimit = 5;

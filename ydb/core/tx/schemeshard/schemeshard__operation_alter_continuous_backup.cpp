@@ -2,13 +2,11 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
 #include "schemeshard_utils.h"  // for TransactionTemplate
-
-#include <ydb/core/tx/schemeshard/backup/constants.h>
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/schemeshard/backup/constants.h>
 
 namespace NKikimr::NSchemeShard {
 

@@ -1,9 +1,9 @@
+#include "ut/ut_utils.h"
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
 #include <library/cpp/http/misc/httpcodes.h>
-#include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
@@ -20,11 +20,11 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/tenant_runtime.h>
+
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/actors/core/interconnect.h>
-
 #include <util/string/builder.h>
 #include <regex>
 
@@ -35,6 +35,7 @@ using namespace NKikimrWhiteboard;
 using namespace NSchemeShard;
 using namespace Tests;
 using namespace NMonitoring;
+using namespace NKikimr::NViewerTests;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 #ifdef NDEBUG
@@ -193,51 +194,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(result.PDiskStateInfoSize(), 100000);
         Ctest << "Data has merged" << Endl;
     }
-
-    struct THttpRequest : NMonitoring::IHttpRequest {
-        HTTP_METHOD Method;
-        TCgiParameters CgiParameters;
-        THttpHeaders HttpHeaders;
-        TString PostContent;
-
-        THttpRequest(HTTP_METHOD method)
-            : Method(method)
-        {}
-
-        ~THttpRequest() {}
-
-        const char* GetURI() const override {
-            return "";
-        }
-
-        const char* GetPath() const override {
-            return "";
-        }
-
-        const TCgiParameters& GetParams() const override {
-            return CgiParameters;
-        }
-
-        const TCgiParameters& GetPostParams() const override {
-            return CgiParameters;
-        }
-
-        TStringBuf GetPostContent() const override {
-            return PostContent;
-        }
-
-        HTTP_METHOD GetMethod() const override {
-            return Method;
-        }
-
-        const THttpHeaders& GetHeaders() const override {
-            return HttpHeaders;
-        }
-
-        TString GetRemoteAddr() const override {
-            return TString();
-        }
-    };
 
     class TMonPage: public IMonPage {
     public:
@@ -587,18 +543,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
     }
 
-    void WaitForHttpReady(TKeepAliveHttpClient& client) {
-        for (int retries = 0;; ++retries) {
-            UNIT_ASSERT(retries < 100);
-            TStringStream responseStream;
-            const TKeepAliveHttpClient::THttpCode statusCode = client.DoGet("/viewer/simple_counter?max_counter=1&period=100", &responseStream);
-            const TString response = responseStream.ReadAll();
-            if (statusCode == HTTP_OK) {
-                break;
-            }
-        }
-    }
-
     void GrantConnect(TClient& client) {
         client.CreateUser("/Root", "username", "password");
         client.GrantConnect("username");
@@ -851,21 +795,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 2);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -929,23 +865,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 3);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -1012,23 +939,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 3);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -1097,25 +1015,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
-        size_t secondExclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
+        size_t secondExclusiveDynNodeId = runtime.GetNodeId(3);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 4);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
-                    secondExclusiveDynNodeId = nodes[3];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -2117,5 +2025,4 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);
         UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
     }
-
 }

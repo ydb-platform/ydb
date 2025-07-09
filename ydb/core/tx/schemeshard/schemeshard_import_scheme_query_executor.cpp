@@ -1,11 +1,13 @@
-#include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
+
+#include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -99,7 +101,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
     void Finish(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {
         auto logMessage = TStringBuilder() << "TSchemeQueryExecutor Reply"
             << ", self: " << SelfId()
-            << ", success: " << status;
+            << ", status: " << status;
         LOG_I(logMessage);
 
         std::visit([&]<typename T>(T& value) {

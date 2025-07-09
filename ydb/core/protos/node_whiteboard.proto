@@ -146,6 +146,7 @@ message TPDiskStateInfo {
     optional uint32 ExpectedSlotCount = 22 [(DefaultField) = true];
     optional uint64 EnforcedDynamicSlotSize = 23 [(DefaultField) = true];
     optional uint32 NumActiveSlots = 24 [(DefaultField) = true];
+    optional uint32 SlotSizeInUnits = 25;
 }
 
 message TEvPDiskStateRequest {
@@ -230,6 +231,8 @@ message TVDiskStateInfo {
     optional uint64 ReadThroughput = 22 [(DefaultField) = true];
     // Write bytes per second to PDisk for TEvVPut blobs and replication bytes only
     optional uint64 WriteThroughput = 23 [(DefaultField) = true];
+
+    optional uint32 GroupSizeInUnits = 32;
 }
 
 message TEvVDiskStateRequest {
@@ -263,6 +266,7 @@ message TBSGroupStateInfo {
     optional uint64 BlobDepotId = 21 [(DefaultField) = true]; // if set, then this is virtual group
     optional bool NoVDisksInGroup = 22 [(DefaultField) = true];
     optional uint64 BlobDepotOnlineTime = 23 [(DefaultField) = true];
+    optional uint32 GroupSizeInUnits = 24;
 }
 
 message TEvBSGroupStateRequest {
@@ -279,6 +283,16 @@ message TEvBSGroupStateResponse {
 enum EConfigState {
     Consistent = 0;
     Outdated = 1;
+}
+
+message TSystemThreadInfo {
+    optional string Name = 1;
+    optional uint32 Threads = 2;
+    optional double SystemUsage = 3;
+    optional double UserUsage = 4;
+    optional uint32 MinorPageFaults = 5;
+    optional uint32 MajorPageFaults = 6;
+    map<string, uint32> States = 7;
 }
 
 message TSystemStateInfo {
@@ -345,6 +359,9 @@ message TSystemStateInfo {
     optional double CoresUsed = 39;
     optional uint32 CoresTotal = 40;
     optional float NetworkUtilization = 41;
+    optional uint64 NetworkWriteThroughput = 42;
+    optional uint32 RealNumberOfCpus = 43; // number of cpus without cgroups limitations
+    repeated TSystemThreadInfo Threads = 44;
 }
 
 message TEvSystemStateRequest {

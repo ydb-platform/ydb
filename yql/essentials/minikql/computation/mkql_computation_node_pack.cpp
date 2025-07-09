@@ -1067,34 +1067,41 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
 
 // Transport packer
 template<bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* pool)
+TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type, TMaybe<size_t> bufferPageAllocSize, arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
+    , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     MKQL_ENSURE(!stable, "Stable packing is not supported");
-    InitBlocks();
+    InitBlocks(minFillPercentage);
 }
 
 template<bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::MemoryPool* pool)
+TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, TMaybe<size_t> bufferPageAllocSize, arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
+    , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
-    InitBlocks();
+    InitBlocks(minFillPercentage);
 }
 
 template<bool Fast>
-void TValuePackerTransport<Fast>::InitBlocks() {
+void TValuePackerTransport<Fast>::InitBlocks(TMaybe<ui8> minFillPercentage) {
     TVector<const TBlockType*> items;
     if (IsLegacyStructBlock(Type_, BlockLenIndex_, items)) {
         IsLegacyBlock_ = true;
     } else if (!IsMultiBlock(Type_, BlockLenIndex_, items)) {
         return;
     }
+
+    const TBlockSerializerParams serializerParams = {
+        .Pool = &ArrowPool_,
+        .MinFillPercentage = minFillPercentage
+    };
 
     IsBlock_ = true;
     ConvertedScalars_.resize(items.size());
@@ -1104,13 +1111,19 @@ void TValuePackerTransport<Fast>::InitBlocks() {
     for (ui32 i = 0; i < items.size(); ++i) {
         if (i != BlockLenIndex_) {
             const TBlockType* itemType = items[i];
-            BlockSerializers_[i] = MakeBlockSerializer(TTypeInfoHelper(), itemType->GetItemType());
+            BlockSerializers_[i] = MakeBlockSerializer(TTypeInfoHelper(), itemType->GetItemType(), serializerParams);
             BlockDeserializers_[i] = MakeBlockDeserializer(TTypeInfoHelper(), itemType->GetItemType());
             if (itemType->GetShape() == TBlockType::EShape::Scalar) {
                 BlockReaders_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType->GetItemType());
             }
         }
     }
+}
+
+template<bool Fast>
+void TValuePackerTransport<Fast>::SetMinFillPercentage(TMaybe<ui8> minFillPercentage) {
+    MKQL_ENSURE(IsBlock_, "SetMinFillPercentage() can be used only for blocks");
+    InitBlocks(minFillPercentage);
 }
 
 template<bool Fast>
@@ -1135,7 +1148,7 @@ template<bool Fast>
 TChunkedBuffer TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& value) const {
     MKQL_ENSURE(ItemCount_ == 0, "Can not mix Pack() and AddItem() calls");
     MKQL_ENSURE(!IsBlock_, "Pack() should not be used for blocks");
-    TPagedBuffer::TPtr result = std::make_shared<TPagedBuffer>();
+    TPagedBuffer::TPtr result = std::make_shared<TPagedBuffer>(BufferPageAllocSize_);
     if constexpr (Fast) {
         PackImpl<Fast, false>(Type_, *result, value, State_);
     } else {
@@ -1149,7 +1162,7 @@ TChunkedBuffer TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& v
 
 template<bool Fast>
 void TValuePackerTransport<Fast>::StartPack() {
-    Buffer_ = std::make_shared<TPagedBuffer>();
+    Buffer_ = std::make_shared<TPagedBuffer>(BufferPageAllocSize_);
     if constexpr (Fast) {
         // reserve place for list item count
         Buffer_->ReserveHeader(sizeof(ItemCount_));
@@ -1431,7 +1444,7 @@ void TValuePackerTransport<Fast>::BuildMeta(TPagedBuffer::TPtr& buffer, bool add
     } else {
         s.OptionalMaskReserve = maskSize;
 
-        TPagedBuffer::TPtr resultBuffer = std::make_shared<TPagedBuffer>();
+        TPagedBuffer::TPtr resultBuffer = std::make_shared<TPagedBuffer>(BufferPageAllocSize_);
         SerializeMeta(*resultBuffer, useMask, s.OptionalUsageMask, fullLen, s.Properties.Test(EPackProps::SingleOptional));
         if (addItemCount) {
             PackData<Fast>(ItemCount_, *resultBuffer);

@@ -35,7 +35,7 @@ using NCrypto::TMD5Hash;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = TableClientLogger;
+constinit const auto Logger = TableClientLogger;
 
 struct TWireProtocolWriterTag
 { };
@@ -1051,6 +1051,17 @@ auto IWireProtocolReader::GetSchemaData(const TTableSchema& schema) -> TSchemaDa
         schemaData.push_back(*reinterpret_cast<ui32*>(&value));
     }
     return schemaData;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TWireProtocolOptions CreateUnlimitedWireProtocolOptions()
+{
+    return {
+        .MaxStringValueLength = std::numeric_limits<i64>::max(),
+        .MaxAnyValueLength = std::numeric_limits<i64>::max(),
+        .MaxCompositeValueLength = std::numeric_limits<i64>::max(),
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////

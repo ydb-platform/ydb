@@ -9,11 +9,12 @@ namespace NKikimr::NOlap::NLoading {
 bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<TPortionInfo::TPtr> portions;
-    if (!db.LoadPortions(Self->GetPathId(), [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-        const TIndexInfo& indexInfo = portion.GetSchema(*VersionedIndex)->GetIndexInfo();
-        AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
-        portions.emplace_back(portion.Build());
-    })) {
+    if (!db.LoadPortions(Self->GetPathId(),
+            [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                const TIndexInfo& indexInfo = portion->GetSchema(*VersionedIndex)->GetIndexInfo();
+                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
+                portions.emplace_back(portion->Build());
+            })) {
         return false;
     }
     for (auto&& i : portions) {
@@ -24,13 +25,11 @@ bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionCont
 
 bool TGranuleOnlyPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId().GetRawValue()).Select().IsReady();
 }
 
 bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
-    TPortionInfo::TSchemaCursor schema(*VersionedIndex);
-    Context->ClearRecords();
     return db.LoadColumns(Self->GetPathId(), [&](TColumnChunkLoadContextV2&& loadContext) {
         Context->Add(std::move(loadContext));
     });
@@ -38,20 +37,20 @@ bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& 
 
 bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(Self->GetPathId()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(Self->GetPathId().GetRawValue()).Select().IsReady();
 }
 
 bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
-    Context->ClearIndexes();
-    return db.LoadIndexes(Self->GetPathId(), [&](const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
-        Context->Add(std::move(loadContext));
-    });
+    return db.LoadIndexes(
+        Self->GetPathId(), [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
+            Context->Add(std::move(loadContext));
+        });
 }
 
 bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(Self->GetPathId()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(Self->GetPathId().GetRawValue()).Select().IsReady();
 }
 
 bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
@@ -60,7 +59,8 @@ bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransaction
     for (auto&& i : Self->GetPortions()) {
         auto it = constructors.find(i.first);
         AFL_VERIFY(it != constructors.end());
-        auto accessor = TPortionAccessorConstructor::BuildForLoading(i.second, std::move(it->second.MutableRecords()), std::move(it->second.MutableIndexes()));
+        auto accessor =
+            TPortionAccessorConstructor::BuildForLoading(i.second, it->second.DetachBuildInfo(), std::move(it->second.MutableIndexes()));
         Self->GetDataAccessorsManager()->AddPortion(accessor);
     }
     return true;

@@ -138,6 +138,8 @@ namespace NKikimr::NTestShard {
         bool WriteOnTimeScheduled = false;
         bool DoSomeActionInFlight = false;
 
+        TControlWrapper DisableWrites;
+
         void GenerateKeyValue(TString *key, TString *value, bool *isInline);
         void IssueWrite();
         void IssuePatch();

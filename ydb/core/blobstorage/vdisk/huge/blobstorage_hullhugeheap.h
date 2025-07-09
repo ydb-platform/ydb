@@ -68,14 +68,14 @@ namespace NKikimr {
                     bool operator ==(const TSeg &s) const { return Left == s.Left && Right == s.Right; }
                 };
 
-                TChainLayoutBuilder(ui32 left, ui32 milestone, ui32 right, ui32 overhead);
+                TChainLayoutBuilder(const TString& prefix, ui32 left, ui32 milestone, ui32 right, ui32 overhead);
                 const TVector<TSeg> &GetLayout() const { return Layout; }
                 const TSeg &GetMilestoneSegment() const { return Layout.at(MilestoneId); }
                 TString ToString(ui32 appendBlockSize = 0) const;
                 void Output(IOutputStream &str, ui32 appendBlockSize = 0) const;
 
             private:
-                void Check(ui32 left, ui32 right);
+                void Check(const TString& prefix, ui32 left, ui32 right);
                 void BuildDownward(ui32 left, ui32 right, ui32 overhead);
                 void BuildUpward(ui32 left, ui32 right, ui32 overhead);
 
@@ -139,7 +139,6 @@ namespace NKikimr {
             // returns freed ChunkID if any
             TFreeRes Free(const NPrivate::TChunkSlot &id);
             bool LockChunkForAllocation(TChunkID chunkId);
-            void UnlockChunk(TChunkID chunkId);
             THeapStat GetStat() const;
             // returns true is allocated, false otherwise
             bool RecoveryModeAllocate(const NPrivate::TChunkSlot &id);
@@ -150,6 +149,8 @@ namespace NKikimr {
             void RenderHtml(IOutputStream &str) const;
             void RenderHtmlForUsage(IOutputStream &str) const;
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
+            void ShredNotify(const std::vector<ui32>& chunksToShred);
+            void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
             static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk);
 
@@ -165,7 +166,7 @@ namespace NKikimr {
                     } else if (lockedIt->first < freeIt->first) {
                         callback(*lockedIt++);
                     } else {
-                        Y_ABORT("intersecting sets of keys for FreeSpace and LockedChunks");
+                        Y_FAIL_S(VDiskLogPrefix << "intersecting sets of keys for FreeSpace and LockedChunks");
                     }
                 }
                 std::for_each(freeIt, freeEnd, callback);
@@ -201,6 +202,8 @@ namespace NKikimr {
             std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const;
 
             void FinishRecovery();
+            void ShredNotify(const std::vector<ui32>& chunksToShred);
+            void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
         private:
             void BuildChains();
@@ -234,6 +237,8 @@ namespace NKikimr {
             const ui32 FreeChunksReservation;
             TFreeChunks FreeChunks;
             TAllChains Chains;
+            THashSet<TChunkID> ForbiddenChunks; // chunks that are being shredded right now
+            std::deque<TChunkID> ForceFreeChunks;
 
         public:
             THeap(const TString &vdiskLogPrefix,
@@ -275,8 +280,10 @@ namespace NKikimr {
             ui32 RemoveChunk();
             // make chunk not available for allocations, it is used for heap defragmentation
             bool LockChunkForAllocation(ui32 chunkId, ui32 slotSize);
-            void UnlockChunk(ui32 chunkId, ui32 slotSize);
             THeapStat GetStat() const;
+            void ShredNotify(const std::vector<ui32>& chunksToShred);
+            void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
+            THashSet<TChunkIdx> GetForbiddenChunks() const { return ForbiddenChunks; }
 
             //////////////////////////////////////////////////////////////////////////////////////////
             // RecoveryMode

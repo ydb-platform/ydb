@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/flat_row_remap.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
 #include <ydb/core/tablet_flat/flat_util_misc.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/generic/vector.h>
 
@@ -32,7 +33,7 @@ namespace NTest{
 
         TLayoutCook& Key(std::initializer_list<NTable::TTag> keys)
         {
-            Y_ABORT_UNLESS(!Scheme, "Keys are already assigned for layout cook");
+            Y_ENSURE(!Scheme, "Keys are already assigned for layout cook");
 
             TPos keyOrder = 0;
 
@@ -44,9 +45,9 @@ namespace NTest{
                 auto it = std::find_if(Cols.begin(), Cols.end(), pred);
 
                 if (it == Cols.end()) {
-                    Y_ABORT("Not all key tags found in columns registery");
+                    Y_TABLET_ERROR("Not all key tags found in columns registery");
                 } else if (it->KeyOrder != Max<NTable::TPos>()) {
-                    Y_ABORT("Non-unique key column tags supplied for layout");
+                    Y_TABLET_ERROR("Non-unique key column tags supplied for layout");
                 } else {
                     it->KeyOrder = keyOrder++;
                 }

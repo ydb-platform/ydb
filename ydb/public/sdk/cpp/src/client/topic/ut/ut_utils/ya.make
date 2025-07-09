@@ -1,14 +1,8 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
-    managed_executor.cpp
-    managed_executor.h
     topic_sdk_test_setup.cpp
     topic_sdk_test_setup.h
-    trace.cpp
-    trace.h
 )
 
 PEERDIR(
@@ -19,7 +13,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic
-    ydb/public/sdk/cpp/src/client/table
+
+    ydb/public/sdk/cpp/tests/integration/topic/utils
 )
 
 YQL_LAST_ABI_VERSION()

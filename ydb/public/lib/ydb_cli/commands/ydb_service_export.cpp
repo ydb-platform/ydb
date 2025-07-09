@@ -1,6 +1,6 @@
 #include "ydb_service_export.h"
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
@@ -128,7 +128,7 @@ void TCommandExportToYt::Config(TConfig& config) {
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
-        .RequiredArgument("STRING").Handler1T<TString>([this](const TString& arg) {
+        .RequiredArgument("STRING").Handler([this](const TString& arg) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
 
@@ -157,7 +157,10 @@ void TCommandExportToYt::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
 
+void TCommandExportToYt::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
 
@@ -275,7 +278,7 @@ void TCommandExportToS3::Config(TConfig& config) {
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
-        .RequiredArgument("STRING").Handler1T<TString>([this](const TString& arg) {
+        .RequiredArgument("STRING").Handler([this](const TString& arg) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
 
@@ -317,6 +320,10 @@ void TCommandExportToS3::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandExportToS3::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);

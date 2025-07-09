@@ -2,11 +2,12 @@
 
 #include "ydb_command.h"
 
-#include <ydb-cpp-sdk/client/import/import.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/aws.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
+#include <ydb/public/lib/ydb_cli/import/import.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -22,6 +23,7 @@ public:
     TCommandImportFromS3();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     int Run(TConfig& config) override;
 
 private:
@@ -56,6 +58,7 @@ public:
         Args[0] = "<input files...>";
     }
     void Config(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
 
 protected:
@@ -84,6 +87,7 @@ protected:
     ui32 SkipRows = 0;
     bool Header = false;
     bool NewlineDelimited = true;
+    NConsoleClient::ESendFormat SendFormat = NConsoleClient::ESendFormat::Default;
 };
 
 class TCommandImportFromTsv : public TCommandImportFromCsv {

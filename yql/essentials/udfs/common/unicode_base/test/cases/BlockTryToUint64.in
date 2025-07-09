@@ -1,0 +1,8 @@
+{"key"="with_format_1";"value"="0x1234abcd"};
+{"key"="with_format_2";"value"="0X4"};
+{"key"="with_format_3";"value"="0644"};
+{"key"="binary_1";"value"="0101010"};
+{"key"="binary_2";"value"="101"};
+{"key"="zero";"value"="0"};
+{"key"="invalid";"value"="hell"};
+{"key"="very_long";"value"="0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"};

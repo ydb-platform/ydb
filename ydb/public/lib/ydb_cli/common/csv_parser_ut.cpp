@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
             {"col2", TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Int64).EndOptional().Build()},
             {"col3", TTypeBuilder().Primitive(EPrimitiveType::Bool).Build()},
         };
-        
+
         TString csvHeader = "col4,col3,col5,col1,col6";
         std::vector<TString> data = {
             "col4 unused value,true,col5 unused value,col1 value,col6 unused value"
@@ -334,93 +334,5 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
                 .EndStruct()
             .EndList().Build();
         AssertValuesEqual(builtResult, expexctedResult);
-    }
-
-    void CheckPossibleTypes(TVector<TVector<TString>>&& batches, TVector<TMaybe<TType>>&& expectedTypes) {
-        TVector<TString> columnNames;
-        for (size_t i = 1; i <= expectedTypes.size(); ++i) {
-            columnNames.push_back(TStringBuilder() << "column" << i);
-        }
-        size_t columnCount = columnNames.size();
-        TCsvParser parser = TCsvParser(std::move(columnNames), ',', "");
-        TPossibleTypes possibleTypesGlobal(columnCount);
-        uint64_t row = 0;
-        for (auto& batch : batches) {
-            TPossibleTypes batchTypes = possibleTypesGlobal.GetCopy();
-            for (auto& line : batch) {
-                ++row;
-                parser.ParseLineTypes(line, batchTypes, TCsvParser::TParseMetadata{row, "testFile.csv"});
-            }
-            possibleTypesGlobal.MergeWith(batchTypes);
-        }
-        auto& possibleTypesResult = possibleTypesGlobal.GetColumnPossibleTypes();
-        UNIT_ASSERT_EQUAL_C(expectedTypes.size(), possibleTypesResult.size(),
-            TStringBuilder() << "Expected " << expectedTypes.size() << " columns, got " << possibleTypesResult.size());
-        for (size_t i = 0; i < expectedTypes.size(); ++i) {
-            TPossibleType& resultPossibleType = possibleTypesResult[i];
-            std::vector<TType>::const_iterator& it = resultPossibleType.GetIterator();
-            TType resultType = (it == TPossibleType::GetAvailableTypesEnd()
-                ? TTypeBuilder().Primitive(EPrimitiveType::Utf8).Build()
-                : *it);
-            if (!resultPossibleType.GetHasNonNulls()) {
-                UNIT_ASSERT(!expectedTypes[i].Defined());
-            } else {
-                UNIT_ASSERT(expectedTypes[i].Defined());
-                if (resultPossibleType.GetHasNulls()) {
-                    resultType = TTypeBuilder()
-                        .BeginOptional()
-                            .Primitive(TTypeParser(resultType).GetPrimitive())
-                        .EndOptional()
-                        .Build();
-                }
-                UNIT_ASSERT_C(TypesEqual(expectedTypes[i].GetRef(), resultType),
-                    TStringBuilder() << "Expected type " << expectedTypes[i].GetRef() << ", got " << resultType);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(InferTypesNonNull) {
-        TVector<TVector<TString>> batches = {
-            {
-                "1 0,True,0,10,100000000000,-10,-100000000000,2001-01-01,2001-01-01T12:12:12,2001-01-01T12:12:12.111111,550e8400-e29b-41d4-a716-446655440000,\"{\"\"name1\"\":\"\"value1\"\"}\"",
-                "2 0,False,0,20,0,0,0,2001-01-02,2001-01-02T12:12:12,2001-01-02T12:12:12.111111,550e8400-e29b-41d4-a716-446655440001,\"{\"\"name2\"\": \"\"value2\"\"}\""
-            }
-        };
-        TVector<TMaybe<TType>> expectedTypes = {
-            TTypeBuilder().Primitive(EPrimitiveType::Utf8).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Bool).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Uint64).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Uint64).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Uint64).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Int64).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Int64).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Date).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Datetime).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Timestamp).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Uuid).Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Json).Build()
-        };
-        CheckPossibleTypes(std::move(batches), std::move(expectedTypes));
-    }
-
-    Y_UNIT_TEST(InferTypesWithNulls) {
-        TVector<TVector<TString>> batches = {
-            {
-                ",True,0,2001-01-01,",
-                ",False,,2001-01-02,"
-            },
-            {
-                ",True,0,10,",
-                ",,0,True,abc"
-            }
-        };
-        TVector<TMaybe<TType>> expectedTypes = {
-            Nothing(), // Can't infer type of a column that has only null values
-            TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Bool).EndOptional().Build(),
-            TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Uint64).EndOptional().Build(),
-            TTypeBuilder().Primitive(EPrimitiveType::Utf8).Build(),
-            TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Utf8).EndOptional().Build(),
-        };
-        CheckPossibleTypes(std::move(batches), std::move(expectedTypes));
     }
 }

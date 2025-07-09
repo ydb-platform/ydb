@@ -126,6 +126,7 @@
   - sys/errno.h
   - sys/eventfd.h
   - sysexits.h
+  - sys/fanotify.h
   - sys/fcntl.h
   - sys/file.h
   - sys/fsuid.h

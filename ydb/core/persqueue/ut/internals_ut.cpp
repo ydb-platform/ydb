@@ -299,26 +299,69 @@ Y_UNIT_TEST(TestToHex) {
 }
 
 Y_UNIT_TEST(StoreKeys) {
-    TKey keyOld(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, false);
+    // key for Body
+    auto keyOld = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
     UNIT_ASSERT_VALUES_EQUAL(keyOld.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");
 
-    TKey keyNew(TKeyPrefix::TypeData, TPartitionId{5, TWriteId{0, 1}, 9}, 8, 7, 6, 5, false);
+    auto keyNew = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{5, TWriteId{0, 1}, 9}, 8, 7, 6, 5);
     UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "D0000000009_00000000000000000008_00007_0000000006_00005");
 
     keyNew.SetType(TKeyPrefix::TypeInfo);
     UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "M0000000009_00000000000000000008_00007_0000000006_00005");
+
+    // key for Head
+    auto keyHead = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    UNIT_ASSERT_VALUES_EQUAL(keyHead.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005|");
+
+    keyHead = TKey::FromKey(keyHead, TKeyPrefix::TypeData, TPartitionId{10}, 11);
+    UNIT_ASSERT_VALUES_EQUAL(keyHead.ToString(), "d0000000010_00000000000000000011_00007_0000000006_00005|");
+
+    // key for FastWrite
+    auto keyFastWrite = TKey::ForFastWrite(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    UNIT_ASSERT_VALUES_EQUAL(keyFastWrite.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005?");
+
+    keyFastWrite = TKey::FromKey(keyFastWrite, TKeyPrefix::TypeData, TPartitionId{12}, 13);
+    UNIT_ASSERT_VALUES_EQUAL(keyFastWrite.ToString(), "d0000000012_00000000000000000013_00007_0000000006_00005?");
 }
 
 Y_UNIT_TEST(RestoreKeys) {
+    // the key from the string
     {
-        TKey key("X0000000001_00000000000000000002_00003_0000000004_00005");
+        auto key = TKey::FromString("X0000000001_00000000000000000002_00003_0000000004_00005");
         UNIT_ASSERT(key.GetType() == TKeyPrefix::TypeTmpData);
         UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetOffset(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartNo(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetInternalPartsCount(), 5);
+        UNIT_ASSERT(!key.HasSuffix());
     }
+
+    // blob type
     {
-        TKey key("i0000000001_00000000000000000002_00003_0000000004_00005");
+        auto key = TKey::FromString("i0000000001_00000000000000000002_00003_0000000004_00005");
         UNIT_ASSERT(key.GetType() == TKeyPrefix::TypeMeta);
-        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 1);
+    }
+
+    // the `partitionId` is being replaced
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005", TPartitionId{3});
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 3);
+        UNIT_ASSERT(!key.HasSuffix());
+    }
+
+    // key for FastWrite
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005?", TPartitionId{4});
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 4);
+        UNIT_ASSERT(key.HasSuffix());
+    }
+
+    // key for head
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005|", TPartitionId{8});
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 8);
+        UNIT_ASSERT(key.HasSuffix());
     }
 }
 

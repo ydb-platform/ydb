@@ -126,6 +126,9 @@ TBusServerConfigPtr TBusServerConfig::CreateUds(const std::string& socketPath)
     return config;
 }
 
+void TBusServerDynamicConfig::Register(TRegistrar /*registrar*/)
+{ }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TBusConfig::Register(TRegistrar registrar)
@@ -154,18 +157,20 @@ void TBusConfig::Register(TRegistrar registrar)
         .Default(EEncryptionMode::Optional);
     registrar.Parameter("verification_mode", &TThis::VerificationMode)
         .Default(EVerificationMode::None);
-    registrar.Parameter("ca", &TThis::CA)
-        .Default();
-    registrar.Parameter("cert_chain", &TThis::CertificateChain)
-        .Default();
-    registrar.Parameter("private_key", &TThis::PrivateKey)
-        .Default();
     registrar.Parameter("cipher_list", &TThis::CipherList)
         .Default();
     registrar.Parameter("load_certs_from_bus_certs_directory", &TThis::LoadCertsFromBusCertsDirectory)
         .Default(false);
     registrar.Parameter("peer_alternative_host_name", &TThis::PeerAlternativeHostName)
         .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TBusDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("reject_connection_on_memory_overcommit", &TThis::RejectConnectionOnMemoryOvercommit)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -197,6 +202,9 @@ TBusClientConfigPtr TBusClientConfig::CreateUds(const std::string& socketPath)
     config->UnixDomainSocketPath = socketPath;
     return config;
 }
+
+void TBusClientDynamicConfig::Register(TRegistrar /*registrar*/)
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 

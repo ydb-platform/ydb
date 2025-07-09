@@ -1,9 +1,9 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -159,6 +159,49 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                   Mode: ECdcStreamModeKeysOnly
                   Format: ECdcStreamFormat%s
                   ResolvedTimestampsIntervalMs: 1000
+                }
+            )", format, format), {NKikimrScheme::StatusInvalidParameter});
+        }
+    }
+
+    Y_UNIT_TEST(SchemaChanges) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const char* format : TVector<const char*>{"Json"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%s"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  SchemaChanges: true
+                }
+            )", format, format));
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/Table/Stream%s", format)), {
+                NLs::StreamSchemaChanges(true),
+            });
+        }
+
+        for (const char* format : TVector<const char*>{"Proto", "DynamoDBStreamsJson", "DebeziumJson"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%s"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  SchemaChanges: true
                 }
             )", format, format), {NKikimrScheme::StatusInvalidParameter});
         }
@@ -1040,6 +1083,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Shared");
+        const auto subDomainPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
             Name: "Shared"
             StoragePools {
@@ -1064,9 +1110,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             Name: "Serverless"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard));
+        )", TTestTxConfig::SchemeShard, subDomainPathId));
         env.TestWaitNotification(runtime, txId);
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
@@ -1885,6 +1931,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Shared");
+        const auto subDomainPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
             Name: "Shared"
             StoragePools {
@@ -1915,9 +1964,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
             Name: "Serverless"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
@@ -1999,14 +2048,14 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
                 runtime.DispatchEvents(opts);
             }
 
-            UNIT_ASSERT_STRINGS_EQUAL(meteringRecord, TBillRecord()
+            auto expectedBill = TBillRecord()
                 .Id("cdc_stream_scan-72075186233409549-3-72075186233409549-4")
                 .CloudId("CLOUD_ID_VAL")
                 .FolderId("FOLDER_ID_VAL")
                 .ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::FromValue(0))
-                .Usage(TBillRecord::RequestUnits(1, TInstant::FromValue(0)))
-                .ToString());
+                .Usage(TBillRecord::RequestUnits(1, TInstant::FromValue(0)));
+            MeteringDataEqual(meteringRecord, expectedBill.ToString());
         } else {
             for (int i = 0; i < 10; ++i) {
                 env.SimulateSleep(runtime, TDuration::Seconds(1));

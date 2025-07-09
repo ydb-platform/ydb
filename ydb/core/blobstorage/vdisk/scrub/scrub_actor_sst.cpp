@@ -31,17 +31,21 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::ReadOutAndResilverIndex(TLevelSegmentPtr sst) {
+        TTrackableVector<TLevelSegment::TRec> linearIndex(TMemoryConsumer(VCtx->SstIndex));
+        sst->SaveLinearIndex(&linearIndex);
+
         TDiskPart prevPart;
         bool first = true;
         ui32 remainOutboundSize = sst->LoadedOutbound.size() * sizeof(TDiskPart);
-        ui32 remainIndexSize = sst->LoadedIndex.size() * sizeof(TLevelSegment::TRec);
+        ui32 remainIndexSize = linearIndex.size() * sizeof(TLevelSegment::TRec);
         for (TDiskPart part : sst->IndexParts) {
             TString regen = TString::Uninitialized(part.Size);
             ui32 destLen = regen.size();
             char *dest = regen.Detach() + destLen;
-            auto prepend = [&destLen, &dest](const void *data, ui32 len) {
+            const TString& logPrefix = LogPrefix;
+            auto prepend = [&destLen, &dest, &logPrefix](const void *data, ui32 len) {
                 if (len) {
-                    Y_ABORT_UNLESS(len <= destLen);
+                    Y_VERIFY_S(len <= destLen, logPrefix);
                     destLen -= len;
                     dest -= len;
                     memcpy(dest, data, len);
@@ -71,10 +75,10 @@ namespace NKikimr {
             // third step: the index
             const ui32 isize = Min(remainIndexSize, destLen);
             remainIndexSize -= isize;
-            prepend(reinterpret_cast<const char*>(sst->LoadedIndex.data()) + remainIndexSize, isize);
+            prepend(reinterpret_cast<const char*>(linearIndex.data()) + remainIndexSize, isize);
 
             // fourth step: sanity check
-            Y_ABORT_UNLESS(!destLen);
+            Y_VERIFY_S(!destLen, LogPrefix);
 
             std::optional<TRcBuf> data = Read(part);
             if (!data) {
@@ -102,15 +106,15 @@ namespace NKikimr {
                     Checkpoints |= TEvScrubNotify::INDEX_RESTORED;
                 }
             } else {
-                Y_ABORT_UNLESS(regen.size() == data->size(), "index size differs from one stored in memory");
+                Y_VERIFY_S(regen.size() == data->size(), LogPrefix << "index size differs from one stored in memory");
                 const size_t headerLen = first ? sizeof(TIdxDiskPlaceHolder) : sizeof(TIdxDiskLinker);
-                Y_ABORT_UNLESS(memcmp(regen.data(), data->data(), part.Size - headerLen) == 0,
-                    "index data differs from one stored in memory"); // compare index data up to header
+                Y_VERIFY_S(memcmp(regen.data(), data->data(), part.Size - headerLen) == 0,
+                    LogPrefix << "index data differs from one stored in memory"); // compare index data up to header
                 auto compare = [&](auto a, auto b) {
-                    Y_ABORT_UNLESS(sizeof(a) == headerLen && sizeof(b) == headerLen);
+                    Y_VERIFY_S(sizeof(a) == headerLen && sizeof(b) == headerLen, LogPrefix);
                     memcpy(&a, regen.data() + regen.size() - headerLen, headerLen); // to prevent unaligned access
                     memcpy(&b, data->data() + data->size() - headerLen, headerLen);
-                    Y_ABORT_UNLESS(a == b, "index header differs from one stored in memory");
+                    Y_VERIFY_S(a == b, LogPrefix << "index header differs from one stored in memory");
                 };
                 if (first) {
                     compare(TIdxDiskPlaceHolder(0), TIdxDiskPlaceHolder(0));
@@ -122,7 +126,7 @@ namespace NKikimr {
             prevPart = part;
             first = false;
         }
-        Y_ABORT_UNLESS(!remainOutboundSize && !remainIndexSize);
+        Y_VERIFY_S(!remainOutboundSize && !remainIndexSize, LogPrefix);
     }
 
     void TScrubCoroImpl::ReadOutSelectedBlobs(std::vector<TBlobOnDisk>&& blobsOnDisk) {
@@ -183,7 +187,7 @@ namespace NKikimr {
             for (TBlobOnDisk *blob : blobs) {
                 const TDiskPart& part = blob->Part;
                 const ui32 end = part.Offset + part.Size;
-                Y_ABORT_UNLESS(part.ChunkIdx == chunkIdx);
+                Y_VERIFY_S(part.ChunkIdx == chunkIdx, LogPrefix);
                 if (interval == TDiskPart()) {
                     interval = blob->Part;
                 } else if (end - interval.Offset <= ScrubCtx->PDiskCtx->Dsk->ReadBlockSize) {
@@ -210,7 +214,7 @@ namespace NKikimr {
                 iter.PutToMerger(&merger);
 
                 NMatrix::TVectorType needed = blob.Needed;
-                Y_ABORT_UNLESS(!needed.Empty());
+                Y_VERIFY_S(!needed.Empty(), LogPrefix);
 
                 STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS11, VDISKP(LogPrefix, "reading out blob"), (SstId, SstId),
                     (Id, blob.Id));

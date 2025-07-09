@@ -20,7 +20,7 @@ SELECT expr_21, expr_22, ..., expr_2k UNION ALL
 SELECT expr_n1, expr_n2, ..., expr_nk;
 ```
 
-### Example
+#### Example
 
 ```yql
 VALUES (1,2), (3,4);

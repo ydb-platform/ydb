@@ -1,16 +1,16 @@
-#include <ydb-cpp-sdk/client/debug/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/debug/client.h>
 
 #include <ydb/public/api/grpc/ydb_debug_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_debug_v1.pb.h>
 #include <ydb/public/api/protos/ydb_debug.pb.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
-namespace NYdb::inline V3::NDebug {
+namespace NYdb::inline Dev::NDebug {
 
 using namespace Ydb;
 
@@ -34,6 +34,26 @@ public:
             TRequest(),
             responseCb,
             serviceMethod,
+            DbDriverState_,
+            TRpcRequestSettings::Make(settings));
+
+        return pingPromise;
+    }
+
+    auto PingPlainGrpc(const TPlainGrpcPingSettings& settings) {
+        auto pingPromise = NewPromise<TPlainGrpcPingResult>();
+        auto responseCb = [pingPromise] (Debug::PlainGrpcResponse* msg, TPlainStatus status) mutable {
+            TPlainGrpcPingResult val(TStatus(std::move(status)));
+            val.CallBackTs = msg->GetCallBackTs();
+            pingPromise.SetValue(std::move(val));
+        };
+
+        Debug::PlainGrpcRequest request;
+
+        Connections_->Run<Debug::V1::DebugService, Debug::PlainGrpcRequest, Debug::PlainGrpcResponse>(
+            std::move(request),
+            responseCb,
+            &Debug::V1::DebugService::Stub::AsyncPingPlainGrpc,
             DbDriverState_,
             TRpcRequestSettings::Make(settings));
 
@@ -71,8 +91,7 @@ TDebugClient::TDebugClient(const TDriver& driver, const TClientSettings& setting
 }
 
 TAsyncPlainGrpcPingResult TDebugClient::PingPlainGrpc(const TPlainGrpcPingSettings& settings) {
-    return Impl_->Ping<Debug::PlainGrpcRequest, Debug::PlainGrpcResponse, TPlainGrpcPingResult>(
-        settings, &Debug::V1::DebugService::Stub::AsyncPingPlainGrpc);
+    return Impl_->PingPlainGrpc(settings);
 }
 
 TAsyncGrpcProxyPingResult TDebugClient::PingGrpcProxy(const TGrpcProxyPingSettings& settings) {
@@ -99,4 +118,4 @@ TAsyncActorChainPingResult TDebugClient::PingActorChain(const TActorChainPingSet
     return Impl_->PingActorChain(settings);
 }
 
-} // namespace NYdb::V3::NDebug
+} // namespace NYdb::NDebug

@@ -6,7 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 namespace NYdb::NConsoleClient {
 #define GETTER(TYPE, NAME) \

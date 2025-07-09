@@ -643,6 +643,21 @@ TNodeRef TDocument::Buildf(const char* content) {
     return TNodeRef(fy_node_build_from_string(Document_.get(), content, strlen(content)));
 }
 
+TNodeRef TDocument::CreateScalar(const TString& content) {
+    ENSURE_DOCUMENT_NOT_EMPTY(Document_);
+    return TNodeRef(fy_node_create_scalar_copy(Document_.get(), content.data(), content.size()));
+}
+
+TNodeRef TDocument::CreateMapping() {
+    ENSURE_DOCUMENT_NOT_EMPTY(Document_);
+    return TNodeRef(fy_node_create_mapping(Document_.get()));
+}
+
+TNodeRef TDocument::CreateSequence() {
+    ENSURE_DOCUMENT_NOT_EMPTY(Document_);
+    return TNodeRef(fy_node_create_sequence(Document_.get()));
+}
+
 void TDocument::Resolve() {
     ENSURE_DOCUMENT_NOT_EMPTY(Document_);
     if (fy_document_resolve(Document_.get()) != 0) {

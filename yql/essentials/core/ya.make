@@ -6,6 +6,8 @@ SRCS(
     yql_callable_transform.h
     yql_cost_function.cpp
     yql_data_provider.h
+    yql_default_valid_value.cpp
+    yql_default_valid_value.h
     yql_execution.cpp
     yql_execution.h
     yql_expr_constraint.cpp
@@ -16,6 +18,8 @@ SRCS(
     yql_expr_optimize.h
     yql_expr_type_annotation.cpp
     yql_expr_type_annotation.h
+    yql_func_stack.cpp
+    yql_func_stack.h
     yql_gc_transformer.cpp
     yql_gc_transformer.h
     yql_graph_transformer.cpp
@@ -60,6 +64,7 @@ PEERDIR(
     library/cpp/random_provider
     library/cpp/threading/future
     library/cpp/time_provider
+    library/cpp/type_info/tz
     library/cpp/yson
     library/cpp/yson/node
     yql/essentials/ast
@@ -71,10 +76,12 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/minikql/jsonpath/parser
     yql/essentials/core/minsketch
+    yql/essentials/core/histogram
     yql/essentials/protos
     yql/essentials/public/udf
-    yql/essentials/public/udf/tz
+    yql/essentials/public/langver
     yql/essentials/sql/settings
+    yql/essentials/sql
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core/expr_nodes
@@ -101,6 +108,7 @@ RECURSE(
     dqs_expr_nodes
     file_storage
     issue
+    langver
     minsketch
     pg_ext
     pg_settings

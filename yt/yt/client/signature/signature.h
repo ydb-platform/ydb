@@ -6,6 +6,8 @@
 
 #include <yt/yt/core/ytree/public.h>
 
+#include <yt/yt_proto/yt/client/misc/proto/signature.pb.h>
+
 #include <vector>
 
 namespace NYT::NSignature {
@@ -20,19 +22,28 @@ public:
     //! Constructs an empty TSignature.
     TSignature() = default;
 
-    [[nodiscard]] const NYson::TYsonString& Payload() const;
+    [[nodiscard]] const std::string& Payload() const;
 
 private:
     NYson::TYsonString Header_;
-    NYson::TYsonString Payload_;
-    std::vector<std::byte> Signature_;
+    std::string Payload_;
+    std::string Signature_;
 
-    friend class TSignatureGeneratorBase;
-    friend class TSignatureValidatorBase;
+    friend struct ISignatureGenerator;
+    friend class TSignatureGenerator;
+
+    friend struct ISignatureValidator;
+    friend class TSignatureValidator;
 
     friend void Serialize(const TSignature& signature, NYson::IYsonConsumer* consumer);
     friend void Deserialize(TSignature& signature, NYTree::INodePtr node);
     friend void Deserialize(TSignature& signature, NYson::TYsonPullParserCursor* cursor);
+
+    friend void FromProto(TSignature* signature, const NProto::TSignature& protoSignature);
+    friend void ToProto(NProto::TSignature* protoSignature, const TSignature& signature);
+
+    friend void FromProto(TSignaturePtr* signature, const NProto::TSignature& protoSignature);
+    friend void ToProto(NProto::TSignature* protoSignature, const TSignaturePtr& signature);
 };
 
 DEFINE_REFCOUNTED_TYPE(TSignature)

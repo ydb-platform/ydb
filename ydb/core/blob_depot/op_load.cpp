@@ -38,6 +38,9 @@ namespace NKikimr::NBlobDepot {
                         if (table.HaveValue<Schema::Config::AssimilatorState>()) {
                             Self->AssimilatorState.emplace(table.GetValue<Schema::Config::AssimilatorState>());
                         }
+                        if (table.HaveValue<Schema::Config::PerGenerationCounter>()) {
+                            Self->PerGenerationCounter = table.GetValue<Schema::Config::PerGenerationCounter>();
+                        }
                     }
                 }
 
@@ -115,6 +118,8 @@ namespace NKikimr::NBlobDepot {
             void Complete(const TActorContext&) override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "TTxLoad::Complete", (Id, Self->GetLogId()),
                     (Configured, Self->Configured));
+
+                Self->OnUpdateDecommitState();
 
                 if (Self->Configured) {
                     Self->StartOperation();

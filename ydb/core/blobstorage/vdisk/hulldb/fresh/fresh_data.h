@@ -127,7 +127,7 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     TIntrusivePtr<TFreshSegment<TKey, TMemRec>> TFreshData<TKey, TMemRec>::FindSegmentForCompaction() {
-        Y_ABORT_UNLESS(!CompactionInProgress());
+        Y_VERIFY_S(!CompactionInProgress(), HullCtx->VCtx->VDiskLogPrefix);
         if (Dreg) {
             Old.Swap(Dreg);
             Dreg.Swap(Cur);
@@ -143,7 +143,7 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
         // FIXME ref count = 2?
-        Y_ABORT_UNLESS(Old && Old.Get() == freshSegment.Get());
+        Y_VERIFY_S(Old && Old.Get() == freshSegment.Get(), HullCtx->VCtx->VDiskLogPrefix);
         freshSegment.Drop();
         Old.Drop();
         WaitForCommit = true;
@@ -151,7 +151,7 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::CompactionFinished() {
-        Y_ABORT_UNLESS(!Old && WaitForCommit);
+        Y_VERIFY_S(!Old && WaitForCommit, HullCtx->VCtx->VDiskLogPrefix);
         WaitForCommit = false;
         OldSegLastKeepLsn = ui64(-1);
     }
@@ -251,4 +251,3 @@ namespace NKikimr {
     extern template class TFreshData<TKeyBlock, TMemRecBlock>;
 
 } // NKikimr
-

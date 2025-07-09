@@ -8,7 +8,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/library/grpc/server/grpc_request.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <util/generic/hash.h>
 #include <util/system/mutex.h>
@@ -79,6 +79,9 @@ public:
 
     void StopService() {
         AtomicSet(ShuttingDown_, 1);
+        if (ClustersUpdaterStatus) {
+            ClustersUpdaterStatus->Stop();
+        }
     }
 
     bool IsShuttingDown() const {
@@ -139,6 +142,8 @@ private:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
 
     bool NeedDiscoverClusters;
+    TClustersUpdater::TStatus::TPtr ClustersUpdaterStatus;
+
     NPersQueue::TConverterFactoryPtr TopicConverterFactory;
     std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
 };

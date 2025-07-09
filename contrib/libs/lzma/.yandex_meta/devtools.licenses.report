@@ -46,24 +46,11 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
     Files with this license:
-        COPYING [43:43]
-
-SKIP     0BSD                 14de854251593dd36ab8a222793a5b8f
-BELONGS ya.make
-	# Not a license
-    License text:
-                domain; 0BSD-licensed code is copyrighted but available under
-    Scancode info:
-        Original SPDX id: 0BSD
-        Score           : 50.00
-        Match type      : REFERENCE
-        Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
-    Files with this license:
-        COPYING [74:74]
+        COPYING [49:49]
 
 SKIP     LGPL-2.1-only        181bd2f3201dc6ff4c508cb04d170817
 BELONGS ya.make
-FILE_INCLUDE COPYING.LGPLv2.1 found in files: README at line 81
+FILE_INCLUDE COPYING.LGPLv2.1 found in files: README at line 82
 	# Not a license by itself
     License text:
             COPYING.LGPLv2.1      GNU Lesser General Public License version 2.1
@@ -73,20 +60,7 @@ FILE_INCLUDE COPYING.LGPLv2.1 found in files: README at line 81
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
     Files with this license:
-        README [81:81]
-
-KEEP     Public-Domain        19d6afb7fb41001fbab2151dd27a7fb9
-BELONGS ya.make
-    License text:
-                There is very little *practical* difference between public
-                domain and 0BSD. The main difference likely is that one
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 70.00
-        Match type      : REFERENCE
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        COPYING [71:72]
+        README [82:82]
 
 SKIP     0BSD                 1a459a2067895b8576617d7b67fe52ca
 BELONGS ya.make
@@ -112,19 +86,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
     Files with this license:
-        COPYING [48:48]
-
-KEEP     0BSD                 21b027dd1b59c23a56e34a32360d0c10
-BELONGS ya.make
-    License text:
-                0BSD for newer releases was made in Febrary 2024 because
-    Scancode info:
-        Original SPDX id: 0BSD
-        Score           : 50.00
-        Match type      : REFERENCE
-        Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
-    Files with this license:
-        COPYING [67:67]
+        COPYING [54:54]
 
 SKIP     LGPL-2.1-only        23c2a5e0106b99d75238986559bb5fc6
 BELONGS ya.make
@@ -141,7 +103,7 @@ FILE_INCLUDE COPYING found in files: COPYING.LGPLv2.1 at line 116
 
 SKIP     GPL-2.0-only         3220ce24cf5698918173f671259bb375
 BELONGS ya.make
-FILE_INCLUDE COPYING.GPLv2 found in files: README at line 79
+FILE_INCLUDE COPYING.GPLv2 found in files: README at line 80
 	# Not a license by itself
     License text:
             COPYING.GPLv2         GNU General Public License version 2
@@ -151,7 +113,7 @@ FILE_INCLUDE COPYING.GPLv2 found in files: README at line 79
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
     Files with this license:
-        README [79:79]
+        README [80:80]
 
 KEEP     0BSD                 327b128c3f16957fab69efc9b095e368
 BELONGS ya.make
@@ -221,7 +183,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
     Files with this license:
-        COPYING [57:57]
+        COPYING [63:63]
 
 SKIP     LGPL-2.0-only AND LGPL-2.1-or-later 493b7c38175021ac13d1589215e13989
 BELONGS ya.make
@@ -282,18 +244,6 @@ BELONGS ya.make
         liblzma/api/lzma/vli.h [1:1]
         liblzma/liblzma_linux.map [1:1]
 
-KEEP     Public-Domain        65b77ffe5d577fa84afe9f017beede5c
-BELONGS ya.make
-    License text:
-                public domain has (real or perceived) legal ambiguities in
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 70.00
-        Match type      : REFERENCE
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        COPYING [68:68]
-
 SKIP     GPL-3.0-only         6dbb0879a53d93955d47d50ed23aa325
 BELONGS ya.make
     # This is a reference to the file with GPL-3.0 license
@@ -305,7 +255,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
     Files with this license:
-        COPYING [60:60]
+        COPYING [66:66]
 
 KEEP     Public-Domain        702cbf9589b30951b6a2b94913b66332
 BELONGS ya.make
@@ -330,7 +280,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
     Files with this license:
-        COPYING [59:59]
+        COPYING [65:65]
 
 KEEP     0BSD                 79430bd4c5e1b494780b3fb35b24fd7d
 BELONGS ya.make
@@ -364,37 +314,6 @@ BELONGS ya.make
     Files with this license:
         COPYING [25:25]
 
-KEEP     0BSD AND Public-Domain 83aabd12f73b5065603bf2054fb6d54f
-BELONGS ya.make
-    License text:
-                an extremely permissive license. Neither 0BSD nor public domain
-    Scancode info:
-        Original SPDX id: 0BSD
-        Score           : 50.00
-        Match type      : REFERENCE
-        Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
-    Files with this license:
-        COPYING [75:75]
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 70.00
-        Match type      : REFERENCE
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        COPYING [75:75]
-
-KEEP     Public-Domain        90705824d045bd99f4cb1ef6f42a57ae
-BELONGS ya.make
-    License text:
-                significant amount of code put into the public domain and
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        COPYING [65:65]
-
 KEEP     BSD-3-Clause AND 0BSD a675dbcfcecb36b880f01b1c31049149
 BELONGS ya.make
     License text:
@@ -414,33 +333,9 @@ BELONGS ya.make
     Files with this license:
         liblzma/api/lzma.h [23:23]
 
-KEEP     Public-Domain        a7c077779fe1982e666c1f33e396f1b5
-BELONGS ya.make
-    License text:
-                that obviously remains so. The switch from public domain to
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 70.00
-        Match type      : REFERENCE
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        COPYING [66:66]
-
-KEEP     0BSD                 a8a6073ae588092bed4e746ed49b52f5
-BELONGS ya.make
-    License text:
-                domain and 0BSD. The main difference likely is that one
-    Scancode info:
-        Original SPDX id: 0BSD
-        Score           : 50.00
-        Match type      : REFERENCE
-        Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
-    Files with this license:
-        COPYING [72:72]
-
 SKIP     GPL-3.0-only         ad3e81fa9e595e378d10023b1bf20d51
 BELONGS ya.make
-FILE_INCLUDE COPYING.GPLv3 found in files: README at line 80
+FILE_INCLUDE COPYING.GPLv3 found in files: README at line 81
 	# Not a license by itself
     License text:
             COPYING.GPLv3         GNU General Public License version 3
@@ -450,31 +345,7 @@ FILE_INCLUDE COPYING.GPLv3 found in files: README at line 80
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
     Files with this license:
-        README [80:80]
-
-KEEP     BSD-2-Clause         b3129c96ef9c28cff49bffaf9d804a88
-BELONGS ya.make
-    License text:
-                for example, BSD 2-Clause "Simplified" License which does have
-    Scancode info:
-        Original SPDX id: BSD-2-Clause
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
-    Files with this license:
-        COPYING [78:78]
-
-KEEP     Public-Domain        c1a07f044cdb7e843b741e6236100ea3
-BELONGS ya.make
-    License text:
-        /// and the public domain code from https://github.com/rawrunprotected/crc
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        liblzma/check/crc_x86_clmul.h [13:13]
+        README [81:81]
 
 KEEP     Public-Domain        cc574f0a684665d6c5ae08f28aec98dd
 BELONGS ya.make
@@ -511,20 +382,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
     Files with this license:
-        COPYING [58:58]
-
-KEEP     Public-Domain        d2d5f589792b8c7a8679d6c69614d2e9
-BELONGS ya.make
-    License text:
-                shouldn't claim that 0BSD-licensed code is in the public
-                domain; 0BSD-licensed code is copyrighted but available under
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        COPYING [73:74]
+        COPYING [64:64]
 
 KEEP     0BSD                 deae85a8d274ed0cce9af4ffbf7f1265
 BELONGS ya.make
@@ -552,7 +410,7 @@ BELONGS ya.make
 
 KEEP     0BSD                 e5a555c3368d6625b4f901cafe6caf46
 BELONGS ya.make
-FILE_INCLUDE COPYING.0BSD found in files: README at line 78
+FILE_INCLUDE COPYING.0BSD found in files: README at line 79
     License text:
             COPYING.0BSD          BSD Zero Clause License
     Scancode info:
@@ -561,7 +419,7 @@ FILE_INCLUDE COPYING.0BSD found in files: README at line 78
         Match type      : REFERENCE
         Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
     Files with this license:
-        README [78:78]
+        README [79:79]
 
 KEEP     0BSD                 e7ecdbf411fbdc32d3df058d1c7bf661
 BELONGS ya.make
@@ -585,10 +443,8 @@ BELONGS ya.make
         liblzma/check/check.c [1:1]
         liblzma/check/check.h [1:1]
         liblzma/check/crc32_fast.c [1:1]
-        liblzma/check/crc32_table.c [1:1]
         liblzma/check/crc32_table_le.h [1:1]
         liblzma/check/crc64_fast.c [1:1]
-        liblzma/check/crc64_table.c [1:1]
         liblzma/check/crc64_table_le.h [1:1]
         liblzma/check/crc_common.h [1:1]
         liblzma/check/crc_x86_clmul.h [1:1]
@@ -705,18 +561,6 @@ BELONGS ya.make
         liblzma/simple/simple_private.h [1:1]
         liblzma/simple/sparc.c [1:1]
         liblzma/simple/x86.c [1:1]
-
-KEEP     0BSD                 f3ff7259b99521ac278b6ea15c6f179f
-BELONGS ya.make
-    License text:
-                shouldn't claim that 0BSD-licensed code is in the public
-    Scancode info:
-        Original SPDX id: 0BSD
-        Score           : 50.00
-        Match type      : REFERENCE
-        Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
-    Files with this license:
-        COPYING [73:73]
 
 KEEP     0BSD                 f6a343d8de811f538c36fa8681cb7078
 BELONGS ya.make

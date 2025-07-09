@@ -13,78 +13,78 @@ $vt2 = ParseType('Variant<Int64,Uint32>');
 
 SELECT
     AsTuple(
-        VARIANT (1, '0', $vt1) < VARIANT ($id(1u), '0', $vt2),
-        VARIANT (1, '0', $vt1) < VARIANT (2u, '0', $vt2),
-        VARIANT (1, '0', $vt1) < VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) < VARIANT ($id(1u), '1', $vt2),
-        VARIANT (1, '1', $vt1) < VARIANT (2u, '1', $vt2),
-        VARIANT (2, '1', $vt1) < VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) < VARIANT ($id(1u), '0', $vt2),
-        VARIANT (2u / 0u, '1', $vt1) < VARIANT (1u, '1', $vt2)
+        Variant(1, '0', $vt1) < Variant($id(1u), '0', $vt2),
+        Variant(1, '0', $vt1) < Variant(2u, '0', $vt2),
+        Variant(1, '0', $vt1) < Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) < Variant($id(1u), '1', $vt2),
+        Variant(1, '1', $vt1) < Variant(2u, '1', $vt2),
+        Variant(2, '1', $vt1) < Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) < Variant($id(1u), '0', $vt2),
+        Variant(2u / 0u, '1', $vt1) < Variant(1u, '1', $vt2)
     )
 ;
 
 SELECT
     AsTuple(
-        VARIANT (1, '0', $vt1) <= VARIANT ($id(1u), '0', $vt2),
-        VARIANT (1, '0', $vt1) <= VARIANT (2u, '0', $vt2),
-        VARIANT (1, '0', $vt1) <= VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) <= VARIANT ($id(1u), '1', $vt2),
-        VARIANT (1, '1', $vt1) <= VARIANT (2u, '1', $vt2),
-        VARIANT (2, '1', $vt1) <= VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) <= VARIANT ($id(1u), '0', $vt2),
-        VARIANT (2u / 0u, '1', $vt1) <= VARIANT (1u, '1', $vt2)
+        Variant(1, '0', $vt1) <= Variant($id(1u), '0', $vt2),
+        Variant(1, '0', $vt1) <= Variant(2u, '0', $vt2),
+        Variant(1, '0', $vt1) <= Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) <= Variant($id(1u), '1', $vt2),
+        Variant(1, '1', $vt1) <= Variant(2u, '1', $vt2),
+        Variant(2, '1', $vt1) <= Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) <= Variant($id(1u), '0', $vt2),
+        Variant(2u / 0u, '1', $vt1) <= Variant(1u, '1', $vt2)
     )
 ;
 
 SELECT
     AsTuple(
-        VARIANT (1, '0', $vt1) == VARIANT ($id(1u), '0', $vt2),
-        VARIANT (1, '0', $vt1) == VARIANT (2u, '0', $vt2),
-        VARIANT (1, '0', $vt1) == VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) == VARIANT ($id(1u), '1', $vt2),
-        VARIANT (1, '1', $vt1) == VARIANT (2u, '1', $vt2),
-        VARIANT (2, '1', $vt1) == VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) == VARIANT ($id(1u), '0', $vt2),
-        VARIANT (2u / 0u, '1', $vt1) == VARIANT (1u, '1', $vt2)
+        Variant(1, '0', $vt1) == Variant($id(1u), '0', $vt2),
+        Variant(1, '0', $vt1) == Variant(2u, '0', $vt2),
+        Variant(1, '0', $vt1) == Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) == Variant($id(1u), '1', $vt2),
+        Variant(1, '1', $vt1) == Variant(2u, '1', $vt2),
+        Variant(2, '1', $vt1) == Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) == Variant($id(1u), '0', $vt2),
+        Variant(2u / 0u, '1', $vt1) == Variant(1u, '1', $vt2)
     )
 ;
 
 SELECT
     AsTuple(
-        VARIANT (1, '0', $vt1) != VARIANT ($id(1u), '0', $vt2),
-        VARIANT (1, '0', $vt1) != VARIANT (2u, '0', $vt2),
-        VARIANT (1, '0', $vt1) != VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) != VARIANT ($id(1u), '1', $vt2),
-        VARIANT (1, '1', $vt1) != VARIANT (2u, '1', $vt2),
-        VARIANT (2, '1', $vt1) != VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) != VARIANT ($id(1u), '0', $vt2),
-        VARIANT (2u / 0u, '1', $vt1) != VARIANT (1u, '1', $vt2)
+        Variant(1, '0', $vt1) != Variant($id(1u), '0', $vt2),
+        Variant(1, '0', $vt1) != Variant(2u, '0', $vt2),
+        Variant(1, '0', $vt1) != Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) != Variant($id(1u), '1', $vt2),
+        Variant(1, '1', $vt1) != Variant(2u, '1', $vt2),
+        Variant(2, '1', $vt1) != Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) != Variant($id(1u), '0', $vt2),
+        Variant(2u / 0u, '1', $vt1) != Variant(1u, '1', $vt2)
     )
 ;
 
 SELECT
     AsTuple(
-        VARIANT (1, '0', $vt1) > VARIANT ($id(1u), '0', $vt2),
-        VARIANT (1, '0', $vt1) > VARIANT (2u, '0', $vt2),
-        VARIANT (1, '0', $vt1) > VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) > VARIANT ($id(1u), '1', $vt2),
-        VARIANT (1, '1', $vt1) > VARIANT (2u, '1', $vt2),
-        VARIANT (2, '1', $vt1) > VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) > VARIANT ($id(1u), '0', $vt2),
-        VARIANT (2u / 0u, '1', $vt1) > VARIANT (1u, '1', $vt2)
+        Variant(1, '0', $vt1) > Variant($id(1u), '0', $vt2),
+        Variant(1, '0', $vt1) > Variant(2u, '0', $vt2),
+        Variant(1, '0', $vt1) > Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) > Variant($id(1u), '1', $vt2),
+        Variant(1, '1', $vt1) > Variant(2u, '1', $vt2),
+        Variant(2, '1', $vt1) > Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) > Variant($id(1u), '0', $vt2),
+        Variant(2u / 0u, '1', $vt1) > Variant(1u, '1', $vt2)
     )
 ;
 
 SELECT
     AsTuple(
-        VARIANT (1, '0', $vt1) >= VARIANT ($id(1u), '0', $vt2),
-        VARIANT (1, '0', $vt1) >= VARIANT (2u, '0', $vt2),
-        VARIANT (1, '0', $vt1) >= VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) >= VARIANT ($id(1u), '1', $vt2),
-        VARIANT (1, '1', $vt1) >= VARIANT (2u, '1', $vt2),
-        VARIANT (2, '1', $vt1) >= VARIANT (1u, '1', $vt2),
-        VARIANT (1, '1', $vt1) >= VARIANT ($id(1u), '0', $vt2),
-        VARIANT (2u / 0u, '1', $vt1) >= VARIANT (1u, '1', $vt2)
+        Variant(1, '0', $vt1) >= Variant($id(1u), '0', $vt2),
+        Variant(1, '0', $vt1) >= Variant(2u, '0', $vt2),
+        Variant(1, '0', $vt1) >= Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) >= Variant($id(1u), '1', $vt2),
+        Variant(1, '1', $vt1) >= Variant(2u, '1', $vt2),
+        Variant(2, '1', $vt1) >= Variant(1u, '1', $vt2),
+        Variant(1, '1', $vt1) >= Variant($id(1u), '0', $vt2),
+        Variant(2u / 0u, '1', $vt1) >= Variant(1u, '1', $vt2)
     )
 ;

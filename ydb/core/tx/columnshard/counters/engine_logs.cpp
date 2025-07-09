@@ -81,22 +81,14 @@ void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
-    const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
-    Y_ABORT_UNLESS(producedId < BlobGuards.size());
-    for (auto&& blobId : portion->GetBlobIds()) {
-        BlobGuards[producedId]->Add(blobId.BlobSize(), blobId.BlobSize());
-    }
+    const ui32 producedId = (ui32)portion->GetProduced();
     PortionRecordCountGuards[producedId]->Add(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Add(portion->GetTotalBlobBytes(), 1);
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
-    const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
-    Y_ABORT_UNLESS(producedId < BlobGuards.size());
+    const ui32 producedId = (ui32)portion->GetProduced();
     THashSet<NOlap::TUnifiedBlobId> blobIds;
-    for (auto&& blobId : portion->GetBlobIds()) {
-        BlobGuards[producedId]->Sub(blobId.BlobSize(), blobId.BlobSize());
-    }
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);
 }

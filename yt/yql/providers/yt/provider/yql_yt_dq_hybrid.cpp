@@ -143,7 +143,12 @@ private:
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(tableInfo->Cluster).GetOrElse(false);
+            const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
             if ((info.Ranges || tableInfo->Meta->IsDynamic) && !canUseYtPartitioningApi) {
+                return false;
+            }
+            if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
+                PushSkipStat("DynamicStoreRead", nodeName);
                 return false;
             }
             if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
@@ -279,31 +284,41 @@ private:
                 .Build()
             .Done();
 
-        TExprNode::TPtr limit;
-        if (const auto& limitNode = NYql::GetSetting(sort.Settings().Ref(), EYtSettingType::Limit)) {
-            limit = GetLimitExpr(limitNode, ctx);
-        }
-
+        TExprNode::TPtr work;
         auto [direct, selector] = GetOutputSortSettings(sort, ctx);
-        auto work = direct && selector ?
-            limit ?
-                Build<TCoTopSort>(ctx, sort.Pos())
+        if (direct && selector) {
+            // Don't use runtime limit for TopSort - it may have max<ui64>() value, which cause TopSort to fail
+            TMaybe<ui64> limit = GetLimit(sort.Settings().Ref());
+            work = limit
+                ? Build<TCoTopSort>(ctx, sort.Pos())
                     .Input(input)
-                    .Count(std::move(limit))
+                    .Count<TCoUint64>()
+                        .Literal()
+                            .Value(ToString(*limit), TNodeFlags::Default)
+                        .Build()
+                    .Build()
                     .SortDirections(std::move(direct))
                     .KeySelectorLambda(std::move(selector))
-                    .Done().Ptr():
-                Build<TCoSort>(ctx, sort.Pos())
+                    .Done().Ptr()
+                : Build<TCoSort>(ctx, sort.Pos())
                     .Input(input)
                     .SortDirections(std::move(direct))
                     .KeySelectorLambda(std::move(selector))
-                    .Done().Ptr():
-            limit ?
-                Build<TCoTake>(ctx, sort.Pos())
+                    .Done().Ptr()
+                ;
+        } else {
+            TExprNode::TPtr limit;
+            if (const auto& limitNode = NYql::GetSetting(sort.Settings().Ref(), EYtSettingType::Limit)) {
+                limit = GetLimitExpr(limitNode, ctx);
+            }
+
+            work = limit
+                ? Build<TCoTake>(ctx, sort.Pos())
                     .Input(input)
                     .Count(std::move(limit))
-                    .Done().Ptr():
-                input.Ptr();
+                    .Done().Ptr()
+                : input.Ptr();
+        }
 
         auto settings = NYql::AddSetting(sort.Settings().Ref(), EYtSettingType::NoDq, {}, ctx);
         auto operation = ctx.ChangeChild(sort.Ref(), TYtTransientOpBase::idx_Settings, std::move(settings));

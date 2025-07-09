@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.7.6)
+VERSION(0.8.1)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-http/archive/v0.7.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-http/archive/v0.8.1.tar.gz)
 
 PEERDIR(
     contrib/restricted/aws/aws-c-cal

@@ -1,4 +1,8 @@
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <util/datetime/cputimer.h>
 #include <util/string/builder.h>
@@ -29,7 +33,15 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     settings.MaxErrors = maxErrors;
     settings.Mode = mode;
     settings.Arena = &arena;
-    auto res = SqlToYql(query, settings);
+
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+    auto res = SqlToYql(lexers, parsers, query, settings);
     if (debug == EDebugOutput::ToCerr) {
         Err2Str(res, debug);
     }

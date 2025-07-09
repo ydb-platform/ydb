@@ -79,23 +79,27 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
             .Param("stream")
             .Callable("FromFlow")
                 .Callable(0, "NarrowMap")
-                    .Callable(0, "WideToBlocks")
-                        .Callable(0, "ExpandMap")
-                            .Callable(0, "ToFlow")
-                                .Arg(0, "stream")
-                            .Seal()
-                            .Lambda(1)
-                                .Param("item")
-                                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
-                                    ui32 i = 0;
-                                    for (const auto& item : items) {
-                                        lambda.Callable(i++, "Member")
-                                            .Arg(0, "item")
-                                            .Atom(1, item->GetName())
-                                        .Seal();
-                                    }
-                                    return lambda;
-                                })
+                    .Callable(0, "ToFlow")
+                        .Callable(0, "WideToBlocks")
+                            .Callable(0, "FromFlow")
+                                .Callable(0, "ExpandMap")
+                                    .Callable(0, "ToFlow")
+                                        .Arg(0, "stream")
+                                    .Seal()
+                                    .Lambda(1)
+                                        .Param("item")
+                                        .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
+                                            ui32 i = 0;
+                                            for (const auto& item : items) {
+                                                lambda.Callable(i++, "Member")
+                                                    .Arg(0, "item")
+                                                    .Atom(1, item->GetName())
+                                                .Seal();
+                                            }
+                                            return lambda;
+                                        })
+                                    .Seal()
+                                .Seal()
                             .Seal()
                         .Seal()
                     .Seal()

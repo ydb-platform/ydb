@@ -19,7 +19,7 @@ bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TAct
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxStoreTablePath::Execute at " << Self->TabletID());
 
-    Y_ABORT_UNLESS(Self->TableInfos.contains(PathId));
+    Y_ENSURE(Self->TableInfos.contains(PathId));
 
     txc.DB.NoMoreReadsForTx();
 

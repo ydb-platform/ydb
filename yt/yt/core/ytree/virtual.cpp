@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/yson/tokenizer.h>
 #include <yt/yt/core/yson/writer.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/ypath/tokenizer.h>
 
@@ -22,6 +23,7 @@ using namespace NYPath;
 using namespace NConcurrency;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -63,7 +65,15 @@ void ExecuteBatchRead(
         for (int index = 0; index < std::ssize(batchIndexRanges); ++index) {
             auto batchWriter = New<TAsyncYsonWriter>(ysonFragmentType);
             batchWriters.push_back(batchWriter);
-            auto batchFuture = BIND([writeItems, batchWriter, batchIndexRange = batchIndexRanges[index]] {
+            auto batchFuture = BIND([
+                writeItems,
+                createReadOffloadGuard = offloadParams->CreateReadOffloadGuard,
+                batchWriter,
+                batchIndexRange = batchIndexRanges[index]
+            ] {
+                auto guard = createReadOffloadGuard
+                    ? createReadOffloadGuard()
+                    : nullptr;
                 writeItems(batchIndexRange, batchWriter);
             })
                 .AsyncVia(offloadParams->OffloadInvoker)
@@ -98,7 +108,7 @@ void ReplyFromAsyncYsonWriter(
         .Subscribe(BIND([=] (const TErrorOr<TYsonString>& resultOrError) {
             if (resultOrError.IsOK()) {
                 auto* response = &context->Response();
-                response->set_value(resultOrError.Value().ToString());
+                response->set_value(ToProto(resultOrError.Value()));
                 context->Reply();
             } else {
                 context->Reply(resultOrError);
@@ -200,7 +210,7 @@ void TVirtualMapBase::GetSelf(
         EYsonType::MapFragment,
         std::ssize(keys),
         [&] (std::pair<i64, i64> keyIndexRange, const TAsyncYsonWriterPtr& writer) {
-            if (attributeFilter) {
+            if (attributeFilter && !attributeFilter.IsEmpty()) {
                 for (i64 index = keyIndexRange.first; index < keyIndexRange.second; ++index) {
                     const auto& key = keys[index];
                     if (auto service = FindItemService(key)) {
@@ -278,7 +288,7 @@ void TVirtualMapBase::ListSelf(
         EYsonType::MapFragment,
         std::ssize(keys),
         [&] (auto keyIndexRange, const TAsyncYsonWriterPtr& writer) {
-            if (attributeFilter) {
+            if (attributeFilter && !attributeFilter.IsEmpty()) {
                 for (i64 index = keyIndexRange.first; index < keyIndexRange.second; ++index) {
                     const auto& key = keys[index];
                     if (auto service = FindItemService(key)) {

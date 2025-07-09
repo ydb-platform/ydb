@@ -2,18 +2,18 @@
 
 #include "fwd.h"
 
-#include <ydb-cpp-sdk/client/common_client/settings.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/logger/backend.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TGRpcConnectionsImpl;
 
@@ -47,9 +47,10 @@ public:
     //! default: 0
     TDriverConfig& SetMaxClientQueueSize(size_t sz);
     //! Enable Ssl.
-    //! caCerts  - The buffer containing the PEM encoding of the server root certificates.
+    //! caCerts  - The buffer containing the PEM encoded root certificates for SSL/TLS connections.
     //!            If this parameter is empty, the default roots will be used.
     TDriverConfig& UseSecureConnection(const std::string& caCerts = std::string());
+    TDriverConfig& SetUsePerChannelTcpConnection(bool usePerChannel);
     TDriverConfig& UseClientCertificate(const std::string& clientCert, const std::string& clientPrivateKey);
     //! Set token, this option can be overridden for client by ClientSettings
     TDriverConfig& SetAuthToken(const std::string& token);
@@ -88,13 +89,12 @@ public:
     //! Params is a optionally field to set policy settings
     //! default: EBalancingPolicy::UsePreferableLocation
     TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const std::string& params = std::string());
-    //! !!! EXPERIMENTAL !!!
     //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout
     //! internal grpc routine fails request with TRANSIENT_FAILURE or TRANSPORT_UNAVAILABLE error
     //! Note: this timeout should not be too small to prevent fail due to
     //! network buffers delay. I.e. values less than 5 seconds may cause request failure
     //! even with fast network
-    //! default: disabled
+    //! default: enabled, 10 seconds
     TDriverConfig& SetGRpcKeepAliveTimeout(TDuration timeout);
     TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls);
     //! Set inactive socket timeout.
@@ -142,6 +142,7 @@ public:
     template<typename TExtension>
     void AddExtension(typename TExtension::TParams params = typename TExtension::TParams());
 
+    TDriverConfig GetConfig() const;
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Impl_;
 };

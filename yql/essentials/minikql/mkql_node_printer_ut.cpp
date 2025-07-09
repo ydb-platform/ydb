@@ -104,12 +104,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodePrinterTest) {
         TCallableType* ctype1 = TCallableType::Create("ctype1", dtype1, 0, nullptr, nullptr, env);
         TCallable* c1 = TCallable::Create(0, nullptr, ctype1, env);
         TRuntimeNode r1(c1, false);
-        auto s1 = SerializeRuntimeNode(r1, env);
+        auto s1 = SerializeRuntimeNode(r1, env.GetNodeStack());
         TRuntimeNode r2 = DeserializeRuntimeNode(s1, env);
         UNIT_ASSERT(r1 == r2);
 
         TRuntimeNode r3(c1, true);
-        auto s2 = SerializeRuntimeNode(r3, env);
+        auto s2 = SerializeRuntimeNode(r3, env.GetNodeStack());
         TRuntimeNode r4 = DeserializeRuntimeNode(s2, env);
         UNIT_ASSERT(r3 == r4);
 

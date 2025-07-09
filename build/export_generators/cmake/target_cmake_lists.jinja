@@ -30,7 +30,7 @@
 {%-             set only_headers_like_sources_library = false -%}
 {%-         endif -%}
 {%-     endif -%}
-{%-     if current_target.target_commands|selectattr('macro', 'eq', 'add_custom_command')|length -%}
+{%-     if current_target.custom_runs|length -%}
 {%-         set only_headers_like_sources_library = false -%}
 {%-     endif -%}
 {%- else -%}

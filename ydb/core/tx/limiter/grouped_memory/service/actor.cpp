@@ -4,6 +4,9 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 void TMemoryLimiterActor::Bootstrap() {
     Manager = std::make_shared<TManager>(SelfId(), Config, Name, Signals, DefaultStage);
+
+    Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(ConsumerKind));
+
     Become(&TThis::StateWait);
 }
 
@@ -45,6 +48,14 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcessScope::TP
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcessScope::TPtr& ev) {
     Manager->RegisterProcessScope(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId());
+}
+
+void TMemoryLimiterActor::Handle(NMemory::TEvConsumerRegistered::TPtr& ev) {
+    Manager->SetMemoryConsumer(std::move(ev->Get()->Consumer));
+}
+
+void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
+    Manager->UpdateMemoryLimits(ev->Get()->LimitBytes, ev->Get()->HardLimitBytes);
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

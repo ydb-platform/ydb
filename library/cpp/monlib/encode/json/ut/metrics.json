@@ -27,6 +27,7 @@
     {
       "type": "GAUGE",
       "labels": { "metric": "Writes" },
+      "memOnly": true,
       "timeseries": [
         {
           "ts": "2017-08-28T12:32:11Z",

@@ -8,7 +8,7 @@
 
 {% else %}
 
-Вызов `CREATE TABLE` создает {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %} с указанной схемой данных{% if feature_map_tables %}  и ключевыми колонками (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}Позволяет определить вторичные индексы на создаваемой таблице.
+Вызов `CREATE TABLE` создает {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %} с указанной схемой данных{% if feature_map_tables %}  и ключевыми колонками (`PRIMARY KEY`){% endif %}.{% if feature_secondary_index == true %} Позволяет определить вторичные индексы на создаваемой таблице.
 
 {% endif %}
 
@@ -60,7 +60,9 @@ WITH (
 
 {% endif %}
 
-### Примеры создания таблиц
+{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+
+## Примеры создания таблиц
 
 {% list tabs %}
 
@@ -95,7 +97,7 @@ WITH (
   {% if feature_column_container_type == true %}
 
   Для неключевых колонок допускаются любые типы данных{% if feature_serial %} , кроме [серийных](../../types/serial.md) {% endif %}, для ключевых - только [примитивные](../../types/primitive.md){% if feature_serial %} и [серийные](../../types/serial.md){% endif %}. При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
-  
+
   {% else %}
 
   {% if feature_serial %}
@@ -103,7 +105,7 @@ WITH (
   Для ключевых колонок допускаются только [примитивные](../../types/primitive.md) и [серийные](../../types/serial.md) типы данных, для неключевых колонок допускаются только [примитивные](../../types/primitive.md).
 
   {% else %}
-  
+
   Для ключевых и неключевых колонок допускаются только [примитивные](../../types/primitive.md) типы данных.
 
   {% endif %}
@@ -183,7 +185,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
   );
   ```
-  
+
   Такой код создаст колоночную таблицу с 10-ю партициями. С полным списком опций партиционирования колоночных таблиц можно ознакомиться в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 
@@ -243,6 +245,7 @@ CREATE TABLE <table_name> (
 При создании строковых таблиц возможно задать:
 
 * [Вторичный индекс](secondary_index.md).
+* [Векторный индекс](vector_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 

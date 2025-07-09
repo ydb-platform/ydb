@@ -3,6 +3,7 @@
 #include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/logging/log.h>
 

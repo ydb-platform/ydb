@@ -6,6 +6,7 @@
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
 #include <yt/yt/library/profiling/public.h>

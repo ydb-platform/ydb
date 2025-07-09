@@ -22,7 +22,7 @@ For example:
   |d|2|
 
 
-### Example
+#### Example
 
 ```yql
 $sample = AsList(
@@ -40,7 +40,7 @@ This conversion can be convenient in the following cases:
 
 * When the cells in a container column store IDs from another table that you want to join with [`JOIN`](join.md).
 
-### Syntax
+#### Syntax
 
 * `FLATTEN BY` is specified after `FROM`, but before `GROUP BY`, if `GROUP BY` is present in the query.
 * The type of the result column depends on the type of the source column:
@@ -83,7 +83,7 @@ To specify the type of container to convert to, you can use:
 
    To filter the `NULL` values without serialization, specify the operation by using `FLATTEN OPTIONAL BY`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -125,21 +125,25 @@ SELECT * FROM (
 
 ## FLATTEN COLUMNS {#flatten-columns}
 
-Converts a table where all columns must be structures to a table with columns corresponding to each element of each structure from the source columns.
 
-The names of the source column structures are not used and not returned in the result. Be sure that the structure element names aren't repeated in the source columns.
 
-### Example
+Transforms each column of type `Struct` into individual columns, one for each field within the struct. The names of the new columns are the names of the fields from the original struct columns. Columns that are not structs remain unchanged.
+  
+- Only one level of the struct is flattened.
+- The original struct columns are not included in the result; their names are not used anywhere.
+- All column names in the resulting table (including names from struct fields in the original columns and names of non-struct columns) must be unique; name conflicts result in an error.
+
+#### Example
 
 ```yql
-SELECT x, y, z
+SELECT x, y, z, not_struct
 FROM (
   SELECT
     AsStruct(
         1 AS x,
         "foo" AS y),
     AsStruct(
-        false AS z)
+        false AS z),
+    1 as not_struct,
 ) FLATTEN COLUMNS;
 ```
-

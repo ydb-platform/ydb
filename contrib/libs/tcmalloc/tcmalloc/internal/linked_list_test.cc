@@ -14,16 +14,16 @@
 
 #include "tcmalloc/internal/linked_list.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 
 #include <algorithm>
+#include <type_traits>
 #include <vector>
 
 #include "gtest/gtest.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/container/node_hash_set.h"
 #include "absl/random/random.h"
-#include "benchmark/benchmark.h"
 #include "tcmalloc/internal/mock_span.h"
 
 namespace tcmalloc {
@@ -32,9 +32,12 @@ namespace {
 
 class LinkedListTest : public ::testing::Test {
  protected:
-  void SetUp() override { list_.Init(); }
-
   LinkedList list_;
+
+  static_assert(!std::is_copy_constructible<LinkedList>::value,
+                "LinkedList should not be copyable");
+  static_assert(!std::is_move_constructible<LinkedList>::value,
+                "LinkedList should not be movable");
 };
 
 TEST_F(LinkedListTest, PushPop) {
@@ -117,6 +120,11 @@ TEST_F(LinkedListTest, PushPopBatch) {
 class TListTest : public ::testing::Test {
  protected:
   MockSpanList list_;
+
+  static_assert(!std::is_copy_constructible<MockSpanList>::value,
+                "TList should not be copyable");
+  static_assert(!std::is_move_constructible<MockSpanList>::value,
+                "TList should not be movable");
 };
 
 TEST_F(TListTest, AppendPushPop) {

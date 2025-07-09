@@ -54,13 +54,13 @@ BELONGS ya.make
         include/boost/locale/conversion.hpp [2:2]
         include/boost/locale/date_time.hpp [2:2]
         include/boost/locale/date_time_facet.hpp [2:2]
-        include/boost/locale/encoding.hpp [2:2]
+        include/boost/locale/encoding.hpp [2:3]
         include/boost/locale/encoding_errors.hpp [2:2]
         include/boost/locale/encoding_utf.hpp [2:3]
         include/boost/locale/format.hpp [2:3]
         include/boost/locale/formatting.hpp [2:3]
         include/boost/locale/generator.hpp [2:2]
-        include/boost/locale/gnu_gettext.hpp [2:2]
+        include/boost/locale/gnu_gettext.hpp [2:3]
         include/boost/locale/info.hpp [2:3]
         include/boost/locale/localization_backend.hpp [2:2]
         include/boost/locale/message.hpp [2:3]
@@ -68,75 +68,74 @@ BELONGS ya.make
         include/boost/locale/utf.hpp [2:2]
         include/boost/locale/util.hpp [2:3]
         include/boost/locale/util/locale_data.hpp [2:3]
-        src/boost/locale/encoding/codepage.cpp [2:3]
-        src/boost/locale/encoding/iconv_converter.hpp [2:2]
-        src/boost/locale/encoding/uconv_converter.hpp [2:2]
-        src/boost/locale/encoding/wconv_converter.hpp [2:2]
-        src/boost/locale/icu/all_generator.hpp [2:2]
-        src/boost/locale/icu/boundary.cpp [2:3]
-        src/boost/locale/icu/cdata.hpp [2:2]
-        src/boost/locale/icu/codecvt.cpp [2:3]
-        src/boost/locale/icu/codecvt.hpp [2:2]
-        src/boost/locale/icu/collator.cpp [2:2]
-        src/boost/locale/icu/conversion.cpp [2:3]
-        src/boost/locale/icu/date_time.cpp [2:3]
-        src/boost/locale/icu/formatter.cpp [2:3]
-        src/boost/locale/icu/formatter.hpp [2:2]
-        src/boost/locale/icu/formatters_cache.cpp [2:3]
-        src/boost/locale/icu/formatters_cache.hpp [2:3]
-        src/boost/locale/icu/icu_backend.cpp [2:3]
-        src/boost/locale/icu/icu_backend.hpp [2:2]
-        src/boost/locale/icu/icu_util.hpp [2:3]
-        src/boost/locale/icu/numeric.cpp [2:2]
-        src/boost/locale/icu/time_zone.cpp [2:2]
-        src/boost/locale/icu/time_zone.hpp [2:2]
-        src/boost/locale/icu/uconv.hpp [2:3]
-        src/boost/locale/posix/all_generator.hpp [2:2]
-        src/boost/locale/posix/codecvt.cpp [2:3]
-        src/boost/locale/posix/collate.cpp [2:2]
-        src/boost/locale/posix/converter.cpp [2:2]
-        src/boost/locale/posix/numeric.cpp [2:2]
-        src/boost/locale/posix/posix_backend.cpp [2:3]
-        src/boost/locale/posix/posix_backend.hpp [2:2]
-        src/boost/locale/shared/date_time.cpp [2:3]
-        src/boost/locale/shared/format.cpp [2:2]
-        src/boost/locale/shared/formatting.cpp [2:2]
-        src/boost/locale/shared/generator.cpp [2:2]
-        src/boost/locale/shared/iconv_codecvt.cpp [2:3]
-        src/boost/locale/shared/iconv_codecvt.hpp [2:2]
-        src/boost/locale/shared/ids.cpp [2:3]
-        src/boost/locale/shared/ios_prop.hpp [2:3]
-        src/boost/locale/shared/localization_backend.cpp [2:2]
-        src/boost/locale/shared/mo_hash.hpp [2:2]
-        src/boost/locale/shared/mo_lambda.cpp [2:3]
-        src/boost/locale/shared/mo_lambda.hpp [2:3]
-        src/boost/locale/std/all_generator.hpp [2:2]
-        src/boost/locale/std/codecvt.cpp [2:2]
-        src/boost/locale/std/collate.cpp [2:2]
-        src/boost/locale/std/converter.cpp [2:2]
-        src/boost/locale/std/numeric.cpp [2:2]
-        src/boost/locale/std/std_backend.cpp [2:3]
-        src/boost/locale/std/std_backend.hpp [2:2]
-        src/boost/locale/util/codecvt_converter.cpp [2:3]
-        src/boost/locale/util/default_locale.cpp [2:2]
-        src/boost/locale/util/encoding.cpp [2:3]
-        src/boost/locale/util/encoding.hpp [2:3]
-        src/boost/locale/util/gregorian.cpp [2:2]
-        src/boost/locale/util/gregorian.hpp [2:2]
-        src/boost/locale/util/iconv.hpp [2:2]
-        src/boost/locale/util/info.cpp [2:3]
-        src/boost/locale/util/locale_data.cpp [2:3]
-        src/boost/locale/util/numeric.hpp [2:2]
-        src/boost/locale/util/timezone.hpp [2:2]
-        src/boost/locale/win32/all_generator.hpp [2:2]
-        src/boost/locale/win32/api.hpp [2:2]
-        src/boost/locale/win32/collate.cpp [2:2]
-        src/boost/locale/win32/converter.cpp [2:2]
-        src/boost/locale/win32/lcid.cpp [2:2]
-        src/boost/locale/win32/lcid.hpp [2:2]
-        src/boost/locale/win32/numeric.cpp [2:2]
-        src/boost/locale/win32/win_backend.cpp [2:3]
-        src/boost/locale/win32/win_backend.hpp [2:2]
+        src/encoding/codepage.cpp [2:3]
+        src/encoding/iconv_converter.hpp [2:2]
+        src/encoding/uconv_converter.hpp [2:2]
+        src/encoding/wconv_converter.hpp [2:2]
+        src/icu/all_generator.hpp [2:2]
+        src/icu/boundary.cpp [2:3]
+        src/icu/cdata.hpp [2:2]
+        src/icu/codecvt.cpp [2:3]
+        src/icu/codecvt.hpp [2:2]
+        src/icu/collator.cpp [2:3]
+        src/icu/conversion.cpp [2:3]
+        src/icu/date_time.cpp [2:3]
+        src/icu/formatter.cpp [2:3]
+        src/icu/formatter.hpp [2:3]
+        src/icu/formatters_cache.cpp [2:3]
+        src/icu/formatters_cache.hpp [2:3]
+        src/icu/icu_backend.cpp [2:3]
+        src/icu/icu_backend.hpp [2:2]
+        src/icu/icu_util.hpp [2:3]
+        src/icu/numeric.cpp [2:3]
+        src/icu/time_zone.hpp [2:3]
+        src/icu/uconv.hpp [2:3]
+        src/posix/all_generator.hpp [2:2]
+        src/posix/codecvt.cpp [2:3]
+        src/posix/collate.cpp [2:2]
+        src/posix/converter.cpp [2:2]
+        src/posix/numeric.cpp [2:2]
+        src/posix/posix_backend.cpp [2:3]
+        src/posix/posix_backend.hpp [2:2]
+        src/shared/date_time.cpp [2:3]
+        src/shared/format.cpp [2:3]
+        src/shared/formatting.cpp [2:2]
+        src/shared/generator.cpp [2:3]
+        src/shared/iconv_codecvt.cpp [2:3]
+        src/shared/iconv_codecvt.hpp [2:2]
+        src/shared/ids.cpp [2:3]
+        src/shared/ios_prop.hpp [2:3]
+        src/shared/localization_backend.cpp [2:2]
+        src/shared/mo_hash.hpp [2:2]
+        src/shared/mo_lambda.cpp [2:3]
+        src/shared/mo_lambda.hpp [2:3]
+        src/std/all_generator.hpp [2:2]
+        src/std/codecvt.cpp [2:2]
+        src/std/collate.cpp [2:2]
+        src/std/converter.cpp [2:2]
+        src/std/numeric.cpp [2:2]
+        src/std/std_backend.cpp [2:3]
+        src/std/std_backend.hpp [2:2]
+        src/util/codecvt_converter.cpp [2:3]
+        src/util/default_locale.cpp [2:2]
+        src/util/encoding.cpp [2:3]
+        src/util/encoding.hpp [2:3]
+        src/util/gregorian.cpp [2:2]
+        src/util/gregorian.hpp [2:2]
+        src/util/iconv.hpp [2:2]
+        src/util/info.cpp [2:3]
+        src/util/locale_data.cpp [2:3]
+        src/util/numeric.hpp [2:2]
+        src/util/timezone.hpp [2:2]
+        src/win32/all_generator.hpp [2:2]
+        src/win32/api.hpp [2:2]
+        src/win32/collate.cpp [2:2]
+        src/win32/converter.cpp [2:2]
+        src/win32/lcid.cpp [2:2]
+        src/win32/lcid.hpp [2:2]
+        src/win32/numeric.cpp [2:2]
+        src/win32/win_backend.cpp [2:3]
+        src/win32/win_backend.hpp [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0aacc38a77bc0373054292f93600d25a
 BELONGS ya.make
@@ -148,7 +147,19 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/boost/locale/icu/uconv.hpp [2:3]
+        src/icu/uconv.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 10d0d960009e0367294c74e986494399
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+        // Copyright (c) 2025 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/locale/encoding.hpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 187d73eada66cef6d5d08ed727437603
 BELONGS ya.make
@@ -160,8 +171,40 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/locale/detail/allocator_traits.hpp [2:2]
-        src/boost/locale/shared/ids.cpp [2:3]
-        src/boost/locale/shared/std_collate_adapter.hpp [2:2]
+        src/icu/formatter.hpp [2:3]
+        src/icu/numeric.cpp [2:3]
+        src/shared/format.cpp [2:3]
+        src/shared/generator.cpp [2:3]
+        src/shared/ids.cpp [2:3]
+        src/shared/std_collate_adapter.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21fa899f7deb226d35fdddb2e22eb4ea
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+        // Copyright (c) 2021-2025 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/icu/boundary.cpp [2:3]
+        src/shared/message.cpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5283dadfabe6a307c3ae77a03b4204e6
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+        // Copyright (c) 2021-2024 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/locale/format.hpp [2:3]
+        src/icu/date_time.cpp [2:3]
+        src/icu/formatter.cpp [2:3]
+        src/icu/formatters_cache.cpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5f6f0ebf2d6180caac56d446585150fe
 BELONGS ya.make
@@ -187,6 +230,11 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/locale/encoding_utf.hpp [2:3]
+        include/boost/locale/gnu_gettext.hpp [2:3]
+        src/icu/collator.cpp [2:3]
+        src/icu/conversion.cpp [2:3]
+        src/icu/time_zone.hpp [2:3]
+        src/util/locale_data.cpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8d04644911f5fff0cef0ea7eeadf74ee
 BELONGS ya.make
@@ -198,11 +246,20 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/boost/locale/icu/boundary.cpp [2:3]
-        src/boost/locale/icu/date_time.cpp [2:3]
-        src/boost/locale/icu/formatters_cache.cpp [2:3]
-        src/boost/locale/icu/formatters_cache.hpp [2:3]
-        src/boost/locale/icu/icu_util.hpp [2:3]
+        src/icu/formatters_cache.hpp [2:3]
+        src/icu/icu_util.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a63a0062b2f0e3cc2d4c206ed25fb44c
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+        // Copyright (c) 2023-2024 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/locale/util/locale_data.hpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a999dc6b43b371fa616fd4c0c30cf6f3
 BELONGS ya.make
@@ -213,10 +270,23 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/locale/detail/any_string.hpp [2:2]
-        include/boost/locale/util/locale_data.hpp [2:3]
-        src/boost/locale/shared/message.hpp [2:2]
-        src/boost/locale/util/make_std_unique.hpp [2:2]
+        src/shared/message.hpp [2:2]
+        src/util/make_std_unique.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa7339758a526244dab153b34cc3dcef
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2022-2025 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/locale/detail/encoding.hpp [2:2]
+        src/encoding/codepage.cpp [2:3]
+        src/icu/codecvt.cpp [2:3]
+        src/util/encoding.cpp [2:3]
+        src/util/encoding.hpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c75aae6c76ff96e098e51412b5d4691b
 BELONGS ya.make
@@ -228,40 +298,44 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/locale/detail/encoding.hpp [2:2]
         include/boost/locale/detail/facet_id.hpp [2:2]
         include/boost/locale/detail/is_supported_char.hpp [2:2]
         include/boost/locale/formatting.hpp [2:3]
         include/boost/locale/info.hpp [2:3]
         include/boost/locale/util.hpp [2:3]
         include/boost/locale/util/string.hpp [2:2]
-        src/boost/locale/encoding/codepage.cpp [2:3]
-        src/boost/locale/icu/codecvt.cpp [2:3]
-        src/boost/locale/icu/conversion.cpp [2:3]
-        src/boost/locale/icu/icu_backend.cpp [2:3]
-        src/boost/locale/posix/codecvt.cpp [2:3]
-        src/boost/locale/posix/posix_backend.cpp [2:3]
-        src/boost/locale/shared/date_time.cpp [2:3]
-        src/boost/locale/shared/iconv_codecvt.cpp [2:3]
-        src/boost/locale/std/std_backend.cpp [2:3]
-        src/boost/locale/util/codecvt_converter.cpp [2:3]
-        src/boost/locale/util/encoding.cpp [2:3]
-        src/boost/locale/util/encoding.hpp [2:3]
-        src/boost/locale/util/info.cpp [2:3]
-        src/boost/locale/util/locale_data.cpp [2:3]
-        src/boost/locale/win32/win_backend.cpp [2:3]
+        src/icu/icu_backend.cpp [2:3]
+        src/posix/codecvt.cpp [2:3]
+        src/posix/posix_backend.cpp [2:3]
+        src/shared/date_time.cpp [2:3]
+        src/shared/iconv_codecvt.cpp [2:3]
+        src/std/std_backend.cpp [2:3]
+        src/util/codecvt_converter.cpp [2:3]
+        src/util/info.cpp [2:3]
+        src/win32/win_backend.cpp [2:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL c9d011950648c03f29cc58f664ea728e
+KEEP     COPYRIGHT_SERVICE_LABEL c7b0fea325502e648cff49d8a76577a4
 BELONGS ya.make
     License text:
-        // Copyright (c) 2009-2015 Artyom Beilis (Tonkikh)
-        // Copyright (c) 2021-2023 Alexander Grund
+        // Copyright (c) 2024-2025 Alexander Grund
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/boost/locale/shared/message.cpp [2:3]
+        src/util/numeric_conversion.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9d011950648c03f29cc58f664ea728e
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2009-2015 Artyom Beilis (Tonkikh)
+        // Copyright (c) 2021-2025 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/shared/message.cpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ce25033e7c274b09a88738980e8ddeb6
 BELONGS ya.make
@@ -273,25 +347,33 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/boost/locale/shared/ios_prop.hpp [2:3]
+        src/shared/ios_prop.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d1d2857cd6a3cb1945f79fec36352462
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2023-2025 Alexander Grund
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/locale/detail/any_string.hpp [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f3772b68b272fd4e5066ca5b643faab9
 BELONGS ya.make
     License text:
-        // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+        // Copyright (c) 2015 Artyom Beilis (Tonkikh)
         // Copyright (c) 2021-2023 Alexander Grund
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/locale/format.hpp [2:3]
         include/boost/locale/generic_codecvt.hpp [2:3]
         include/boost/locale/message.hpp [2:3]
-        src/boost/locale/icu/formatter.cpp [2:3]
-        src/boost/locale/shared/message.cpp [2:3]
-        src/boost/locale/shared/mo_lambda.cpp [2:3]
-        src/boost/locale/shared/mo_lambda.hpp [2:3]
+        src/shared/mo_lambda.cpp [2:3]
+        src/shared/mo_lambda.hpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f9f21cf5cc873fe5cc18d20988035289
 BELONGS ya.make
@@ -313,4 +395,4 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/boost/locale/util/foreach_char.hpp [2:2]
+        src/util/foreach_char.hpp [2:2]

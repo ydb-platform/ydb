@@ -1,19 +1,19 @@
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/driver/constants.h>
-#include <src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/driver/constants.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <library/cpp/logger/log.h>
-#include <src/client/impl/ydb_internal/common/parser.h>
-#include <src/client/impl/ydb_internal/common/getenv.h>
-#include <ydb-cpp-sdk/client/common_client/ssl_credentials.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/parser.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/getenv.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <util/stream/file.h>
-#include <ydb-cpp-sdk/client/resources/ydb_ca.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_ca.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 using NYdbGrpc::TGRpcClientLow;
 using NYdbGrpc::TServiceConnection;
@@ -34,6 +34,7 @@ public:
     size_t GetClientThreadsNum() const override { return ClientThreadsNum; }
     size_t GetMaxQueuedResponses() const override { return MaxQueuedResponses; }
     TSslCredentials GetSslCredentials() const override { return SslCredentials; }
+    bool GetUsePerChannelTcpConnection() const override { return UsePerChannelTcpConnection; }
     std::string GetDatabase() const override { return Database; }
     std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const override { return CredentialsProviderFactory; }
     EDiscoveryMode GetDiscoveryMode() const override { return DiscoveryMode; }
@@ -55,6 +56,7 @@ public:
     size_t ClientThreadsNum = 0;
     size_t MaxQueuedResponses = 0;
     TSslCredentials SslCredentials;
+    bool UsePerChannelTcpConnection = false;
     std::string Database;
     std::shared_ptr<ICredentialsProviderFactory> CredentialsProviderFactory = CreateInsecureCredentialsProviderFactory();
     EDiscoveryMode DiscoveryMode = EDiscoveryMode::Sync;
@@ -68,8 +70,8 @@ public:
         };
     bool DrainOnDtors = true;
     TBalancingSettings BalancingSettings = TBalancingSettings{EBalancingPolicy::UsePreferableLocation, std::string()};
-    TDuration GRpcKeepAliveTimeout;
-    bool GRpcKeepAlivePermitWithoutCalls = false;
+    TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
+    bool GRpcKeepAlivePermitWithoutCalls = true;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     uint64_t MemoryQuota = 0;
     uint64_t MaxInboundMessageSize = 0;
@@ -111,6 +113,11 @@ TDriverConfig& TDriverConfig::SetMaxClientQueueSize(size_t sz) {
 TDriverConfig& TDriverConfig::UseSecureConnection(const std::string& cert) {
     Impl_->SslCredentials.IsEnabled = true;
     Impl_->SslCredentials.CaCert = cert;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetUsePerChannelTcpConnection(bool usePerChannel) {
+    Impl_->UsePerChannelTcpConnection = usePerChannel;
     return *this;
 }
 
@@ -221,6 +228,41 @@ TDriver::TDriver(const TDriverConfig& config) {
 
 void TDriver::Stop(bool wait) {
     Impl_->Stop(wait);
+}
+
+TDriverConfig TDriver::GetConfig() const {
+    TDriverConfig config;
+
+    config.SetEndpoint(Impl_->DefaultDiscoveryEndpoint_);
+    config.SetNetworkThreadsNum(Impl_->NetworkThreadsNum_);
+    config.SetClientThreadsNum(Impl_->ClientThreadsNum_);
+    config.SetMaxClientQueueSize(Impl_->MaxQueuedResponses_);
+    if (Impl_->SslCredentials_.IsEnabled) {
+        config.UseSecureConnection(Impl_->SslCredentials_.CaCert);
+    }
+    config.UseClientCertificate(Impl_->SslCredentials_.Cert, Impl_->SslCredentials_.PrivateKey);
+    config.SetCredentialsProviderFactory(Impl_->DefaultCredentialsProviderFactory_);
+    config.SetDatabase(Impl_->DefaultDatabase_);
+    config.SetDiscoveryMode(Impl_->DefaultDiscoveryMode_);
+    config.SetMaxQueuedRequests(Impl_->MaxQueuedRequests_);
+    config.SetGrpcMemoryQuota(Impl_->MemoryQuota_);
+    config.SetTcpKeepAliveSettings(
+        Impl_->TcpKeepAliveSettings_.Enabled,
+        Impl_->TcpKeepAliveSettings_.Idle,
+        Impl_->TcpKeepAliveSettings_.Count,
+        Impl_->TcpKeepAliveSettings_.Interval
+    );
+    config.SetDrainOnDtors(Impl_->DrainOnDtors_);
+    config.SetBalancingPolicy(Impl_->BalancingSettings_.Policy, Impl_->BalancingSettings_.PolicyParams);
+    config.SetGRpcKeepAliveTimeout(Impl_->GRpcKeepAliveTimeout_);
+    config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
+    config.SetSocketIdleTimeout(Impl_->SocketIdleTimeout_);
+    config.SetMaxInboundMessageSize(Impl_->MaxInboundMessageSize_);
+    config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);
+    config.SetMaxMessageSize(Impl_->MaxMessageSize_);
+    config.Impl_->Log = Impl_->Log;
+
+    return config;
 }
 
 } // namespace NYdb

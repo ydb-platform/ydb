@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/intrusive_heap.h>
@@ -10,6 +11,7 @@
 
 namespace NKikimr::NDataShard {
 
+using TIndexBuildScanSettings = NKikimrIndexBuilder::TIndexBuildScanSettings;
 class TDataShard;
 struct TUserTable;
 
@@ -30,24 +32,24 @@ struct TScanRecord {
 class TScanManager {
 public:
     const TScanRecord* Get(ui64 id) const {
-        Y_ABORT_UNLESS(id != 0);
+        Y_ENSURE(id != 0);
         if (Id == id) {
             return &Record;
         }
-        Y_ABORT_UNLESS(Id == 0);
+        Y_ENSURE(Id == 0);
         return nullptr;
     }
 
     TScanRecord::TScanIds& Set(ui64 id, TScanRecord::TSeqNo seqNo) {
-        Y_ABORT_UNLESS(id != 0);
-        Y_ABORT_UNLESS(Id == 0);
+        Y_ENSURE(id != 0);
+        Y_ENSURE(Id == 0);
         Id = id;
         Record.SeqNo = seqNo;
         return Record.ScanIds;
     }
 
     void Drop(ui64 id) {
-        Y_ABORT_UNLESS(Get(id) == &Record);
+        Y_ENSURE(Get(id) == &Record);
         Id = 0;
         Record = {};
     }
@@ -82,9 +84,12 @@ using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 
-// TODO(mbkkt) unfortunately key can have same columns as row
-// I can detect this but maybe better
-// if IScan will provide for us "how much data did we read"?
-ui64 CountBytes(TArrayRef<const TCell> key, const NTable::TRowState& row);
+ui64 CountRowCellBytes(TConstArrayRef<TCell> key, TConstArrayRef<TCell> value);
+
+inline TDuration GetRetryWakeupTimeoutBackoff(ui32 attempt) {
+    const ui32 maxBackoffExponent = 3;
+
+    return TDuration::Seconds(1u << Min(attempt, maxBackoffExponent));
+}
 
 }

@@ -63,13 +63,16 @@ struct IsReadSet {
 };
 
 Y_UNIT_TEST_SUITE(TDataShardRSTest) {
-    Y_UNIT_TEST(TestCleanupInRS) {
+    Y_UNIT_TEST_TWIN(TestCleanupInRS, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             // Volatile transactions avoid storing readsets in InReadSets table
-            .SetEnableDataShardVolatileTransactions(false);
+            .SetEnableDataShardVolatileTransactions(false)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -377,7 +380,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
                         break;
                     }
                     NKikimrTx::TReadSetData genericData;
-                    Y_ABORT_UNLESS(genericData.ParseFromString(msg->Record.GetReadSet()));
+                    Y_ENSURE(genericData.ParseFromString(msg->Record.GetReadSet()));
                     Cerr << "... generic readset: " << genericData.DebugString() << Endl;
                     UNIT_ASSERT(genericData.HasDecision());
                     UNIT_ASSERT(genericData.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
@@ -444,7 +447,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
                         break;
                     }
                     NKikimrTx::TReadSetData genericData;
-                    Y_ABORT_UNLESS(genericData.ParseFromString(msg->Record.GetReadSet()));
+                    Y_ENSURE(genericData.ParseFromString(msg->Record.GetReadSet()));
                     Cerr << "... generic readset: " << genericData.DebugString() << Endl;
                     UNIT_ASSERT(genericData.HasDecision());
                     UNIT_ASSERT(genericData.GetDecision() == NKikimrTx::TReadSetData::DECISION_ABORT);

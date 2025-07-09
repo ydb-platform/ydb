@@ -5,42 +5,42 @@
 $n = select n_name, n_nationkey from `{path}nation` as n
     where n_name = 'PERU' or n_name = 'MOZAMBIQUE';
 
-$l = select 
+$l = select
     l_orderkey, l_suppkey,
     DateTime::GetYear(cast(l_shipdate as timestamp)) as l_year,
     l_extendedprice * (1 - l_discount) as volume
-from 
+from
     `{path}lineitem` as l
-where 
+where
     l.l_shipdate between Date('1995-01-01') and Date('1996-12-31');
 
-$j1 = select 
+$j1 = select
     n_name as supp_nation,
     s_suppkey
-from 
+from
     `{path}supplier` as supplier
-join 
+join
     $n as n1
-on 
+on
     supplier.s_nationkey = n1.n_nationkey;
 
 $j2 = select
     n_name as cust_nation,
     c_custkey
-from 
+from
     `{path}customer` as customer
-join 
+join
     $n as n2
-on 
+on
     customer.c_nationkey = n2.n_nationkey;
 
 $j3 = select
     cust_nation, o_orderkey
-from 
+from
     `{path}orders` as orders
-join 
+join
     $j2 as customer
-on 
+on
     orders.o_custkey = customer.c_custkey;
 
 $j4 = select
@@ -48,21 +48,21 @@ $j4 = select
     l_orderkey, l_suppkey,
     l_year,
     volume
-from 
+from
     $l as lineitem
-join 
+join
     $j3 as orders
-on 
+on
     lineitem.l_orderkey = orders.o_orderkey;
 
 $j5 = select
     supp_nation, cust_nation,
     l_year, volume
-from 
+from
     $j4 as lineitem
-join 
+join
     $j1 as supplier
-on 
+on
     lineitem.l_suppkey = supplier.s_suppkey
 where (supp_nation = 'PERU' and cust_nation = 'MOZAMBIQUE')
     OR (supp_nation = 'MOZAMBIQUE' and cust_nation = 'PERU');
@@ -74,7 +74,7 @@ select
     l_year,
     sum(volume) as revenue
 from
-    $join5 as shipping
+    $j5 as shipping
 group by
     supp_nation,
     cust_nation,

@@ -1,11 +1,11 @@
-#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <src/client/persqueue_public/persqueue.h>
-#include <src/client/persqueue_public/impl/read_session.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/read_session.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/gmock_in_unittest/gmock.h>
@@ -513,7 +513,6 @@ public:
     std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl>> CbContext;
     std::shared_ptr<TThreadPool> ThreadPool;
     ::IExecutor::TPtr DefaultExecutor;
-    std::shared_ptr<std::unordered_map<ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs = std::make_shared<std::unordered_map<ECodec, THolder<NTopic::ICodec>>>();
 };
 
 class TReorderingExecutor : public ::IExecutor {
@@ -588,14 +587,10 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
         .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>()));
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
-
-    (*ProvidedCodecs)[ECodec::GZIP] = MakeHolder<NTopic::TGzipCodec>();
-    (*ProvidedCodecs)[ECodec::LZOP] = MakeHolder<NTopic::TUnsupportedCodec>();
-    (*ProvidedCodecs)[ECodec::ZSTD] = MakeHolder<NTopic::TZstdCodec>();
 }
 
 TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
-    if (!std::uncaught_exception()) { // Exiting from test successfully. Check additional expectations.
+    if (!std::uncaught_exceptions()) { // Exiting from test successfully. Check additional expectations.
         MockProcessorFactory->Wait();
         MockProcessor->Wait();
 

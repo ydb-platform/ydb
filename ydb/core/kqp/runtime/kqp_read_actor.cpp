@@ -1,5 +1,4 @@
 #include "kqp_read_actor.h"
-#include "kqp_compute_scheduler.h"
 
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
@@ -22,6 +21,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/intrlist.h>
+#include <util/string/vector.h>
 
 namespace {
 
@@ -723,6 +723,20 @@ public:
         }
     }
 
+    bool CheckTotalRetriesExeeded() {
+        const auto limit = MaxTotalRetries();
+        return limit && TotalRetries + 1 > *limit;
+    }
+
+    bool CheckShardRetriesExeeded(ui64 id) {
+        if (!Reads[id] || Reads[id].Finished) {
+            return false;
+        }
+
+        const auto& state = Reads[id].Shard;
+        return state->RetryAttempt + 1 > MaxShardRetries();
+    }
+
     void RetryRead(ui64 id, bool allowInstantRetry = true) {
         if (!Reads[id] || Reads[id].Finished) {
             return;
@@ -730,18 +744,17 @@ public:
 
         auto state = Reads[id].Shard;
 
-        TotalRetries += 1;
-        auto limit = MaxTotalRetries();
-        if (limit && TotalRetries > *limit) {
+        if (CheckTotalRetriesExeeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
                 NDqProto::StatusIds::UNAVAILABLE);
         }
+        ++TotalRetries;
 
-        state->RetryAttempt += 1;
-        if (state->RetryAttempt > MaxShardRetries()) {
+        if (CheckShardRetriesExeeded(id)) {
             ResetRead(id);
             return ResolveShard(state);
         }
+        ++state->RetryAttempt;
 
         auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
         if (delay == TDuration::Zero()) {
@@ -791,6 +804,7 @@ public:
         auto& record = ev->Record;
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
+
         for (const auto& column : Settings->GetColumns()) {
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
@@ -825,7 +839,11 @@ public:
         record.MutableTableId()->SetTableId(Settings->GetTable().GetTableId().GetTableId());
         record.MutableTableId()->SetSchemaVersion(Settings->GetTable().GetSchemaVersion());
 
-        record.SetReverse(Settings->GetReverse());
+        if (Settings->HasOptionalSorting()) {
+            record.SetReverse(Settings->GetOptionalSorting() == (ui32)ERequestSorting::DESC);
+        } else {
+            record.SetReverse(Settings->GetReverse());
+        }
         if (limit) {
             record.SetMaxRows(*limit);
             record.SetTotalRowsLimit(*limit);
@@ -954,12 +972,16 @@ public:
             Reads[id].Shard->Issues.push_back(issue);
         }
 
+        auto replyError = [&](auto message, auto status) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
+            return RuntimeError(message, status, issues);
+        };
+
         if (UseFollowers && record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS && Reads[id].Shard->SuccessBatches > 0) {
             // read from follower is interrupted with error after several successful responses.
             // in this case read is not safe because we can return inconsistent data.
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-            return RuntimeError("Failed to read from follower", NYql::NDqProto::StatusIds::UNAVAILABLE, issues);
+            return replyError("Failed to read from follower", NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
 
         switch (record.GetStatus().GetCode()) {
@@ -968,20 +990,33 @@ public:
                 break;
             }
             case Ydb::StatusIds::OVERLOADED: {
+                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::OVERLOADED);
+                }
                 return RetryRead(id, false);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
+                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                }
                 return RetryRead(id);
             }
             case Ydb::StatusIds::NOT_FOUND: {
+                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::UNAVAILABLE);
+                }
                 auto shard = Reads[id].Shard;
                 ResetRead(id);
                 return ResolveShard(shard);
             }
             default: {
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-                return RuntimeError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED, issues);
+                return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
             }
         }
 
@@ -997,14 +1032,22 @@ public:
             BrokenLocks.push_back(lock);
         }
 
+        if (UseFollowers) {
+            YQL_ENSURE(Locks.empty());
+        }
+
         CA_LOG_D("Taken " << Locks.size() << " locks");
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         Reads[id].RegisterMessage(*ev->Get());
 
+        if (Settings->GetIsBatch() && ev->Get()->GetRowsCount() > 0) {
+            SerializedEndRow = TSerializedCellVec{ev->Get()->GetCells(ev->Get()->GetRowsCount() - 1)};
+        }
 
         ReceivedRowCount += ev->Get()->GetRowsCount();
+
         CA_LOG_D(TStringBuilder() << "new data for read #" << id
             << " seqno = " << ev->Get()->Record.GetSeqNo()
             << " finished = " << ev->Get()->Record.GetFinished());
@@ -1452,6 +1495,17 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+
+        if (Settings->GetIsBatch() && SerializedEndRow) {
+            for (const auto& column : Settings->GetColumns()) {
+                if (!IsSystemColumn(column.GetId())) {
+                    resultInfo.AddEndRowColumnIds(column.GetId());
+                }
+            }
+
+            resultInfo.SetSerializedEndRow(SerializedEndRow.ReleaseBuffer());
+        }
+
         result.PackFrom(resultInfo);
         return result;
     }
@@ -1571,6 +1625,14 @@ private:
     THashMap<TString, TDuplicationStats> DuplicateCheckStats;
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;
+
+    struct TReadColumnInfo {
+        ui32 Id;
+        NScheme::TTypeInfo TypeInfo;
+        bool IsPrimary = false;
+    };
+
+    TSerializedCellVec SerializedEndRow; // For BATCH operations only
 };
 
 

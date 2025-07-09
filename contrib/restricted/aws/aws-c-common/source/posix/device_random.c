@@ -51,7 +51,8 @@ int aws_device_random_buffer_append(struct aws_byte_buf *output, size_t n) {
     /* read() can fail if N is too large (e.g. x64 macos fails if N > INT32_MAX),
      * so work in reasonably sized chunks. */
     while (n > 0) {
-        size_t capped_n = aws_min_size(n, 1024 * 1024 * 1024 * 1 /* 1GiB */);
+        size_t capped_n = aws_min_size(
+            n, 1024 * 1024 * 1024 * 1 /* 1GiB */); /* NOLINT(bugprone-implicit-widening-of-multiplication-result) */
 
         ssize_t amount_read = read(s_rand_fd, output->buffer + output->len, capped_n);
 

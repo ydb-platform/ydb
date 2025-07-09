@@ -227,6 +227,11 @@ namespace NMonitoring {
                 FillLogHistogram(*snapshot, point->MutableLogHistogram());
             }
 
+            void OnMemOnly(bool isMemOnly) override {
+                Y_ENSURE(Sample_, "metric not started");
+                Sample_->SetIsMemOnly(isMemOnly);
+            }
+
             void Close() override {
             }
 

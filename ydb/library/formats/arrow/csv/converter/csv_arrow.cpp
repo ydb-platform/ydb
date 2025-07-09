@@ -207,10 +207,6 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
         return {};
     }
 
-    if (batch && ResultColumns.size() && batch->schema()->fields().size() != ResultColumns.size()) {
-        errString = ErrorPrefix() + "not all result columns present";
-        batch.reset();
-    }
     return batch;
 }
 

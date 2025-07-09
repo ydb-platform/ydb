@@ -7,6 +7,8 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
+#include <yt/yt/library/numeric/util.h>
+
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <queue>
@@ -23,15 +25,6 @@ bool WillOverflowMul(i64 lhs, i64 rhs)
 {
     i64 result;
     return __builtin_mul_overflow(lhs, rhs, &result);
-}
-
-i64 ClampingAdd(i64 lhs, i64 rhs, i64 max)
-{
-    i64 result;
-    if (__builtin_add_overflow(lhs, rhs, &result) || result > max) {
-        return max;
-    }
-    return result;
 }
 
 } // namespace
@@ -226,6 +219,13 @@ public:
         return limit;
     }
 
+    TDuration GetPeriod() const override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        return Period_.load();
+    }
+
     i64 GetQueueTotalAmount() const override
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
@@ -418,7 +418,7 @@ private:
             } else {
                 auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, *limit);
 
-                auto newAvailable = ClampingAdd(Available_.load(), deltaAvailable, maxAvailable);
+                auto newAvailable = UnsignedSaturationArithmeticAdd(Available_.load(), deltaAvailable, maxAvailable);
                 YT_VERIFY(newAvailable <= maxAvailable);
                 if (newAvailable == maxAvailable) {
                     LastUpdated_ = now;
@@ -482,7 +482,7 @@ private:
             auto throughputPerPeriod = static_cast<i64>(period.SecondsFloat() * limit);
 
             while (true) {
-                auto newAvailable = ClampingAdd(available, deltaAvailable, /*max*/ throughputPerPeriod);
+                auto newAvailable = UnsignedSaturationArithmeticAdd(available, deltaAvailable, /*max*/ throughputPerPeriod);
                 if (Available_.compare_exchange_weak(available, newAvailable)) {
                     break;
                 }
@@ -675,6 +675,13 @@ public:
         return std::nullopt;
     }
 
+    TDuration GetPeriod() const override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        return TDuration::Max();
+    }
+
     TFuture<void> GetAvailableFuture() override
     {
         YT_UNIMPLEMENTED();
@@ -732,11 +739,26 @@ public:
         }));
     }
 
-    bool TryAcquire(i64 /*amount*/) override
+    bool TryAcquire(i64 amount) override
     {
-        YT_ABORT();
+        size_t i = 0;
+        for (; i < Throttlers_.size(); ++i) {
+            if (!Throttlers_[i]->TryAcquire(amount)) {
+                break;
+            }
+        }
+
+        if (i != Throttlers_.size()) {
+            for (size_t j = 0; j < i; ++j) {
+                Throttlers_[j]->Release(amount);
+            }
+            return false;
+        }
+
+        return true;
     }
 
+    // TODO(vvshlyaga): implement TryAcquireAvailable the same way as TryAcquire.
     i64 TryAcquireAvailable(i64 /*amount*/) override
     {
         YT_ABORT();

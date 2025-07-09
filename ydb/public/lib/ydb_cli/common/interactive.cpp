@@ -12,7 +12,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-
 bool AskYesOrNo() {
     TString input;
     for (;;) {
@@ -26,6 +25,34 @@ bool AskYesOrNo() {
         }
     }
     return false;
+}
+
+bool AskPrompt(const std::string &query, bool defaultAnswer) {
+    if (IsStdinInteractive()) {
+        Cerr << query << (defaultAnswer ? " [Y/n] " : " [y/N] ");
+
+        while(true) {
+            std::string text;
+            std::getline(std::cin, text);
+
+            std::transform(text.begin(), text.end(), text.begin(),
+                [](unsigned char c){ return std::tolower(c); });
+
+            if (text == "y" || text == "yes") {
+                return true;
+            } else if (text == "n" || text == "no") {
+                return false;
+            } else if (text == "") {
+                return defaultAnswer;
+            } else {
+                Cerr << "Please type \"y\" or \"n\". ";
+            }
+        }
+    } else {
+        Cerr << query << " Non interactive session, assuming default answer: " << defaultAnswer << Endl;
+    }
+
+    return defaultAnswer;
 }
 
 bool IsStdinInteractive() {

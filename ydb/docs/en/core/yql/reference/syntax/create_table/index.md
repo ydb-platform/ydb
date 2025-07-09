@@ -8,7 +8,7 @@ The table is automatically created upon the first [INSERT INTO](../insert_into.m
 
 {% else %}
 
-The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ concept_table }}){% else %}a table{% endif %} with the specified data schema{% if feature_map_tables %} and primary key columns (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}It also allows defining secondary indexes on the created table.
+The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ concept_table }}){% else %}a table{% endif %} with the specified data schema{% if feature_map_tables %} and primary key columns (`PRIMARY KEY`){% endif %}.{% if feature_secondary_index == true %} It also allows defining secondary indexes on the created table.
 
 {% endif %}
 
@@ -36,6 +36,7 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 {% if oss == true and backend_name == "YDB" %}
 
+
 {% if feature_olap_tables %}
 
 {{ ydb-short-name }} supports two types of tables:
@@ -59,7 +60,9 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 {% endif %}
 
-### Examples of table creation {#examples-tables-creation}
+{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+
+## Examples of table creation {#examples-tables-creation}
 
 {% list tabs %}
 
@@ -213,7 +216,7 @@ Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These 
 
 {% endif %}
 
-#### Example
+### Example
 
 ```yql
 CREATE TABLE <table_name> (
@@ -231,6 +234,7 @@ CREATE TABLE <table_name> (
 When creating row-oriented tables, it is possible to specify:
 
 * [A secondary index](secondary_index.md).
+* [A vector index](vector_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
 

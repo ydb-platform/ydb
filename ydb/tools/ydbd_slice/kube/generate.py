@@ -63,6 +63,21 @@ def generate_dynconfigs(project_path, namespace_name, cluster_uuid, preferred_po
     )
 
 
+def generate_obliterate(project_path, namespace_name, nodeclaim_name, ydb_image, nodes_list):
+    for node_name in nodes_list:
+        generate_file(
+            project_path=project_path,
+            filename=f'obliterate-{namespace_name}-{node_name}.yaml',
+            template='/ydbd_slice/templates/common/obliterate.yaml',
+            template_kwargs=dict(
+                namespace_name=namespace_name,
+                nodeclaim_name=nodeclaim_name,
+                node_name=node_name,
+                ydb_image=ydb_image
+            )
+        )
+
+
 def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name, node_flavor,
                               storage_name, database_name, cluster_uuid=''):
     generate_file(

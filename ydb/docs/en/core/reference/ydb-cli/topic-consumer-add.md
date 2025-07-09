@@ -20,11 +20,11 @@ View the description of the add consumer command:
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
-| `--consumer VAL` | Name of the consumer to be added. |
-| `--starting-message-timestamp VAL` | Time in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format. Consumption starts as soon as the first [message](../../concepts/topic.md#message) is received after the specified time. If the time is not specified, consumption will start from the oldest message in the topic. |
-| `--supported-codecs` | Supported data compression methods.<br/>The default value is `raw`.<br/>Possible values:<ul><li>`RAW`: No compression.</li><li>`ZSTD`: [zstd](https://en.wikipedia.org/wiki/Zstandard) compression.</li><li>`GZIP`: [gzip](https://en.wikipedia.org/wiki/Gzip) compression.</li><li>`LZOP`: [lzop](https://en.wikipedia.org/wiki/Lzop) compression.</li></ul> |
+| Name                               | Description                                                                                                                                                                                                                                                                                                                                                   |
+|------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--consumer VAL`                   | Name of the consumer to be added.                                                                                                                                                                                                                                                                                                                             |
+| `--starting-message-timestamp VAL` | Time in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format. Consumption starts as soon as the first [message](../../concepts/topic.md#message) is received after the specified time. If the time is not specified, consumption will start from the oldest message in the topic.                                                                 |
+| `--supported-codecs`               | Supported data compression methods.<br/>The default value is `raw`.<br/>Possible values:<ul><li>`RAW`: No compression.</li><li>`ZSTD`: [zstd](https://en.wikipedia.org/wiki/Zstandard) compression.</li><li>`GZIP`: [gzip](https://en.wikipedia.org/wiki/Gzip) compression.</li><li>`LZOP`: [lzop](https://en.wikipedia.org/wiki/Lzop) compression.</li></ul> |
 
 ## Examples {#examples}
 

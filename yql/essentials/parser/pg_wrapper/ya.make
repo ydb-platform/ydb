@@ -65,7 +65,7 @@ ENDIF()
 IF (NOT OS_WINDOWS AND NOT SANITIZER_TYPE AND NOT BUILD_TYPE == "DEBUG")
 IF (NOT BUILD_POSTGRES_ONLY)
 IF (YQL_USE_PG_BC)
-USE_LLVM_BC14()
+USE_LLVM_BC16()
 INCLUDE(pg_bc.all.inc)
 ENDIF()
 ENDIF()
@@ -80,6 +80,7 @@ ENDIF()
 PEERDIR(
     library/cpp/resource
     library/cpp/yson
+    library/cpp/string_utils/base64
     yql/essentials/core
     yql/essentials/minikql/arrow
     yql/essentials/minikql/computation

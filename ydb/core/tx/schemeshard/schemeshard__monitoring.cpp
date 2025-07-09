@@ -6,13 +6,18 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+
 #include <util/string/cast.h>
 
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
-    if (tabletIdParam.StartsWith("0x"))
-        return IntFromString<ui64, 16>(tabletIdParam.substr(2));
-    else
-        return FromStringWithDefault<ui64>(tabletIdParam, ui64(NKikimr::NSchemeShard::InvalidTabletId));
+    ui64 tabletId = ui64(NKikimr::NSchemeShard::InvalidTabletId);
+    if (tabletIdParam.StartsWith("0x")) {
+        TryIntFromString<16>(tabletIdParam.substr(2), tabletId);
+    } else {
+        TryFromString(tabletIdParam, tabletId);
+    }
+    return tabletId;
 }
 
 namespace NKikimr {
@@ -79,6 +84,7 @@ struct TCgi {
     static const TParam BuildIndexId;
     static const TParam UpdateCoordinatorsConfig;
     static const TParam UpdateCoordinatorsConfigDryRun;
+    static const TParam Action;
 
     struct TPages {
         static constexpr TStringBuf MainPage = "Main";
@@ -90,6 +96,10 @@ struct TCgi {
         static constexpr TStringBuf ShardInfoByTabletId = "ShardInfoByTabletId";
         static constexpr TStringBuf ShardInfoByShardIdx = "ShardInfoByShardIdx";
         static constexpr TStringBuf BuildIndexInfo = "BuildIndexInfo";
+    };
+
+    struct TActions {
+        static constexpr TStringBuf SplitOneToOne = "SplitOneToOne";
     };
 };
 
@@ -111,6 +121,7 @@ const TCgi::TParam TCgi::Page = TStringBuf("Page");
 const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun");
+const TCgi::TParam TCgi::Action = TStringBuf("Action");
 
 
 class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
@@ -231,6 +242,93 @@ private:
     THashMap<ui64, const TItem*> InFlight;
 };
 
+class TMonitoringShardSplitOneToOne : public TActorBootstrapped<TMonitoringShardSplitOneToOne> {
+public:
+    TMonitoringShardSplitOneToOne(NMon::TEvRemoteHttpInfo::TPtr&& ev, ui64 schemeShardId, const TPathId& pathId, TTabletId shardId)
+        : Ev(std::move(ev))
+        , SchemeShardId(schemeShardId)
+        , PathId(pathId)
+        , ShardId(shardId)
+    {}
+
+    void Bootstrap() {
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Become(&TThis::StateWaitTxId);
+    }
+
+    STFUNC(StateWaitTxId) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+        }
+    }
+
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        TxId = ev->Get()->TxId;
+
+        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+
+        auto& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+        modifyScheme.SetInternal(true);
+
+        auto& info = *modifyScheme.MutableSplitMergeTablePartitions();
+        info.SetTableOwnerId(PathId.OwnerId);
+        info.SetTableLocalId(PathId.LocalPathId);
+        info.AddSourceTabletId(ui64(ShardId));
+        info.SetAllowOneToOneSplitMerge(true);
+
+        PipeCache = MakePipePerNodeCacheID(EPipePerNodeCache::Leader);
+        Send(PipeCache, new TEvPipeCache::TEvForward(propose.Release(), SchemeShardId, /* subscribe */ true));
+        Become(&TThis::StateWaitProposed);
+    }
+
+    STFUNC(StateWaitProposed) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+        TString text;
+        try {
+            NProtobufJson::Proto2Json(ev->Get()->Record, text, {
+                .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
+                .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
+                .MapAsObject = true,
+            });
+        } catch (const std::exception& e) {
+            Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                "HTTP/1.1 500 Internal Error\r\nConnection: Close\r\n\r\nUnexpected failure to serialize the response\r\n"));
+            PassAway();
+        }
+
+        Send(Ev->Sender, new NMon::TEvRemoteJsonInfoRes(text));
+        PassAway();
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nSchemeShard tablet disconnected\r\n"));
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
+        }
+        TActorBootstrapped::PassAway();
+    }
+
+private:
+    NMon::TEvRemoteHttpInfo::TPtr Ev;
+    ui64 SchemeShardId;
+    TPathId PathId;
+    TTabletId ShardId;
+    ui64 TxId = 0;
+    TActorId PipeCache;
+};
+
 struct TSchemeShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
     TStringStream Answer;
@@ -242,10 +340,17 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
         Y_UNUSED(txc);
 
         const TCgiParameters& cgi = Ev->Get()->Cgi();
+
+        if (cgi.Has(TCgi::Action)) {
+            HandleAction(cgi.Get(TCgi::Action), cgi, ctx);
+            return true;
+        }
 
         const TString page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
 
@@ -311,7 +416,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        if (Answer) {
+        if (Ev && Answer) {
             ctx.Send(Ev->Sender, new NMon::TEvRemoteHttpInfoRes(Answer.Str()));
         }
     }
@@ -707,70 +812,82 @@ private:
             const auto& info = *indexInfoPtr->Get();
             TAG(TH4) {str << "Fields";}
             PRE () {
-                str << "BuildInfoId:                   " << info.Id << Endl
-                    << "Uid:                           " << info.Uid << Endl
+                str << "BuildInfoId: " << info.Id << Endl
+                    << "Uid: " << info.Uid << Endl
 
-                    << "CancelRequested:               " << (info.CancelRequested ? "YES" : "NO") << Endl
+                    << "CancelRequested: " << (info.CancelRequested ? "YES" : "NO") << Endl
 
-                    << "State:                         " << info.State << Endl
-                    << "Issue:                         " << info.Issue << Endl
+                    << "State: " << info.State << Endl
+                    << "KMeans: " << info.KMeans.DebugString() << Endl
+                    << "Sample: " << info.Sample.DebugString() << Endl
+                    << "IsBroken: " << info.IsBroken << Endl
+                    << "Issue: " << info.GetIssue() << Endl
 
-                    << "Shards.size:                  " << info.Shards.size() << Endl
-                    << "ToUploadShards.size:          " << info.ToUploadShards.size() << Endl
-                    << "DoneShards.size:              " << info.DoneShards.size() << Endl
-                    << "InProgressShards.size:        " << info.InProgressShards.size() << Endl
+                    << "Shards.size: " << info.Shards.size() << Endl
+                    << "ToUploadShards.size: " << info.ToUploadShards.size() << Endl
+                    << "DoneShards.size: " << info.DoneShards.size() << Endl
+                    << "InProgressShards.size: " << info.InProgressShards.size() << Endl
 
-                    << "DomainPathId:                  " << LinkToPathInfo(info.DomainPathId) << Endl
-                    << "DomainPath:                    " << TPath::Init(info.DomainPathId, Self).PathString() << Endl
+                    << "DomainPathId: " << LinkToPathInfo(info.DomainPathId) << Endl
+                    << "DomainPath: " << TPath::Init(info.DomainPathId, Self).PathString() << Endl
 
-                    << "TablePathId:                   " << LinkToPathInfo(info.TablePathId) << Endl
-                    << "TablePath:                     " << TPath::Init(info.TablePathId, Self).PathString() << Endl
+                    << "TablePathId: " << LinkToPathInfo(info.TablePathId) << Endl
+                    << "TablePath: " << TPath::Init(info.TablePathId, Self).PathString() << Endl
 
-                    << "IndexType:                     " <<  NKikimrSchemeOp::EIndexType_Name(info.IndexType) << Endl
+                    << "IndexType: " <<  NKikimrSchemeOp::EIndexType_Name(info.IndexType) << Endl
 
-                    << "IndexName:                     " << info.IndexName << Endl;
+                    << "IndexName: " << info.IndexName << Endl;
 
-                    for (const auto& column: info.IndexColumns) {
-                        str << "IndexColumns:          " << column << Endl;
-                    }
-
-                str << "Subscribers.size:             " << info.Subscribers.size() << Endl
-
-                    << "AlterMainTableTxId:            " << info.AlterMainTableTxId << Endl
-                    << "AlterMainTableTxStatus:        " << NKikimrScheme::EStatus_Name(info.AlterMainTableTxStatus) << Endl
-                    << "AlterMainTableTxDone:          " << (info.AlterMainTableTxDone ? "DONE": "not done") << Endl
-
-                    << "LockTxId:                      " << info.LockTxId << Endl
-                    << "LockTxStatus:                  " << NKikimrScheme::EStatus_Name(info.LockTxStatus) << Endl
-                    << "LockTxDone                     " << (info.LockTxDone ? "DONE" : "not done") << Endl
-
-                    << "InitiateTxId:                  " << info.InitiateTxId << Endl
-                    << "InitiateTxStatus:              " << NKikimrScheme::EStatus_Name(info.InitiateTxStatus) << Endl
-                    << "InitiateTxDone                 " << (info.InitiateTxDone ? "DONE" : "not done") << Endl
-
-                    << "ApplyTxId:                     " << info.ApplyTxId << Endl
-                    << "ApplyTxStatus:                 " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus) << Endl
-                    << "ApplyTxDone                    " << (info.ApplyTxDone ? "DONE" : "not done") << Endl
-
-                    << "UnlockTxId:                    " << info.UnlockTxId << Endl
-                    << "UnlockTxStatus:                " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus) << Endl
-                    << "UnlockTxDone                   " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
-
-                    << "SnapshotStep:                  " << info.SnapshotStep << Endl
-                    << "SnapshotTxId:                  " << info.SnapshotTxId << Endl
-
-                    << "Processed:                     " << info.Processed << Endl
-                    << "Billed:                        " << info.Billed << Endl;
-
-            }
-
-            TVector<NScheme::TTypeInfo> keyTypes;
-            if (Self->Tables.contains(info.TablePathId)) {
-                TTableInfo::TPtr tableInfo = Self->Tables.at(info.TablePathId);
-                for (ui32 keyPos: tableInfo->KeyColumnIds) {
-                    keyTypes.push_back(tableInfo->Columns.at(keyPos).PType);
+                for (const auto& column: info.IndexColumns) {
+                    str << "IndexColumns: " << column << Endl;
                 }
+
+                str << "Subscribers.size: " << info.Subscribers.size() << Endl
+
+                    << "AlterMainTableTxId: " << info.AlterMainTableTxId << Endl
+                    << "AlterMainTableTxStatus: " << NKikimrScheme::EStatus_Name(info.AlterMainTableTxStatus) << Endl
+                    << "AlterMainTableTxDone: " << (info.AlterMainTableTxDone ? "DONE": "not done") << Endl
+
+                    << "LockTxId: " << info.LockTxId << Endl
+                    << "LockTxStatus: " << NKikimrScheme::EStatus_Name(info.LockTxStatus) << Endl
+                    << "LockTxDone: " << (info.LockTxDone ? "DONE" : "not done") << Endl
+
+                    << "InitiateTxId: " << info.InitiateTxId << Endl
+                    << "InitiateTxStatus: " << NKikimrScheme::EStatus_Name(info.InitiateTxStatus) << Endl
+                    << "InitiateTxDone: " << (info.InitiateTxDone ? "DONE" : "not done") << Endl
+
+                    << "ApplyTxId: " << info.ApplyTxId << Endl
+                    << "ApplyTxStatus: " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus) << Endl
+                    << "ApplyTxDone: " << (info.ApplyTxDone ? "DONE" : "not done") << Endl
+
+                    << "UnlockTxId: " << info.UnlockTxId << Endl
+                    << "UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus) << Endl
+                    << "UnlockTxDone: " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
+
+                    << "SnapshotStep: " << info.SnapshotStep << Endl
+                    << "SnapshotTxId: " << info.SnapshotTxId << Endl;
+
+                TString requestUnitsExplain;
+                ui64 requestUnits = TRUCalculator::Calculate(info.Processed, requestUnitsExplain);
+                str << "Processed: " << info.Processed.ShortDebugString() << Endl
+                    << "Request Units: " << requestUnits << " (" << requestUnitsExplain << ")" << Endl
+                    << "Billed: " << info.Billed.ShortDebugString() << Endl;
             }
+
+            auto getKeyTypes = [&](TPathId pathId) {
+                TVector<NScheme::TTypeInfo> keyTypes;
+                
+                auto tableInfo = Self->Tables.FindPtr(pathId);
+                if (!tableInfo) {
+                    return keyTypes;
+                }
+
+                for (ui32 keyPos: tableInfo->Get()->KeyColumnIds) {
+                    keyTypes.push_back(tableInfo->Get()->Columns.at(keyPos).PType);
+                }
+
+                return keyTypes;
+            };
 
             {
                 TAG(TH3) {str << "Shards : " << info.Shards.size() << "\n";}
@@ -799,23 +916,31 @@ private:
                                 if (Self->ShardInfos.contains(idx)) {
                                     str << Self->ShardInfos.at(idx).TabletID;
                                 } else {
-                                    str << "shard " << idx << " has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {
-                                if (keyTypes) {
-                                    str << DebugPrintRange(keyTypes, status.Range.ToTableRange(), *AppData()->TypeRegistry);
+                                if (Self->ShardInfos.contains(idx)) {
+                                    if (auto keyTypes = getKeyTypes(Self->ShardInfos.at(idx).PathId)) {
+                                        str << DebugPrintRange(keyTypes, status.Range.ToTableRange(), *AppData()->TypeRegistry);
+                                    } else {
+                                        str << "deleted table";
+                                    }
                                 } else {
-                                    str << "table has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {
-                                if (keyTypes) {
-                                    TSerializedCellVec vec;
-                                    vec.Parse(status.LastKeyAck);
-                                    str << DebugPrintPoint(keyTypes, vec.GetCells(), *AppData()->TypeRegistry);
+                                if (Self->ShardInfos.contains(idx)) {
+                                    if (auto keyTypes = getKeyTypes(Self->ShardInfos.at(idx).PathId)) {
+                                        TSerializedCellVec vec;
+                                        vec.Parse(status.LastKeyAck);
+                                        str << DebugPrintPoint(keyTypes, vec.GetCells(), *AppData()->TypeRegistry);
+                                    } else {
+                                        str << "deleted table";
+                                    }
                                 } else {
-                                    str << "table has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {
@@ -831,7 +956,7 @@ private:
                                 str << Self->Generation() << ":" << status.SeqNoRound;
                             }
                             TABLED() {
-                                str << status.Processed;
+                                str << status.Processed.ShortDebugString();
                             }
                         }
                         str << "\n";
@@ -941,10 +1066,10 @@ private:
 
             TAG(TH4) {str << "Shard idx " << shardIdx << "</a>";}
             PRE () {
-                str << "TabletID:                     " << shard.TabletID<< Endl
-                    << "CurrentTxId:                  " << shard.CurrentTxId << Endl
-                    << "PathId:                       " << LinkToPathInfo(shard.PathId) << Endl
-                    << "TabletType:                   " << TTabletTypes::TypeToStr(shard.TabletType) << Endl;
+                str << "TabletID: " << shard.TabletID<< Endl
+                    << "CurrentTxId: " << shard.CurrentTxId << Endl
+                    << "PathId: " << LinkToPathInfo(shard.PathId) << Endl
+                    << "TabletType: " << TTabletTypes::TypeToStr(shard.TabletType) << Endl;
             }
 
             TAG(TH4) {str << "BindedChannels for shard idx " << shardIdx << "</a>";}
@@ -1014,25 +1139,25 @@ private:
 
             TAG(TH4) {str << "Path info " << pathId << "</a>";}
             PRE () {
-                str << "Path:                     " << Self->PathToString(path) << Endl
-                    << "PathId:                   " << pathId << Endl
-                    << "Parent Path Id:           " << LinkToPathInfo(path->ParentPathId) << Endl
-                    << "Name:                     " << path->Name << Endl
-                    << "Owner:                    " << path->Owner << Endl
-                    << "ACL:                      " << localACL.ToString() << Endl
-                    << "ACLVersion:               " << path->ACLVersion << Endl
-                    << "EffectiveACL:             " << effectiveACL.ToString() << Endl
-                    << "Path Type:                " << NKikimrSchemeOp::EPathType_Name(path->PathType) << Endl
-                    << "Path State:               " << NKikimrSchemeOp::EPathState_Name(path->PathState) << Endl
-                    << "Created step:             " << path->StepCreated << Endl
-                    << "Dropped step:             " << path->StepDropped << Endl
-                    << "Created tx:               " << path->CreateTxId << Endl
-                    << "Dropped tx:               " << path->DropTxId << Endl
-                    << "Last tx:                  " << path->LastTxId << Endl
+                str << "Path: " << Self->PathToString(path) << Endl
+                    << "PathId: " << pathId << Endl
+                    << "Parent Path Id: " << LinkToPathInfo(path->ParentPathId) << Endl
+                    << "Name: " << path->Name << Endl
+                    << "Owner: " << path->Owner << Endl
+                    << "ACL: " << localACL.ToString() << Endl
+                    << "ACLVersion: " << path->ACLVersion << Endl
+                    << "EffectiveACL: " << effectiveACL.ToString() << Endl
+                    << "Path Type: " << NKikimrSchemeOp::EPathType_Name(path->PathType) << Endl
+                    << "Path State: " << NKikimrSchemeOp::EPathState_Name(path->PathState) << Endl
+                    << "Created step: " << path->StepCreated << Endl
+                    << "Dropped step: " << path->StepDropped << Endl
+                    << "Created tx: " << path->CreateTxId << Endl
+                    << "Dropped tx: " << path->DropTxId << Endl
+                    << "Last tx: " << path->LastTxId << Endl
                     << "Has PreSerializedChildrenListing: " << !path->PreSerializedChildrenListing.empty() << Endl
-                    << "Children count:           " << path->GetChildren().size() << Endl
-                    << "Alive children count:     " << path->GetAliveChildren() << Endl
-                    << "Dir alter version:        " << path->DirAlterVersion << Endl
+                    << "Children count: " << path->GetChildren().size() << Endl
+                    << "Alive children count: " << path->GetAliveChildren() << Endl
+                    << "Dir alter version: " << path->DirAlterVersion << Endl
                     << "User attrs alter version  " << path->UserAttrs->AlterVersion << Endl
                     << "User attrs count          " << path->UserAttrs->Attrs.size() << Endl
                     << "DbRefCount count          " << path->DbRefCount << Endl
@@ -1150,22 +1275,22 @@ private:
 
             TAG(TH4) {str << "TxState info " << opId << "</a>";}
             PRE () {
-                str << "TxType:                                  " << TTxState::TypeName(txState.TxType) << Endl
-                    << "TargetPathId:                            " << LinkToPathInfo(txState.TargetPathId) << Endl
-                    << "SourcePathId:                            " << LinkToPathInfo(txState.SourcePathId) << Endl
-                    << "State:                                   " << TTxState::StateName(txState.State) << Endl
-                    << "MinStep:                                 " << txState.MinStep << Endl
-                    << "ReadyForNotifications:                   " << txState.ReadyForNotifications << Endl
-                    << "DataTotalSize:                           " << txState.DataTotalSize << Endl
-                    << "TxShardsListFinalized:                   " << txState.TxShardsListFinalized << Endl
-                    << "SchemeOpSeqNo:                           " << txState.SchemeOpSeqNo.Generation << ":" << txState.SchemeOpSeqNo.Round << Endl
-                    << "StartTime:                               " << txState.StartTime << Endl
-                    << "Shards count:                            " << txState.Shards.size() << Endl
-                    << "Shards in progress count:                " << txState.ShardsInProgress.size() << Endl
-                    << "SchemeChangeNotificationReceived count:  " << txState.SchemeChangeNotificationReceived.size() << Endl
-                    << "SplitDescription:                        " << (txState.SplitDescription ? txState.SplitDescription->ShortDebugString() : "") << Endl
-                    << "Dependent operations count:              " << operation->DependentOperations.size() << Endl
-                    << "Wait operations count:                   " << operation->WaitOperations.size() << Endl;
+                str << "TxType: " << TTxState::TypeName(txState.TxType) << Endl
+                    << "TargetPathId: " << LinkToPathInfo(txState.TargetPathId) << Endl
+                    << "SourcePathId: " << LinkToPathInfo(txState.SourcePathId) << Endl
+                    << "State: " << TTxState::StateName(txState.State) << Endl
+                    << "MinStep: " << txState.MinStep << Endl
+                    << "ReadyForNotifications: " << txState.ReadyForNotifications << Endl
+                    << "DataTotalSize: " << txState.DataTotalSize << Endl
+                    << "TxShardsListFinalized: " << txState.TxShardsListFinalized << Endl
+                    << "SchemeOpSeqNo: " << txState.SchemeOpSeqNo.Generation << ":" << txState.SchemeOpSeqNo.Round << Endl
+                    << "StartTime: " << txState.StartTime << Endl
+                    << "Shards count: " << txState.Shards.size() << Endl
+                    << "Shards in progress count: " << txState.ShardsInProgress.size() << Endl
+                    << "SchemeChangeNotificationReceived count: " << txState.SchemeChangeNotificationReceived.size() << Endl
+                    << "SplitDescription: " << (txState.SplitDescription ? txState.SplitDescription->ShortDebugString() : "") << Endl
+                    << "Dependent operations count: " << operation->DependentOperations.size() << Endl
+                    << "Wait operations count: " << operation->WaitOperations.size() << Endl;
             }
 
             TAG(TH4) {str << "Dependent operations for txId " << opId.GetTxId() << "</a>";}
@@ -1360,7 +1485,44 @@ private:
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+private:
+    void SendBadRequest(const TString& details, const TActorContext& ctx) {
+        ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n" << details << "\r\n"));
+    }
+
+private:
+    void HandleAction(const TString& action, const TCgiParameters& cgi, const TActorContext& ctx) {
+        if (Ev->Get()->GetMethod() != HTTP_METHOD_POST) {
+            SendBadRequest("Action requires a POST method", ctx);
+            return;
+        }
+
+        if (action == TCgi::TActions::SplitOneToOne) {
+            TTabletId tabletId = TTabletId(TryParseTabletId(cgi.Get(TCgi::ShardID)));
+            TShardIdx shardIdx = Self->GetShardIdx(tabletId);
+            if (!shardIdx) {
+                SendBadRequest("Cannot find the specified shard", ctx);
+                return;
+            }
+            auto* info = Self->ShardInfos.FindPtr(shardIdx);
+            if (!info) {
+                SendBadRequest("Cannot find the specified shard info", ctx);
+                return;
+            }
+            TPathId pathId = info->PathId;
+            auto* table = Self->Tables.FindPtr(pathId);
+            if (!table) {
+                SendBadRequest("Cannot find the specified shard's table", ctx);
+                return;
+            }
+
+            ctx.Register(new TMonitoringShardSplitOneToOne(std::move(Ev), Self->TabletID(), pathId, tabletId));
+            return;
+        }
+
+        SendBadRequest("Action not supported", ctx);
+    }
 };
 
 bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {

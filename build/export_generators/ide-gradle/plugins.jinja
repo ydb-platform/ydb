@@ -11,26 +11,28 @@ plugins {
 {%- endif -%}
 {%- if with_kotlin and kotlin_version %}
     kotlin("jvm") version "{{ kotlin_version }}"
-{%-     if target.with_kotlinc_plugin_allopen|length %}
+{%-     if with_kotlinc_plugin_allopen|length %}
     kotlin("plugin.allopen") version "{{ kotlin_version }}"
-{%      endif -%}
-{%-     if target.with_kotlinc_plugin_lombok|length %}
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_lombok|length %}
     kotlin("plugin.lombok") version "{{ kotlin_version }}"
-{%      endif -%}
-{%-     if target.with_kotlinc_plugin_noarg|length %}
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_noarg|length %}
     kotlin("plugin.noarg") version "{{ kotlin_version }}"
-{%      endif -%}
-{%-     if target.with_kotlinc_plugin_serialization|length %}
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_serialization|length %}
     kotlin("plugin.serialization") version "{{ kotlin_version }}"
-{%      endif -%}
+{%-     endif -%}
+{%-     if with_kapt or with_test_kapt %}
+    kotlin("kapt") version "{{ kotlin_version }}"
+{%-     endif -%}
 {%- endif -%}
 
-{%- if has_errorprone %}
+{%- if with_errorprone or with_test_errorprone %}
     id("net.ltgt.errorprone") version "4.1.0"
 {%- endif -%}
 
-{#- TODO remove usings annotation_processors semantic -#}
-{%- if ("lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors) or (target.use_annotation_processor|length and target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) %}
+{%- if with_lombok_plugin %}
     id("io.freefair.lombok") version "8.6"
 {%- endif %}
 }

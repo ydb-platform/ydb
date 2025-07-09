@@ -7,7 +7,7 @@
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
@@ -247,14 +247,16 @@ void TTestActorSystem::SetupTabletRuntime(const std::function<TNodeLocation(ui32
 
 void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
     if (const auto& domain = GetDomainsInfo()->Domain) {
-        ui32 numReplicas = 3;
+        ui32 numReplicas = 5;
 
         auto process = [&](auto&& generateId, auto&& createReplica) {
             auto info = MakeIntrusive<TStateStorageInfo>();
-            info->NToSelect = numReplicas;
-            info->Rings.resize(numReplicas);
+            info->RingGroups.resize(1);
+            auto& ringGroup = info->RingGroups.front();
+            ringGroup.NToSelect = numReplicas;
+            ringGroup.Rings.resize(numReplicas);
             for (ui32 i = 0; i < numReplicas; ++i) {
-                info->Rings[i].Replicas.push_back(generateId(stateStorageNodeId, i));
+                ringGroup.Rings[i].Replicas.push_back(generateId(stateStorageNodeId, i));
             }
             if (nodeId == stateStorageNodeId) {
                 for (ui32 i = 0; i < numReplicas; ++i) {

@@ -5,8 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/python
-    library/python/monlib
+    ydb/tests/stress/simple_queue/workload
 )
 
 END()

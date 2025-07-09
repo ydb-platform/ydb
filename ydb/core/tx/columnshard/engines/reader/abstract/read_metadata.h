@@ -1,6 +1,6 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 
@@ -19,24 +19,17 @@ class TReadContext;
 
 class TDataStorageAccessor {
 private:
-    const std::unique_ptr<NOlap::TInsertTable>& InsertTable;
     const std::unique_ptr<NOlap::IColumnEngine>& Index;
 
 public:
-    TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable, const std::unique_ptr<IColumnEngine>& index);
+    TDataStorageAccessor(const std::unique_ptr<IColumnEngine>& index);
     std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription, const bool withUncommitted) const;
-    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema,
-        const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const;
 };
 
 // Holds all metadata that is needed to perform read/scan
 class TReadMetadataBase {
 public:
-    enum class ESorting {
-        NONE = 0 /* "not_sorted" */,
-        ASC /* "ascending" */,
-        DESC /* "descending" */,
-    };
+    using ESorting = ERequestSorting;
 
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
@@ -49,6 +42,7 @@ private:
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
+    const ui64 TabletId;
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
@@ -60,11 +54,16 @@ protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
-    void SetRequestedLimit(const ui64 value) { 
+    ui64 GetTabletId() const {
+        return TabletId;
+    }
+
+    void SetRequestedLimit(const ui64 value) {
         AFL_VERIFY(!RequestedLimit);
         if (value == 0 || value >= Max<i64>()) {
             return;
@@ -75,6 +74,14 @@ public:
 
     i64 GetLimitRobust() const {
         return std::min<i64>(FilteredCountLimit.value_or(Max<i64>()), RequestedLimit.value_or(Max<i64>()));
+    }
+
+    std::optional<i64> GetLimitRobustOptional() const {
+        if (HasLimit()) {
+            return GetLimitRobust();
+        } else {
+            return std::nullopt;
+        }
     }
 
     bool HasLimit() const {
@@ -97,6 +104,10 @@ public:
         return LockId;
     }
 
+    EDeduplicationPolicy GetDeduplicationPolicy() const {
+        return DeduplicationPolicy;
+    }
+
     void OnReadFinished(NColumnShard::TColumnShard& owner) const {
         DoOnReadFinished(owner);
     }
@@ -110,13 +121,17 @@ public:
         return *IndexVersionsPointer;
     }
 
+    const std::shared_ptr<TVersionedIndex>& GetIndexVersionsPtr() const {
+        AFL_VERIFY(IndexVersionsPointer);
+        return IndexVersionsPointer;
+    }
+
     const std::optional<TGranuleShardingInfo>& GetRequestShardingInfo() const {
         return RequestShardingInfo;
     }
 
     void SetPKRangesFilter(const std::shared_ptr<TPKRangesFilter>& value) {
         AFL_VERIFY(value);
-        Y_ABORT_UNLESS(IsSorted() && value->IsReverse() == IsDescSorted());
         Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
         if (ResultIndexSchema) {
@@ -144,6 +159,10 @@ public:
         return ResultIndexSchema;
     }
 
+    bool HasResultSchema() const {
+        return !!ResultIndexSchema;
+    }
+
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     NArrow::TSchemaLiteView GetBlobSchema(const ui64 version) const {
@@ -158,34 +177,34 @@ public:
         return ResultIndexSchema->GetIndexInfo();
     }
 
-    void InitShardingInfo(const ui64 pathId) {
+    void InitShardingInfo(const TInternalPathId pathId) {
         AFL_VERIFY(!RequestShardingInfo);
         RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor)
+        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor,
+        const ui64 tabletId)
         : Sorting(sorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
         , ScanCursor(scanCursor)
-        , ResultIndexSchema(schema)
-    {
+        , TabletId(tabletId)
+        , ResultIndexSchema(schema) {
+        AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
+                                                                "tablet_id", TabletId);
     }
     virtual ~TReadMetadataBase() = default;
 
     virtual TString DebugString() const {
         return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
-            << " " << Sorting << " sorted";
+                                << " " << Sorting << " sorted";
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
         AFL_VERIFY(ResultIndexSchema);
-        std::set<ui32> result;
-        for (auto&& i : GetProgram().GetProcessingColumns()) {
-            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnIdVerified(i));
-        }
+        std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
     bool IsAscSorted() const {

@@ -35,6 +35,7 @@
   - intrin.h
   - intrin0.h
   - intrinsics.h
+  - lasxintrin.h
   - lsxintrin.h
   - lzcntintrin.h
   - mm_malloc.h
@@ -54,6 +55,8 @@
   - tbmintrin.h
   - tmmintrin.h
   - varargs.h
+  - vecintrin.h
+  - wasm_simd128.h
   - wmmintrin.h
   - x86intrin.h
   - xmmintrin.h

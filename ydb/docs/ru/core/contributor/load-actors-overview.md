@@ -17,17 +17,17 @@
 
 ## Типы акторов {#load-actor-type}
 
-Тип | Описание
---- | ---
-[KqpLoad](load-actors-kqp.md) | Подает нагрузку на слой Query Processor и нагружает все компоненты кластера.
-[KeyValueLoad](load-actors-key-value.md) | Нагружает Key-value таблетку.
-[StorageLoad](load-actors-storage.md) | Нагружает Distributed Storage без задействования слоев таблеток и Query Processor.
-[VDiskLoad](load-actors-vdisk.md) | Тестирует производительность записи на VDisk.
-[PDiskWriteLoad](load-actors-pdisk-write.md) | Тестирует производительность записи на PDisk.
-[PDiskReadLoad](load-actors-pdisk-read.md) | Тестирует производительность чтения с PDisk.
-[PDiskLogLoad](load-actors-pdisk-log.md) | Тестирует корректность вырезания из середины лога PDisk.
-[MemoryLoad](load-actors-memory.md) | Аллоцирует память, полезен при тестировании логики.
-[Stop](load-actors-stop.md) | Останавливает все акторы, либо только указанные.
+| Тип                                             | Описание                                                                           |
+|-------------------------------------------------|------------------------------------------------------------------------------------|
+| [KqpLoad](load-actors-kqp.md)                   | Подает нагрузку на слой Query Processor и нагружает все компоненты кластера.       |
+| [KeyValueLoad](load-actors-key-value.md)        | Нагружает Key-value таблетку.                                                      |
+| [StorageLoad](load-actors-storage.md)           | Нагружает Distributed Storage без задействования слоев таблеток и Query Processor. |
+| [VDiskLoad](load-actors-vdisk.md)               | Тестирует производительность записи на VDisk.                                      |
+| [PDiskWriteLoad](load-actors-pdisk-write.md)                           | Тестирует производительность записи на PDisk.                                      |
+| [PDiskReadLoad](load-actors-pdisk-read.md)      | Тестирует производительность чтения с PDisk.                                       |
+| [PDiskLogLoad](load-actors-pdisk-log.md)        | Тестирует корректность вырезания из середины лога PDisk.                           |
+| [MemoryLoad](load-actors-memory.md)             | Аллоцирует память, полезен при тестировании логики.                                |
+| [Stop](load-actors-stop.md)                     | Останавливает все акторы, либо только указанные.                                   |
 
 ## Запуск нагрузки {#load-actor-start}
 

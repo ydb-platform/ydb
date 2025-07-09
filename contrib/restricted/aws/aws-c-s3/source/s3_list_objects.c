@@ -54,68 +54,67 @@ struct fs_parser_wrapper {
 };
 
 /* invoked when the ListBucketResult/Contents node is iterated. */
-static bool s_on_contents_node(struct aws_xml_parser *parser, struct aws_xml_node *node, void *user_data) {
+static int s_on_contents_node(struct aws_xml_node *node, void *user_data) {
     struct fs_parser_wrapper *fs_wrapper = user_data;
     struct aws_s3_object_info *fs_info = &fs_wrapper->fs_info;
 
     /* for each Contents node, get the info from it and send it off as an object we've encountered */
-    struct aws_byte_cursor node_name;
-    aws_xml_node_get_name(node, &node_name);
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
 
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "ETag")) {
-        return aws_xml_node_as_body(parser, node, &fs_info->e_tag) == AWS_OP_SUCCESS;
+        return aws_xml_node_as_body(node, &fs_info->e_tag);
     }
 
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "Key")) {
-        return aws_xml_node_as_body(parser, node, &fs_info->key) == AWS_OP_SUCCESS;
+        return aws_xml_node_as_body(node, &fs_info->key);
     }
 
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "LastModified")) {
         struct aws_byte_cursor date_cur;
-        if (aws_xml_node_as_body(parser, node, &date_cur) == AWS_OP_SUCCESS) {
-            aws_date_time_init_from_str_cursor(&fs_info->last_modified, &date_cur, AWS_DATE_FORMAT_ISO_8601);
-            return true;
+        if (aws_xml_node_as_body(node, &date_cur) != AWS_OP_SUCCESS) {
+            return AWS_OP_ERR;
         }
 
-        return false;
+        if (aws_date_time_init_from_str_cursor(&fs_info->last_modified, &date_cur, AWS_DATE_FORMAT_ISO_8601)) {
+            return AWS_OP_ERR;
+        }
+
+        return AWS_OP_SUCCESS;
     }
 
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "Size")) {
         struct aws_byte_cursor size_cur;
-
-        if (aws_xml_node_as_body(parser, node, &size_cur) == AWS_OP_SUCCESS) {
-            if (aws_byte_cursor_utf8_parse_u64(size_cur, &fs_info->size)) {
-                return false;
-            }
-            return true;
+        if (aws_xml_node_as_body(node, &size_cur) != AWS_OP_SUCCESS) {
+            return AWS_OP_ERR;
         }
+
+        if (aws_byte_cursor_utf8_parse_u64(size_cur, &fs_info->size) != AWS_OP_SUCCESS) {
+            return AWS_OP_ERR;
+        }
+
+        return AWS_OP_SUCCESS;
     }
 
-    return true;
+    return AWS_OP_SUCCESS;
 }
 
 /* invoked when the ListBucketResult/CommonPrefixes node is iterated. */
-static bool s_on_common_prefixes_node(struct aws_xml_parser *parser, struct aws_xml_node *node, void *user_data) {
+static int s_on_common_prefixes_node(struct aws_xml_node *node, void *user_data) {
     struct fs_parser_wrapper *fs_wrapper = user_data;
 
-    struct aws_byte_cursor node_name;
-    aws_xml_node_get_name(node, &node_name);
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
 
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "Prefix")) {
-        return aws_xml_node_as_body(parser, node, &fs_wrapper->fs_info.prefix) == AWS_OP_SUCCESS;
+        return aws_xml_node_as_body(node, &fs_wrapper->fs_info.prefix);
     }
 
-    return true;
+    return AWS_OP_SUCCESS;
 }
 
-static bool s_on_list_bucket_result_node_encountered(
-    struct aws_xml_parser *parser,
-    struct aws_xml_node *node,
-    void *user_data) {
+static int s_on_list_bucket_result_node_encountered(struct aws_xml_node *node, void *user_data) {
     struct aws_s3_operation_data *operation_data = user_data;
 
-    struct aws_byte_cursor node_name;
-    aws_xml_node_get_name(node, &node_name);
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
 
     struct fs_parser_wrapper fs_wrapper;
     AWS_ZERO_STRUCT(fs_wrapper);
@@ -124,30 +123,23 @@ static bool s_on_list_bucket_result_node_encountered(
         fs_wrapper.allocator = operation_data->allocator;
         /* this will traverse the current Contents node, get the metadata necessary to construct
          * an instance of fs_info so we can invoke the callback on it. This happens once per object. */
-        bool ret_val = aws_xml_node_traverse(parser, node, s_on_contents_node, &fs_wrapper) == AWS_OP_SUCCESS;
+        if (aws_xml_node_traverse(node, s_on_contents_node, &fs_wrapper) != AWS_OP_SUCCESS) {
+            return AWS_OP_ERR;
+        }
 
         if (operation_data->prefix && !fs_wrapper.fs_info.prefix.len) {
             fs_wrapper.fs_info.prefix = aws_byte_cursor_from_string(operation_data->prefix);
         }
 
-        struct aws_byte_buf trimmed_etag;
-        AWS_ZERO_STRUCT(trimmed_etag);
+        struct aws_byte_buf trimmed_etag = aws_replace_quote_entities(fs_wrapper.allocator, fs_wrapper.fs_info.e_tag);
+        fs_wrapper.fs_info.e_tag = aws_byte_cursor_from_buf(&trimmed_etag);
 
-        if (fs_wrapper.fs_info.e_tag.len) {
-            struct aws_string *quoted_etag_str =
-                aws_string_new_from_cursor(fs_wrapper.allocator, &fs_wrapper.fs_info.e_tag);
-            replace_quote_entities(fs_wrapper.allocator, quoted_etag_str, &trimmed_etag);
-            fs_wrapper.fs_info.e_tag = aws_byte_cursor_from_buf(&trimmed_etag);
-            aws_string_destroy(quoted_etag_str);
+        int ret_val = AWS_OP_SUCCESS;
+        if (operation_data->on_object) {
+            ret_val = operation_data->on_object(&fs_wrapper.fs_info, operation_data->user_data);
         }
 
-        if (ret_val && operation_data->on_object) {
-            ret_val |= operation_data->on_object(&fs_wrapper.fs_info, operation_data->user_data);
-        }
-
-        if (trimmed_etag.len) {
-            aws_byte_buf_clean_up(&trimmed_etag);
-        }
+        aws_byte_buf_clean_up(&trimmed_etag);
 
         return ret_val;
     }
@@ -155,16 +147,18 @@ static bool s_on_list_bucket_result_node_encountered(
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "CommonPrefixes")) {
         /* this will traverse the current CommonPrefixes node, get the metadata necessary to construct
          * an instance of fs_info so we can invoke the callback on it. This happens once per prefix. */
-        bool ret_val = aws_xml_node_traverse(parser, node, s_on_common_prefixes_node, &fs_wrapper) == AWS_OP_SUCCESS;
-
-        if (ret_val && operation_data->on_object) {
-            ret_val |= operation_data->on_object(&fs_wrapper.fs_info, operation_data->user_data);
+        if (aws_xml_node_traverse(node, s_on_common_prefixes_node, &fs_wrapper) != AWS_OP_SUCCESS) {
+            return AWS_OP_ERR;
         }
 
+        int ret_val = AWS_OP_SUCCESS;
+        if (operation_data->on_object) {
+            ret_val = operation_data->on_object(&fs_wrapper.fs_info, operation_data->user_data);
+        }
         return ret_val;
     }
 
-    return true;
+    return AWS_OP_SUCCESS;
 }
 
 static int s_construct_next_request_http_message(
@@ -235,14 +229,12 @@ struct aws_s3_paginator *aws_s3_initiate_list_objects(
 
     aws_ref_count_init(&operation_data->ref_count, operation_data, s_ref_count_zero_callback);
 
-    struct aws_byte_cursor xml_result_node_name = aws_byte_cursor_from_c_str("ListBucketResult");
-    struct aws_byte_cursor continuation_node_name = aws_byte_cursor_from_c_str("NextContinuationToken");
     struct aws_s3_paginated_operation_params operation_params = {
         .next_message = s_construct_next_request_http_message,
         .on_result_node_encountered_fn = s_on_list_bucket_result_node_encountered,
         .on_paginated_operation_cleanup = s_on_paginator_cleanup,
-        .result_xml_node_name = &xml_result_node_name,
-        .continuation_token_node_name = &continuation_node_name,
+        .result_xml_node_name = aws_byte_cursor_from_c_str("ListBucketResult"),
+        .continuation_token_node_name = aws_byte_cursor_from_c_str("NextContinuationToken"),
         .user_data = operation_data,
     };
 
@@ -263,38 +255,4 @@ struct aws_s3_paginator *aws_s3_initiate_list_objects(
     aws_s3_paginated_operation_release(operation);
 
     return paginator;
-}
-
-struct aws_s3_paginated_operation *aws_s3_list_objects_operation_new(
-    struct aws_allocator *allocator,
-    const struct aws_s3_list_objects_params *params) {
-    AWS_FATAL_PRECONDITION(params);
-    AWS_FATAL_PRECONDITION(params->client);
-    AWS_FATAL_PRECONDITION(params->bucket_name.len);
-    AWS_FATAL_PRECONDITION(params->endpoint.len);
-
-    struct aws_s3_operation_data *operation_data = aws_mem_calloc(allocator, 1, sizeof(struct aws_s3_operation_data));
-    operation_data->allocator = allocator;
-    operation_data->delimiter =
-        params->delimiter.len > 0 ? aws_string_new_from_cursor(allocator, &params->delimiter) : NULL;
-    operation_data->prefix = params->prefix.len > 0 ? aws_string_new_from_cursor(allocator, &params->prefix) : NULL;
-    operation_data->on_object = params->on_object;
-    operation_data->user_data = params->user_data;
-
-    aws_ref_count_init(&operation_data->ref_count, operation_data, s_ref_count_zero_callback);
-
-    struct aws_byte_cursor xml_result_node_name = aws_byte_cursor_from_c_str("ListBucketResult");
-    struct aws_byte_cursor continuation_node_name = aws_byte_cursor_from_c_str("NextContinuationToken");
-    struct aws_s3_paginated_operation_params operation_params = {
-        .next_message = s_construct_next_request_http_message,
-        .on_result_node_encountered_fn = s_on_list_bucket_result_node_encountered,
-        .on_paginated_operation_cleanup = s_on_paginator_cleanup,
-        .result_xml_node_name = &xml_result_node_name,
-        .continuation_token_node_name = &continuation_node_name,
-        .user_data = operation_data,
-    };
-
-    struct aws_s3_paginated_operation *operation = aws_s3_paginated_operation_new(allocator, &operation_params);
-
-    return operation;
 }

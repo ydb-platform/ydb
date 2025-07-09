@@ -13,7 +13,7 @@
     #include <unistd.h>
 #endif
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace {
 ui32 GetProcessId() {

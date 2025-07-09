@@ -1,9 +1,9 @@
 #include "common.h"
 #include "read_session_impl.ipp"
 
-#include <ydb-cpp-sdk/client/topic/read_events.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Aliases for event types

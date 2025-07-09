@@ -459,6 +459,123 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 
+    Y_UNIT_TEST(RequestReplaceDevicePDisk)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
+                                   MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(0, 1))
+                ),
+            TStatus::ALLOW
+        );
+    }
+
+    Y_UNIT_TEST(RequestReplaceDevicePDiskByPath)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto pdiskId = env.PDiskId(0, 0);
+
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::ALLOW
+        );
+    }
+
+    Y_UNIT_TEST(RequestReplaceDeviceTwiceWithNoVDisks)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto pdiskId = env.PDiskId(0, 0);
+
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::ALLOW
+        );
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::DISALLOW_TEMP
+        );
+    }
+
+    Y_UNIT_TEST(RequestReplacePDiskDoesntBreakGroup)
+    {
+        auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        {
+            auto pdiskId = env.PDiskId(0, 0);
+    
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+    
+            env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::ALLOW
+            );
+        }
+
+        {
+            auto pdiskId = env.PDiskId(1, 0);
+    
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+    
+            env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::DISALLOW_TEMP
+            );
+        }
+    }
+
+    Y_UNIT_TEST(RequestReplacePDiskConsecutiveWithDone)
+    {
+        auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        for (ui32 i = 0; i < 8; ++i) {
+            auto pdiskId = env.PDiskId(i, 0);
+    
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+    
+            auto rec = env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::ALLOW
+            );
+
+            auto pid = rec.GetPermissions(0).GetId();
+
+            env.CheckDonePermission("user", pid);
+        }
+    }
+
     Y_UNIT_TEST(RequestReplaceManyDevicesOnOneNode)
     {
         TCmsTestEnv env(16, 3);
@@ -1050,17 +1167,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TestAvailabilityMode(MODE_FORCE_RESTART, true);
     }
 
-    void TestAvailabilityModeScheduled(EAvailabilityMode mode,  bool disconnectNodes)
+    void TestKeepAvailabileModeScheduled(bool disconnectNodes)
     {
-        Y_ABORT_UNLESS(mode == MODE_KEEP_AVAILABLE
-                 || mode == MODE_FORCE_RESTART);
-
         TCmsTestEnv env(8);
         env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", true, false, true,
-                                        true, mode, TStatus::ALLOW_PARTIAL,
+                                        true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)));
@@ -1068,21 +1182,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
         }
 
-        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW_PARTIAL, 1);
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL, 1);
         if (disconnectNodes) {
             TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
         }
 
-        env.CheckRequest("user", res1.first, false, mode,
-                         mode == MODE_KEEP_AVAILABLE ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
-                         mode == MODE_KEEP_AVAILABLE ? 0 : 1);
-        if (mode != MODE_KEEP_AVAILABLE) {
-            return;
-        }
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP, 0);
 
         env.CheckDonePermission("user", res1.second[0]);
 
-        env.CheckRequest("user", res1.first, false, mode,
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE,
                          disconnectNodes ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
                          disconnectNodes ? 0 : 1);
         if (!disconnectNodes) {
@@ -1091,27 +1200,17 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true;
 
-        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW, 1);
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::ALLOW, 1);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeScheduled)
     {
-        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, false);
-    }
-
-    Y_UNIT_TEST(TestForceRestartModeScheduled)
-    {
-        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, false);
+        TestKeepAvailabileModeScheduled(false);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeScheduledDisconnects)
     {
-        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, true);
-    }
-
-    Y_UNIT_TEST(TestForceRestartModeScheduledDisconnects)
-    {
-        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, true);
+        TestKeepAvailabileModeScheduled(true);
     }
 
     Y_UNIT_TEST(TestOutdatedState)
@@ -1288,9 +1387,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         THashMap<ui32, ui32> NodeToRing;
         THashSet<ui32> StateStorageNodes;
-
-        for (ui32 ring = 0; ring < info->Rings.size(); ++ring) {
-            for (auto& replica : info->Rings[ring].Replicas) {
+        auto &group = info->RingGroups[0];
+        for (ui32 ring = 0; ring < group.Rings.size(); ++ring) {
+            for (auto& replica : group.Rings[ring].Replicas) {
                 ui32 nodeId = replica.NodeId();
 
                 NodeToRing[nodeId] = ring;
@@ -1498,10 +1597,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckPermissionRequest("user", true, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL,
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+
+        // But it is possible for FORCE RESTART mode
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
 
@@ -1538,14 +1639,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL,
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // But it is possible for FORCE RESTART mode
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
-                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
-                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
 
         // It's ok to get two permissions for one group if PartialPermissionAllowed is set to false
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
@@ -2249,6 +2352,49 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Wall-E soft maintainance task can continue
         env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(2));
+    }
+
+    void ChangePileMap(TEvInterconnect::TEvNodesInfo::TPtr* ev) {
+        UNIT_ASSERT((*ev)->Get()->PileMap);
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
+        auto pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(*(*ev)->Get()->PileMap);
+        for (const auto& node : *nodes) {
+            pileMap->at(node.NodeId % pileMap->size()).push_back(node.NodeId);
+        }
+
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes, pileMap))
+        );
+        ev->Swap(newEv);
+    }
+
+    Y_UNIT_TEST(BridgeModeCollectInfo)
+    {
+        TTestEnvOpts opts(8);
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        env.SetObserverFunc(observerFunc);
+
+        env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto reply = env.GrabEdgeEventRethrow<TCms::TEvPrivate::TEvClusterInfo>(handle);
+        UNIT_ASSERT(reply);
+        const auto &info = *reply->Info;
+        UNIT_ASSERT(info.IsBridgeMode);
+        UNIT_ASSERT(info.NodeIdToPileId.size() == 8);
+
+        for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
+            UNIT_ASSERT(nodeId % opts.PileCount == pileId);
+        }
+
     }
 }
 

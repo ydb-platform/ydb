@@ -26,7 +26,7 @@ Here is a program to parse ``"Hello, World!"`` (or any greeting of the form
     from pyparsing import Word, alphas
     greet = Word(alphas) + "," + Word(alphas) + "!"
     hello = "Hello, World!"
-    print(hello, "->", greet.parseString(hello))
+    print(hello, "->", greet.parse_string(hello))
 
 The program outputs the following::
 
@@ -36,7 +36,7 @@ The Python representation of the grammar is quite readable, owing to the
 self-explanatory class names, and the use of '+', '|' and '^' operator
 definitions.
 
-The parsed results returned from ``parseString()`` is a collection of type
+The parsed results returned from ``parse_string()`` is a collection of type
 ``ParseResults``, which can be accessed as a
 nested list, a dictionary, or an object with named attributes.
 

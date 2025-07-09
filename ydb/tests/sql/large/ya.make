@@ -1,5 +1,6 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+TAG(ya:manual) #skip reason https://github.com/ydb-platform/ydb/issues/16128
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 
@@ -16,11 +17,10 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
     ydb/tests/sql/lib
     contrib/python/moto/bin
 )

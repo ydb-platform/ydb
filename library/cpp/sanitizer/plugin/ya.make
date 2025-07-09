@@ -1,0 +1,9 @@
+LIBRARY()
+
+NO_UTIL()
+NO_RUNTIME()
+NO_PLATFORM()
+
+LD_PLUGIN(sanitizer.py)
+
+END()

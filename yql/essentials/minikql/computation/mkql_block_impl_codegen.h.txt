@@ -38,7 +38,7 @@ namespace NKikimr::NMiniKQL {
             : TBase(context)
             , CountType(llvm::Type::getInt64Ty(Context))
             , PointerType(llvm::PointerType::getUnqual(llvm::ArrayType::get(llvm::Type::getInt128Ty(Context), width)))
-            , SkipSpaceType(llvm::ArrayType::get(llvm::Type::getInt64Ty(Context), 9U)) // Skip std::vectors Values & Arrays
+            , SkipSpaceType(llvm::ArrayType::get(llvm::Type::getInt64Ty(Context), 10U)) // Skip Values, Deques, Arrays std::vectors and BlockLengthIndex ui64
         {}
     };
 #endif

@@ -8,7 +8,7 @@
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/server/grpc_server.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
@@ -19,9 +19,12 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/mock_transfer_writer_factory.h>
 #include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
@@ -124,13 +127,16 @@ namespace Tests {
         TString DomainName = TestDomainName;
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
+        std::optional<ui32> DataCenterCount;
         ui64 StorageGeneration = 0;
+        bool FetchPoolsGeneration = false;
         NFake::TStorage CustomDiskParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
         TIntrusivePtr<TFormatFactory> Formats;
         bool EnableMockOnSingleNode = true;
         TAutoPtr<TLogBackend> LogBackend;
+        std::shared_ptr<std::vector<std::string>> AuditLogBackendLines;
         TLoggerInitializer LoggerInitializer;
         TStoragePoolKinds StoragePoolTypes;
         TVector<NKikimrKqp::TKqpSetting> KqpSettings;
@@ -142,6 +148,7 @@ namespace Tests {
         bool UseRealThreads = true;
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
+        bool EnableYqGrpc = false;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
@@ -154,6 +161,8 @@ namespace Tests {
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
         std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
         std::shared_ptr<NKikimr::NPQ::TPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
+        std::shared_ptr<NKikimr::NReplication::NService::ITransferWriterFactory> TransferWriterFactory = std::make_shared<MockTransferWriterFactory>();
+
         bool EnableMetering = false;
         TString MeteringFilePath;
         TString AwsRegion;
@@ -161,10 +170,14 @@ namespace Tests {
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
+        NYql::ISolomonGateway::TPtr SolomonGateway;
+        NYql::IPqGateway::TPtr PqGateway;
+        NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
         bool Verbose = true;
         bool UseSectorMap = false;
+        TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -180,12 +193,14 @@ namespace Tests {
         TServerSettings& SetDomainName(const TString& value);
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
-        TServerSettings& SetStorageGeneration(ui64 value) { StorageGeneration = value; return *this; }
+        TServerSettings& SetDataCenterCount(ui32 value) { DataCenterCount = value; return *this; }
+        TServerSettings& SetStorageGeneration(ui64 storageGeneration, bool fetchPoolsGeneration = false) { StorageGeneration = storageGeneration; FetchPoolsGeneration = fetchPoolsGeneration; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
         TServerSettings& SetLogBackend(TAutoPtr<TLogBackend> value) { LogBackend = value; return *this; }
+        TServerSettings& SetAuditLogBackendLines(std::shared_ptr<std::vector<std::string>> value) { AuditLogBackendLines = value; return *this; }
         TServerSettings& SetLoggerInitializer(TLoggerInitializer value) { LoggerInitializer = std::move(value); return *this; }
         TServerSettings& AddStoragePoolType(const TString& poolKind, ui32 encryptionMode = 0);
         TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0);
@@ -207,6 +222,7 @@ namespace Tests {
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }
         TServerSettings& SetEnablePersistentQueryStats(bool value) { FeatureFlags.SetEnablePersistentQueryStats(value); return *this; }
         TServerSettings& SetEnableYq(bool value) { EnableYq = value; return *this; }
+        TServerSettings& SetEnableYqGrpc(bool value) { EnableYqGrpc = value; return *this; }
         TServerSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
         TServerSettings& SetChangesQueueItemsLimit(ui64 value) { ChangesQueueItemsLimit = value; return *this; }
         TServerSettings& SetChangesQueueBytesLimit(ui64 value) { ChangesQueueBytesLimit = value; return *this; }
@@ -216,9 +232,19 @@ namespace Tests {
         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
+        TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
+        TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
+        TServerSettings& SetScanReaskToResolve(const ui32 count) {
+            AppConfig->MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetReaskShardRetriesCount(count);
+            return *this;
+        }
+        TServerSettings& SetColumnShardReaderClassName(const TString& className) {
+            AppConfig->MutableColumnShardConfig()->SetReaderClassName(className);
+            return *this;
+        }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
         ) {
@@ -253,16 +279,21 @@ namespace Tests {
             return *this;
         }
 
-        // Add additional grpc services
-        template <typename TService>
+        TServerSettings& SetProxyDSMocks(const TVector<TIntrusivePtr<NFake::TProxyDS>>& proxyDSMocks) {
+            ProxyDSMocks = proxyDSMocks;
+            return *this;
+        }
+
+        template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
-            std::optional<NActors::TActorId> proxyId = std::nullopt
+            std::optional<NActors::TActorId> proxyId = std::nullopt,
+            TParams...params
         ) {
             if (!GrpcServiceFactory) {
                 GrpcServiceFactory = std::make_shared<TGrpcServiceFactory>();
             }
-            GrpcServiceFactory->Register<TService>(name, true, proxyId);
+            GrpcServiceFactory->Register<TService>(name, true, proxyId, params...);
             return *this;
         }
 
@@ -281,12 +312,14 @@ namespace Tests {
             AppConfig->MutableHiveConfig()->SetMinScatterToBalance(100);
             AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+            AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
             FeatureFlags.SetEnableFollowerStats(true);
             FeatureFlags.SetEnableColumnStore(true);
         }
 
+        TServerSettings() = default;
         TServerSettings(const TServerSettings& settings) = default;
         TServerSettings& operator=(const TServerSettings& settings) = default;
     private:
@@ -308,6 +341,8 @@ namespace Tests {
         void SetupConfigurators(ui32 nodeIdx);
         void SetupProxies(ui32 nodeIdx);
         void SetupLogging();
+        void AddSysViewsRosterUpdateObserver();
+        void WaitForSysViewsRosterUpdate();
 
         void Initialize();
 
@@ -322,22 +357,27 @@ namespace Tests {
         TServer& operator =(TServer&& server) = default;
         virtual ~TServer();
 
-        void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0);
-        void EnableGRpc(ui16 port, ui32 grpcServiceNodeId = 0);
+        void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0, const std::optional<TString>& tenant = std::nullopt);
+        void EnableGRpc(ui16 port, ui32 grpcServiceNodeId = 0, const std::optional<TString>& tenant = std::nullopt);
         void SetupRootStoragePools(const TActorId sender) const;
 
         void SetupDefaultProfiles();
 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
-            return GRpcServerRootCounters;
+            const auto tenantIt = TenantsGRpc.find(Settings->DomainName);
+            Y_ABORT_UNLESS(tenantIt != TenantsGRpc.end());
+            Y_ABORT_UNLESS(!tenantIt->second.empty());
+            return tenantIt->second.begin()->second.GRpcServerRootCounters;
         }
 
         void ShutdownGRpc() {
-            if (GRpcServer) {
-                GRpcServer->Stop();
-                GRpcServer = nullptr;
+            for (auto& [_, tenantGRpc] : TenantsGRpc) {
+                for (auto& [_, nodeGRpc] : tenantGRpc) {
+                    nodeGRpc.Shutdown();
+                }
             }
         }
+
         void StartDummyTablets();
         TVector<ui64> StartPQTablets(ui32 pqTabletsN, bool wait = true);
         TTestActorRuntime* GetRuntime() const;
@@ -346,6 +386,7 @@ namespace Tests {
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
         const NYdb::TDriver& GetDriver() const;
         const NYdbGrpc::TGRpcServer& GetGRpcServer() const;
+        const NYdbGrpc::TGRpcServer& GetTenantGRpcServer(const TString& tenant) const;
 
         ui32 StaticNodes() const {
             return Settings->NodeCount;
@@ -367,9 +408,24 @@ namespace Tests {
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
-        std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> GRpcServerRootCounters;
         NFq::IYqSharedResources::TPtr YqSharedResources;
+
+        TTestActorRuntime::TEventObserverHolder SysViewsRosterUpdateObserver;
+        bool SysViewsRosterUpdateFinished;
+
+        struct TGRpcInfo {
+            std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
+            TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
+
+            void Shutdown() {
+                if (GRpcServer) {
+                    GRpcServer->Stop();
+                    GRpcServer = nullptr;
+                }
+            }
+        };
+
+        std::unordered_map<TString, std::unordered_map<ui32, TGRpcInfo>> TenantsGRpc;  // tenant -> nodeIdx -> GRpcInfo
     };
 
     class TClient {
@@ -514,6 +570,7 @@ namespace Tests {
             return CreateColumnTable(parent, table);
         }
 #endif
+        NMsgBusProxy::EResponseStatus CreateTopic(const TString& parent, const NKikimrSchemeOp::TPersQueueGroupDescription& topic);
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
         NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);
@@ -705,7 +762,7 @@ namespace Tests {
         ui32 Availabe() const;
         ui32 Capacity() const;
 
-        void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30));
+        void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30), bool acceptAlreadyExist = false);
 
     private:
         TVector<ui32>& Nodes(const TString &name);

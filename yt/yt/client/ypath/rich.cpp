@@ -115,7 +115,7 @@ void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& a
 }
 
 template <class TFunc>
-auto RunAttributeAccessor(const TRichYPath& path, const TString& key, TFunc accessor) -> decltype(accessor())
+auto RunAttributeAccessor(const TRichYPath& path, const std::string& key, TFunc accessor) -> decltype(accessor())
 {
     try {
         return accessor();
@@ -127,7 +127,7 @@ auto RunAttributeAccessor(const TRichYPath& path, const TString& key, TFunc acce
 }
 
 template <class T>
-T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue)
+T GetAttribute(const TRichYPath& path, const std::string& key, const T& defaultValue)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Get(key, defaultValue);
@@ -135,14 +135,14 @@ T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue
 }
 
 template <class T>
-typename TOptionalTraits<T>::TOptional FindAttribute(const TRichYPath& path, const TString& key)
+typename TOptionalTraits<T>::TOptional FindAttribute(const TRichYPath& path, const std::string& key)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Find<T>(key);
     });
 }
 
-TYsonString FindAttributeYson(const TRichYPath& path, const TString& key)
+TYsonString FindAttributeYson(const TRichYPath& path, const std::string& key)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().FindYson(key);
@@ -662,16 +662,15 @@ std::optional<std::string> TRichYPath::GetCluster() const
 
 void TRichYPath::SetCluster(const std::string& value)
 {
-    // TODO(babenko): switch to std::string
-    Attributes().Set("cluster", TString(value));
+    Attributes().Set("cluster", value);
 }
 
-std::optional<std::vector<TString>> TRichYPath::GetClusters() const
+std::optional<std::vector<std::string>> TRichYPath::GetClusters() const
 {
-    return FindAttribute<std::vector<TString>>(*this, "clusters");
+    return FindAttribute<std::vector<std::string>>(*this, "clusters");
 }
 
-void TRichYPath::SetClusters(const std::vector<TString>& value)
+void TRichYPath::SetClusters(const std::vector<std::string>& value)
 {
     Attributes().Set("clusters", value);
 }
@@ -689,6 +688,11 @@ TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const
 TVersionedWriteOptions TRichYPath::GetVersionedWriteOptions() const
 {
     return GetAttribute(*this, "versioned_write_options", TVersionedWriteOptions());
+}
+
+std::optional<TString> TRichYPath::GetAccessMethod() const
+{
+    return FindAttribute<TString>(*this, "access_method");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

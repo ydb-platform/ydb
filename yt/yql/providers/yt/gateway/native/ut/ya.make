@@ -9,6 +9,7 @@ PEERDIR(
     yt/yql/providers/yt/gateway/file
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/lib/secret_masker/dummy
     yt/yql/providers/yt/lib/ut_common
     library/cpp/testing/mock_server
     library/cpp/testing/common
@@ -21,4 +22,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-

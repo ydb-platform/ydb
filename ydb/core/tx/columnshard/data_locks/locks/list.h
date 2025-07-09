@@ -2,6 +2,7 @@
 #include "abstract.h"
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NDataLocks {
 
@@ -9,7 +10,7 @@ class TListPortionsLock: public ILock {
 private:
     using TBase = ILock;
     THashSet<TPortionAddress> Portions;
-    THashSet<ui64> Granules;
+    THashSet<TInternalPathId> Granules;
 protected:
     virtual std::optional<TString> DoIsLocked(
         const TPortionInfo& portion, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
@@ -100,7 +101,7 @@ public:
 class TListTablesLock: public ILock {
 private:
     using TBase = ILock;
-    THashSet<ui64> Tables;
+    THashSet<TInternalPathId> Tables;
 protected:
     virtual std::optional<TString> DoIsLocked(
         const TPortionInfo& portion, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
@@ -120,7 +121,7 @@ protected:
         return Tables.empty();
     }
 public:
-    TListTablesLock(const TString& lockName, const THashSet<ui64>& tables, const ELockCategory category, const bool readOnly = false)
+    TListTablesLock(const TString& lockName, const THashSet<TInternalPathId>& tables, const ELockCategory category, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
         , Tables(tables)
     {

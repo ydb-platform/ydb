@@ -1286,6 +1286,19 @@ class Parser(object):
         n = match.group(0)[1:]
         return bytechr(int(n, 16)).decode(encoding)
 
+    def find_previous(self, statements, class_):
+        for previous in reversed(statements):
+            if isinstance(previous, self.ast.Comment):
+                continue
+            elif isinstance(previous, class_):
+                return previous
+            else:
+                # If we find something that doesn't match what we're looking
+                # for, and isn't a comment, fail
+                return None
+        # Out of statements to look at
+        return None
+
     def parse_table_BASE_(self, table):
         statements = table.statements
         while self.next_token_ != "}" or self.cur_comments_:
@@ -1306,6 +1319,19 @@ class Parser(object):
                         location=self.cur_token_location_,
                     )
                 )
+            elif self.is_cur_keyword_("HorizAxis.MinMax"):
+                base_script_list = self.find_previous(statements, ast.BaseAxis)
+                if base_script_list is None:
+                    raise FeatureLibError(
+                        "MinMax must be preceded by BaseScriptList",
+                        self.cur_token_location_,
+                    )
+                if base_script_list.vertical:
+                    raise FeatureLibError(
+                        "HorizAxis.MinMax must be preceded by HorizAxis statements",
+                        self.cur_token_location_,
+                    )
+                base_script_list.minmax.append(self.parse_base_minmax_())
             elif self.is_cur_keyword_("VertAxis.BaseTagList"):
                 vert_bases = self.parse_base_tag_list_()
             elif self.is_cur_keyword_("VertAxis.BaseScriptList"):
@@ -1318,6 +1344,19 @@ class Parser(object):
                         location=self.cur_token_location_,
                     )
                 )
+            elif self.is_cur_keyword_("VertAxis.MinMax"):
+                base_script_list = self.find_previous(statements, ast.BaseAxis)
+                if base_script_list is None:
+                    raise FeatureLibError(
+                        "MinMax must be preceded by BaseScriptList",
+                        self.cur_token_location_,
+                    )
+                if not base_script_list.vertical:
+                    raise FeatureLibError(
+                        "VertAxis.MinMax must be preceded by VertAxis statements",
+                        self.cur_token_location_,
+                    )
+                base_script_list.minmax.append(self.parse_base_minmax_())
             elif self.cur_token_ == ";":
                 continue
 
@@ -1574,7 +1613,7 @@ class Parser(object):
             "HorizAxis.BaseScriptList",
             "VertAxis.BaseScriptList",
         ), self.cur_token_
-        scripts = [(self.parse_base_script_record_(count))]
+        scripts = [self.parse_base_script_record_(count)]
         while self.next_token_ == ",":
             self.expect_symbol_(",")
             scripts.append(self.parse_base_script_record_(count))
@@ -1586,6 +1625,25 @@ class Parser(object):
         base_tag = self.expect_script_tag_()
         coords = [self.expect_number_() for i in range(count)]
         return script_tag, base_tag, coords
+
+    def parse_base_minmax_(self):
+        script_tag = self.expect_script_tag_()
+        language = self.expect_language_tag_()
+        min_coord = self.expect_number_()
+        self.advance_lexer_()
+        if not (self.cur_token_type_ is Lexer.SYMBOL and self.cur_token_ == ","):
+            raise FeatureLibError(
+                "Expected a comma between min and max coordinates",
+                self.cur_token_location_,
+            )
+        max_coord = self.expect_number_()
+        if self.next_token_ == ",":  # feature tag...
+            raise FeatureLibError(
+                "Feature tags are not yet supported in BASE table",
+                self.cur_token_location_,
+            )
+
+        return script_tag, language, min_coord, max_coord
 
     def parse_device_(self):
         result = None
@@ -2003,44 +2061,6 @@ class Parser(object):
                 'Expected "%s"' % block.name.strip(), self.cur_token_location_
             )
         self.expect_symbol_(";")
-
-        # A multiple substitution may have a single destination, in which case
-        # it will look just like a single substitution. So if there are both
-        # multiple and single substitutions, upgrade all the single ones to
-        # multiple substitutions.
-
-        # Check if we have a mix of non-contextual singles and multiples.
-        has_single = False
-        has_multiple = False
-        for s in statements:
-            if isinstance(s, self.ast.SingleSubstStatement):
-                has_single = not any([s.prefix, s.suffix, s.forceChain])
-            elif isinstance(s, self.ast.MultipleSubstStatement):
-                has_multiple = not any([s.prefix, s.suffix, s.forceChain])
-
-        # Upgrade all single substitutions to multiple substitutions.
-        if has_single and has_multiple:
-            statements = []
-            for s in block.statements:
-                if isinstance(s, self.ast.SingleSubstStatement):
-                    glyphs = s.glyphs[0].glyphSet()
-                    replacements = s.replacements[0].glyphSet()
-                    if len(replacements) == 1:
-                        replacements *= len(glyphs)
-                    for i, glyph in enumerate(glyphs):
-                        statements.append(
-                            self.ast.MultipleSubstStatement(
-                                s.prefix,
-                                glyph,
-                                s.suffix,
-                                [replacements[i]],
-                                s.forceChain,
-                                location=s.location,
-                            )
-                        )
-                else:
-                    statements.append(s)
-            block.statements = statements
 
     def is_cur_keyword_(self, k):
         if self.cur_token_type_ is Lexer.NAME:

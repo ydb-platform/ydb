@@ -1,6 +1,7 @@
 #include "columnshard.h"
 #include "columnshard_impl.h"
 
+#include "data_accessor/cache_policy/policy.h"
 #include "ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h"
 
 #include <ydb/core/protos/kqp.pb.h>
@@ -140,7 +141,7 @@ public:
             for (auto&& [columnId, data] : RangesByColumn) {
                 for (auto&& [storageId, blobs] : data) {
                     for (auto&& b : blobs) {
-                        const TString blob = blobsData.Extract(storageId, b);
+                        const TString blob = blobsData.ExtractVerified(storageId, b);
                         auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(blob.data(), blob.size()));
                         auto it = SketchesByColumns.find(columnId);
                         AFL_VERIFY(it != SketchesByColumns.end());
@@ -207,7 +208,7 @@ public:
                     if (!indexMeta->IsInplaceData()) {
                         portionInfo.FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
-                        const std::vector<TString> data = portionInfo.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
+                        const std::vector<TString> data = portionInfo.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
 
                         for (const auto& sketchAsString : data) {
                             auto sketch =
@@ -253,7 +254,8 @@ public:
             return;
         }
         Result->AddWaitingTask();
-        std::shared_ptr<NOlap::TDataAccessorsRequest> request = std::make_shared<NOlap::TDataAccessorsRequest>("STATISTICS_FLUSH");
+        std::shared_ptr<NOlap::TDataAccessorsRequest> request =
+            std::make_shared<NOlap::TDataAccessorsRequest>(NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::STATISTICS_FLUSH);
         for (auto&& i : Portions) {
             request->AddPortion(i);
         }
@@ -287,8 +289,11 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     }
 
     AFL_VERIFY(HasIndex());
+    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record.GetTable().GetPathId());
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+    AFL_VERIFY(internalPathId);
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
-    auto spg = index.GetGranuleOptional(record.GetTable().GetPathId().GetLocalId());
+    auto spg = index.GetGranuleOptional(*internalPathId);
     AFL_VERIFY(spg);
 
     std::set<ui32> columnTagsRequested;
@@ -301,7 +306,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         columnTagsRequested = std::set<ui32>(allColumnIds.begin(), allColumnIds.end());
     }
 
-    NOlap::TDataAccessorsRequest request("STATISTICS");
+    NOlap::TDataAccessorsRequest request(NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::STATISTICS);
     std::shared_ptr<TResultAccumulator> resultAccumulator =
         std::make_shared<TResultAccumulator>(columnTagsRequested, ev->Sender, ev->Cookie, std::move(response));
     auto versionedIndex = std::make_shared<NOlap::TVersionedIndex>(index.GetVersionedIndex());

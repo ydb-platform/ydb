@@ -44,7 +44,7 @@ namespace NTable {
         }
 
         TResult Do(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
-                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
+                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const override
         {
             auto index = Index.TryLoadRaw();
             if (!index) {
@@ -112,7 +112,7 @@ namespace NTable {
         }
 
         TResult DoReverse(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
-                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
+                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const override
         {
             auto index = Index.TryLoadRaw();
             if (!index) {
@@ -198,7 +198,7 @@ namespace NTable {
          */
         bool DoPrecharge(const TCells key1, const TCells key2, const TIter key1Page, const TIter key2Page,
                 const TIter first, const TIter last, TRowId startRowId, TRowId endRowId,
-                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept
+                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const
         {
             bool ready = true;
 
@@ -296,7 +296,7 @@ namespace NTable {
          */
         bool DoPrechargeReverse(const TCells key1, const TCells key2, const TIter key1Page, const TIter key2Page,
                 TIter first, TIter last, TRowId startRowId, TRowId endRowId,
-                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept
+                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const
         {
             bool ready = true;
 
@@ -388,7 +388,7 @@ namespace NTable {
         }
 
     private:
-        bool DoPrechargeHistory(TRowId startRowId, TRowId endRowId) const noexcept {
+        bool DoPrechargeHistory(TRowId startRowId, TRowId endRowId) const {
             auto index = HistoryIndex->TryLoadRaw();
             if (!index) {
                 return false;
@@ -507,7 +507,7 @@ namespace NTable {
         /**
          * Precharges pages that contain row1 to row2 inclusive
          */
-        bool DoPrechargeGroup(TGroupState& group, TRowId row1, TRowId row2, ui64& bytes) const noexcept {
+        bool DoPrechargeGroup(TGroupState& group, TRowId row1, TRowId row2, ui64& bytes) const {
             auto groupIndex = group.GroupIndex.TryLoadRaw();
             if (!groupIndex) {
                 if (bytes) {
@@ -550,7 +550,7 @@ namespace NTable {
         /**
          * Precharges pages that contain row1 to row2 inclusive in reverse
          */
-        bool DoPrechargeGroupReverse(TGroupState& group, TRowId row1, TRowId row2, ui64& bytes) const noexcept {
+        bool DoPrechargeGroupReverse(TGroupState& group, TRowId row1, TRowId row2, ui64& bytes) const {
             auto groupIndex = group.GroupIndex.TryLoadRaw();
             if (!groupIndex) {
                 if (bytes) {
@@ -591,7 +591,7 @@ namespace NTable {
         }
 
     private:
-        TRowId LookupRowId(const TCells key, const TSharedData* page, const TPartScheme::TGroupInfo &group, ESeek seek, const TKeyCellDefaults &keyDefaults) const noexcept
+        TRowId LookupRowId(const TCells key, const TSharedData* page, const TPartScheme::TGroupInfo &group, ESeek seek, const TKeyCellDefaults &keyDefaults) const
         {
             auto data = TDataPage(page);
             auto lookup = data.LookupKey(key, group, seek, &keyDefaults);
@@ -600,7 +600,7 @@ namespace NTable {
         }
 
     private:
-        TRowId LookupRowIdReverse(const TCells key, const TSharedData* page, const TPartScheme::TGroupInfo &group, ESeek seek, const TKeyCellDefaults &keyDefaults) const noexcept
+        TRowId LookupRowIdReverse(const TCells key, const TSharedData* page, const TPartScheme::TGroupInfo &group, ESeek seek, const TKeyCellDefaults &keyDefaults) const
         {
             auto data = TDataPage(page);
             auto lookup = data.LookupKeyReverse(key, group, seek, &keyDefaults);
@@ -611,7 +611,7 @@ namespace NTable {
         }
 
     private:
-        bool LimitExceeded(ui64 value, ui64 limit) const noexcept {
+        bool LimitExceeded(ui64 value, ui64 limit) const {
             return limit && value > limit;
         }
 

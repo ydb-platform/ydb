@@ -56,8 +56,8 @@ TPyObjectPtr ToPyResource(
         const NUdf::TType* type,
         const NUdf::TUnboxedValuePod& value)
 {
-// TODO NILE-43
-#if false && UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
     NUdf::TResourceTypeInspector inpector(*ctx->PyCtx->TypeInfoHelper, type);
     auto tag = inpector.GetTag();
     if (tag == ctx->PyCtx->ResourceTag) {
@@ -80,8 +80,8 @@ NUdf::TUnboxedValue FromPyResource(
         const TPyCastContext::TPtr& ctx,
         const NUdf::TType* type, PyObject* value)
 {
-// TODO NILE-43
-#if false && UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
     NUdf::TResourceTypeInspector inpector(*ctx->PyCtx->TypeInfoHelper, type);
     auto tag = inpector.GetTag();
     if (tag == ctx->PyCtx->ResourceTag) {

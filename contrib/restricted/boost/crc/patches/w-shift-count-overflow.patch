@@ -1,0 +1,11 @@
+--- contrib/restricted/boost/crc/include/boost/crc.hpp	(index)
++++ contrib/restricted/boost/crc/include/boost/crc.hpp	(working tree)
+@@ -1188,7 +1188,7 @@ namespace detail
+                  )) & UCHAR_MAX ) ^ *new_dividend_bytes++;
+ 
+                 // Complete the multi-bit altered modulo-2 polynomial division
+-                remainder <<= CHAR_BIT;
++                remainder = (remainder << CHAR_BIT);
+                 remainder ^= table[ index ];
+             }
+ 

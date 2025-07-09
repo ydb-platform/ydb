@@ -38,7 +38,6 @@ domains_config:
   domain:
   - name: "{ydb_domain_name}"
     domain_id: 1
-    scheme_root: 72075186232723360
     storage_pool_types:
     - kind: "hdd"
       pool_config:
@@ -92,7 +91,7 @@ system_tablets:
   - node: {ydb_defaut_tablet_node_ids}
   flat_schemeshard:
   - info:
-      tablet_id: 72075186232723360
+      tablet_id: 72057594046678944
 actor_system_config:
   executor:
   - type: BASIC
@@ -156,6 +155,7 @@ grpc_config:
   - "monitoring"
   - "auth"
   - "query_service"
+  - "view"
 feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true

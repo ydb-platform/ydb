@@ -71,10 +71,12 @@ virtual void Scenario(const TActorContext &ctx) {
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
 
     // check compaction result
-    ui32 freedChunks = 0;
+    THashSet<ui32> freedChunks;
     auto check = [&freedChunks] (TEvBlobStorage::TEvVDefragResult::TPtr &ev) {
         const auto &rec = ev->Get()->Record;
-        freedChunks += rec.GetFreedChunks().size();
+        for (const auto& chunk : rec.GetFreedChunks()) {
+            freedChunks.insert(chunk);
+        }
         STR << "FoundChunksToDefrag# " << rec.GetFoundChunksToDefrag()
             << " RewrittenRecs# " << rec.GetRewrittenRecs()
             << " RewrittenBytes# " << rec.GetRewrittenBytes()
@@ -98,7 +100,7 @@ virtual void Scenario(const TActorContext &ctx) {
     LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
 
     // check actually freed chunks
-    UNIT_ASSERT_VALUES_EQUAL(freedChunks, 4);
+    UNIT_ASSERT_VALUES_EQUAL(freedChunks.size(), 4);
 }
 SYNC_TEST_END(TDefrag50PercentGarbage, TSyncTestBase)
 

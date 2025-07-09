@@ -1,8 +1,7 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
+    ydb_bridge.cpp
     ydb_dynamic_config.cpp
     ydb_replication.cpp
     ydb_scripting.cpp

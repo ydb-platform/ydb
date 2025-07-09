@@ -8,7 +8,6 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 33u
 Y_UNIT_TEST_SUITE(TMiniKQLWideTopTest) {
     Y_UNIT_TEST_LLVM(TopByFirstKeyAsc) {
         TSetup<LLVM> setup;
@@ -562,9 +561,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideTopTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 }
-#endif
 
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 34u
 Y_UNIT_TEST_SUITE(TMiniKQLWideSortTest) {
     Y_UNIT_TEST_LLVM(SortByFirstKeyAsc) {
         TSetup<LLVM> setup;
@@ -644,7 +641,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideSortTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 }
-#endif
 
 }
 }

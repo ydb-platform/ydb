@@ -5,7 +5,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 

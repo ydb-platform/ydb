@@ -5,6 +5,7 @@
 #include <ydb/core/util/source_location.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -118,6 +119,7 @@ struct TNodeRegistrationSettings {
     ui32 InterconnectPort;
     NActors::TNodeLocation Location;
     TString NodeRegistrationToken;
+    std::optional<TString> BridgePileName;
 };
 
 class INodeRegistrationResult {
@@ -156,9 +158,11 @@ class IConfigurationResult {
 public:
     virtual ~IConfigurationResult() {}
     virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
-    virtual bool HasYamlConfig() const = 0;
-    virtual const TString& GetYamlConfig() const = 0;
+    virtual bool HasMainYamlConfig() const = 0;
+    virtual const TString& GetMainYamlConfig() const = 0;
     virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
+    virtual bool HasDatabaseYamlConfig() const = 0;
+    virtual const TString& GetDatabaseYamlConfig() const = 0;
 };
 
 class IDynConfigClient {
@@ -174,6 +178,25 @@ public:
 
 // ===
 
+class IStorageConfigResult {
+public:
+    virtual ~IStorageConfigResult() {}
+    virtual const TString& GetMainYamlConfig() const = 0;
+    virtual const TString& GetStorageYamlConfig() const = 0;
+};
+
+class IConfigClient {
+public:
+    virtual ~IConfigClient() {}
+    virtual std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger) const = 0;
+};
+
+// ===
+
 struct TInitialConfiguratorDependencies {
     NConfig::IErrorCollector& ErrorCollector;
     NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
@@ -181,6 +204,7 @@ struct TInitialConfiguratorDependencies {
     NConfig::IMemLogInitializer& MemLogInit;
     NConfig::INodeBrokerClient& NodeBrokerClient;
     NConfig::IDynConfigClient& DynConfigClient;
+    NConfig::IConfigClient& ConfigClient;
     NConfig::IEnv& Env;
     NConfig::IInitLogger& Logger;
 };
@@ -194,6 +218,7 @@ struct TRecordedInitialConfiguratorDeps {
             *MemLogInit,
             *NodeBrokerClient,
             *DynConfigClient,
+            *ConfigClient,
             *Env,
             *Logger
         };
@@ -205,6 +230,7 @@ struct TRecordedInitialConfiguratorDeps {
     std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
     std::unique_ptr<NConfig::INodeBrokerClient> NodeBrokerClient;
     std::unique_ptr<NConfig::IDynConfigClient> DynConfigClient;
+    std::unique_ptr<NConfig::IConfigClient> ConfigClient;
     std::unique_ptr<NConfig::IEnv> Env;
     std::unique_ptr<NConfig::IInitLogger> Logger;
 };
@@ -226,6 +252,7 @@ struct TDebugInfo {
 
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;
+    TString StartupConfigYaml;
     TMap<TString, TString> Labels;
     std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     std::optional<TDebugInfo> DebugInfo;
@@ -238,7 +265,7 @@ public:
     virtual ~IInitialConfigurator() {};
     virtual void RegisterCliOptions(NLastGetopt::TOpts& opts) = 0;
     virtual void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) = 0;
-    virtual void Parse(const TVector<TString>& freeArgs) = 0;
+    virtual void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) = 0;
     virtual void Apply(
         NKikimrConfig::TAppConfig& appConfig,
         ui32& nodeId,
@@ -256,11 +283,13 @@ std::unique_ptr<IErrorCollector> MakeDefaultErrorCollector();
 std::unique_ptr<IMemLogInitializer> MakeDefaultMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient();
+std::unique_ptr<IConfigClient> MakeDefaultConfigClient();
 std::unique_ptr<IInitLogger> MakeDefaultInitLogger();
 
 std::unique_ptr<IMemLogInitializer> MakeNoopMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeNoopNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeNoopDynConfigClient();
+std::unique_ptr<IConfigClient> MakeNoopConfigClient();
 std::unique_ptr<IInitLogger> MakeNoopInitLogger();
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
@@ -292,8 +321,8 @@ public:
         Impl->ValidateOptions(opts, parseResult);
     }
 
-    void Parse(const TVector<TString>& freeArgs) {
-        Impl->Parse(freeArgs);
+    void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) {
+        Impl->Parse(freeArgs, csk);
     }
 
     void Apply(

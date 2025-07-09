@@ -7,11 +7,42 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 namespace NYql {
 namespace {
 
 using namespace NKikimr;
 using namespace NNodes;
+
+namespace {
+
+bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
+    THashSet<TStringBuf> columnNames;
+    auto equalStmts = settings.Update.Cast().Ptr()->Child(1);
+
+    for (const auto& stmt : equalStmts->Children()) {
+        auto columnName = stmt->Child(0)->Content();
+        columnNames.insert(columnName);
+    }
+
+    bool hasIntersection = false;
+    for (const auto& stmt : equalStmts->Children()) {
+        VisitExpr(stmt->Child(1), [&columnNames, &hasIntersection] (const TExprNode::TPtr& node) {
+            if (node->Content() == "Member"
+                && node->ChildrenSize() > 1
+                && columnNames.contains(node->Child(1)->Content())) {
+                hasIntersection = true;
+                return false;
+            }
+            return true;
+        });
+    }
+
+    return hasIntersection;
+}
+
+} // namespace
 
 class TKiSinkIntentDeterminationTransformer: public TKiSinkVisitorTransformer {
 public:
@@ -86,6 +117,12 @@ private:
         auto table = node.Table();
 
         SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterDatabase(TKiAlterDatabase node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
         return TStatus::Ok;
     }
 
@@ -311,8 +348,12 @@ private:
                     mode == "insert_revert" ||
                     mode == "insert_abort" ||
                     mode == "delete_on" ||
-                    mode == "update_on")
+                    mode == "update_on" ||
+                    mode == "fill_table")
                 {
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    return TStatus::Ok;
+                } else if (mode == "fill_table") {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "insert_ignore") {
@@ -320,6 +361,18 @@ private:
                         << "INSERT OR IGNORE is not yet supported for Kikimr."));
                     return TStatus::Error;
                 } else if (mode == "update") {
+                    if (settings.IsBatch) {
+                        if (SessionCtx->Tables().GetTables().size() != 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch update is not supported for multiple tables."));
+                            return TStatus::Error;
+                        }
+
+                        if (HasUpdateIntersection(settings)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch update is only supported for idempotent updates."));
+                            return TStatus::Error;
+                        }
+                    }
+
                     if (!settings.PgFilter) {
                         if (!settings.Filter) {
                             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table update."));
@@ -333,6 +386,13 @@ private:
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "delete") {
+                    if (settings.IsBatch) {
+                        if (SessionCtx->Tables().GetTables().size() != 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch delete is not supported for multiple tables."));
+                            return TStatus::Error;
+                        }
+                    }
+
                     if (!settings.Filter && !settings.PgFilter) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
@@ -394,7 +454,8 @@ private:
 
             case TKikimrKey::Type::TableList:
                 break;
-
+            case TKikimrKey::Type::Database:
+                return TStatus::Ok;
             case TKikimrKey::Type::Role:
                 return TStatus::Ok;
             case TKikimrKey::Type::Object:
@@ -569,6 +630,10 @@ public:
     }
 
     bool CanExecute(const TExprNode& node) override {
+        if (node.IsCallable(TKiAlterDatabase::CallableName())) {
+            return true;
+        }
+
         if (node.IsCallable(TKiExecDataQuery::CallableName())) {
             return true;
         }
@@ -883,7 +948,7 @@ public:
         } else {
             YQL_ENSURE(false, "Invalid key type for sequence");
         }
-        
+
 
         return Build<TKiAlterSequence>(ctx, node->Pos())
             .World(node->Child(0))
@@ -978,7 +1043,18 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on" && mode != "analyze") {
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap
+                && mode != "replace"
+                && mode != "drop"
+                && mode != "drop_if_exists"
+                && mode != "insert_abort"
+                && mode != "update"
+                && mode != "upsert"
+                && mode != "delete"
+                && mode != "update_on"
+                && mode != "delete_on"
+                && mode != "analyze"
+                && mode != "fill_table") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
             return true;
         }
@@ -998,6 +1074,23 @@ public:
         YQL_ENSURE(key.Extract(*node->Child(2)), "Failed to extract ydb key.");
 
         switch (key.GetKeyType()) {
+            case TKikimrKey::Type::Database: {
+                NCommon::TDatabaseSettings settings = NCommon::ParseDatabaseSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "alterDatabase") {
+                    return Build<TKiAlterDatabase>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .DatabasePath().Build(key.GetDatabasePath())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                }
+
+                break;
+            }
             case TKikimrKey::Type::Table: {
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
@@ -1031,7 +1124,12 @@ public:
                         TString(dataSink.Cluster()),
                         key.GetTablePath(), node->Pos(), ctx);
 
-                    returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
+                    if (table) {
+                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
+                        return true;
+                    } else {
+                        return false;
+                    }
                 };
 
                 TVector<TExprBase> columnsToReturn;
@@ -1040,7 +1138,9 @@ public:
                         auto pgResultNode = item.Cast<TCoPgResultItem>();
                         const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
                         if (value.empty()) {
-                            fillStar();
+                            if (!fillStar()) {
+                                return nullptr;
+                            }
                             break;
                         } else {
                             auto atom = Build<TCoAtom>(ctx, node->Pos())
@@ -1051,7 +1151,9 @@ public:
                     } else if (auto returningItem = item.Maybe<TCoReturningListItem>()) {
                         columnsToReturn.push_back(returningItem.Cast().ColumnRef());
                     } else if (auto returningStar = item.Maybe<TCoReturningStar>()) {
-                        fillStar();
+                        if (!fillStar()) {
+                            return nullptr;
+                        }
                         break;
                     }
                 }
@@ -1074,6 +1176,11 @@ public:
                             .Filter(settings.Filter.Cast())
                             .Update(settings.Update.Cast())
                             .ReturningColumns(returningColumns)
+                            .IsBatch(
+                                settings.IsBatch
+                                ? ctx.NewAtom(node->Pos(), "true")
+                                : ctx.NewAtom(node->Pos(), "false")
+                            )
                             .Done()
                             .Ptr();
                     } else {
@@ -1100,6 +1207,11 @@ public:
                             .Table().Build(key.GetTablePath())
                             .Filter(settings.Filter.Cast())
                             .ReturningColumns(returningColumns)
+                            .IsBatch(
+                                settings.IsBatch
+                                ? ctx.NewAtom(node->Pos(), "true")
+                                : ctx.NewAtom(node->Pos(), "false")
+                            )
                             .Done()
                             .Ptr();
                     } else {
@@ -1760,6 +1872,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
     output = input;
 
     auto callable = TCallable(input);
+
+    if (auto node = callable.Maybe<TKiAlterDatabase>()) {
+        return HandleAlterDatabase(node.Cast(), ctx);
+    }
 
     if (auto node = callable.Maybe<TKiWriteTable>()) {
         return HandleWriteTable(node.Cast(), ctx);

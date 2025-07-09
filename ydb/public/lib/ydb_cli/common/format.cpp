@@ -102,7 +102,7 @@ bool TCommandWithFormat::HasOutput() {
     return false;
 }
 
-void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config, 
+void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
                                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Input format. Available options: ";
@@ -224,17 +224,17 @@ void TCommandWithInput::AddInputFileOption(TClientCommand::TConfig& config, bool
 
 // Deprecated
 void TCommandWithOutput::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
-    config.Opts->AddLongOption("json", description).NoArgument()
+    config.Opts->GetOpts().AddLongOption("json", description).NoArgument()
         .StoreValue(&OutputFormat, EDataFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
         .Hidden();
 }
 
-void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config, 
+void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
                                     const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Output format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default output format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     for (const auto& format : allowedFormats) {
         auto findResult = FormatDescriptions.find(format);
@@ -411,6 +411,8 @@ void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) {
     }
 }
 
+
+
 void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets) {
     static const TString edge = "|  ";
     static const TString noEdge = "   ";
@@ -518,7 +520,7 @@ TString ReplaceAll(TString str, const TString& from, const TString& to) {
     if (!from) {
         return str;
     }
-        
+
     size_t startPos = 0;
     while ((startPos = str.find(from, startPos)) != TString::npos) {
         str.replace(startPos, from.length(), to);
@@ -546,29 +548,39 @@ TString FormatPrettyTableDouble(TString stringValue) {
 
 
     stream << std::fixed << std::setprecision(3) << std::scientific << value;
-    return ToString(stream.str());   
+    return ToString(stream.str());
 }
 
-void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table) {
+void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast, TVector<bool> hasMore) {
     const auto& node = plan.GetMapSafe();
 
     auto& newRow = table.AddRow();
 
     NColorizer::TColors colors = NColorizer::AutoColors(Output);
-    TStringBuf color;
-    switch(offset.size() % 3) {
-        case 0: 
-            color = colors.LightRed();
-            break;
-        case 1:
-            color = colors.LightGreen();
-            break;
-        case 2:
-            color = colors.LightBlue();
-            break;
-        default:
-            color = colors.Default();
-            break;
+
+    bool hasChildren = node.contains("Plans") && !node.at("Plans").GetArraySafe().empty();
+
+    TStringBuilder arrowOffset;
+    for (size_t i = 0; i < hasMore.size(); ++i) {
+        if (hasMore[i]) {
+            arrowOffset << "│ ";
+        } else {
+            arrowOffset << "  ";
+        }
+    }
+
+    if (offset.empty()) {
+        arrowOffset << "┌> ";
+    } else {
+        if (isLast) {
+            if (hasChildren) {
+                arrowOffset << "└─┬> ";
+            } else {
+                arrowOffset << "└──> ";
+            }
+        } else {
+            arrowOffset << "├──> ";
+        }
     }
 
     if (node.contains("Operators")) {
@@ -610,9 +622,9 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
             TStringBuilder operation;
             if (info.empty()) {
-                operation << offset << color << " -> " << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default();
+                operation << arrowOffset << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default();
             } else {
-                operation << offset << color << " -> " << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default()
+                operation << arrowOffset << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default()
                      << " (" << JoinStrings(info, ", ") << ")";
             }
 
@@ -632,15 +644,22 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         }
     } else {
         TStringBuilder operation;
-        operation << offset << color << " -> " << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
+        operation << arrowOffset << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
         newRow.Column(0, std::move(operation));
     }
 
     if (node.contains("Plans")) {
         auto& plans = node.at("Plans").GetArraySafe();
-        for (auto subplan : plans) {
+        for (size_t i = 0; i < plans.size(); ++i) {
+            bool isLastChild = (i == plans.size() - 1);
+
+            TVector<bool> newHasMore = hasMore;
+            if (!offset.empty()) {
+                newHasMore.push_back(!isLast);
+            }
+
             offset += "  ";
-            PrintPrettyTableImpl(subplan, offset, table);
+            PrintPrettyTableImpl(plans[i], offset, table, isLastChild, newHasMore);
             offset.resize(offset.size() - 2);
         }
     }

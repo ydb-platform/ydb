@@ -125,8 +125,8 @@ namespace NKikimr::NDataShard {
         state.SplitKeyId = splitKeyId;
         state.SplitKey = std::move(key);
         auto res = Offsets.insert(&state);
-        Y_ABORT_UNLESS(res.second, "AddSplitKey used with a key that already exists");
-        Y_ABORT_UNLESS(res.first != Offsets.begin(), "AddSplitKey somehow added split key before the first key");
+        Y_ENSURE(res.second, "AddSplitKey used with a key that already exists");
+        Y_ENSURE(res.first != Offsets.begin(), "AddSplitKey somehow added split key before the first key");
         auto& prev = **--res.first;
         state.MaxOffset = prev.MaxOffset;
         PersistSplitKeyCreated(db, state);
@@ -141,8 +141,8 @@ namespace NKikimr::NDataShard {
         state.SplitKey = std::move(key);
         state.MaxOffset = offset;
         auto res = Offsets.insert(&state);
-        Y_ABORT_UNLESS(res.second, "AddSplitKey used with a key that already exists");
-        Y_ABORT_UNLESS(res.first != Offsets.begin(), "AddSplitKey somehow added split key before the first key");
+        Y_ENSURE(res.second, "AddSplitKey used with a key that already exists");
+        Y_ENSURE(res.first != Offsets.begin(), "AddSplitKey somehow added split key before the first key");
         PersistSplitKeyCreated(db, state);
         AddStatBytes(state);
         return &state;
@@ -162,7 +162,7 @@ namespace NKikimr::NDataShard {
 
         // Find the range that contains the key
         auto stop = Offsets.upper_bound(key);
-        Y_ABORT_UNLESS(stop != Offsets.begin());
+        Y_ENSURE(stop != Offsets.begin());
         auto start = std::prev(stop);
 
         if (offset <= (*start)->MaxOffset) {

@@ -16,6 +16,7 @@ from contourpy.util.bokeh_util import filled_to_bokeh, lines_to_bokeh
 from contourpy.util.renderer import Renderer
 
 if TYPE_CHECKING:
+    from bokeh.core.enums import OutputBackendType
     from bokeh.models import GridPlot
     from bokeh.palettes import Palette
     from numpy.typing import ArrayLike
@@ -61,15 +62,15 @@ class BokehRenderer(Renderer):
 
         nfigures = nrows*ncols
         self._figures = []
-        backend = "svg" if self._want_svg else "canvas"
+        backend: OutputBackendType = "svg" if self._want_svg else "canvas"
         for _ in range(nfigures):
             fig = figure(output_backend=backend)
-            fig.xgrid.visible = False
-            fig.ygrid.visible = False
+            fig.xgrid.visible = False  # type: ignore[attr-defined]
+            fig.ygrid.visible = False  # type: ignore[attr-defined]
             self._figures.append(fig)
             if not show_frame:
-                fig.outline_line_color = None  # type: ignore[assignment]
-                fig.axis.visible = False
+                fig.outline_line_color = None
+                fig.axis.visible = False  # type: ignore[attr-defined]
 
         self._layout = gridplot(
             self._figures, ncols=ncols, toolbar_location=None,  # type: ignore[arg-type]
@@ -112,7 +113,7 @@ class BokehRenderer(Renderer):
         color = self._convert_color(color)
         xs, ys = filled_to_bokeh(filled, fill_type)
         if len(xs) > 0:
-            fig.multi_polygons(xs=[xs], ys=[ys], color=color, fill_alpha=alpha, line_width=0)
+            fig.multi_polygons(xs=[xs], ys=[ys], color=color, fill_alpha=alpha, line_width=0)  # type: ignore[arg-type]
 
     def grid(
         self,
@@ -197,6 +198,7 @@ class BokehRenderer(Renderer):
         color = self._convert_color(color)
         xs, ys = lines_to_bokeh(lines, line_type)
         if xs is not None:
+            assert ys is not None
             fig.line(xs, ys, line_color=color, line_alpha=alpha, line_width=linewidth)
 
     def mask(
@@ -246,8 +248,8 @@ class BokehRenderer(Renderer):
         """
         if transparent:
             for fig in self._figures:
-                fig.background_fill_color = None  # type: ignore[assignment]
-                fig.border_fill_color = None  # type: ignore[assignment]
+                fig.background_fill_color = None
+                fig.border_fill_color = None
 
         if self._want_svg:
             export_svg(self._layout, filename=filename, webdriver=webdriver)
@@ -286,7 +288,7 @@ class BokehRenderer(Renderer):
                 ``Category10`` palette. Default ``None`` which is ``black``.
         """
         fig = self._get_figure(ax)
-        fig.title = title  # type: ignore[assignment]
+        fig.title = title
         fig.title.align = "center"  # type: ignore[attr-defined]
         if color is not None:
             fig.title.text_color = self._convert_color(color)  # type: ignore[attr-defined]
@@ -326,11 +328,12 @@ class BokehRenderer(Renderer):
         kwargs = {"text_color": color, "text_align": "center", "text_baseline": "middle"}
         for j in range(ny):
             for i in range(nx):
-                fig.add_layout(Label(x=x[j, i], y=y[j, i], text=f"{z[j, i]:{fmt}}", **kwargs))
+                label = Label(x=x[j, i], y=y[j, i], text=f"{z[j, i]:{fmt}}", **kwargs)  # type: ignore[arg-type]
+                fig.add_layout(label)
         if quad_as_tri:
             for j in range(ny-1):
                 for i in range(nx-1):
                     xx = np.mean(x[j:j+2, i:i+2])
                     yy = np.mean(y[j:j+2, i:i+2])
                     zz = np.mean(z[j:j+2, i:i+2])
-                    fig.add_layout(Label(x=xx, y=yy, text=f"{zz:{fmt}}", **kwargs))
+                    fig.add_layout(Label(x=xx, y=yy, text=f"{zz:{fmt}}", **kwargs))  # type: ignore[arg-type]

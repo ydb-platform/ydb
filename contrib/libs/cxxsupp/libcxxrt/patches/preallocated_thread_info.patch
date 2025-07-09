@@ -1,0 +1,107 @@
+--- /exception.cc	(index)
++++ /exception.cc	(working tree)
+@@ -331,6 +373,44 @@ static void free_exception_list(__cxa_exception *ex)
+ 	__cxa_free_exception(ex+1);
+ }
+ 
++#define fast_ti_size 100
++
++static long fast_ti_index;
++static __cxa_thread_info fast_ti[fast_ti_size];
++
++static inline __cxa_thread_info* alloc_thread_info() {
++    {
++        long cur_index;
++
++        __atomic_load(&fast_ti_index, &cur_index, __ATOMIC_SEQ_CST);
++
++        // exausted long time ago
++        if (cur_index >= fast_ti_size) {
++            return static_cast<__cxa_thread_info*>(calloc(1, sizeof(__cxa_thread_info)));
++        }
++    }
++
++    auto my_index = __sync_fetch_and_add(&fast_ti_index, 1);
++
++    // exausted
++    if (my_index >= fast_ti_size) {
++        return static_cast<__cxa_thread_info*>(calloc(1, sizeof(__cxa_thread_info)));
++    }
++
++    // fast path
++    auto& ret = fast_ti[my_index];
++
++    memset(&ret, 0, sizeof(ret));
++
++    return &ret;
++}
++
++static inline void free_thread_info(__cxa_thread_info* ti) {
++    if ((ti < fast_ti) || (ti >= (fast_ti + fast_ti_size))) {
++        free(ti);
++    }
++}
++
+ /**
+  * Cleanup function called when a thread exists to make certain that all of the
+  * per-thread data is deleted.
+@@ -352,10 +352,9 @@ static void thread_cleanup(void* thread_info)
+ 			free_exception_list(info->globals.caughtExceptions);
+ 		}
+ 	}
+-	free(thread_info);
++	free_thread_info(info);
+ }
+ 
+-
+ /**
+  * Once control used to protect the key creation.
+  */
+@@ -389,11 +388,16 @@ static void init_key(void)
+ 	pthread_setspecific(eh_key, 0);
+ }
+ 
++static __thread __cxa_thread_info* THR_INFO = nullptr;
++
+ /**
+  * Returns the thread info structure, creating it if it is not already created.
+  */
+ static __cxa_thread_info *thread_info()
+ {
++	if (THR_INFO) {
++		return THR_INFO;
++   }
+ 	if ((0 == pthread_once) || pthread_once(&once_control, init_key))
+ 	{
+ 		fakeTLS = true;
+@@ -402,17 +406,29 @@ static __cxa_thread_info *thread_info()
+ 	__cxa_thread_info *info = static_cast<__cxa_thread_info*>(pthread_getspecific(eh_key));
+ 	if (0 == info)
+ 	{
+-		info = static_cast<__cxa_thread_info*>(calloc(1, sizeof(__cxa_thread_info)));
++       info = alloc_thread_info();
+ 		pthread_setspecific(eh_key, info);
+ 	}
++   THR_INFO = info;
+ 	return info;
+ }
++
++// ensure main thread will allocate preallocated tls
++static struct InitMainTls {
++    inline InitMainTls() {
++        thread_info();
++    }
++} init_main_tls;
++
+ /**
+  * Fast version of thread_info().  May fail if thread_info() is not called on
+  * this thread at least once already.
+  */
+ static __cxa_thread_info *thread_info_fast()
+ {
++   if (THR_INFO) {
++       return THR_INFO;
++   }
+ 	if (fakeTLS) { return &singleThreadInfo; }
+ 	return static_cast<__cxa_thread_info*>(pthread_getspecific(eh_key));
+ }

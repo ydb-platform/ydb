@@ -78,6 +78,13 @@ public:
         YT_LOG_INFO("Bus server started");
     }
 
+    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config)
+    {
+        YT_VERIFY(config);
+
+        DynamicConfig_.Store(config);
+    }
+
     TFuture<void> Stop()
     {
         YT_LOG_INFO("Stopping Bus server");
@@ -122,6 +129,7 @@ public:
 
 protected:
     const TBusServerConfigPtr Config_;
+    TAtomicIntrusivePtr<TBusServerDynamicConfig> DynamicConfig_{New<TBusServerDynamicConfig>()};
     const IPollerPtr Poller_;
     const IMessageHandlerPtr Handler_;
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
@@ -254,7 +262,6 @@ protected:
                 .EndMap());
 
             auto poller = TTcpDispatcher::TImpl::Get()->GetXferPoller();
-
             auto connection = New<TTcpConnection>(
                 Config_,
                 EConnectionType::Server,
@@ -269,7 +276,8 @@ protected:
                 Handler_,
                 std::move(poller),
                 PacketTranscoderFactory_,
-                MemoryUsageTracker_);
+                MemoryUsageTracker_,
+                DynamicConfig_.Acquire()->RejectConnectionOnMemoryOvercommit);
 
             {
                 auto guard = WriterGuard(ConnectionsSpinLock_);
@@ -435,6 +443,18 @@ public:
 
         Server_.Store(server);
         server->Start();
+        server->OnDynamicConfigChanged(DynamicConfig_.Acquire());
+    }
+
+    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config) final
+    {
+        YT_VERIFY(config);
+
+        DynamicConfig_.Store(config);
+
+        if (auto server = Server_.Acquire()) {
+            server->OnDynamicConfigChanged(config);
+        }
     }
 
     TFuture<void> Stop() final
@@ -448,6 +468,7 @@ public:
 
 private:
     const TBusServerConfigPtr Config_;
+    TAtomicIntrusivePtr<TBusServerDynamicConfig> DynamicConfig_{New<TBusServerDynamicConfig>()};
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
@@ -521,6 +542,15 @@ public:
         }
     }
 
+    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config) final
+    {
+        YT_VERIFY(config);
+
+        for (const auto& server : Servers_) {
+            server->OnDynamicConfigChanged(config);
+        }
+    }
+
     TFuture<void> Stop() final
     {
         if (Config_->EnableLocalBypass && Config_->Port) {
@@ -545,6 +575,34 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+IBusServerPtr CreatePublicTcpBusServer(
+    TBusServerConfigPtr config,
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
+{
+    YT_VERIFY(config->Port.has_value());
+    return New<TTcpBusServerProxy<TRemoteTcpBusServer>>(
+        config,
+        packetTranscoderFactory,
+        memoryUsageTracker);
+}
+
+IBusServerPtr CreateLocalTcpBusServer(
+    TBusServerConfigPtr config,
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
+{
+#ifdef _linux_
+    return New<TTcpBusServerProxy<TLocalTcpBusServer>>(
+        config,
+        packetTranscoderFactory,
+        memoryUsageTracker);
+#else
+    Y_UNUSED(config, packetTranscoderFactory, memoryUsageTracker);
+    YT_ABORT();
+#endif
+}
+
 IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
@@ -553,17 +611,15 @@ IBusServerPtr CreateBusServer(
     std::vector<IBusServerPtr> servers;
 
     if (config->Port) {
-        servers.push_back(
-            New<TTcpBusServerProxy<TRemoteTcpBusServer>>(
-                config,
-                packetTranscoderFactory,
-                memoryUsageTracker));
+        servers.push_back(CreatePublicTcpBusServer(
+            config,
+            packetTranscoderFactory,
+            memoryUsageTracker));
     }
 
 #ifdef _linux_
     // Abstract unix sockets are supported only on Linux.
-    servers.push_back(
-        New<TTcpBusServerProxy<TLocalTcpBusServer>>(
+    servers.push_back(CreateLocalTcpBusServer(
             config,
             packetTranscoderFactory,
             memoryUsageTracker));

@@ -1,6 +1,9 @@
 #pragma once
 
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+
+const TString& ToString(NYql::EJoinKind);
+const TString& ToString(NYql::EJoinAlgoType);
 
 namespace NYql::NDq {
 
@@ -16,15 +19,15 @@ namespace NYql::NDq {
 */
 struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     TJoinOptimizerNodeInternal(
-        const std::shared_ptr<IBaseOptimizerNode>& left, 
+        const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TVector<TJoinColumn>& leftJoinKeys,
-        const TVector<TJoinColumn>& rightJoinKeys, 
-        const EJoinKind joinType, 
+        const TVector<TJoinColumn>& rightJoinKeys,
+        const EJoinKind joinType,
         const EJoinAlgoType joinAlgo,
         const bool leftAny,
         const bool rightAny
-    ) 
+    )
         : IBaseOptimizerNode(JoinNodeType)
         , LeftArg(left)
         , RightArg(right)
@@ -44,7 +47,44 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
         return res;
     }
 
-    virtual void Print(std::stringstream&, int) {
+    virtual void Print(std::stringstream& stream, int ntabs) {
+        for (int i = 0; i < ntabs; ++i){
+            stream << "   ";
+        }
+
+        stream << ToString(JoinType) << "," << ToString(JoinAlgo) << " ";
+
+        for (size_t i = 0; i < LeftJoinKeys.size(); ++i){
+            stream
+                << LeftJoinKeys[i].RelName << "." << LeftJoinKeys[i].AttributeName
+                << "="
+                << RightJoinKeys[i].RelName << "." << RightJoinKeys[i].AttributeName << ",";
+        }
+        stream << "\n";
+
+
+        for (int i = 0; i < ntabs; ++i){
+            stream << "   ";
+        }
+        stream << "  ";
+        stream << "Shuffled By: ";
+        if (ShuffleLeftSideByOrderingIdx == TJoinOptimizerNodeInternal::DontShuffle) {
+            stream << "Don't shuffle";
+        } else if (ShuffleLeftSideByOrderingIdx == TJoinOptimizerNodeInternal::NoOrdering) {
+            stream << "No ordering";
+        } else {
+            stream << ShuffleLeftSideByOrderingIdx;
+        }
+        stream << "\n";
+
+        LeftArg->Print(stream, ntabs + 1);
+
+        for (int i = 0; i < ntabs; ++i){
+            stream << "   ";
+        }
+        stream << "  ";
+        stream << "Shuffled By: " << ShuffleRightSideByOrderingIdx << "\n";
+        RightArg->Print(stream, ntabs + 1);
     }
 
     std::shared_ptr<IBaseOptimizerNode> LeftArg;
@@ -55,6 +95,15 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     EJoinAlgoType JoinAlgo;
     const bool LeftAny;
     const bool RightAny;
+
+    enum {
+        NoOrdering = -1,
+        DontShuffle = -2
+    };
+
+    // for interesting orderings framework
+    std::int64_t ShuffleLeftSideByOrderingIdx  = DontShuffle;
+    std::int64_t ShuffleRightSideByOrderingIdx = DontShuffle;
 };
 
 /**
@@ -69,7 +118,8 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
     bool leftAny,
-    bool rightAny
+    bool rightAny,
+    const std::optional<TOrderingsStateMachine::TLogicalOrderings>& logicalOrderings
 );
 
 /**
@@ -79,6 +129,10 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
  * separately if the plan contains non-orderable joins). So we check the instances and if we encounter
  * an external node, we return the whole subtree unchanged.
 */
-std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode>& internal);
+std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
+    const std::shared_ptr<IBaseOptimizerNode>& internal,
+    bool enableShuffleElimination,
+    const TFDStorage* fdStorage
+);
 
 } // namespace NYql::NDq

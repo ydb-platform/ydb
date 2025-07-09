@@ -95,7 +95,12 @@ void TTopicParserBase::ParseBuffer() {
             Consumer->OnParsingError(status);
         }
     } catch (...) {
-        Consumer->OnParsingError(TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse messages from offset " << GetOffsets().front() << ", got unexpected exception: " << CurrentExceptionMessage()));
+        auto error = TStringBuilder() << "Failed to parse messages";
+        if (const auto& offsets = GetOffsets()) {
+            error << " from offset " << offsets.front();
+        }
+        error << ", got unexpected exception: " << CurrentExceptionMessage();
+        Consumer->OnParsingError(TStatus::Fail(EStatusId::INTERNAL_ERROR, error));
     }
     Stats.AddParseAndFilterLatency(TInstant::Now() - startParseAndFilter);
 }

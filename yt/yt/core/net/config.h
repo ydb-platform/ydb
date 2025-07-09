@@ -12,10 +12,9 @@ namespace NYT::NNet {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDialerConfig
-    : public NYTree::TYsonStruct
+struct TDialerConfig
+    : public virtual NYTree::TYsonStruct
 {
-public:
     bool EnableNoDelay;
     bool EnableAggressiveReconnect;
 
@@ -34,11 +33,10 @@ DEFINE_REFCOUNTED_TYPE(TDialerConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Configuration for TAddressResolver singleton.
-class TAddressResolverConfig
+struct TAddressResolverConfig
     : public TAsyncExpiringCacheConfig
     , public NDns::TAresDnsResolverConfig
 {
-public:
     bool EnableIPv4;
     bool EnableIPv6;
 

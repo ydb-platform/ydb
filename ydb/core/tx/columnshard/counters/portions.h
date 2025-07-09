@@ -1,28 +1,56 @@
 #pragma once
-#include "common/agent.h"
-#include "common/client.h"
-#include "common/owner.h"
+#include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/signals/agent.h>
+#include <ydb/library/signals/client.h>
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+class TPortionDataAccessor;
 
 class TSimplePortionsGroupInfo {
 private:
-    YDB_READONLY(i64, BlobBytes, 0);
-    YDB_READONLY(i64, RawBytes, 0);
-    YDB_READONLY(i64, Count, 0);
-    YDB_READONLY(i64, RecordsCount, 0);
+    using TCountByChannel = THashMap<ui16, i64>;
+    TPositiveControlInteger BlobBytes;
+    TPositiveControlInteger RawBytes;
+    TPositiveControlInteger Count;
+    TPositiveControlInteger RecordsCount;
+
+protected:
+    void Add(const TSimplePortionsGroupInfo& item) {
+        BlobBytes.Add(item.BlobBytes);
+        RawBytes.Add(item.RawBytes);
+        Count.Add(item.Count);
+        RecordsCount.Add(item.RecordsCount);
+    }
 
 public:
+    ui64 GetCount() const {
+        return Count.Val();
+    }
+
+    ui64 GetRecordsCount() const {
+        return RecordsCount.Val();
+    }
+
+    ui64 GetBlobBytes() const {
+        return BlobBytes.Val();
+    }
+
+    ui64 GetRawBytes() const {
+        return RawBytes.Val();
+    }
+
     NJson::TJsonValue SerializeToJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("blob_bytes", BlobBytes);
-        result.InsertValue("raw_bytes", RawBytes);
-        result.InsertValue("count", Count);
-        result.InsertValue("records_count", RecordsCount);
+        result.InsertValue("blob_bytes", BlobBytes.Val());
+        result.InsertValue("raw_bytes", RawBytes.Val());
+        result.InsertValue("count", Count.Val());
+        result.InsertValue("records_count", RecordsCount.Val());
         return result;
     }
 
@@ -35,24 +63,101 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{blob_bytes=" << BlobBytes << ";raw_bytes=" << RawBytes << ";count=" << Count << ";records=" << RecordsCount
-                                << "}";
+        return TStringBuilder() << "{blob_bytes=" << BlobBytes.Val() << ";raw_bytes=" << RawBytes.Val() << ";count=" << Count.Val()
+                                << ";records=" << RecordsCount.Val() << "}";
+    }
+
+    TSimplePortionsGroupInfo& operator+=(const TSimplePortionsGroupInfo& item) {
+        Add(item);
+        return *this;
     }
 
     TSimplePortionsGroupInfo operator+(const TSimplePortionsGroupInfo& item) const {
-        TSimplePortionsGroupInfo result;
-        result.BlobBytes = BlobBytes + item.BlobBytes;
-        result.RawBytes = RawBytes + item.RawBytes;
-        result.Count = Count + item.Count;
-        result.RecordsCount = RecordsCount + item.RecordsCount;
+        TSimplePortionsGroupInfo result = *this;
+        result += item;
         return result;
     }
 
-    void AddPortion(const std::shared_ptr<const TPortionInfo>& p);
-    void RemovePortion(const std::shared_ptr<const TPortionInfo>& p);
+    void AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
+        AFL_VERIFY(p);
+        AddPortion(*p);
+    }
 
     void AddPortion(const TPortionInfo& p);
+
+    void RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
+        AFL_VERIFY(p);
+        RemovePortion(*p);
+    }
+
     void RemovePortion(const TPortionInfo& p);
+
+    bool IsEmpty() const {
+        if (!Count.Val()) {
+            AFL_VERIFY(!BlobBytes.Val())("this", DebugString());
+            AFL_VERIFY(!RawBytes.Val())("this", DebugString());
+            AFL_VERIFY(!RecordsCount.Val())("this", DebugString());
+            return true;
+        }
+        return false;
+    }
+};
+
+class TFullPortionsGroupInfo: public TSimplePortionsGroupInfo {
+private:
+    using TBase = TSimplePortionsGroupInfo;
+    using TCountByChannel = THashMap<ui16, i64>;
+    TPositiveControlInteger Blobs;
+    YDB_READONLY_DEF(TCountByChannel, BytesByChannel);
+
+    void Add(const TFullPortionsGroupInfo& item) {
+        TBase::Add(item);
+        Blobs.Add(item.Blobs);
+        for (const auto& [channel, bytes] : item.BytesByChannel) {
+            BytesByChannel[channel] += bytes;
+        }
+    }
+
+public:
+    NJson::TJsonValue SerializeToJson() const {
+        NJson::TJsonValue result = TBase::SerializeToJson();
+        result.InsertValue("blobs", Blobs.Val());
+        {
+            NJson::TJsonValue bytesByChannel = NJson::JSON_MAP;
+            for (const auto& [channel, bytes] : BytesByChannel) {
+                bytesByChannel.InsertValue(ToString(channel), bytes);
+            }
+            result.InsertValue("bytes_by_channel", std::move(bytesByChannel));
+        }
+        return result;
+    }
+
+    TString DebugString() const {
+        return TBase::DebugString();
+    }
+
+    TFullPortionsGroupInfo& operator+=(const TFullPortionsGroupInfo& item) {
+        Add(item);
+        return *this;
+    }
+
+    TFullPortionsGroupInfo operator+(const TFullPortionsGroupInfo& item) const {
+        TFullPortionsGroupInfo result = *this;
+        result += item;
+        return result;
+    }
+
+    void AddPortion(const TPortionDataAccessor& p);
+    void RemovePortion(const TPortionDataAccessor& p);
+
+    bool IsEmpty() const {
+        if (TBase::IsEmpty()) {
+            AFL_VERIFY(!Blobs)("this", DebugString());
+            AFL_VERIFY(BytesByChannel.empty())("this", DebugString());
+            return true;
+        }
+        return false;
+    }
 };
 
 class TPortionGroupCounters: public NColumnShard::TCommonCountersOwner {

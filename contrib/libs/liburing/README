@@ -64,6 +64,11 @@ Building liburing
     make -j$(nproc);
 
     #
+    # Build liburing.pc
+    #
+    make liburing.pc
+
+    #
     # Install liburing (headers, shared/static libs, and manpage).
     #
     sudo make install;

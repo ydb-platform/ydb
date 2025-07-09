@@ -33,17 +33,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 02593c67abef7b0879c4d146f47b2893
-BELONGS ya.make
-    License text:
-        // Copyright Antony Polukhin, 2013-2024.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/any.hpp [361:361]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 224ede317f83c513d1a68907e0d028bc
 BELONGS ya.make
     License text:
@@ -55,11 +44,23 @@ BELONGS ya.make
     Files with this license:
         include/boost/any.hpp [360:360]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 23910b9cea6f83bc545465022dc83ed9
+KEEP     COPYRIGHT_SERVICE_LABEL 56575c8d851d98611bafdb62f758a33b
+BELONGS ya.make
+    License text:
+        // Copyright Antony Polukhin, 2020-2025.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/any/bad_any_cast.hpp [1:1]
+        include/boost/any/unique_any.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9e29a51422491ff093ace215247384ab
 BELONGS ya.make
     License text:
         // Copyright Ruslan Arutyunyan, 2019-2021.
-        // Copyright Antony Polukhin, 2021-2024.
+        // Copyright Antony Polukhin, 2021-2025.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -69,23 +70,22 @@ BELONGS ya.make
         include/boost/any/detail/placeholder.hpp [1:1]
         include/boost/any/fwd.hpp [1:1]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 8476ad19b5e66c88a59e46e73871b064
+KEEP     COPYRIGHT_SERVICE_LABEL f7a6c5f84d4ba4d22fc5a7a38e6014ca
 BELONGS ya.make
     License text:
-        // Copyright Antony Polukhin, 2020-2024.
+        // Copyright Antony Polukhin, 2013-2025.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/any/bad_any_cast.hpp [1:1]
-        include/boost/any/unique_any.hpp [1:1]
+        include/boost/any.hpp [361:361]
 
 KEEP     COPYRIGHT_SERVICE_LABEL fe4a46e0c33e697b28d96bddcd54d9da
 BELONGS ya.make
     License text:
         // Copyright Ruslan Arutyunyan, 2019-2021.
-        // Copyright Antony Polukhin, 2021-2024.
+        // Copyright Antony Polukhin, 2021-2025.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00

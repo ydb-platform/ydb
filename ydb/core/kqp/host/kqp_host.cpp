@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -18,8 +19,11 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
@@ -60,6 +64,38 @@ void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&&
     }
 
     total.SetWorkerCpuTimeUs(total.GetWorkerCpuTimeUs() + stats.GetWorkerCpuTimeUs());
+}
+
+bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
+    ui64 writeCount = 0;
+    ui64 readCount = 0;
+    bool isBatch = false;
+
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->ChildrenSize() == 2
+            && node->Child(0)->Content() == "is_batch"
+            && node->Child(1)->Content() == "true") {
+            isBatch = true;
+            return true;
+        }
+
+        if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            writeCount++;
+        } else if (NYql::NNodes::TCoRead::Match(node.Get())) {
+            readCount++;
+        }
+
+        return true;
+    });
+
+    if (isBatch && (writeCount > 1 || readCount != 0)) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "BATCH can't be used with multiple writes or reads."));
+        return false;
+    }
+
+    return true;
 }
 
 class TKqpResultWriter : public IResultWriter {
@@ -1019,7 +1055,7 @@ private:
 
         for (const auto& operation : queryBlock.Operations()) {
             auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());
-            if (tableData.Metadata->IsOlap() || !tableData.Metadata->SysView.empty()) {
+            if (tableData.Metadata->IsOlap() || tableData.Metadata->Kind == EKikimrTableKind::SysView) {
                 // Always use ScanQuery for queries with OLAP and system tables.
                 return true;
             }
@@ -1130,12 +1166,16 @@ public:
         }
 
         if (FederatedQuerySetup) {
-            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},
+            const auto& hostnamePatterns = QueryServiceConfig.GetHostnamePatterns();
+            const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
+            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
-                                                                                 FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles());
+                                                                                 FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
+                                                                                 QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
+                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
         }
     }
 
@@ -1312,9 +1352,6 @@ private:
                 &effectiveSettings
             );
             SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
-            if (astRes.ActualSyntaxType == NYql::ESyntaxType::Pg) {
-                SessionCtx->Config().IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX;
-            }
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
             queryAst = query.AstResult->Ast;
@@ -1334,7 +1371,14 @@ private:
 
         YQL_ENSURE(queryAst->Root);
         TExprNode::TPtr queryExpr;
+        YQL_CLOG(INFO, CoreDq) << "Good place to weld in";
+
         if (!CompileExpr(*queryAst->Root, queryExpr, ctx, ModuleResolver.get(), nullptr)) {
+            return result;
+        }
+        YQL_CLOG(INFO, CoreDq) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
+
+        if (!CheckIsBatch(queryExpr, ctx)) {
             return result;
         }
 
@@ -1491,8 +1535,14 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
+        if (SessionCtx->Config().EnableNewRBO) {
+            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, SessionCtx->QueryPtr(),
+                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
+        }
+        else {
+            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
+        }
     }
 
     IAsyncQueryResultPtr PrepareDataQueryAstInternal(const TKqpQueryRef& queryAst, const TPrepareSettings& settings,
@@ -1597,7 +1647,13 @@ private:
 
         YQL_ENSURE(ExprCtxStorage);
 
-        auto prepareData = PrepareRewrite(compileResult.QueryExpr, *ExprCtxStorage, *TypesCtx, SessionCtx, Cluster);
+        auto prepareData = PrepareRewrite(
+            compileResult.QueryExpr,
+            *ExprCtxStorage,
+            *TypesCtx,
+            SessionCtx,
+            *FuncRegistry,
+            Cluster);
 
         return MakeIntrusive<TAsyncSplitQueryResult>(
             compileResult.QueryExpr,
@@ -1848,6 +1904,36 @@ private:
         TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
     }
 
+    void InitSolomonProvider() {
+        auto solomonState = MakeIntrusive<TSolomonState>();
+
+        solomonState->Types = TypesCtx.Get();
+        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
+        solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
+        solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
+        solomonState->ExecutorPoolId = AppData()->UserPoolId;
+
+        TypesCtx->AddDataSource(NYql::SolomonProviderName, NYql::CreateSolomonDataSource(solomonState));
+        TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
+    }
+
+    void InitPqProvider() {
+        TString sessionId = CreateGuidAsString();
+        auto state = MakeIntrusive<TPqState>(sessionId);
+        state->SupportRtmrMode = false;
+        state->Types = TypesCtx.Get();
+        state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
+        state->FunctionRegistry = FuncRegistry;
+        state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
+        state->Gateway = FederatedQuerySetup->PqGateway;;
+        state->DqIntegration = NYql::CreatePqDqIntegration(state);
+        state->Gateway->OpenSession(sessionId, "username");
+
+        TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
+        TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
+    }
+
     void Init(EKikimrQueryType queryType) {
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem);
@@ -1875,6 +1961,11 @@ private:
 
         TypesCtx->AddDataSource(providerNames, kikimrDataSource);
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
+        TypesCtx->FilterPushdownOverJoinOptionalSide = SessionCtx->ConfigPtr()->FilterPushdownOverJoinOptionalSide;
+        const auto &yqlCoreOptFlags = SessionCtx->ConfigPtr()->YqlCoreOptimizerFlags;
+        TypesCtx->OptimizerFlags.insert(yqlCoreOptFlags.begin(), yqlCoreOptFlags.end());
+
+        TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->EnableNewRBO;
 
         bool addExternalDataSources = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
             || (queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
@@ -1883,6 +1974,12 @@ private:
             InitGenericProvider();
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider();
+            }
+            if (FederatedQuerySetup->SolomonGateway) {
+                InitSolomonProvider();
+            }
+            if (FederatedQuerySetup->PqGateway) {
+                InitPqProvider();
             }
         }
 
@@ -1919,6 +2016,9 @@ private:
                 || settingName == "TimeOrderRecoverAhead"
                 || settingName == "TimeOrderRecoverRowLimit"
                 || settingName == "MatchRecognizeStream"
+                || settingName == "OptimizerFlags"
+                || settingName == "FuseEquiJoinsInputMultiLabels"
+                || settingName == "PullUpFlatMapOverJoinMultipleLabels"
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
@@ -1939,6 +2039,23 @@ private:
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()
             .AddOptimization(true, false)
+            .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
+            .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
+            .AddRun(&NullProgressWriter)
+            .Build();
+
+        YqlTransformerNewRBO = TTransformationPipeline(TypesCtx)
+            .AddServiceTransformers()
+            .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
+                NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
+            .AddPreTypeAnnotation()
+            .AddExpressionEvaluation(*FuncRegistry)
+            .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
+            .AddIOAnnotation(false)
+            .AddTypeAnnotation()
+            .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .AddPostTypeAnnotation()
+            .AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
             .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
             .AddRun(&NullProgressWriter)
@@ -1978,6 +2095,7 @@ private:
         SetupSession(queryType);
 
         YqlTransformer->Rewind();
+        YqlTransformerNewRBO->Rewind();
 
         ResultProviderConfig->FillSettings = FillSettings;
         ResultProviderConfig->CommittedResults.clear();
@@ -2014,6 +2132,7 @@ private:
     IDataProvider::TFillSettings FillSettings;
     TIntrusivePtr<TResultProviderConfig> ResultProviderConfig;
     TAutoPtr<IGraphTransformer> YqlTransformer;
+    TAutoPtr<IGraphTransformer> YqlTransformerNewRBO;
     TAutoPtr<IGraphTransformer> DataQueryAstTransformer;
     TExprNode::TPtr FakeWorld;
     TKqpAsyncResultBase<IKqpHost::TQueryResult>::TAsyncTransformStatusCallback DataProvidersFinalizer;

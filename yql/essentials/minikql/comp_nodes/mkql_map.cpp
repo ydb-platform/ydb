@@ -111,19 +111,19 @@ protected:
         }
 
         ui64 GetListLength() const final {
-            if (!Length) {
-                Length = List.GetListLength();
+            if (!Length_) {
+                Length_ = List.GetListLength();
             }
 
-            return *Length;
+            return *Length_;
         }
 
         bool HasListItems() const final {
-            if (!HasItems) {
-                HasItems = List.HasListItems();
+            if (!HasItems_) {
+                HasItems_ = List.HasListItems();
             }
 
-            return *HasItems;
+            return *HasItems_;
         }
 
         bool HasFastListLength() const final {
@@ -345,7 +345,7 @@ public:
 
             const auto size = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), list, ctx.Codegen, block);
 
-            const auto itemsPtr = *Stateless || ctx.AlwaysInline ?
+            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
                 new AllocaInst(elementsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
                 new AllocaInst(elementsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, size, itemsPtr, block);
@@ -388,7 +388,7 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListMapWrapper::MakeLazyList));
+            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
             const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);

@@ -26,6 +26,10 @@
 
 namespace NYT {
 
+const TString DefaultHosts = "hosts";
+const TString DefaultRemoteTempTablesDirectory = "//tmp/yt_wrapper/table_storage";
+const TString DefaultRemoteTempFilesDirectory = "//tmp/yt_wrapper/file_storage";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TConfig::GetBool(const char* var, bool defaultValue)
@@ -186,15 +190,43 @@ void TConfig::LoadTimings()
     HostListUpdateInterval = TDuration::Seconds(60);
 }
 
+void TConfig::LoadProxyUrlAliasingRules()
+{
+    TString strConfig = GetEnv("YT_PROXY_URL_ALIASING_CONFIG");
+    if (!strConfig) {
+        return;
+    }
+
+    NYT::TNode nodeConfig;
+
+    try {
+        nodeConfig = NodeFromYsonString(strConfig);
+        Y_ENSURE(nodeConfig.IsMap());
+    } catch (const yexception& exc) {
+        ythrow yexception()
+            << "Failed to parse YT_PROXY_URL_ALIASING_CONFIG (it must be yson map): "
+            << exc;
+    }
+
+    for (const auto& [key, value] : nodeConfig.AsMap()) {
+        Y_ENSURE(value.IsString(), "Proxy url is not string");
+        ProxyUrlAliasingRules.emplace(key, value.AsString());
+    }
+}
+
 void TConfig::Reset()
 {
-    Hosts = GetEnv("YT_HOSTS", "hosts");
+    Hosts = GetEnv("YT_HOSTS", DefaultHosts);
     Pool = GetEnv("YT_POOL");
     Prefix = GetEnv("YT_PREFIX");
     ApiVersion = GetEnv("YT_VERSION", "v3");
     LogLevel = GetEnv("YT_LOG_LEVEL", "error");
     LogPath = GetEnv("YT_LOG_PATH");
-    LogUseCore = GetBool("YT_LOG_USE_CORE", false);
+    LogUseCore = GetBool("YT_LOG_USE_CORE", true);
+    StructuredLog = GetEnv("YT_STRUCTURED_LOG");
+
+    HttpProxyRole = GetEnv("YT_HTTP_PROXY_ROLE");
+    RpcProxyRole = GetEnv("YT_RPC_PROXY_ROLE");
 
     ContentEncoding = GetEncoding("YT_CONTENT_ENCODING");
     AcceptEncoding = GetEncoding("YT_ACCEPT_ENCODING");
@@ -211,6 +243,7 @@ void TConfig::Reset()
     LoadToken();
     LoadSpec();
     LoadTimings();
+    LoadProxyUrlAliasingRules();
 
     CacheUploadDeduplicationMode = GetUploadingDeduplicationMode("YT_UPLOAD_DEDUPLICATION", EUploadDeduplicationMode::Host);
     CacheUploadDeduplicationThreshold = 10_MB;
@@ -219,12 +252,9 @@ void TConfig::Reset()
     ReadRetryCount = Max(GetInt("YT_READ_RETRY_COUNT", 30), 1);
     StartOperationRetryCount = Max(GetInt("YT_START_OPERATION_RETRY_COUNT", 30), 1);
 
-    RemoteTempFilesDirectory = GetEnv("YT_FILE_STORAGE",
-        "//tmp/yt_wrapper/file_storage");
-    RemoteTempTablesDirectory = GetEnv("YT_TEMP_TABLES_STORAGE",
-        "//tmp/yt_wrapper/table_storage");
-    RemoteTempTablesDirectory = GetEnv("YT_TEMP_DIR",
-        RemoteTempTablesDirectory);
+    RemoteTempFilesDirectory = GetEnv("YT_FILE_STORAGE", DefaultRemoteTempFilesDirectory);
+    RemoteTempTablesDirectory = GetEnv("YT_TEMP_TABLES_STORAGE", DefaultRemoteTempTablesDirectory);
+    RemoteTempTablesDirectory = GetEnv("YT_TEMP_DIR", RemoteTempTablesDirectory);
     KeepTempTables = GetBool("YT_KEEP_TEMP_TABLES");
 
     InferTableSchema = false;

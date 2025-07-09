@@ -10,6 +10,8 @@
 #include <aws/common/linked_list.h>
 #include <aws/io/exports.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_C_IO_PACKAGE_ID 1
 
 struct aws_io_handle {
@@ -248,6 +250,10 @@ enum aws_io_errors {
     AWS_IO_STREAM_SEEK_UNSUPPORTED,
     AWS_IO_STREAM_GET_LENGTH_UNSUPPORTED,
 
+    AWS_IO_TLS_ERROR_READ_FAILURE,
+
+    AWS_ERROR_PEM_MALFORMED,
+
     AWS_IO_ERROR_END_RANGE = AWS_ERROR_ENUM_END_RANGE(AWS_C_IO_PACKAGE_ID),
     AWS_IO_INVALID_FILE_HANDLE = AWS_ERROR_INVALID_FILE_HANDLE,
 };
@@ -271,5 +277,6 @@ AWS_IO_API
 void aws_io_fatal_assert_library_initialized(void);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_IO_H */

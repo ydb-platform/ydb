@@ -58,7 +58,7 @@ class TTableInfo {
 
         auto it = info->Columns.begin();
         while (it != info->Columns.end()) {
-            Y_ABORT_UNLESS(result.emplace(it->second.Name, it).second);
+            Y_ENSURE(result.emplace(it->second.Name, it).second);
             it++;
         }
 
@@ -83,7 +83,7 @@ public:
 
     std::pair<NScheme::TTypeInfo, TString> GetColumnType(const TString& name) const {
         auto it = ColumnNameIndex.find(name);
-        Y_ABORT_UNLESS(it != ColumnNameIndex.end());
+        Y_ENSURE(it != ColumnNameIndex.end());
         auto& column = it->second->second;
         return {column.Type, column.TypeMod};
     }
@@ -96,7 +96,7 @@ public:
         TVector<ui32> result;
         for (const auto& name : order) {
             auto it = ColumnNameIndex.find(name);
-            Y_ABORT_UNLESS(it != ColumnNameIndex.end());
+            Y_ENSURE(it != ColumnNameIndex.end());
 
             if (it->second->second.IsKey) {
                 continue;
@@ -110,7 +110,7 @@ public:
 
     ui32 KeyOrder(const TString& name) const {
         auto it = ColumnNameIndex.find(name);
-        Y_ABORT_UNLESS(it != ColumnNameIndex.end());
+        Y_ENSURE(it != ColumnNameIndex.end());
 
         if (!it->second->second.IsKey) {
             return Max<ui32>();

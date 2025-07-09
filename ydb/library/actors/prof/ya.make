@@ -7,7 +7,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/tcmalloc/malloc_extension
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/containers/atomizer
 )
 

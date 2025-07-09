@@ -45,7 +45,7 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
                                                 const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     DataShard.ReleaseCache(*tx);
 
@@ -56,14 +56,14 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
             case ERestoreDataStatus::Restart:
                 return EExecutionStatus::Restart;
             case ERestoreDataStatus::Error:
-                Y_ABORT("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+                Y_ENSURE(false, "Failed to restore tx data: " << tx->GetDataTx()->GetErrors());
         }
     }
 
     TDataShardLocksDb locksDb(DataShard, txc);
     TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
-    tx->GetDataTx()->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
+    tx->GetDataTx()->SetMvccVersion(DataShard.GetMvccVersion(tx));
     IEngineFlat *engine = tx->GetDataTx()->GetEngine();
     try {
         auto &outReadSets = op->OutReadSets();
@@ -76,7 +76,7 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
         op->OutReadSets().clear();
 
         auto result = engine->PrepareOutgoingReadsets();
-        Y_VERIFY_S(result == IEngineFlat::EResult::Ok,
+        Y_ENSURE(result == IEngineFlat::EResult::Ok,
                    "Engine errors at " << DataShard.TabletID() << " for " << *op
                    << ": " << engine->GetErrors());
 

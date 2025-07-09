@@ -106,17 +106,8 @@ void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topolo
     if (dsproxyCost == vdiskCost) {
         return;
     }
+    UNIT_ASSERT(queuePut != 0);
     UNIT_ASSERT_C(oks != actor->RequestsSent || queuePut != queueSent, str.Str());
-}
-
-#define MAKE_TEST(erasure, requestType, requests, inflight)                         \
-Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight) {   \
-    auto groupType = TBlobStorageGroupType::Erasure##erasure;                       \
-    ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;   \
-    ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;  \
-    TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true); \
-    auto actor = new TInflightActor##requestType({requests, inflight});             \
-    TestDSProxyAndVDiskEqualCost(topology, actor);                                  \
 }
 
 #define MAKE_TEST_W_DATASIZE(erasure, requestType, requests, inflight, dataSize)                        \
@@ -280,6 +271,56 @@ void TestDiskTimeAvailableScaling() {
 Y_UNIT_TEST_SUITE(DiskTimeAvailable) {
     Y_UNIT_TEST(Scaling) {
         TestDiskTimeAvailableScaling();
+    }
+}
+
+template <typename TInflightActor>
+void TestDSProxyAndVDiskEqualByteCounters(TInflightActor* actor) {
+    std::unique_ptr<TEnvironmentSetup> env;
+    ui32 groupSize;
+    TBlobStorageGroupType groupType;
+    ui32 groupId;
+    std::vector<ui32> pdiskLayout;
+    TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
+    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout);
+    actor->SetGroupId(TGroupId::FromValue(groupId));
+    env->Runtime->Register(actor, 1);
+    env->Sim(TDuration::Minutes(10));
+    ui64 dsproxyCounter = 0;
+    ui64 vdiskCounter = 0;
+
+    for (ui32 nodeId = 1; nodeId <= groupSize; ++nodeId) {
+        auto* appData = env->Runtime->GetNode(nodeId)->AppData.get();
+        for(auto sizeClass : {"256", "4096", "262144", "1048576", "16777216", "4194304"})
+            dsproxyCounter += GetServiceCounters(appData->Counters, "dsproxynode")->
+                    GetSubgroup("subsystem", "request")->
+                    GetSubgroup("storagePool", env->StoragePoolName)->
+                    GetSubgroup("handleClass", "PutTabletLog")->
+                    GetSubgroup("sizeClass", sizeClass)->
+                    GetCounter("generatedSubrequestBytes")->Val();
+    }
+    vdiskCounter = env->AggregateVDiskCountersWithHandleClass(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
+            "PutTabletLog", "requestBytes");
+    if constexpr(VERBOSE) {
+        for (ui32 i = 1; i <= groupSize; ++i) {
+            Cerr << " ##################### Node " << i << " ##################### " << Endl;
+            env->Runtime->GetNode(i)->AppData->Counters->OutputPlainText(Cerr);
+        }
+    }
+    UNIT_ASSERT(dsproxyCounter != 0);
+    UNIT_ASSERT_VALUES_EQUAL(dsproxyCounter, vdiskCounter);
+}
+
+
+Y_UNIT_TEST_SUITE(TestDSProxyAndVDiskEqualByteCounters) {
+    Y_UNIT_TEST(MultiPut) {
+        auto actor = new TInflightActorPut({10, 10}, 1000, 10);                       
+        TestDSProxyAndVDiskEqualByteCounters(actor);    
+    }
+
+    Y_UNIT_TEST(SinglePut) {
+        auto actor = new TInflightActorPut({1, 1}, 1000);                       
+        TestDSProxyAndVDiskEqualByteCounters(actor);    
     }
 }
 

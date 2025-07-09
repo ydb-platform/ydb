@@ -1,18 +1,25 @@
-from typing import Callable, Type
+from collections.abc import Callable
+from typing import TypeVar, Union
 
 import pytest
 
-from multidict import MultiMapping
+from multidict import CIMultiDict, CIMultiDictProxy, MultiDict, MultiDictProxy
+
+_T = TypeVar("_T")
+_MD_Types = Union[
+    MultiDict[_T], CIMultiDict[_T], MultiDictProxy[_T], CIMultiDictProxy[_T]
+]
+GetVersion = Callable[[_MD_Types[_T]], int]
 
 
-def test_getversion_bad_param(multidict_getversion_callable):
+def test_getversion_bad_param(multidict_getversion_callable: GetVersion[str]) -> None:
     with pytest.raises(TypeError):
-        multidict_getversion_callable(1)
+        multidict_getversion_callable(1)  # type: ignore[arg-type]
 
 
 def test_ctor(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m1 = any_multidict_class()
     v1 = multidict_getversion_callable(m1)
@@ -22,201 +29,290 @@ def test_ctor(
 
 
 def test_add(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.add("key", "val")
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_delitem(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     del m["key"]
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_delitem_not_found(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     with pytest.raises(KeyError):
         del m["notfound"]
     assert multidict_getversion_callable(m) == v
+    assert v == multidict_getversion_callable(p)
 
 
 def test_setitem(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m["key"] = "val2"
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_setitem_not_found(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m["notfound"] = "val2"
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_clear(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.clear()
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_setdefault(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.setdefault("key2", "val2")
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_popone(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.popone("key")
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_popone_default(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.popone("key2", "default")
-    assert multidict_getversion_callable(m) == v
+    v2 = multidict_getversion_callable(m)
+    assert v2 == v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_popone_key_error(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     with pytest.raises(KeyError):
         m.popone("key2")
-    assert multidict_getversion_callable(m) == v
+    v2 = multidict_getversion_callable(m)
+    assert v2 == v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_pop(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.pop("key")
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_pop_default(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.pop("key2", "default")
-    assert multidict_getversion_callable(m) == v
+    v2 = multidict_getversion_callable(m)
+    assert v2 == v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_pop_key_error(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     with pytest.raises(KeyError):
         m.pop("key2")
-    assert multidict_getversion_callable(m) == v
+    v2 = multidict_getversion_callable(m)
+    assert v2 == v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_popall(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.popall("key")
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_popall_default(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.popall("key2", "default")
-    assert multidict_getversion_callable(m) == v
+    v2 = multidict_getversion_callable(m)
+    assert v2 == v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_popall_key_error(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     with pytest.raises(KeyError):
         m.popall("key2")
-    assert multidict_getversion_callable(m) == v
+    v2 = multidict_getversion_callable(m)
+    assert v2 == v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_popitem(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     m.add("key", "val")
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     m.popitem()
-    assert multidict_getversion_callable(m) > v
+    v2 = multidict_getversion_callable(m)
+    assert v2 > v
+    assert v2 == multidict_getversion_callable(p)
 
 
 def test_popitem_key_error(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    any_multidict_proxy_class: type[MultiDictProxy[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
+    p = any_multidict_proxy_class(m)
     v = multidict_getversion_callable(m)
+    assert v == multidict_getversion_callable(p)
     with pytest.raises(KeyError):
         m.popitem()
-    assert multidict_getversion_callable(m) == v
+    v2 = multidict_getversion_callable(m)
+    assert v2 == v
+    assert v2 == multidict_getversion_callable(p)

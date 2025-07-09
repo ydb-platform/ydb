@@ -38,6 +38,11 @@ void TYqlCalcJob::Load(IInputStream& stream) {
     ::Load(&stream, UseResultYson_);
 }
 
+void TYqlCalcJob::Do(const NYT::TRawJobContext& jobContext) {
+    DoImpl(jobContext.GetInputFile(), jobContext.GetOutputFileList());
+    Finish();
+}
+
 void TYqlCalcJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles) {
     NYT::TTableReader<NYT::TNode> reader(MakeIntrusive<NYT::TNodeTableReader>(MakeIntrusive<NYT::TJobReader>(inHandle)));
     NYT::TTableWriter<NYT::TNode> writer(MakeIntrusive<NYT::TNodeTableWriter>(MakeHolder<NYT::TJobWriter>(outHandles)));
@@ -45,7 +50,7 @@ void TYqlCalcJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     Init();
 
     TLambdaBuilder builder(FunctionRegistry.Get(), *Alloc,Env.Get(),
-        RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), nullptr, SecureParamsProvider.Get());
+        RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), nullptr, SecureParamsProvider.Get(), LogProvider.Get());
 
     std::function<void(const NUdf::TUnboxedValuePod&, TType*, TVector<ui32>*)> flush;
     if (UseResultYson_) {

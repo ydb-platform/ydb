@@ -1,20 +1,20 @@
 #pragma once
 
 
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/testlib/fake_coordinator.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
+#include <ydb/core/testlib/fake_coordinator.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/core/protos/follower_group.pb.h>
-#include <ydb/core/protos/msgbus_kv.pb.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 
 #include <functional>
 
@@ -73,6 +73,14 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
         OPTION(bool, SetupKqpProxy, false);
         OPTION(bool, EnableStrictAclCheck, false);
+        OPTION(std::optional<bool>, EnableStrictUserManagement, std::nullopt);
+        OPTION(std::optional<bool>, EnableDatabaseAdmin, std::nullopt);
+        OPTION(std::optional<bool>, EnablePermissionsExport, std::nullopt);
+        OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
+        OPTION(std::optional<bool>, EnableLocalDBBtreeIndex, std::nullopt);
+        OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
+        OPTION(std::optional<bool>, EnableSystemNamesProtection, std::nullopt);
+        OPTION(std::optional<bool>, EnableRealSystemViewPaths, std::nullopt);
 
         #undef OPTION
     };
@@ -92,11 +100,14 @@ namespace NSchemeShardUT_Private {
         TActorId MeteringFake;
         THolder<NYdb::TDriver> YdbDriver;
 
+        TTestActorRuntime::TEventObserverHolder SysViewsRosterUpdateObserver;
+        bool SysViewsRosterUpdateFinished;
+
     public:
         static bool ENABLE_SCHEMESHARD_LOG;
 
         TTestEnv(TTestActorRuntime& runtime, ui32 nchannels = 4, bool enablePipeRetries = true,
-            TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, bool enableSystemViews = false);
+            TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts,
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory = {});
 
@@ -128,6 +139,9 @@ namespace NSchemeShardUT_Private {
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<TShardIdx> shardIds);
 
+        void AddSysViewsRosterUpdateObserver(TTestActorRuntime& runtime);
+        void WaitForSysViewsRosterUpdate(TTestActorRuntime& runtime);
+
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 
         void TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime, const TString& path,
@@ -145,10 +159,15 @@ namespace NSchemeShardUT_Private {
 
         void BootSchemeShard(TTestActorRuntime& runtime, ui64 schemeRoot);
         void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId);
+        NKikimrConfig::TAppConfig GetAppConfig() const;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // A wrapper to run test scenarios with reboots of schemeshard, hive and coordinator
+    // The idea is to run the same test scenario multiple times and on each run restart a tablet **once**
+    // on receiving a non-filtered event. A given tablet is restarted when it receives an event for which
+    // PassUserRequests() doesn't return true. On the first run, it is restarted on the first such event,
+    // on the second run - on the second event and so on.
     class TTestWithReboots {
     protected:
         struct TDatashardLogBatchingSwitch {
@@ -160,6 +179,7 @@ namespace NSchemeShardUT_Private {
 
     public:
         TVector<ui64> TabletIds;
+        TSet<ui32> NoRebootEventTypes;
         THolder<TTestActorRuntime> Runtime;
         TTestEnvOptions EnvOpts;
         THolder<TTestEnv> TestEnv;
@@ -193,7 +213,7 @@ namespace NSchemeShardUT_Private {
     private:
         virtual TTestEnv* CreateTestEnv();
         // Make sure that user requests are not dropped
-        static bool PassUserRequests(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
+        bool PassUserRequests(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
 
     private:
         struct TFinalizer;

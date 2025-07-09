@@ -20,10 +20,7 @@ void TCommandUpdate::Config(TConfig& config) {
 }
 
 int TCommandUpdate::Run(TConfig& config) {
-    Y_UNUSED(config);
-
-
-    TYdbUpdater updater;
+    TYdbUpdater updater(config.StorageUrl.value());
     return updater.Update(ForceUpdate);
 }
 

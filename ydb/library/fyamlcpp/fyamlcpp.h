@@ -706,6 +706,10 @@ public:
 
     TNodeRef Buildf(const char* content);
 
+    TNodeRef CreateScalar(const TString& content);
+    TNodeRef CreateMapping();
+    TNodeRef CreateSequence();
+
     void Resolve();
 
     bool HasDirectives();

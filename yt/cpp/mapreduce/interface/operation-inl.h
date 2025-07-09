@@ -8,7 +8,7 @@
 
 #include "errors.h"
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/singleton.h>
 #include <util/system/type_name.h>
 

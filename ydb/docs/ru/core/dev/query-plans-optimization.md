@@ -20,7 +20,7 @@ SELECT season_id, episode_id
 
 - {{ ydb-short-name }} CLI
 
-  Получить план запроса через {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) можно с помощью следующей команды:
+  Получить план запроса через {{ ydb-short-name }} [CLI](../reference/ydb-cli/commands/explain-plan.md) можно с помощью следующей команды:
 
   ```bash
   ydb -p <profile_name> table query explain \
@@ -63,7 +63,7 @@ ALTER TABLE episodes
   ADD INDEX title_index GLOBAL ON (title)
 ```
 
-Стоит отметить, что в данном примере мы используем [синхронный вторичный индекс](../concepts/_includes/secondary_indexes.md#sync). Создание индекса в {{ ydb-short-name }} — асинхронная операция, поэтому даже если запрос на построение завершился успехом, стоит подождать какое-то время, так как фактически индекс может быть еще не готов к использованию. Управлять асинхронной операцией можно через [CLI](../reference/ydb-cli/commands/_includes/secondary_index.md#add).
+Стоит отметить, что в данном примере мы используем [синхронный вторичный индекс](../concepts/secondary_indexes.md#sync). Создание индекса в {{ ydb-short-name }} — асинхронная операция, поэтому даже если запрос на построение завершился успехом, стоит подождать какое-то время, так как фактически индекс может быть еще не готов к использованию. Управлять асинхронной операцией можно через [CLI](../reference/ydb-cli/commands/secondary_index.md#add).
 
 Построим план того же запроса с использованием вторичного индекса `title_index`. Обратите внимание, что вторичный индекс надо явно указать в запросе через конструкцию `VIEW`.
 

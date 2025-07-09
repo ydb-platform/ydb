@@ -92,7 +92,7 @@ public:
     virtual bool IsReadyToExecute(TOperation::TPtr op) const = 0;
     virtual TOperation::TPtr FindReadyOperation() const
     {
-        Y_FAIL_S("FindReadyOperation is not implemented for execution unit " << Kind);
+        Y_ENSURE(false, "FindReadyOperation is not implemented for execution unit " << Kind);
     }
 
     virtual EExecutionStatus Execute(TOperation::TPtr op,

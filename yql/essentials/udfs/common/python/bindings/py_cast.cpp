@@ -22,15 +22,16 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
+#include <util/generic/scope.h>
 #include <util/string/join.h>
 #include <util/string/builder.h>
 
 #ifdef HAVE_LONG_LONG
-#   define YQL_PyLong_AsUnsignedMask PyLong_AsUnsignedLongLongMask
+#   define YQL_PyLong_AsUnsignedMask PyLong_AsUnsignedLongLongMask // NOLINT(readability-identifier-naming)
 #   define YQL_PyLong_Asi64 PyLong_AsLongLong
 #   define YQL_PyLong_Asui64 PyLong_AsUnsignedLongLong
 #else
-#   define YQL_PyLong_AsUnsignedMask PyLong_AsUnsignedLongMask
+#   define YQL_PyLong_AsUnsignedMask PyLong_AsUnsignedLongMask // NOLINT(readability-identifier-naming)
 #   define YQL_PyLong_Asi64 PyLong_AsLong
 #   define YQL_PyLong_Asui64 PyLong_AsUnsignedLong
 #endif
@@ -252,7 +253,7 @@
     template <> \
     bool TryPyCast(PyObject* value, Type& result) { \
         if (PyUnicode_Check(value)) { \
-            const TPyObjectPtr utf8(PyUnicode_AsUTF8String(value)); \
+            const TPyObjectPtr utf8(AsUtf8StringOrThrow(value)); \
             char* str = nullptr; \
             Py_ssize_t size = 0; \
             int rc = PyBytes_AsStringAndSize(utf8.Get(), &str, &size); \
@@ -278,6 +279,22 @@
 namespace NPython {
 
 using namespace NKikimr;
+
+namespace {
+
+NPython::TPyObjectPtr AsUtf8StringOrThrow(PyObject* obj) {
+    auto* utf8String = PyUnicode_AsUTF8String(obj);
+    if (!utf8String) {
+        Y_ENSURE(PyErr_Occurred());
+        Y_DEFER {
+            PyErr_Clear();
+        };
+        throw yexception() << "Failed to convert the string to UTF-8 format. Original message is:\n" << GetLastErrorAsString() << "\n";
+    }
+    return NPython::TPyObjectPtr(utf8String);
+}
+
+} // namespace
 
 inline void ThrowCastTypeException(PyObject* value, TStringBuf toType) {
     throw yexception() << "Can't cast object '" << Py_TYPE(value)->tp_name << "' to " << toType
@@ -548,7 +565,7 @@ NUdf::TUnboxedValue FromPyData(
     case NUdf::TDataType<NUdf::TUtf8>::Id:
     case NUdf::TDataType<NUdf::TJson>::Id:
         if (PyUnicode_Check(value)) {
-            const TPyObjectPtr uif8(PyUnicode_AsUTF8String(value));
+            const TPyObjectPtr uif8(AsUtf8StringOrThrow(value));
             return ctx->ValueBuilder->NewString(PyCast<NUdf::TStringRef>(uif8.Get()));
         }
         throw yexception() << "Python object " << PyObjectRepr(value) << " has invalid value for unicode";
@@ -557,7 +574,7 @@ NUdf::TUnboxedValue FromPyData(
     case NUdf::TDataType<NUdf::TJson>::Id:
     case NUdf::TDataType<NUdf::TUtf8>::Id: {
         if (PyUnicode_Check(value)) {
-            const TPyObjectPtr utf8(PyUnicode_AsUTF8String(value));
+            const TPyObjectPtr utf8(AsUtf8StringOrThrow(value));
             return ctx->ValueBuilder->NewString(PyCast<NUdf::TStringRef>(utf8.Get()));
         }
 

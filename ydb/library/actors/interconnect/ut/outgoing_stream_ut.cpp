@@ -6,28 +6,35 @@
 #define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(OutgoingStream) {
-    Y_UNIT_TEST(Basic) {
-        std::vector<char> buffer;
-        buffer.resize(4 << 20);
+    void OutgoingTest(bool withExternal) {
+        struct {
+            ui32 ZcCounter = 0; // ZcCounter to handle zero copy async transfer from some event queue
+            std::vector<char> Buffer;
+        } ev;
+        ev.Buffer.resize(4 << 20);
 
         TReallyFastRng32 rng(EntropyPool());
-        for (char *p = buffer.data(); p != buffer.data() + buffer.size(); p += sizeof(ui32)) {
+        for (char *p = ev.Buffer.data(); p != ev.Buffer.data() + ev.Buffer.size(); p += sizeof(ui32)) {
             *reinterpret_cast<ui32*>(p) = rng();
         }
 
         for (ui32 nIter = 0; nIter < 10; ++nIter) {
-            Cerr << "nIter# " << nIter << Endl;
+            Ctest << "nIter# " << nIter << Endl;
 
             size_t base = 0; // number of dropped bytes
             size_t sendOffset = 0; // offset to base
             size_t pending = 0; // number of bytes in queue
 
-            NInterconnect::TOutgoingStreamT<4096> stream;
+            using TOutStream = NInterconnect::TOutgoingStreamT<4096>;
+            TOutStream stream;
+            bool zcSync = false;
 
             size_t numRewindsRemain = 10;
+            
+            ui32 zcTransferId = 0; // Emulate zc copy counter
 
-            while (base != buffer.size()) {
-                const size_t bytesToEnd = buffer.size() - (base + sendOffset);
+            while (base != ev.Buffer.size()) {
+                const size_t bytesToEnd = ev.Buffer.size() - (base + sendOffset);
 
                 Ctest << "base# " << base << " sendOffset# " << sendOffset << " pending# " << pending
                     << " bytesToEnd# " << bytesToEnd;
@@ -37,15 +44,27 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
 
                 const size_t maxBuffers = 128;
                 std::vector<NActors::TConstIoVec> iov;
-                stream.ProduceIoVec(iov, maxBuffers, Max<size_t>());
+                std::vector<TOutStream::TBufController> ctrl;
+                stream.ProduceIoVec(iov, maxBuffers, Max<size_t>(), withExternal ? &ctrl : nullptr);
+
+                if (withExternal) {
+                    Y_ABORT_UNLESS(iov.size() == ctrl.size());
+                    if (zcSync == false) {
+                        for (auto& x : ctrl) {
+                            if (x.ZcReady()) {
+                                x.Update(++zcTransferId);
+                            }
+                        }
+                    }
+                }
                 size_t offset = base + sendOffset;
                 for (const auto& [ptr, len] : iov) {
-                    UNIT_ASSERT(memcmp(buffer.data() + offset, ptr, len) == 0);
+                    UNIT_ASSERT(memcmp(ev.Buffer.data() + offset, ptr, len) == 0);
                     offset += len;
                 }
                 UNIT_ASSERT(iov.size() == maxBuffers || offset == base + sendOffset + pending);
 
-                const char *nextData = buffer.data() + base + sendOffset + pending;
+                const char *nextData = ev.Buffer.data() + base + sendOffset + pending;
                 const size_t nextDataMaxLen = bytesToEnd - pending;
                 const size_t nextDataLen = nextDataMaxLen ? rng() % Min<size_t>(16384, nextDataMaxLen) + 1 : 0;
 
@@ -54,7 +73,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
                     size_t offset = base + sendOffset + pending - bytesToScan;
                     stream.ScanLastBytes(bytesToScan, [&](TContiguousSpan span) {
                         UNIT_ASSERT(offset + span.size() <= base + sendOffset + pending);
-                        UNIT_ASSERT(memcmp(buffer.data() + offset, span.data(), span.size()) == 0);
+                        UNIT_ASSERT(memcmp(ev.Buffer.data() + offset, span.data(), span.size()) == 0);
                         offset += span.size();
                     });
                     UNIT_ASSERT_VALUES_EQUAL(offset, base + sendOffset + pending);
@@ -67,7 +86,8 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
                     ADVANCE,
                     REWIND,
                     DROP,
-                    BOOKMARK
+                    BOOKMARK,
+                    EMULATE_ZC_USAGE,
                 };
 
                 std::vector<EAction> actions;
@@ -83,13 +103,17 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
                 actions.push_back(EAction::ADVANCE);
                 actions.push_back(EAction::DROP);
 
+                if (withExternal) {
+                    actions.push_back(EAction::EMULATE_ZC_USAGE);
+                }
+
                 switch (actions[rng() % actions.size()]) {
                     case EAction::COPY_APPEND: {
                         Ctest << " COPY_APPEND nextDataLen# " << nextDataLen;
                         auto span = stream.AcquireSpanForWriting(nextDataLen);
                         UNIT_ASSERT(span.size() != 0);
                         memcpy(span.data(), nextData, span.size());
-                        stream.Append(span);
+                        stream.Append(span, nullptr);
                         pending += span.size();
                         break;
                     }
@@ -102,7 +126,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
 
                     case EAction::REF_APPEND:
                         Ctest << " REF_APPEND nextDataLen# " << nextDataLen;
-                        stream.Append({nextData, nextDataLen});
+                        stream.Append({nextData, nextDataLen}, &ev.ZcCounter);
                         pending += nextDataLen;
                         break;
 
@@ -132,16 +156,33 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
                         break;
                     }
 
-                    case EAction::BOOKMARK:
+                    case EAction::BOOKMARK: {
                         Ctest << " BOOKMARK nextDataLen# " << nextDataLen;
                         auto bookmark = stream.Bookmark(nextDataLen);
                         stream.WriteBookmark(std::move(bookmark), {nextData, nextDataLen});
                         pending += nextDataLen;
                         break;
+                    }
+
+                    case EAction::EMULATE_ZC_USAGE:
+                        if (zcSync == false) {
+                            UNIT_ASSERT_VALUES_EQUAL(ev.ZcCounter, zcTransferId);
+                            zcSync = true;
+                        }
+                        break;
                 }
 
                 Ctest << Endl;
             }
+            ev.ZcCounter = 0;
         }
+    }
+
+    Y_UNIT_TEST(Basic) {
+        OutgoingTest(false);
+    }
+
+    Y_UNIT_TEST(WithExternalLife) {
+        OutgoingTest(true);
     }
 }

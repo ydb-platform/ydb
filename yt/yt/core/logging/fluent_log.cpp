@@ -8,6 +8,29 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TOneShotFluentLogEvent::TOneShotFluentLogEvent(
+    TStatePtr state,
+    const NLogging::TLogger& logger,
+    NLogging::ELogLevel level)
+    : TBase(state->GetConsumer())
+    , State_(std::move(state))
+    , Logger_(&logger)
+    , Level_(level)
+{
+    for (const auto& [key, value] : logger.GetStructuredTags()) {
+        (*this).Item(key).Value(value);
+    }
+}
+
+TOneShotFluentLogEvent::~TOneShotFluentLogEvent()
+{
+    if (State_ && *Logger_) {
+        LogStructuredEvent(*Logger_, State_->GetValue(), Level_);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TOneShotFluentLogEvent LogStructuredEventFluently(const TLogger& logger, ELogLevel level)
 {
     return TOneShotFluentLogEvent(

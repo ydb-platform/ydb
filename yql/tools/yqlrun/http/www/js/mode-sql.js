@@ -25,7 +25,7 @@ var SqlHighlightRules = function() {
         "avg|cast|coalesce|likely|random|randomnumber|filecontent|filepath|length|max|median|count|count_if|" +
         "grouping|min|percentile|sum|min_by|max_by|min_of|max_of|stddev|variance|" +
         "stddev_sample|stddev_population|variance_sample|variance_population|" +
-        "bool_and|bool_or|bit_and|bit_or|bit_xor|some|list|unique|sakura|betula|banach|smith|hegel|aristotle|plato|quine|marx|freud|hahn|cedar"
+        "bool_and|bool_or|bit_and|bit_or|bit_xor|some|list|unique"
     );
 
     var dataTypes = (

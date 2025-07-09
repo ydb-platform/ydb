@@ -45,8 +45,8 @@ private:
 };
 
 TTaskTransformFactory CreateCommonDqTaskTransformFactory() {
-    return [] (const THashMap<TString, TString>& taskParams, const IFunctionRegistry* funcRegistry) -> TCallableVisitFuncProvider {
-        Y_UNUSED(taskParams);
+    return [] (const TTaskTransformArguments& args, const IFunctionRegistry* funcRegistry) -> TCallableVisitFuncProvider {
+        Y_UNUSED(args);
         return TCommonDqTaskTransform(*funcRegistry);
     };
 }

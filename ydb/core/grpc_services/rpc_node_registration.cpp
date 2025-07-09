@@ -6,8 +6,11 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/node_broker.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
@@ -70,6 +73,9 @@ public:
             nodeBrokerRequest->Record.SetPath(request->path());
         }
         nodeBrokerRequest->Record.SetAuthorizedByCertificate(IsNodeAuthorizedByCertificate);
+        if (request->has_bridge_pile_name()) {
+            nodeBrokerRequest->Record.SetBridgePileName(request->bridge_pile_name());
+        }
 
         NTabletPipe::SendData(ctx, NodeBrokerPipe, nodeBrokerRequest.Release());
 
@@ -102,12 +108,29 @@ public:
 
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
+        EvNodesInfo = ev;
+        if (EvNodesInfo && EvNodeWardenStorageConfig) {
+            Finish(ctx);
+        }
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
+        EvNodeWardenStorageConfig = ev;
+        if (EvNodesInfo && EvNodeWardenStorageConfig) {
+            Finish(ctx);
+        }
+    }
+
+    void Finish(const TActorContext& ctx) {
         auto config = AppData()->DynamicNameserviceConfig;
 
-        for (const auto &node : ev->Get()->Nodes) {
+        auto& bridgeInfo = EvNodeWardenStorageConfig->Get()->BridgeInfo;
+
+        for (const auto &node : EvNodesInfo->Get()->Nodes) {
             // Copy static nodes only.
             if (!config || node.NodeId <= config->MaxStaticNodeId) {
                 auto &info = *Result.add_nodes();
@@ -119,6 +142,17 @@ public:
                 NActorsInterconnect::TNodeLocation location;
                 node.Location.Serialize(&location, true);
                 CopyNodeLocation(info.mutable_location(), location);
+                if (bridgeInfo) {
+                    auto& map = bridgeInfo->StaticNodeIdToPile;
+                    if (auto it = map.find(node.NodeId); it != map.end()) {
+                        it->second->BridgePileId.CopyToProto(&info, &std::decay_t<decltype(info)>::set_bridge_pile_id);
+                    } else {
+                        Y_DEBUG_ABORT("missing static node pile id");
+                    }
+                } else {
+                    // ensure no bridge mode is enabled
+                    Y_DEBUG_ABORT_UNLESS(!AppData()->BridgeConfig || !AppData()->BridgeConfig->PilesSize());
+                }
             }
         }
 
@@ -163,6 +197,7 @@ public:
             CFunc(TEvents::TEvUndelivered::EventType, Undelivered);
             HFunc(TEvNodeBroker::TEvRegistrationResponse, Handle);
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            HFunc(TEvNodeWardenStorageConfig, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         }
@@ -170,18 +205,11 @@ public:
 
 private:
     bool CheckAccess() {
-        const auto& serializedToken = Request->GetSerializedToken();
-        // Empty serializedToken means token is not required. Checked in secure_request.h
-        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
-            NACLib::TUserToken token(serializedToken);
-            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
-                if (token.IsExist(sid)) {
-                    IsNodeAuthorizedByCertificate = true;
-                    return true;
-                }
-            }
-            return false;
+        if (Request->GetInternalToken()) {
+            return IsTokenAllowed(Request->GetInternalToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
         }
+        // No token at this stage means that token is not required
+        // and access should be granted
         return true;
     }
 
@@ -193,6 +221,9 @@ private:
         dst->set_address(src.GetAddress());
         CopyNodeLocation(dst->mutable_location(), src.GetLocation());
         dst->set_expire(src.GetExpire());
+        if (src.HasBridgePileId()) {
+            dst->set_bridge_pile_id(src.GetBridgePileId());
+        }
     }
 
     static void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const Ydb::Discovery::NodeLocation& src) {
@@ -260,6 +291,8 @@ private:
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TActorId NodeBrokerPipe;
     bool IsNodeAuthorizedByCertificate = false;
+    TEvInterconnect::TEvNodesInfo::TPtr EvNodesInfo;
+    TEvNodeWardenStorageConfig::TPtr EvNodeWardenStorageConfig;
 };
 
 void DoNodeRegistrationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

@@ -96,8 +96,16 @@ public:
         return Record.GetRequest().GetTopicOperations();
     }
 
+    const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperations() const {
+        return Record.GetRequest().GetKafkaApiOperations();
+    }
+
     bool HasTopicOperations() const {
         return Record.GetRequest().HasTopicOperations();
+    }
+
+    bool HasKafkaApiOperations() const {
+        return Record.GetRequest().HasKafkaApiOperations();
     }
 
     bool GetKeepSession() const {
@@ -295,8 +303,8 @@ public:
         return Record.SerializeToZeroCopyStream(chunker);
     }
 
-    static NActors::IEventBase* Load(TEventSerializedData* data) {
-        auto pbEv = THolder<TEvQueryRequestRemote>(static_cast<TEvQueryRequestRemote*>(TEvQueryRequestRemote::Load(data)));
+    static TEvQueryRequest* Load(const TEventSerializedData* data) {
+        auto pbEv = THolder<TEvQueryRequestRemote>(TEvQueryRequestRemote::Load(data));
         auto req = new TEvQueryRequest();
         req->Record.Swap(&pbEv->Record);
         return req;

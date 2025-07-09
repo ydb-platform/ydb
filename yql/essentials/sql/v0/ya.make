@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/enumbitset
     yql/essentials/minikql
     yql/essentials/public/udf
@@ -11,6 +11,7 @@ PEERDIR(
     yql/essentials/core/issue/protos
     yql/essentials/parser/proto_ast/collect_issues
     yql/essentials/parser/proto_ast/gen/v0
+    yql/essentials/sql/v0/lexer
 )
 
 SRCS(

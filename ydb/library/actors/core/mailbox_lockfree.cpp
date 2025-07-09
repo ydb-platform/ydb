@@ -361,7 +361,7 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(GetNextPtr(tail) == nullptr);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         // Mark events as enqueued when usage stats are enabled
-        if (ActorLibCollectUsageStats) {
+         if constexpr (ActorLibCollectUsageStats) {
             for (IEventHandle* ev = head; ev; ev = GetNextPtr(ev)) {
                 if (IActor* actor = FindActor(ev->GetRecipientRewrite().LocalId())) {
                     actor->OnEnqueueEvent(ev->SendTime);

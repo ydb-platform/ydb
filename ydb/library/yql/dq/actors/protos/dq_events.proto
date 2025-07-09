@@ -141,6 +141,7 @@ message TComputeRuntimeSettings {
     optional bool UseSpilling = 6;
     optional uint32 TasksOnNodeCount = 5; // approx
     optional TRlPath RlPath = 7;
+    optional bool WithProgressStats = 9 [default = false];
 }
 
 message TEvNewCheckpointCoordinator {

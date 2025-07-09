@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -195,9 +195,9 @@ namespace NKqpHelpers {
         return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, /* txId */ {}, false /* commitTx */));
     }
 
-    inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {
+    inline TString KqpSimpleBeginWait(TTestActorRuntime& runtime, TString& txId, NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> future) {
         txId.clear();
-        auto response = AwaitResponse(runtime, KqpSimpleBeginSend(runtime, sessionId, query));
+        auto response = AwaitResponse(runtime, std::move(future));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -207,32 +207,40 @@ namespace NKqpHelpers {
         return FormatResult(result);
     }
 
+    inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {
+        return KqpSimpleBeginWait(runtime, txId, KqpSimpleBeginSend(runtime, sessionId, query));
+    }
+
     inline TString KqpSimpleContinue(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
-        Y_ABORT_UNLESS(!txId.empty(), "continue on empty transaction");
+        Y_ENSURE(!txId.empty(), "continue on empty transaction");
         auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */)));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
-        Y_ABORT_UNLESS(result.tx_meta().id() == txId);
+        Y_ENSURE(result.tx_meta().id() == txId);
         return FormatResult(result);
     }
 
     inline auto KqpSimpleSendCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
-        Y_ABORT_UNLESS(!txId.empty(), "commit on empty transaction");
+        Y_ENSURE(!txId.empty(), "commit on empty transaction");
         return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */));
     }
 
-    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
-        auto response = AwaitResponse(runtime, KqpSimpleSendCommit(runtime, sessionId, txId, query));
+    inline TString KqpSimpleWaitCommit(TTestActorRuntime& runtime, NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> future) {
+        auto response = AwaitResponse(runtime, std::move(future));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
-        Y_ABORT_UNLESS(result.tx_meta().id().empty(), "must be empty transaction");
+        Y_ENSURE(result.tx_meta().id().empty(), "must be empty transaction");
         return FormatResult(result);
+    }
+
+    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
+        return KqpSimpleWaitCommit(runtime, KqpSimpleSendCommit(runtime, sessionId, txId, query));
     }
 
     inline Ydb::Table::ExecuteSchemeQueryRequest MakeSchemeRequestRPC(

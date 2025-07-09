@@ -1,14 +1,14 @@
-#include <src/client/persqueue_public/impl/persqueue_impl.h>
-#include <src/client/topic/impl/common.h>
-#include <src/client/persqueue_public/include/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/persqueue_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 
-#include <src/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 #include <util/random/random.h>
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 class TCommonCodecsProvider {
 public:
@@ -48,7 +48,7 @@ TCredentials::TCredentials(const Ydb::PersQueue::V1::Credentials& settings)
             break;
         }
         default: {
-            ythrow yexception() << "unsupported credentials type " << ::NPersQueue::ObfuscateString(ToString(Credentials_));
+            ythrow yexception() << "unsupported credentials type " << ::NPersQueue::ObfuscateString(Credentials_.ShortDebugString());
         }
     }
 }

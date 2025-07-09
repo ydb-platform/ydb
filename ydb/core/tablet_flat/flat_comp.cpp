@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NTable {
 
-void TCompactionParams::Describe(IOutputStream& out) const noexcept {
+void TCompactionParams::Describe(IOutputStream& out) const {
     out << "TCompactionParams{" << Table << ":";
 
     if (Edge.Head == TEpoch::Max()) {

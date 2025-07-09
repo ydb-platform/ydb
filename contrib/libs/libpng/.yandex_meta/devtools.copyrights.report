@@ -75,7 +75,7 @@ BELONGS ya.make
     Files with this license:
         LICENSE [13:17]
         png.c [3:6]
-        png.c [797:803]
+        png.c [819:825]
         png.h [5:8]
         png.h [35:39]
         pngconf.h [5:8]
@@ -216,7 +216,7 @@ BELONGS ya.make
         LICENSE [13:17]
         LICENSE [87:91]
         png.c [3:6]
-        png.c [797:803]
+        png.c [819:825]
         png.h [5:8]
         png.h [35:39]
         png.h [109:113]
@@ -261,7 +261,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         png.c [3:6]
-        png.c [797:803]
+        png.c [819:825]
         png.h [5:8]
         pngget.c [3:6]
         pnglibconf.h [5:6]
@@ -316,7 +316,7 @@ BELONGS ya.make
         LICENSE [13:17]
         LICENSE [103:104]
         png.c [3:6]
-        png.c [797:803]
+        png.c [819:825]
         png.h [5:8]
         png.h [35:39]
         png.h [125:126]

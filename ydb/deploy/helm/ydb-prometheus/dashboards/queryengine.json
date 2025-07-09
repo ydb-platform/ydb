@@ -698,7 +698,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Workers_QueriesPerWorkerQ_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
+              "expr": "sum by (le) (rate(kqp_SessionActors_QueriesPerSessionActorQ_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -788,7 +788,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(kqp_Workers_Active{database=\"$database\",container=\"ydb-dynamic\"})",
+              "expr": "sum(kqp_SessionActors_Active{database=\"$database\",container=\"ydb-dynamic\"})",
               "format": "time_series",
               "interval": "",
               "legendFormat": "workers",
@@ -878,7 +878,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Workers_LifeSpanMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
+              "expr": "sum by (le) (rate(kqp_SessionActors_LifeSpanMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -968,7 +968,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(rate(kqp_Workers_Created{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
+              "expr": "sum(rate(kqp_SessionActors_Created{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "interval": "",
               "legendFormat": "created",
@@ -980,7 +980,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(rate(kqp_Workers_ClosedIdle{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
+              "expr": "sum(rate(kqp_SessionActors_ClosedIdle{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -993,7 +993,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(rate(kqp_Workers_ClosedError{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
+              "expr": "sum(rate(kqp_SessionActors_ClosedError{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -1006,7 +1006,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(rate(kqp_Workers_ClosedRequest{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
+              "expr": "sum(rate(kqp_SessionActors_ClosedRequest{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "hide": false,
               "interval": "",

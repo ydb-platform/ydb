@@ -6,6 +6,8 @@
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
+#include <util/stream/output.h>
+
 namespace NKikimr {
 
 namespace {
@@ -224,7 +226,7 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
         TCellHeader cellHeader;
         const char* src;
         if (!reader.Read(&cellHeader) || !reader.Skip(cellHeader.CellSize(), &src)) {
-            Y_ABORT("Unexpected failure to deserialize cell data a second time");
+            Y_ENSURE(false, "Unexpected failure to deserialize cell data a second time");
         }
         size_t cellSize = cellHeader.CellSize();
         if (cellHeader.IsNull()) {
@@ -360,7 +362,7 @@ namespace {
     constexpr size_t CellMatrixHeaderSize = sizeof(ui32) + sizeof(ui16);
 
     Y_FORCE_INLINE void SerializeCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount, TString& resultBuffer, TVector<TCell>* resultCells) {
-        Y_ABORT_UNLESS(cells.size() == (size_t)rowCount * (size_t)colCount);
+        Y_ENSURE(cells.size() == (size_t)rowCount * (size_t)colCount);
 
         if (!SerializeCellVecInit(cells, resultBuffer, resultCells))
             return;
@@ -533,18 +535,18 @@ TSerializedCellMatrix::TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 r
 }
 
 const TCell& TSerializedCellMatrix::GetCell(ui32 row, ui16 column) const {
-    Y_ABORT_UNLESS(row < RowCount && column < ColCount);
+    Y_ENSURE(row < RowCount && column < ColCount);
     return Cells.at(CalcIndex(row, column));
 }
 
 
 void TSerializedCellMatrix::GetSubmatrix(ui32 firstRow, ui32 lastRow, ui16 firstColumn, ui16 lastColumn, TVector<TCell>& resultCells) const {
-    Y_ABORT_UNLESS(firstColumn < ColCount &&
-                   lastColumn < ColCount &&
-                   firstRow < RowCount &&
-                   lastRow < RowCount &&
-                   firstColumn <= lastColumn &&
-                   firstRow <= lastRow);
+    Y_ENSURE(firstColumn < ColCount &&
+             lastColumn < ColCount &&
+             firstRow < RowCount &&
+             lastRow < RowCount &&
+             firstColumn <= lastColumn &&
+             firstRow <= lastRow);
 
     ui32 rowCount = (lastRow - firstRow + 1);
     ui16 colCount = (lastColumn - firstColumn + 1);
@@ -617,6 +619,10 @@ TOwnedCellVecBatch::TOwnedCellVecBatch()
     : Pool(std::make_unique<TMemoryPool>(InitialPoolSize)) {
 }
 
+TOwnedCellVecBatch::TOwnedCellVecBatch(std::unique_ptr<TMemoryPool> pool)
+    : Pool(std::move(pool)) {
+}
+
 size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
     size_t cellsSize = cells.size();
     if (cellsSize == 0) {
@@ -671,8 +677,17 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Bool:
             res += r.AsValue<bool>() ? "true" : "false";
             break;
+        case NScheme::NTypeIds::Int8:
+            res += ToString(r.AsValue<i8>());
+            break;
         case NScheme::NTypeIds::Byte:
             res += ToString(r.AsValue<ui8>());
+            break;
+        case NScheme::NTypeIds::Int16:
+            res += ToString(r.AsValue<i16>());
+            break;
+        case NScheme::NTypeIds::Uint16:
+            res += ToString(r.AsValue<ui16>());
             break;
         case NScheme::NTypeIds::Int32:
             res += ToString(r.AsValue<i32>());
@@ -732,3 +747,17 @@ size_t GetCellHeaderSize() {
 }
 
 } // namespace NKikimr
+
+Y_DECLARE_OUT_SPEC(, NKikimr::ETriBool, out, value) {
+    switch (value) {
+        case NKikimr::ETriBool::True:
+            out << "True";
+            break;
+        case NKikimr::ETriBool::False:
+            out << "False";
+            break;
+        case NKikimr::ETriBool::Null:
+            out << "Null";
+            break;
+    }
+}

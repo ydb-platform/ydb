@@ -15,6 +15,7 @@
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 
 #include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/threading/thread.h>
@@ -229,48 +230,15 @@ public:
         ++RowsCnt_;
     }
 
-    std::vector<TResultBatch::TPtr> Build() {
+    TResultBatch::TPtr Build() {
         std::vector<arrow::Datum> columns;
         columns.reserve(ColumnBuilders_.size());
         for (size_t i = 0; i < ColumnBuilders_.size(); ++i) {
             columns.emplace_back(std::move(ColumnBuilders_[i]->Build(false)));
         }
-        std::vector<std::shared_ptr<TResultBatch>> blocks;
-        int64_t offset = 0;
-        std::vector<int64_t> currentChunk(columns.size()), inChunkOffset(columns.size());
-        while (RowsCnt_) {
-            int64_t max_curr_len = RowsCnt_;
-            for (size_t i = 0; i < columns.size(); ++i) {
-                if (arrow::Datum::Kind::CHUNKED_ARRAY == columns[i].kind()) {
-                    auto& c_arr = columns[i].chunked_array();
-                    while (currentChunk[i] < c_arr->num_chunks() && !c_arr->chunk(currentChunk[i])) {
-                        ++currentChunk[i];
-                    }
-                    YQL_ENSURE(currentChunk[i] < c_arr->num_chunks());
-                    max_curr_len = std::min(max_curr_len, c_arr->chunk(currentChunk[i])->length() - inChunkOffset[i]);
-                }
-            }
-            RowsCnt_ -= max_curr_len;
-            decltype(columns) result_columns;
-            result_columns.reserve(columns.size());
-            offset += max_curr_len;
-            for (size_t i = 0; i < columns.size(); ++i) {
-                auto& e = columns[i];
-                if (arrow::Datum::Kind::CHUNKED_ARRAY == e.kind()) {
-                    result_columns.emplace_back(e.chunked_array()->chunk(currentChunk[i])->Slice(inChunkOffset[i], max_curr_len));
-                    if (max_curr_len + inChunkOffset[i] == e.chunked_array()->chunk(currentChunk[i])->length()) {
-                        ++currentChunk[i];
-                        inChunkOffset[i] = 0;
-                    } else {
-                        inChunkOffset[i] += max_curr_len;
-                    }
-                } else {
-                    result_columns.emplace_back(e.array()->Slice(offset - max_curr_len, max_curr_len));
-                }
-            }
-            blocks.emplace_back(std::make_shared<TResultBatch>(max_curr_len, std::move(result_columns)));
-        }
-        return blocks;
+        auto res = std::make_shared<TResultBatch>(RowsCnt_, std::move(columns));
+        RowsCnt_ = 0;
+        return res;
     }
 
 private:
@@ -286,7 +254,7 @@ public:
         , std::shared_ptr<std::vector<TType*>> columnTypes
         , std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes
         , arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
-        , bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
+        , ui64 nativeYtTypeFlags, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : Consumer_(consumer)
         , ColumnTypes_(columnTypes)
         , JobStats_(jobStats)
@@ -294,7 +262,7 @@ public:
     {
         ColumnConverters_.reserve(columnTypes->size());
         for (size_t i = 0; i < columnTypes->size(); ++i) {
-            ColumnConverters_.emplace_back(MakeYtColumnConverter(columnTypes->at(i), pgBuilder, pool, isNative));
+            ColumnConverters_.emplace_back(MakeYtColumnConverter(columnTypes->at(i), pgBuilder, pool, nativeYtTypeFlags));
         }
     }
 
@@ -309,25 +277,26 @@ public:
     }
 
     arrow::Status OnRecordBatchDecoded(std::shared_ptr<arrow::RecordBatch> batch) override {
-        NKikimr::NMiniKQL::TScopedAlloc scope(__LOCATION__);
-        TThrowingBindTerminator t;
-
-        YQL_ENSURE(batch);
-        MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;
-        YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
-        result.resize(ColumnConverters_.size());
-        size_t matchedColumns = 0;
-        for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
-            auto columnIdxIt = ColumnOrderMapping.find(batch->schema()->field_names()[i]);
-            if (ColumnOrderMapping.end() == columnIdxIt) {
-                continue;
+        {
+            auto ctx = NCommon::CreateMemoryArenaContext();
+
+            YQL_ENSURE(batch);
+            MKQL_ADD_STAT(JobStats_, BlockCount, 1);
+            YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
+            result.resize(ColumnConverters_.size());
+            size_t matchedColumns = 0;
+            for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
+                auto columnIdxIt = ColumnOrderMapping.find(batch->schema()->field_names()[i]);
+                if (ColumnOrderMapping.end() == columnIdxIt) {
+                    continue;
+                }
+                ++matchedColumns;
+                auto columnIdx =  columnIdxIt->second;
+                result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
             }
-            ++matchedColumns;
-            auto columnIdx =  columnIdxIt->second;
-            result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
+            Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         }
-        Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         Consumer_->HandleResult(std::make_shared<TResultBatch>(batch->num_rows(), std::move(result)));
         return arrow::Status::OK();
     }
@@ -371,8 +340,7 @@ public:
         LocalListeners_.reserve(Inputs_.size());
         for (size_t i = 0; i < Inputs_.size(); ++i) {
             auto& decoder = Settings_->Specs->Inputs[Settings_->OriginalIndexes[i]];
-            bool native = decoder->NativeYtTypeFlags;
-            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
+            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, decoder->NativeYtTypeFlags, jobStats));
             LocalListeners_.back()->Init(LocalListeners_.back());
         }
         BlockBuilder_.Init(ptr, *Settings_->Pool, Settings_->PgBuilder);
@@ -428,7 +396,7 @@ public:
 
         if (!res.IsOK()) {
             // Propagate error
-            Listener_->HandleError(res.GetMessage());
+            Listener_->HandleError(TString(res.GetMessage()));
             return;
         }
 
@@ -479,9 +447,7 @@ public:
                 }
             }
             if (payload) {
-                for (auto &e: FallbackHandler(inputIdx, payload)) {
-                    Listener_->HandleFallback(std::move(e));
-                }
+                Listener_->HandleFallback(FallbackHandler(inputIdx, payload));
                 InputDone(inputIdx);
                 RunRead();
             }
@@ -493,7 +459,7 @@ public:
         }
     }
 
-    std::vector<TResultBatch::TPtr> FallbackHandler(size_t idx, NYT::TSharedRef payload) {
+    TResultBatch::TPtr FallbackHandler(size_t idx, NYT::TSharedRef payload) {
         if (!payload.Size()) {
             return {};
         }

@@ -1,10 +1,10 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/retry/retry.h>
-#include <ydb-cpp-sdk/client/retry/retry.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
-namespace NYdb::inline V3::NRetry::Sync {
+namespace NYdb::inline Dev::NRetry::Sync {
 
 template <typename TClient, typename TStatusType>
 class TRetryContext : public TRetryContextBase {

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package com.example;
+
+/**
+ * Represents a cookie.
+ */
+message Cookie {
+  string id = 1; // The id of the cookie.
+  optional string name = 2; // The name of the cookie.
+  repeated string ingredients = 3; // Ingredients in the cookie.
+}

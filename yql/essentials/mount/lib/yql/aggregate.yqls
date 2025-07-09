@@ -382,8 +382,8 @@
 # list_type:type
 # doesn't support optional values
 (let hyperloglog_traits_factory_raw (lambda '(list_type precision) (block '(
-    (let init (lambda '(value parent) (NamedApply (Udf 'HyperLogLog.Create) '((Apply (Udf 'Digest.MurMurHash) (Pickle value)) precision) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(value state parent) (NamedApply (Udf 'HyperLogLog.AddValue) '(state (Apply (Udf 'Digest.MurMurHash) (Pickle value))) (AsStruct) (DependsOn parent))))
+    (let init (lambda '(value parent) (NamedApply (Udf 'HyperLogLog.Create) '((Apply (Udf 'Digest.MurMurHash) (StablePickle value)) precision) (AsStruct) (DependsOn parent))))
+    (let update (lambda '(value state parent) (NamedApply (Udf 'HyperLogLog.AddValue) '(state (Apply (Udf 'Digest.MurMurHash) (StablePickle value))) (AsStruct) (DependsOn parent))))
     (let save (lambda '(state) (Apply (Udf 'HyperLogLog.Serialize) state)))
     (let load (lambda '(state) (Apply (Udf 'HyperLogLog.Deserialize) state)))
     (let merge (lambda '(one two) (Apply (Udf 'HyperLogLog.Merge) one two)))

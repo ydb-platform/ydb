@@ -8,10 +8,10 @@
 
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
-#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <util/generic/serialized_enum.h>
@@ -22,6 +22,11 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+
+enum class EQueryMode {
+    SCAN_QUERY,
+    EXECUTE_QUERY
+};
 
 Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
     class TDecimalTestCase {
@@ -40,8 +45,20 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             TestHelper.BulkUpsert(TestTable, inserter);
         }
 
-        void CheckQuery(const TString& query, const TString& expected) const {
-            TestHelper.ReadData(query, expected);
+        void CheckQuery(const TString& query, const TString& expected, EQueryMode mode = EQueryMode::SCAN_QUERY) const {
+            switch (mode) {
+            case EQueryMode::SCAN_QUERY:
+                TestHelper.ReadData(query, expected);
+                break;
+            case EQueryMode::EXECUTE_QUERY: {
+                TestHelper.ExecuteQuery(query);
+                break;
+            }
+            }
+        }
+
+        void ExecuteDataQuery(const TString& query) const {
+            TestHelper.ExecuteQuery(query);
         }
 
         void PrepareTable1() {
@@ -173,7 +190,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
                 "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
 
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec >= cast(\"8.492\" as decimal(22,9)) order by id",
-                "[[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
         };
 
         check(tester22);

@@ -3,6 +3,9 @@ LIBRARY()
 SRCS(
     bsc.cpp
     bsc.h
+    bsc_audit.h
+    bsc_audit.cpp
+    cluster_balancing.cpp
     cmds_box.cpp
     cmds_drive_status.cpp
     cmds_host_config.cpp
@@ -62,10 +65,12 @@ SRCS(
     update_last_seen_ready.cpp
     update_seen_operational.cpp
     virtual_group.cpp
+    yaml_config_helpers.h
 )
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/yaml_config
     ydb/core/base
     ydb/core/base/services
     ydb/core/blobstorage

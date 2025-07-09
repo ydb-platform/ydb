@@ -13,6 +13,15 @@
 
 #include <aws/cal/private/opensslcrypto_common.h>
 
+/*
+ * OpenSSL 3 has a large amount of interface changes and many of the functions used
+ * throughout aws-c-cal have become deprecated.
+ * Lets disable deprecation warnings, so that we can atleast run CI, until we
+ * can move over to new functions.
+ */
+#define OPENSSL_SUPPRESS_DEPRECATED
+#include <openssl/crypto.h>
+
 static struct openssl_hmac_ctx_table hmac_ctx_table;
 static struct openssl_evp_md_ctx_table evp_md_ctx_table;
 
@@ -21,23 +30,35 @@ struct openssl_evp_md_ctx_table *g_aws_openssl_evp_md_ctx_table = NULL;
 
 static struct aws_allocator *s_libcrypto_allocator = NULL;
 
+#if !defined(OPENSSL_IS_AWSLC) && !defined(OPENSSL_IS_BORINGSSL)
+#    define OPENSSL_IS_OPENSSL
+#endif
+
 /* weak refs to libcrypto functions to force them to at least try to link
  * and avoid dead-stripping
  */
-#if defined(OPENSSL_IS_AWSLC)
+#if defined(OPENSSL_IS_AWSLC) || defined(OPENSSL_IS_BORINGSSL)
 extern HMAC_CTX *HMAC_CTX_new(void) __attribute__((weak, used));
 extern void HMAC_CTX_free(HMAC_CTX *) __attribute__((weak, used));
-extern void HMAC_CTX_reset(HMAC_CTX *) __attribute__((weak, used));
 extern void HMAC_CTX_init(HMAC_CTX *) __attribute__((weak, used));
 extern void HMAC_CTX_cleanup(HMAC_CTX *) __attribute__((weak, used));
 extern int HMAC_Update(HMAC_CTX *, const unsigned char *, size_t) __attribute__((weak, used));
 extern int HMAC_Final(HMAC_CTX *, unsigned char *, unsigned int *) __attribute__((weak, used));
 extern int HMAC_Init_ex(HMAC_CTX *, const void *, size_t, const EVP_MD *, ENGINE *) __attribute__((weak, used));
+
+static int s_hmac_init_ex_bssl(HMAC_CTX *ctx, const void *key, size_t key_len, const EVP_MD *md, ENGINE *impl) {
+    AWS_PRECONDITION(ctx);
+
+    int (*init_ex_pt)(HMAC_CTX *, const void *, size_t, const EVP_MD *, ENGINE *) = (int (*)(
+        HMAC_CTX *, const void *, size_t, const EVP_MD *, ENGINE *))g_aws_openssl_hmac_ctx_table->impl.init_ex_fn;
+
+    return init_ex_pt(ctx, key, key_len, md, impl);
+}
+
 #else
 /* 1.1 */
 extern HMAC_CTX *HMAC_CTX_new(void) __attribute__((weak, used));
 extern void HMAC_CTX_free(HMAC_CTX *) __attribute__((weak, used));
-extern int HMAC_CTX_reset(HMAC_CTX *) __attribute__((weak, used));
 
 /* 1.0.2 */
 extern void HMAC_CTX_init(HMAC_CTX *) __attribute__((weak, used));
@@ -48,6 +69,23 @@ extern int HMAC_Update(HMAC_CTX *, const unsigned char *, size_t) __attribute__(
 extern int HMAC_Final(HMAC_CTX *, unsigned char *, unsigned int *) __attribute__((weak, used));
 extern int HMAC_Init_ex(HMAC_CTX *, const void *, int, const EVP_MD *, ENGINE *) __attribute__((weak, used));
 
+static int s_hmac_init_ex_openssl(HMAC_CTX *ctx, const void *key, size_t key_len, const EVP_MD *md, ENGINE *impl) {
+    AWS_PRECONDITION(ctx);
+    if (key_len > INT_MAX) {
+        return 0;
+    }
+
+    /*Note: unlike aws-lc and boringssl, openssl 1.1.1 and 1.0.2 take int as key
+    len arg. */
+    int (*init_ex_ptr)(HMAC_CTX *, const void *, int, const EVP_MD *, ENGINE *) =
+        (int (*)(HMAC_CTX *, const void *, int, const EVP_MD *, ENGINE *))g_aws_openssl_hmac_ctx_table->impl.init_ex_fn;
+
+    return init_ex_ptr(ctx, key, (int)key_len, md, impl);
+}
+
+#endif /* !OPENSSL_IS_AWSLC && !OPENSSL_IS_BORINGSSL*/
+
+#if !defined(OPENSSL_IS_AWSLC)
 /* libcrypto 1.1 stub for init */
 static void s_hmac_ctx_init_noop(HMAC_CTX *ctx) {
     (void)ctx;
@@ -57,7 +95,9 @@ static void s_hmac_ctx_init_noop(HMAC_CTX *ctx) {
 static void s_hmac_ctx_clean_up_noop(HMAC_CTX *ctx) {
     (void)ctx;
 }
+#endif
 
+#if defined(OPENSSL_IS_OPENSSL)
 /* libcrypto 1.0 shim for new */
 static HMAC_CTX *s_hmac_ctx_new(void) {
     AWS_PRECONDITION(
@@ -79,18 +119,6 @@ static void s_hmac_ctx_free(HMAC_CTX *ctx) {
     aws_mem_release(s_libcrypto_allocator, ctx);
 }
 
-/* libcrypto 1.0 shim for reset, matches HMAC_CTX_reset semantics */
-static int s_hmac_ctx_reset(HMAC_CTX *ctx) {
-    AWS_PRECONDITION(ctx);
-    AWS_PRECONDITION(
-        g_aws_openssl_hmac_ctx_table->init_fn != s_hmac_ctx_init_noop &&
-        g_aws_openssl_hmac_ctx_table->clean_up_fn != s_hmac_ctx_clean_up_noop &&
-        "libcrypto 1.0 reset called on libcrypto 1.1 vtable");
-    g_aws_openssl_hmac_ctx_table->clean_up_fn(ctx);
-    g_aws_openssl_hmac_ctx_table->init_fn(ctx);
-    return 1;
-}
-
 #endif /* !OPENSSL_IS_AWSLC */
 
 enum aws_libcrypto_version {
@@ -98,15 +126,16 @@ enum aws_libcrypto_version {
     AWS_LIBCRYPTO_1_0_2,
     AWS_LIBCRYPTO_1_1_1,
     AWS_LIBCRYPTO_LC,
-} s_libcrypto_version = AWS_LIBCRYPTO_NONE;
+    AWS_LIBCRYPTO_BORINGSSL
+};
 
 bool s_resolve_hmac_102(void *module) {
-#if !defined(OPENSSL_IS_AWSLC)
+#if defined(OPENSSL_IS_OPENSSL)
     hmac_ctx_init init_fn = (hmac_ctx_init)HMAC_CTX_init;
     hmac_ctx_clean_up clean_up_fn = (hmac_ctx_clean_up)HMAC_CTX_cleanup;
-    hmac_ctx_update update_fn = (hmac_ctx_update)HMAC_Update;
-    hmac_ctx_final final_fn = (hmac_ctx_final)HMAC_Final;
-    hmac_ctx_init_ex init_ex_fn = (hmac_ctx_init_ex)HMAC_Init_ex;
+    hmac_update update_fn = (hmac_update)HMAC_Update;
+    hmac_final final_fn = (hmac_final)HMAC_Final;
+    hmac_init_ex init_ex_fn = (hmac_init_ex)HMAC_Init_ex;
 
     /* were symbols bound by static linking? */
     bool has_102_symbols = init_fn && clean_up_fn && update_fn && final_fn && init_ex_fn;
@@ -126,7 +155,6 @@ bool s_resolve_hmac_102(void *module) {
 
     if (init_fn) {
         hmac_ctx_table.new_fn = (hmac_ctx_new)s_hmac_ctx_new;
-        hmac_ctx_table.reset_fn = (hmac_ctx_reset)s_hmac_ctx_reset;
         hmac_ctx_table.free_fn = s_hmac_ctx_free;
         hmac_ctx_table.init_fn = init_fn;
         hmac_ctx_table.clean_up_fn = clean_up_fn;
@@ -141,22 +169,20 @@ bool s_resolve_hmac_102(void *module) {
 }
 
 bool s_resolve_hmac_111(void *module) {
-#if !defined(OPENSSL_IS_AWSLC)
+#if defined(OPENSSL_IS_OPENSSL)
     hmac_ctx_new new_fn = (hmac_ctx_new)HMAC_CTX_new;
     hmac_ctx_free free_fn = (hmac_ctx_free)HMAC_CTX_free;
-    hmac_ctx_reset reset_fn = (hmac_ctx_reset)HMAC_CTX_reset;
-    hmac_ctx_update update_fn = (hmac_ctx_update)HMAC_Update;
-    hmac_ctx_final final_fn = (hmac_ctx_final)HMAC_Final;
-    hmac_ctx_init_ex init_ex_fn = (hmac_ctx_init_ex)HMAC_Init_ex;
+    hmac_update update_fn = (hmac_update)HMAC_Update;
+    hmac_final final_fn = (hmac_final)HMAC_Final;
+    hmac_init_ex init_ex_fn = (hmac_init_ex)HMAC_Init_ex;
 
     /* were symbols bound by static linking? */
-    bool has_111_symbols = new_fn && free_fn && update_fn && final_fn && init_ex_fn && reset_fn;
+    bool has_111_symbols = new_fn && free_fn && update_fn && final_fn && init_ex_fn;
 
     if (has_111_symbols) {
         AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "found static libcrypto 1.1.1 HMAC symbols");
     } else {
         *(void **)(&new_fn) = dlsym(module, "HMAC_CTX_new");
-        *(void **)(&reset_fn) = dlsym(module, "HMAC_CTX_reset");
         *(void **)(&free_fn) = dlsym(module, "HMAC_CTX_free");
         *(void **)(&update_fn) = dlsym(module, "HMAC_Update");
         *(void **)(&final_fn) = dlsym(module, "HMAC_Final");
@@ -168,13 +194,13 @@ bool s_resolve_hmac_111(void *module) {
 
     if (new_fn) {
         hmac_ctx_table.new_fn = new_fn;
-        hmac_ctx_table.reset_fn = reset_fn;
         hmac_ctx_table.free_fn = free_fn;
         hmac_ctx_table.init_fn = s_hmac_ctx_init_noop;
         hmac_ctx_table.clean_up_fn = s_hmac_ctx_clean_up_noop;
         hmac_ctx_table.update_fn = update_fn;
         hmac_ctx_table.final_fn = final_fn;
-        hmac_ctx_table.init_ex_fn = init_ex_fn;
+        hmac_ctx_table.init_ex_fn = s_hmac_init_ex_openssl;
+        hmac_ctx_table.impl.init_ex_fn = (crypto_generic_fn_ptr)init_ex_fn;
         g_aws_openssl_hmac_ctx_table = &hmac_ctx_table;
         return true;
     }
@@ -188,13 +214,12 @@ bool s_resolve_hmac_lc(void *module) {
     hmac_ctx_clean_up clean_up_fn = (hmac_ctx_clean_up)HMAC_CTX_cleanup;
     hmac_ctx_new new_fn = (hmac_ctx_new)HMAC_CTX_new;
     hmac_ctx_free free_fn = (hmac_ctx_free)HMAC_CTX_free;
-    hmac_ctx_reset reset_fn = (hmac_ctx_reset)HMAC_CTX_reset;
-    hmac_ctx_update update_fn = (hmac_ctx_update)HMAC_Update;
-    hmac_ctx_final final_fn = (hmac_ctx_final)HMAC_Final;
-    hmac_ctx_init_ex init_ex_fn = (hmac_ctx_init_ex)HMAC_Init_ex;
+    hmac_update update_fn = (hmac_update)HMAC_Update;
+    hmac_final final_fn = (hmac_final)HMAC_Final;
+    hmac_init_ex init_ex_fn = (hmac_init_ex)HMAC_Init_ex;
 
     /* were symbols bound by static linking? */
-    bool has_awslc_symbols = new_fn && free_fn && update_fn && final_fn && init_fn && init_ex_fn && reset_fn;
+    bool has_awslc_symbols = new_fn && free_fn && update_fn && final_fn && init_fn && init_ex_fn;
 
     /* If symbols aren't already found, try to find the requested version */
     /* when built as a shared lib, and multiple versions of libcrypto are possibly
@@ -203,7 +228,6 @@ bool s_resolve_hmac_lc(void *module) {
         AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "found static aws-lc HMAC symbols");
     } else {
         *(void **)(&new_fn) = dlsym(module, "HMAC_CTX_new");
-        *(void **)(&reset_fn) = dlsym(module, "HMAC_CTX_reset");
         *(void **)(&free_fn) = dlsym(module, "HMAC_CTX_free");
         *(void **)(&update_fn) = dlsym(module, "HMAC_Update");
         *(void **)(&final_fn) = dlsym(module, "HMAC_Final");
@@ -216,13 +240,53 @@ bool s_resolve_hmac_lc(void *module) {
     if (new_fn) {
         /* Fill out the vtable for the requested version */
         hmac_ctx_table.new_fn = new_fn;
-        hmac_ctx_table.reset_fn = reset_fn;
         hmac_ctx_table.free_fn = free_fn;
         hmac_ctx_table.init_fn = init_fn;
         hmac_ctx_table.clean_up_fn = clean_up_fn;
         hmac_ctx_table.update_fn = update_fn;
         hmac_ctx_table.final_fn = final_fn;
-        hmac_ctx_table.init_ex_fn = init_ex_fn;
+        hmac_ctx_table.init_ex_fn = s_hmac_init_ex_bssl;
+        hmac_ctx_table.impl.init_ex_fn = (crypto_generic_fn_ptr)init_ex_fn;
+        g_aws_openssl_hmac_ctx_table = &hmac_ctx_table;
+        return true;
+    }
+#endif
+    return false;
+}
+
+bool s_resolve_hmac_boringssl(void *module) {
+#if defined(OPENSSL_IS_BORINGSSL)
+    hmac_ctx_new new_fn = (hmac_ctx_new)HMAC_CTX_new;
+    hmac_ctx_free free_fn = (hmac_ctx_free)HMAC_CTX_free;
+    hmac_update update_fn = (hmac_update)HMAC_Update;
+    hmac_final final_fn = (hmac_final)HMAC_Final;
+    hmac_init_ex init_ex_fn = (hmac_init_ex)HMAC_Init_ex;
+
+    /* were symbols bound by static linking? */
+    bool has_bssl_symbols = new_fn && free_fn && update_fn && final_fn && init_ex_fn;
+
+    if (has_bssl_symbols) {
+        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "found static boringssl HMAC symbols");
+    } else {
+        *(void **)(&new_fn) = dlsym(module, "HMAC_CTX_new");
+        *(void **)(&free_fn) = dlsym(module, "HMAC_CTX_free");
+        *(void **)(&update_fn) = dlsym(module, "HMAC_Update");
+        *(void **)(&final_fn) = dlsym(module, "HMAC_Final");
+        *(void **)(&init_ex_fn) = dlsym(module, "HMAC_Init_ex");
+        if (new_fn) {
+            AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "found dynamic boringssl HMAC symbols");
+        }
+    }
+
+    if (new_fn) {
+        hmac_ctx_table.new_fn = new_fn;
+        hmac_ctx_table.free_fn = free_fn;
+        hmac_ctx_table.init_fn = s_hmac_ctx_init_noop;
+        hmac_ctx_table.clean_up_fn = s_hmac_ctx_clean_up_noop;
+        hmac_ctx_table.update_fn = update_fn;
+        hmac_ctx_table.final_fn = final_fn;
+        hmac_ctx_table.init_ex_fn = s_hmac_init_ex_bssl;
+        hmac_ctx_table.impl.init_ex_fn = (crypto_generic_fn_ptr)init_ex_fn;
         g_aws_openssl_hmac_ctx_table = &hmac_ctx_table;
         return true;
     }
@@ -238,6 +302,8 @@ static enum aws_libcrypto_version s_resolve_libcrypto_hmac(enum aws_libcrypto_ve
             return s_resolve_hmac_111(module) ? version : AWS_LIBCRYPTO_NONE;
         case AWS_LIBCRYPTO_1_0_2:
             return s_resolve_hmac_102(module) ? version : AWS_LIBCRYPTO_NONE;
+        case AWS_LIBCRYPTO_BORINGSSL:
+            return s_resolve_hmac_boringssl(module) ? version : AWS_LIBCRYPTO_NONE;
         case AWS_LIBCRYPTO_NONE:
             AWS_FATAL_ASSERT(!"Attempted to resolve invalid libcrypto HMAC API version AWS_LIBCRYPTO_NONE");
     }
@@ -386,6 +452,14 @@ bool s_resolve_md_lc(void *module) {
     return false;
 }
 
+bool s_resolve_md_boringssl(void *module) {
+#if !defined(OPENSSL_IS_AWSLC)
+    return s_resolve_md_111(module);
+#else
+    return false;
+#endif
+}
+
 static enum aws_libcrypto_version s_resolve_libcrypto_md(enum aws_libcrypto_version version, void *module) {
     switch (version) {
         case AWS_LIBCRYPTO_LC:
@@ -394,6 +468,8 @@ static enum aws_libcrypto_version s_resolve_libcrypto_md(enum aws_libcrypto_vers
             return s_resolve_md_111(module) ? version : AWS_LIBCRYPTO_NONE;
         case AWS_LIBCRYPTO_1_0_2:
             return s_resolve_md_102(module) ? version : AWS_LIBCRYPTO_NONE;
+        case AWS_LIBCRYPTO_BORINGSSL:
+            return s_resolve_md_boringssl(module) ? version : AWS_LIBCRYPTO_NONE;
         case AWS_LIBCRYPTO_NONE:
             AWS_FATAL_ASSERT(!"Attempted to resolve invalid libcrypto MD API version AWS_LIBCRYPTO_NONE");
     }
@@ -479,31 +555,26 @@ static enum aws_libcrypto_version s_resolve_libcrypto_lib(void) {
     return AWS_LIBCRYPTO_NONE;
 }
 
-static void *s_libcrypto_module = NULL;
-
 static enum aws_libcrypto_version s_resolve_libcrypto(void) {
-    if (s_libcrypto_version != AWS_LIBCRYPTO_NONE) {
-        return s_libcrypto_version;
-    }
-
     /* Try to auto-resolve against what's linked in/process space */
     AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "searching process and loaded modules");
     void *process = dlopen(NULL, RTLD_NOW);
-#if 0
-    // dlopen is not supported in musl. It's ok to pass NULL to s_resolve_libcrypto_symbols,
-    // as dlsym handles it well according to man.
-    AWS_FATAL_ASSERT(process && "Unable to load symbols from process space");
-#endif
     enum aws_libcrypto_version result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_LC, process);
     if (result == AWS_LIBCRYPTO_NONE) {
         AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find aws-lc symbols linked");
+        result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_BORINGSSL, process);
+    }
+    if (result == AWS_LIBCRYPTO_NONE) {
+        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find boringssl symbols linked");
         result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_0_2, process);
     }
     if (result == AWS_LIBCRYPTO_NONE) {
         AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find libcrypto 1.0.2 symbols linked");
         result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_1_1, process);
     }
-    dlclose(process);
+    if (process) {
+        dlclose(process);
+    }
 
     if (result == AWS_LIBCRYPTO_NONE) {
         AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find libcrypto 1.1.1 symbols linked");
@@ -523,7 +594,7 @@ static enum aws_libcrypto_version s_resolve_libcrypto(void) {
 #endif
 
 /* Openssl 1.0.x requires special handling for its locking callbacks or else it's not thread safe */
-#if !defined(OPENSSL_IS_AWSLC)
+#if !defined(OPENSSL_IS_AWSLC) && !defined(OPENSSL_IS_BORINGSSL)
 static struct aws_mutex *s_libcrypto_locks = NULL;
 
 static void s_locking_fn(int mode, int n, const char *unused0, int unused1) {
@@ -550,7 +621,7 @@ void aws_cal_platform_init(struct aws_allocator *allocator) {
 
     s_libcrypto_allocator = allocator;
 
-#if !defined(OPENSSL_IS_AWSLC)
+#if !defined(OPENSSL_IS_AWSLC) && !defined(OPENSSL_IS_BORINGSSL)
     /* Ensure that libcrypto 1.0.2 has working locking mechanisms. This code is macro'ed
      * by libcrypto to be a no-op on 1.1.1 */
     if (!CRYPTO_get_locking_callback()) {
@@ -572,8 +643,37 @@ void aws_cal_platform_init(struct aws_allocator *allocator) {
 #endif
 }
 
+/*
+ * Shutdown any resources before unloading CRT (ex. dlclose).
+ * This is currently aws-lc specific.
+ * Ex. why we need it:
+ * aws-lc uses thread local data extensively and registers thread atexit
+ * callback to clean it up.
+ * there are cases where crt gets dlopen'ed and then dlclose'ed within a larger program
+ * (ex. nodejs workers).
+ * with glibc, dlclose actually removes symbols from global space (musl does not).
+ * once crt is unloaded, thread atexit will no longer point at a valid aws-lc
+ * symbol and will happily crash when thread is closed.
+ * AWSLC_thread_local_shutdown was added by aws-lc to let teams remove thread
+ * local data manually before lib is unloaded.
+ * We can't call AWSLC_thread_local_shutdown in cal cleanup because it renders
+ * aws-lc unusable and there is no way to reinitilize aws-lc to a working state,
+ * i.e. everything that depends on aws-lc stops working after shutdown (ex. curl).
+ * So instead rely on GCC/Clang destructor extension to shutdown right before
+ * crt gets unloaded. Does not work on msvc, but thats a bridge we can cross at
+ * a later date (since we dont support aws-lc on win right now)
+ * TODO: do already init'ed check on lc similar to what we do for s2n, so we
+ * only shutdown when we initialized aws-lc. currently not possible because
+ * there is no way to check that aws-lc has been initialized.
+ */
+void __attribute__((destructor)) s_cal_crypto_shutdown(void) {
+#if defined(OPENSSL_IS_AWSLC)
+    AWSLC_thread_local_shutdown();
+#endif
+}
+
 void aws_cal_platform_clean_up(void) {
-#if !defined(OPENSSL_IS_AWSLC)
+#if !defined(OPENSSL_IS_AWSLC) && !defined(OPENSSL_IS_BORINGSSL)
     if (CRYPTO_get_locking_callback() == s_locking_fn) {
         CRYPTO_set_locking_callback(NULL);
         size_t lock_count = (size_t)CRYPTO_num_locks();
@@ -588,12 +688,19 @@ void aws_cal_platform_clean_up(void) {
     }
 #endif
 
-    if (s_libcrypto_module) {
-        dlclose(s_libcrypto_module);
-    }
+#if defined(OPENSSL_IS_AWSLC)
+    AWSLC_thread_local_clear();
+#endif
 
     s_libcrypto_allocator = NULL;
 }
+
+void aws_cal_platform_thread_clean_up(void) {
+#if defined(OPENSSL_IS_AWSLC)
+    AWSLC_thread_local_clear();
+#endif
+}
+
 #if !defined(__GNUC__) || (__GNUC__ >= 4 && __GNUC_MINOR__ > 1)
 #    pragma GCC diagnostic pop
 #endif

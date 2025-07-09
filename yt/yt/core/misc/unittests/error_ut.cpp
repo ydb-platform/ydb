@@ -228,6 +228,20 @@ TEST(TErrorTest, NativeFiberId)
         .ThrowOnError();
 }
 
+TEST(TErrorTest, ErrorCodicils)
+{
+    EXPECT_FALSE(TError("ErrorCodicils").Attributes().Contains("test_attribute"));
+    {
+        auto guard = TErrorCodicils::Guard("test_attribute", [] () -> std::string {
+            return "test_value";
+        });
+        EXPECT_EQ("test_value",
+            TError("ErrorCodicils").Attributes().Get<std::string>("test_attribute"));
+        EXPECT_FALSE(TError().Attributes().Contains("test_attribute"));
+    }
+    EXPECT_FALSE(TError("ErrorCodicils").Attributes().Contains("test_attribute"));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

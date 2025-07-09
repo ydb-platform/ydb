@@ -1,4 +1,5 @@
 #include "schemeshard__operation_side_effects.h"
+
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
@@ -477,6 +478,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             if (subDomain->GetDatabaseQuotas()) {
                 message->Record.MutableDatabaseQuotas()->CopyFrom(*subDomain->GetDatabaseQuotas());
             }
+            message->Record.MutableSchemeLimits()->CopyFrom(subDomain->GetSchemeLimits().AsProto());
             if (const auto& auditSettings = subDomain->GetAuditSettings()) {
                 message->Record.MutableAuditSettings()->CopyFrom(*auditSettings);
             }
@@ -555,7 +557,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         }
 
         if (!hasChanges) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "DoUpdateTenant no hasChanges"
                            << ", pathId: " << pathId
                            << ", tenantLink: " << tenantLink

@@ -53,6 +53,16 @@ namespace NSequenceProxy {
             msg->Path);
     }
 
+    void TSequenceProxy::Handle(TEvSequenceProxy::TEvGetSequence::TPtr& ev) {
+        auto* msg = ev->Get();
+        TGetSequenceRequestInfo request;
+        request.Sender = ev->Sender;
+        request.Cookie = ev->Cookie;
+        request.UserToken = std::move(msg->UserToken);
+        request.StartAt = AppData()->MonotonicTimeProvider->Now();
+        DoGetSequence(std::move(request), msg->Database, msg->PathId);
+    }
+
     void TSequenceProxy::Reply(const TNextValRequestInfo& request, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         Counters->ResponseCount->Inc();
         auto milliseconds = (AppData()->MonotonicTimeProvider->Now() - request.StartAt).MilliSeconds();
@@ -66,6 +76,17 @@ namespace NSequenceProxy {
         auto milliseconds = (AppData()->MonotonicTimeProvider->Now() - request.StartAt).MilliSeconds();
         Counters->NextValLatency->Collect(milliseconds);
         Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(pathId, value), 0, request.Cookie);
+    }
+
+    void TSequenceProxy::Reply(const TGetSequenceRequestInfo& request, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
+        Counters->ResponseCount->Inc();
+        Counters->ErrorsCount->Inc();
+        Send(request.Sender, new TEvSequenceProxy::TEvGetSequenceResult(status, issues), 0, request.Cookie);
+    }
+
+    void TSequenceProxy::Reply(const TGetSequenceRequestInfo& request, const TEvSequenceProxy::TEvGetSequenceResult& ev) {
+        Counters->ResponseCount->Inc();
+        Send(request.Sender, new TEvSequenceProxy::TEvGetSequenceResult(ev), 0, request.Cookie);
     }
 
     void TSequenceProxy::MaybeStartResolve(const TString& database, const TString& path, TSequenceByName& info) {
@@ -111,6 +132,28 @@ namespace NSequenceProxy {
         OnChanged(database, pathId, info);
     }
 
+    void TSequenceProxy::DoGetSequence(TGetSequenceRequestInfo&& request, const TString& database, const TPathId& pathId) {
+        Counters->RequestCount->Inc();
+
+        auto& info = Databases[database].SequenceByPathId[pathId];
+        if (!info.ResolveInProgress) {
+            StartResolve(database, pathId, !info.SequenceInfo);
+            info.ResolveInProgress = true;
+        }
+        if (!info.SequenceInfo) {
+            info.PendingGetSequenceResolve.emplace_back(std::move(request));
+            return;
+        }
+
+        if (DoMaybeReplyUnauthorized(request, pathId, info)) {
+            return;
+        }
+
+        info.PendingGetSequence.emplace_back(std::move(request));
+
+        OnChanged(database, pathId, info);
+    }
+
     void TSequenceProxy::OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         auto& info = Databases[database].SequenceByName[path];
         Y_ABORT_UNLESS(info.ResolveInProgress);
@@ -139,7 +182,9 @@ namespace NSequenceProxy {
         auto& infoById = Databases[database].SequenceByPathId[pathId];
         infoById.SequenceInfo = result.SequenceInfo;
         infoById.SecurityObject = result.SecurityObject;
-        OnResolved(database, pathId, infoById, info.PendingNextValResolve);
+
+        TList<TGetSequenceRequestInfo> resolvedGetSequence;
+        OnResolved(database, pathId, infoById, info.PendingNextValResolve, resolvedGetSequence);
 
         MaybeStartResolve(database, path, info);
     }
@@ -153,6 +198,11 @@ namespace NSequenceProxy {
             Reply(info.PendingNextValResolve.front(), status, issues);
             info.PendingNextValResolve.pop_front();
         }
+
+        while (!info.PendingGetSequenceResolve.empty()) {
+            Reply(info.PendingGetSequenceResolve.front(), status, issues);
+            info.PendingGetSequenceResolve.pop_front();
+        }
     }
 
     void TSequenceProxy::OnResolveResult(const TString& database, const TPathId& pathId, TResolveResult&& result) {
@@ -163,20 +213,29 @@ namespace NSequenceProxy {
         Y_ABORT_UNLESS(result.SequenceInfo);
         info.SequenceInfo = result.SequenceInfo;
         info.SecurityObject = result.SecurityObject;
-        OnResolved(database, pathId, info, info.PendingNextValResolve);
+        OnResolved(database, pathId, info, info.PendingNextValResolve, info.PendingGetSequenceResolve);
     }
 
-    void TSequenceProxy::OnResolved(const TString& database, const TPathId& pathId, TSequenceByPathId& info, TList<TNextValRequestInfo>& resolved) {
+    void TSequenceProxy::OnResolved(const TString& database, const TPathId& pathId, TSequenceByPathId& info,
+            TList<TNextValRequestInfo>& resolvedNextVal, TList<TGetSequenceRequestInfo>& resolvedGetSequence) {
         info.LastKnownTabletId = info.SequenceInfo->Description.GetSequenceShard();
         info.DefaultCacheSize = Max(info.SequenceInfo->Description.GetCache(), ui64(1));
 
-        while (!resolved.empty()) {
-            auto& request = resolved.front();
+        while (!resolvedNextVal.empty()) {
+            auto& request = resolvedNextVal.front();
             if (!DoMaybeReplyUnauthorized(request, pathId, info)) {
                 info.PendingNextVal.emplace_back(std::move(request));
                 ++info.TotalRequested;
             }
-            resolved.pop_front();
+            resolvedNextVal.pop_front();
+        }
+
+        while (!resolvedGetSequence.empty()) {
+            auto& request = resolvedGetSequence.front();
+            if (!DoMaybeReplyUnauthorized(request, pathId, info)) {
+                info.PendingGetSequence.emplace_back(std::move(request));
+            }
+            resolvedGetSequence.pop_front();
         }
 
         OnChanged(database, pathId, info);
@@ -215,6 +274,34 @@ namespace NSequenceProxy {
         OnChanged(database, pathId, info);
     }
 
+    void TSequenceProxy::Handle(TEvSequenceProxy::TEvGetSequenceResult::TPtr& ev) {
+        auto it = GetSequenceInFlight.find(ev->Cookie);
+        Y_ABORT_UNLESS(it != GetSequenceInFlight.end());
+        auto database = it->second.Database;
+        auto pathId = it->second.PathId;
+        GetSequenceInFlight.erase(it);
+
+        auto& info = Databases[database].SequenceByPathId[pathId];
+        Y_ABORT_UNLESS(info.GetSequenceInProgress);
+        info.GetSequenceInProgress = false;
+
+        auto* msg = ev->Get();
+
+        if (msg->Status == Ydb::StatusIds::SUCCESS) {
+            while (!info.PendingGetSequence.empty()) {
+                Reply(info.PendingGetSequence.front(), *msg);
+                info.PendingGetSequence.pop_front();
+            }
+        } else {
+            while (!info.PendingGetSequence.empty()) {
+                Reply(info.PendingGetSequence.front(), msg->Status, msg->Issues);
+                info.PendingGetSequence.pop_front();
+            }
+        }
+
+        OnChanged(database, pathId, info);
+    }
+
     void TSequenceProxy::OnChanged(const TString& database, const TPathId& pathId, TSequenceByPathId& info) {
         while (info.TotalCached > 0 && !info.PendingNextVal.empty()) {
             const auto& request = info.PendingNextVal.front();
@@ -230,9 +317,15 @@ namespace NSequenceProxy {
             info.AllocateInProgress = true;
             info.TotalAllocating += cache;
         }
+
+        if (!info.PendingGetSequence.empty() && !info.GetSequenceInProgress) {
+            StartGetSequence(info.LastKnownTabletId, database, pathId);
+            info.GetSequenceInProgress = true;
+        }
     }
 
-    bool TSequenceProxy::DoMaybeReplyUnauthorized(const TNextValRequestInfo& request, const TPathId& pathId, TSequenceByPathId& info) {
+    template <class TRequestInfo>
+    bool TSequenceProxy::DoMaybeReplyUnauthorized(const TRequestInfo& request, const TPathId& pathId, TSequenceByPathId& info) {
         if (request.UserToken && info.SecurityObject) {
             ui32 access = NACLib::EAccessRights::SelectRow;
             if (!info.SecurityObject->CheckAccess(access, *request.UserToken)) {

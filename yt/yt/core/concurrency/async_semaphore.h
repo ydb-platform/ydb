@@ -53,7 +53,8 @@ class TAsyncSemaphore
     : public TRefCounted
 {
 public:
-    explicit TAsyncSemaphore(i64 totalSlots);
+    // Overdrafting allows successfully execute requests that try to acquire more slots than semaphore has in total.
+    explicit TAsyncSemaphore(i64 totalSlots, bool enableOverdraft = false);
 
     //! Updates the total number of slots.
     void SetTotal(i64 totalSlots);
@@ -62,8 +63,8 @@ public:
     virtual void Release(i64 slots = 1);
 
     //! Acquires a given number of slots.
-    //! Cannot fail, may lead to an overcommit.
-    //! Returns whether overcommit happened.
+    //! Cannot fail, may lead to an overdraft.
+    //! Returns whether overdraft happened.
     virtual bool Acquire(i64 slots = 1);
 
     //! Tries to acquire a given number of slots.
@@ -95,6 +96,7 @@ private:
     i64 TotalSlots_;
     i64 FreeSlots_;
 
+    const bool EnableOverdraft_ = false;
     bool Releasing_ = false;
 
     TPromise<void> ReadyEvent_;
@@ -106,6 +108,8 @@ private:
     };
 
     std::queue<TWaiter> Waiters_;
+
+    bool CanOverdraft() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TAsyncSemaphore)

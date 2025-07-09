@@ -283,18 +283,36 @@ You can also specify any value in the `value` field. Data from the `value` field
 
 The type formatting table to load into the table:
 
-| {{ ydb-short-name }} type                                | Description format                                                                                                                                                                                                                               |
-|-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Bool`                                  | `true` or `false`                                                                                                                                                                                                                                |
-| `Int8`, `Int16`, `Int32`, `Int64`       | A signed integer                                                                                                                                                                                                                                 |
-| `Uint8`, `Uint16`, `Uint32`, `Uint64`   | An unsigned integer                                                                                                                                                                                                                              |
-| `Text`, `Bytes`, `Json`, `JsonDocument` | Represent as text                                                                                                                                                                                                                                |
-| `Float`, `Double`, `Decimal(22, 9)`     | A real number                                                                                                                                                                                                                                    |
-| `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), corresponds to the `java.time.Duration` in Java.                                                                                                                                   |
-| `Date`                                  | Pattern `YYYY-MM-DD` calendar date from standard [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)                                                                                                                                              |
-| `Datetime`                              | Pattern `YYYY-MM-DDThh:mm:ss`, timezone will be set to `UTC`                                                                                                                                                                                     |
-| `Timestamp`                             | The timestamp from the [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) standard corresponds to the `java.time.Instant` in Java, timezone will be set to `UTC` (precision in microseconds - `Timestamp` type {{ ydb-short-name }} restriction) |                                                                               |
-
+#|
+|| {{ ydb-short-name }} type | Description format ||
+|| `Bool` |
+`true` or `false`
+    ||
+|| `Int8`, `Int16`, `Int32`, `Int64` |
+A signed integer
+    ||
+|| `Uint8`, `Uint16`, `Uint32`, `Uint64` |
+An unsigned integer
+    ||
+|| `Text`, `Bytes`, `Json`, `JsonDocument` |
+Represent as text
+    ||
+|| `Float`, `Double`, `Decimal(22, 9)` |
+A real number
+    ||
+|| `Interval` |
+[ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), corresponds to the `java.time.Duration` in Java.
+    ||
+|| `Date` |
+Pattern `YYYY-MM-DD` calendar date from standard [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)
+    ||
+|| `Datetime` |
+Pattern `YYYY-MM-DDThh:mm:ss`, timezone will be set to `UTC`
+    ||
+|| `Timestamp` |
+The timestamp from the [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) standard corresponds to the `java.time.Instant` in Java, timezone will be set to `UTC` (precision in microseconds - `Timestamp` type {{ ydb-short-name }} restriction)
+    ||
+|#
 
 Example `CSV` file:
 
@@ -414,8 +432,8 @@ Example contents of the `DATABASECHANGELOG` table:
 
 | AUTHOR        | COMMENTS        | CONTEXTS | DATEEXECUTED | DEPLOYMENT_ID | DESCRIPTION                                                    | EXECTYPE | FILENAME               | ID                   | LABELS | LIQUIBASE | MD5SUM                             | ORDEREXECUTED | TAG |
 |:--------------|:----------------|:---------|:-------------|:--------------|:---------------------------------------------------------------|:---------|:-----------------------|:---------------------|:-------|:----------|:-----------------------------------|:--------------|:----|
-| kurdyukov-kir | Table episodes. |          | 12:53:27     | 1544007500    | createTable tableName=episodes                                 | EXECUTED | migration/episodes.xml | episodes             |        | 4.25.1    | 9:4067056a5ab61db09b379a93625870ca | 1             |
-| kurdyukov-kir | ""              |          | 12:53:28     | 1544007500    | createIndex indexName=index_episodes_title, tableName=episodes | EXECUTED | migration/episodes.xml | index_episodes_title |        | 4.25.1    | 9:49b8b0b22d18c7fd90a3d6b2c561455d | 2             |
+| kurdyukov-kir | Table episodes. |          | 12:53:27     | 1544007500    | createTable tableName=episodes                                 | EXECUTED | migration/episodes.xml | episodes             |        | 4.25.1    | 9:4067056a5ab61db09b379a93625870ca | 1             | |
+| kurdyukov-kir | ""              |          | 12:53:28     | 1544007500    | createIndex indexName=index_episodes_title, tableName=episodes | EXECUTED | migration/episodes.xml | index_episodes_title |        | 4.25.1    | 9:49b8b0b22d18c7fd90a3d6b2c561455d | 2             | |
 
 ### Database schema evolution
 

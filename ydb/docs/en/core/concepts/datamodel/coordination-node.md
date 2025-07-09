@@ -1,4 +1,4 @@
-# Coordination node
+# Coordination Node
 
 A coordination node is an object in {{ ydb-short-name }} that allows client applications to coordinate their actions in a distributed manner. Typical use cases for coordination nodes include:
 
@@ -34,6 +34,6 @@ Semaphores in {{ ydb-short-name }} are **not** recursive. Thus, semaphore acquis
 
 Working with coordination nodes and semaphores is done through [dedicated methods in {{ ydb-short-name }} SDK](../../reference/ydb-sdk/coordination.md).
 
-## Similar systems {#similar-systems}
+## Similar Systems {#similar-systems}
 
 {{ ydb-short-name }} coordination nodes can solve tasks that are traditionally performed using systems such as [Apache Zookeeper](https://zookeeper.apache.org/), [etcd](https://etcd.io/), [Consul](https://www.consul.io/), and others. If a project uses {{ ydb-short-name }} for data storage along with one of these third-party systems for coordination, switching to {{ ydb-short-name }} coordination nodes can reduce the number of systems that need to be operated and maintained.

@@ -1,11 +1,11 @@
 #pragma once
 
-#include <src/client/persqueue_public/ut/ut_utils/test_utils.h>
-#include <src/client/persqueue_public/ut/ut_utils/sdk_test_setup.h>
-#include <src/client/persqueue_public/include/aliases.h>
-#include <src/client/persqueue_public/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/sdk_test_setup.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/aliases.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
 
-#include <src/client/topic/common/executor_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NPersQueueTests;
@@ -14,18 +14,39 @@ using NYdb::NTopic::IAsyncExecutor;
 
 namespace NYdb::NPersQueue::NTests {
 
+struct TPersQueueYdbSdkTestSetupSettings {
+    TString TestCaseName;
+    bool Start = true;
+    TVector<NKikimrServices::EServiceKikimr> LogServices = ::NPersQueue::TTestServer::LOGGED_SERVICES;
+    NActors::NLog::EPriority LogPriority = NActors::NLog::PRI_DEBUG;
+    ui32 NodeCount = NKikimr::NPersQueueTests::PQ_DEFAULT_NODE_COUNT;
+    size_t TopicPartitionsCount = 1;
+};
+
 class TPersQueueYdbSdkTestSetup : public ::NPersQueue::SDKTestSetup {
     THolder<NYdb::TDriver> Driver;
     THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
 
     TAdaptiveLock Lock;
 public:
+    // TODO(qyryq) Delete this ctor in favor of TPersQueueYdbSdkTestSetupSettings.
     TPersQueueYdbSdkTestSetup(const TString& testCaseName, bool start = true,
                               const TVector<NKikimrServices::EServiceKikimr>& logServices = ::NPersQueue::TTestServer::LOGGED_SERVICES,
                               NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG,
                               ui32 nodeCount = NKikimr::NPersQueueTests::PQ_DEFAULT_NODE_COUNT,
                               size_t topicPartitionsCount = 1)
         : SDKTestSetup(testCaseName, start, logServices, logPriority, nodeCount, topicPartitionsCount)
+    {
+    }
+
+    TPersQueueYdbSdkTestSetup(TPersQueueYdbSdkTestSetupSettings settings)
+        : SDKTestSetup(
+            settings.TestCaseName,
+            settings.Start,
+            settings.LogServices,
+            settings.LogPriority,
+            settings.NodeCount,
+            settings.TopicPartitionsCount)
     {
     }
 

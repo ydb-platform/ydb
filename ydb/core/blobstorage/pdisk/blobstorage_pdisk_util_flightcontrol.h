@@ -22,11 +22,14 @@ class TFlightControl {
     TVector<bool> IsCompleteLoop;
     TMutex ScheduleMutex;
     TCondVar ScheduleCondVar;
+    TString PDiskLogPrefix;
 
     void WakeUp();
 
 public:
     TFlightControl(ui64 bits);
+
+    void Initialize(const TString& logPrefix);
 
     // Returns 0 in case of scheduling error
     // Operation Idx otherwise

@@ -8,7 +8,9 @@ namespace NYT::NCrypto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TPemBlobConfig)
+DECLARE_REFCOUNTED_STRUCT(TPemBlobConfig)
+DECLARE_REFCOUNTED_STRUCT(TSslContextCommand)
+DECLARE_REFCOUNTED_STRUCT(TSslContextConfig)
 DECLARE_REFCOUNTED_CLASS(TSslContext)
 
 ////////////////////////////////////////////////////////////////////////////////

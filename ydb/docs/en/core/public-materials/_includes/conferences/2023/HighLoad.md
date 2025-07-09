@@ -6,7 +6,7 @@ Implementing a distributed database with strong consistency isn’t difficult; e
 
 [{{ team.ivanov.name }}]({{ team.ivanov.profile }}) ({{ team.ivanov.position }}) discussed the architecture of YDB, demonstrated its high performance through benchmark results, and compared YDB with its competitors.
 
-@[YouTube](https://youtu.be/iMjq96GQTHQ?si=moMbI3Je90s3zY60)
+@[YouTube](https://youtu.be/84t_6jV2m5E?si=z3YrrRaCvifSo6JN)
 
 The presentation will be of interest to developers of high-load systems and developers of platforms for various purposes.
 

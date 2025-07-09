@@ -40,7 +40,7 @@ protected:
             case 0:
                 THROW_ERROR_EXCEPTION("Cannot create client without cluster");
             case 1:
-                return NCache::CreateClient(NCache::MakeClusterConfig(ClientsCacheConfig_, clusterUrl), Options_);
+                return NCache::CreateClient(NCache::GetConnectionConfig(ClientsCacheConfig_, clusterUrl), Options_);
             default:
                 return CreateFederatedClient(clusters);
         }
@@ -104,12 +104,15 @@ IClientsCachePtr CreateFederatedClientsCache(
 
 IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
-    const NApi::NRpcProxy::TConnectionConfigPtr& cacheConfig,
+    const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig,
     const NApi::TClientOptions& options,
     TString clusterSeparator)
 {
     auto clientsCacheConfig = New<TClientsCacheConfig>();
-    clientsCacheConfig->DefaultConfig = CloneYsonStruct(cacheConfig, /*postprocess*/ false, /*setDefaults*/ false);
+    clientsCacheConfig->DefaultConnection = CloneYsonStruct(
+        connectionConfig,
+        /*postprocess*/ false,
+        /*setDefaults*/ false);
 
     return NYT::New<TClientsCache>(
         std::move(clientsCacheConfig),

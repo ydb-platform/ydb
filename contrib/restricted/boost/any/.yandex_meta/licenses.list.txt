@@ -10,11 +10,11 @@ License
 Distributed under the [Boost Software License, Version 1.0](https://boost.org/LICENSE_1_0.txt).
 
 ====================COPYRIGHT====================
-// Copyright Antony Polukhin, 2013-2024.
+// Copyright Antony Polukhin, 2013-2025.
 
 
 ====================COPYRIGHT====================
-// Copyright Antony Polukhin, 2020-2024.
+// Copyright Antony Polukhin, 2020-2025.
 
 
 ====================COPYRIGHT====================
@@ -23,4 +23,4 @@ Distributed under the [Boost Software License, Version 1.0](https://boost.org/LI
 
 ====================COPYRIGHT====================
 // Copyright Ruslan Arutyunyan, 2019-2021.
-// Copyright Antony Polukhin, 2021-2024.
+// Copyright Antony Polukhin, 2021-2025.

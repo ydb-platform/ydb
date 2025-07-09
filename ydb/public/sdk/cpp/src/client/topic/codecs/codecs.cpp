@@ -1,11 +1,11 @@
-#include <ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/stream/buffer.h>
 #include <util/stream/zlib.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 namespace {
 
@@ -61,6 +61,18 @@ std::string TUnsupportedCodec::Decompress(const std::string&) const {
 
 std::unique_ptr<IOutputStream> TUnsupportedCodec::CreateCoder(TBuffer&, int) const {
     throw yexception() << "use of unsupported codec";
+}
+
+class TCommonCodecsProvider {
+public:
+    TCommonCodecsProvider() {
+        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::GZIP, std::make_unique<TGzipCodec>());
+        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::ZSTD, std::make_unique<TZstdCodec>());
+    }
+};
+
+namespace {
+TCommonCodecsProvider COMMON_CODECS_PROVIDER;
 }
 
 }; // namespace NYdb::NTopic

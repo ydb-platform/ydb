@@ -101,7 +101,7 @@ public:
     }
 
     UNIMPLEMENTED_CONST_METHOD(NApi::TClusterTag, GetClusterTag, ());
-    UNIMPLEMENTED_CONST_METHOD(const TString&, GetClusterId, ());
+    UNIMPLEMENTED_CONST_METHOD(const std::string&, GetClusterId, ());
     UNIMPLEMENTED_CONST_METHOD(const std::optional<std::string>&, GetClusterName, ());
     UNIMPLEMENTED_CONST_METHOD(bool, IsSameCluster, (const NApi::IConnectionPtr&));
     UNIMPLEMENTED_METHOD(

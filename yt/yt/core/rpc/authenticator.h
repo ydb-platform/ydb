@@ -13,8 +13,8 @@ namespace NYT::NRpc {
 struct TAuthenticationResult
 {
     std::string User;
-    TString Realm;
-    TString UserTicket;
+    std::string Realm;
+    std::string UserTicket;
 };
 
 struct TAuthenticationContext

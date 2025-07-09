@@ -1,3 +1,3 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>

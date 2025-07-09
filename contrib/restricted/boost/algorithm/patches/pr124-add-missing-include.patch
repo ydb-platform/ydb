@@ -1,0 +1,21 @@
+From 7012619c8056b1b30f88bc57dd39c80c0018214f Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Mon, 5 May 2025 18:01:59 +0200
+Subject: [PATCH] Add missing include
+
+---
+ include/boost/algorithm/searching/boyer_moore.hpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/boost/algorithm/searching/boyer_moore.hpp b/include/boost/algorithm/searching/boyer_moore.hpp
+index 80a5a4474..e3c00105c 100644
+--- a/include/boost/algorithm/searching/boyer_moore.hpp
++++ b/include/boost/algorithm/searching/boyer_moore.hpp
+@@ -10,6 +10,7 @@
+ #ifndef BOOST_ALGORITHM_BOYER_MOORE_SEARCH_HPP
+ #define BOOST_ALGORITHM_BOYER_MOORE_SEARCH_HPP
+ 
++#include <algorithm>    // for std::reverse_copy
+ #include <iterator>     // for std::iterator_traits
+ 
+ #include <boost/config.hpp>

@@ -12,7 +12,7 @@ private:
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;
 
-    TTxScan(NColumnShard::TColumnShard* self, TEvColumnShard::TEvScan::TPtr& ev)
+    TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev)
         : TBase(self)
         , Ev(ev) {
     }
@@ -24,7 +24,7 @@ public:
     }
 
 private:
-    TEvColumnShard::TEvScan::TPtr Ev;
+    TEvDataShard::TEvKqpScan::TPtr Ev;
 };
 
 }   // namespace NKikimr::NOlap::NReader

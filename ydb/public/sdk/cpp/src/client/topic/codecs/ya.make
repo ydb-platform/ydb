@@ -1,9 +1,7 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
-    codecs.cpp
+    GLOBAL codecs.cpp
 )
 
 PEERDIR(

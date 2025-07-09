@@ -2,7 +2,10 @@ LIBRARY(common)
 
 SRCS(
     aws.cpp
+    cert_format_converter.cpp
+    client_command_options.cpp
     command.cpp
+    command_utils.cpp
     common.cpp
     csv_parser.cpp
     examples.cpp
@@ -29,22 +32,13 @@ SRCS(
     sys.cpp
     tabbed_table.cpp
     waiting_bar.cpp
+    ydb_updater.cpp
     yt.cpp
 )
 
-IF (YDB_CERTIFIED)
-    CFLAGS(
-        -DDISABLE_UPDATE
-    )
-ELSE()
-    SRCS(
-        ydb_updater.cpp
-    )
-ENDIF ()
-
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
-    library/cpp/config
+    contrib/libs/openssl
     library/cpp/getopt
     library/cpp/json/writer
     library/cpp/yaml/as
@@ -52,6 +46,7 @@ PEERDIR(
     ydb/public/lib/json_value
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/result
@@ -62,12 +57,19 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/credentials
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
     ydb/library/arrow_parquet
+    ydb/public/lib/ydb_cli/common/ini_config
+    ydb/public/lib/ydb_cli/common/yql_parser
 )
 
 GENERATE_ENUM_SERIALIZATION(formats.h)
 GENERATE_ENUM_SERIALIZATION(parameters.h)
 
 END()
+
+RECURSE(
+    ini_config
+    yql_parser
+)
 
 RECURSE_FOR_TESTS(
     ut

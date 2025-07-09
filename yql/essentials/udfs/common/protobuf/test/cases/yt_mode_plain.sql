@@ -106,8 +106,11 @@ $udfParPB = Udf(Protobuf::Parse, $configPB as TypeConfig);
 $udfSerPB = Udf(Protobuf::Serialize, $configPB as TypeConfig);
 
 SELECT TestField,
-       Ensure("Success", $udfParNO(TestField) == $udfParNO($udfSerNO($udfParNO(TestField))), "Fail"),
-       Ensure("Success", $udfParYT(TestField) == $udfParYT($udfSerYT($udfParYT(TestField))), "Fail"),
-       Ensure("Success", $udfParPB(TestField) == $udfParPB($udfSerPB($udfParPB(TestField))), "Fail")
+      $udfParNO(TestField),
+      $udfSerNO($udfParNO(TestField)),
+      $udfParYT(TestField),
+      $udfSerYT($udfParYT(TestField)),
+      $udfParPB(TestField),
+      $udfSerPB($udfParPB(TestField)),
 FROM plato.Input;
 

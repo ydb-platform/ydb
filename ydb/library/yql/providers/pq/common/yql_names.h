@@ -5,6 +5,7 @@
 namespace NYql {
 
 constexpr TStringBuf PartitionsCountProp = "PartitionsCount";
+constexpr TStringBuf FederatedClustersProp = "FederatedClusters";
 constexpr TStringBuf ConsumerSetting = "Consumer";
 constexpr TStringBuf EndpointSetting = "Endpoint";
 constexpr TStringBuf SharedReading = "SharedReading";

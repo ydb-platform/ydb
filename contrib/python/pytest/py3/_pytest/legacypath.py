@@ -1,8 +1,11 @@
 """Add backward compatibility support for the legacy py path type."""
+
 import dataclasses
+from pathlib import Path
 import shlex
 import subprocess
-from pathlib import Path
+from typing import Final
+from typing import final
 from typing import List
 from typing import Optional
 from typing import TYPE_CHECKING
@@ -11,7 +14,6 @@ from typing import Union
 from iniconfig import SectionWrapper
 
 from _pytest.cacheprovider import Cache
-from _pytest.compat import final
 from _pytest.compat import LEGACY_PATH
 from _pytest.compat import legacy_path
 from _pytest.config import Config
@@ -31,9 +33,8 @@ from _pytest.pytester import RunResult
 from _pytest.terminal import TerminalReporter
 from _pytest.tmpdir import TempPathFactory
 
-if TYPE_CHECKING:
-    from typing_extensions import Final
 
+if TYPE_CHECKING:
     import pexpect
 
 
@@ -89,7 +90,6 @@ class Testdir:
         return self._pytester.chdir()
 
     def finalize(self) -> None:
-        """See :meth:`Pytester._finalize`."""
         return self._pytester._finalize()
 
     def makefile(self, ext, *args, **kwargs) -> LEGACY_PATH:
@@ -270,7 +270,7 @@ class LegacyTestdirPlugin:
 @final
 @dataclasses.dataclass
 class TempdirFactory:
-    """Backward compatibility wrapper that implements :class:`py.path.local`
+    """Backward compatibility wrapper that implements ``py.path.local``
     for :class:`TempPathFactory`.
 
     .. note::
@@ -289,11 +289,11 @@ class TempdirFactory:
         self._tmppath_factory = tmppath_factory
 
     def mktemp(self, basename: str, numbered: bool = True) -> LEGACY_PATH:
-        """Same as :meth:`TempPathFactory.mktemp`, but returns a :class:`py.path.local` object."""
+        """Same as :meth:`TempPathFactory.mktemp`, but returns a ``py.path.local`` object."""
         return legacy_path(self._tmppath_factory.mktemp(basename, numbered).resolve())
 
     def getbasetemp(self) -> LEGACY_PATH:
-        """Same as :meth:`TempPathFactory.getbasetemp`, but returns a :class:`py.path.local` object."""
+        """Same as :meth:`TempPathFactory.getbasetemp`, but returns a ``py.path.local`` object."""
         return legacy_path(self._tmppath_factory.getbasetemp().resolve())
 
 

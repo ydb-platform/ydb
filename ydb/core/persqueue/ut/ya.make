@@ -17,6 +17,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/json
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/ut/common
@@ -49,6 +50,7 @@ SRCS(
     fetch_request_ut.cpp
     utils_ut.cpp
     list_all_topics_ut.cpp
+    cache_eviction_ut.cpp
 )
 
 RESOURCE(

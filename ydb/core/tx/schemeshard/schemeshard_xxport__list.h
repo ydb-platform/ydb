@@ -1,7 +1,7 @@
 #pragma once
 
-#include "schemeshard_xxport__tx_base.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <util/string/cast.h>
 
@@ -25,7 +25,7 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
     {
     }
 
-    bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
+    bool DoExecuteImpl(const TMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
         const auto& record = Request->Get()->Record;
         const auto& request = record.GetRequest();
 
@@ -54,26 +54,26 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
 
         resp.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        auto it = container.begin();
+        auto it = container.end();
         ui64 skip = (page - 1) * pageSize;
-        while (it != container.end() && skip) {
+        while (it != container.begin() && skip) {
+            --it;
             if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
                 --skip;
             }
-            ++it;
         }
 
         ui64 size = 0;
-        while (it != container.end() && size < pageSize) {
+        while (it != container.begin() && size < pageSize) {
+            --it;
             if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
-                Self->FromXxportInfo(*resp.MutableEntries()->Add(), it->second);
+                Self->FromXxportInfo(*resp.MutableEntries()->Add(), *it->second);
                 ++size;
             }
-            ++it;
         }
 
-        if (it == container.end()) {
-            resp.SetNextPageToken("1");
+        if (it == container.begin()) {
+            resp.SetNextPageToken("0");
         } else {
             resp.SetNextPageToken(ToString(page + 1));
         }

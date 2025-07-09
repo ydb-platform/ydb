@@ -1,6 +1,6 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
-// Copyright (c) 2021-2023 Alexander Grund
+// Copyright (c) 2021-2024 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -418,7 +418,7 @@ namespace boost { namespace locale {
     typedef basic_format<char> format;
     /// Definition of wchar_t based format
     typedef basic_format<wchar_t> wformat;
-#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+#ifdef __cpp_lib_char8_t
     /// Definition of char8_t based format
     typedef basic_format<char8_t> u8format;
 #endif

@@ -18,11 +18,18 @@ namespace NKikimr {
         friend class TPDiskMockActor;
 
     public:
+        enum class ESpaceColorPolicy {
+            None = 0,
+            SharedQuota,
+        };
+
+    public:
         using TPtr = TIntrusivePtr<TPDiskMockState>;
 
     public:
         TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize = 128 << 20,
-                bool isDiskReadOnly = false, NPDisk::EDeviceType deviceType = NPDisk::EDeviceType::DEVICE_TYPE_NVME);
+                bool isDiskReadOnly = false, NPDisk::EDeviceType deviceType = NPDisk::EDeviceType::DEVICE_TYPE_NVME,
+                ESpaceColorPolicy spaceColorPolicy = ESpaceColorPolicy::None);
         TPDiskMockState(std::unique_ptr<TImpl>&& impl);
         ~TPDiskMockState();
 
@@ -36,6 +43,7 @@ namespace NKikimr {
         void SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor);
         void SetStatusFlags(NPDisk::TStatusFlags flags);
         TString& GetStateErrorReason();
+        ui32 GetNumActiveSlots() const;
 
         TPtr Snapshot(); // create a copy of PDisk whole state
 

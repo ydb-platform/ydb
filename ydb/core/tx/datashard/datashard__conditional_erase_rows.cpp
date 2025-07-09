@@ -12,6 +12,7 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -33,7 +34,7 @@ protected:
     virtual void CloseEraser() = 0;
 };
 
-class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
+class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, public IScan, public IEraserOps {
     struct TDataShardId {
         TActorId ActorId;
         ui64 TabletId;
@@ -138,8 +139,8 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         TVector<TCell> keyCells;
 
         for (const auto& key : keyOrder) {
-            Y_ABORT_UNLESS(key.Pos != Max<TPos>());
-            Y_ABORT_UNLESS(key.Pos < row.Size());
+            Y_ENSURE(key.Pos != Max<TPos>());
+            Y_ENSURE(key.Pos < row.Size());
             keyCells.push_back(row.Get(key.Pos));
         }
 
@@ -155,7 +156,7 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         request->Record.SetSchemaVersion(tableId.SchemaVersion);
 
         for (const auto& key : keyOrder) {
-            Y_ABORT_UNLESS(key.Tag != Max<TTag>());
+            Y_ENSURE(key.Tag != Max<TTag>());
             request->Record.AddKeyColumnIds(key.Tag);
         }
 
@@ -173,12 +174,14 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         SerializedKeys.Clear();
     }
 
-    void Reply(bool aborted = false) {
+    void Reply(EStatus status = EStatus::Done) {
         auto response = MakeHolder<TEvDataShard::TEvConditionalEraseRowsResponse>();
         response->Record.SetTabletID(DataShard.TabletId);
 
-        if (aborted) {
-            response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
+        if (status != EStatus::Done) {
+            response->Record.SetStatus(status == EStatus::Exception
+                ? NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR
+                : NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
         } else if (!Success) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR);
         } else if (!NoMoreData) {
@@ -229,14 +232,14 @@ public:
     {
     }
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "CondEraseScan {"
           << " TableId: " << TableId
           << " TxId: " << TxId
         << " }";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
 
         Driver = driver;
@@ -245,12 +248,12 @@ public:
 
         // fill scan tags & positions in KeyOrder
         ScanTags = Condition->Tags();
-        Y_ABORT_UNLESS(ScanTags.size() == 1, "Multi-column conditions are not supported");
+        Y_ENSURE(ScanTags.size() == 1, "Multi-column conditions are not supported");
 
         THashMap<TTag, TPos> tagToPos;
 
         for (TPos pos = 0; pos < ScanTags.size(); ++pos) {
-            Y_ABORT_UNLESS(tagToPos.emplace(ScanTags.at(pos), pos).second);
+            Y_ENSURE(tagToPos.emplace(ScanTags.at(pos), pos).second);
         }
 
         for (auto& key : KeyOrder) {
@@ -272,12 +275,12 @@ public:
         sys->Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvConditionalEraseRowsRegistered(TxId, SelfId()));
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         lead.To(ScanTags, {}, ESeek::Lower);
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell>, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell>, const TRow& row) override {
         Stats.IncProcessed();
         if (!Condition->Check(row)) {
             return EScan::Feed;
@@ -293,7 +296,7 @@ public:
         return EScan::Sleep;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         NoMoreData = true;
 
         if (!SerializedKeys) {
@@ -304,11 +307,19 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        Reply(abort != EAbort::None);
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        Reply(status);
         PassAway();
 
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void PassAway() override {
@@ -401,8 +412,8 @@ protected:
                 }
 
                 const TColInfo* col = scheme->ColInfo(mainColumnId);
-                Y_ABORT_UNLESS(col);
-                Y_ABORT_UNLESS(col->Tag == mainColumnId);
+                Y_ENSURE(col);
+                Y_ENSURE(col->Tag == mainColumnId);
 
                 keyOrder.emplace_back().Tag = col->Tag;
                 keys.insert(col->Tag);
@@ -413,7 +424,7 @@ protected:
     }
 
     TActorId CreateEraser() override {
-        Y_ABORT_UNLESS(!Eraser);
+        Y_ENSURE(!Eraser);
         Eraser = this->Register(CreateDistributedEraser(this->SelfId(), TableId, Indexes));
         return Eraser;
     }
@@ -437,8 +448,8 @@ IScan* CreateCondEraseScan(
         TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
         THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
 {
-    Y_ABORT_UNLESS(ds);
-    Y_ABORT_UNLESS(condition.Get());
+    Y_ENSURE(ds);
+    Y_ENSURE(condition.Get());
 
     if (!indexes) {
         return new TCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits);
@@ -600,7 +611,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
 
         if (scan) {
             const ui32 localTableId = userTable->LocalTid;
-            Y_ABORT_UNLESS(Executor()->Scheme().GetTableInfo(localTableId));
+            Y_ENSURE(Executor()->Scheme().GetTableInfo(localTableId));
 
             auto* appData = AppData(ctx);
             const auto& taskName = appData->DataShardConfig.GetTtlTaskName();

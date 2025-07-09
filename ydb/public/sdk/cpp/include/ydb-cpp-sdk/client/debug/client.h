@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
-namespace NYdb::inline V3::NDebug {
+namespace NYdb::inline Dev::NDebug {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -11,6 +11,8 @@ public:
     TPlainGrpcPingResult(TStatus&& status)
         : TStatus(std::move(status))
     {}
+
+    ui64 CallBackTs = 0;
 };
 
 class TGrpcProxyPingResult: public TStatus {
@@ -96,4 +98,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::V3::NDebug
+} // namespace NYdb::NDebug

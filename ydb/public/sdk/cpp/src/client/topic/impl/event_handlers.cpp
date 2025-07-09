@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/topic/read_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, uint64_t index);
 

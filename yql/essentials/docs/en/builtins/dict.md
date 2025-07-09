@@ -6,7 +6,7 @@ Construct an empty dictionary. Two arguments are passed: for a key and a value. 
 
 [Documentation for the type definition format](../types/type_string.md).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictCreate(String, Tuple<String,Double?>);
@@ -22,7 +22,7 @@ Construct an empty set. An argument is passed: the key type that can be built by
 
 [Documentation for the type definition format](../types/type_string.md).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT SetCreate(String);
@@ -36,7 +36,7 @@ SELECT SetCreate(Tuple<Int32?,String>);
 
 The count of items in the dictionary.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictLength(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -50,7 +50,7 @@ SELECT DictLength(dict_column) FROM my_table;
 
 Check that the dictionary contains at least one item.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictHasItems(AsDict(AsTuple(1, AsList("foo", "bar")))) FROM my_table;
@@ -65,7 +65,7 @@ SELECT DictHasItems(dict_column) FROM my_table;
 
 Get dictionary contents as a list of tuples including key-value pairs (`List<Tuplekey_type,value_type>`).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictItems(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -83,7 +83,7 @@ FROM my_table;
 
 Get a list of dictionary keys.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictKeys(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -101,7 +101,7 @@ FROM my_table;
 
 Get a list of dictionary values.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictPayloads(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -117,7 +117,7 @@ FROM my_table;
 
 Get a dictionary element by its key.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictLookup(AsDict(
@@ -136,7 +136,7 @@ FROM my_table;
 
 Checking if an element in the dictionary using its key. Returns true or false.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictContains(AsDict(
@@ -164,7 +164,7 @@ Arguments:
 1. Dictionary.
 2. [Aggregation factory](basic.md#aggregationfactory).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT DictAggregate(AsDict(
@@ -183,7 +183,7 @@ So there are two options to make a call:
 * With the `Dict<K,V1>` and `List<K>` arguments.
 * With the `Dict<K,V1>` and `Dict<K,V2>` arguments.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), AsList(7, 4)); -- true
@@ -199,7 +199,7 @@ Arguments:
 * Two dictionaries: `Dict<K,V1>` and `Dict<K,V2>`.
 * An optional function that combines the values from the source dictionaries to construct the values of the output dictionary. If such a function has the `(K,V1,V2) -> U` type, the result type is `Dict<K,U>`. If the function is not specified, the result type is `Dict<K,Void>`, and the values from the source dictionaries are ignored.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT SetIntersection(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 3 }
@@ -219,7 +219,7 @@ So there are two options to make a call:
 * With the `Dict<K,V1>` and `List<K>` arguments.
 * With the `Dict<K,V1>` and `Dict<K,V2>` arguments.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT SetIncludes(ToSet(AsList(1, 2, 3)), AsList(3, 4)); -- false
@@ -235,7 +235,7 @@ Arguments:
 * Two dictionaries: `Dict<K,V1>` and `Dict<K,V2>`.
 * An optional function that combines the values from the source dictionaries to construct the values of the output dictionary. If such a function has the `(K,V1?,V2?) -> U` type, the result type is `Dict<K,U>`. If the function is not specified, the result type is `Dict<K,Void>`, and the values from the source dictionaries are ignored.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT SetUnion(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 3, 4 }
@@ -250,7 +250,7 @@ SELECT SetUnion(
 
 Construct a dictionary containing all the keys with their values in the first dictionary with no matching key in the second dictionary.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT SetDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2 }
@@ -269,7 +269,7 @@ Arguments:
 * Two dictionaries: `Dict<K,V1>` and `Dict<K,V2>`.
 * An optional function that combines the values from the source dictionaries to construct the values of the output dictionary. If such a function has the `(K,V1?,V2?) -> U` type, the result type is `Dict<K,U>`. If the function is not specified, the result type is `Dict<K,Void>`, and the values from the source dictionaries are ignored.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT SetSymmetricDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 4 }

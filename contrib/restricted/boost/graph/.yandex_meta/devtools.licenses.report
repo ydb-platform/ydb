@@ -95,7 +95,7 @@ BELONGS ya.make
         include/boost/graph/kamada_kawai_spring_layout.hpp [3:5]
         include/boost/graph/loop_erased_random_walk.hpp [3:5]
         include/boost/graph/max_cardinality_matching.hpp [4:6]
-        include/boost/graph/maximum_weighted_matching.hpp [4:6]
+        include/boost/graph/maximum_weighted_matching.hpp [5:7]
         include/boost/graph/one_bit_color_map.hpp [3:5]
         include/boost/graph/page_rank.hpp [4:6]
         include/boost/graph/plod_generator.hpp [3:5]

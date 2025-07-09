@@ -6,6 +6,8 @@
  */
 #include <aws/io/io.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_allocator;
 
 /**
@@ -90,5 +92,6 @@ AWS_IO_API
 void aws_pkcs11_lib_release(struct aws_pkcs11_lib *pkcs11_lib);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_PKCS11_H */

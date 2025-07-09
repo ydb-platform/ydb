@@ -1,13 +1,13 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
 #include <ydb/public/api/protos/ydb_common.pb.h>
 
 #include <util/datetime/base.h>
 
 #include <google/protobuf/duration.pb.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 void SetDuration(const TDuration& duration, google::protobuf::Duration& protoValue);
 
@@ -43,6 +43,20 @@ template <typename TProtoRequest, typename TRequestSettings>
 TProtoRequest MakeOperationRequest(const TRequestSettings& settings) {
     auto request = MakeRequest<TProtoRequest>();
     FillOperationParams(settings, request);
+    return request;
+}
+
+
+template <typename TProtoRequest>
+TProtoRequest* MakeRequestOnArena(google::protobuf::Arena* arena) {
+    return google::protobuf::Arena::CreateMessage<TProtoRequest>(arena);
+}
+
+template <typename TProtoRequest, typename TRequestSettings>
+TProtoRequest* MakeOperationRequestOnArena(const TRequestSettings& settings, google::protobuf::Arena* arena) {
+    Y_ASSERT(arena != nullptr);
+    auto request = MakeRequestOnArena<TProtoRequest>(arena);
+    FillOperationParams(settings, *request);
     return request;
 }
 

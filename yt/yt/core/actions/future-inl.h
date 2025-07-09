@@ -722,7 +722,8 @@ void InterceptExceptions(const TPromise<T>& promise, const F& func)
         auto guard = MakeFutureCurrentTokenGuard(promise.Impl_.Get());
         func();
     } catch (const NYT::TErrorException& ex) {
-        promise.Set(ex.Error());
+        // Create error explicitly from exception so that FromExceptionEnricher is called.
+        promise.Set(NYT::TError(ex));
     } catch (const std::exception& ex) {
         promise.Set(NYT::TError(ex));
     } catch (const NConcurrency::TFiberCanceledException&) {
@@ -1421,7 +1422,7 @@ bool TPromiseBase<T>::TrySet(NYT::TErrorOr<T>&& value) const
 
 template <class T>
 template <class U>
-inline void TPromiseBase<T>::TrySetFrom(TFuture<U> another) const
+inline void TPromiseBase<T>::TrySetFrom(const TFuture<U>& another) const
 {
     YT_ASSERT(Impl_);
 

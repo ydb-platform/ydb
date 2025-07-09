@@ -10,7 +10,7 @@ namespace NKikimr {
         struct TStamp {
             TStamp(ui64 stamp) : Stamp(stamp) { }
 
-            TOut& Do(TOut &out) const noexcept
+            TOut& Do(TOut &out) const
             {
                 return out << Stamp.Gen() << ":" << Stamp.Step();
             }

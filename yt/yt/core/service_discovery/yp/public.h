@@ -7,7 +7,7 @@ namespace NYT::NServiceDiscovery::NYP {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TServiceDiscoveryConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceDiscoveryConfig)
 
 YT_DECLARE_CONFIGURABLE_SINGLETON(TServiceDiscoveryConfig);
 

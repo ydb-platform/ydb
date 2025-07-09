@@ -4,25 +4,31 @@
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
 class TReadOnlyController: public ICSController {
 private:
+    YDB_READONLY(TAtomicCounter, CleanupSchemasFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, TTLFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, TTLStartedCounter, 0);
-    YDB_READONLY(TAtomicCounter, InsertFinishedCounter, 0);
-    YDB_READONLY(TAtomicCounter, InsertStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CleaningFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, CleaningStartedCounter, 0);
 
     YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
+
+    YDB_READONLY(TAtomicCounter, HeadersSkippingOnSelect, 0);
+    YDB_READONLY(TAtomicCounter, HeadersApprovedOnSelect, 0);
+    YDB_READONLY(TAtomicCounter, HeadersSkippedNoData, 0);
+
     YDB_READONLY(TAtomicCounter, IndexesSkippingOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
+
     YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
     YDB_READONLY(TAtomicCounter, NeedActualizationCount, 0);
 
@@ -76,43 +82,58 @@ protected:
     }
 
 public:
-    void WaitCompactions(const TDuration d) const {
+    bool WaitCompactions(const TDuration d) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();
+        ui32 count = 0;
         while (Now() - start < d) {
             if (compactionsStart != GetCompactionStartedCounter().Val()) {
                 compactionsStart = GetCompactionStartedCounter().Val();
                 start = TInstant::Now();
+                ++count;
             }
             Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
+            Sleep(std::min(TDuration::Seconds(1), d));
         }
+        return count > 0;
     }
 
-    void WaitIndexation(const TDuration d) const {
+    bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
         TInstant start = TInstant::Now();
-        ui32 insertsStart = GetInsertStartedCounter().Val();
-        while (Now() - start < d) {
-            if (insertsStart != GetInsertStartedCounter().Val()) {
-                insertsStart = GetInsertStartedCounter().Val();
-                start = TInstant::Now();
-            }
-            Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
-        }
-    }
-
-    void WaitCleaning(const TDuration d) const {
-        TInstant start = TInstant::Now();
-        ui32 countStart = GetCleaningStartedCounter().Val();
+        const ui32 countStart0 = GetCleaningStartedCounter().Val();
+        ui32 countStart = countStart0;
         while (Now() - start < d) {
             if (countStart != GetCleaningStartedCounter().Val()) {
                 countStart = GetCleaningStartedCounter().Val();
                 start = TInstant::Now();
             }
             Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
+            if (testRuntime) {
+                testRuntime->SimulateSleep(TDuration::Seconds(1));
+            } else {
+                Sleep(TDuration::Seconds(1));
+            }
         }
+        return GetCleaningStartedCounter().Val() != countStart0;
+    }
+
+    bool WaitCleaningSchemas(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
+        TInstant start = TInstant::Now();
+        const ui32 countStart0 = GetCleanupSchemasFinishedCounter().Val();
+        ui32 countStart = countStart0;
+        while (Now() - start < d) {
+            if (countStart != GetCleanupSchemasFinishedCounter().Val()) {
+                countStart = GetCleanupSchemasFinishedCounter().Val();
+                start = TInstant::Now();
+            }
+            Cerr << "WAIT_CLEANING_SCHEMAS: " << GetCleanupSchemasFinishedCounter().Val() << Endl;
+            if (testRuntime) {
+                testRuntime->SimulateSleep(TDuration::Seconds(1));
+            } else {
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+        return GetCleanupSchemasFinishedCounter().Val() != countStart0;
     }
 
     void WaitTtl(const TDuration d) const {
@@ -158,6 +179,10 @@ public:
         AFL_VERIFY(!NeedActualizationCount.Val());
     }
 
+    virtual void OnCleanupSchemasFinished() override {
+        CleanupSchemasFinishedCounter.Inc();
+    }
+
     virtual void OnIndexSelectProcessed(const std::optional<bool> result) override {
         if (!result) {
             IndexesSkippedNoData.Inc();
@@ -167,6 +192,21 @@ public:
             IndexesSkippingOnSelect.Inc();
         }
     }
+
+    virtual void OnHeaderSelectProcessed(const std::optional<bool> result) override {
+        if (!result) {
+            HeadersSkippedNoData.Inc();
+        } else if (*result) {
+            HeadersApprovedOnSelect.Inc();
+        } else {
+            HeadersSkippingOnSelect.Inc();
+        }
+    }
+
+    virtual bool IsForcedGenerateInternalPathId() const override {
+        return true;
+    }
+
 };
 
 }

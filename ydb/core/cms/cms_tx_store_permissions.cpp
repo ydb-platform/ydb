@@ -31,6 +31,7 @@ public:
 
         const auto &rec = Response->Get<TEvCms::TEvPermissionResponse>()->Record;
 
+        auto now = ctx.Now();
         if (MaintenanceTaskId) {
             Y_ABORT_UNLESS(Scheduled);
 
@@ -39,13 +40,25 @@ public:
                 .TaskId = *MaintenanceTaskId,
                 .RequestId = Scheduled->RequestId,
                 .Owner = Scheduled->Owner,
-                .HasSingleCompositeActionGroup = !Scheduled->Request.GetPartialPermissionAllowed()
+                .HasSingleCompositeActionGroup = !Scheduled->Request.GetPartialPermissionAllowed(),
+                .CreateTime = now,
+                .LastRefreshTime = now
             });
 
             db.Table<Schema::MaintenanceTasks>().Key(*MaintenanceTaskId).Update(
                 NIceDb::TUpdate<Schema::MaintenanceTasks::RequestID>(Scheduled->RequestId),
                 NIceDb::TUpdate<Schema::MaintenanceTasks::Owner>(Scheduled->Owner),
-                NIceDb::TUpdate<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>(!Scheduled->Request.GetPartialPermissionAllowed())
+                NIceDb::TUpdate<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>(!Scheduled->Request.GetPartialPermissionAllowed()),
+                NIceDb::TUpdate<Schema::MaintenanceTasks::CreateTime>(now.MicroSeconds()),
+                NIceDb::TUpdate<Schema::MaintenanceTasks::LastRefreshTime>(now.MicroSeconds())
+            );
+        } else if (Scheduled != nullptr && Self->State->MaintenanceRequests.contains(Scheduled->RequestId)) {
+            const auto& taskId = Self->State->MaintenanceRequests[Scheduled->RequestId];
+            auto& task = Self->State->MaintenanceTasks.at(taskId);
+
+            task.LastRefreshTime = now;
+            db.Table<Schema::MaintenanceTasks>().Key(taskId).Update(
+                NIceDb::TUpdate<Schema::MaintenanceTasks::LastRefreshTime>(now.MicroSeconds())
             );
         }
 

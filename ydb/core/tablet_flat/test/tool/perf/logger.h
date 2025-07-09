@@ -31,23 +31,23 @@ namespace NPerf {
 
         }
 
-        TLogLn operator ()(ELnLev lev) const noexcept
+        TLogLn operator ()(ELnLev lev) const
         {
             return Log(lev);
         }
 
-        TLogLn Log(ELnLev lev) const noexcept override
+        TLogLn Log(ELnLev lev) const override
         {
             return { ShouldLog(lev) ? this : nullptr, lev };
         }
 
     protected:
-        bool ShouldLog(ELnLev level) const noexcept
+        bool ShouldLog(ELnLev level) const
         {
             return (int)level <= Max(Level, Relev);
         }
 
-        void LogLn(ELnLev level, const TString &line) const noexcept override
+        void LogLn(ELnLev level, const TString &line) const override
         {
             auto left = (Now() - Start).SecondsFloat();
 
@@ -59,7 +59,7 @@ namespace NPerf {
             if ((int)level <= Relev) *Redir << out;
         }
 
-        static const char* Lev2Label(ELnLev level) noexcept
+        static const char* Lev2Label(ELnLev level)
         {
             static const char *line[] = { "??", "**", "EE", "WW", "I0",
                 "I1", "I2", "I3", "D0", "D1", "D2", "D3" };

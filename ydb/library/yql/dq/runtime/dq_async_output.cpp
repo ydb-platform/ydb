@@ -11,11 +11,17 @@ namespace {
 
 class TDqAsyncOutputBuffer : public IDqAsyncOutputBuffer {
     struct TValueDesc {
-        std::variant<NUdf::TUnboxedValue, NDqProto::TWatermark, NDqProto::TCheckpoint> Value;
+        std::variant<NUdf::TUnboxedValue, NKikimr::NMiniKQL::TUnboxedValueVector, NDqProto::TWatermark, NDqProto::TCheckpoint> Value;
         ui64 EstimatedSize;
 
         TValueDesc(NUdf::TUnboxedValue&& value, ui64 size)
             : Value(std::move(value))
+            , EstimatedSize(size)
+        {
+        }
+
+        TValueDesc(NUdf::TUnboxedValue* values, ui32 count, ui64 size)
+            : Value(NKikimr::NMiniKQL::TUnboxedValueVector(values, values + count))
             , EstimatedSize(size)
         {
         }
@@ -32,9 +38,15 @@ class TDqAsyncOutputBuffer : public IDqAsyncOutputBuffer {
         {
         }
 
+        bool HasValue() const {
+            return std::holds_alternative<NUdf::TUnboxedValue>(Value) || std::holds_alternative<NKikimr::NMiniKQL::TUnboxedValueVector>(Value);
+        }
+
         TValueDesc(const TValueDesc&) = default;
         TValueDesc(TValueDesc&&) = default;
     };
+
+    static constexpr ui64 REESTIMATE_ROW_SIZE_PERIOD = 1024;
 
 public:
     TDqOutputStats PushStats;
@@ -43,6 +55,7 @@ public:
     TDqAsyncOutputBuffer(ui64 outputIndex, const TString& type, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes, TCollectStatsLevel level)
         : MaxStoredBytes(maxStoredBytes)
         , OutputType(outputType)
+        , IsBlock(IsBlockType(OutputType))
     {
         PushStats.Level = level;
         PopStats.Level = level;
@@ -57,30 +70,37 @@ public:
     const TDqOutputStats& GetPushStats() const override {
         return PushStats;
     }
-    
+
     const TDqAsyncOutputBufferStats& GetPopStats() const override {
         return PopStats;
     }
 
-    bool IsFull() const override {
-        return EstimatedStoredBytes >= MaxStoredBytes;
+    EDqFillLevel GetFillLevel() const override {
+        return FillLevel;
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
+        auto result = EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
+        if (FillLevel != result) {
+            if (Aggregator) {
+                Aggregator->UpdateCount(FillLevel, result);
+            }
+            FillLevel = result;
+        }
+        return result;
+    }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
+        Aggregator = aggregator;
+        Aggregator->AddCount(FillLevel);
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
-        if (ValuesPushed++ % 1000 == 0) {
-            ReestimateRowBytes(value);
-        }
-        Y_ABORT_UNLESS(EstimatedRowBytes > 0);
-        Values.emplace_back(std::move(value), EstimatedRowBytes);
-        EstimatedStoredBytes += EstimatedRowBytes;
-
-        ReportChunkIn(1, EstimatedRowBytes);
+        DoPush(std::move(value));
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 count) override {
-        Y_UNUSED(values);
-        Y_UNUSED(count);
-        YQL_ENSURE(false, "Wide stream is not supported");
+        DoPush(values, count);
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
@@ -115,7 +135,7 @@ public:
 
         // Calc values count.
         for (auto iter = Values.cbegin(), end = Values.cend();
-            usedBytes < bytes && iter != end && std::holds_alternative<NUdf::TUnboxedValue>(iter->Value);
+            usedBytes < bytes && iter != end && iter->HasValue();
             ++iter)
         {
             ++valuesCount;
@@ -124,7 +144,15 @@ public:
 
         // Reserve size and return data.
         while (valuesCount--) {
-            batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(Values.front().Value)));
+            auto& value = Values.front().Value;
+            if (std::holds_alternative<NUdf::TUnboxedValue>(value)) {
+                batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(value)));
+            } else if (std::holds_alternative<NKikimr::NMiniKQL::TUnboxedValueVector>(value)) {
+                auto& multiValue = std::get<NKikimr::NMiniKQL::TUnboxedValueVector>(value);
+                batch.PushRow(multiValue.data(), multiValue.size());
+            } else {
+                YQL_ENSURE(false, "Unsupported output value");
+            }
             Values.pop_front();
         }
         Y_ABORT_UNLESS(EstimatedStoredBytes >= usedBytes);
@@ -181,7 +209,7 @@ public:
             return false;
         }
         for (const TValueDesc& v : Values) {
-            if (std::holds_alternative<NUdf::TUnboxedValue>(v.Value)) {
+            if (v.HasValue()) {
                 return false;
             }
         }
@@ -194,8 +222,47 @@ public:
     }
 
 private:
+    template <typename... TArgs>
+    void DoPush(TArgs&&... args) {
+        if (ValuesPushed++ % REESTIMATE_ROW_SIZE_PERIOD == 0) {
+            ReestimateRowBytes(args...);
+        }
+
+        Y_ABORT_UNLESS(EstimatedRowBytes > 0);
+        EstimatedStoredBytes += EstimatedRowBytes;
+        ReportChunkIn(GetRowsCount(args...), EstimatedRowBytes);
+
+        Values.emplace_back(std::forward<TArgs>(args)..., EstimatedRowBytes);
+    }
+
+    ui64 GetRowsCount(const NUdf::TUnboxedValue& value) const {
+        Y_UNUSED(value);
+        return 1;
+    }
+
+    ui64 GetRowsCount(const NUdf::TUnboxedValue* values, ui32 count) const {
+        if (!IsBlock) {
+            return 1;
+        }
+        return NKikimr::NMiniKQL::TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+    }
+
     void ReestimateRowBytes(const NUdf::TUnboxedValue& value) {
-        const ui64 valueSize = TDqDataSerializer::EstimateSize(value, OutputType);
+        DoReestimateRowBytes(TDqDataSerializer::EstimateSize(value, OutputType));
+    }
+
+    void ReestimateRowBytes(const NUdf::TUnboxedValue* values, ui32 count) {
+        const auto* multiType = static_cast<NKikimr::NMiniKQL::TMultiType* const>(OutputType);
+        YQL_ENSURE(multiType, "Expected multi type for wide output");
+
+        ui64 valueSize = 0;
+        for (ui32 i = 0; i < count; ++i) {
+            valueSize += TDqDataSerializer::EstimateSize(values[i], multiType->GetElementType(i));
+        }
+        DoReestimateRowBytes(valueSize);
+    }
+
+    void DoReestimateRowBytes(ui64 valueSize) {
         if (EstimatedRowBytes) {
             EstimatedRowBytes = static_cast<ui64>(0.6 * valueSize + 0.4 * EstimatedRowBytes);
         } else {
@@ -214,35 +281,64 @@ private:
             PushStats.Resume();
         }
 
-        if (IsFull()) {
-            PopStats.TryPause();
-        }
+        auto fillLevel = UpdateFillLevel();
 
         if (PopStats.CollectFull()) {
+            if (fillLevel != NoLimit) {
+                PopStats.TryPause();
+            }
             PopStats.MaxMemoryUsage = std::max(PopStats.MaxMemoryUsage, EstimatedStoredBytes);
             PopStats.MaxRowsInMemory = std::max(PopStats.MaxRowsInMemory, Values.size());
         }
     }
 
     void ReportChunkOut(ui64 rows, ui64 bytes) {
+        auto fillLevel = UpdateFillLevel();
+
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += bytes;
             PopStats.Rows += rows;
             PopStats.Chunks++;
-            if (!IsFull()) {
+            if (fillLevel == NoLimit) {
                 PopStats.Resume();
             }
         }
     }
 
+    static bool IsBlockType(const NKikimr::NMiniKQL::TType* type) {
+        if (!type->IsMulti()) {
+            return false;
+        }
+
+        const NKikimr::NMiniKQL::TMultiType* multiType = static_cast<const NKikimr::NMiniKQL::TMultiType*>(type);
+        const ui32 width = multiType->GetElementsCount();
+        if (!width) {
+            return false;
+        }
+
+        for (ui32 i = 0; i < width; i++) {
+            if (!multiType->GetElementType(i)->IsBlock()) {
+                return false;
+            }
+        }
+
+        const auto lengthType = static_cast<const NKikimr::NMiniKQL::TBlockType*>(multiType->GetElementType(width - 1));
+        return lengthType->GetShape() == NKikimr::NMiniKQL::TBlockType::EShape::Scalar
+            && lengthType->GetItemType()->IsData()
+            && static_cast<const NKikimr::NMiniKQL::TDataType*>(lengthType->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Uint64;
+    }
+
 private:
     const ui64 MaxStoredBytes;
     NKikimr::NMiniKQL::TType* const OutputType;
+    const bool IsBlock = false;
     ui64 EstimatedStoredBytes = 0;
     ui64 ValuesPushed = 0;
     bool Finished = false;
     std::deque<TValueDesc> Values;
     ui64 EstimatedRowBytes = 0;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    EDqFillLevel FillLevel = NoLimit;
 };
 
 } // namespace

@@ -3,8 +3,7 @@
 #include <ydb/library/backup/query_builder.h>
 #include <ydb/library/backup/query_uploader.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 using namespace NBackup;
 using namespace NTable;
@@ -128,7 +127,7 @@ public:
         Y_ENSURE(dataAccumulator);
 
         TUploader::TOptions opts;
-        opts.InFly = settings.InFly_;
+        opts.InFly = settings.MaxInFlight_;
         opts.Rate = settings.RateLimiterSettings_.Rate_;
         opts.Interval = settings.RateLimiterSettings_.Interval_;
         opts.ReactionTime = settings.RateLimiterSettings_.ReactionTime_;
@@ -183,5 +182,4 @@ NPrivate::IDataWriter* CreateCompatWriter(
     return new TDataWriter(path, tableClient, accumulator, settings);
 }
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

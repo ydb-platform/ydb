@@ -1,3 +1,5 @@
+#include <ydb/core/fq/libs/common/iceberg_processor.h>
+
 #include "request_validators.h"
 
 namespace NFq {
@@ -145,6 +147,11 @@ NYql::TIssues ValidateConnectionSetting(
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.logging.folder_id field is not specified"));
         }
 
+        break;
+    }
+    case FederatedQuery::ConnectionSetting::kIceberg: {
+        TIcebergProcessor p(setting.iceberg(), issues);
+        p.Process();
         break;
     }
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET: {

@@ -31,7 +31,7 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
 
     TValidatorsRegistry::Instance()->LockValidators();
 
-    ConfigsManager = new TConfigsManager(*this);
+    ConfigsManager = new TConfigsManager(*this, Counters);
     ctx.RegisterWithSameMailbox(ConfigsManager);
 
     TenantsManager = new TTenantsManager(*this, domains->Domain,
@@ -184,6 +184,24 @@ void TConsole::Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorCon
 void TConsole::Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxSetConfig(ev), ctx);
+}
+
+bool TConsole::HasTenant(const TString& path) const
+{
+    if (!TenantsManager) {
+        return false;
+    }
+
+    return TenantsManager->HasTenant(path);
+}
+
+TString TConsole::GetDomainName() const
+{
+    if (!TenantsManager) {
+        return {};
+    }
+
+    return TenantsManager->GetDomainName();
 }
 
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)

@@ -3,7 +3,7 @@
 #include "reader.h"
 
 #include <util/generic/maybe.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/yexception.h>
 #include <util/system/yassert.h>
 

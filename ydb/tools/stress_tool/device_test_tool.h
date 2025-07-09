@@ -116,23 +116,34 @@ public:
     }
 
     void PrintResultsHumanFormat() {
-        const ui32 screenWidth = 140;
-        const ui32 columnWidth = screenWidth / Results.size() - 3; // 3 symbols is additional 2 spaces and | sign
-        TStringStream formatStr;
-        formatStr << " %" << columnWidth << "s |";
-        const char *format = formatStr.Str().c_str();
+        const ui32 screenWidth = 250;
+        const ui32 maxColumnWidthLimit = screenWidth / Results.size() - 3; // 3 symbols is additional 2 spaces and | sign
+
+        // calculate max width per column
+        TVector<ui32> columnWidths;
+        columnWidths.reserve(Results.size());
+        for (const auto& counter : Results) {
+            ui32 maxWidth = std::max(counter.Name.size(), counter.Value.size());
+            columnWidths.push_back(std::min<ui32>(maxWidth, maxColumnWidthLimit));
+        }
+
         if (!HeaderPrinted) {
             HeaderPrinted = true;
             PrintGlobalParams();
             TEST_COUT("|");
-            for (const auto& counter : Results) {
-                TEST_COUT(Sprintf(format, counter.Name.c_str()));
+            for (size_t i = 0; i < Results.size(); ++i) {
+                const auto& name = Results[i].Name;
+                ui32 width = columnWidths[i];
+                TEST_COUT(std::format(" {:>{}.{}} |", name.c_str(), width, width));
             }
             TEST_COUT_LN("");
         }
+
         TEST_COUT("|");
-        for (const auto& counter : Results) {
-            TEST_COUT(Sprintf(format, counter.Value.c_str()));
+        for (size_t i = 0; i < Results.size(); ++i) {
+            const auto& value = Results[i].Value;
+            ui32 width = columnWidths[i];
+            TEST_COUT(std::format(" {:>{}.{}} |", value.c_str(), width, width));
         }
         TEST_COUT_LN("");
     }

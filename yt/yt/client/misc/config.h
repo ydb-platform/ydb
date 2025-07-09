@@ -10,10 +10,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TWorkloadConfig
+struct TWorkloadConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     TWorkloadDescriptor WorkloadDescriptor;
 
     REGISTER_YSON_STRUCT(TWorkloadConfig);

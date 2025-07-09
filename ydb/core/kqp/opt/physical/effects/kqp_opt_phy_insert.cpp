@@ -142,6 +142,7 @@ TExprBase KqpBuildInsertStages(TExprBase node, TExprContext& ctx, const TKqpOpti
             .Input(insertRows.Cast())
             .Columns(insert.Columns())
             .ReturningColumns(insert.ReturningColumns())
+            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
             .Settings(insert.Settings())
             .Done();
     } else {
@@ -150,6 +151,7 @@ TExprBase KqpBuildInsertStages(TExprBase node, TExprContext& ctx, const TKqpOpti
             .Input(insert.Input())
             .Columns(insert.Columns())
             .ReturningColumns(insert.ReturningColumns())
+            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
             .Settings(insert.Settings())
             .Done();
     }

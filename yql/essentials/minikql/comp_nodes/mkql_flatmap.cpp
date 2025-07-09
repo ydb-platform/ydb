@@ -219,7 +219,7 @@ public:
         }
 
         if (state.IsFinish()) {
-            return NUdf::TUnboxedValuePod::MakeFinish();
+            return state;
         }
 
         while (true) {
@@ -1484,7 +1484,7 @@ public:
                 block = smsk;
 
                 const auto arrayType = ArrayType::get(list->getType(), UseOnStack);
-                const auto array = *this->Stateless || ctx.AlwaysInline ?
+                const auto array = *this->Stateless_ || ctx.AlwaysInline ?
                     new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()):
                     new AllocaInst(arrayType, 0U, "array", block);
                 const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {zeroSize, zeroSize}, "ptr", block);
@@ -1556,7 +1556,7 @@ public:
             Value* res;
             if constexpr (!IsMultiRowPerItem) {
                 const auto newType = PointerType::getUnqual(list->getType());
-                const auto newPtr = *this->Stateless || ctx.AlwaysInline ?
+                const auto newPtr = *this->Stateless_ || ctx.AlwaysInline ?
                     new AllocaInst(newType, 0U, "new_ptr", &ctx.Func->getEntryBlock().back()):
                     new AllocaInst(newType, 0U, "new_ptr", block);
                 res = GenNewArray(ctx, idx, newPtr, block);
@@ -1574,7 +1574,7 @@ public:
             } else {
                 const auto factory = ctx.GetFactory();
 
-                const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::ExtendList<ResultContainerOpt>));
+                const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::ExtendList<ResultContainerOpt>>());
 
                 const auto funType = FunctionType::get(list->getType(), {factory->getType(), vector->getType(), index->getType()}, false);
                 const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
@@ -1600,7 +1600,7 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListFlatMapWrapper::MakeLazyList));
+            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFlatMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
             const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);

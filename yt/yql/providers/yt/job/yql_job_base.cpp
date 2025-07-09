@@ -273,6 +273,16 @@ void TYqlJobBase::Init() {
         JobStats = CreateDefaultStatsRegistry();
     }
     SecureParamsProvider.Reset(new TEnvSecureParamsProvider("YT_SECURE_VAULT"));
+    LogProvider = NUdf::MakeLogProvider(
+        [](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+            Cerr << Now() << " " << component << " [" << level << "] " << message << "\n";
+        }, RuntimeLogLevel);
+}
+
+void TYqlJobBase::Finish() {
+    if (JobStats) {
+        JobStats->SetStat(Job_ThreadsCount, GetRunnigThreadsCount());
+    }
 }
 
 void TYqlJobBase::Save(IOutputStream& s) const {
@@ -281,7 +291,9 @@ void TYqlJobBase::Save(IOutputStream& s) const {
         FileAliases,
         UdfValidateMode,
         OptLLVM,
-        TableNames
+        TableNames,
+        RuntimeLogLevel,
+        LangVer
     );
 }
 
@@ -291,15 +303,10 @@ void TYqlJobBase::Load(IInputStream& s) {
         FileAliases,
         UdfValidateMode,
         OptLLVM,
-        TableNames
+        TableNames,
+        RuntimeLogLevel,
+        LangVer
     );
-}
-
-void TYqlJobBase::Do(const NYT::TRawJobContext& jobContext) {
-    DoImpl(jobContext.GetInputFile(), jobContext.GetOutputFileList());
-    if (JobStats) {
-        JobStats->SetStat(Job_ThreadsCount, GetRunnigThreadsCount());
-    }
 }
 
 TCallableVisitFuncProvider TYqlJobBase::MakeTransformProvider(THashMap<TString, TRuntimeNode>* extraArgs) const {

@@ -38,7 +38,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        generated/include/aws/common/config.h [5:5]
+        generated/include/aws/common/config-linux.h [5:5]
         include/aws/common/allocator.h [4:4]
         include/aws/common/array_list.h [5:5]
         include/aws/common/array_list.inl [5:5]
@@ -53,12 +53,14 @@ BELONGS ya.make
         include/aws/common/byte_order.h [5:5]
         include/aws/common/byte_order.inl [5:5]
         include/aws/common/cache.h [4:4]
+        include/aws/common/cbor.h [5:5]
         include/aws/common/clock.h [5:5]
         include/aws/common/clock.inl [5:5]
         include/aws/common/command_line_parser.h [4:4]
         include/aws/common/common.h [5:5]
         include/aws/common/condition_variable.h [5:5]
         include/aws/common/cpuid.h [4:4]
+        include/aws/common/cross_process_lock.h [4:4]
         include/aws/common/date_time.h [4:4]
         include/aws/common/device_random.h [4:4]
         include/aws/common/encoding.h [5:5]
@@ -70,6 +72,7 @@ BELONGS ya.make
         include/aws/common/fifo_cache.h [4:4]
         include/aws/common/file.h [4:4]
         include/aws/common/hash_table.h [5:5]
+        include/aws/common/host_utils.h [4:4]
         include/aws/common/json.h [5:5]
         include/aws/common/lifo_cache.h [4:4]
         include/aws/common/linked_hash_table.h [4:4]
@@ -89,7 +92,7 @@ BELONGS ya.make
         include/aws/common/math.gcc_x64_asm.inl [5:5]
         include/aws/common/math.h [5:5]
         include/aws/common/math.inl [5:5]
-        include/aws/common/math.msvc.inl [5:5]
+        include/aws/common/math.msvc_x64.inl [5:5]
         include/aws/common/mutex.h [5:5]
         include/aws/common/package.h [5:5]
         include/aws/common/platform.h [5:5]
@@ -99,22 +102,24 @@ BELONGS ya.make
         include/aws/common/private/array_list.h [5:5]
         include/aws/common/private/byte_buf.h [4:4]
         include/aws/common/private/dlloads.h [4:4]
+        include/aws/common/private/external_module_impl.h [5:5]
         include/aws/common/private/hash_table_impl.h [5:5]
-        include/aws/common/private/json_impl.h [5:5]
+        include/aws/common/private/system_info_priv.h [4:4]
         include/aws/common/private/thread_shared.h [4:4]
         include/aws/common/private/xml_parser_impl.h [5:5]
         include/aws/common/process.h [4:4]
-        include/aws/common/promise.h [2:2]
         include/aws/common/ref_count.h [5:5]
         include/aws/common/ring_buffer.h [4:4]
         include/aws/common/ring_buffer.inl [4:4]
         include/aws/common/rw_lock.h [5:5]
+        include/aws/common/shutdown_types.h [5:5]
         include/aws/common/statistics.h [5:5]
         include/aws/common/stdbool.h [7:7]
         include/aws/common/stdint.h [4:4]
         include/aws/common/string.h [4:4]
         include/aws/common/string.inl [4:4]
         include/aws/common/system_info.h [5:5]
+        include/aws/common/system_resource_util.h [5:5]
         include/aws/common/task_scheduler.h [5:5]
         include/aws/common/thread.h [5:5]
         include/aws/common/thread_scheduler.h [4:4]
@@ -126,7 +131,7 @@ BELONGS ya.make
         include/aws/common/zero.inl [5:5]
         source/allocator.c [2:2]
         source/allocator_sba.c [2:2]
-        source/arch/arm/asm/cpuid.c [2:2]
+        source/arch/arm/auxv/cpuid.c [2:2]
         source/arch/intel/asm/cpuid.c [2:2]
         source/arch/intel/cpuid.c [2:2]
         source/arch/intel/encoding_avx2.c [2:2]
@@ -145,9 +150,11 @@ BELONGS ya.make
         source/fifo_cache.c [2:2]
         source/file.c [2:2]
         source/hash_table.c [2:2]
+        source/host_utils.c [2:2]
         source/json.c [2:2]
         source/lifo_cache.c [2:2]
         source/linked_hash_table.c [2:2]
+        source/linux/system_info.c [2:2]
         source/log_channel.c [2:2]
         source/log_formatter.c [2:2]
         source/log_writer.c [2:2]
@@ -157,6 +164,7 @@ BELONGS ya.make
         source/memtrace.c [2:2]
         source/posix/clock.c [2:2]
         source/posix/condition_variable.c [2:2]
+        source/posix/cross_process_lock.c [2:2]
         source/posix/device_random.c [2:2]
         source/posix/environment.c [2:2]
         source/posix/file.c [2:2]
@@ -164,21 +172,34 @@ BELONGS ya.make
         source/posix/process.c [2:2]
         source/posix/rw_lock.c [2:2]
         source/posix/system_info.c [2:2]
+        source/posix/system_resource_utils.c [2:2]
         source/posix/thread.c [2:2]
         source/posix/time.c [2:2]
         source/priority_queue.c [2:2]
         source/process_common.c [2:2]
-        source/promise.c [2:2]
         source/ref_count.c [2:2]
         source/ring_buffer.c [2:2]
         source/statistics.c [2:2]
         source/string.c [2:2]
+        source/system_info.c [2:2]
         source/task_scheduler.c [2:2]
         source/thread_scheduler.c [2:2]
         source/thread_shared.c [2:2]
         source/uri.c [2:2]
         source/uuid.c [2:2]
         source/xml_parser.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1080fa0fb4e78243d4cf99f682a9b7e1
+BELONGS ya.make
+    License text:
+        Copyright (c) 2014-2017 Pavel Kalvoda
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        THIRD-PARTY-LICENSES.txt [61:61]
+        THIRD-PARTY-LICENSES.txt [65:65]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 413dcc4b68245c99831f8704250351e2
 BELONGS ya.make
@@ -191,6 +212,93 @@ BELONGS ya.make
     Files with this license:
         source/posix/time.c [15:15]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 4b1fdef3f7cab7eba63b9b5e2e625bc1
+BELONGS ya.make
+    License text:
+        /* Copyright of this function: (c) 2008-2009 Bjoern Hoehrmann
+         * <bjoern@hoehrmann.de> */
+        /* See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details. */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/external/libcbor/cbor/internal/unicode.c [56:58]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6415d26683d228a47ae78c42308409b0
+BELONGS ya.make
+    License text:
+        Copyright (C) 2005-2019 Intel Corporation
+        SPDX-License-Identifier: GPL-2.0-only OR BSD-3-Clause
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        THIRD-PARTY-LICENSES.txt [2:3]
+        include/aws/common/external/ittnotify.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77640a7c11b488730ee52114bd193b99
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2014-2020 Pavel Kalvoda <me@pavelkalvoda.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/external/libcbor/allocators.c [2:2]
+        source/external/libcbor/cbor.c [2:2]
+        source/external/libcbor/cbor.h [2:2]
+        source/external/libcbor/cbor/arrays.c [2:2]
+        source/external/libcbor/cbor/arrays.h [2:2]
+        source/external/libcbor/cbor/bytestrings.c [2:2]
+        source/external/libcbor/cbor/bytestrings.h [2:2]
+        source/external/libcbor/cbor/callbacks.c [2:2]
+        source/external/libcbor/cbor/callbacks.h [2:2]
+        source/external/libcbor/cbor/common.c [2:2]
+        source/external/libcbor/cbor/common.h [2:2]
+        source/external/libcbor/cbor/data.h [2:2]
+        source/external/libcbor/cbor/encoding.c [2:2]
+        source/external/libcbor/cbor/encoding.h [2:2]
+        source/external/libcbor/cbor/floats_ctrls.c [2:2]
+        source/external/libcbor/cbor/floats_ctrls.h [2:2]
+        source/external/libcbor/cbor/internal/builder_callbacks.c [2:2]
+        source/external/libcbor/cbor/internal/builder_callbacks.h [2:2]
+        source/external/libcbor/cbor/internal/encoders.c [2:2]
+        source/external/libcbor/cbor/internal/encoders.h [2:2]
+        source/external/libcbor/cbor/internal/loaders.c [2:2]
+        source/external/libcbor/cbor/internal/loaders.h [2:2]
+        source/external/libcbor/cbor/internal/memory_utils.c [2:2]
+        source/external/libcbor/cbor/internal/memory_utils.h [2:2]
+        source/external/libcbor/cbor/internal/stack.c [2:2]
+        source/external/libcbor/cbor/internal/stack.h [2:2]
+        source/external/libcbor/cbor/internal/unicode.c [2:2]
+        source/external/libcbor/cbor/internal/unicode.h [2:2]
+        source/external/libcbor/cbor/ints.c [2:2]
+        source/external/libcbor/cbor/ints.h [2:2]
+        source/external/libcbor/cbor/maps.c [2:2]
+        source/external/libcbor/cbor/maps.h [2:2]
+        source/external/libcbor/cbor/serialization.c [2:2]
+        source/external/libcbor/cbor/serialization.h [2:2]
+        source/external/libcbor/cbor/streaming.c [2:2]
+        source/external/libcbor/cbor/streaming.h [2:2]
+        source/external/libcbor/cbor/strings.c [2:2]
+        source/external/libcbor/cbor/strings.h [2:2]
+        source/external/libcbor/cbor/tags.c [2:2]
+        source/external/libcbor/cbor/tags.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9db87b867e659d4a2f36a8b3f8dfbe2e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019 Intel Corporation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        THIRD-PARTY-LICENSES.txt [8:8]
+
 KEEP     COPYRIGHT_SERVICE_LABEL bdcf211d81a69c0f282fb7543c1a24a7
 BELONGS ya.make
     License text:
@@ -200,5 +308,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/aws/common/external/cJSON.h [2:2]
+        THIRD-PARTY-LICENSES.txt [38:38]
         source/external/cJSON.c [2:2]
+        source/external/cJSON.h [2:2]

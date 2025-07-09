@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     pq_meta_fields.cpp
+    pq_partition_key.cpp
     yql_names.cpp
 )
 

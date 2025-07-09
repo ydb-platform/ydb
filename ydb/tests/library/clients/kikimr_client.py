@@ -254,8 +254,10 @@ class KiKiMRMessageBusClient(object):
             raise RuntimeError('console_request failed: %s: %s' % (response.Status.Code, response.Status.Reason))
         return response
 
-    def add_config_item(self, config, cookie=None, raise_on_error=True):
+    def add_config_item(self, config, cookie=None, raise_on_error=True, token=None):
         request = msgbus.TConsoleRequest()
+        if token is not None:
+            request.SecurityToken = token
         action = request.ConfigureRequest.Actions.add()
         item = action.AddConfigItem.ConfigItem
         if isinstance(config, str) or isinstance(config, bytes):

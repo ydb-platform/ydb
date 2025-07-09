@@ -54,43 +54,11 @@ struct TPatternCacheEntry {
     }
 };
 
+using TPatternCacheEntryPtr = std::shared_ptr<TPatternCacheEntry>;
+using TPatternCacheEntryFuture = NThreading::TFuture<TPatternCacheEntryPtr>;
+
 class TComputationPatternLRUCache {
 public:
-    class TTicket : private TNonCopyable {
-    public:
-        TTicket(const TString& serialized, bool isOwned, const NThreading::TFuture<std::shared_ptr<TPatternCacheEntry>>& future, TComputationPatternLRUCache* cache)
-            : Serialized(serialized)
-            , IsOwned(isOwned)
-            , Future(future)
-            , Cache(cache)
-        {}
-
-        ~TTicket() {
-            if (Cache) {
-                Cache->NotifyMissing(Serialized);
-            }
-        }
-
-        bool HasFuture() const {
-            return !IsOwned;
-        }
-
-        std::shared_ptr<TPatternCacheEntry> GetValueSync() const {
-            Y_ABORT_UNLESS(HasFuture());
-            return Future.GetValueSync();
-        }
-
-        void Close() {
-            Cache = nullptr;
-        }
-
-    private:
-        const TString Serialized;
-        const bool IsOwned;
-        const NThreading::TFuture<std::shared_ptr<TPatternCacheEntry>> Future;
-        TComputationPatternLRUCache* Cache;
-    };
-
     struct Config {
         Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes)
             : MaxSizeBytes(maxSizeBytes)
@@ -118,83 +86,77 @@ public:
     };
 
     TComputationPatternLRUCache(const Config& configuration, NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
-
     ~TComputationPatternLRUCache();
 
-    static std::shared_ptr<TPatternCacheEntry> CreateCacheEntry(bool useAlloc = true) {
+    static TPatternCacheEntryPtr CreateCacheEntry(bool useAlloc = true) {
         return std::make_shared<TPatternCacheEntry>(useAlloc);
     }
 
-    std::shared_ptr<TPatternCacheEntry> Find(const TString& serializedProgram);
+    TPatternCacheEntryPtr Find(const TString& serializedProgram);
+    TPatternCacheEntryFuture FindOrSubscribe(const TString& serializedProgram);
 
-    TTicket FindOrSubscribe(const TString& serializedProgram);
-
-    void EmplacePattern(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
+    void EmplacePattern(const TString& serializedProgram, TPatternCacheEntryPtr patternWithEnv);
 
     void NotifyPatternCompiled(const TString& serializedProgram);
+    void NotifyPatternMissing(const TString& serializedProgram);
 
     size_t GetSize() const;
 
     void CleanCache();
 
     Config GetConfiguration() const {
-        std::lock_guard lock(Mutex);
-        return Configuration;
+        std::lock_guard lock(Mutex_);
+        return Configuration_;
     }
 
     size_t GetMaxSizeBytes() const {
-        std::lock_guard lock(Mutex);
-        return Configuration.MaxSizeBytes;
+        std::lock_guard lock(Mutex_);
+        return Configuration_.MaxSizeBytes;
     }
 
     i64 GetCacheHits() const {
-        return *Hits;
+        return *Hits_;
     }
 
     void IncNotSuitablePattern() {
-        ++*NotSuitablePattern;
+        ++*NotSuitablePattern_;
     }
 
     size_t GetPatternsToCompileSize() const {
-        std::lock_guard lock(Mutex);
-        return PatternsToCompile.size();
+        std::lock_guard lock(Mutex_);
+        return PatternsToCompile_.size();
     }
 
-    void GetPatternsToCompile(THashMap<TString, std::shared_ptr<TPatternCacheEntry>> & result) {
-        std::lock_guard lock(Mutex);
-        result.swap(PatternsToCompile);
+    void GetPatternsToCompile(THashMap<TString, TPatternCacheEntryPtr> & result) {
+        std::lock_guard lock(Mutex_);
+        result.swap(PatternsToCompile_);
     }
 
 private:
-    void AccessPattern(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry);
-
-    void NotifyMissing(const TString& serialized);
+    class TLRUPatternCacheImpl;
 
     static constexpr size_t CacheMaxElementsSize = 10000;
 
-    friend class TTicket;
+    void AccessPattern(const TString& serializedProgram, TPatternCacheEntryPtr entry);
 
-    mutable std::mutex Mutex;
-    THashMap<TString, TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>>> Notify;
+    mutable std::mutex Mutex_;
+    THashMap<TString, TVector<NThreading::TPromise<TPatternCacheEntryPtr>>> Notify_; // protected by Mutex
+    std::unique_ptr<TLRUPatternCacheImpl> Cache_;                                    // protected by Mutex
+    THashMap<TString, TPatternCacheEntryPtr> PatternsToCompile_;                     // protected by Mutex
 
-    class TLRUPatternCacheImpl;
-    std::unique_ptr<TLRUPatternCacheImpl> Cache;
+    const Config Configuration_;
 
-    THashMap<TString, std::shared_ptr<TPatternCacheEntry>> PatternsToCompile;
-
-    const Config Configuration;
-
-    NMonitoring::TDynamicCounters::TCounterPtr Hits;
-    NMonitoring::TDynamicCounters::TCounterPtr HitsCompiled;
-    NMonitoring::TDynamicCounters::TCounterPtr Waits;
-    NMonitoring::TDynamicCounters::TCounterPtr Misses;
-    NMonitoring::TDynamicCounters::TCounterPtr NotSuitablePattern;
-    NMonitoring::TDynamicCounters::TCounterPtr SizeItems;
-    NMonitoring::TDynamicCounters::TCounterPtr SizeCompiledItems;
-    NMonitoring::TDynamicCounters::TCounterPtr SizeBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr SizeCompiledBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr MaxSizeBytesCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr MaxCompiledSizeBytesCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr Hits_;
+    NMonitoring::TDynamicCounters::TCounterPtr HitsCompiled_;
+    NMonitoring::TDynamicCounters::TCounterPtr Waits_;
+    NMonitoring::TDynamicCounters::TCounterPtr Misses_;
+    NMonitoring::TDynamicCounters::TCounterPtr NotSuitablePattern_;
+    NMonitoring::TDynamicCounters::TCounterPtr SizeItems_;
+    NMonitoring::TDynamicCounters::TCounterPtr SizeCompiledItems_;
+    NMonitoring::TDynamicCounters::TCounterPtr SizeBytes_;
+    NMonitoring::TDynamicCounters::TCounterPtr SizeCompiledBytes_;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxSizeBytesCounter_;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxCompiledSizeBytesCounter_;
 };
 
 } // namespace NKikimr::NMiniKQL

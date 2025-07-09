@@ -1,4 +1,4 @@
-#include <src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

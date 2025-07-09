@@ -93,7 +93,7 @@ namespace NActors {
         }
 
         TRope EraseBack(size_t count) {
-            Y_ABORT_UNLESS(count <= Rope.GetSize());
+            Y_ENSURE(count <= Rope.GetSize());
             TRope::TIterator iter = Rope.End();
             iter -= count;
             return Rope.Extract(iter, Rope.End());

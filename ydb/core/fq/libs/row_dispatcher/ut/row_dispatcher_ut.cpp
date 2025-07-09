@@ -73,6 +73,7 @@ public:
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         NConfig::TRowDispatcherConfig config;
         config.SetEnabled(true);
+        config.SetSendStatusPeriodSec(1);
         NConfig::TRowDispatcherCoordinatorConfig& coordinatorConfig = *config.MutableCoordinator();
         coordinatorConfig.SetCoordinationNodePath("RowDispatcher");
         auto& database = *coordinatorConfig.MutableDatabase();
@@ -156,9 +157,9 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 
-    void MockNoSession(TActorId readActorId) {
+    void MockNoSession(TActorId readActorId, ui64 generation) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvNoSession>();
-        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
+        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
     void MockNewDataArrived(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
@@ -175,16 +176,18 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release(), 0, generation));
     }
 
-    void MockSessionError(TActorId topicSessionId, TActorId readActorId) {
+    void MockSessionError(TActorId topicSessionId, TActorId readActorId, ui32 partitionId, bool isFatalError = false) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionError>();
         event->ReadActorId = readActorId;
+        event->IsFatalError = isFatalError;
+        event->Record.SetPartitionId(partitionId);
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
     }
     
-    void MockGetNextBatch(ui64 partitionId, TActorId readActorId, ui64 generation) {
+    void MockGetNextBatch(ui64 partitionId, TActorId readActorId, ui64 generation, ui64 seqNo = 2) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
         event->Record.SetPartitionId(partitionId);
-        event->Record.MutableTransportMeta()->SetSeqNo(2);
+        event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
@@ -195,6 +198,11 @@ public:
 
     void ExpectStartSession(NActors::TActorId actorId) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(actorId);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
+    void ExpectPoisonPill(NActors::TActorId actorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPoisonPill>(actorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
@@ -236,11 +244,11 @@ public:
         return actorId;
     }
 
-    void ProcessData(NActors::TActorId readActorId, ui64 partId, NActors::TActorId topicSessionActorId, ui64 generation = 1) {
+    void ProcessData(NActors::TActorId readActorId, ui64 partId, NActors::TActorId topicSessionActorId, ui64 generation = 1, ui64 seqNo = 1) {
         MockNewDataArrived(partId, topicSessionActorId, readActorId);
         ExpectNewDataArrived(readActorId, partId);
 
-        MockGetNextBatch(partId, readActorId, generation);
+        MockGetNextBatch(partId, readActorId, generation, seqNo);
         ExpectGetNextBatch(topicSessionActorId, partId);
 
         MockMessageBatch(partId, topicSessionActorId, readActorId, generation);
@@ -262,8 +270,8 @@ public:
     NYql::NPq::NProto::TDqPqTopicSource Source2 = BuildPqTopicSourceSettings("Endpoint2", "Database1", "topic", "connection_id1");
     NYql::NPq::NProto::TDqPqTopicSource Source1Connection2 = BuildPqTopicSourceSettings("Endpoint1", "Database1", "topic", "connection_id2");
 
-    ui32 PartitionId0 = 0;
-    ui32 PartitionId1 = 1;
+    ui32 PartitionId0 = 100;
+    ui32 PartitionId1 = 101;
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {
@@ -292,10 +300,10 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId1, PartitionId0, topicSessionId);
         ProcessData(ReadActorId2, PartitionId0, topicSessionId);
 
-        MockSessionError(topicSessionId, ReadActorId1);
+        MockSessionError(topicSessionId, ReadActorId1, PartitionId0);
         ExpectSessionError(ReadActorId1);
 
-        MockSessionError(topicSessionId, ReadActorId2);
+        MockSessionError(topicSessionId, ReadActorId2, PartitionId0);
         ExpectSessionError(ReadActorId2);
     }
 
@@ -305,7 +313,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ExpectStartSessionAck(ReadActorId1);
         ExpectStartSession(topicSessionId);
 
-        MockSessionError(topicSessionId, ReadActorId1);
+        MockSessionError(topicSessionId, ReadActorId1, PartitionId0);
         ExpectSessionError(ReadActorId1);
     }
 
@@ -356,15 +364,11 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId2, PartitionId0, topicSession3);
         ProcessData(ReadActorId2, PartitionId1, topicSession4);
 
-        MockSessionError(topicSession1, ReadActorId1);
+        MockSessionError(topicSession1, ReadActorId1, PartitionId0);
         ExpectSessionError(ReadActorId1);
 
-        ProcessData(ReadActorId1, PartitionId1, topicSession2);
         ProcessData(ReadActorId2, PartitionId0, topicSession3);
         ProcessData(ReadActorId2, PartitionId1, topicSession4);
-
-        MockStopSession(Source1, ReadActorId1);
-        ExpectStopSession(topicSession2);
         
         MockStopSession(Source2, ReadActorId2);
         ExpectStopSession(topicSession3);
@@ -440,13 +444,17 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
     }
 
     Y_UNIT_TEST_F(ProcessNoSession, TFixture) {
-        MockAddSession(Source1, {PartitionId0}, ReadActorId3);
+        ui64 generation = 42;
+        MockAddSession(Source1, {PartitionId0}, ReadActorId3, generation);
         auto topicSessionId = ExpectRegisterTopicSession();
-        ExpectStartSessionAck(ReadActorId3);
+        ExpectStartSessionAck(ReadActorId3, generation);
         ExpectStartSession(topicSessionId);
-        ProcessData(ReadActorId3, PartitionId0, topicSessionId);
+        ProcessData(ReadActorId3, PartitionId0, topicSessionId, generation, 2);
 
-        MockNoSession(ReadActorId3);
+        MockNoSession(ReadActorId3, generation - 1); // Ignore NoSession with wrong generation.
+        ProcessData(ReadActorId3, PartitionId0, topicSessionId, generation, 3);
+
+        MockNoSession(ReadActorId3, generation);
         ExpectStopSession(topicSessionId);
     }
 
@@ -460,6 +468,49 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 
         MockStopSession(Source1, ReadActorId1);
         ExpectStopSession(topicSessionId);
+    }
+
+    Y_UNIT_TEST_F(SessionFatalError, TFixture) {
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
+        auto session0 = ExpectRegisterTopicSession();
+        auto session1 = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(session0);
+        ExpectStartSession(session1);
+
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId2);
+        ExpectStartSessionAck(ReadActorId2);
+        ExpectStartSession(session0);
+        ExpectStartSession(session1);
+
+        MockSessionError(session0, ReadActorId1, PartitionId0, true);       // consumer (ReadActorId1) deleted
+        ExpectSessionError(ReadActorId1);
+        ExpectPoisonPill(session0);
+        ExpectStopSession(session1);
+
+        // 1 topic session / 1 consumer (ReadActorId2) 
+
+        ProcessData(ReadActorId2, PartitionId1, session1);                  // still working
+
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
+        auto new_session0 = ExpectRegisterTopicSession();
+        ExpectStartSession(new_session0);
+        ExpectStartSession(session1);
+
+        // 2 topic session / 2 consumer 
+
+        MockSessionError(session0, ReadActorId2, PartitionId0, true);      // late event, delete ReadActorId2 consumer
+        ExpectSessionError(ReadActorId2);
+
+         // 2 topic session / 1 consumer 
+
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId2);
+        ExpectStartSession(new_session0);
+        ExpectStartSession(session1);
+        ProcessData(ReadActorId1, PartitionId0, new_session0);
+        ProcessData(ReadActorId2, PartitionId0, new_session0);
+        ProcessData(ReadActorId1, PartitionId1, session1);
+        ProcessData(ReadActorId2, PartitionId1, session1);
     }
 }
 

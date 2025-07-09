@@ -44,40 +44,48 @@ struct TEvScanExchange {
         YDB_READONLY(ui64, TabletId, 0);
         YDB_ACCESSOR_DEF(std::vector<ui32>, DataIndexes);
         YDB_READONLY_DEF(TLocksInfo, LocksInfo);
+        YDB_ACCESSOR_DEF(ui64, WaitOutputTimeUs);
+        YDB_ACCESSOR_DEF(bool, Finished);
     public:
         ui32 GetRowsCount() const {
             return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
         }
 
-        TEvSendData(const std::shared_ptr<arrow::Table>& arrowBatch, const ui64 tabletId, const TLocksInfo& locksInfo)
+        TEvSendData(const std::shared_ptr<arrow::Table>& arrowBatch, const ui64 tabletId, const TLocksInfo& locksInfo, const bool finished)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
             , LocksInfo(locksInfo)
+            , Finished(finished)
         {
             Y_ABORT_UNLESS(ArrowBatch);
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
-        TEvSendData(const std::shared_ptr<arrow::Table>& arrowBatch, const ui64 tabletId, std::vector<ui32>&& dataIndexes, const TLocksInfo& locksInfo)
+        TEvSendData(const std::shared_ptr<arrow::Table>& arrowBatch, const ui64 tabletId, std::vector<ui32>&& dataIndexes, const TLocksInfo& locksInfo, const bool finished)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
             , DataIndexes(std::move(dataIndexes))
             , LocksInfo(locksInfo)
+            , Finished(finished)
         {
             Y_ABORT_UNLESS(ArrowBatch);
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
-        TEvSendData(TVector<TOwnedCellVec>&& rows, const ui64 tabletId, const TLocksInfo& locksInfo)
+        TEvSendData(TVector<TOwnedCellVec>&& rows, const ui64 tabletId, const TLocksInfo& locksInfo, const bool finished)
             : Rows(std::move(rows))
             , TabletId(tabletId)
-            , LocksInfo(locksInfo) {
+            , LocksInfo(locksInfo)
+            , Finished(finished)
+        {
             Y_ABORT_UNLESS(Rows.size());
         }
 
-        TEvSendData(const ui64 tabletId, const TLocksInfo& locksInfo)
+        TEvSendData(const ui64 tabletId, const TLocksInfo& locksInfo, const bool finished)
             : TabletId(tabletId)
-            , LocksInfo(locksInfo) {
+            , LocksInfo(locksInfo)
+            , Finished(finished)
+        {
         }
     };
 

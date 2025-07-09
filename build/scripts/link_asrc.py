@@ -1,5 +1,4 @@
 import argparse
-import itertools
 import os
 import sys
 import tarfile
@@ -61,7 +60,7 @@ def main():
                 names = tar.getnames()
                 if names and len(names) > 0:
                     parts.append([DELIM_JAVA, src_dir])
-                    parts[-1].extend(itertools.imap(lambda x: os.path.join(src_dir, x), names))
+                    parts[-1].extend(os.path.join(src_dir, x) for x in names)
                     if sys.version_info >= (3, 12):
                         tar.extractall(path=src_dir, filter='data')
                     else:

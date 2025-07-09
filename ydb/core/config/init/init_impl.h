@@ -2,12 +2,14 @@
 
 #include "init.h"
 
-#include <ydb-cpp-sdk/client/discovery/discovery.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
@@ -44,7 +46,6 @@
 
 namespace fs = std::filesystem;
 
-extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 using namespace NYdb::NConsoleClient;
@@ -54,6 +55,8 @@ namespace NKikimr::NConfig {
 
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
+constexpr const char *CONFIG_NAME = "config.yaml";
+constexpr const char *STORAGE_CONFIG_NAME = "storage.yaml";
 
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
 constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
@@ -175,7 +178,10 @@ auto MutableConfigPartMerge(
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
+void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, const TString& storageYamlConfigFile,
+    bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig,
+    NYamlConfig::IConfigSwissKnife* csk,
+    const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
@@ -329,10 +335,14 @@ struct TCommonAppOptions {
     TString PathToInterconnectPrivateKeyFile;
     TString PathToInterconnectCaFile;
     TString YamlConfigFile;
+    TString ConfigDirPath;
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
     EWorkload Workload = EWorkload::Hybrid;
+    TString BridgePileName;
+    TString SeedNodesFile;
+    TVector<TString> SeedNodes;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -366,6 +376,8 @@ struct TCommonAppOptions {
             .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls);
         opts.AddLongOption("node-address", "address for dynamic node")
             .RequiredArgument("ADDR").StoreResult(&NodeAddress);
+        opts.AddLongOption("bridge-pile-name", "pile name for bridged mode")
+            .RequiredArgument("PILE").StoreResult(&BridgePileName);
         opts.AddLongOption("node-host", "hostname for dynamic node")
             .RequiredArgument("NAME").StoreResult(&NodeHost);
         opts.AddLongOption("node-resolve-host", "resolve hostname for dynamic node")
@@ -423,12 +435,16 @@ struct TCommonAppOptions {
         opts.AddLongOption("body", "body name (used to describe dynamic node location)")
             .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
+        opts.AddLongOption("config-dir", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigDirPath);
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
 
         opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
             .RequiredArgument("NAME").StoreResult(&Workload);
+
+        opts.AddLongOption("seed-nodes", "Path to seed nodes configuration file")
+            .RequiredArgument("PATH").StoreResult(&SeedNodesFile);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -868,8 +884,9 @@ struct TCommonAppOptions {
     };
 
     void FillClusterEndpoints(const NKikimrConfig::TAppConfig& appConfig, TVector<TString> &addrs) const {
-        if (!NodeBrokerAddresses.empty()) {
-            for (auto addr: NodeBrokerAddresses) {
+        const TVector<TString>& seedAddresses = NodeBrokerAddresses.empty() ? SeedNodes : NodeBrokerAddresses;
+        if (!seedAddresses.empty()) {
+            for (auto addr: seedAddresses) {
                 addrs.push_back(addr);
             }
         } else {
@@ -1013,6 +1030,8 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer);
 
+NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::optional<TString>& authToken = std::nullopt);
+
 // =====
 
 struct TAppInitDebugInfo {
@@ -1051,14 +1070,49 @@ public:
         MbusAppOptions.ValidateCliOptions(opts, parseResult);
     }
 
-    void Parse(const TVector<TString>& freeArgs) override {
+    void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) override {
         using TCfg = NKikimrConfig::TAppConfig;
 
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
 
         Option("auth-file", TCfg::TAuthConfigFieldTag{});
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
-        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig);
+
+        TString yamlConfigFile = CommonAppOptions.YamlConfigFile;
+        TString storageYamlConfigFile;
+        bool loadedFromStore = false;
+
+        if (CommonAppOptions.ConfigDirPath) {
+            AppConfig.SetConfigDirPath(CommonAppOptions.ConfigDirPath);
+
+            auto dir = fs::path(CommonAppOptions.ConfigDirPath.c_str());
+
+            if (auto path = dir / STORAGE_CONFIG_NAME; fs::is_regular_file(path)) {
+                storageYamlConfigFile = path.string();
+            }
+
+            if (auto path = dir / CONFIG_NAME; fs::is_regular_file(path)) {
+                yamlConfigFile = path.string();
+                loadedFromStore = true;
+            } else {
+                storageYamlConfigFile.clear();
+            }
+        }
+
+        if (CommonAppOptions.SeedNodesFile) {
+            ParseSeedNodes(CommonAppOptions);
+        }
+
+        if (CommonAppOptions.IsStaticNode()) {
+            if (yamlConfigFile.empty() && CommonAppOptions.SeedNodesFile) {
+                InitConfigFromSeedNodes(yamlConfigFile, storageYamlConfigFile);
+            }
+            if (!CommonAppOptions.ConfigDirPath.empty() && yamlConfigFile.empty()) {
+                ythrow yexception() << "YAML config is not provided for static node";
+            }
+        }
+
+        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
@@ -1080,14 +1134,9 @@ public:
             InitDynamicNode();
         }
 
-        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig);
+        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
-
-        if (!AppConfig.HasActorSystemConfig()) {
-            AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
-            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::ActorSystemConfigItem, TConfigItemInfo::EUpdateKind::SetExplicitly);
-        }
 
         Option("domains-file", TCfg::TDomainsConfigFieldTag{});
         Option("bs-file", TCfg::TBlobStorageConfigFieldTag{});
@@ -1135,15 +1184,14 @@ public:
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
+        FillData(CommonAppOptions);
+
         std::vector<TString> errors;
-        EValidationResult result = ValidateConfig(AppConfig, errors);
-        if (result == EValidationResult::Error) {
+        if (csk && csk->ValidateConfig(AppConfig, errors) == NYamlConfig::EValidationResult::Error) {
             ythrow yexception() << errors.front();
         }
 
         Logger.Out() << "configured" << Endl;
-
-        FillData(CommonAppOptions);
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
@@ -1227,6 +1275,7 @@ public:
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
         Labels["dynamic"] = ToString(CommonAppOptions.IsStaticNode() ? "false" : "true");
+        Labels["node_kind"] = CommonAppOptions.IsStaticNode() ? "static" : "dynamic";
 
         for (const auto& [name, value] : Labels) {
             auto *label = AppConfig.AddLabels();
@@ -1276,6 +1325,7 @@ public:
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
             AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
+            cf.BridgePileName ? std::make_optional(cf.BridgePileName) : std::nullopt,
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);
@@ -1297,14 +1347,58 @@ public:
         }
     }
 
+    class TAppConfigFieldsPreserver {
+    public:
+        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
+            : AppConfig(appConfig)
+            , ConfigDirPath(appConfig.HasConfigDirPath() ? std::make_optional(appConfig.GetConfigDirPath()) : std::nullopt)
+            , StoredConfigYaml(appConfig.HasStoredConfigYaml() ? std::make_optional(appConfig.GetStoredConfigYaml()) : std::nullopt)
+            , StartupConfigYaml(appConfig.HasStartupConfigYaml() ? std::make_optional(appConfig.GetStartupConfigYaml()) : std::nullopt)
+            , StartupStorageYaml(appConfig.HasStartupStorageYaml() ? std::make_optional(appConfig.GetStartupStorageYaml()) : std::nullopt)
+        {}
+
+        ~TAppConfigFieldsPreserver() {
+            if (ConfigDirPath) {
+                AppConfig.SetConfigDirPath(*ConfigDirPath);
+            }
+            if (StoredConfigYaml) {
+                AppConfig.MutableStoredConfigYaml()->CopyFrom(*StoredConfigYaml);
+            }
+            if (StartupConfigYaml) {
+                AppConfig.SetStartupConfigYaml(*StartupConfigYaml);
+            }
+            if (StartupStorageYaml) {
+                AppConfig.SetStartupStorageYaml(*StartupStorageYaml);
+            }
+        }
+
+    private:
+        NKikimrConfig::TAppConfig& AppConfig;
+        std::optional<TString> ConfigDirPath;
+        std::optional<NKikimrBlobStorage::TYamlConfig> StoredConfigYaml;
+        std::optional<TString> StartupConfigYaml;
+        std::optional<TString> StartupStorageYaml;
+    };
+
     void InitStaticNode() {
         CommonAppOptions.ValidateStaticNodeConfig();
-
+        Labels["node_kind"] = "static";
         Labels["dynamic"] = "false";
+
+        if (!AppConfig.HasStartupConfigYaml()) {
+            return;
+        }
+
+        TAppConfigFieldsPreserver preserver(AppConfig);
+
+        NKikimrConfig::TAppConfig appConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(AppConfig.GetStartupConfigYaml(), {}, Labels, appConfig);
+        ApplyConfigForNode(appConfig);
     }
 
     void InitDynamicNode() {
         Labels["dynamic"] = "true";
+        Labels["node_kind"] = "dynamic";
         RegisterDynamicNode(CommonAppOptions);
 
         Labels["node_id"] = ToString(NodeId);
@@ -1376,8 +1470,10 @@ public:
         servicesMask = ServicesMask;
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
+        configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
+        configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";
         configsDispatcherInitInfo.DebugInfo = TDebugInfo {
             .InitInfo = InitDebug.ConfigTransformInfo,
         };
@@ -1385,6 +1481,103 @@ public:
         debugInfo.StaticConfig.CopyFrom(appConfig); // FIXME it's not static config
         debugInfo.OldDynConfig.CopyFrom(InitDebug.OldConfig);
         debugInfo.NewDynConfig.CopyFrom(InitDebug.YamlConfig);
+    }
+
+    void ParseSeedNodes(TCommonAppOptions& cf) {
+        if (auto path = fs::path(cf.SeedNodesFile.c_str()); fs::is_regular_file(path)) {
+            try {
+                TFileInput file(cf.SeedNodesFile);
+                TString fileContent = file.ReadAll();
+                auto doc = NFyaml::TDocument::Parse(fileContent);
+                if (doc.Root().Type() == NFyaml::ENodeType::Sequence) {
+                    for (const auto& item : doc.Root().Sequence()) {
+                        if (item.Type() == NFyaml::ENodeType::Scalar) {
+                            cf.SeedNodes.push_back(item.Scalar());
+                        } else {
+                            ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings, but found non-scalar item at " << item.Path();
+                        }
+                    }
+                } else {
+                    ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings at root";
+                }
+            } catch (const std::exception& e) {
+                ythrow yexception() << "Failed to read or parse seed nodes file: " << e.what();
+            }
+        } else {
+            ythrow yexception() << "Seed nodes file not found: " << cf.SeedNodesFile;
+        }
+    }
+
+    void InitConfigFromSeedNodes(TString& yamlConfigFile, TString& storageYamlConfigFile) {
+        if (AppConfig.GetConfigDirPath().empty()) {
+            ythrow yexception() << "Seed nodes file provided, but config dir path is not set";
+        }
+
+        if (CommonAppOptions.SeedNodes.empty()) {
+            ythrow yexception() << "No seed nodes provided";
+        }
+
+        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
+        if (!result) {
+            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+            return;
+        }
+
+        const TString& clusterConfig = result->GetMainYamlConfig();
+        const TString& storageConfig = result->GetStorageYamlConfig();
+        const TString configDirPath = AppConfig.GetConfigDirPath();
+
+        auto saveConfig = [&](const TString& config, const TString& configName) {
+            try {
+                TString tempPath = TStringBuilder() << AppConfig.GetConfigDirPath() << "/temp_" << configName;
+                TString configPath = TStringBuilder() << AppConfig.GetConfigDirPath() << "/" << configName;
+            {
+                TFileOutput tempFile(tempPath);
+                tempFile << config;
+                tempFile.Flush();
+
+                if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
+                    return false;
+                }
+            }
+
+            return NFs::Rename(tempPath, configPath);
+            } catch (const std::exception& e) {
+                return false;
+            }
+        };
+
+        bool clusterSaved = !clusterConfig.empty() && saveConfig(clusterConfig, CONFIG_NAME);
+        bool storageSaved = !storageConfig.empty() && saveConfig(storageConfig, STORAGE_CONFIG_NAME);
+
+        if (clusterSaved) {
+            yamlConfigFile = configDirPath + "/" + CONFIG_NAME;
+        }
+        if (storageSaved) {
+            storageYamlConfigFile = configDirPath + "/" + STORAGE_CONFIG_NAME;
+        }
+
+        if (clusterSaved && storageSaved) {
+            Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
+                         << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
+        } else if (clusterSaved) {
+            Logger.Out() << "Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
+        } else if (!clusterConfig.empty() || !storageConfig.empty()) {
+            TStringBuilder errorMsg;
+            errorMsg << "Failed to save configs: ";
+            if (!clusterConfig.empty() && !clusterSaved) {
+                errorMsg << "main config";
+            }
+            if (!storageConfig.empty() && !storageSaved) {
+                if (!clusterConfig.empty() && !clusterSaved) {
+                    errorMsg << ", ";
+                }
+                errorMsg << "storage config";
+            }
+            ythrow yexception() << errorMsg;
+        } else {
+            Logger.Out() << "No configs received from seed nodes" << Endl;
+        }
     }
 };
 
@@ -1395,6 +1588,7 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
         NConfig::IMemLogInitializer& memLogInit,
         NConfig::INodeBrokerClient& nodeBrokerClient,
         NConfig::IDynConfigClient& dynConfigClient,
+        NConfig::IConfigClient& configClient,
         NConfig::IEnv& env);
 
 } // namespace NKikimr::NConfig

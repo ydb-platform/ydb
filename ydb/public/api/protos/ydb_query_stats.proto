@@ -43,4 +43,7 @@ message QueryStats {
     string query_ast = 5;
     uint64 total_duration_us = 6;
     uint64 total_cpu_time_us = 7;
+    // will be filled only in MODE_EXPLAIN or in MODE_EXEC with QueryStatsCollection.Mode >= STATS_COLLECTION_FULL,
+    // collects additional meta about query compilation, including table metadata
+    string query_meta = 8;
 }

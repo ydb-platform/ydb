@@ -1,4 +1,5 @@
 #include "root.h"
+#include "cert_format_converter.h"
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -18,17 +19,43 @@ void TClientCommandRootBase::Config(TConfig& config) {
     TimeRequests = false;
     ProgressRequests = false;
 
-    NLastGetopt::TOpts& opts = *config.Opts;
-    opts.AddLongOption('t', "time", "Show request execution time").NoArgument().SetFlag(&TimeRequests);
-    opts.AddLongOption('o', "progress", "Show progress of long requests").NoArgument().SetFlag(&ProgressRequests);
+    TClientCommandOptions& opts = *config.Opts;
+    opts.AddLongOption('t', "time", "Show request execution time").StoreTrue(&TimeRequests);
+    opts.AddLongOption('o', "progress", "Show progress of long requests").StoreTrue(&ProgressRequests);
     opts.AddLongOption("ca-file",
-        "Path to a file containing the PEM encoding of the server root certificates for tls connections.\n"
-        "If this parameter is empty, the default roots will be used.")
-        .RequiredArgument("PATH").StoreResult(&CaCertsFile);
+        "File containing PEM encoded root certificates for SSL/TLS connections.\n"
+        "If this parameter is empty, the default roots will be used")
+        .FileName("CA certificates").ProfileParam("ca-file", true)
+        .LogToConnectionParams("ca-file")
+        .Env("YDB_CA_FILE", true, "CA certificates")
+        .RequiredArgument("PATH").StoreFilePath(&config.CaCertsFile).StoreResult(&config.CaCerts);
+    opts.AddLongOption("client-cert-file",
+        "File containing client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded)")
+        .FileName("Client certificate")
+        .LogToConnectionParams("client-cert-file")
+        .Env("YDB_CLIENT_CERT_FILE", true, "Client certificate")
+        .ProfileParam("client-cert-file", true)
+        .RequiredArgument("PATH").StoreFilePath(&config.ClientCertFile).StoreResult(&config.ClientCert);
+    opts.AddLongOption("client-cert-key-file",
+        "File containing PEM encoded client certificate private key for SSL/TLS connections")
+        .FileName("Client certificate private key")
+        .LogToConnectionParams("client-cert-key-file")
+        .Env("YDB_CLIENT_CERT_KEY_FILE", true, "Client certificate private key")
+        .ProfileParam("client-cert-key-file", true)
+        .RequiredArgument("PATH").StoreFilePath(&config.ClientCertPrivateKeyFile).StoreResult(&config.ClientCertPrivateKey);
+    opts.AddLongOption("client-cert-key-password-file",
+        "File containing password for client certificate private key (if key is encrypted).\n"
+        "If key file is encrypted, but this option is not set, password will be asked interactively")
+        .FileName("Client certificate private key password")
+        .LogToConnectionParams("client-cert-key-password-file")
+        .Env("YDB_CLIENT_CERT_KEY_PASSWORD", false)
+        .Env("YDB_CLIENT_CERT_KEY_PASSWORD_FILE", true, "Client certificate private key password")
+        .ProfileParam("client-cert-key-password-file", true)
+        .RequiredArgument("PATH").StoreFilePath(&config.ClientCertPrivateKeyPasswordFile).StoreResult(&config.ClientCertPrivateKeyPassword);
 
     opts.SetCustomUsage(config.ArgV[0]);
     config.SetFreeArgsMin(1);
-    opts.ArgPermutation_ = NLastGetopt::REQUIRE_ORDER;
+    opts.GetOpts().ArgPermutation_ = NLastGetopt::REQUIRE_ORDER;
 }
 
 void TClientCommandRootBase::SetCustomUsage(TConfig& config) {
@@ -37,8 +64,6 @@ void TClientCommandRootBase::SetCustomUsage(TConfig& config) {
 
 void TClientCommandRootBase::Parse(TConfig& config) {
     TClientCommandTree::Parse(config);
-    ParseCredentials(config);
-    ParseAddress(config);
 
     TClientCommand::TIME_REQUESTS = TimeRequests;
     TClientCommand::PROGRESS_REQUESTS = ProgressRequests;
@@ -84,14 +109,23 @@ bool TClientCommandRootBase::ParseProtocol(TConfig& config, TString& message) {
 }
 
 void TClientCommandRootBase::ParseCaCerts(TConfig& config) {
-    if (CaCertsFile.empty()) {
-        return;
-    }
-    if (!config.EnableSsl) {
+    if (!config.EnableSsl && config.CaCerts) {
         throw TMisuseException()
             << "\"ca-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
     }
-    config.CaCerts = ReadFromFile(CaCertsFile, "CA certificates");
+}
+
+void TClientCommandRootBase::ParseClientCert(TConfig& config) {
+    if (!config.EnableSsl && config.ClientCert) {
+        TMisuseException()
+            << "\"client-cert-file\"/\"client-cert-key-file\"/\"client-cert-key-password-file\" options are provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+    }
+
+    if (config.ClientCert) {
+        // Convert certificates from PKCS#12 to PEM or encrypted private key to nonencrypted
+        // May ask for password
+        std::tie(config.ClientCert, config.ClientCertPrivateKey) = ConvertCertToPEM(config.ClientCert, config.ClientCertPrivateKey, config.ClientCertPrivateKeyPassword);
+    }
 }
 
 void TClientCommandRootBase::ParseCredentials(TConfig& config) {

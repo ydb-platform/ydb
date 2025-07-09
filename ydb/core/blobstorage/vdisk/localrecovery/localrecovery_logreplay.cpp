@@ -110,7 +110,7 @@ namespace NKikimr {
                 Finish(ctx, ReadLogCtx->Msg->Status, "Recovery log read failed");
                 return;
             } else {
-                Y_ABORT_UNLESS(ReadLogCtx->Msg->Position == PrevLogPos);
+                Y_VERIFY_S(ReadLogCtx->Msg->Position == PrevLogPos, LocRecCtx->VCtx->VDiskLogPrefix);
                 // update RecovInfo
                 LocRecCtx->RecovInfo->HandleReadLogResult(ReadLogCtx->Msg->Results);
                 // run dispatcher
@@ -808,9 +808,10 @@ namespace NKikimr {
                             "DISPATCH RECORD: %s", record.ToString().data()));
 
             // Remember last seen lsn
-            Y_ABORT_UNLESS(RecoveredLsn < record.Lsn,
-                     "%s RecoveredLsn# %" PRIu64 " recordLsn# %" PRIu64 " signature# %" PRIu64,
-                     LocRecCtx->VCtx->VDiskLogPrefix.data(), RecoveredLsn, record.Lsn, ui64(record.Signature));
+            Y_VERIFY_S(RecoveredLsn < record.Lsn, LocRecCtx->VCtx->VDiskLogPrefix
+                     << "RecoveredLsn# " << RecoveredLsn
+                     << " recordLsn# " << record.Lsn
+                     << " signature# " << ui64(record.Signature));
             RecoveredLsn = record.Lsn;
 
             switch (record.Signature) {
@@ -948,4 +949,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

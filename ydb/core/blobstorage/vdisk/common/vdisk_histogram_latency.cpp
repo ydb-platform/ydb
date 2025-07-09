@@ -24,7 +24,7 @@ namespace NKikimr {
 
         void TLtcHisto::Collect(TDuration d, ui64 size) {
             if (Histo) {
-                Histo->Collect(d.MilliSeconds());
+                Histo->Collect(d.MillisecondsFloat());
             }
             if (size) {
                 ThroughputBytes->Add(size);
@@ -33,4 +33,3 @@ namespace NKikimr {
 
     } // NKikimr
 } // NKikimr
-

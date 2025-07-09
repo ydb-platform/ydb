@@ -1,5 +1,5 @@
-libpng 1.6.45 - January 7, 2025
-===============================
+libpng 1.6.47 - February 18, 2025
+=================================
 
 This is a public release of libpng, intended for use in production code.
 
@@ -9,13 +9,13 @@ Files available for download
 
 Source files with LF line endings (for Unix/Linux):
 
- * libpng-1.6.45.tar.xz (LZMA-compressed, recommended)
- * libpng-1.6.45.tar.gz (deflate-compressed)
+ * libpng-1.6.47.tar.xz (LZMA-compressed, recommended)
+ * libpng-1.6.47.tar.gz (deflate-compressed)
 
 Source files with CRLF line endings (for Windows):
 
- * lpng1645.7z (LZMA-compressed, recommended)
- * lpng1645.zip (deflate-compressed)
+ * lpng1647.7z (LZMA-compressed, recommended)
+ * lpng1647.zip (deflate-compressed)
 
 Other information:
 
@@ -25,18 +25,19 @@ Other information:
  * TRADEMARK.md
 
 
-Changes from version 1.6.44 to version 1.6.45
+Changes from version 1.6.46 to version 1.6.47
 ---------------------------------------------
 
- * Added support for the cICP chunk.
-   (Contributed by Lucas Chollet and John Bowler)
- * Adjusted and improved various checks in colorspace calculations.
+ * Modified the behaviour of colorspace chunks in order to adhere
+   to the new precedence rules formulated in the latest draft of
+   the PNG Specification.
    (Contributed by John Bowler)
- * Rearranged the write order of colorspace chunks for better conformance
-   with the PNG v3 draft specification.
-   (Contributed by John Bowler)
- * Raised the minimum required CMake version from 3.6 to 3.14.
- * Forked off a development branch for libpng version 1.8.
+ * Fixed a latent bug in `png_write_iCCP`.
+   This would have been a read-beyond-end-of-malloc vulnerability,
+   introduced early in the libpng-1.6.0 development, yet (fortunately!)
+   it was inaccessible before the above-mentioned modification of the
+   colorspace precedence rules, due to pre-existing colorspace checks.
+   (Reported by Bob Friesenhahn; fixed by John Bowler)
 
 
 Send comments/corrections/commendations to png-mng-implement at lists.sf.net.

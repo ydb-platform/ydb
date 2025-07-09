@@ -132,7 +132,7 @@ By default changes are committed no more than once every 10 seconds. You can ove
 
 {% note info %}
 
-The change commit interval directly affects the barrier emission interval in the changefeed — the parameter values are synchronized. Thus, changes are usually committed at the same frequency as barriers appear in the changefeeds. However, in some cases, for example, if there is an uneven load across tables, barriers in changefeeds may appear at significantly different times, which can increase the change commit interval. You can find information about lag in the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
+The change commit interval directly affects the barrier emission interval in the changefeed — the parameter values are synchronized. Thus, changes are usually committed at the same frequency as barriers appear in the changefeeds. However, in some cases, for example, if there is an uneven load across tables, barriers in changefeeds may appear at significantly different times, which can increase the change commit interval. You can find information about the lag in the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
 
 {% endnote %}
 

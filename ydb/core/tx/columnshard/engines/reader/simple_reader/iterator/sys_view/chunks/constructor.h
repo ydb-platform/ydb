@@ -67,6 +67,8 @@ public:
 
 class TConstructor: public NAbstract::ISourcesConstructor {
 private:
+    const ERequestSorting Sorting;
+    ui32 CurrentSourceIdx = 0;
     std::deque<TPortionDataConstructor> Constructors;
 
     virtual void DoClear() override {
@@ -79,15 +81,8 @@ private:
         return Constructors.empty();
     }
     virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override {
-        AFL_VERIFY(Constructors.size());
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.front().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
-        Constructors.pop_front();
-        return result;
-    }
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
-        AFL_VERIFY(false);
     }
     virtual TString DoDebugString() const override {
         return Default<TString>();
@@ -96,28 +91,6 @@ private:
 public:
     TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
         const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
-        const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const bool isReverseSort) {
-        const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
-        const TVersionedIndex& originalSchemaInfo = engineImpl->GetVersionedIndex();
-        for (auto&& i : engineImpl->GetTables()) {
-            if (internalPathId && *internalPathId != i.first) {
-                continue;
-            }
-            for (auto&& [_, p] : i.second->GetPortions()) {
-                if (reqSnapshot < p->RecordSnapshotMin()) {
-                    continue;
-                }
-                Constructors.emplace_back(
-                    pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p, p->GetSchema(originalSchemaInfo));
-                if (!pkFilter->IsUsed(Constructors.back().GetStart(), Constructors.back().GetFinish())) {
-                    Constructors.pop_back();
-                }
-            }
-        }
-        std::sort(Constructors.begin(), Constructors.end(), TPortionDataConstructor::TComparator(isReverseSort));
-        for (ui32 idx = 0; idx < Constructors.size(); ++idx) {
-            Constructors[idx].SetIndex(idx);
-        }
-    }
+        const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting);
 };
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks

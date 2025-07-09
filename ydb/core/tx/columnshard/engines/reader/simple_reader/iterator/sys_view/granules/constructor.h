@@ -94,7 +94,6 @@ private:
         return result;
     }
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
-        AFL_VERIFY(false);
     }
     virtual TString DoDebugString() const override {
         return Default<TString>();

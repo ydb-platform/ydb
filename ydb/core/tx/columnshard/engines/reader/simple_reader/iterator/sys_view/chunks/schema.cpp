@@ -1,8 +1,6 @@
 #include "metadata.h"
 #include "schema.h"
 
-#include <ydb/core/formats/arrow/arrow_batch_builder.h>
-
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(const TString& tableName,
@@ -13,16 +11,13 @@ std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(co
 
 NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(
     const NColumnShard::TUnifiedPathId pathId, const ui64 tabletId, const ui64 portionId, const ui32 entityId, const ui64 chunkIdx) {
-    NArrow::TRecordBatchConstructor rbConstructor;
-    {
-        auto record = rbConstructor.InitColumns(GetPKSchema()).StartRecord();
-        record.AddRecordValue(std::make_shared<arrow::UInt64Scalar>(pathId.SchemeShardLocalPathId.GetRawValue()))
-            .AddRecordValue(std::make_shared<arrow::UInt64Scalar>(tabletId))
-            .AddRecordValue(std::make_shared<arrow::UInt64Scalar>(portionId))
-            .AddRecordValue(std::make_shared<arrow::UInt32Scalar>(entityId))
-            .AddRecordValue(std::make_shared<arrow::UInt64Scalar>(chunkIdx));
-    }
-    return NArrow::TSimpleRow(rbConstructor.Finish().GetBatch(), 0);
+    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 4 + sizeof(ui32));
+    writer.Append<ui64>(pathId.SchemeShardLocalPathId.GetRawValue());
+    writer.Append<ui64>(tabletId);
+    writer.Append<ui64>(portionId);
+    writer.Append<ui32>(entityId);
+    writer.Append<ui64>(chunkIdx);
+    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
 }
 
 std::shared_ptr<arrow::Schema> TSchemaAdapter::GetPKSchema() {

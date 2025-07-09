@@ -125,7 +125,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
                 "to_version", indexInfoOptional->GetVersion())("diff", schema.GetDiff()->DebugString());
         }
     } else {
-        AFL_VERIFY(vIndex.IsEmpty());
+//        AFL_VERIFY(vIndex.IsEmpty());
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(presetId, schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }
     AFL_VERIFY(indexInfoOptional);

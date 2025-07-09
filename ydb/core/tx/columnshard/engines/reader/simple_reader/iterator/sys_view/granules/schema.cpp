@@ -1,18 +1,13 @@
 #include "metadata.h"
 #include "schema.h"
 
-#include <ydb/core/formats/arrow/arrow_batch_builder.h>
-
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules {
 
 NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId) {
-    NArrow::TRecordBatchConstructor rbConstructor;
-    {
-        auto record = rbConstructor.InitColumns(GetPKSchema()).StartRecord();
-        record.AddRecordValue(std::make_shared<arrow::UInt64Scalar>(pathId.GetRawValue()))
-            .AddRecordValue(std::make_shared<arrow::UInt64Scalar>(tabletId));
-    }
-    return NArrow::TSimpleRow(rbConstructor.Finish().GetBatch(), 0);
+    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2);
+    writer.Append<ui64>(pathId.GetRawValue());
+    writer.Append<ui64>(tabletId);
+    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
 }
 
 std::shared_ptr<arrow::Schema> TSchemaAdapter::GetPKSchema() {

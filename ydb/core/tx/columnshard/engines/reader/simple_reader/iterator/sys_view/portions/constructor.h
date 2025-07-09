@@ -70,6 +70,8 @@ class TConstructor: public NAbstract::ISourcesConstructor {
 private:
     std::deque<TPortionDataConstructor> Constructors;
     const ui64 TabletId;
+    ui32 CurrentSourceIdx = 1;
+    const ERequestSorting Sorting;
 
     virtual void DoClear() override {
         Constructors.clear();
@@ -81,15 +83,8 @@ private:
         return Constructors.empty();
     }
     virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override {
-        AFL_VERIFY(Constructors.size());
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.front().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
-        Constructors.pop_front();
-        return result;
-    }
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
-        AFL_VERIFY(false);
     }
     virtual TString DoDebugString() const override {
         return Default<TString>();
@@ -106,6 +101,6 @@ private:
 public:
     TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
         const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
-        const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const bool isReverseSort);
+        const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting);
 };
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions

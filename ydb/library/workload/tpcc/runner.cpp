@@ -612,13 +612,14 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
 
     // Calculate progress ratio for gauge
     float progressRatio = static_cast<float>(data.ProgressPercentTotal / 100.0);
+    constexpr int progressBarWidth = 15;
 
     auto topLeftMainInfo = vbox({
         text(metricsSs.str()) | bold,
         text(timingSs.str()),
         hbox({
             text("Progress: ["),
-            gauge(progressRatio) | size(WIDTH, EQUAL, 20),
+            gauge(progressRatio) | size(WIDTH, EQUAL, progressBarWidth),
             text("] " + std::to_string(static_cast<int>(data.ProgressPercentTotal)) + "%")
         })
     });

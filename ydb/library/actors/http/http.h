@@ -370,6 +370,9 @@ public:
     void ConnectionClosed();
 
     size_t GetHeadersSize() const { // including request line
+        if (HeaderType::Headers.empty()) {
+            return TSocketBuffer::Size();
+        }
         return HeaderType::Headers.end() - TSocketBuffer::Data();
     }
 
@@ -623,6 +626,9 @@ public:
     }
 
     size_t GetHeadersSize() const { // including request line
+        if (HeaderType::Headers.empty()) {
+            return TSocketBuffer::Size();
+        }
         return HeaderType::Headers.end() - TSocketBuffer::Data();
     }
 

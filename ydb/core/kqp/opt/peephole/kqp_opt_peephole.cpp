@@ -102,8 +102,6 @@ public:
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
-        AddHandler(0, [](const TExprNode* node) { return node->IsCallable("WideToBlocks"); }, HNDL(OptimizeWideToBlocks));
-        AddHandler(0, [](const TExprNode* node) { return node->IsCallable("WideFromBlocks"); }, HNDL(OptimizeWideFromBlocks));
 #undef HNDL
     }
 
@@ -159,18 +157,6 @@ protected:
     TMaybeNode<TExprBase> RewriteBlockHashJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewriteBlockHashJoin(node, ctx);
         DumpAppliedRule("RewriteBlockHashJoin", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    TMaybeNode<TExprBase> OptimizeWideToBlocks(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeOptimizeWideToBlocks(node, ctx);
-        DumpAppliedRule("OptimizeWideToBlocks", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    TMaybeNode<TExprBase> OptimizeWideFromBlocks(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeOptimizeWideFromBlocks(node, ctx);
-        DumpAppliedRule("OptimizeWideFromBLocks", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

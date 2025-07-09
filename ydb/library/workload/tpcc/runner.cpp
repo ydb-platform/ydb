@@ -571,6 +571,12 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
 void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     using namespace ftxui;
 
+    // Get window width to determine which columns to show
+    constexpr int MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS = 140;
+    auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
+    const int windowWidth = screen.dimx();
+    const bool showExtendedColumns = windowWidth >= MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS;
+
     // First update is special: we switch buffers and capture stderr to display live logs
     static bool firstUpdate = true;
     if (firstUpdate) {
@@ -654,24 +660,30 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     size_t threadCount = LastStatisticsSnapshot->StatVec.size();
     size_t halfCount = (threadCount + 1) / 2;
 
-    auto headerRow = hbox({
-        text("Thr") | size(WIDTH, EQUAL, 4),
-        text("Load") | center | size(WIDTH, EQUAL, 24),
-        text("QPS") | align_right | size(WIDTH, EQUAL, 8),
-        text("Queue") | align_right | size(WIDTH, EQUAL, 10),
-        text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20)
-    });
+    // Create header row elements
+    Elements headerLeftColumn;
+    headerLeftColumn.push_back(text("Thr") | size(WIDTH, EQUAL, 4));
+    headerLeftColumn.push_back(text("Load") | center | size(WIDTH, EQUAL, 24));
+    headerLeftColumn.push_back(text("QPS") | align_right | size(WIDTH, EQUAL, 8));
+    if (showExtendedColumns) {
+        headerLeftColumn.push_back(text("Queue") | align_right | size(WIDTH, EQUAL, 10));
+        headerLeftColumn.push_back(text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20));
+    }
 
-    auto headerRow2 = hbox({
-        text("Thr") | size(WIDTH, EQUAL, 4),
-        text("Load") | center | size(WIDTH, EQUAL, 24),
-        text("QPS") | align_right | size(WIDTH, EQUAL, 8),
-        text("Queue") | align_right | size(WIDTH, EQUAL, 10),
-        text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20)
-    });
+    Elements headerRightColumn;
+    headerRightColumn.push_back(text("Thr") | size(WIDTH, EQUAL, 4));
+    headerRightColumn.push_back(text("Load") | center | size(WIDTH, EQUAL, 24));
+    headerRightColumn.push_back(text("QPS") | align_right | size(WIDTH, EQUAL, 8));
+    if (showExtendedColumns) {
+        headerRightColumn.push_back(text("Queue") | align_right | size(WIDTH, EQUAL, 10));
+        headerRightColumn.push_back(text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20));
+    }
 
-    leftThreadElements.push_back(headerRow);
-    rightThreadElements.push_back(headerRow2);
+    auto headerLeft = hbox(headerLeftColumn);
+    auto headerRight = hbox(headerRightColumn);
+
+    leftThreadElements.push_back(headerLeft);
+    rightThreadElements.push_back(headerRight);
 
     for (size_t i = 0; i < threadCount; ++i) {
         const auto& stats = LastStatisticsSnapshot->StatVec[i];
@@ -698,22 +710,26 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
 
         std::stringstream loadPercentSs, qpsSs, queueSizeSs, queueP90Ss;
         loadPercentSs << std::fixed << std::setprecision(1) << std::setw(4) << std::right << (load * 100) << "%";
-        qpsSs << std::fixed << std::setprecision(0) << stats.QueriesPerSecond;
+        qpsSs << std::fixed << std::setprecision(0) << std::setw(8) << std::right << stats.QueriesPerSecond;
         queueSizeSs << stats.TaskThreadStats->InternalTasksWaitingInflight;
         queueP90Ss << std::fixed << std::setprecision(1) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
 
-        auto threadLine = hbox({
-            text(std::to_string(i + 1)) | size(WIDTH, EQUAL, 4),
-            hbox({
-                text("["),
-                loadBar | size(WIDTH, EQUAL, 10),
-                text("] "),
-                text(loadPercentSs.str()) | color(loadColor)
-            }) |  size(WIDTH, EQUAL, 24),
-            text(qpsSs.str()) | align_right | size(WIDTH, EQUAL, 8),
-            text(queueSizeSs.str()) | align_right | size(WIDTH, EQUAL, 10),
-            text(queueP90Ss.str()) | align_right | size(WIDTH, EQUAL, 20)
-        });
+        // Create thread line elements
+        Elements threadLineElements;
+        threadLineElements.push_back(text(std::to_string(i + 1)) | size(WIDTH, EQUAL, 4));
+        threadLineElements.push_back(hbox({
+            text("["),
+            loadBar | size(WIDTH, EQUAL, 10),
+            text("] "),
+            text(loadPercentSs.str()) | color(loadColor)
+        }) | size(WIDTH, EQUAL, 24));
+        threadLineElements.push_back(text(qpsSs.str()) | align_right | size(WIDTH, EQUAL, 8));
+        if (showExtendedColumns) {
+            threadLineElements.push_back(text(queueSizeSs.str()) | align_right | size(WIDTH, EQUAL, 10));
+            threadLineElements.push_back(text(queueP90Ss.str()) | align_right | size(WIDTH, EQUAL, 20));
+        }
+
+        auto threadLine = hbox(threadLineElements);
 
         if (i < halfCount) {
             leftThreadElements.push_back(threadLine);
@@ -758,7 +774,6 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     // Render full screen
 
     std::cout << "\033[H"; // Move cursor to top
-    auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
     Render(screen, layout);
     std::cout << screen.ToString();
 }

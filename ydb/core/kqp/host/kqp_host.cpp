@@ -2047,6 +2047,50 @@ private:
             .AddRun(&NullProgressWriter)
             .Build();
 
+        auto typesCtx = TypesCtx;
+        EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION;
+        auto RBOOptimizationTransformer = CreateCompositeGraphTransformer(
+            {
+                TTransformStage(
+                    CreateChoiceGraphTransformer(
+                    [typesCtx](const TExprNode::TPtr&, TExprContext&) {
+                        return typesCtx->EngineType == EEngineType::Ytflow;
+                    },
+                    TTransformStage(
+                        CreateRecaptureDataProposalsInspector(*typesCtx, TString{YtflowProviderName}),
+                        "RecaptureDataProposalsYtflow",
+                        issueCode),
+                    TTransformStage(
+                        CreateRecaptureDataProposalsInspector(*typesCtx, TString{DqProviderName}),
+                        "RecaptureDataProposalsDq",
+                        issueCode)),
+                    "RecaptureDataProposals",
+                    issueCode),
+                TTransformStage(
+                    CreateStatisticsProposalsInspector(*typesCtx, TString{DqProviderName}),
+                    "StatisticsProposals",
+                    issueCode
+                ),
+                TTransformStage(
+                    CreateLogicalDataProposalsInspector(*typesCtx),
+                    "LogicalDataProposals",
+                    issueCode),
+                TTransformStage(
+                    CreatePhysicalDataProposalsInspector(*typesCtx),
+                    "PhysicalDataProposals",
+                    issueCode),
+                TTransformStage(
+                    CreatePhysicalFinalizers(*typesCtx),
+                    "PhysicalFinalizers",
+                    issueCode),
+                TTransformStage(
+                    CreateCheckExecutionTransformer(*typesCtx, true),
+                    "CheckExecution",
+                    issueCode)
+                },
+                false
+            );
+
         YqlTransformerNewRBO = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
@@ -2058,7 +2102,8 @@ private:
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()
-            .AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
+            //.AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
+            .Add(RBOOptimizationTransformer.Release(), "RBOOptimizationTransformer")
             .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
             .AddRun(&NullProgressWriter)

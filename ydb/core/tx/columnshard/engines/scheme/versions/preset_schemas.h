@@ -12,7 +12,6 @@ private:
     THashMap<ui64, std::shared_ptr<const TVersionedIndex>> PresetVersionedIndexCopy;
 
     const ui64 DefaultPresetId;
-    std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache;
 
 public:

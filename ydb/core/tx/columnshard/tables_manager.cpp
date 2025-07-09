@@ -550,14 +550,12 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
     const TString& tablePath, const TSchemeShardLocalPathId externalPathId) {
     const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId);
-    if (!internalPathId) {
-        auto schemaAdapter =
-            NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(TFsPath(tablePath).Fix().GetName());
-        if (!schemaAdapter) {
-            return TConclusionStatus::Fail(
-                "incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());
-        }
+    auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(TFsPath(tablePath).Fix().GetName());
+    if (schemaAdapter) {
         return schemaAdapter->BuildMetadataAccessor(tablePath, externalPathId, internalPathId);
+    } else if (!internalPathId) {
+        return TConclusionStatus::Fail(
+            "incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());
     } else {
         if (!HasTable(*internalPathId)) {
             return std::make_shared<NOlap::TAbsentTableAccessor>(

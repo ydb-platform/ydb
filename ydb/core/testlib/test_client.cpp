@@ -1515,8 +1515,8 @@ namespace Tests {
                 ydbCredFactory,
                 NFq::TYqSharedResources::Cast(yqSharedResources),
                 counters);
-            TActorId netClassifierId = Runtime->Register(actor.release(), nodeIdx, userPoolId);
-            Runtime->RegisterService(NYql::NDq::MakeCheckpointStorageID(), netClassifierId, nodeIdx);
+            TActorId actorId = Runtime->Register(actor.release(), nodeIdx, userPoolId);
+            Runtime->RegisterService(NYql::NDq::MakeCheckpointStorageID(), actorId, nodeIdx);
         }
 
         {

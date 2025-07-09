@@ -8,6 +8,7 @@ RECURSE(
     arrow_parquet
     backup
     benchmarks
+    blockcodecs
     breakpad
     chunks_limiter
     drr

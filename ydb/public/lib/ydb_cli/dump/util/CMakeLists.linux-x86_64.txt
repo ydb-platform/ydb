@@ -20,6 +20,7 @@ target_link_libraries(ydb_cli-dump-util PUBLIC
   contrib-libs-cxxsupp
   yutil
   common
+  src-client-draft
   src-client-scheme
   src-client-table
   client-types-status

@@ -15,16 +15,11 @@
 add_library(src-client-proto)
 
 
-target_compile_options(src-client-proto PUBLIC
-  -DYDB_SDK_INTERNAL_CLIENTS
-)
-
 target_link_libraries(src-client-proto PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   api-grpc
-  api-grpc-draft
   api-protos
   src-client-params
   src-client-value

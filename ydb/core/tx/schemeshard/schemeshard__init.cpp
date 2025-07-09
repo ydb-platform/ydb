@@ -1880,9 +1880,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         }
 
-        // Read Running data erasure for tenants
+        // Read Running shred for tenants
         {
-            if (!Self->DataErasureManager->Restore(db)) {
+            if (!Self->ShredManager->Restore(db)) {
                 return false;
             }
         }

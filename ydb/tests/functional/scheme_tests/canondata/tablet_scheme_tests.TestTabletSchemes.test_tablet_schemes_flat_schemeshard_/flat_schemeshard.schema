@@ -8414,7 +8414,7 @@
     },
     {
         "TableId": 115,
-        "TableName": "DataErasureGenerations",
+        "TableName": "ShredGenerations",
         "TableKey": [
             1
         ],
@@ -8464,7 +8464,7 @@
     },
     {
         "TableId": 116,
-        "TableName": "WaitingDataErasureTenants",
+        "TableName": "WaitingShredTenants",
         "TableKey": [
             1,
             2
@@ -8515,7 +8515,7 @@
     },
     {
         "TableId": 117,
-        "TableName": "TenantDataErasureGenerations",
+        "TableName": "TenantShredGenerations",
         "TableKey": [
             1
         ],
@@ -8559,7 +8559,7 @@
     },
     {
         "TableId": 118,
-        "TableName": "WaitingDataErasureShards",
+        "TableName": "WaitingShredShards",
         "TableKey": [
             1,
             2

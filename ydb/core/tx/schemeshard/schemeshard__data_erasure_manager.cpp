@@ -2,44 +2,44 @@
 
 namespace NKikimr::NSchemeShard {
 
-TDataErasureManager::TDataErasureManager(TSchemeShard* const schemeShard)
+TShredManager::TShredManager(TSchemeShard* const schemeShard)
     : SchemeShard(schemeShard)
 {}
 
-EDataErasureStatus TDataErasureManager::GetStatus() const {
+EShredStatus TShredManager::GetStatus() const {
     return Status;
 }
 
-void TDataErasureManager::SetStatus(const EDataErasureStatus& status) {
+void TShredManager::SetStatus(const EShredStatus& status) {
     Status = status;
 }
 
-void TDataErasureManager::IncGeneration() {
+void TShredManager::IncGeneration() {
     ++Generation;
 }
 
-void TDataErasureManager::SetGeneration(ui64 generation) {
+void TShredManager::SetGeneration(ui64 generation) {
     Generation = generation;
 }
 
-ui64 TDataErasureManager::GetGeneration() const {
+ui64 TShredManager::GetGeneration() const {
     return Generation;
 }
 
-void TDataErasureManager::Clear() {
+void TShredManager::Clear() {
     ClearOperationQueue();
-    ClearWaitingDataErasureRequests();
+    ClearWaitingShredRequests();
 }
 
-void TDataErasureManager::Start() {
+void TShredManager::Start() {
     Running = true;
 }
 
-void TDataErasureManager::Stop() {
+void TShredManager::Stop() {
     Running = false;
 }
 
-bool TDataErasureManager::IsRunning() const {
+bool TShredManager::IsRunning() const {
     return Running;
 }
 

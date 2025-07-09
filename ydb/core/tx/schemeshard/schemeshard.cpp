@@ -81,4 +81,40 @@ bool PartitionConfigHasExternalBlobsEnabled(const NKikimrSchemeOp::TPartitionCon
     return false;
 }
 
+NKikimrConfig::TShredConfig ConvertToShredConfig(const NKikimrConfig::TDataErasureConfig& dataErasureConfig) {
+    NKikimrConfig::TShredConfig shredConfig;
+
+    if (dataErasureConfig.HasMaxRate()) {
+        shredConfig.SetMaxRate(dataErasureConfig.GetMaxRate());
+    }
+    if (dataErasureConfig.HasInflightLimit()) {
+        shredConfig.SetInflightLimit(dataErasureConfig.GetInflightLimit());
+    }
+    if (dataErasureConfig.HasTimeoutSeconds()) {
+        shredConfig.SetTimeoutSeconds(dataErasureConfig.GetTimeoutSeconds());
+    }
+    if (dataErasureConfig.HasDataErasureIntervalSeconds()) {
+        shredConfig.SetShredIntervalSeconds(dataErasureConfig.GetDataErasureIntervalSeconds());
+    }
+    if (dataErasureConfig.HasBlobStorageControllerRequestIntervalSeconds()) {
+        shredConfig.SetBlobStorageControllerRequestIntervalSeconds(dataErasureConfig.GetBlobStorageControllerRequestIntervalSeconds());
+    }
+
+    if (dataErasureConfig.HasTenantDataErasureConfig()) {
+        const auto& tenantDataErasureConfig = dataErasureConfig.GetTenantDataErasureConfig();
+        auto& tenantShredConfig = *shredConfig.MutableTenantShredConfig();
+
+        if (tenantDataErasureConfig.HasMaxRate()) {
+            tenantShredConfig.SetMaxRate(tenantDataErasureConfig.GetMaxRate());
+        }
+        if (tenantDataErasureConfig.HasInflightLimit()) {
+            tenantShredConfig.SetInflightLimit(tenantDataErasureConfig.GetInflightLimit());
+        }
+        if (tenantDataErasureConfig.HasTimeoutSeconds()) {
+            tenantShredConfig.SetTimeoutSeconds(tenantDataErasureConfig.GetTimeoutSeconds());
+        }
+    }
+    return shredConfig;
+}
+
 }

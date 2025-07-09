@@ -195,7 +195,7 @@ message TFeatureFlags {
     optional bool EnableDatabaseAdmin = 169 [default = false];
     optional bool EnableChangefeedsImport = 170 [default = false];
     optional bool EnablePermissionsExport = 171 [default = false];
-    optional bool EnableDataErasure = 172 [default = false];
+    optional bool EnableDataErasure = 172 [default = false]; // deprecated: use EnableShred
     optional bool EnableShowCreate = 173 [default = false];
     optional bool EnableChangefeedsExport = 174 [default = false];
     optional bool EnableKafkaNativeBalancing = 175 [default = false];
@@ -216,4 +216,5 @@ message TFeatureFlags {
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = true];
+    optional bool EnableShred = 193 [default = false];
 }

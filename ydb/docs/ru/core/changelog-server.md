@@ -41,7 +41,7 @@
 * [Добавлено](https://github.com/ydb-platform/ydb/pull/9168) ограничение в 100 000 на число одновременных запросов на создание сессий в сервисе координации.
 * [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [число столбцов в первичном ключе](./concepts/limits-ydb.md?#schema-object) с 20 до 30.
 * **_(Экспериментально)_** [Добавлены](https://github.com/ydb-platform/ydb/pull/14075) строгие проверки прав доступа, включаемые установкой следующих флагов:
-  * `enable_strict_acl_check`; 
+  * `enable_strict_acl_check`;
   * `enable_strict_user_management` — строгие проверки для локальных пользователей;
   * `enable_database_admin` — функции администратора базы данных;
   * `enable_data_erasure` — включает процедуру многократной перезаписи удалённых данных для снижения риска их чтения при прямом обращении к блочным устройствам средствами операционной системы [(PR #14460)](https://github.com/ydb-platform/ydb/pull/14460).
@@ -78,7 +78,7 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12220) ошибка, из-за которой автопартиционирование некорректно работало при работе с топиком в транзакции.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/12905) зависания транзакций при работе с топиками во время перезапуска таблеток.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/13910) ошибка «Key is out of range» при импорте из S3-совместимого хранилища.
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/13741) некорректное определение конца поля с метаданными в [динамической конфигурации кластера](./maintenance/manual/dynamic-config.md).
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/13741) некорректное определение конца поля с метаданными в конфигурации кластера.
 * [Улучшено](https://github.com/ydb-platform/ydb/pull/16420) построение вторичных индексов: при возникновении некоторых ошибок система ретраит процесс, а не прерывает его.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16635) ошибка выполнения выражения `RETURNING` в запросах `INSERT INTO` и `UPSERT INTO`.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16269) проблема зависания операции «Drop Tablet» в PQ tablet, особенно во время задержек в работе Interconnect.

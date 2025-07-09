@@ -104,6 +104,15 @@ private:
     }
 
 public:
+    struct TPortionAddressComparator {
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+    };
+
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
@@ -360,7 +369,6 @@ public:
     }
 
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
-
         const bool visible = (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) && DoIsVisible(snapshot, checkCommitSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(

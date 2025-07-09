@@ -755,6 +755,20 @@
             "uri": "https://{canondata_backend}/1942100/1013b32caebd140d1dc9278f326196c687df1d88/resource.tar.gz#test.test_in-small_in_YQL-19183-ansi-Results_/results.txt"
         }
     ],
+    "test.test[intersect-intersect_mix-default.txt-Debug]": [
+        {
+            "checksum": "9c0083b439d15cc700b1f47cad03d5f7",
+            "size": 1735,
+            "uri": "https://{canondata_backend}/1916746/2ac7ca2ee06357a0ae2df3c4927fc906e2649791/resource.tar.gz#test.test_intersect-intersect_mix-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[intersect-intersect_mix-default.txt-Results]": [
+        {
+            "checksum": "880bc2c5f1cdd2ea8a714c3bb367ac9f",
+            "size": 689,
+            "uri": "https://{canondata_backend}/1916746/2ac7ca2ee06357a0ae2df3c4927fc906e2649791/resource.tar.gz#test.test_intersect-intersect_mix-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[join-inmem_by_uncomparable_structs-default.txt-Debug]": [
         {
             "checksum": "8c3db3c0b89d765d8902292c8ad33420",

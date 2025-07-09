@@ -1576,6 +1576,18 @@ Y_UNIT_TEST(Except) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(UnionIntersectExcept) {
+    TCases cases = {
+        {"select 1 union select 2 intersect select 3 except select 4",
+         "SELECT\n\t1\nUNION\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nEXCEPT\nSELECT\n\t4\n;\n"},
+        {"select 1 intersect select 2 union select 3 except select 4",
+         "SELECT\n\t1\nINTERSECT\nSELECT\n\t2\nUNION\nSELECT\n\t3\nEXCEPT\nSELECT\n\t4\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Comment) {
     TCases cases = {
         {"/*\nmulti\nline\ncomment\n*/\npragma foo = \"true\";\npragma bar = \"1\"",

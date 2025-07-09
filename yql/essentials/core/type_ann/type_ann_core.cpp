@@ -6197,7 +6197,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+        auto& missingValue = input->Tail();
+        if (!EnsureComputable(missingValue, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -6208,11 +6209,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TTypeAnnotationNode::TListType types;
         types.reserve(args.size());
         for (const auto& arg : args) {
+            // If any of lambda input args has null type just return the missing value.
             if (IsNull(*arg)) {
                 output = input->TailPtr();
                 return IGraphTransformer::TStatus::Repeat;
             }
 
+            // All arguments must be optional.
             if (!EnsureOptionalType(*arg, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -6234,11 +6237,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         const auto thenType = lambda->GetTypeAnn();
-        const auto elseType = input->Tail().GetTypeAnn();
-        if (input->Tail().IsCallable("Null") && (thenType->GetKind() == ETypeAnnotationKind::Optional ||
+        const auto elseType = missingValue.GetTypeAnn();
+        if (missingValue.IsCallable("Null") && (thenType->GetKind() == ETypeAnnotationKind::Optional ||
             thenType->GetKind() == ETypeAnnotationKind::Pg)) {
+            // Expand null type to the lambda return type.
             output = ctx.Expr.ChangeChild(*input, input->ChildrenSize() - 1,
-                ctx.Expr.NewCallable(input->Tail().Pos(), "Nothing", { ExpandType(input->Tail().Pos(), *thenType, ctx.Expr) }));
+                ctx.Expr.NewCallable(missingValue.Pos(), "Nothing", { ExpandType(missingValue.Pos(), *thenType, ctx.Expr) }));
             return IGraphTransformer::TStatus::Repeat;
         } else if (!IsSameAnnotation(*thenType, *elseType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "mismatch of then/else types, then type: "
@@ -12713,6 +12717,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Unwrap"] = &UnwrapWrapper;
         Functions["Exists"] = &ExistsWrapper;
         Functions["BlockExists"] = &BlockExistsWrapper;
+        Functions["BlockValidUnwrap"] = &BlockValidUnwrapWrapper;
         Functions["Just"] = &JustWrapper;
         Functions["Optional"] = &OptionalWrapper;
         Functions["OptionalIf"] = &OptionalIfWrapper;

@@ -1827,8 +1827,6 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             ythrow yexception() << "Invalid hash join mode: " << mode;
     }
 
-    // For block hash join, peephole handles everything - don't apply NarrowMap
-    Cerr << "MISHA use BlockHashJoin? " << useBlockHashJoin << Endl;
     if (!useBlockHashJoin) {
         std::vector<TString> fullColNames;
         for (const auto& v: leftNames) {

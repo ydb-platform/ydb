@@ -75,12 +75,9 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;
 
-            Cerr << "MISHA: " << joinQuery << Endl;
-
             auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
 
             auto resultSet = status.GetResultSets()[0];
             // Current Join implementation is simple and returns all the rows

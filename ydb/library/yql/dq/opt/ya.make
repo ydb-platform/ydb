@@ -29,7 +29,6 @@ SRCS(
     dq_opt_stat.cpp
     dq_opt_stat_transformer_base.cpp
     dq_opt_predicate_selectivity.cpp
-    visualizer.cpp
 )
 
 YQL_LAST_ABI_VERSION()

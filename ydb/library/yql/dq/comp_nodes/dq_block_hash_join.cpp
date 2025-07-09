@@ -8,8 +8,6 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
-
-// Include block infrastructure from BlockMapJoinCore
 #include <yql/essentials/minikql/comp_nodes/mkql_blocks.h>
 
 #include <algorithm>
@@ -18,8 +16,6 @@
 namespace NKikimr::NMiniKQL {
 
 namespace {
-
-// Simplified block hash join implementation
 
 class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper> {
 private:
@@ -96,10 +92,8 @@ private:
                  << " leftFinished=" << LeftFinished_
                  << " rightFinished=" << RightFinished_ << Endl;
             
-            // Simple concatenation logic: read left stream first, then right stream
             
             if (!LeftFinished_) {
-                // Try to read from left stream with correct width
                 TVector<NUdf::TUnboxedValue> leftInput(LeftStreamWidth_);
                 Cerr << "Trying to read left stream with width " << LeftStreamWidth_ << Endl;
                 auto status = LeftStream_.WideFetch(leftInput.data(), LeftStreamWidth_);
@@ -108,25 +102,16 @@ private:
                 switch (status) {
                 case NUdf::EFetchStatus::Ok: {
                     Cerr << "Left stream read successful!" << Endl;
-                    // Copy left stream data to output (assuming same structure for now)
-                    // For proper join, we would need to map columns correctly
                     
-                    // First, copy all elements except the last one (block length)
                     size_t dataCols = std::min(static_cast<size_t>(width), LeftStreamWidth_) - 1;
                     for (size_t i = 0; i < dataCols; i++) {
                         Cerr << "Copying leftInput[" << i << "] IsBoxed=" << leftInput[i].IsBoxed() 
                              << " IsSpecial=" << leftInput[i].IsSpecial()
                              << " IsInvalid=" << leftInput[i].IsInvalid() << Endl;
-                        try {
-                            output[i] = std::move(leftInput[i]);
-                            Cerr << "Successfully copied leftInput[" << i << "]" << Endl;
-                        } catch (const std::exception& e) {
-                            Cerr << "Exception copying leftInput[" << i << "]: " << e.what() << Endl;
-                            throw;
-                        }
+                        output[i] = std::move(leftInput[i]);
+                        Cerr << "Successfully copied leftInput[" << i << "]" << Endl;
                     }
                     
-                    // Copy block length to the last position in output
                     if (width > 0) {
                         size_t blockLengthSrcIdx = LeftStreamWidth_ - 1;
                         size_t blockLengthDstIdx = width - 1;
@@ -138,9 +123,7 @@ private:
                         output[blockLengthDstIdx] = std::move(leftInput[blockLengthSrcIdx]);
                     }
                     
-                    // Fill remaining middle columns if output is wider than left stream
                     for (size_t i = dataCols; i < width - 1; i++) {
-                        // Create empty array for additional columns
                         Cerr << "Creating empty array for output[" << i << "]" << Endl;
                         auto blockItemType = AS_TYPE(TBlockType, ResultItemTypes_[i])->GetItemType();
                         std::shared_ptr<arrow::DataType> arrowType;
@@ -163,23 +146,18 @@ private:
             }
             
             if (!RightFinished_) {
-                // Try to read from right stream with correct width
                 TVector<NUdf::TUnboxedValue> rightInput(RightStreamWidth_);
                 auto status = RightStream_.WideFetch(rightInput.data(), RightStreamWidth_);
                 
                 switch (status) {
                 case NUdf::EFetchStatus::Ok: {
                     Cerr << "Right stream read successful!" << Endl;
-                    // Copy right stream data to output (assuming same structure for now)
-                    
-                    // First, copy all elements except the last one (block length)
                     size_t dataCols = std::min(static_cast<size_t>(width), RightStreamWidth_) - 1;
                     for (size_t i = 0; i < dataCols; i++) {
                         Cerr << "Copying rightInput[" << i << "] IsBoxed=" << rightInput[i].IsBoxed() << Endl;
                         output[i] = std::move(rightInput[i]);
                     }
                     
-                    // Copy block length to the last position in output
                     if (width > 0) {
                         size_t blockLengthSrcIdx = RightStreamWidth_ - 1;
                         size_t blockLengthDstIdx = width - 1;
@@ -191,9 +169,7 @@ private:
                         output[blockLengthDstIdx] = std::move(rightInput[blockLengthSrcIdx]);
                     }
                     
-                    // Fill remaining middle columns if output is wider than right stream
                     for (size_t i = dataCols; i < width - 1; i++) {
-                        // Create empty array for additional columns
                         Cerr << "Creating empty array for output[" << i << "]" << Endl;
                         auto blockItemType = AS_TYPE(TBlockType, ResultItemTypes_[i])->GetItemType();
                         std::shared_ptr<arrow::DataType> arrowType;
@@ -215,7 +191,6 @@ private:
                 }
             }
             
-            // Both streams finished
             Cerr << "Both streams finished, returning Finish" << Endl;
             return NUdf::EFetchStatus::Finish;
         }

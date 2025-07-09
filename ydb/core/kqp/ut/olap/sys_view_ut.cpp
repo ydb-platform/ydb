@@ -219,6 +219,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
+        {
+            auto selectQuery = Sprintf(R"(
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
+            )",
+                tablePathId1);
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("column0")), 150);
+        }
     }
 
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {

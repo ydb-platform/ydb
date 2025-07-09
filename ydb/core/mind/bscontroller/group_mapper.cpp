@@ -277,16 +277,58 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            bool BetterWithAttentionToReplication(const TPDiskInfo& pretender, const TPDiskInfo& king) const {
+                auto pretenderNode = pretender.PDiskId.NodeId;
+                auto kingNode = king.PDiskId.NodeId;
+
+                Y_ABORT_UNLESS(Self.DiskSlotState.has_value());
+
+                auto& diskSlotState = *Self.DiskSlotState;
+
+                // Compare by number of free slots in PDisk's rack.
+                i32 freeSlotsPretender = diskSlotState.GetFreeSlotsOnRack(pretender.Location.GetRackId());
+                i32 freeSlotsKing = diskSlotState.GetFreeSlotsOnRack(king.Location.GetRackId());
+
+                if (freeSlotsPretender != freeSlotsKing) {
+                    return freeSlotsPretender > freeSlotsKing;
+                }
+
+                // Compare by number of replicating VDisks on the PDisk's node.
+                auto pretenderNodeRepls = diskSlotState.GetReplicatingVDisksOnNode(pretenderNode);
+                auto kingNodeRepls = diskSlotState.GetReplicatingVDisksOnNode(kingNode);
+
+                if (pretenderNodeRepls != kingNodeRepls) {
+                    return pretenderNodeRepls < kingNodeRepls;
+                }
+
+                // Compare by number of replicating VDisks on the PDisk.
+                auto pretenderPDiskRepls = diskSlotState.GetReplicatingVDisksOnPDisk(pretender.PDiskId);
+                auto kingPDiskRepls = diskSlotState.GetReplicatingVDisksOnPDisk(king.PDiskId);
+
+                if (pretenderPDiskRepls != kingPDiskRepls) {
+                    return pretenderPDiskRepls < kingPDiskRepls;
+                }
+
+                // Fallback: lower PDiskId wins
+                return pretender.PDiskId < king.PDiskId;
+            }
+
             bool DiskIsBetter(const TPDiskInfo& pretender, const TPDiskInfo& king) const {
-                if (pretender.FreeSlots() != king.FreeSlots()) {
-                    return pretender.FreeSlots() > king.FreeSlots();
-                } else if (GivesLocalityBoost(pretender, king) || BetterQuotaMatch(pretender, king)) {
-                    return true;
+                if (Self.WithAttentionToReplication) {
+                    return BetterWithAttentionToReplication(pretender, king);
                 } else {
-                    if (pretender.NumDomainMatchingDisks != king.NumDomainMatchingDisks) {
-                        return pretender.NumDomainMatchingDisks > king.NumDomainMatchingDisks;
+                    if (pretender.FreeSlots() != king.FreeSlots()) {
+                        return pretender.FreeSlots() > king.FreeSlots();
                     }
-                    return pretender.PDiskId < king.PDiskId;
+
+                    if (GivesLocalityBoost(pretender, king) || BetterQuotaMatch(pretender, king)) {
+                        return true;
+                    } else {
+                        if (pretender.NumDomainMatchingDisks != king.NumDomainMatchingDisks) {
+                            return pretender.NumDomainMatchingDisks > king.NumDomainMatchingDisks;
+                        }
+                        return pretender.PDiskId < king.PDiskId;
+                    }
                 }
             }
 
@@ -868,11 +910,14 @@ namespace NKikimr::NBsController {
         TPDisks PDisks;
         TPDiskByPosition PDiskByPosition;
         bool Dirty = false;
+        bool WithAttentionToReplication;
+        std::optional<TDiskSlotState> DiskSlotState;
 
     public:
-        TImpl(TGroupGeometryInfo geom, bool randomize)
+        TImpl(TGroupGeometryInfo geom, bool randomize, bool withAttentionToReplication)
             : Geom(std::move(geom))
             , Randomize(randomize)
+            , WithAttentionToReplication(withAttentionToReplication)
         {
             static bool controlsRegistered = false;
             if (controlsRegistered) {
@@ -889,6 +934,10 @@ namespace NKikimr::NBsController {
                     "GroupMapperControls.GroupSizeInUnitsSmallerThanPDiskPenalty");
                 controlsRegistered = true;
             }
+        }
+
+        void SetDiskSlotState(TDiskSlotState&& state) {
+            DiskSlotState = std::move(state);
         }
 
         bool RegisterPDisk(const TPDiskRecord& pdisk) {
@@ -1167,11 +1216,15 @@ namespace NKikimr::NBsController {
         }
     };
 
-    TGroupMapper::TGroupMapper(TGroupGeometryInfo geom, bool randomize)
-        : Impl(new TImpl(std::move(geom), randomize))
+    TGroupMapper::TGroupMapper(TGroupGeometryInfo geom, bool randomize, bool withAttentionToReplication)
+        : Impl(new TImpl(std::move(geom), randomize, withAttentionToReplication))
     {}
 
     TGroupMapper::~TGroupMapper() = default;
+
+    void TGroupMapper::SetDiskSlotState(TDiskSlotState&& state) {
+        Impl->SetDiskSlotState(std::move(state));
+    }
 
     bool TGroupMapper::RegisterPDisk(const TPDiskRecord& pdisk) {
         return Impl->RegisterPDisk(pdisk);

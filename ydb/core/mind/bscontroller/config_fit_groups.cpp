@@ -542,16 +542,17 @@ namespace NKikimr {
                     TBridgePileId bridgePileId,
                     T&& func) {
                 if (!Mapper) {
-                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
+                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.WithAttentionToReplication);
                     PopulateGroupMapper();
                 }
+                TDiskSlotState s;
                 TStackVec<TPDiskId, 32> removeQ;
                 if (addExistingDisks) {
                     for (const auto& realm : group) {
                         for (const auto& domain : realm) {
                             for (const TPDiskId id : domain) {
                                 if (id != TPDiskId()) {
-                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, "X")) {
+                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, s, "X")) {
                                         removeQ.push_back(id);
                                     }
                                 }
@@ -591,6 +592,20 @@ namespace NKikimr {
             void PopulateGroupMapper() {
                 const TBoxId boxId = std::get<0>(StoragePoolId);
 
+                TDiskSlotState diskSlotState;
+
+                if (State.Fit.WithAttentionToReplication) {
+                    State.VSlots.ForEach([&](const TVSlotId& id, const TVSlotInfo& info) {
+                        if (info.IsBeingDeleted()) {
+                            return; // ignore slots being deleted
+                        }
+                        if (info.GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                            TPDiskId pdiskId = id.ComprisingPDiskId();
+                            diskSlotState.AddReplicatingVSlot(pdiskId);
+                        }
+                    });
+                }
+
                 State.PDisks.ForEach([&](const TPDiskId& id, const TPDiskInfo& info) {
                     if (info.BoxId != boxId) {
                         return; // ignore disks not from desired box
@@ -602,15 +617,17 @@ namespace NKikimr {
 
                     for (const auto& filter : StoragePool.PDiskFilters) {
                         if (filter.MatchPDisk(info)) {
-                            const bool inserted = RegisterPDisk(id, info, true);
+                            const bool inserted = RegisterPDisk(id, info, true, diskSlotState);
                             Y_ABORT_UNLESS(inserted);
                             break;
                         }
                     }
                 });
+
+                Mapper->SetDiskSlotState(std::move(diskSlotState));
             }
 
-            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TString whyUnusable = {}) {
+            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TDiskSlotState& diskSlotState, TString whyUnusable = {}) {
                 // calculate number of used slots on this PDisk, also counting the static ones
                 ui32 numSlots = info.NumActiveSlots + info.StaticSlotUsage;
 
@@ -678,10 +695,12 @@ namespace NKikimr {
                 ui32 slotSizeInUnits = 0;
                 info.ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
 
+                auto location = State.HostRecords->GetLocation(id.NodeId);
+
                 // register PDisk in the mapper
-                return Mapper->RegisterPDisk({
+                bool registered = Mapper->RegisterPDisk({
                     .PDiskId = id,
-                    .Location = State.HostRecords->GetLocation(id.NodeId),
+                    .Location = location,
                     .Usable = usable,
                     .NumSlots = numSlots,
                     .MaxSlots = maxSlots,
@@ -693,6 +712,13 @@ namespace NKikimr {
                     .WhyUnusable = std::move(whyUnusable),
                     .BridgePileId = bridgePileId,
                 });
+
+                if (registered && State.Fit.WithAttentionToReplication) {
+                    i32 freeSlots = i32(maxSlots) - numSlots;
+                    diskSlotState.AddFreeSlotsForRack(location.GetRackId(), freeSlots);
+                }
+
+                return registered;
             }
 
             std::map<TVDiskIdShort, TVSlotInfo*> CreateVSlotsForGroup(TGroupInfo *groupInfo,

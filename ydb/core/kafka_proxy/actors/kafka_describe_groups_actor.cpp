@@ -202,6 +202,9 @@ TString TKafkaDescribeGroupsActor::GetYqlWithTableNames(const TString& templateS
 }
 
 std::shared_ptr<TDescribeGroupsResponseData> TKafkaDescribeGroupsActor::BuildResponse() {
+    for (auto& groupId : DescribeGroupsRequestData->Groups) {
+        GroupIdToDescription[*groupId].ErrorCode = EKafkaErrors::GROUP_ID_NOT_FOUND;
+    }
     TDescribeGroupsResponseData describeGroupsResponse;
     for (auto& groupId : DescribeGroupsRequestData->Groups) {
         if (GroupIdToDescription.find(groupId) != GroupIdToDescription.end()) {

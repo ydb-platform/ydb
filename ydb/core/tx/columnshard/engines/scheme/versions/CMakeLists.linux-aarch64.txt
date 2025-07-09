@@ -21,6 +21,7 @@ target_link_libraries(engines-scheme-versions PUBLIC
   yutil
   engines-scheme-abstract
   engines-scheme-common
+  columnshard-data_sharing-protos
 )
 
 target_sources(engines-scheme-versions PRIVATE
@@ -28,5 +29,6 @@ target_sources(engines-scheme-versions PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/versions/snapshot_scheme.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/versions/preset_schemas.cpp
 )
 

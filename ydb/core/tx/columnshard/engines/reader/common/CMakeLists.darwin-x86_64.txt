@@ -36,6 +36,7 @@ target_sources(engines-reader-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common/description.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common/result.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common/stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common/comparable.cpp
 )
 
 

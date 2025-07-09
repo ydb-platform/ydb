@@ -24,6 +24,7 @@ target_link_libraries(simple_reader-iterator-collections PUBLIC
 
 target_sources(simple_reader-iterator-collections PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/not_sorted.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/full_scan_sorted.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/limit_sorted.cpp

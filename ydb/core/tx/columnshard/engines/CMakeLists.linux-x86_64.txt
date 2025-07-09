@@ -62,6 +62,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
 )
 
 target_sources(tx-columnshard-engines PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/metadata_accessor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine_logs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/db_wrapper.cpp

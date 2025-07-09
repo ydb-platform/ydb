@@ -21,8 +21,6 @@ target_link_libraries(engines-reader-transaction PUBLIC
   engines-reader-abstract
   ydb-core-tablet_flat
   engines-reader-actor
-  reader-sys_view-constructor
-  reader-plain_reader-constructor
 )
 
 target_sources(engines-reader-transaction PRIVATE

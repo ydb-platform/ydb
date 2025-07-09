@@ -14,6 +14,7 @@
 
 add_subdirectory(collections)
 add_subdirectory(sync_points)
+add_subdirectory(sys_view)
 
 add_library(reader-simple_reader-iterator)
 
@@ -27,6 +28,7 @@ target_link_libraries(reader-simple_reader-iterator PUBLIC
   reader-common_reader-iterator
   simple_reader-iterator-collections
   simple_reader-iterator-sync_points
+  simple_reader-iterator-sys_view
   reader-simple_reader-duplicates
   tx-conveyor-usage
   limiter-grouped_memory-usage

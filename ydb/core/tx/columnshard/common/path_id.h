@@ -117,6 +117,13 @@ public:
         return SchemeShardLocalPathId;
     }
 
+    explicit operator bool() const {
+        return InternalPathId && SchemeShardLocalPathId;
+    }
+    const TSchemeShardLocalPathId& GetSchemeShardLocalPathId() const {
+        return SchemeShardLocalPathId;
+    }
+
     bool IsValid() const {
         return InternalPathId.IsValid() && SchemeShardLocalPathId.IsValid();
     }

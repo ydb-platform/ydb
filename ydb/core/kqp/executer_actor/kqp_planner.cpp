@@ -675,16 +675,13 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             it->second.Set(state->GetStats());
         }
         if (PendingComputeTasks.empty() && CheckpointCoordinatorId) {
-            LOG_I("TEvReadyState to " << CheckpointCoordinatorId);
+            LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
 
             auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+            event->NeedSendRunToCA = false;
             for (const auto& dqTask : TasksGraph.GetTasks()) {
-
-                Cerr << "CheckpointingMode " << (dqTask.CheckpointingMode != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) << Endl;
-
                 NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, dqTask, true);
                 auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-
                 auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
                     dqTask.Id,
                     NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
@@ -697,16 +694,8 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             }                
             TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
         }
-
-
-        
-        LOG_I("AcknowledgeCA: PendingComputeTasks size " << PendingComputeTasks.size());
-        
         return true;
     }
-
-    LOG_I("AcknowledgeCA: PendingComputeTasks size " << PendingComputeTasks.size());
-
 
     YQL_ENSURE(task.ComputeActorId == computeActor);
     auto it = PendingComputeActors.find(computeActor);

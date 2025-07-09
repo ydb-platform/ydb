@@ -45,13 +45,12 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , StateLoadMode(stateLoadMode)
     , StreamingDisposition(streamingDisposition)
 {
-    CC_LOG_D("TCheckpointCoordinator 888");
-
 }
 
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
     ControlId = ev->Sender;
+    NeedSendRunToCA = ev->Get()->NeedSendRunToCA;
 
     for (const auto& task: ev->Get()->Tasks) {
         auto& actorId = TaskIdToActor[task.Id];
@@ -81,7 +80,8 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         }
         AllActorsSet.insert(actorId);
     }
-    if (ActorsToTrigger.empty())    // TODO
+    if (ActorsToTrigger.empty())
+        // Use NeedSendRunToCA     // TODO
         return;
 
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());
@@ -311,9 +311,11 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
         }
 
         ScheduleNextCheckpoint();
-        CC_LOG_I("[" << checkpoint << "] State restored, send TEvRun to " << AllActors.size() << " actors");
-        for (const auto& [actor, transport] : AllActors) {
-            transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
+        if (NeedSendRunToCA) {
+            CC_LOG_I("[" << checkpoint << "] State restored, send TEvRun to " << AllActors.size() << " actors");
+            for (const auto& [actor, transport] : AllActors) {
+                transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
+            }
         }
     }
 }

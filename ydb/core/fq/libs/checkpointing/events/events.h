@@ -51,6 +51,7 @@ struct TEvCheckpointCoordinator {
             NActors::TActorId ActorId;
         };
         std::vector<TTask> Tasks;
+        bool NeedSendRunToCA = true; 
     };
 
     struct TEvRaiseTransientIssues : public NActors::TEventLocal<TEvRaiseTransientIssues, EvRaiseTransientIssues> {

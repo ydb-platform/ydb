@@ -142,7 +142,6 @@ struct TAggQueryStat {
     NYql::TCounters::TEntry QueuedRows;
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;
-
     bool Updated = false;
 
     void Add(const TTopicSessionClientStatistic& stat, ui64 filteredBytes) {
@@ -167,12 +166,21 @@ struct TAggQueryStat {
         MaxReadLagCounter->Set(readLagMessagesMax);
     }
 
-    void Clear() {
+    void Remove() {
         if (!SubGroup) {
             return;
         }
         SetMetrics(0, 0, 0);
         SubGroup->RemoveSubgroup("query_id", QueryId);
+    }
+
+    void Clear() {
+        Updated = false;
+        FilteredBytes = NYql::TCounters::TEntry{};
+        QueuedBytes = NYql::TCounters::TEntry{};
+        QueuedRows = NYql::TCounters::TEntry{};
+        ReadLagMessages = NYql::TCounters::TEntry{};
+        IsWaiting = false;
     }
 };
 
@@ -628,7 +636,7 @@ void TRowDispatcher::UpdateMetrics() {
 
     AllSessionsDateRate = NYql::TCounters::TEntry();
     for (auto& [queryId, stat] : AggrStats.LastQueryStats) {
-        stat.Updated = false;
+        stat.Clear();
     }
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
@@ -657,7 +665,7 @@ void TRowDispatcher::UpdateMetrics() {
     for (auto& [key, stats] : AggrStats.LastQueryStats) {
         if (!stats.Updated) {
             toDelete.insert(key);
-            stats.Clear();
+            stats.Remove();
             continue;
         }
         stats.SetMetrics();

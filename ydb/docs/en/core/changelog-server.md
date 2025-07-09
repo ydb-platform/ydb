@@ -28,21 +28,28 @@ Release date: 2025.
 * Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md) and [ALTER USER](./yql/reference/syntax/alter-user.md) operators:
   * `HASH` — sets a password in encrypted form.
   * `LOGIN` and `NOLOGIN` — unlocks and blocks a user, respectively.
+* [Added](https://github.com/ydb-platform/ydb/issues/17734) automatic cleanup of temporary tables and directories during export to S3. This mode is enabled by setting the `enable_export_auto_dropping` flag in the cluster configuration.
+* [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity checks of backups during import, which prevent restoration from corrupted backups and protect against data loss.
+* [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic.md#udf) in queries.
+* Added system views with information about [access right settings](./dev/system-views.md#auth), [history of overloaded partitions](./dev/system-views.md#top-overload-partitions), [history of partitions with broken locks](./dev/system-views.md#top-tli-partitions).
+* Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md) and [ALTER USER](./yql/reference/syntax/alter-user.md) statements:
+  * `HASH` — sets a password in encrypted form.
+  * `LOGIN` and `NOLOGIN` — unblocks and blocks a user, respectively.
 * Enhanced account security:
   * [Added](https://github.com/ydb-platform/ydb/pull/11963) user password complexity verification.
   * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) automatic user lockout after a specified number of failed attempts to enter the correct password.
   * [Added](https://github.com/ydb-platform/ydb/pull/12983) the ability for users to change their own passwords.
-* [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to the flags for which the `(RequireRestart) = true` parameter is not specified in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) will be applied without a restart.
-* [Changed](https://github.com/ydb-platform/ydb/pull/11329) lock behavior when the number of locks on shards exceeds the limit. Now, once the limit is exceeded, the oldest locks (rather than the newest) are converted into full-shard locks.
-* [Implemented](https://github.com/ydb-platform/ydb/pull/12567) a mechanism to preserve optimistic locks in memory when datashards are gracefully restarted, which should reduce the number of `ABORTED` errors due to lock loss during table balancing between nodes.
-* [Implemented](https://github.com/ydb-platform/ydb/pull/12689) a mechanism to abort volatile transactions with the `ABORTED` status when datashards are gracefully restarted.
-* [Added](https://github.com/ydb-platform/ydb/pull/6342) the ability to remove `NOT NULL` constraints on a column in a table using the `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL` query.
-* [Added](https://github.com/ydb-platform/ydb/pull/9168) the 100,000 limit on the number of concurrent requests to create sessions in the coordination service.
-* [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum [number of columns in the primary key](./concepts/limits-ydb.md#schema-object) from 20 to 30.
-* **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) strict access control checks, which are enabled by setting the `enable_strict_acl_check` flag and the following ones:
+* [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to flags that do not specify `(RequireRestart) = true` in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) are applied without a cluster restart.
+* [Changed](https://github.com/ydb-platform/ydb/pull/11329) lock behavior when shard locks exceed the limit. Once the limit is exceeded, the oldest locks (rather than the newest) are converted into full-shard locks.
+* [Implemented](https://github.com/ydb-platform/ydb/pull/12567) a mechanism to preserve optimistic locks in memory during graceful datashard restarts, reducing `ABORTED` errors caused by lock loss during table balancing.
+* [Implemented](https://github.com/ydb-platform/ydb/pull/12689) a mechanism to abort volatile transactions with the `ABORTED` status during graceful datashard restarts.
+* [Added](https://github.com/ydb-platform/ydb/pull/6342) support for removing `NOT NULL` constraints from a table column using the `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL` statement.
+* [Added](https://github.com/ydb-platform/ydb/pull/9168) a limit of 100,000 concurrent session-creation requests in the coordination service.
+* [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum number of columns in the primary key from 20 to 30.
+* **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) strict access control checks, enabled by setting the `enable_strict_acl_check` flag and these additional flags:
   * `enable_strict_user_management` enables strict checks for local users.
   * `enable_database_admin` enables database administrator functions.
-  * `enable_data_erasure` [enables](https://github.com/ydb-platform/ydb/pull/14460) a procedure that repeatedly overwrites deleted data to minimize the risk of recovering the deleted information when directly accessing block devices via operating system functions.
+  * `enable_data_erasure` [enables](https://github.com/ydb-platform/ydb/pull/14460) a procedure that repeatedly overwrites deleted data to minimize recovery risk when accessing block devices directly via operating system functions.
 
 #### Backward Incompatible Changes
 
@@ -50,47 +57,47 @@ Release date: 2025.
 
 #### Performance
 
-* [Added](https://github.com/ydb-platform/ydb/pull/6509) support for [constant folding](https://en.wikipedia.org/wiki/Constant_folding) in the query optimizer by default, which improves query performance by evaluating constant expressions at compilation time. This feature reduces runtime overhead, enabling faster and more efficient query execution for complex static expressions.
-* [Added](https://github.com/ydb-platform/ydb/issues/6512) a granular timecast protocol that reduces the execution time of distributed transactions (slowing down one shard will not cause all shards to slow down).
-* [Implemented](https://github.com/ydb-platform/ydb/issues/11561) in-memory state migration on graceful restart, which preserves locks and increases the chances of successful transaction execution. This reduces the execution time of long transactions by decreasing the number of retries.
-* [Implemented](https://github.com/ydb-platform/ydb/issues/15255) pipeline processing of internal transactions in Node Broker, which accelerated the startup of dynamic nodes in the cluster.
-* [Improved](https://github.com/ydb-platform/ydb/pull/15607) [Node Broker](./concepts/glossary#node-broker-#node-broker) resilience to increased load from cluster nodes.
-* [Enabled](https://github.com/ydb-platform/ydb/pull/19440) by default evictable B-Tree indexes instead of non-evictable SST indexes, which reduces memory consumption when storing "cold" data.
+* [Added](https://github.com/ydb-platform/ydb/pull/6509) support for [constant folding](https://en.wikipedia.org/wiki/Constant_folding) in the query optimizer by default. This feature enhances query performance by evaluating constant expressions at compile time, thereby reducing runtime overhead and enabling faster, more efficient execution of complex static expressions.
+* [Added](https://github.com/ydb-platform/ydb/issues/6512) a granular timecast protocol for distributed transactions, ensuring that slowing one shard does not affect the performance of others.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/11561) in-memory state migration on a graceful restart, preserving locks and improving transaction success rates. This reduces the execution time of long transactions by decreasing the number of retries.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/15255) pipeline processing of internal transactions in Node Broker, accelerating the startup of dynamic nodes in the cluster.  
+* [Improved](https://github.com/ydb-platform/ydb/pull/15607) Node Broker resilience under increased cluster load.
+* [Enabled](https://github.com/ydb-platform/ydb/pull/19440) evictable B-Tree indexes by default instead of non-evictable SST indexes, reducing memory consumption when storing cold data.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/15264) memory consumption by storage nodes.
 * [Improved](https://github.com/ydb-platform/ydb/pull/10969) Hive startup times.
-* [Optimized](https://github.com/ydb-platform/ydb/pull/6561) the replication process.
+* [Optimized](https://github.com/ydb-platform/ydb/pull/6561) the distributed storage replication process.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/9491) the header size of large binary objects in VDisk.
 * Improved diagnostics and introspection of memory errors.
 * Reduced memory consumption through allocator page cleaning.
 
 #### Bug Fixes
 
-* [Fixed](https://github.com/ydb-platform/ydb/pull/9707) an error in [Interconnect](../concepts/glossary#actor-system-interconnect) configuration that led to performance degradation.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/13993) the out-of-memory error when deleting very large tables by regulating the number of tablets simultaneously processing this operation.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/9848) an issue with handling accidental duplicate entries in the system tablet configuration.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/11059) an issue where reading data would take too long (seconds) during frequent table resharding operations.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/9723) an error in reading from asynchronous replicas that led to failure.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/9507) an issue with rare [CDC](./dev/cdc.md) initial scan freezes.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/11483) an issue with handling incomplete schema transactions in datashards during system restart.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/10460) an issue with inconsistent reading from a topic when trying to explicitly confirm a message read within a transaction. Now the user receives an error when attempting to confirm a message.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/12220) an issue where topic auto-partitioning worked incorrectly within a transaction.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/12905) an issue where a transaction hangs when working with topics during tablet restarts.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9707) an error in the [Interconnect](../concepts/glossary#actor-system-interconnect) configuration that caused performance degradation.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/13993) an out-of-memory error that occurred when deleting very large tables by limiting the number of tablets that process this operation concurrently.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9848) an issue that caused accidental duplicate entries in the system tablet configuration.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/11059) an issue where data reads took too long (seconds) during frequent table resharding operations.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9723) an error reading from asynchronous replicas that caused failures.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9507) an issue that caused rare [CDC](./dev/cdc.md) initial scan freezes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/11483) an issue handling incomplete schema transactions in datashards during system restart.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/10460) an issue causing inconsistent reads from a topic when explicitly confirming a message read within a transaction; users now receive an error when attempting to confirm a message.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/12220) an issue in which topic auto-partitioning functioned incorrectly within a transaction.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/12905) an issue in which transactions hang when working with topics during tablet restarts.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/13910) the "Key is out of range" error when importing data from S3-compatible storage.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/13741) an issue where the end of the metadata field in the [dynamic cluster configuration](../maintenance/manual/dynamic-config.md) was determined incorrectly.
-* [Improved](https://github.com/ydb-platform/ydb/pull/16420) the process of building secondary indices: when certain errors occur, the system retries the process instead of interrupting it.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/16635) an error in executing the `RETURNING` expression in `INSERT` and `UPSERT` operations.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/16269) an issue with Drop Tablet operations in the PQ tablet hanging, especially during Interconnect delays.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/16194) an error that occurred during VDisk [compaction](../concepts/glossary#compaction).
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an issue where long topic reading sessions ended with "too big inflight" errors.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15515) an issue where reading a topic by multiple consumers would hang if at least one partition had no incoming data.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/13741) an issue in which the end of the metadata field in the [dynamic cluster configuration](../maintenance/manual/dynamic-config.md) was determined incorrectly.
+* [Improved](https://github.com/ydb-platform/ydb/pull/16420) the secondary index build process: the system now retries on certain errors instead of interrupting the build.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16635) an error executing the `RETURNING` expression in `INSERT` and `UPSERT` operations.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16269) an issue causing Drop Tablet operations in PQ tablets to hang during Interconnect delays.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16194) an error during VDisk [compaction](../concepts/glossary#compaction).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an issue in which long topic-reading sessions ended with "too big inflight" errors.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15515) an issue where reading a topic by multiple consumers hangs if at least one partition has no incoming data.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18614) a rare issue with PQ tablet restarts.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18378) an issue where, after updating the cluster version, Hive started subscribers in data centers without running database nodes.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/19057) an issue where the `Failed to set up listener on port 9092 errno# 98 (Address already in use)` error would occur when updating the version.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18905) an error that led to a segmentation fault when simultaneously executing a request to healthcheck and disabling the cluster node.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18899) an issue that caused partitioning of [row-oriented tables](./concepts/datamodel/table.md#partitioning_row_table) to fail when a split key was selected from access samples containing a mix of full key and key prefix operations (such as exact and range reads).
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18647) an [issue](https://github.com/ydb-platform/ydb/issues/17885) where the index type was incorrectly defaulting to GLOBAL SYNC when UNIQUE was explicitly specified in the query.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/16797) an issue where topic auto-partitioning did not work when the configuration parameter `max_active_partition` was set using the `ALTER TOPIC` statement.
-* [Fixed](https://github.com/db-platform/adb/pull/18938) an issue that causes `db scheme describe` to return a list of columns not in the order in which they were set when creating the table.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18378) an issue in which, after updating the cluster version, Hive started subscribers in data centers without running database nodes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/19057) an issue in which the `Failed to set up listener on port 9092 errno# 98 (Address already in use)` error occurred during version updates.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18905) an error that led to a segmentation fault when a healthcheck request and a cluster-node disable request executed simultaneously.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18899) an issue that caused partitioning of [row-oriented tables](./concepts/datamodel/table.md#partitioning_row_table) to fail when a split key was selected from access samples containing a mix of full-key and key-prefix operations (such as exact and range reads).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18647) an [issue](https://github.com/ydb-platform/ydb/issues/17885) where the index type defaulted to `GLOBAL SYNC` despite `UNIQUE` being explicitly specified.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16797) an issue where topic auto-partitioning did not work when the `max_active_partition` parameter was set via `ALTER TOPIC`.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18938) an issue that caused `db scheme describe` to return columns out of their original creation order.
   
 ## Version 24.4 {#24-4}
 

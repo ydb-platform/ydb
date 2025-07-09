@@ -55,6 +55,19 @@ Release date: 2025.
 
 * If you are using [temporal over YDB](https://github.com/yandex/temporal-over-ydb), update it to version [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) before updating {{ ydb-short-name }} to the current version to avoid errors in query execution.
 
+#### YDB UI
+
+* Query Editor was redesigned to [support partial results load]((https://github.com/ydb-platform/ydb-embedded-ui/pull/1974)) - it starts displaying results when receives a chunk from the server, doesn't have to wait until the query completion. This approach allows application developers to see query results faster.
+* [Security Improvement](https://github.com/ydb-platform/ydb-embedded-ui/pull/1967): controls that are could not be activated by current user due to lack of permissions are not displayed. Users won't click and experience Access Denied error.
+* [Added]((https://github.com/ydb-platform/ydb-embedded-ui/pull/1981)) search by tablet id on Tablets tab.
+* HotKeys help tab accessible by ⌘+K key is added.
+* Operations tab is added to Database page. Operations allow to list operations and cancel them.
+* Cluster dashboard redesign and make it collapsable.
+* JsonViewer: handle case sensitive search.
+* Added code snippets for YDB SDK to connect to selected database. Such snippets must speed up development.
+* Rows on Queries tab were sorted by string values after proper backend sort.
+* QueryEditor: removed extra confirmation requests on leaving browser page – do not ask confirmation when it's irrelevant.
+
 #### Performance
 
 * [Added](https://github.com/ydb-platform/ydb/pull/6509) support for [constant folding](https://en.wikipedia.org/wiki/Constant_folding) in the query optimizer by default. This feature enhances query performance by evaluating constant expressions at compile time, thereby reducing runtime overhead and enabling faster, more efficient execution of complex static expressions.

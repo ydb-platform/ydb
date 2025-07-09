@@ -190,7 +190,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check, days_back=1):
             re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}\n")
             for test in all_tests
             if test.get('flaky_today')
-            and test.get('fail_count') >= 1
+            and test.get('fail_count') >= 2
         )
         flaky_tests = sorted(flaky_tests)
         add_lines_to_file(os.path.join(output_path, 'flaky.txt'), flaky_tests)
@@ -200,7 +200,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check, days_back=1):
             + f" # owner {test.get('owner')} success_rate {test.get('success_rate')}% runs {(test.get('pass_count') or 0) + (test.get('fail_count') or 0) + (test.get('mute_count') or 0) + (test.get('skip_count') or 0)} ({test.get('pass_count') or 0}p/{test.get('fail_count') or 0}f/{test.get('mute_count') or 0}m/{test.get('skip_count') or 0}s), state {test.get('state')}, days in state {test.get('days_in_state')}, {period_info}, snapshot_date {(base_date + datetime.timedelta(days=test.get('date_window'))).date()}\n"
             for test in all_tests
             if test.get('flaky_today')
-            and test.get('fail_count') >= 1
+            and test.get('fail_count') >= 2
         )
         ## тесты может запускаться 1 раз в день. если за последние 7 дней набирается трешход то мьютим
         ## падения сегодня более весомы ??  

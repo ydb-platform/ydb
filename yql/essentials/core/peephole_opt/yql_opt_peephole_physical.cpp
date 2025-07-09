@@ -8787,27 +8787,6 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    const auto& input = node->Head();
-    if (input.IsCallable("WideToBlocks")) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Drop WideFromBlocks over WideToBlocks";
-        return ctx.NewCallable(node->Pos(), "ToStream", input.ChildrenList());
-    }
-
-    return node;
-}
-
-TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    if (node->ChildrenSize() == 1 && node->Head().IsCallable("WideFromBlocks")) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Drop WideToBlocks over WideFromBlocks";
-        return node->Head().HeadPtr();
-    }
-
-    return node;
-}
-
 TExprNode::TPtr BuildCheckedBinaryOpOverDecimal(TPositionHandle pos, TStringBuf op, const TExprNode::TPtr& lhs, const TExprNode::TPtr& rhs, const TTypeAnnotationNode& resultType, TExprContext& ctx) {
     auto typeNode = ExpandType(pos, resultType, ctx);
     return ctx.Builder(pos)
@@ -9107,8 +9086,6 @@ struct TPeepHoleRules {
         {"Sort", &OptimizeTopOrSort<true, false>},
         {"ToFlow", &OptimizeToFlow},
         {"FromFlow", &OptimizeFromFlow},
-        {"WideFromBlocks", &OptimizeWideFromBlocks},
-        {"WideToBlocks", &OptimizeWideToBlocks},
         {"Coalesce", &OptimizeCoalesce},
     };
 

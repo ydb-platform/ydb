@@ -5,6 +5,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <util/random/fast.h>
 #include <util/random/random.h>
 
 #include <string>
@@ -14,6 +15,11 @@ namespace NYdb::NTPCC {
 // [from; to]
 inline size_t RandomNumber(size_t from, size_t to) {
     return ::RandomNumber(to - from + 1) + from;
+}
+
+// [from; to]
+inline size_t RandomNumber(TReallyFastRng32& rng, size_t from, size_t to) {
+    return rng.Uniform(from, to + 1);
 }
 
 // Non-uniform random number generation as per TPC-C spec

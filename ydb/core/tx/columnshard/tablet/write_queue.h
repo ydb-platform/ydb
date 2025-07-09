@@ -27,7 +27,7 @@ private:
 
 public:
     bool operator<(const TWriteTask& item) const {
-        return std::tie(Created, PathId.InternalPathId, TaskId) < std::tie(item.Created, item.PathId.InternalPathId, item.TaskId);
+        return std::tie(Created, PathId.GetInternalPathId(), TaskId) < std::tie(item.Created, item.PathId.GetInternalPathId(), item.TaskId);
     }
 
     bool IsDeprecated(const TMonotonic now) const {

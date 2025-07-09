@@ -87,6 +87,13 @@ struct TUnifiedPathId {
     TInternalPathId InternalPathId;
     TSchemeShardLocalPathId SchemeShardLocalPathId;
 
+    const TInternalPathId& GetInternalPathId() const {
+        return InternalPathId;
+    }
+    const TSchemeShardLocalPathId& GetSchemeShardLocalPathId() const {
+        return SchemeShardLocalPathId;
+    }
+
     explicit operator bool() const {
         return InternalPathId && SchemeShardLocalPathId;
     }

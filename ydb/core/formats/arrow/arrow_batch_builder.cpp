@@ -7,35 +7,35 @@ namespace NKikimr::NArrow {
 namespace {
 
 template <typename T>
-arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
     return builder.Append(cell.AsValue<typename T::c_type>());
 }
 
-arrow::Status AppendCell(arrow::BooleanBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::BooleanBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
     return builder.Append(cell.AsValue<ui8>());
 }
 
-arrow::Status AppendCell(arrow::BinaryBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::BinaryBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
     return builder.Append(cell.Data(), cell.Size());
 }
 
-arrow::Status AppendCell(arrow::StringBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::StringBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
     return builder.Append(cell.Data(), cell.Size());
 }
 
-arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -44,6 +44,13 @@ arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
     /// so we could convert them to Arrow and back but cannot calculate anything on them.
     /// We need separate Arrow.Decimal, YQL.Decimal, CH.Decimal and YDB.Decimal in future.
     return builder.Append(cell.Data());
+}
+
+[[maybe_unused]] arrow::Status AppendCell(arrow::FixedSizeBinaryBuilder& builder, const TCell& cell) {
+    if (cell.IsNull()) {
+        return builder.AppendNull();
+    }
+    return builder.Append(reinterpret_cast<const uint8_t*>(cell.Data()));
 }
 
 template <typename TDataType>
@@ -59,6 +66,7 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
         result = AppendCell<TType>(builder, cell, colNum);
         return true;
     };
+
     auto success = SwitchYqlTypeToArrowType(type, std::move(callback));
     if(!success) {
         return arrow::Status::TypeError("Unsupported type");

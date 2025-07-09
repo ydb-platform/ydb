@@ -534,15 +534,20 @@ public:
                     }
                 }
 
-                if constexpr (std::is_same<TData, NYdb::TDecimalValue>::value) {
-                    if constexpr (arrow::is_decimal128_type<T>::value) {
-                        Y_ABORT_UNLESS(typedBuilder.Append(arrow::Decimal128(data.Hi_, data.Low_)).ok());
+                if constexpr (std::is_same<TData, NYdb::Dev::TDecimalValue>::value) {
+                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
+                        char bytes[16] = {0};
+                        std::memcpy(bytes, &data.Low_, 8);
+                        std::memcpy(bytes + 8, &data.Hi_, 8);
+                        Y_ABORT_UNLESS(typedBuilder.Append(bytes).ok());
                         return true;
                     }
                 }
+
                 Y_ABORT("Unknown type combination");
                 return false;
             }));
+
             return TRowBuilder(Index + 1, Owner);
         }
 

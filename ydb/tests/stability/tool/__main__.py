@@ -224,13 +224,14 @@ class bcolors:
 
 
 class StabilityCluster:
-    def __init__(self, ssh_username, cluster_path, ydbd_path=None, ydbd_next_path=None):
+    def __init__(self, ssh_username, cluster_path, ydbd_path=None, ydbd_next_path=None, yaml_config=None):
         self.working_dir = os.path.join(tempfile.gettempdir(), "ydb_stability")
         os.makedirs(self.working_dir, exist_ok=True)
         self.ssh_username = ssh_username
         self.slice_directory = cluster_path
         self.ydbd_path = ydbd_path
         self.ydbd_next_path = ydbd_next_path
+        self.yaml_config = yaml_config
 
         self.artifacts = (
             self._unpack_resource('nemesis'),
@@ -244,14 +245,24 @@ class StabilityCluster:
             self._unpack_resource('ydb_cli'),
         )
 
-        self.kikimr_cluster = ExternalKiKiMRCluster(
-            config_path=self.slice_directory,
-            kikimr_configure_binary_path=self._unpack_resource("cfg"),
-            kikimr_path=self.ydbd_path,
-            kikimr_next_path=self.ydbd_next_path,
-            ssh_username=self.ssh_username,
-            deploy_cluster=True,
-        )
+        if self.yaml_config is None:
+            self.kikimr_cluster = ExternalKiKiMRCluster(
+                cluster_template=self.slice_directory,
+                kikimr_configure_binary_path=self._unpack_resource("cfg"),
+                kikimr_path=self.ydbd_path,
+                kikimr_next_path=self.ydbd_next_path,
+                ssh_username=self.ssh_username,
+                deploy_cluster=True,
+            )
+        else:
+            self.kikimr_cluster = ExternalKiKiMRCluster(
+                cluster_template=self.slice_directory,
+                kikimr_configure_binary_path=None,
+                kikimr_path=self.ydbd_path,
+                kikimr_next_path=self.ydbd_next_path,
+                ssh_username=self.ssh_username,
+                yaml_config=self.yaml_config,
+            )
 
     def _unpack_resource(self, name):
         res = resource.find(name)
@@ -401,7 +412,7 @@ class StabilityCluster:
             print(f'    {node}: {minidumps_search_results[node]}')
 
     def start_nemesis(self):
-        self.prepare_cluster_yaml()
+        self.prepare_config_files()
         with ThreadPoolExecutor() as pool:
             pool.map(lambda node: node.ssh_command(DICT_OF_SERVICES['nemesis']['start_command'], raise_on_error=True), self.kikimr_cluster.nodes.values())
 
@@ -603,17 +614,27 @@ class StabilityCluster:
             )
             node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
-    def prepare_cluster_yaml(self):
+    def prepare_config_files(self):
         with ThreadPoolExecutor() as pool:
-            pool.map(lambda node: node.copy_file_or_dir(
-                self.slice_directory,
-                '/Berkanavt/kikimr/cfg/cluster.yaml'
-            ), self.kikimr_cluster.nodes.values())
+            if self.yaml_config is None:
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.slice_directory,
+                    '/Berkanavt/kikimr/cfg/cluster.yaml'
+                ), self.kikimr_cluster.nodes.values())
+            else:
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.slice_directory,
+                    '/Berkanavt/kikimr/cfg/databases.yaml'
+                ), self.kikimr_cluster.nodes.values())
+                pool.map(lambda node: node.copy_file_or_dir(
+                    self.yaml_config,
+                    '/Berkanavt/kikimr/cfg/config.yaml'
+                ), self.kikimr_cluster.nodes.values())
 
     def deploy_tools(self):
         with ThreadPoolExecutor(len(self.kikimr_cluster.nodes)) as pool:
             pool.map(self.deploy_node_tools, self.kikimr_cluster.nodes.values())
-        self.prepare_cluster_yaml()
+        self.prepare_config_files()
 
     def get_workload_outputs(self, mode='err', last_n_lines=10):
         """Capture last N lines of output from all running workload screens."""
@@ -1041,6 +1062,13 @@ Common usage scenarios:
         help="Path to next ydbd version binary (for cross-version testing)",
     )
     parser.add_argument(
+        "--yaml-config",
+        required=False,
+        default=None,
+        type=path_type,
+        help="Path to Yandex DB configuration v2",
+    )
+    parser.add_argument(
         "--ssh_user",
         required=False,
         default=getpass.getuser(),
@@ -1184,12 +1212,14 @@ Common usage scenarios:
 def main():
     args = parse_args()
     ssh_username = args.ssh_user
+    yaml_config = args.yaml_config
     print('Initing cluster info')
     stability_cluster = StabilityCluster(
         ssh_username=ssh_username,
         cluster_path=args.cluster_path,
         ydbd_path=args.ydbd_path,
         ydbd_next_path=args.next_ydbd_path,
+        yaml_config=yaml_config,
     )
 
     for action in args.actions:

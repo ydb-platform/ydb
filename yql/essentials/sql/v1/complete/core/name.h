@@ -42,6 +42,14 @@ namespace NSQLComplete {
         friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;
     };
 
+    struct TColumnId {
+        TString TableAlias;
+        TString Name;
+
+        friend bool operator<(const TColumnId& lhs, const TColumnId& rhs);
+        friend bool operator==(const TColumnId& lhs, const TColumnId& rhs) = default;
+    };
+
 } // namespace NSQLComplete
 
 template <>

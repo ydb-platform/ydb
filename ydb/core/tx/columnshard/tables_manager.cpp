@@ -10,6 +10,7 @@
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -21,12 +22,12 @@ void TSchemaPreset::Deserialize(const NKikimrSchemeOp::TColumnTableSchemaPreset&
 namespace {
 
 TInternalPathId GetInitialMaxInternalPathId(const ui64 tabletId) {
-    static constexpr ui64 InternalPathIdBase = 1'000'000'000; //Use a value presumably greater than any really used
-    static constexpr ui64 InternalPathIdTabletMod = 1'000'000; //Use different start value for tablets
+    static constexpr ui64 InternalPathIdBase = 1'000'000'000;   //Use a value presumably greater than any really used
+    static constexpr ui64 InternalPathIdTabletMod = 1'000'000;   //Use different start value for tablets
     return TInternalPathId::FromRawValue(InternalPathIdBase + tabletId * InternalPathIdTabletMod);
 }
 
-} //namespace
+}   //namespace
 
 std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const {
     if (!HasTable(internalPathId)) {
@@ -40,9 +41,10 @@ std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSche
 
 std::optional<TInternalPathId> TTablesManager::ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
     if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
-        return {*internalPathId};
+        return { *internalPathId };
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "resolve_internal_path_id")("ss_local", schemeShardLocalPathId)("result", "not_found");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "resolve_internal_path_id")("ss_local", schemeShardLocalPathId)(
+            "result", "not_found");
         return std::nullopt;
     }
 }
@@ -79,7 +81,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             return false;
         }
         if (GenerateInternalPathId && maxPathId) {
-            MaxInternalPathId =TInternalPathId::FromRawValue(*maxPathId);
+            MaxInternalPathId = TInternalPathId::FromRawValue(*maxPathId);
             AFL_VERIFY(MaxInternalPathId >= GetInitialMaxInternalPathId(TabletId));
         }
     }
@@ -223,10 +225,10 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     return true;
 }
 
-
-THashMap<TSchemeShardLocalPathId, TInternalPathId> TTablesManager::ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
+THashMap<TSchemeShardLocalPathId, TInternalPathId> TTablesManager::ResolveInternalPathIds(
+    const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
     THashMap<TSchemeShardLocalPathId, TInternalPathId> result;
-    for (const auto& [schemeShardLocalPathId, internalPathId]: SchemeShardLocalToInternal) {
+    for (const auto& [schemeShardLocalPathId, internalPathId] : SchemeShardLocalToInternal) {
         if ((from <= schemeShardLocalPathId) && (schemeShardLocalPathId <= to)) {
             result.emplace(schemeShardLocalPathId, internalPathId);
         }
@@ -234,7 +236,8 @@ THashMap<TSchemeShardLocalPathId, TInternalPathId> TTablesManager::ResolveIntern
     return result;
 }
 
-bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDeleted, const std::optional<NOlap::TSnapshot> minReadSnapshot) const {
+bool TTablesManager::HasTable(
+    const TInternalPathId pathId, const bool withDeleted, const std::optional<NOlap::TSnapshot> minReadSnapshot) const {
     auto it = Tables.find(pathId);
     if (it == Tables.end()) {
         return false;
@@ -355,8 +358,8 @@ void TTablesManager::AddSchemaVersion(
     }
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TTablesManager::CreateAddShardingInfoTx(
-    TColumnShard& owner, const TSchemeShardLocalPathId schemeShardLocalPathId, const ui64 versionId,
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TTablesManager::CreateAddShardingInfoTx(TColumnShard& owner,
+    const TSchemeShardLocalPathId schemeShardLocalPathId, const ui64 versionId,
     const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const {
     const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId)("scheme_shard_local_path_id", schemeShardLocalPathId);
@@ -364,7 +367,8 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TTablesManager::CreateAddShar
 }
 
 void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::TSnapshot& version,
-    const NKikimrTxColumnShard::TTableVersionInfo& versionInfo, const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, NIceDb::TNiceDb& db) {
+    const NKikimrTxColumnShard::TTableVersionInfo& versionInfo, const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema,
+    NIceDb::TNiceDb& db) {
     auto it = Tables.find(pathId);
     AFL_VERIFY(it != Tables.end());
     auto& table = it->second;
@@ -407,10 +411,8 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
     , TabletId(tabletId)
-    , GenerateInternalPathId(
-        AppData()->ColumnShardConfig.GetGenerateInternalPathId() ||
-        NYDBTest::TControllers::GetColumnShardController()->IsForcedGenerateInternalPathId()
-    )
+    , GenerateInternalPathId(AppData()->ColumnShardConfig.GetGenerateInternalPathId() ||
+                             NYDBTest::TControllers::GetColumnShardController()->IsForcedGenerateInternalPathId())
     , MaxInternalPathId(GetInitialMaxInternalPathId(TabletId)) {
 }
 
@@ -450,16 +452,18 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
 }
 
 void TTablesManager::MoveTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("scheme_shard_local_path_id", schemeShardLocalPathId);
+    NActors::TLogContextGuard gLogging =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("scheme_shard_local_path_id", schemeShardLocalPathId);
     const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
     AFL_VERIFY(RenamingLocalToInternal.emplace(schemeShardLocalPathId, *internalPathId).second)("internal_path_id", internalPathId);
     AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
 }
 
-void TTablesManager::MoveTableProgress(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)
-        ("event", "move_table_progress")("old_path_id", oldSchemeShardLocalPathId)("new_path_id", newSchemeShardLocalPathId);
+void TTablesManager::MoveTableProgress(
+    NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD) ("event", "move_table_progress")(
+        "old_path_id", oldSchemeShardLocalPathId)("new_path_id", newSchemeShardLocalPathId);
     AFL_VERIFY(!ResolveInternalPathId(oldSchemeShardLocalPathId));
     AFL_VERIFY(!ResolveInternalPathId(newSchemeShardLocalPathId));
     const auto* pInternalPathId = RenamingLocalToInternal.FindPtr(oldSchemeShardLocalPathId);
@@ -471,8 +475,56 @@ void TTablesManager::MoveTableProgress(NIceDb::TNiceDb& db, const TSchemeShardLo
     table->UpdateLocalPathId(db, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(newSchemeShardLocalPathId, internalPathId).second);
-    NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, {internalPathId, oldSchemeShardLocalPathId});
+    NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, { internalPathId, oldSchemeShardLocalPathId });
     NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, table->GetPathId());
+}
+
+std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {
+    const ui64 lastSchemaVersion = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion();
+    std::set<TSchemaAddress> toRemove;
+    std::vector<TTablesManager::TSchemasChain> chains;
+    std::optional<TSchemaAddress> addrPred;
+    std::set<ui64> versionsToRemove;
+    std::optional<ui64> ignoreToVersion;
+    std::vector<ui64> versions;
+    ui32 predVersion = 0;
+    for (auto&& i : PrimaryIndex->GetVersionedIndex().GetSnapshotByVersions()) {
+        versions.emplace_back(i.first);
+        TSchemaAddress addr(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot());
+        if (addrPred) {
+            AFL_VERIFY(*addrPred < addr);
+        }
+        addrPred = addr;
+        if (ignoreToVersion) {
+            AFL_VERIFY(*ignoreToVersion == i.second->GetIndexInfo().GetVersion());
+        }
+        if (i.second->GetIndexInfo().GetIgnoreToVersion() && *i.second->GetIndexInfo().GetIgnoreToVersion() <= lastSchemaVersion) {
+            ignoreToVersion = i.second->GetIndexInfo().GetIgnoreToVersion();
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_to_remove")("reason", "equal_to_use")("from", i.first)(
+                "to", ignoreToVersion);
+            AFL_VERIFY(versionsToRemove.emplace(i.first).second);
+            AFL_VERIFY(toRemove.emplace(addr).second);
+        } else {
+            ignoreToVersion.reset();
+            if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(predVersion, i.first) &&
+                lastSchemaVersion != i.first) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_to_remove")("reason", "empty")("from", i.first);
+                AFL_VERIFY(versionsToRemove.emplace(i.first).second);
+                AFL_VERIFY(toRemove.emplace(addr).second);
+            } else {
+                predVersion = i.first + 1;
+                if (toRemove.size()) {
+                    chains.emplace_back(toRemove, addr);
+                    toRemove.clear();
+                }
+            }
+        }
+    }
+    AFL_VERIFY(toRemove.empty())("last_version", lastSchemaVersion)("ignore_last", ignoreToVersion)("versions", JoinSeq(",", versions));
+    for (auto&& i : versionsToRemove) {
+        MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().MutableVersionedIndex().EraseVersion(i);
+    }
+    return chains;
 }
 
 }   // namespace NKikimr::NColumnShard

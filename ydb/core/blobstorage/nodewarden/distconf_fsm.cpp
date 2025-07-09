@@ -14,7 +14,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const bool hasQuorum = StorageConfig && HasQuorum(*StorageConfig);
+        const bool hasQuorum = StorageConfig && HasConnectedNodeQuorum(*StorageConfig);
 
         if (RootState == ERootState::INITIAL && hasQuorum) { // becoming root node
             Y_ABORT_UNLESS(!Scepter);
@@ -97,7 +97,7 @@ namespace NKikimr::NStorage {
                 return ProcessCollectConfigs(res->MutableCollectConfigs());
 
             case TEvGather::kProposeStorageConfig:
-                if (auto error = ProcessProposeStorageConfig(res->MutableProposeStorageConfig())) {
+                if (auto error = ProcessProposeStorageConfig(res->MutableProposeStorageConfig(), {} /* all piles */)) {
                     SwitchToError(*error);
                 } else {
                     ConfigsCollected = true;
@@ -115,13 +115,14 @@ namespace NKikimr::NStorage {
         SwitchToError("incorrect response from peer");
     }
 
-    bool TDistributedConfigKeeper::HasQuorum(const NKikimrBlobStorage::TStorageConfig& config) const {
+    bool TDistributedConfigKeeper::HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+            const THashSet<TBridgePileId>& specificBridgePileIds) const {
         auto generateConnected = [&](auto&& callback) {
             for (const auto& [nodeId, node] : AllBoundNodes) {
                 callback(nodeId);
             }
         };
-        return HasNodeQuorum(config, generateConnected);
+        return HasNodeQuorum(config, generateConnected, GetMandatoryPileIds(config, specificBridgePileIds));
     }
 
     void TDistributedConfigKeeper::ProcessCollectConfigs(TEvGather::TCollectConfigs *res) {
@@ -446,7 +447,8 @@ namespace NKikimr::NStorage {
         return {};
     }
 
-    std::optional<TString> TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res) {
+    std::optional<TString> TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res,
+            const THashSet<TBridgePileId>& specificBridgePileIds) {
         auto generateSuccessful = [&](auto&& callback) {
             for (const auto& item : res->GetStatus()) {
                 const TNodeIdentifier node(item.GetNodeId());
@@ -458,7 +460,7 @@ namespace NKikimr::NStorage {
 
         if (!CurrentProposedStorageConfig) {
             return "no currently proposed StorageConfig";
-        } else if (HasConfigQuorum(*CurrentProposedStorageConfig, generateSuccessful, *Cfg)) {
+        } else if (HasConfigQuorum(*CurrentProposedStorageConfig, generateSuccessful, *Cfg, true, specificBridgePileIds)) {
             // apply configuration and spread it
             ApplyStorageConfig(*CurrentProposedStorageConfig);
             FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);

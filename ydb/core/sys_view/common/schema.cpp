@@ -411,12 +411,12 @@ private:
     THashMap<TString, ESysViewType> SystemViewTypes;
 };
 
-ISystemViewResolver* CreateSystemViewResolver() {
-    return new TSystemViewResolver();
+THolder<ISystemViewResolver> CreateSystemViewResolver() {
+    return MakeHolder<TSystemViewResolver>();
 }
 
-ISystemViewResolver* CreateSystemViewRewrittenResolver() {
-    return new TSystemViewRewrittenResolver();
+THolder<ISystemViewResolver> CreateSystemViewRewrittenResolver() {
+    return MakeHolder<TSystemViewRewrittenResolver>();
 }
 
 } // NSysView

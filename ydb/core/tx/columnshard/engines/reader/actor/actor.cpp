@@ -79,7 +79,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
 
 void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
     if (ChunksLimiter.HasMore()) {
-        WaitTime = TInstant::Now() - StartWaitTime;
+        WaitTime += TInstant::Now() - StartWaitTime;
     }
     auto g = Stats->MakeGuard("task_result");
     auto result = ev->Get()->ExtractResult();

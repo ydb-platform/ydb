@@ -40,7 +40,7 @@ DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TReplicationCardCacheDynamicConfig
-    : public virtual NYTree::TYsonStruct
+    : public TAsyncExpiringCacheDynamicConfig
 {
     std::optional<bool> EnableWatching;
 

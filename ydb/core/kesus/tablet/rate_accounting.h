@@ -3,7 +3,6 @@
 #include <ydb/core/protos/kesus.pb.h>
 #include <ydb/library/time_series_vec/time_series_vec.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 

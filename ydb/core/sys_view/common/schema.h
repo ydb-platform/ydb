@@ -843,9 +843,9 @@ public:
     virtual const THashMap<TString, NKikimrSysView::ESysViewType>& GetSystemViewsTypes(ETarget target) const = 0;
 };
 
-ISystemViewResolver* CreateSystemViewResolver();
+THolder<ISystemViewResolver> CreateSystemViewResolver();
 
-ISystemViewResolver* CreateSystemViewRewrittenResolver();
+THolder<ISystemViewResolver> CreateSystemViewRewrittenResolver();
 
 } // NSysView
 } // NKikimr

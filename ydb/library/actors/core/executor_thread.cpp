@@ -212,7 +212,6 @@ namespace NActors {
 
         ThreadCtx.ResetOverwrittenEventsPerMailbox();
         ThreadCtx.ResetOverwrittenTimePerMailboxTs();
-        bool drained = false;
         for (; execCtx.ExecutedEvents < ThreadCtx.OverwrittenEventsPerMailbox(); execCtx.ExecutedEvents++) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
                 EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "mailbox->Pop()");
@@ -387,7 +386,6 @@ namespace NActors {
                         ThreadCtx.WorkerId(),
                         recipient.ToString(),
                         SafeTypeName(actor));
-                drained = true;
                 break; // empty queue, leave
             }
         }
@@ -412,7 +410,7 @@ namespace NActors {
 
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
-        if (mailbox->IsEmpty() && drained) {
+        if (mailbox->IsEmpty() && mailbox->CanReclaim()) {
             ThreadCtx.FreeMailbox(mailbox);
         } else {
             mailbox->Unlock(ThreadCtx.Pool(), hpnow, RevolvingWriteCounter);

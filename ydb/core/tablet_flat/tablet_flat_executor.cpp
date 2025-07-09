@@ -21,8 +21,8 @@ namespace NFlatExecutorSetup {
         Y_UNUSED(ctx);
     }
 
-    void ITablet::DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext& ctx) {
-        Y_UNUSED(dataCleanupGeneration);
+    void ITablet::VacuumComplete(ui64 vacuumGeneration, const TActorContext& ctx) {
+        Y_UNUSED(vacuumGeneration);
         Y_UNUSED(ctx);
     }
 

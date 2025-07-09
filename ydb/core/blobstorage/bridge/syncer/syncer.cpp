@@ -151,7 +151,7 @@ namespace NKikimr::NStorage::NBridge {
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS02, "issuing assimilate request", (LogId, LogId), (GroupId, groupId),
             (SkipBlocksUpTo, state.SkipBlocksUpTo ? ToString(*state.SkipBlocksUpTo) : "<none>"),
             (SkipBarriersUpTo, state.SkipBarriersUpTo ? TString(TStringBuilder() << '[' <<
-                std::get<0>(*state.SkipBarriersUpTo) << ':' << std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"),
+                std::get<0>(*state.SkipBarriersUpTo) << ':' << (int)std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"),
             (SkipBlobsUpTo, state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"));
 
         SendToBSProxy(SelfId(), it->first, new TEvBlobStorage::TEvAssimilate(state.SkipBlocksUpTo, state.SkipBarriersUpTo,
@@ -173,25 +173,32 @@ namespace NKikimr::NStorage::NBridge {
 
         auto& msg = *ev->Get();
 
-        if (!state.BlocksFinished && (msg.Blocks.empty() || !msg.Barriers.empty() || !msg.Blobs.empty())) {
+        if (state.BlocksFinished) {
+            Y_ABORT_UNLESS(msg.Blocks.empty());
+        } else if (msg.Blocks.empty() || !msg.Barriers.empty() || !msg.Blobs.empty()) {
             state.BlocksFinished = true;
             state.SkipBlocksUpTo.emplace(); // the last value as we are going reverse
         } else {
             state.SkipBlocksUpTo.emplace(msg.Blocks.back().TabletId);
         }
-        if (state.BlocksFinished) {
-            if (!state.BarriersFinished && (msg.Barriers.empty() || !msg.Blobs.empty())) {
-                state.BarriersFinished = true;
-                state.SkipBarriersUpTo.emplace(); // the same logic for barriers
-            } else {
-                auto& lastBarrier = msg.Barriers.back();
-                state.SkipBarriersUpTo.emplace(lastBarrier.TabletId, lastBarrier.Channel);
-            }
-            if (state.BarriersFinished && msg.Blobs.empty()) {
-                state.BlobsFinished = true;
-            } else {
-                state.SkipBlobsUpTo.emplace(msg.Blobs.back().Id);
-            }
+
+        if (state.BarriersFinished) {
+            Y_ABORT_UNLESS(state.BlocksFinished);
+            Y_ABORT_UNLESS(msg.Barriers.empty());
+        } else if (msg.Barriers.empty() || !msg.Blobs.empty()) {
+            state.BarriersFinished = true;
+            state.SkipBarriersUpTo.emplace(); // the same logic for barriers
+        } else {
+            auto& lastBarrier = msg.Barriers.back();
+            state.SkipBarriersUpTo.emplace(lastBarrier.TabletId, lastBarrier.Channel);
+        }
+
+        if (state.BlobsFinished) {
+            Y_ABORT("unexpected state");
+        } else if (msg.Blobs.empty()) {
+            state.BlobsFinished = true;
+        } else {
+            state.SkipBlobsUpTo.emplace(msg.Blobs.back().Id);
         }
 
         if (state.Blocks.empty()) {
@@ -199,11 +206,13 @@ namespace NKikimr::NStorage::NBridge {
         } else {
             state.Blocks.insert(state.Blocks.end(), msg.Blocks.begin(), msg.Blocks.end());
         }
+
         if (state.Barriers.empty()) {
             state.Barriers = std::move(msg.Barriers);
         } else {
             state.Barriers.insert(state.Barriers.end(), msg.Barriers.begin(), msg.Barriers.end());
         }
+
         if (state.Blobs.empty()) {
             state.Blobs = std::move(msg.Blobs);
         } else {

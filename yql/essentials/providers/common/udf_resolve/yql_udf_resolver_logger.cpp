@@ -5,6 +5,8 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 #include <util/datetime/cputimer.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_value.h>
 
 namespace {
 using namespace NYql;
@@ -22,27 +24,37 @@ public:
         return Underlying_->GetSystemModulePath(moduleName);
     }
 
-    void LogImport(TStringBuilder& sb, const TImport& import) const {
-        sb << " ";
+    void LogImport(NJson::TJsonArray& result, const TImport& import) const {
+        auto currImport = NJson::TJsonMap();
         switch (import.Block->Type) {
-        case NYql::EUserDataType::PATH:             sb << "PATH"; break;
-        case NYql::EUserDataType::URL:              sb << "URL"; break;
-        case NYql::EUserDataType::RAW_INLINE_DATA:  sb << "RAW_INLINE_DATA"; break;
+        case NYql::EUserDataType::PATH:             currImport["type"] = "PATH"; break;
+        case NYql::EUserDataType::URL:              currImport["type"] = "URL"; break;
+        case NYql::EUserDataType::RAW_INLINE_DATA:  currImport["type"] = "RAW_INLINE_DATA"; break;
         };
-        sb << ":" << import.FileAlias << ":";
+        currImport["alias"] = import.FileAlias;
+        auto modulesJson = NJson::TJsonArray();
         bool isTrusted = false;
         if (import.Modules) {
-            bool was = false;
-            for (auto& e: *import.Modules) {
-                sb << (was ? "," : "") << e;
+            TSet<TString> modules(import.Modules->begin(), import.Modules->end());
+            for (auto& e: modules) {
+                modulesJson.AppendValue(import.Block->CustomUdfPrefix + e);
                 isTrusted |= FunctionRegistry_->IsLoadedUdfModule(e);
-                was = true;
             }
         }
-        sb << ":" << isTrusted << ":";
+        currImport["modules"] = std::move(modulesJson);
+        currImport["trusted"] = isTrusted;
         auto frozen = import.Block->FrozenFile;
         Y_ENSURE(frozen);
-        sb << frozen->GetMd5() << ":" << frozen->GetSize();
+        currImport["md5"] = frozen->GetMd5();
+        currImport["size"] = frozen->GetSize();
+        result.AppendValue(std::move(currImport));
+    }
+
+    void LogFunction(NJson::TJsonArray& result, const TFunction& fn) const {
+        auto currFn = NJson::TJsonMap();
+        currFn["name"] = fn.Name;
+        currFn["normalized_name"] = fn.NormalizedName;
+        result.AppendValue(std::move(currFn));
     }
 
     bool LoadMetadata(
@@ -57,14 +69,28 @@ public:
         }
 
         TStringBuilder sb;
-        sb << TInstant::Now() << " " << SessionId_ << " LoadMetadata with imports (";
+        auto logEntry = NJson::TJsonMap();
+        logEntry["timestamp"] = TInstant::Now().ToString();
+        logEntry["query_id"] = SessionId_;
+        logEntry["method"] = "LoadMetadata";
+        logEntry["duration"] = runningTime;
+        auto importsJson = NJson::TJsonArray();
         for (auto& e: imports) {
             if (!e || !e->Block) {
                 continue;
             }
-            LogImport(sb, *e);
+            LogImport(importsJson, *e);
         }
-        sb << ") took " << runningTime << " ms\n";
+        auto fnsJson = NJson::TJsonArray();
+        for (auto& e: functions) {
+            if (!e) {
+                continue;
+            }
+            LogFunction(fnsJson, *e);
+        }
+        logEntry["imports"] = std::move(importsJson);
+        logEntry["functions"] = std::move(fnsJson);
+        sb << NJson::WriteJson(logEntry, false) << "\n";
         Out_ << TString(sb);
         return result;
     }
@@ -78,14 +104,20 @@ public:
         }
 
         TStringBuilder sb;
-        sb << TInstant::Now() << " " << SessionId_ << " LoadRichMetadata with imports (";
+        auto logEntry = NJson::TJsonMap();
+        logEntry["timestamp"] = TInstant::Now().ToString();
+        logEntry["query_id"] = SessionId_;
+        logEntry["method"] = "LoadRichMetadata";
+        logEntry["duration"] = runningTime;
+        auto importsJson = NJson::TJsonArray();
         for (auto& e: imports) {
             if (!e.Block) {
                 continue;
             }
-            LogImport(sb, e);
+            LogImport(importsJson, e);
         }
-        sb << ") took " << runningTime << " ms\n";
+        logEntry["imports"] = std::move(importsJson);
+        sb << NJson::WriteJson(logEntry, false) << "\n";
         Out_ << TString(sb);
         return result;
     }

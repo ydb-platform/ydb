@@ -13,93 +13,6 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-class TKeysKeeper : public TActorBootstrapped<TKeysKeeper> {
-public:
-    using IStreamCtx = NKikimr::NGRpcServer::IGRpcStreamingContext<etcdserverpb::LeaseKeepAliveRequest, etcdserverpb::LeaseKeepAliveResponse>;
-
-    TKeysKeeper(TIntrusivePtr<IStreamCtx> ctx, TSharedStuff::TPtr stuff)
-        : Ctx(std::move(ctx)), Stuff(std::move(stuff))
-    {}
-
-    void Bootstrap(const TActorContext& ctx) {
-        Become(&TThis::StateFunc);
-        Ctx->Attach(ctx.SelfID);
-        if (!Ctx->Read())
-            return Die(ctx);
-        std::cout << "Keeper started." << std::endl;
-    }
-private:
-    STFUNC(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(IStreamCtx::TEvReadFinished, Handle);
-            HFunc(IStreamCtx::TEvWriteFinished, Handle);
-            HFunc(IStreamCtx::TEvNotifiedWhenDone, Handle);
-
-            HFunc(TEvQueryResult, Handle);
-            hFunc(TEvQueryError, Handle);
-        }
-    }
-
-    void Handle(TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
-        if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow() && 2ULL == parser.ColumnsCount()) {
-            etcdserverpb::LeaseKeepAliveResponse response;
-            response.set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
-            response.set_ttl(NYdb::TValueParser(parser.GetValue(1)).GetInt64());
-
-            const auto header = response.mutable_header();
-            header->set_revision(Stuff->Revision.load());
-
-            if (!Ctx->Write(std::move(response)))
-                return Die(ctx);
-        }
-    }
-
-    void Handle(TEvQueryError::TPtr &ev) {
-        std::cout << "Keep error received: " << ev->Get()->Issues.ToString() << std::endl;
-    }
-
-    void Handle(IStreamCtx::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        if (!ev->Get()->Success)
-            return Die(ctx);
-
-        NYdb::TParamsBuilder params;
-        const auto& leasePraramName = AddParam<i64>("Lease", params, ev->Get()->Record.id());
-
-        std::ostringstream sql;
-        sql << Stuff->TablePrefix;
-        sql << "update `leases` set `updated` = CurrentUtcDatetime(`id`) where " << leasePraramName << " = `id`;" << std::endl;
-        sql << "select `id`, `ttl` - unwrap(cast(CurrentUtcDatetime(`id`) - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leasePraramName << " = `id`;" << std::endl;
-
-        TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
-            return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
-        };
-        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
-            if (const auto lock = stuff.lock()) {
-                if (const auto res = future.GetValue(); res.IsSuccess())
-                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
-                else
-                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
-            }
-        });
-
-        if (!Ctx->Read())
-            return Die(ctx);
-    }
-
-    void Handle(IStreamCtx::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
-        if (!ev->Get()->Success)
-            return Die(ctx);
-    }
-
-    void Handle(IStreamCtx::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
-        std::cout << "Keep " << (ev->Get()->Success ? "finished." : "failed!") << std::endl;
-        return Die(ctx);
-    }
-
-    const TIntrusivePtr<IStreamCtx> Ctx;
-    const TSharedStuff::TPtr Stuff;
-};
-
 class TWatch : public TActorBootstrapped<TWatch> {
 public:
     using IStreamCtx = NKikimr::NGRpcServer::IGRpcStreamingContext<etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;
@@ -224,8 +137,26 @@ private:
                 changes.emplace_back(std::move(buff.second.top()));
 
         std::sort(changes.begin(), changes.end(), TChange::TOrder());
+        auto total = std::accumulate(changes.cbegin(), changes.cend(), 0ULL,
+            [](size_t size, const TChange& change) { return size + change.Key.size() + change.OldData.Value.size() + change.NewData.Value.size(); });
 
         if (!changes.empty()) {
+            while (total > DataSizeLimit) {
+                size_t size = 0U;
+                auto it = changes.begin();
+                for (; size < DataSizeLimit && changes.end() != it; ++it)
+                    size += it->Key.size() + it->OldData.Value.size() + it->NewData.Value.size();
+
+                if (changes.end() == it)
+                    break;
+
+                std::vector<TChange> part;
+                part.reserve(std::distance(changes.begin(), it));
+                std::move(changes.begin(), it, std::back_inserter(part));
+                changes.erase(changes.begin(), it);
+                total -= size;
+                ctx.Send(Watchman, new TEvChanges(Id, std::move(part)));
+            }
             ctx.Send(Watchman, new TEvChanges(Id, std::move(changes)));
             TimeOfLastSent = TMonotonic::Now();
         }
@@ -486,10 +417,9 @@ public:
         : Counters(std::move(counters)), Stuff(std::move(stuff))
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
         Stuff->Watchtower = SelfId();
-        ctx.Schedule(TDuration::Seconds(11), new TEvents::TEvWakeup);
     }
 private:
     struct TSubscriptions {
@@ -510,24 +440,14 @@ private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvWatchRequest, Handle);
-            HFunc(TEvLeaseKeepAliveRequest, Handle);
 
             HFunc(TEvSubscribe, Handle);
             HFunc(TEvChange, Handle);
-
-            CFunc(TEvents::TEvWakeup::EventType, Wakeup);
-
-            HFunc(TEvQueryResult, Handle);
-            HFunc(TEvQueryError, Handle);
         }
     }
 
     void Handle(TEvWatchRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.RegisterWithSameMailbox(new TWatchman(ev->Get()->GetStreamCtx(), ctx.SelfID, Stuff));
-    }
-
-    void Handle(TEvLeaseKeepAliveRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.RegisterWithSameMailbox(new TKeysKeeper(ev->Get()->GetStreamCtx(), Stuff));
     }
 
     void Handle(TEvSubscribe::TPtr& ev, const TActorContext&) {
@@ -591,73 +511,6 @@ private:
         }
     }
 
-    void Wakeup(const TActorContext&) {
-        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
-
-        std::ostringstream sql;
-        sql << Stuff->TablePrefix;
-        NYdb::TParamsBuilder params;
-        const auto& revName = AddParam("Revision", params, Revision);
-
-        sql << "$Leases = select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) <= CurrentUtcDatetime(`id`);" << std::endl;
-        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` view `lease` as h left semi join $Leases as l using(`lease`);" << std::endl;
-
-        sql << "insert into `history`" << std::endl;
-        sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
-        sql << "delete from `current` on select `key` from $Victims;" << std::endl;
-
-        if constexpr (NotifyWatchtower) {
-            sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << std::endl;
-        } else {
-            sql << "select count(*) from $Victims;" << std::endl;
-        }
-
-        sql << "delete from `leases` where `id` in $Leases;" << std::endl;
-
-        Stuff->Client->ExecuteQuery(sql.str(), TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
-            if (const auto lock = stuff.lock()) {
-                if (const auto res = future.GetValue(); res.IsSuccess())
-                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
-                else
-                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
-            }
-        });
-    }
-
-    void Handle(TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
-        i64 deleted = 0ULL;
-        if constexpr (NotifyWatchtower) {
-            for (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow(); ++deleted) {
-                TData oldData;
-                oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
-                oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
-                oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
-                oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
-                oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
-                auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
-
-                ctx.Send(ctx.SelfID, std::make_unique<TEvChange>(std::move(key), Revision, std::move(oldData)));
-            }
-        } else {
-            if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow()) {
-                deleted = NYdb::TValueParser(parser.GetValue(0)).GetUint64();
-            }
-        }
-
-        if (deleted) {
-            std::cout << deleted <<  " leases expired." << std::endl;
-        } else {
-            Stuff->Revision.compare_exchange_weak(Revision, Revision - 1LL);
-        }
-
-        ctx.Schedule(TDuration::Seconds(3), new TEvents::TEvWakeup);
-    }
-
-    void Handle(TEvQueryError::TPtr &ev, const TActorContext& ctx) {
-        std::cout << "Check leases SQL error received " << ev->Get()->Issues.ToString() << std::endl;
-        ctx.Schedule(TDuration::Seconds(7), new TEvents::TEvWakeup);
-    }
-
     const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     const TSharedStuff::TPtr Stuff;
 
@@ -667,7 +520,6 @@ private:
     TByKeyPrefixMap ByKeyPrefixMap;
 
     size_t MinSizeOfPrefix = 0U;
-    i64 Revision = 0LL;
 };
 
 }

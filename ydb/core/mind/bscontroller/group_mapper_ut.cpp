@@ -402,6 +402,12 @@ public:
         return str.Str();
     }
 
+    TString FormatGroup(ui32 groupId) {
+        const auto it = Groups.find(groupId);
+        UNIT_ASSERT(it != Groups.end());
+        return FormatGroup(it->second.Group);
+    }
+
     void CheckGroupErasure(const TGroupMapper::TGroupDefinition& group, ui32 decommittedDataCenter = 0) {
         TSet<ui32> dataCenters;
         for (const auto& realm : group) {
@@ -582,6 +588,13 @@ public:
         }
 
         return CheckLayoutByGroupDefinition(group, pdisks, geom, true, error);
+    }
+
+    TPDiskId GetGroupDiskId(ui32 groupId, ui32 realm = 0, ui32 domain = 0, ui32 disk = 0) const {
+        const auto it = Groups.find(groupId);
+        UNIT_ASSERT(it != Groups.end());
+        const TGroupRecord& group = it->second;
+        return group.Group[realm][domain][disk];
     }
 };
 
@@ -838,6 +851,53 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper::TGroupDefinition newGroup = context.ReallocateGroup(mapper, 1, {TPDiskId(8, 1)});
 
         UNIT_ASSERT_EQUAL_C(TPDiskId(9, 1), newGroup[0][7][0], context.FormatGroup(newGroup));
+    }
+    
+    Y_UNIT_TEST(RoundRobinMapping) {
+        TTestContext context(
+            {
+                {1, 1, 1, 1, 3}, // node 1
+                {1, 1, 2, 2, 3},
+                {1, 1, 3, 3, 3},
+                {1, 1, 4, 4, 3},
+                {1, 1, 5, 5, 3},
+                {1, 1, 6, 6, 3},
+                {1, 1, 7, 7, 3},
+                {1, 1, 8, 8, 3},
+                {1, 1, 1, 9, 3}, // node 9 is in the same rack as node 1
+                {1, 1, 2, 10, 3},
+                {1, 1, 3, 11, 3},
+                {1, 1, 1, 12, 3}, // node 12 is in the same rack as node 1
+                {1, 1, 2, 13, 3},
+                {1, 1, 3, 14, 3},
+            }
+        );
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block), false, true, 14, 1);
+        context.PopulateGroupMapper(mapper, 8);
+
+        for (ui32 groupId = 1; groupId <= 6; ++groupId) {
+            TGroupMapper::TGroupDefinition group;
+            group.emplace_back(TVector<TVector<TPDiskId>>(8));
+            auto& g = group[0];
+
+            for (int i = 0; i < 8; i++) {
+                g[i].emplace_back(TPDiskId(i + 1, 1));
+            }
+
+            context.SetGroup(groupId, group);
+        }
+
+        for (ui32 groupId = 1; groupId <= 6; ++groupId) {
+            TGroupMapper::TGroupDefinition newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(1, 1)});
+        }
+
+        UNIT_ASSERT_EQUAL_C(TPDiskId(9, 1), context.GetGroupDiskId(1), context.FormatGroup(1));
+        UNIT_ASSERT_EQUAL_C(TPDiskId(12, 1), context.GetGroupDiskId(2), context.FormatGroup(2));
+        UNIT_ASSERT_EQUAL_C(TPDiskId(1, 2), context.GetGroupDiskId(3), context.FormatGroup(3));
+        UNIT_ASSERT_EQUAL_C(TPDiskId(9, 2), context.GetGroupDiskId(4), context.FormatGroup(4));
+        UNIT_ASSERT_EQUAL_C(TPDiskId(12, 2), context.GetGroupDiskId(5), context.FormatGroup(5));
+        UNIT_ASSERT_EQUAL_C(TPDiskId(1, 3), context.GetGroupDiskId(6), context.FormatGroup(6));
     }
 
     Y_UNIT_TEST(NonUniformClusterDifferentSlotsPerDisk) {

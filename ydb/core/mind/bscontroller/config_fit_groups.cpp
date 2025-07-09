@@ -442,6 +442,8 @@ namespace NKikimr {
                     State.GroupFailureModelChanged.insert(groupId);
 
                     if (replacedSlots) {
+                        State.Self.GroupMapperLastUsedNodeId = Mapper->LastUsedNodeId();
+
                         if (!IgnoreGroupFailModelChecks) {
                             // process only groups with changed content; check the failure model
                             if (!checker.CheckFailModelForGroup(failed)) {
@@ -546,7 +548,13 @@ namespace NKikimr {
                     std::optional<TBridgePileId> bridgePileId,
                     T&& func) {
                 if (!Mapper) {
-                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
+                    ui32 maxNodeId = 0;
+
+                    if (!State.Self.PDisks.empty()) {
+                        maxNodeId = State.Self.PDisks.rbegin()->first.NodeId;
+                    }
+
+                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.UseRoundRobin, maxNodeId, State.Self.GroupMapperLastUsedNodeId);
                     PopulateGroupMapper();
                 }
                 TStackVec<TPDiskId, 32> removeQ;

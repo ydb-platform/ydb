@@ -2,7 +2,7 @@
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.2.6 {#25-1-2-6}
+### Release candidate 25.1.2.7 {#25-1-2-7}
 
 Release date: 2025.
 

@@ -20,7 +20,6 @@ struct TEvents {
     enum EEv {
         EvAskData = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_PUBLIC),
         EvKillSource,
-        EvUpdateMaxCacheSize,
         EvEnd
     };
 
@@ -66,16 +65,6 @@ struct TEvents {
 
         TSourceId GetSourceId() const {
             return SourceId;
-        }
-    };
-
-    class TEvUpdateMaxCacheSize: public NActors::TEventLocal<TEvUpdateMaxCacheSize, EvUpdateMaxCacheSize> {
-    private:
-        YDB_READONLY_CONST(ui64, MaxCacheSize);
-
-    public:
-        TEvUpdateMaxCacheSize(const ui64 maxCacheSize)
-            : MaxCacheSize(maxCacheSize) {
         }
     };
 };

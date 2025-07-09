@@ -1,6 +1,7 @@
 #pragma once
 #include "counters.h"
 
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
 #include <ydb/core/tx/general_cache/usage/abstract.h>
 #include <ydb/core/tx/general_cache/usage/config.h>
@@ -274,6 +275,8 @@ private:
 
     THashMap<TSourceId, TSourceInfo> SourcesInfo;
 
+    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
+
     void DrainQueue(const TSourceId sourceId) {
         MutableSourceInfo(sourceId).DrainQueue();
     }
@@ -314,7 +317,12 @@ private:
             Cache.Insert(i.first, i.second);
         }
         Counters->CacheSizeCount->Set(Cache.Size());
-        Counters->CacheSizeBytes->Set(Cache.TotalSize());
+
+        const auto cacheTotalSize = Cache.TotalSize();
+        Counters->CacheSizeBytes->Set(cacheTotalSize);
+        if (MemoryConsumer) {
+            MemoryConsumer->SetConsumption(cacheTotalSize);
+        }
     }
 
 public:
@@ -421,6 +429,10 @@ public:
             return;
         }
         Cache.SetMaxSize(maxCacheSize);
+    }
+
+    void SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
+        MemoryConsumer = std::move(consumer);
     }
 };
 

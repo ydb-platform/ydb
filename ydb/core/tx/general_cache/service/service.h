@@ -2,6 +2,7 @@
 #include "counters.h"
 #include "manager.h"
 
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/config.h>
 #include <ydb/core/tx/general_cache/usage/events.h>
@@ -27,8 +28,12 @@ private:
         Manager->AddRequest(std::make_shared<TRequest>(ev->Get()->ExtractAddresses(), ev->Get()->ExtractCallback(), ev->Get()->GetConsumer()));
     }
 
-    void HandleMain(NPublic::TEvents<TPolicy>::TEvUpdateMaxCacheSize::TPtr& ev) {
-        Manager->UpdateMaxCacheSize(ev->Get()->GetMaxCacheSize());
+    void HandleMain(NMemory::TEvConsumerRegistered::TPtr& ev) {
+        Manager->SetMemoryConsumer(std::move(ev->Get()->Consumer));
+    }
+
+    void HandleMain(NMemory::TEvConsumerLimit::TPtr& ev) {
+        Manager->UpdateMaxCacheSize(ev->Get()->LimitBytes);
     }
 
     void HandleMain(NSource::TEvents<TPolicy>::TEvObjectsInfo::TPtr& ev) {
@@ -54,10 +59,11 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NPublic::TEvents<TPolicy>::TEvAskData, HandleMain);
             hFunc(NPublic::TEvents<TPolicy>::TEvKillSource, HandleMain);
-            hFunc(NPublic::TEvents<TPolicy>::TEvUpdateMaxCacheSize, HandleMain);
             hFunc(NSource::TEvents<TPolicy>::TEvObjectsInfo, HandleMain);
             hFunc(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo, HandleMain);
             hFunc(NActors::TEvents::TEvUndelivered, HandleMain);
+            hFunc(NMemory::TEvConsumerRegistered, HandleMain);
+            hFunc(NMemory::TEvConsumerLimit, HandleMain);
             default:
                 AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for general cache")("ev_type", ev->GetTypeName());
                 break;
@@ -74,6 +80,9 @@ public:
 
     void Bootstrap() {
         Manager = std::make_unique<TManager>(TBase::SelfId(), Counters.GetManager());
+
+        TBase::Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(TPolicy::GetConsumerKind()));
+
         TBase::Become(&TDistributor::StateMain);
     }
 };

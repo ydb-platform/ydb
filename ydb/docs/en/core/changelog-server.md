@@ -36,8 +36,8 @@ Release date: 2025.
   * `HASH` — sets a password in encrypted form.
   * `LOGIN` and `NOLOGIN` — unblocks and blocks a user, respectively.
 * Enhanced account security:
-  * [Added](https://github.com/ydb-platform/ydb/pull/11963) user password complexity verification.
-  * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) automatic user lockout after a specified number of failed attempts to enter the correct password.
+  * [Added](https://github.com/ydb-platform/ydb/pull/11963) user [password complexity](./reference/configuration/auth_config#password-complexity) verification.
+  * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) [automatic user lockout](./reference/configuration/auth_config#account-lockout) after a specified number of failed attempts to enter the correct password.
   * [Added](https://github.com/ydb-platform/ydb/pull/12983) the ability for users to change their own passwords.
 * [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to flags that do not specify `(RequireRestart) = true` in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) are applied without a cluster restart.
 * [Changed](https://github.com/ydb-platform/ydb/pull/11329) lock behavior when shard locks exceed the limit. Once the limit is exceeded, the oldest locks (rather than the newest) are converted into full-shard locks.

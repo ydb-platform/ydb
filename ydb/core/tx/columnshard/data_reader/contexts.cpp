@@ -13,7 +13,7 @@ IFetchingStep::EStepResult IFetchingStep::Execute(const std::shared_ptr<TPortion
     return DoExecute(fetchingContext);
 }
 
-TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<TVersionedIndex>& versions,
+TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
     const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
     const std::optional<TFetcherMemoryProcessInfo>& memoryProcessInfo)
     : Consumer(consumer)

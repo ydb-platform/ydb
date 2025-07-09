@@ -69,8 +69,10 @@ public:
 };
 
 struct TIndexInfo: public IIndexInfo {
-private:
+public:
     using TColumns = THashMap<ui32, NTable::TColumn>;
+
+private:
     friend class TPortionInfo;
     friend class TCompactedPortionInfo;
     friend class TPortionDataAccessor;
@@ -156,14 +158,6 @@ private:
         }
     }
 
-    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
-        auto it = Indexes.find(entityId);
-        if (it != Indexes.end()) {
-            return it->second->GetStorageId();
-        }
-        return GetColumnStorageId(entityId, specialTier);
-    }
-
     void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
 
     bool CompareColumnIdxByName(const ui32 lhs, const ui32 rhs) const {
@@ -173,6 +167,14 @@ private:
     }
 
 public:
+    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
+        auto it = Indexes.find(entityId);
+        if (it != Indexes.end()) {
+            return it->second->GetStorageId();
+        }
+        return GetColumnStorageId(entityId, specialTier);
+    }
+
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
@@ -401,6 +403,7 @@ public:
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
+    std::vector<TString> GetColumnNames() const;
     std::vector<std::string> GetColumnSTLNames(const bool withSpecial = true) const;
     TColumnIdsView GetColumnIds(const bool withSpecial = true) const;
     ui32 GetColumnIdByIndexVerified(const ui32 index) const {

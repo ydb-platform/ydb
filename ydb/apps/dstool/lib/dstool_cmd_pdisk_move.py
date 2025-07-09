@@ -38,8 +38,6 @@ def is_successful_response(response):
 
 
 def do(args):
-    base_config = common.fetch_base_config()
-
     assert not args.dry_run, '--dry-run is not supported for this command'
 
     src = args.source_pdisk

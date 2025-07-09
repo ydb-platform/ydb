@@ -340,7 +340,6 @@ Year,Manufacturer,Model,Price
 |Тип                                  |csv_with_names|tsv_with_names|json_list|json_each_row|json_as_string|parquet|raw|
 |-------------------------------------|--------------|--------------|---------|-------------|--------------|-------|---|
 |`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓|✓||✓||
-|`Decimal`                            |✓            |✓              |        |✓            |              |✓     |    |
 |`DyNumber`                           |             |                |✓       |             |              |      |    |
 |`String`, `Utf8`, `Json`             |✓            |✓              |✓       |✓            |✓             |✓     |✓  |
 |`JsonDocument`                       |             |               |         |             |              |✓     |     |
@@ -358,7 +357,6 @@ Year,Manufacturer,Model,Price
 |Тип                                  |csv_with_names|tsv_with_names|json_list|json_each_row|parquet|raw|
 |-------------------------------------|--------------|--------------|---------|-------------|-------|---|
 |`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓|✓|✓|✓|
-|`Decimal`                            |              |              |         |             |       |✓  |
 |`DyNumber`                           |             |                |✓       |             |      |✓  |
 |`String`, `Utf8`, `Json`             |✓            |✓              |✓       |✓            |✓     |✓  |
 |`JsonDocument`                       |             |               |         |             |       |✓  |

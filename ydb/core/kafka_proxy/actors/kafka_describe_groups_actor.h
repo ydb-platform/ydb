@@ -64,6 +64,8 @@ struct TDescribeGroupsKqpQuery {
 };
 
 ui32 WAIT_REQUESTS_SECONDS = 20;
+ui32 REQUEST_GROUPS_QUERY_INDEX = 0;
+ui32 REQUEST_MEMBERS_QUERY_INDEX = 1;
 
 private:
     STATEFN(StateWork) {
@@ -95,9 +97,8 @@ private:
     TString GetYqlWithTableNames(const TString& templateStr);
     std::shared_ptr<TDescribeGroupsResponseData> BuildResponse();
     void SendToKqpDescribeGroupsMetadataRequest(const TActorContext& ctx);
-    void SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage);
-    TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
-                                            const TActorContext& ctx);
+    void SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage = std::nullopt);
+    TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
 
     const TContext::TPtr Context;
     const ui64 CorrelationId;
@@ -109,7 +110,6 @@ private:
 
     TString KqpSessionId;
     ui64 KqpCookie = 0;
-    ui64 PendingResponses = 0;
     ui32 InitedTablesCount = 0;
 };
 

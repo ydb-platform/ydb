@@ -10,4 +10,4 @@
 Смотрите также:
 
 - [{#T}](../../dev/vector-indexes.md)
-- [{#T}](../../yql/reference/udf/list/knn)
+- [{#T}](../../yql/reference/udf/list/knn?version=main)

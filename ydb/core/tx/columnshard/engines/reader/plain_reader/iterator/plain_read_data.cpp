@@ -9,7 +9,11 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
     std::deque<std::shared_ptr<IDataSource>> sources;
     const auto readMetadata = GetReadMetadataVerifiedAs<const TReadMetadata>();
-    Scanner = std::make_shared<TScanHead>(GetReadMetadata()->ExtractSelectInfo(), SpecialReadContext);
+    auto constructor = GetReadMetadata()->ExtractSelectInfo();
+    constructor->FillReadStats(GetReadMetadata()->ReadStats);
+    Scanner = std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
+    auto& stats = GetReadMetadata()->ReadStats;
+    stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
 }
 
 std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {

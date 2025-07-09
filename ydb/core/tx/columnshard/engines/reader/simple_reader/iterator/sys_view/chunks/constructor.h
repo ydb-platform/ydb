@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/chunks/chunks.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
@@ -64,7 +65,7 @@ public:
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context);
 };
 
-class TConstructor: public NCommon::ISourcesConstructor {
+class TConstructor: public NAbstract::ISourcesConstructor {
 private:
     std::deque<TPortionDataConstructor> Constructors;
 
@@ -106,7 +107,8 @@ public:
                 if (reqSnapshot < p->RecordSnapshotMin()) {
                     continue;
                 }
-                Constructors.emplace_back(pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p, p->GetSchema(originalSchemaInfo));
+                Constructors.emplace_back(
+                    pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p, p->GetSchema(originalSchemaInfo));
                 if (!pkFilter->IsUsed(Constructors.back().GetStart(), Constructors.back().GetFinish())) {
                     Constructors.pop_back();
                 }

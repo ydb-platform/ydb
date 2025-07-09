@@ -8,4 +8,12 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract {
 
+class ISourcesConstructor: public NCommon::ISourcesConstructor {
+private:
+    virtual void DoFillReadStats(TReadStats& /*stats*/) const override {
+    }
+
+public:
+};
+
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract

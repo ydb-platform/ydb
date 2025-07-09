@@ -23,9 +23,15 @@ private:
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
     virtual TString DoDebugString() const = 0;
     bool InitCursorFlag = false;
+    virtual void DoFillReadStats(TReadStats& /*stats*/) const = 0;
 
 public:
     virtual ~ISourcesConstructor() = default;
+
+    void FillReadStats(const std::shared_ptr<TReadStats>& stats) const {
+        AFL_VERIFY(stats);
+        DoFillReadStats(*stats);
+    }
 
     virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const {
         return std::vector<TInsertWriteId>();
@@ -176,8 +182,7 @@ public:
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
-    TConclusionStatus Init(
-        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const bool isPlain);
+    TConclusionStatus Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const bool isPlain);
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;

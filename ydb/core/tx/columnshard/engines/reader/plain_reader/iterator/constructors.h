@@ -14,6 +14,25 @@ private:
     std::deque<std::shared_ptr<TPortionInfo>> Sources;
     ui32 SourceIdx = 0;
 
+    virtual void DoFillReadStats(TReadStats& stats) const override {
+        ui64 compactedPortionsBytes = 0;
+        ui64 insertedPortionsBytes = 0;
+        ui64 committedPortionsBytes = 0;
+        for (auto&& i : Sources) {
+            if (i->GetPortionType() == EPortionType::Compacted) {
+                compactedPortionsBytes += i->GetTotalBlobBytes();
+            } else if (i->GetProduced() == NPortion::EProduced::INSERTED) {
+                insertedPortionsBytes += i->GetTotalBlobBytes();
+            } else {
+                committedPortionsBytes += i->GetTotalBlobBytes();
+            }
+        }
+        stats.IndexPortions = Sources.size();
+        stats.InsertedPortionsBytes = insertedPortionsBytes;
+        stats.CompactedPortionsBytes = compactedPortionsBytes;
+        stats.CommittedPortionsBytes = committedPortionsBytes;
+    }
+
     virtual TString DoDebugString() const override {
         return "{" + ::ToString(Sources.size()) + "}";
     }

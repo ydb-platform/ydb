@@ -59,6 +59,25 @@ private:
     std::deque<TSourceConstructor> Sources;
     ui32 SourceIdx = 0;
 
+    virtual void DoFillReadStats(TReadStats& stats) const override {
+        ui64 compactedPortionsBytes = 0;
+        ui64 insertedPortionsBytes = 0;
+        ui64 committedPortionsBytes = 0;
+        for (auto&& i : Sources) {
+            if (i.GetPortion()->GetPortionType() == EPortionType::Compacted) {
+                compactedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+            } else if (i.GetPortion()->GetProduced() == NPortion::EProduced::INSERTED) {
+                insertedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+            } else {
+                committedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+            }
+        }
+        stats.IndexPortions = Sources.size();
+        stats.InsertedPortionsBytes = insertedPortionsBytes;
+        stats.CompactedPortionsBytes = compactedPortionsBytes;
+        stats.CommittedPortionsBytes = committedPortionsBytes;
+    }
+
     virtual TString DoDebugString() const override {
         return "{" + ::ToString(Sources.size()) + "}";
     }
@@ -108,6 +127,25 @@ class TSortedPortionsSources: public NCommon::ISourcesConstructor {
 private:
     std::deque<TSourceConstructor> HeapSources;
     ui32 SourceIdx = 0;
+
+    virtual void DoFillReadStats(TReadStats& stats) const override {
+        ui64 compactedPortionsBytes = 0;
+        ui64 insertedPortionsBytes = 0;
+        ui64 committedPortionsBytes = 0;
+        for (auto&& i : HeapSources) {
+            if (i.GetPortion()->GetPortionType() == EPortionType::Compacted) {
+                compactedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+            } else if (i.GetPortion()->GetProduced() == NPortion::EProduced::INSERTED) {
+                insertedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+            } else {
+                committedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+            }
+        }
+        stats.IndexPortions = HeapSources.size();
+        stats.InsertedPortionsBytes = insertedPortionsBytes;
+        stats.CompactedPortionsBytes = compactedPortionsBytes;
+        stats.CommittedPortionsBytes = committedPortionsBytes;
+    }
 
     virtual TString DoDebugString() const override {
         return "{" + ::ToString(HeapSources.size()) + "}";

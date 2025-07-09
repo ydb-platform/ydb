@@ -7,7 +7,12 @@ namespace NKikimr::NOlap::NReader::NSimple {
 TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
-    Scanner = std::make_shared<TScanHead>(SpecialReadContext->GetReadMetadata()->ExtractSelectInfo(), SpecialReadContext);
+    auto constructor = SpecialReadContext->GetReadMetadata()->ExtractSelectInfo();
+    constructor->FillReadStats(GetReadMetadata()->ReadStats);
+    Scanner =
+        std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
+    auto& stats = GetReadMetadata()->ReadStats;
+    stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
 }
 
 std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {

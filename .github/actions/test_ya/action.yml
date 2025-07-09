@@ -141,7 +141,7 @@ runs:
         RUN_ID=$(
         testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{ inputs.testman_project_id }} \
           --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
-          --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"
+          --tags "${BRANCH_NAME//[^a-zA-Z0-9-]/-}" --tags "$EXTRA_TAG"
         )
         echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
         echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV

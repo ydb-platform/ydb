@@ -4,7 +4,7 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 
-namespace NYdb::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 TDirectReadClientMessage TDirectReadPartitionSession::MakeStartRequest() const {
     TDirectReadClientMessage req;

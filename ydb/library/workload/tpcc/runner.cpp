@@ -411,9 +411,6 @@ void TPCCRunner::RunSync() {
 
     size_t startedTerminalId = 0;
     for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {
-        if (now >= WarmupStopDeadline) {
-            break;
-        }
         Terminals[startedTerminalId]->Start();
 
         std::this_thread::sleep_for(MinWarmupPerTerminal);
@@ -427,8 +424,14 @@ void TPCCRunner::RunSync() {
         Terminals[startedTerminalId]->Start();
     }
 
-    // in case we were starting the rest of terminals for too long (doubtfully)
-    UpdateDisplayIfNeeded(Clock::now());
+    while (!GetGlobalInterruptSource().stop_requested()) {
+        now = Clock::now();
+        if (now >= WarmupStopDeadline) {
+            break;
+        }
+
+        UpdateDisplayIfNeeded(Clock::now());
+    }
 
     StopWarmup.store(true, std::memory_order_relaxed);
 

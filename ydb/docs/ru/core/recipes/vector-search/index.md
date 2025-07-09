@@ -6,8 +6,3 @@
 
 * [{#T}](vector-index-quickstart.md)
 * [{#T}](vector-index-with-prepared-dataset.md)
-
-Смотрите также:
-
-- [{#T}](../../dev/vector-indexes.md)
-- [{#T}](../../yql/reference/udf/list/knn?version=main)

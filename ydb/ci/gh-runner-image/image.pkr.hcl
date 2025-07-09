@@ -58,7 +58,7 @@ apt-get -y install --no-install-recommends \
   antlr3 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
   liblttng-ust1 m4 make ninja-build parallel postgresql-client postgresql-client \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g linux-tools-common linux-tools-generic \
-  linux-image-generic ibverbs-providers rdma-core libibverbs1
+  linux-modules-extra-$(uname -r) ibverbs-providers rdma-core libibverbs1 ibverbs-utils
 
 apt-get -y purge lxd-agent-loader snapd modemmanager
 apt-get -y autoremove

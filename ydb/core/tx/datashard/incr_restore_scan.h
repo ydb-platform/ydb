@@ -40,6 +40,7 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
         TUserTable::TCPtr table,
         const TPathId& targetPathId,
         ui64 txId,
+        ui64 schemeShardTabletId,
         NStreamScan::TLimits limits);
 
 } // namespace NKikimr::NDataShard

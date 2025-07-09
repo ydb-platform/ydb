@@ -86,6 +86,9 @@ extern ui64 gVectorIndexSeed; // for tests only
 
 class TDataErasureManager;
 
+// Forward declaration for incremental restore context
+struct TIncrementalRestoreState;
+
 class TSchemeShard
     : public TActor<TSchemeShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
@@ -282,6 +285,119 @@ public:
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+    
+    // Simplified state tracking for sequential incremental restore 
+    struct TIncrementalRestoreState {
+        TPathId BackupCollectionPathId;
+        ui64 OriginalOperationId;
+        
+        // Sequential incremental backup processing
+        struct TIncrementalBackup {
+            TPathId BackupPathId;
+            TString BackupPath;
+            ui64 Timestamp;
+            bool Completed = false;
+            
+            TIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp)
+                : BackupPathId(pathId), BackupPath(path), Timestamp(timestamp) {}
+        };
+        
+        // Table operation state for tracking DataShard completion
+        struct TTableOperationState {
+            TOperationId OperationId;
+            THashSet<TShardIdx> ExpectedShards;
+            THashSet<TShardIdx> CompletedShards;
+            THashSet<TShardIdx> FailedShards;
+            
+            TTableOperationState() = default;
+            
+            explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
+            
+            bool AllShardsComplete() const {
+                return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() && 
+                       !ExpectedShards.empty();
+            }
+            
+            bool HasFailures() const {
+                return !FailedShards.empty();
+            }
+        };
+        
+        TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
+        ui32 CurrentIncrementalIdx = 0;
+        bool CurrentIncrementalStarted = false;
+        
+        // Operation completion tracking for current incremental backup
+        THashSet<TOperationId> InProgressOperations;
+        THashSet<TOperationId> CompletedOperations;
+        
+        // Table operation state tracking for DataShard completion
+        THashMap<TOperationId, TTableOperationState> TableOperations;
+        
+        bool AllIncrementsProcessed() const {
+            return CurrentIncrementalIdx >= IncrementalBackups.size();
+        }
+        
+        bool IsCurrentIncrementalComplete() const {
+            return CurrentIncrementalIdx < IncrementalBackups.size() && 
+                   IncrementalBackups[CurrentIncrementalIdx].Completed;
+        }
+        
+        bool AreAllCurrentOperationsComplete() const {
+            return InProgressOperations.empty() && !CompletedOperations.empty();
+        }
+        
+        void MarkCurrentIncrementalComplete() {
+            if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+                IncrementalBackups[CurrentIncrementalIdx].Completed = true;
+            }
+        }
+        
+        void MoveToNextIncremental() {
+            if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+                CurrentIncrementalIdx++;
+                CurrentIncrementalStarted = false;
+                
+                // Reset operation tracking for next incremental
+                InProgressOperations.clear();
+                CompletedOperations.clear();
+                TableOperations.clear();
+            }
+        }
+        
+        const TIncrementalBackup* GetCurrentIncremental() const {
+            if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+                return &IncrementalBackups[CurrentIncrementalIdx];
+            }
+            return nullptr;
+        }
+        
+        void AddIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp) {
+            IncrementalBackups.emplace_back(pathId, path, timestamp);
+            // Sort by timestamp to ensure chronological order
+            std::sort(IncrementalBackups.begin(), IncrementalBackups.end(), 
+                      [](const TIncrementalBackup& a, const TIncrementalBackup& b) {
+                          return a.Timestamp < b.Timestamp;
+                      });
+        }
+        
+        void AddCurrentIncrementalOperation(const TOperationId& opId) {
+            InProgressOperations.insert(opId);
+        }
+        
+        void MarkOperationComplete(const TOperationId& opId) {
+            InProgressOperations.erase(opId);
+            CompletedOperations.insert(opId);
+        }
+        
+        bool AllCurrentIncrementalOperationsComplete() const {
+            return InProgressOperations.empty() && !CompletedOperations.empty();
+        }
+    };
+    
+    THashMap<ui64, TIncrementalRestoreState> IncrementalRestoreStates;
+    THashMap<TOperationId, ui64> IncrementalRestoreOperationToState;
+    THashMap<TTxId, ui64> TxIdToIncrementalRestore;
 
     ui64 NextLocalShardIdx = 0;
     THashMap<TShardIdx, TShardInfo> ShardInfos;
@@ -1015,6 +1131,9 @@ public:
 
     struct TTxDeleteTabletReply;
     NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
+    
+    class TTxProgressIncrementalRestore;
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(ui64 operationId);
 
     struct TTxShardStateChanged;
     NTabletFlatExecutor::ITransaction* CreateTxShardStateChanged(TEvDataShard::TEvStateChanged::TPtr& ev);
@@ -1152,6 +1271,12 @@ public:
 
     void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
 
+    // Incremental Restore event handlers
+    void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvIncrementalRestoreResponse::TPtr& ev, const TActorContext& ctx);
+    void CreateIncrementalRestoreOperation(const TPathId& backupCollectionPathId, ui64 operationId, const TString& backupName, const TActorContext& ctx);
+
     void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
@@ -1184,7 +1309,6 @@ public:
     void Handle(TEvDataShard::TEvStateChanged::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSubDomain::TEvConfigureStatus::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvFileStore::TEvUpdateConfigResponse::TPtr& ev, const TActorContext& ctx);
@@ -1205,6 +1329,7 @@ public:
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureManualStartupRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvWakeupToRunDataErasureBSC::TPtr& ev, const TActorContext& ctx);
@@ -1282,18 +1407,6 @@ public:
     THashMap<TTxId, THashSet<ui64>> TxIdToDependentExport;
     // This set is needed to kill all the running scheme uploaders on SchemeShard death.
     THashSet<TActorId> RunningExportSchemeUploaders;
-
-    // Incremental restore transaction tracking
-    THashMap<TTxId, ui64> TxIdToIncrementalRestore;
-    
-    // Context storage for incremental restore transactions
-    struct TIncrementalRestoreContext {
-        TPathId DestinationTablePathId;
-        TString DestinationTablePath;
-        ui64 OriginalOperationId;
-        TPathId BackupCollectionPathId;
-    };
-    THashMap<ui64, TIncrementalRestoreContext> IncrementalRestoreContexts;
 
     void FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo& exportInfo);
 
@@ -1546,7 +1659,9 @@ public:
     void Handle(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev, const TActorContext& ctx);
 
     // Incremental Restore Scan
+    void ProgressIncrementalRestore(ui64 operationId);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev);
     
     // Transaction lifecycle constructor functions
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
@@ -1554,8 +1669,6 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId);
     
     NTabletFlatExecutor::ITransaction* CreateTxIncrementalRestoreResponse(TEvDataShard::TEvProposeTransactionResult::TPtr& ev);
-
-    void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
 
     void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);
 
@@ -1665,5 +1778,5 @@ public:
     };
 };
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

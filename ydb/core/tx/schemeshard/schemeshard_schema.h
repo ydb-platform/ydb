@@ -2133,6 +2133,27 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    // Incremental restore state tracking
+    struct IncrementalRestoreState : Table<122> {
+        struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct CurrentIncrementalIdx : Column<3, NScheme::NTypeIds::Uint32> {};
+        
+        using TKey = TableKey<OperationId>;
+        using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx>;
+    };
+
+    // Incremental restore shard progress tracking
+    struct IncrementalRestoreShardProgress : Table<123> {
+        struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct ShardIdx : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct LastKey : Column<4, NScheme::NTypeIds::String> {};
+        
+        using TKey = TableKey<OperationId, ShardIdx>;
+        using TColumns = TableColumns<OperationId, ShardIdx, Status, LastKey>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2252,7 +2273,9 @@ struct Schema : NIceDb::Schema {
         WaitingDataErasureShards,
         SysView,
         IncrementalRestoreOperations,
-        KMeansTreeClusters
+        KMeansTreeClusters,
+        IncrementalRestoreState,
+        IncrementalRestoreShardProgress
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

@@ -65,7 +65,10 @@ VALUES (6, Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
 Создайте векторный индекс на таблице `Vectors`. Используйте следующую команду:
 
 ```yql
-ALTER TABLE Vectors ADD INDEX Index GLOBAL USING vector_kmeans_tree ON (embedding)
+ALTER TABLE Vectors
+ADD INDEX Index
+GLOBAL USING vector_kmeans_tree 
+ON (embedding)
 WITH (distance=cosine, vector_type="float", vector_dimension=5, levels=1, clusters=2)
 ```
 

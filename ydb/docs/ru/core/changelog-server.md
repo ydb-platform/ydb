@@ -30,8 +30,8 @@
   * `HASH` — возможность задания пароля в зашифрованном виде;
   * `LOGIN` и `NOLOGIN` — разблокировка и блокировка пользователя.
 * Повышена безопасность учётных записей:
-  * [Добавлена](https://github.com/ydb-platform/ydb/pull/11963) проверка сложности пароля пользователя;
-  * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) автоматическая блокировка пользователя при исчерпании лимита попыток ввода пароля;
+  * [Добавлена](https://github.com/ydb-platform/ydb/pull/11963) [проверка сложности пароля](./reference/configuration/auth_config#password-complexity) пользователя;
+  * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) [автоматическая блокировка пользователя](./reference/configuration/auth_config#account-lockout) при исчерпании лимита попыток ввода пароля;
   * [Добавлена](https://github.com/ydb-platform/ydb/pull/12983) возможность самостоятельной смены пароля пользователем.
 * [Реализована](https://github.com/ydb-platform/ydb/issues/9748) возможность переключения функциональных флагов во время работы сервера {{ ydb-short-name }}. Флаги, для которых в [proto-файле](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) не указан параметр `(RequireRestart) = true`, будут применяться без рестарта кластера.
 * [Теперь](https://github.com/ydb-platform/ydb/pull/11329) самые старые (а не новые) блокировки меняются на полношардовые при превышении количества блокировок на шардах.

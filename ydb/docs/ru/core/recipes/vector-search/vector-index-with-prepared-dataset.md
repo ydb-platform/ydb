@@ -76,7 +76,13 @@ python3 `import_dataset.py`
 
 ## Шаг 3. Импорт данных из датасета в таблицу {#step3}
 
-С помощью утилиты [{{ ydb-short-name }} CLI](../../reference/ydb-cli/) следует импортировать полученный файл `wikipedia_embeddings_train.csv` в созданную [на Шаге 1](#step1) таблицу `wikipedia`:
+С помощью утилиты [{{ ydb-short-name }} CLI](../../reference/ydb-cli/) следует импортировать полученный файл `wikipedia_embeddings_train.csv` в созданную [на Шаге 1](#step1) таблицу `wikipedia`.
+
+В скрипте ниже:
+
+* <endpoint> - [эндпоинт](../../concepts/connect.md#endpoint) к БД {{ ydb-short-name }}
+
+* <database> - [путь к базе данных](../../concepts/connect.md#database) к БД {{ ydb-short-name }}
 
 ```bash
 ydb -e <endpoint> -d <database> -v import file csv --path wikipedia --header wikipedia_embeddings_train.csv --timeout 30

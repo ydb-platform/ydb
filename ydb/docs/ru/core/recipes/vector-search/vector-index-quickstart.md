@@ -43,7 +43,7 @@ VALUES
     (6, Untag(Knn::ToBinaryStringFloat([-3.f, -3.f, -3.f, -3.f, -6.f]), "FloatVector"));
 ```
 
-Описание функции `Knn::ToBinaryStringFloat` см. [здесь](../../yql/reference/udf/list/knn?version=main) 
+Описание функции `Knn::ToBinaryStringFloat` см. [здесь](../../yql/reference/udf/list/knn?version=main).
 
 ## Шаг 3. Построение векторного индекса {#step3}
 

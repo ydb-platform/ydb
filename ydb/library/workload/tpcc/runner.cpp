@@ -604,7 +604,7 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     float progressRatio = static_cast<float>(data.ProgressPercent / 100.0);
 
     auto topLeftMainInfo = vbox({
-        text(metricsSs.str()),
+        text(metricsSs.str()) | bold,
         text(timingSs.str()),
         hbox({
             text("Progress: ["),

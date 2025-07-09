@@ -1322,6 +1322,19 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT `Y #` FROM saurus.maxim").size(), 0);
     }
 
+    Y_UNIT_TEST(NoBindingAtQuoted) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TVector<TCandidate> expected = {
+            {FolderName, ".sys/"},
+            {FolderName, "local/"},
+            {FolderName, "prod/"},
+            {FolderName, "test/"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = 1; SELECT * FROM `#`"), expected);
+    }
+
     Y_UNIT_TEST(Typing) {
         const auto queryUtf16 = TUtf16String::FromUtf8(
             "SELECT \n"

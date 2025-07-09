@@ -54,6 +54,10 @@ namespace NSQLComplete {
         struct TQuotation {
             bool AtLhs = false;
             bool AtRhs = false;
+
+            explicit operator bool() const {
+                return AtLhs || AtRhs;
+            }
         };
 
         TKeywords Keywords;

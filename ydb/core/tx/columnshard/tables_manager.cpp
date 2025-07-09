@@ -45,7 +45,7 @@ std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSche
 std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
     const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
     if (TabletPathId && schemeShardLocalPathId == TabletPathId->SchemeShardLocalPathId) {
-        return {TabletPathId->InternalPathId};
+        return { TabletPathId->InternalPathId };
     }
     if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
         return { *internalPathId };
@@ -86,7 +86,8 @@ void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tab
     const auto& tabletInternalPathId = CreateInternalPathId(tabletSchemeShardLocalPathId);
     TabletPathId.emplace(tabletInternalPathId, tabletSchemeShardLocalPathId);
     AFL_VERIFY(!SchemaObjectsCache);
-    SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletInternalPathId, info->TenantPathId);;
+    SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletInternalPathId, info->TenantPathId);
+    ;
     Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathId.GetRawValue());
     Schema::SaveSpecialValue(db, Schema::EValueIds::InternalOwnerPathId, tabletInternalPathId.GetRawValue());
     if (GenerateInternalPathId) {
@@ -108,7 +109,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             tabletInternalPathIdValue = tabletSchemeShardLocalPathIdValue;
         }
         if (tabletSchemeShardLocalPathIdValue.has_value()) {
-            TabletPathId.emplace(TInternalPathId::FromRawValue(*tabletInternalPathIdValue), TSchemeShardLocalPathId::FromRawValue(*tabletSchemeShardLocalPathIdValue));
+            TabletPathId.emplace(TInternalPathId::FromRawValue(*tabletInternalPathIdValue),
+                TSchemeShardLocalPathId::FromRawValue(*tabletSchemeShardLocalPathIdValue));
             if (info) {
                 SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(TabletPathId->InternalPathId, info->TenantPathId);
             } else {
@@ -446,8 +448,7 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
     const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<TPortionIndexStats>& portionsStats,
-    const ui64 tabletId)
+    const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
@@ -504,8 +505,8 @@ void TTablesManager::MoveTablePropose(const TSchemeShardLocalPathId schemeShardL
 
 void TTablesManager::MoveTableProgress(
     NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD) ("event", "move_table_progress")
-        ("old_path_id", oldSchemeShardLocalPathId)("new_path_id", newSchemeShardLocalPathId);
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD) ("event", "move_table_progress")(
+        "old_path_id", oldSchemeShardLocalPathId)("new_path_id", newSchemeShardLocalPathId);
     AFL_VERIFY(!ResolveInternalPathId(newSchemeShardLocalPathId));
     const auto* pInternalPathId = RenamingLocalToInternal.FindPtr(oldSchemeShardLocalPathId);
     AFL_VERIFY(pInternalPathId);

@@ -85,7 +85,7 @@ struct Schema : NIceDb::Schema {
         SubDomainLocalPathId = 18,
         SubDomainOutOfSpace = 19,
         InternalOwnerPathId = 20,
-        MaxInternalPathId = 21, //max internal path id ever known in this tablet
+        MaxInternalPathId = 21,   //max internal path id ever known in this tablet
     };
 
     enum class EInsertTableIds : ui8 {

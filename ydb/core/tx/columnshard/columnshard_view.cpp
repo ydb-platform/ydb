@@ -139,7 +139,7 @@ TString TTxMonitoring::RenderMainPage() {
         html << "<b>InternalPathId :</b> " << tabletPathId->InternalPathId << "<br />";
     } else {
         html << "<b>PathId :</b> " << "None" << "<br />";
-        html << "<b>InternalPathId :</b> " << "None"<< "<br />";
+        html << "<b>InternalPathId :</b> " << "None" << "<br />";
     }
     html << "<b>Table/Store Path :</b> " << Self->OwnerPath << "<br />";
     html << "<b>LastCompletedStep :</b> " << Self->LastCompletedTx.GetPlanStep() << "<br />";

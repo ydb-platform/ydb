@@ -268,7 +268,7 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
     NIceDb::TNiceDb db(txc.DB);
     AFL_VERIFY(proto.HasOwnerPathId());
     const auto& tabletSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
-    TablesManager.Init(db, tabletSchemeShardLocalPathId,  Info());
+    TablesManager.Init(db, tabletSchemeShardLocalPathId, Info());
     if (proto.HasOwnerPath()) {
         OwnerPath = proto.GetOwnerPath();
         Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
@@ -285,9 +285,10 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(tableProto);
 
-    if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId); internalPathId && TablesManager.HasTable(*internalPathId, true)) {
-        LOG_S_DEBUG("EnsureTable for existed pathId: " << TUnifiedPathId(*internalPathId, schemeShardLocalPathId)
-             << " at tablet " << TabletID());
+    if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+        internalPathId && TablesManager.HasTable(*internalPathId, true)) {
+        LOG_S_DEBUG(
+            "EnsureTable for existed pathId: " << TUnifiedPathId(*internalPathId, schemeShardLocalPathId) << " at tablet " << TabletID());
         return;
     }
     const auto internalPathId = TablesManager.CreateInternalPathId(schemeShardLocalPathId);
@@ -415,7 +416,7 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
     AFL_VERIFY(TablesManager.GetTabletPathId());
     const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathId()->SchemeShardLocalPathId;
     AFL_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId)
-        ("tablet_path_id", tabletSchemeShardLocalPathId)("store_path_id", storeSchemeShardLocalPathId);
+    ("tablet_path_id", tabletSchemeShardLocalPathId)("store_path_id", storeSchemeShardLocalPathId);
 
     for (ui32 id : proto.GetDroppedSchemaPresets()) {
         if (!TablesManager.HasPreset(id)) {

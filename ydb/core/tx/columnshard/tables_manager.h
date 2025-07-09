@@ -441,7 +441,6 @@ public:
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner,
         const NColumnShard::TSchemeShardLocalPathId pathId, const ui64 versionId,
         const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
-
 };
 
 }   // namespace NKikimr::NColumnShard

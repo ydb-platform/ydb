@@ -1,6 +1,6 @@
 # Примеры работы с векторным индексом
 
-Этот раздел содержит примеры работы с векторным индексом.
+Этот раздел содержит примеры работы с [векторным индексом](../../dev/vector-indexes?version=main).
 
 Содержание:
 
@@ -9,5 +9,5 @@
 
 Смотрите также:
 
-- [{#T}](../../dev/vector-indexes?version=main)
-- [{#T}](../../yql/reference/udf/list/knn?version=main)
+- [{#T}](../../dev/vector-indexes.md)
+- [{#T}](../../yql/reference/udf/list/knn)

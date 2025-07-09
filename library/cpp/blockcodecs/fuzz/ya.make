@@ -10,8 +10,7 @@ IF (NOT MSVC)
     PEERDIR(
         contrib/libs/protobuf
         contrib/libs/protobuf-mutator
-        library/cpp/blockcodecs/core
-    ydb/library/blockcodecs
+        library/cpp/blockcodecs
         library/cpp/blockcodecs/fuzz/proto
     )
 

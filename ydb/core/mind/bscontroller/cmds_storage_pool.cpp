@@ -387,6 +387,10 @@ namespace NKikimr::NBsController {
             Fit.OnlyToLessOccupiedPDisk = true;
         }
 
+        if (cmd.GetUseRoundRobin()) {
+            Fit.UseRoundRobin = true;
+        }
+
         Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
     }
 

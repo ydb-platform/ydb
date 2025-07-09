@@ -67,7 +67,7 @@ namespace NKikimr {
             };
 
         public:
-            TGroupMapper(TGroupGeometryInfo geom, bool randomize = false);
+            TGroupMapper(TGroupGeometryInfo geom, bool randomize = false, bool doRoundRobin = false, ui32 maxNodeId = 0, ui32 lastUsedNodeId = 0);
             ~TGroupMapper();
 
             // Register PDisk inside mapper to use it in subsequent map operations
@@ -137,6 +137,8 @@ namespace NKikimr {
             std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk,
                 TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, std::optional<TBridgePileId> bridgePileId,
                 TString& error);
+
+            ui32 LastUsedNodeId() const;
         };
 
     } // NBsController

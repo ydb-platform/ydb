@@ -1901,6 +1901,8 @@ public:
 
     TActorId ClusterBalanceActorId;
 
+    ui32 GroupMapperLastUsedNodeId = 0;
+
     bool IsGroupLayoutSanitizerEnabled() const {
         return GroupLayoutSanitizerEnabled;
     }

@@ -31,22 +31,6 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         return;
     }
 
-    const auto schemeShardLocalPath = TSchemeShardLocalPathId::FromProto(record);
-    auto internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPath);
-    if (!internalPathId && record.GetTablePath().find(".sys/") != TString::npos) {
-        internalPathId = TInternalPathId::FromRawValue(0);
-    }
-    if (!internalPathId) {
-        const auto& request = ev->Get()->Record;
-        auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(request.GetGeneration(), TabletID());
-        error->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,TStringBuilder() << "table: " << request.GetTablePath() << "not found");
-        NYql::IssueToMessage(issue, error->Record.MutableIssues()->Add());
-
-        ctx.Send(ev->Sender, error.Release());
-        return;
-    }
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(*internalPathId)->OnReadEvent();
     ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
     Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new NOlap::NReader::TTxScan(this, ev), ctx);

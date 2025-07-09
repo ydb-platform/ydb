@@ -8,7 +8,7 @@ private:
     using TBase = NAbstract::TAccessor;
     const NColumnShard::TUnifiedPathId PathId;
 
-    virtual NColumnShard::TUnifiedPathId GetPathId() const override {
+    virtual std::optional<NColumnShard::TUnifiedPathId> GetPathId() const override {
         return PathId;
     }
 

@@ -45,6 +45,8 @@ public:
     template <typename Proto>
     void ToProto(Proto& proto) const;
 
+    TString DebugString() const;
+
     auto operator<=>(const TInternalPathId&) const = default;
 };
 
@@ -90,6 +92,8 @@ public:
     void ToProto(Proto& proto) const;
 
     auto operator<=>(const TSchemeShardLocalPathId&) const = default;
+
+    TString DebugString() const;
 };
 
 static_assert(sizeof(TSchemeShardLocalPathId) == sizeof(ui64));
@@ -133,8 +137,15 @@ using TInternalPathId = NColumnShard::TInternalPathId;
 class IPathIdTranslator {
 public:
     virtual ~IPathIdTranslator() = default;
-    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const = 0;
-    virtual std::optional<TInternalPathId> ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const = 0;
+    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(const TInternalPathId internalPathId) const = 0;
+    virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
+        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const = 0;
+    std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const {
+        return ResolveSchemeShardLocalPathIdOptional(internalPathId);
+    }
+    std::optional<TInternalPathId> ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
+        return ResolveInternalPathIdOptional(schemeShardLocalPathId);
+    }
     NColumnShard::TSchemeShardLocalPathId ResolveSchemeShardLocalPathIdVerified(const TInternalPathId internalPathId) const;
     TInternalPathId ResolveInternalPathIdVerified(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const;
     NColumnShard::TUnifiedPathId GetUnifiedByInternalVerified(const TInternalPathId internalPathId) const;

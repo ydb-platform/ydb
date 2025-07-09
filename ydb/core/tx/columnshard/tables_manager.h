@@ -225,9 +225,9 @@ private:
     friend class TTxInit;
 
 public:   //IPathIdTranslator
-    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(
+    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(
         const TInternalPathId internalPathId) const override;
-    virtual std::optional<TInternalPathId> ResolveInternalPathId(
+    virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
         const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const override;
 
 public:
@@ -237,7 +237,9 @@ public:
         const ui64 tabletId);
 
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
-        const TString& tablePath, const std::optional<ui64> externalPathId, const std::optional<ui64> internalPathId);
+        const TString& tablePath, const TSchemeShardLocalPathId externalPathId);
+    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
+        const TString& tablePath, const TInternalPathId internalPathId);
 
     class TSchemaAddress {
     private:

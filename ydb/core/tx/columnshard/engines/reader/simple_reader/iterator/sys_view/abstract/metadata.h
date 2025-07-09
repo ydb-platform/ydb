@@ -10,6 +10,10 @@ private:
 public:
     using TBase::TBase;
 
+    virtual TString GetOverridenScanType(const TString& /*defScanType*/) const override {
+        return "SIMPLE";
+    }
+
     virtual bool NeedStalenessChecker() const override {
         return false;
     }

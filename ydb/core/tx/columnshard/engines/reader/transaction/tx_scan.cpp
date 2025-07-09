@@ -52,6 +52,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const TString table = request.GetTablePath();
     const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
+    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(request.GetLocalPathId());
     NConveyorComposite::TCPULimitsConfig cpuLimits;
     cpuLimits.DeserializeFromProto(request).Validate();
     if (scanGen > 1) {
@@ -71,13 +72,16 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }
 
         {
-            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(
-                request.GetTablePath() ? request.GetTablePath() : "undefined", request.GetLocalPathId(), std::nullopt);
+            auto accConclusion =
+                Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId);
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
             } else {
                 read.TableMetadataAccessor = accConclusion.DetachResult();
+            }
+            if (auto pathId = read.TableMetadataAccessor->GetPathId()) {
+                Self->Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId->GetInternalPathId())->OnReadEvent();
             }
         }
 
@@ -97,12 +101,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }();
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
             const TString scanType = [&]() {
-                if (table.find(".sys/") != TString::npos) {
-                    return TString("SIMPLE");
-                }
                 return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
             }();
-            auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(scanType, context);
+            auto constructor =
+                NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);
             if (!constructor) {
                 return std::unique_ptr<IScannerConstructor>();
             }
@@ -123,7 +125,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
         read.StatsMode = request.GetStatsMode();
 
-        static TVersionedPresetSchemas defaultSchemas(0, Self->GetStoragesManager(), Self->GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
+        static TVersionedPresetSchemas defaultSchemas(
+            0, Self->GetStoragesManager(), Self->GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
         const TVersionedPresetSchemas* vIndex =
             Self->GetIndexOptional() ? &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas() : &defaultSchemas;
         auto parseResult = scannerConstructor->ParseProgram(TProgramParsingContext(*vIndex), request, read);

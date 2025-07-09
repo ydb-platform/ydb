@@ -64,6 +64,10 @@ void TInternalPathId::ToProto(NKikimrColumnShardExportProto::TIdentifier& proto)
     proto.SetPathId(PathId);
 }
 
+TString TInternalPathId::DebugString() const {
+    return ToString(PathId);
+}
+
 //Explicit specialization for protos that hold SchemeShardLocalPathId
 
 template <>
@@ -172,6 +176,10 @@ TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrProto::T
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrProto::TPathID& proto) const {
     proto.SetLocalId(PathId);
+}
+
+TString TSchemeShardLocalPathId::DebugString() const {
+    return ToString(PathId);
 }
 
 TUnifiedPathId TUnifiedPathId::BuildValid(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId) {

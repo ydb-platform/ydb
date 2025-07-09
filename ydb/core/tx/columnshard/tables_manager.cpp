@@ -31,7 +31,8 @@ TInternalPathId GetInitialMaxInternalPathId(const ui64 tabletId) {
 
 }   //namespace
 
-std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const {
+std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSchemeShardLocalPathIdOptional(
+    const TInternalPathId internalPathId) const {
     if (!HasTable(internalPathId)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "resolve_ss_path_id")("internal", internalPathId)("result", "not_found");
         return std::nullopt;
@@ -41,7 +42,8 @@ std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSche
     return p->GetPathId().SchemeShardLocalPathId;
 }
 
-std::optional<TInternalPathId> TTablesManager::ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
+std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
+    const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
     if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
         return { *internalPathId };
     } else {
@@ -531,36 +533,38 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
 }
 
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
-    const TString& tablePath, const std::optional<ui64> externalPathId, const std::optional<ui64> extInternalPathId) {
-    if (extInternalPathId) {
-        const auto externalPathIdResolved =
-            ResolveSchemeShardLocalPathIdVerified(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId));
-        return std::make_shared<NOlap::TUserTableAccessor>(
-            tablePath, TUnifiedPathId::BuildValid(NColumnShard::TInternalPathId::FromRawValue(*extInternalPathId), externalPathIdResolved));
+    const TString& tablePath, const TInternalPathId internalPathId) {
+    const std::optional<TSchemeShardLocalPathId> externalPathId = ResolveSchemeShardLocalPathIdOptional(internalPathId);
+    if (!externalPathId) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cannot resolve external path id")("internal", internalPathId);
+        return TConclusionStatus::Fail("cannot resolve external path id for internal " + internalPathId.DebugString());
     }
-    AFL_VERIFY(externalPathId);
-    const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*externalPathId);
-    const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
-    if (extInternalPathId) {
-        AFL_VERIFY(internalPathId);
-        AFL_VERIFY(extInternalPathId == internalPathId->GetRawValue());
+    if (!HasTable(internalPathId)) {
+        return std::make_shared<NOlap::TAbsentTableAccessor>(
+            tablePath, NColumnShard::TUnifiedPathId::BuildValid(internalPathId, *externalPathId));
+    } else {
+        return std::make_shared<NOlap::TUserTableAccessor>(tablePath, NColumnShard::TUnifiedPathId::BuildValid(internalPathId, *externalPathId));
     }
-    if (tablePath.find(".sys/") != TString::npos) {
+}
+
+TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
+    const TString& tablePath, const TSchemeShardLocalPathId externalPathId) {
+    const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId);
+    if (!internalPathId) {
         auto schemaAdapter =
             NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(TFsPath(tablePath).Fix().GetName());
         if (!schemaAdapter) {
-            return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tablePath + "::" + ::ToString(externalPathId));
+            return TConclusionStatus::Fail(
+                "incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());
         }
-        return schemaAdapter->BuildMetadataAccessor(tablePath, schemeShardLocalPathId, internalPathId);
-    } else if (!internalPathId) {
-        return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tablePath + "::" + ::ToString(externalPathId));
+        return schemaAdapter->BuildMetadataAccessor(tablePath, externalPathId, internalPathId);
     } else {
         if (!HasTable(*internalPathId)) {
             return std::make_shared<NOlap::TAbsentTableAccessor>(
-                tablePath, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId));
+                tablePath, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, externalPathId));
         } else {
             return std::make_shared<NOlap::TUserTableAccessor>(
-                tablePath, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId));
+                tablePath, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, externalPathId));
         }
     }
 }

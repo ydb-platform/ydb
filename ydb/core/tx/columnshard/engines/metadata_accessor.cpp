@@ -27,7 +27,7 @@ TString ITableMetadataAccessor::GetTableName() const {
 TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
     : TBase(tableName)
     , PathId(pathId) {
-    AFL_VERIFY(GetTablePath().find(".sys") == TString::npos);
+    AFL_VERIFY(pathId.IsValid());
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(const TSelectMetadataContext& context,

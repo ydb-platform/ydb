@@ -211,7 +211,7 @@ struct TBlackboard {
             const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
     EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, const TAccelerationParams& accelerationParams,
             TBatchedVec<TFinishedBlob> *finished = nullptr, const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
-    TBlobState& GetState(const TLogoBlobID &id);
+    TBlobState& GetState(const TLogoBlobID &id, ui32 orderNumber, const char* origin);
     ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex);
     void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,

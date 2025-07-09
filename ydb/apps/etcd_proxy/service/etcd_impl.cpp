@@ -38,10 +38,11 @@ void MakeSlice(const std::string_view& where, std::ostream& sql, NYdb::TParamsBu
     if (revision) {
         sql << "select * from (select max_by(TableRow(), `modified`) from `history`" << where;
         sql << " and " << AddParam("Rev", params, revision, paramsCounter) << " >= `modified`";
-        sql << " group by `key`) flatten columns where 0L < `version`";
+        sql << " group by `key`) flatten columns where"; ;
     } else {
-        sql << "select * from `current`" << where;
+        sql << "select * from `current`" << where << " and";
     }
+    sql << " 0L < `version`";
 }
 
 struct TRange : public TOperation {
@@ -248,7 +249,7 @@ struct TPut : public TOperation {
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
         const auto& newResultSetName = GetNameWithIndex("New", resultsCounter);
 
-        sql << oldResultSetName << " = select * from `current`" << keyFilter << ';' << std::endl;
+        sql << oldResultSetName << " = select * from `current`" << keyFilter << " and 0L < `version`;" << std::endl;
         sql << newResultSetName << " = select" << std::endl;
         sql << '\t' << keyParamName << " as `key`," << std::endl;
         sql << '\t' << "if(`version` > 0L, `created`, $Revision) as `created`," << std::endl;
@@ -366,7 +367,7 @@ struct TDeleteRange : public TOperation {
             ResultIndex = (*resultsCounter)++;
 
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
-        sql << oldResultSetName << " = select * from `current`" << keyFilter;
+        sql << oldResultSetName << " = select * from `current`" << keyFilter << " and 0L < `version`";
         if (!txnFilter.empty())
             sql << " and " << txnFilter;
         sql << ';' << std::endl;
@@ -1372,7 +1373,7 @@ private:
 
         sql << "select `ttl`, `ttl` - unwrap(cast(CurrentUtcDatetime(`id`) - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leaseParamName << " = `id`;" << std::endl;
         if (Keys) {
-            sql << "select `key` from `current` where " << leaseParamName << " = `lease`;" << std::endl;
+            sql << "select `key` from `current` where " << leaseParamName << " = `lease` and 0L < `version`;" << std::endl;
         }
     }
 

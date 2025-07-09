@@ -381,8 +381,7 @@ private:
                 kv->set_lease(change.NewData.Lease);
                 kv->set_mod_revision(change.NewData.Modified);
                 kv->set_create_revision(change.NewData.Created);
-            } else
-                kv->set_mod_revision(change.NewData.Modified);
+            }
 
             std::cout << (change.NewData.Version ? change.OldData.Version ? "Updated" : "Created" : "Deleted") << '(' << change.Key;
             if (change.OldData.Version) {
@@ -426,9 +425,8 @@ public:
         Become(&TThis::StateFunc);
         Stuff->Watchtower = SelfId();
 
-
         TReadSessionSettings settings;
-        settings.WithoutConsumer().ReadFromTimestamp(TInstant::Now()).AppendTopics(TTopicReadSettings("current/changes").AppendPartitionIds(0ULL));
+        settings.WithoutConsumer().ReadFromTimestamp(TInstant::Now()).AppendTopics(TTopicReadSettings(Stuff->Folder + "/current/changes").AppendPartitionIds(0ULL));
         settings.EventHandlers_.SimpleDataHandlers(
         [my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](TReadSessionEvent::TDataReceivedEvent& event) {
             if (const auto lock = stuff.lock()) {
@@ -467,6 +465,7 @@ public:
         }, false, false);
 
         ReadSession = Stuff->TopicClient->CreateReadSession(settings);
+        Y_ABORT_UNLESS(ReadSession);
     }
 private:
     struct TSubscriptions {

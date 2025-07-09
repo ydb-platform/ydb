@@ -346,6 +346,7 @@ TProxy::TProxy(int argc, char** argv)
     }
 
     if (!Folder.empty()) {
+        Stuff->Folder = Folder;
         std::ostringstream prefix;
         prefix << "pragma TablePathPrefix = '" << Database << Folder << "';" << std::endl;
         Stuff->TablePrefix = prefix.str();

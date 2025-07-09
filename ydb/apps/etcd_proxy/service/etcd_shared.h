@@ -25,7 +25,7 @@ struct TSharedStuff {
     std::atomic<i64> Revision = 0LL;
     NActors::TActorSystem* ActorSystem = nullptr;
     NActors::TActorId Watchtower, MainGate, HolderHouse;
-    std::string TablePrefix;
+    std::string Folder, TablePrefix;
 
     void UpdateRevision(i64 revision);
 };

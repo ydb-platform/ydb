@@ -1221,7 +1221,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/", defaultTableSchema);
         env.TestWaitNotification(runtime, txId);
-        
+
         ui64 pathId = 0;
         ui64 shardId = 0;
         auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -1234,18 +1234,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
         };
         TestLsPathId(runtime, expectedTablePathId, checkFn);
         UNIT_ASSERT(shardId);
-        
+
         const ui32 rowsInBatch = 100000;
         {   // Write data directly into shard
-            const auto& data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            const auto& data = NTxUT::MakeTestBlob({ 0, rowsInBatch }, defaultYdbSchema, {}, { "timestamp" });
             ui64 writeId = 0;
             std::vector<ui64> writeIds;
             txId = 200;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, expectedTablePathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, 0);
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, expectedTablePathId, data, defaultYdbSchema, &writeIds,
+                NEvWrite::EModificationType::Upsert, 0);
         }
 
         const auto& checkStat = [&](const TString& tablePath) -> bool {
-            for(auto i = 0; i != 60; ++i) {
+            for (auto i = 0; i != 60; ++i) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
                 auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, tablePath);
                 auto& tabletStats = description.GetPathDescription().GetTableStats();
@@ -1265,12 +1266,11 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, initialTablePath, false, NLs::PathNotExist);
-        
+
         TestLsPathId(runtime, expectedMovedTablePathId, NLs::PathStringEqual(movedTablePath));
 
         UNIT_ASSERT(checkStat(movedTablePath));
     }
-
 }
 
 Y_UNIT_TEST_SUITE(TOlapNaming) {

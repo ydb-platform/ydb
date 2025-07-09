@@ -147,8 +147,8 @@ bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionCon
 
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    TTablesManager tablesManagerLocal(Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(),
-        Self->Counters.GetPortionIndexCounters(), Self->TabletID());
+    TTablesManager tablesManagerLocal(
+        Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->Counters.GetPortionIndexCounters(), Self->TabletID());
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
         if (!tablesManagerLocal.InitFromDB(db, Self->Info())) {

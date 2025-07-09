@@ -75,7 +75,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
         const auto& internalPathId = Self->TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
         AFL_VERIFY(internalPathId);
-        read.PathId = NColumnShard::TUnifiedPathId{*internalPathId, schemeShardLocalPathId};
+        read.PathId = NColumnShard::TUnifiedPathId{ *internalPathId, schemeShardLocalPathId };
         read.ReadNothing = !Self->TablesManager.HasTable(*internalPathId);
         read.TableName = table;
 

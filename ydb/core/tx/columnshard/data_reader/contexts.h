@@ -264,7 +264,7 @@ private:
     YDB_READONLY_DEF(TFetcherMemoryProcessInfo, MemoryProcessInfo);
 
 public:
-    TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<TVersionedIndex>& versions,
+    TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
         const std::optional<TFetcherMemoryProcessInfo>& memoryProcessInfo = std::nullopt);
 };

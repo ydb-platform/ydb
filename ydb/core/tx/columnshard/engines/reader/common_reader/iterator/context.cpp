@@ -10,7 +10,6 @@ namespace NKikimr::NOlap::NReader::NCommon {
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : CommonContext(commonContext) {
     ReadMetadata = CommonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>();
-    Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
     double kffAccessors = 0.01;
     double kffFilter = 0.45;

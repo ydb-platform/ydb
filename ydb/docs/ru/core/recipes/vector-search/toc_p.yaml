@@ -1,5 +1,5 @@
 items:
-- name: Создание векторного индекса - быстрый старт
+- name: Векторный индекс — быстрый старт
   href: vector-index-quickstart.md
-- name: Создание векторного индекса с внешней подборкой
+- name: Векторный индекс — с внешней подборкой
   href: vector-index-with-prepared-dataset.md

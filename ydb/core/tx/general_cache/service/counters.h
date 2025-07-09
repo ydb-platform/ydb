@@ -41,6 +41,8 @@ public:
     const NMonitoring::TDynamicCounters::TCounterPtr ObjectCacheHit;
     const NMonitoring::TDynamicCounters::TCounterPtr CacheSizeCount;
     const NMonitoring::TDynamicCounters::TCounterPtr CacheSizeBytes;
+    const NMonitoring::TDynamicCounters::TCounterPtr CacheSizeLimitBytes;
+    const NMonitoring::TDynamicCounters::TCounterPtr CacheConfigSizeLimitBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr ObjectsInFlight;
     const NMonitoring::TDynamicCounters::TCounterPtr RequestsInFlight;
     const NMonitoring::TDynamicCounters::TCounterPtr RequestsQueueSize;
@@ -55,6 +57,8 @@ public:
     const NMonitoring::TDynamicCounters::TCounterPtr FetchedObject;
     const NMonitoring::TDynamicCounters::TCounterPtr NoExistsObject;
     const NMonitoring::TDynamicCounters::TCounterPtr FailedObject;
+    const NMonitoring::TDynamicCounters::TCounterPtr UselessCleaningCount;
+    
 
     TManagerCounters(NColumnShard::TCommonCountersOwner& base, const NPublic::TConfig& config)
         : TBase(base, "signals_owner", "manager")
@@ -66,6 +70,8 @@ public:
         , ObjectCacheHit(TBase::GetDeriviative("Cache/Object/Hit/Count"))
         , CacheSizeCount(TBase::GetValue("Cache/Size/Count"))
         , CacheSizeBytes(TBase::GetValue("Cache/Size/Bytes"))
+        , CacheSizeLimitBytes(TBase::GetValue("Cache/SizeLimit/Bytes"))
+        , CacheConfigSizeLimitBytes(TBase::GetValue("Cache/ConfigSizeLimit/Bytes"))
         , ObjectsInFlight(TBase::GetValue("DirectRequest/ObjectsInFlight/Count"))
         , RequestsInFlight(TBase::GetValue("DirectRequest/RequestsInFlight/Count"))
         , RequestsQueueSize(TBase::GetValue("RequestsQueue/Size/Count"))
@@ -79,7 +85,9 @@ public:
         , RemovedObjectInfo(TBase::GetDeriviative("RemovedInfo/Count"))
         , FetchedObject(TBase::GetDeriviative("DirectRequest/Fetched/Count"))
         , NoExistsObject(TBase::GetDeriviative("DirectRequest/NoExists/Count"))
-        , FailedObject(TBase::GetDeriviative("DirectRequest/Failed/Count")) {
+        , FailedObject(TBase::GetDeriviative("DirectRequest/Failed/Count"))
+        , UselessCleaningCount(TBase::GetDeriviative("UselessCleaning/Count"))
+    {
     }
 };
 

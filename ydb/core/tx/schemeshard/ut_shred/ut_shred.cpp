@@ -4,7 +4,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/storage_helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/data_erasure_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/shred_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>

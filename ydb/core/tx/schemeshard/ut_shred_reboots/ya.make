@@ -20,7 +20,7 @@ PEERDIR(
 )
 
 SRCS(
-    ut_data_erasure_reboots.cpp
+    ut_shred_reboots.cpp
 )
 
 YQL_LAST_ABI_VERSION()

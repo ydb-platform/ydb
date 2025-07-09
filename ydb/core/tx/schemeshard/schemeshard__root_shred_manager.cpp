@@ -1,4 +1,4 @@
-#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__shred_manager.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 

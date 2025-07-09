@@ -2,7 +2,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/schemeshard/schemeshard__data_erasure_manager.h>
+#include <ydb/core/tx/schemeshard/schemeshard__shred_manager.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

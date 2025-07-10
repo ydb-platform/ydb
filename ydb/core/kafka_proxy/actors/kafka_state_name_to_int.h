@@ -4,7 +4,9 @@
 #include <map>
 
 namespace NKafka {
-    extern const std::map<int, TString> numbersToStatesMapping;
+    namespace NConsumer {
+        extern const std::map<int, TString> NumbersToStatesMapping;
 
-    extern const std::map<TString, int> statesToNumbersMapping;
-} // namespace NKafka
+        extern const std::map<TString, int> StatesToNumbersMapping;
+    }
+} // namespace NKafka::NConsumer

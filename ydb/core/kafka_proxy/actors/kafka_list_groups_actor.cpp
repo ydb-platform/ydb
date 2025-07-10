@@ -107,8 +107,8 @@ TListGroupsResponseData TKafkaListGroupsActor::ParseGroupsMetadata(const NKqp::T
         TString protocolType = parser.ColumnParser("protocol_type").GetUtf8().c_str();
         groupInfo.GroupId = consumerName;
         groupInfo.ProtocolType = protocolType;
-        ui64 group_state_number = parser.ColumnParser("state").GetUint64();
-        groupInfo.GroupState = numbersToStatesMapping.at(group_state_number);
+        ui64 groupStateNumber = parser.ColumnParser("state").GetUint64();
+        groupInfo.GroupState = NKafka::NConsumer::NumbersToStatesMapping.at(groupStateNumber);
         listGroupsResponse.Groups.push_back(groupInfo);
     }
     return listGroupsResponse;
@@ -141,7 +141,7 @@ NYdb::TParams TKafkaListGroupsActor::BuildSelectParams() {
         auto& statesFilterParams = params.AddParam("$StatesFilter").BeginList();
         for (auto& statesNumberFilter : ListGroupsRequestData->StatesFilter) {
             if (statesNumberFilter.has_value()) {
-                statesFilterParams.AddListItem().Uint32(NKafka::statesToNumbersMapping.at(*statesNumberFilter));
+                statesFilterParams.AddListItem().Uint32(NKafka::NConsumer::StatesToNumbersMapping.at(*statesNumberFilter));
             }
         }
         statesFilterParams.EndList().Build();
@@ -161,7 +161,7 @@ void TKafkaListGroupsActor::SendToKqpConsumerGroupsRequest(const TActorContext& 
                                     SELECT_GROUPS_WITH_FILTER :
                                     SELECT_GROUPS_NO_FILTER),
     BuildSelectParams(),
-    ++KqpCookie,
+    KqpCookie,
     ctx,
     false
     );

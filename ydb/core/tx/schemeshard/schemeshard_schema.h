@@ -2039,7 +2039,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct ShredGenerations : Table<115> {
+    struct DataErasureGenerations : Table<115> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
@@ -2051,8 +2051,9 @@ struct Schema : NIceDb::Schema {
             StartTime
         >;
     };
+    using ShredGenerations = DataErasureGenerations;
 
-    struct WaitingShredTenants : Table<116> {
+    struct WaitingDataErasureTenants : Table<116> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
@@ -2064,8 +2065,9 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using WaitingShredTenants = WaitingDataErasureTenants;
 
-    struct TenantShredGenerations : Table<117> {
+    struct TenantDataErasureGenerations : Table<117> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
 
@@ -2075,8 +2077,9 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using TenantShredGenerations = TenantDataErasureGenerations;
 
-    struct WaitingShredShards : Table<118> {
+    struct WaitingDataErasureShards : Table<118> {
         struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
         struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
@@ -2088,6 +2091,7 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using WaitingShredShards = WaitingDataErasureShards;
 
     struct SysView : Table<119> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
@@ -2246,10 +2250,10 @@ struct Schema : NIceDb::Schema {
         BackupCollection,
         KMeansTreeProgress,
         KMeansTreeSample,
-        ShredGenerations,
-        WaitingShredTenants,
-        TenantShredGenerations,
-        WaitingShredShards,
+        DataErasureGenerations,
+        WaitingDataErasureTenants,
+        TenantDataErasureGenerations,
+        WaitingDataErasureShards,
         SysView,
         IncrementalRestoreOperations,
         KMeansTreeClusters

@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 #include <ydb/public/api/grpc/draft/ydb_replication_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 
 #include <google/protobuf/util/time_util.h>
 #include <google/protobuf/repeated_field.h>
@@ -404,11 +404,11 @@ TAsyncDescribeTransferResult TReplicationClient::DescribeTransfer(const std::str
 
 } // NReplication
 
-const Ydb::Replication::DescribeReplicationResult& TProtoAccessor::GetProto(const NReplication::TDescribeReplicationResult& result) {
+const Ydb::Replication::DescribeReplicationResult& NDraft::TProtoAccessor::GetProto(const NReplication::TDescribeReplicationResult& result) {
     return result.GetProto();
 }
 
-const Ydb::Replication::DescribeTransferResult& TProtoAccessor::GetProto(const NReplication::TDescribeTransferResult& result) {
+const Ydb::Replication::DescribeTransferResult& NDraft::TProtoAccessor::GetProto(const NReplication::TDescribeTransferResult& result) {
     return result.GetProto();
 }
 

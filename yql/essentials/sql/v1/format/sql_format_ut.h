@@ -417,14 +417,14 @@ Y_UNIT_TEST(AsyncReplication) {
 
 Y_UNIT_TEST(Transfer) {
     TCases cases = {
-        {"create transfer user from topic1 to table1 with (user='foo')",
-            "CREATE TRANSFER user FROM topic1 TO table1 WITH (user = 'foo');\n"},
         {"alter transfer user set (user='foo')",
             "ALTER TRANSFER user SET (user = 'foo');\n"},
         {"drop transfer user",
             "DROP TRANSFER user;\n"},
         {"drop transfer user cascade",
             "DROP TRANSFER user CASCADE;\n"},
+        {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; }",
+            "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n};\n"},
         {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; } with (user='foo')",
             "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n} WITH (user = 'foo');\n"},
         {"create transfer user from topic1 to table1 using $xxx with (user='foo')",
@@ -1570,6 +1570,18 @@ Y_UNIT_TEST(Except) {
             "SELECT\n\t1\nEXCEPT ALL\n(\n\tSELECT\n\t\t2\n);\n"},
         {"select 1 except distinct select 2 except select 3 except distinct select 4 except select 5",
             "SELECT\n\t1\nEXCEPT DISTINCT\nSELECT\n\t2\nEXCEPT\nSELECT\n\t3\nEXCEPT DISTINCT\nSELECT\n\t4\nEXCEPT\nSELECT\n\t5\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(UnionIntersectExcept) {
+    TCases cases = {
+        {"select 1 union select 2 intersect select 3 except select 4",
+         "SELECT\n\t1\nUNION\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nEXCEPT\nSELECT\n\t4\n;\n"},
+        {"select 1 intersect select 2 union select 3 except select 4",
+         "SELECT\n\t1\nINTERSECT\nSELECT\n\t2\nUNION\nSELECT\n\t3\nEXCEPT\nSELECT\n\t4\n;\n"},
     };
 
     TSetup setup;

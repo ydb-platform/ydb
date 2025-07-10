@@ -48,6 +48,11 @@ ELSEIF (OS_LINUX)
         # add build-id to binaries to allow external tools check equality of binaries
         -Wl,--build-id=sha1
     )
+ELSEIF (OS_FREEBSD)
+    LDFLAGS(
+        -fuse-ld=lld
+        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld
+    )
 ELSEIF (OS_DARWIN OR OS_IOS)
     LDFLAGS(
         -fuse-ld=lld

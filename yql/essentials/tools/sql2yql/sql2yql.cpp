@@ -228,7 +228,7 @@ int BuildAST(int argc, char* argv[]) {
     TString queryString;
     ui16 syntaxVersion;
     TString outFileNameFormat;
-    NYql::TLangVersion langVer;
+    NYql::TLangVersion langVer = NYql::MinLangVersion;
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = NYql::YtProviderName;
     clusterMapping["pg_catalog"] = NYql::PgProviderName;
@@ -243,10 +243,12 @@ int BuildAST(int argc, char* argv[]) {
     };
 
     THashSet<TString> flags;
+    bool noDebug = false;
     THolder<NYql::TGatewaysConfig> gatewaysConfig;
 
     opts.AddLongOption('o', "output", "save output to file").RequiredArgument("file").StoreResult(&outFileName);
     opts.AddLongOption('q', "query", "query string").RequiredArgument("query").StoreResult(&queryString);
+    opts.AddLongOption("ndebug", "do not print anything when no errors present").Optional().StoreTrue(&noDebug);
     opts.AddLongOption('t', "tree", "print AST proto text").NoArgument();
     opts.AddLongOption('d', "diff", "print inlined diff for original query and query build from AST if they differ").NoArgument();
     opts.AddLongOption('D', "dump", "dump inlined diff for original query and query build from AST").NoArgument();
@@ -445,8 +447,11 @@ int BuildAST(int argc, char* argv[]) {
 
             bool hasError = false;
             if (!parseRes.Issues.Empty()) {
-                parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);
                 hasError = AnyOf(parseRes.Issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;});
+
+                if (hasError || !noDebug) {
+                    parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);
+                }
             }
 
             if (!parseRes.IsOk() && !hasError) {

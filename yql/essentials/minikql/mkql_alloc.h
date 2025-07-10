@@ -491,7 +491,7 @@ inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
 void* MKQLArrowAllocate(ui64 size);
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
 void MKQLArrowFree(const void* mem, ui64 size);
-void MKQLArrowUntrack(const void* mem, ui64 size);
+void MKQLArrowUntrack(const void* mem);
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>
 struct TWithMiniKQLAlloc {

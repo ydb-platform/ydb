@@ -41,6 +41,11 @@ namespace NMonitoring {
          * @return snapshot of the state of this collector.
          */
         virtual IHistogramSnapshotPtr Snapshot() const = 0;
+
+        /**
+        * @return copy of collector implementation
+        */
+        virtual THolder<IHistogramCollector> Clone() = 0;
     };
 
     using IHistogramCollectorPtr = THolder<IHistogramCollector>;

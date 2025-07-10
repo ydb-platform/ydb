@@ -156,7 +156,7 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
 
         TString ToString() const {
             TStringStream str;
-            str << "{Replicas: {" << JoinSeq(", ", Replicas) << "}"
+            str << "{Replicas: [" << JoinSeq(", ", Replicas) << "]"
                 << " WriteOnly: " << WriteOnly
                 << " State: " << static_cast<int>(State)
                 << "}";
@@ -185,7 +185,7 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
     TString ToString() const override {
         TStringStream str;
         str << "{EvResolveReplicasList"
-            << " ReplicaGroups: {" << JoinSeq(", ", ReplicaGroups) << "}"
+            << " ReplicaGroups: [" << JoinSeq(", ", ReplicaGroups) << "]"
             << "}";
         return str.Str();
     }

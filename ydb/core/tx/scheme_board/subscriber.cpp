@@ -542,21 +542,16 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         this->Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
-    void OnReplicaFailure() {
-        if (CurrentSyncRequest) {
-            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
-            CurrentSyncRequest = 0;
-        }
-
-        this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
-    }
-
     void Handle(TEvents::TEvGone::TPtr& ev) {
         if (ev->Sender != ReplicaSubscriber) {
             return;
         }
 
-        OnReplicaFailure();
+        if (CurrentSyncRequest) {
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
+            CurrentSyncRequest = 0;
+        }
+        this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
 
         ReplicaSubscriber = TActorId();
 

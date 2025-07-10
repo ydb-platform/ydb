@@ -237,6 +237,10 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "/Root/TwoShard");
+        const auto startPathId = describeResult.GetPathId();
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT OwnerId, PartIdx, Path, PathId
             FROM `/Root/.sys/partition_stats`

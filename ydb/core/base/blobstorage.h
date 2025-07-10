@@ -1371,14 +1371,14 @@ struct TEvBlobStorage {
             PS_BLOB_IS_RECOVERABLE = 4,     // blob parts are definitely placed incorrectly or there are missing parts but blob may be recovered
             PS_BLOB_IS_LOST = 5,            // blob is lost/unrecoverable
         };
-        EPlacementStatus PlacementStatus;
+        EPlacementStatus PlacementStatus = PS_OK;
 
         enum EDataStatus {
             DS_OK = 1,      // all data parts contain valid data
             DS_UNKNOWN = 2, // status is unknown because of missing disks or network problems
             DS_ERROR = 3,   // some parts definitely contain invalid data
         };
-        EDataStatus DataStatus;
+        EDataStatus DataStatus = DS_OK;
         TString DataInfo; // textual info about checks in blob data
 
         std::shared_ptr<TExecutionRelay> ExecutionRelay;

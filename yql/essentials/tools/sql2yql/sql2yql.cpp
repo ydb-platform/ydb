@@ -228,7 +228,7 @@ int BuildAST(int argc, char* argv[]) {
     TString queryString;
     ui16 syntaxVersion;
     TString outFileNameFormat;
-    NYql::TLangVersion langVer;
+    NYql::TLangVersion langVer = NYql::MinLangVersion;
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = NYql::YtProviderName;
     clusterMapping["pg_catalog"] = NYql::PgProviderName;

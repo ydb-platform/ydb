@@ -25,6 +25,7 @@ class TWritePortionInfoWithBlobsResult;
 class ISnapshotSchema {
 protected:
     virtual TString DoDebugString() const = 0;
+    virtual NJson::TJsonValue DoDebugJson() const = 0;
 
 public:
     using TPtr = std::shared_ptr<ISnapshotSchema>;
@@ -71,6 +72,10 @@ public:
     std::shared_ptr<arrow::Field> GetFieldByIndexVerified(const int index) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnIdOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const;
+
+    NJson::TJsonValue DebugJson() const {
+        return DoDebugJson();
+    }
 
     TString DebugString() const {
         return DoDebugString();

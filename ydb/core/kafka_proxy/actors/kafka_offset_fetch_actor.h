@@ -8,14 +8,14 @@ namespace NKafka {
 
 const TString FETCH_ASSIGNMENTS = R"sql(
     --!syntax_v1
-    DECLARE $ConsumerGroup AS Utf8;
+    DECLARE $ConsumerGroups AS List<Utf8>;
     DECLARE $Database AS Utf8;
 
-    SELECT assignment
+    SELECT assignment, consumer_group
     FROM `%s`
     VIEW PRIMARY KEY
     WHERE database = $Database
-      AND consumer_group = $ConsumerGroup
+      AND consumer_group IN $ConsumerGroups
 )sql";
 
 struct TopicEntities {
@@ -48,11 +48,11 @@ public:
     void Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::vector<TConsumerProtocolAssignment>& assignments);
     void ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic);
+    void ParseGroupsAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>>& assignments);
     TOffsetFetchResponseData::TPtr GetOffsetFetchResponse();
+    NYdb::TParamsBuilder BuildFetchAssignmentsParams(const std::vector<std::optional<TString>>& groupIds);
     void ReplyError(const TActorContext& ctx);
-    NYdb::TParamsBuilder BuildFetchAssignmentsParams(TString groupId);
     void Die(const TActorContext &ctx);
 
 private:
@@ -68,7 +68,7 @@ private:
     ui32 InflyTopics = 0;
     ui32 WaitingGroupTopicsInfo = 0;
     ui32 KqpCookie = 0;
-    std::queue<TKafkaString> GroupsToFetch;
+    std::vector<std::optional<TString>> GroupsToFetch;
     const TString DatabasePath;
     bool KqpSessionCreated = false;
 };

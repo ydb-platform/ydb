@@ -991,6 +991,79 @@ Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
     }
 }
 
+Y_UNIT_TEST_TWIN(JoinInclusionTest, StreamLookupJoin) {
+
+    if (StreamLookupJoin) {
+        return;
+    }
+
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+
+    TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(appConfig);;
+
+    TKikimrRunner kikimr(serverSettings);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {  // create tables
+        const TString query = R"(
+            create table A (
+                a int32,  b int32,
+                primary key(a)
+            );
+
+            create table B (
+                a int32,  b int32,
+                primary key(a, b),
+                index BView global on(b)
+            );
+        )";
+        UNIT_ASSERT(session.ExecuteSchemeQuery(query).GetValueSync().IsSuccess());
+    }
+
+    {  // fill tables
+        const TString query = R"(
+            $a = AsList(
+                AsStruct(1 as a, 2 as b),
+                AsStruct(2 as a, 2 as b),
+                AsStruct(3 as a, 2 as b),
+                AsStruct(4 as a, 2 as b),
+            );
+
+            $b = AsList(
+                AsStruct(1 as a, 2 as b),
+                AsStruct(2 as a, 2 as b),
+                AsStruct(3 as a, 2 as b),
+                AsStruct(4 as a, 2 as b),
+
+            );
+
+            insert into B select * from AS_TABLE($b);
+            insert into A select * from AS_TABLE($a);
+            insert into B (a, b) values (5, null);
+
+        )";
+        UNIT_ASSERT(session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+    }
+
+    {
+        TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        const TString query = R"(
+            select A.a, A.b, B.a, B.b from A
+            left join (select * from B where b is null) as B
+            on A.a = B.a and A.b = B.b
+        )";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        CompareYson(R"([
+            [[1];[2];#;#];[[2];[2];#;#];[[3];[2];#;#];[[4];[2];#;#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);

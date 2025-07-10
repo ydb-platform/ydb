@@ -95,6 +95,7 @@ YT_DEFINE_ERROR_ENUM(
     ((UniqueIndexConflict)                    (1741))
     ((TabletReplicationEraMismatch)           (1742))
     ((OrderedDynamicStoreRotateEpochMismatch) (1743))
+    ((TabletIsInIntermediateState)            (1744))
 );
 
 DEFINE_ENUM(EInMemoryMode,

@@ -119,6 +119,7 @@ public:
 
     THashSet<TString> GatewayTypes;
     TString UdfResolverPath;
+    TString UdfResolverLog;
     bool UdfResolverFilterSyscalls = false;
     bool ScanUdfs = false;
     THolder<NYqlMountConfig::TMountConfig> MountConfig;

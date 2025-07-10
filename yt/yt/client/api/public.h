@@ -57,6 +57,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoSuchAttribute)                                   (1920))
     ((FormatDisabled)                                    (1925))
     ((ClusterLivenessCheckFailed)                        (1926))
+    ((UnsupportedArchiveVersion)                         (1927))
 );
 
 DEFINE_ENUM(ERowModificationType,
@@ -143,6 +144,7 @@ DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IClientBase)
 DECLARE_REFCOUNTED_STRUCT(IClient)
 DECLARE_REFCOUNTED_STRUCT(IInternalClient)
+DECLARE_REFCOUNTED_STRUCT(IDynamicTableTransaction)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
 DECLARE_REFCOUNTED_STRUCT(IPrerequisite)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)

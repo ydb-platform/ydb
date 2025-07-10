@@ -73,11 +73,11 @@ def parse_resources(resources):
         def sort_key(pair):
             pattern, _ = pair
             if isinstance(pattern, RegexObject):
-                return (1, 0, pattern.pattern.count("/"), -len(pattern.pattern))
+                return (1, 0, -pattern.pattern.count("/"), -len(pattern.pattern))
             elif probably_regex(pattern):
-                return (1, 1, pattern.count("/"), -len(pattern))
+                return (1, 1, -pattern.count("/"), -len(pattern))
             else:
-                return (0, 0, pattern.count("/"), -len(pattern))
+                return (0, 0, -pattern.count("/"), -len(pattern))
 
         return sorted(resources, key=sort_key)
 

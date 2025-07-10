@@ -5,7 +5,6 @@
 #include <util/generic/string.h>
 
 #include <ydb/core/protos/external_sources.pb.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NExternalSource {

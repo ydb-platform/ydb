@@ -1,5 +1,7 @@
 #include "bundle_controller_commands.h"
 
+#include <yt/yt/client/bundle_controller_client/bundle_controller_settings.h>
+
 #include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NDriver {

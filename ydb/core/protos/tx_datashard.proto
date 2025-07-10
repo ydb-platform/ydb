@@ -2227,6 +2227,12 @@ message TTxVolatileDetails {
     // When true marks an arbiter for other participants
     // Arbiters hold outgoing readsets until the transaction is decided
     optional bool IsArbiter = 9;
+
+    // When true readset expectations are disabled
+    // This is used when converting non-volatile distributed transactions to
+    // optimistic volatile execution for compatibility with shards which don't
+    // support readset flags.
+    optional bool DisableExpectations = 10;
 }
 
 // Sent by datashard when some overload reason stopped being relevant
@@ -2368,20 +2374,20 @@ message TEvInMemoryStateResponse {
 // Once the operation is done, any deleted data not used initially
 // will be included in garbage collection requests for the blobstorage.
 // Note: deleted data may still be used for a while, e.g. for history for MVCC.
-message TEvForceDataCleanup {
-    optional uint64 DataCleanupGeneration = 1; // increasing sequence
+message TEvVacuum {
+    optional uint64 VacuumGeneration = 1; // increasing sequence
 }
 
-// Returns DataCleanupGeneration of the last successfully completed TEvForceDataCleanup request.
-// Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
-message TEvForceDataCleanupResult {
+// Returns VacuumCleanupGeneration of the last successfully completed TEvVacuum request.
+// Intermediate requests and corresponding TEvVacuumResult's may be skipped.
+message TEvVacuumResult {
     enum EStatus {
         UNKNOWN = 0;
         OK = 1;
         WRONG_SHARD_STATE = 2;
         BORROWED = 3;
     };
-    optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
+    optional uint64 VacuumGeneration = 1; // from corresponding request (or greater)
     optional uint64 TabletId = 2;
     optional EStatus Status = 3;
 }

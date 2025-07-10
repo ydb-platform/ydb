@@ -2370,18 +2370,15 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(BridgeModeCollectInfo)
     {
-        TTestEnvOpts opts(8);
+        TTestEnvOpts opts(16);
         TCmsTestEnv env(opts.WithBridgeMode());
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
                 auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
                 ChangePileMap(x);
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        env.SetObserverFunc(observerFunc);
-
+            return prev(ev);
+        });
         env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));
 
         TAutoPtr<IEventHandle> handle;
@@ -2389,12 +2386,38 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT(reply);
         const auto &info = *reply->Info;
         UNIT_ASSERT(info.IsBridgeMode);
-        UNIT_ASSERT(info.NodeIdToPileId.size() == 8);
+        UNIT_ASSERT_EQUAL(info.NodeIdToPileId.size(), 16);
+        UNIT_ASSERT_EQUAL(info.BSGroupsCount(), 8);
+        for (const auto& [_, group] : info.AllBSGroups()) {
+            UNIT_ASSERT(group.VDisks.size() > 0);
+        }
 
         for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
             UNIT_ASSERT(nodeId % opts.PileCount == pileId);
         }
 
+    }
+
+    Y_UNIT_TEST(BridgeModeGroupsTest)
+    {
+        TTestEnvOpts opts(16);
+        TCmsTestEnv env(opts.WithBridgeMode());
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8), 60000000, "storage"));
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
     }
 }
 

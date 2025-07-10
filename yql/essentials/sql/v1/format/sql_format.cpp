@@ -833,10 +833,21 @@ private:
 
     void VisitSelect(const TRule_select_stmt& msg) {
         NewLine();
+        Visit(msg.GetRule_select_stmt_intersect1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_union_op1());
+            NewLine();
+            Visit(block.GetRule_select_stmt_intersect2());
+        }
+    }
+
+    void VisitSelectIntersect(const TRule_select_stmt_intersect& msg) {
+        NewLine();
         Visit(msg.GetRule_select_kind_parenthesis1());
         for (const auto& block : msg.GetBlock2()) {
             NewLine();
-            Visit(block.GetRule_select_op1());
+            Visit(block.GetRule_intersect_op1());
             NewLine();
             Visit(block.GetRule_select_kind_parenthesis2());
         }
@@ -844,10 +855,21 @@ private:
 
     void VisitSelectUnparenthesized(const TRule_select_unparenthesized_stmt& msg) {
         NewLine();
+        Visit(msg.GetRule_select_unparenthesized_stmt_intersect1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_union_op1());
+            NewLine();
+            Visit(block.GetRule_select_stmt_intersect2());
+        }
+    }
+
+    void VisitSelectUnparenthesizedIntersect(const TRule_select_unparenthesized_stmt_intersect& msg) {
+        NewLine();
         Visit(msg.GetRule_select_kind_partial1());
         for (const auto& block : msg.GetBlock2()) {
             NewLine();
-            Visit(block.GetRule_select_op1());
+            Visit(block.GetRule_intersect_op1());
             NewLine();
             Visit(block.GetRule_select_kind_parenthesis2());
         }
@@ -3012,7 +3034,9 @@ TStaticData::TStaticData()
 
         {TRule_pragma_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitPragma)},
         {TRule_select_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelect)},
+        {TRule_select_stmt_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectIntersect)},
         {TRule_select_unparenthesized_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectUnparenthesized)},
+        {TRule_select_unparenthesized_stmt_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectUnparenthesizedIntersect)},
         {TRule_named_nodes_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedNodes)},
         {TRule_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTable)},
         {TRule_drop_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTable)},

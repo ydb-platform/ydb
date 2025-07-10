@@ -39,7 +39,7 @@ class TUnboxedImmutableComputationNode: public TRefCountedComputationNode<ICompu
 public:
     TUnboxedImmutableComputationNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value);
 
-    ~TUnboxedImmutableComputationNode();
+    ~TUnboxedImmutableComputationNode() override;
 
 private:
     void InitNode(TComputationContext&) const override {}
@@ -395,13 +395,11 @@ private:
     ui32 GetDependencyWeight() const final { return 42U; }
 
     ui32 GetDependencesCount() const final {
-        return Dependence_ ? 1U : 0U;
+        return Dependences_.size();
     }
 
     IComputationNode* AddDependence(const IComputationNode* node) final {
-        if (!Dependence_) {
-            Dependence_ = node;
-        }
+        Dependences_.push_back(node);
         return this;
     }
 
@@ -420,7 +418,7 @@ private:
     }
 protected:
     const IComputationNode *const Source_;
-    const IComputationNode *Dependence_ = nullptr;
+    TConstComputationNodePtrVector Dependences_;
 };
 
 template <typename TDerived>
@@ -443,7 +441,7 @@ protected:
     ui32 GetIndexImpl() const;
     void CollectDependentIndexesImpl(const IComputationNode* self,
         const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies,
-        const IComputationNode* dependence) const;
+        const TConstComputationNodePtrVector& dependences) const;
 };
 
 template <typename TDerived>
@@ -467,7 +465,7 @@ private:
     }
 
     void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
-        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependence_);
+        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependences_);
     }
 };
 
@@ -475,7 +473,7 @@ class TStatefulFlowComputationNodeBase {
 protected:
     TStatefulFlowComputationNodeBase(ui32 stateIndex, EValueRepresentation stateKind);
     void CollectDependentIndexesImpl(const IComputationNode* self, const IComputationNode* owner,
-        IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const;
+        IComputationNode::TIndexesMap& dependencies, const TConstComputationNodePtrVector& dependences) const;
 
     const ui32 StateIndex_;
     const EValueRepresentation StateKind_;
@@ -507,7 +505,7 @@ private:
     }
 
     void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
-        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependence_);
+        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependences_);
     }
 };
 
@@ -517,7 +515,7 @@ class TPairStateFlowComputationNodeBase {
 protected:
     TPairStateFlowComputationNodeBase(ui32 stateIndex, EValueRepresentation firstKind, EValueRepresentation secondKind);
     void CollectDependentIndexesImpl(const IComputationNode* self, const IComputationNode* owner,
-        IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const;
+        IComputationNode::TIndexesMap& dependencies, const TConstComputationNodePtrVector& dependences) const;
 
     const ui32 StateIndex_;
     const EValueRepresentation FirstKind_, SecondKind_;
@@ -543,7 +541,7 @@ private:
     }
 
     void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
-        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependence_);
+        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependences_);
     }
 };
 
@@ -589,7 +587,7 @@ private:
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* values) const final;
 
 protected:
-    const IComputationNode* Dependence_ = nullptr;
+    TConstComputationNodePtrVector Dependences_;
     const IComputationNode* Owner_ = nullptr;
     std::vector<std::pair<ui32, EValueRepresentation>> InvalidationSet_;
     TFetcher Fetcher_;
@@ -623,7 +621,7 @@ class TStatelessWideFlowComputationNodeBase {
 protected:
     ui32 GetIndexImpl() const;
     void CollectDependentIndexesImpl(const IComputationNode* self, const IComputationNode* owner,
-        IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const;
+        IComputationNode::TIndexesMap& dependencies, const TConstComputationNodePtrVector& dependences) const;
 };
 
 template <typename TDerived>
@@ -644,7 +642,7 @@ private:
     }
 
     void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
-        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependence_);
+        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependences_);
     }
 };
 
@@ -652,7 +650,7 @@ class TStatefulWideFlowComputationNodeBase {
 protected:
     TStatefulWideFlowComputationNodeBase(ui32 stateIndex, EValueRepresentation stateKind);
     void CollectDependentIndexesImpl(const IComputationNode* self,
-        const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const;
+        const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies, const TConstComputationNodePtrVector& dependences) const;
 
     const ui32 StateIndex_;
     const EValueRepresentation StateKind_;
@@ -683,7 +681,7 @@ private:
     }
 
     void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
-        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependence_);
+        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependences_);
     }
 };
 
@@ -691,7 +689,7 @@ class TPairStateWideFlowComputationNodeBase {
 protected:
     TPairStateWideFlowComputationNodeBase(ui32 stateIndex, EValueRepresentation firstKind, EValueRepresentation secondKind);
     void CollectDependentIndexesImpl(const IComputationNode* self, const IComputationNode* owner,
-        IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const;
+        IComputationNode::TIndexesMap& dependencies, const TConstComputationNodePtrVector& dependences) const;
 
     const ui32 StateIndex_;
     const EValueRepresentation FirstKind_, SecondKind_;
@@ -717,7 +715,7 @@ private:
     }
 
     void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
-        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependence_);
+        CollectDependentIndexesImpl(this, owner, dependencies, this->Dependences_);
     }
 };
 
@@ -868,7 +866,7 @@ public:
     {
     }
 
-    ~TComputationValueBaseNotSupportedStub() {
+    ~TComputationValueBaseNotSupportedStub() override {
     }
 
 private:
@@ -935,7 +933,7 @@ public:
     {
     }
 
-    ~TComputationValueBase() {
+    ~TComputationValueBase() override {
     }
 
     TString DebugString() const {

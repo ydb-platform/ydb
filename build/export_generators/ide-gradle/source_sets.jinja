@@ -65,7 +65,8 @@ sourceSets {
     }
 {%  endif -%}
 
-{%- if not proto_template and extra_targets|length %}
+{%- if not proto_template -%}
+{%-     if extra_targets|length %}
     test {
 {%-     for extra_target in extra_targets -%}
 {%-         set reldir = "" -%}
@@ -106,7 +107,13 @@ sourceSets {
 {%-         endfor -%}
 {%-     endfor %}
     }
-{%  endif -%}
+{%      else %}
+    test {
+        java.exclude("**/*")
+        resources.exclude("**/*")
+    }
+{%      endif -%}
+{%- endif -%}
 }
 
 tasks.withType<Jar>() {

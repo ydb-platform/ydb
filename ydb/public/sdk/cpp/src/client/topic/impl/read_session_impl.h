@@ -1111,7 +1111,7 @@ struct THash<NYdb::NTopic::TPartitionStreamImpl<true>::TKey> {
     }
 };
 
-namespace NYdb::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 // Read session for single cluster.
 // This class holds only read session logic.

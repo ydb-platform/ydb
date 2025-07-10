@@ -46,6 +46,8 @@ public:
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, Static> KqpPushOlapProcess;
 
+    NCommon::TConfSetting<bool, Static> KqpForceImmediateEffectsExecution;
+
     /* Compile time */
     NCommon::TConfSetting<ui64, Static> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<TString, Static> _DefaultCluster;
@@ -68,6 +70,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
@@ -100,6 +103,7 @@ public:
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapPushdownAggregate() const;
     bool HasOptEnableOlapPushdownProjections() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;

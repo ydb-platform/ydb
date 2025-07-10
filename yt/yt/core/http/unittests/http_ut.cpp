@@ -22,6 +22,8 @@
 #include <yt/yt/core/net/listener.h>
 #include <yt/yt/core/net/mock/dialer.h>
 
+#include <yt/yt/core/rpc/public.h>
+
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/scheduler.h>
@@ -626,9 +628,9 @@ private:
     void SetUp() override
     {
         TestPort = NTesting::GetFreePort();
-        TestUrl = Format("http://localhost:%v", TestPort);
         Poller = CreateThreadPoolPoller(4, "HttpTest");
         if (!GetParam()) {
+            TestUrl = Format("http://localhost:%v", TestPort);
             ServerConfig = New<NHttp::TServerConfig>();
             SetupServer(ServerConfig);
             Server = NHttp::CreateServer(ServerConfig, Poller);
@@ -637,22 +639,19 @@ private:
             SetupClient(clientConfig);
             Client = NHttp::CreateClient(clientConfig, Poller);
         } else {
+            TestUrl = Format("https://localhost:%v", TestPort);
             auto serverConfig = New<NHttps::TServerConfig>();
             serverConfig->Credentials = New<NHttps::TServerCredentialsConfig>();
-            serverConfig->Credentials->PrivateKey = New<TPemBlobConfig>();
-            serverConfig->Credentials->PrivateKey->Value = TestCertificate;
-            serverConfig->Credentials->CertificateChain = New<TPemBlobConfig>();
-            serverConfig->Credentials->CertificateChain->Value = TestCertificate;
+            serverConfig->Credentials->PrivateKey = CreateTestKeyBlob("key.pem");
+            serverConfig->Credentials->CertificateChain = CreateTestKeyBlob("cert.pem");
             SetupServer(serverConfig);
             ServerConfig = serverConfig;
             Server = NHttps::CreateServer(serverConfig, Poller);
 
             auto clientConfig = New<NHttps::TClientConfig>();
             clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
-            clientConfig->Credentials->PrivateKey = New<TPemBlobConfig>();
-            clientConfig->Credentials->PrivateKey->Value = TestCertificate;
-            clientConfig->Credentials->CertificateChain = New<TPemBlobConfig>();
-            clientConfig->Credentials->CertificateChain->Value = TestCertificate;
+            clientConfig->Credentials->InsecureSkipVerify = false;
+            clientConfig->Credentials->CertificateAuthority = CreateTestKeyBlob("ca.pem");
             SetupClient(clientConfig);
             Client = NHttps::CreateClient(clientConfig, Poller);
         }
@@ -678,6 +677,27 @@ public:
         WaitFor(rsp->Close()).ThrowOnError();
     }
 };
+
+TEST_P(THttpServerTest, CertificateValidation)
+{
+    Server->AddHandler("/ok", New<TOKHttpHandler>());
+    Server->Start();
+
+    auto clientConfig = New<NHttps::TClientConfig>();
+    clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
+    clientConfig->Credentials->InsecureSkipVerify = false;
+    auto client = NHttps::CreateClient(clientConfig, Poller);
+
+    auto result = WaitFor(client->Get(TestUrl + "/ok"));
+    EXPECT_THROW_WITH_ERROR_CODE(result.ThrowOnError(), NRpc::EErrorCode::SslError);
+    EXPECT_THROW_WITH_SUBSTRING(result.ThrowOnError(), "SSL_do_handshake failed");
+
+    if (GetParam()) {
+        auto result = WaitFor(Client->Get(Format("https://127.0.0.1:%v/ok", TestPort)));
+        EXPECT_THROW_WITH_ERROR_CODE(result.ThrowOnError(), NRpc::EErrorCode::SslError);
+        EXPECT_THROW_WITH_SUBSTRING(result.ThrowOnError(), "SSL_do_handshake failed");
+    }
+}
 
 TEST_P(THttpServerTest, SimpleRequest)
 {

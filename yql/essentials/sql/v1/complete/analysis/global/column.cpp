@@ -5,6 +5,9 @@
 
 #include <yql/essentials/sql/v1/complete/syntax/format.h>
 
+#include <util/generic/hash_set.h>
+#include <util/generic/scope.h>
+
 namespace NSQLComplete {
 
     namespace {
@@ -46,7 +49,7 @@ namespace NSQLComplete {
             std::any visitTerminal(antlr4::tree::TerminalNode* node) override {
                 switch (node->getSymbol()->getType()) {
                     case SQLv1::TOKEN_ID_QUOTED:
-                        return Unquoted(GetText(node));
+                        return TString(Unquoted(GetText(node)));
                     case SQLv1::TOKEN_ID_PLAIN:
                         return GetText(node);
                 }
@@ -73,6 +76,11 @@ namespace NSQLComplete {
 
         class TInferenceVisitor: public TSQLv1BaseVisitor {
         public:
+            explicit TInferenceVisitor(THashMap<TString, SQLv1::Subselect_stmtContext*> subqueries)
+                : Subqueries_(std::move(subqueries))
+            {
+            }
+
             std::any visitJoin_source(SQLv1::Join_sourceContext* ctx) override {
                 return AccumulatingVisit(ctx->flatten_source());
             }
@@ -98,25 +106,43 @@ namespace NSQLComplete {
             }
 
             std::any visitTable_ref(SQLv1::Table_refContext* ctx) override {
-                TString cluster = GetId(ctx->cluster_expr()).GetOrElse("");
-
-                TMaybe<TString> path = GetId(ctx->table_key());
-                if (path.Empty()) {
-                    return {};
+                if (TMaybe<TString> path = GetId(ctx->table_key())) {
+                    TString cluster = GetId(ctx->cluster_expr()).GetOrElse("");
+                    return TColumnContext{
+                        .Tables = {
+                            TTableId{std::move(cluster), std::move(*path)},
+                        },
+                    };
                 }
 
-                return TColumnContext{
-                    .Tables = {
-                        TTableId{std::move(cluster), std::move(*path)},
-                    },
-                };
+                if (TMaybe<TString> named = NSQLComplete::GetId(ctx->bind_parameter())) {
+                    if (auto it = Subqueries_.find(*named); it != Subqueries_.end()) {
+                        if (Resolving_.contains(*named)) {
+                            return {};
+                        }
+
+                        Resolving_.emplace(*named);
+                        Y_DEFER {
+                            Resolving_.erase(*named);
+                        };
+
+                        return visit(it->second);
+                    }
+                }
+
+                return {};
             }
 
             std::any visitSelect_stmt(SQLv1::Select_stmtContext* ctx) override {
-                return AccumulatingVisit(ctx->select_kind_parenthesis());
+                return AccumulatingVisit(ctx->select_stmt_intersect());
             }
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
+                TColumnContext without;
+                if (std::any any = VisitNullable(ctx->without_column_list()); any.has_value()) {
+                    without = std::move(std::any_cast<TColumnContext>(any));
+                }
+
                 TColumnContext context = AccumulatingVisit(ctx->result_column());
                 auto asterisks = std::ranges::partition(context.Columns, [](const TColumnId& x) {
                     return x.Name != "*";
@@ -130,13 +156,18 @@ namespace NSQLComplete {
 
                 TColumnContext imported;
                 for (const TColumnId& qualified : asterisks) {
-                    auto aliased = source.ExtractAliased(qualified.TableAlias);
+                    TMaybe<TStringBuf> alias = qualified.TableAlias;
+                    if (alias->Empty()) {
+                        alias = Nothing();
+                    }
+
+                    auto aliased = source.ExtractAliased(alias);
                     imported = std::move(imported) | std::move(aliased);
                 }
 
                 context.Columns.erase(asterisks.begin(), asterisks.end());
                 imported = std::move(imported).Renamed("");
-                return std::move(context) | std::move(imported);
+                return std::move(context) | std::move(imported) | std::move(without);
             }
 
             std::any visitResult_column(SQLv1::Result_columnContext* ctx) override {
@@ -167,6 +198,27 @@ namespace NSQLComplete {
                 }
 
                 return {};
+            }
+
+            std::any visitWithout_column_list(SQLv1::Without_column_listContext* ctx) override {
+                return AccumulatingVisit(ctx->without_column_name());
+            };
+
+            std::any visitWithout_column_name(SQLv1::Without_column_nameContext* ctx) override {
+                TString table = GetId(ctx->an_id(0)).GetOrElse("");
+                TMaybe<TString> column = GetId(ctx->an_id(1)).Or([&] {
+                    return GetId(ctx->an_id_without());
+                });
+
+                if (column.Empty()) {
+                    return {};
+                }
+
+                return TColumnContext{
+                    .WithoutByTableAlias = {
+                        {std::move(table), {{std::move(*column)}}},
+                    },
+                };
             }
 
         private:
@@ -216,43 +268,82 @@ namespace NSQLComplete {
                         return std::move(acc) | std::move(child);
                     });
             }
+
+            THashMap<TString, SQLv1::Subselect_stmtContext*> Subqueries_;
+            THashSet<TString> Resolving_;
         };
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(antlr4::TokenStream* tokens, size_t cursorPosition)
-                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
+            TVisitor(const TParsedInput& input)
+                : TSQLv1NarrowingVisitor(input)
             {
             }
 
             std::any visitSql_stmt_core(SQLv1::Sql_stmt_coreContext* ctx) override {
-                if (IsEnclosing(ctx)) {
+                if (ctx->named_nodes_stmt() || IsEnclosing(ctx)) {
                     return visitChildren(ctx);
                 }
                 return {};
             }
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
-                SQLv1::Join_sourceContext* source = ctx->join_source(0);
-                if (source == nullptr) {
-                    source = ctx->join_source(1);
+                antlr4::ParserRuleContext* source = nullptr;
+                if (IsEnclosingStrict(ctx->expr(0)) ||
+                    IsEnclosingStrict(ctx->group_by_clause()) ||
+                    IsEnclosingStrict(ctx->expr(1)) ||
+                    IsEnclosingStrict(ctx->window_clause()) ||
+                    IsEnclosingStrict(ctx->ext_order_by_clause())) {
+                    source = ctx;
+                } else {
+                    source = ctx->join_source(0);
+                    source = source == nullptr ? ctx->join_source(1) : source;
                 }
+
                 if (source == nullptr) {
                     return {};
                 }
 
-                return TInferenceVisitor().visit(source);
+                return TInferenceVisitor(std::move(Subqueries_)).visit(source);
             }
+
+        private:
+            std::any visitNamed_nodes_stmt(SQLv1::Named_nodes_stmtContext* ctx) override {
+                TMaybe<std::string> name = Name(ctx->bind_parameter_list());
+                if (name.Empty()) {
+                    return {};
+                }
+
+                SQLv1::Subselect_stmtContext* subselect = ctx->subselect_stmt();
+                if (subselect == nullptr) {
+                    return {};
+                }
+
+                Subqueries_[std::move(*name)] = subselect;
+                return {};
+            }
+
+            TMaybe<std::string> Name(SQLv1::Bind_parameter_listContext* ctx) const {
+                auto parameters = ctx->bind_parameter();
+                if (parameters.size() != 1) {
+                    return Nothing();
+                }
+
+                return NSQLComplete::GetId(parameters[0]);
+            }
+
+            bool IsEnclosingStrict(antlr4::ParserRuleContext* ctx) const {
+                return ctx != nullptr && IsEnclosing(ctx);
+            }
+
+            THashMap<TString, SQLv1::Subselect_stmtContext*> Subqueries_;
         };
 
     } // namespace
 
-    TMaybe<TColumnContext> InferColumnContext(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition) {
+    TMaybe<TColumnContext> InferColumnContext(TParsedInput input) {
         // TODO: add utility `auto ToMaybe<T>(std::any any) -> TMaybe<T>`
-        std::any result = TVisitor(tokens, cursorPosition).visit(ctx);
+        std::any result = TVisitor(input).visit(input.SqlQuery);
         if (!result.has_value()) {
             return Nothing();
         }

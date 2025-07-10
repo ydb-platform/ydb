@@ -320,6 +320,7 @@ bool IsCompositeNodeType(EObjectType type)
         type == EObjectType::MapNode ||
         type == EObjectType::Scion ||
         type == EObjectType::PortalExit ||
+        type == EObjectType::SysNode ||
         type == EObjectType::ListNode;
 }
 

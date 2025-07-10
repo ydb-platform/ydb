@@ -1,1 +1,1196 @@
-[{"name":"yt.Annotations"},{"name":"yt.ApplyStoredConstraints"},{"name":"yt.Auth"},{"name":"yt.AutoMerge"},{"name":"yt.BatchListFolderConcurrency"},{"name":"yt.BinaryExpirationInterval"},{"name":"yt.BinaryTmpFolder"},{"name":"yt.BlockMapJoin"},{"name":"yt.BlockReaderSupportedDataTypes"},{"name":"yt.BlockReaderSupportedTypes"},{"name":"yt.BufferRowCount"},{"name":"yt.ClientMapTimeout"},{"name":"yt.ColumnGroupMode"},{"name":"yt.CombineCoreLimit"},{"name":"yt.CommonJoinCoreLimit"},{"name":"yt.CompactForDistinct"},{"name":"yt.CoreDumpPath"},{"name":"yt.DQRPCReaderInflight"},{"name":"yt.DQRPCReaderTimeout"},{"name":"yt.DataSizePerJob"},{"name":"yt.DataSizePerMapJob"},{"name":"yt.DataSizePerPartition"},{"name":"yt.DataSizePerSortJob"},{"name":"yt.DefaultCalcMemoryLimit"},{"name":"yt.DefaultCluster"},{"name":"yt.DefaultLocalityTimeout"},{"name":"yt.DefaultMapSelectivityFactor"},{"name":"yt.DefaultMaxJobFails"},{"name":"yt.DefaultMemoryDigestLowerBound"},{"name":"yt.DefaultMemoryLimit"},{"name":"yt.DefaultMemoryReserveFactor"},{"name":"yt.DefaultOperationWeight"},{"name":"yt.DefaultRuntimeCluster"},{"name":"yt.Description"},{"name":"yt.DisableFuseOperations"},{"name":"yt.DisableJobSplitting"},{"name":"yt.DisableOptimizers"},{"name":"yt.DockerImage"},{"name":"yt.DontForceTransformForInputTables"},{"name":"yt.DqPruneKeyFilterLambda"},{"name":"yt.DropUnusedKeysFromKeyFilter"},{"name":"yt.EnableDynamicStoreReadInDQ"},{"name":"yt.EnableFuseMapToMapReduce"},{"name":"yt.EnforceJobUtc"},{"name":"yt.ErasureCodecCpu"},{"name":"yt.ErasureCodecCpuForDq"},{"name":"yt.EvaluationTableSizeLimit"},{"name":"yt.ExpirationDeadline"},{"name":"yt.ExpirationInterval"},{"name":"yt.ExtendTableLimit"},{"name":"yt.ExtendedStatsMaxChunkCount"},{"name":"yt.ExternalTx"},{"name":"yt.ExtraTmpfsSize"},{"name":"yt.FileCacheTtl"},{"name":"yt.FmrOperationSpec"},{"name":"yt.FolderInlineDataLimit"},{"name":"yt.FolderInlineItemsLimit"},{"name":"yt.ForceInferSchema"},{"name":"yt.ForceJobSizeAdjuster"},{"name":"yt.ForceTmpSecurity"},{"name":"yt.GeobaseDownloadUrl"},{"name":"yt.HybridDqDataSizeLimitForOrdered"},{"name":"yt.HybridDqDataSizeLimitForUnordered"},{"name":"yt.HybridDqExecution"},{"name":"yt.HybridDqExecutionFallback"},{"name":"yt.IgnoreTypeV3"},{"name":"yt.IgnoreWeakSchema"},{"name":"yt.IgnoreYamrDsv"},{"name":"yt.InferSchema"},{"name":"yt.InferSchemaMode"},{"name":"yt.InferSchemaTableCountThreshold"},{"name":"yt.InflightTempTablesLimit"},{"name":"yt.IntermediateAccount"},{"name":"yt.IntermediateDataMedium"},{"name":"yt.IntermediateReplicationFactor"},{"name":"yt.JavascriptCpu"},{"name":"yt.JobBlockInput"},{"name":"yt.JobBlockInputSupportedDataTypes"},{"name":"yt.JobBlockInputSupportedTypes"},{"name":"yt.JobBlockOutput"},{"name":"yt.JobBlockOutputSupportedDataTypes"},{"name":"yt.JobBlockOutputSupportedTypes"},{"name":"yt.JobBlockTableContent"},{"name":"yt.JobEnv"},{"name":"yt.JoinAllowColumnRenames"},{"name":"yt.JoinCollectColumnarStatistics"},{"name":"yt.JoinColumnarStatisticsFetcherMode"},{"name":"yt.JoinCommonUseMapMultiOut"},{"name":"yt.JoinEnableStarJoin"},{"name":"yt.JoinMergeForce"},{"name":"yt.JoinMergeReduceJobMaxSize"},{"name":"yt.JoinMergeSetTopLevelFullSort"},{"name":"yt.JoinMergeTablesLimit"},{"name":"yt.JoinMergeUnsortedFactor"},{"name":"yt.JoinMergeUseSmallAsPrimary"},{"name":"yt.JoinUseColumnarStatistics"},{"name":"yt.JoinWaitAllInputs"},{"name":"yt.KeepTempTables"},{"name":"yt.KeyFilterForStartsWith"},{"name":"yt.LLVMMemSize"},{"name":"yt.LLVMNodeCountLimit"},{"name":"yt.LLVMPerNodeMemSize"},{"name":"yt.LayerPaths"},{"name":"yt.LocalCalcLimit"},{"name":"yt.LookupJoinLimit"},{"name":"yt.LookupJoinMaxRows"},{"name":"yt.MapJoinLimit"},{"name":"yt.MapJoinShardCount"},{"name":"yt.MapJoinShardMinRows"},{"name":"yt.MapJoinUseFlow"},{"name":"yt.MapLocalityTimeout"},{"name":"yt.MaxChunksForDqRead"},{"name":"yt.MaxColumnGroups"},{"name":"yt.MaxCpuUsageToFuseMultiOuts"},{"name":"yt.MaxExtraJobMemoryToFuseOperations"},{"name":"yt.MaxInputTables"},{"name":"yt.MaxInputTablesForSortedMerge"},{"name":"yt.MaxJobCount"},{"name":"yt.MaxKeyRangeCount"},{"name":"yt.MaxKeyWeight"},{"name":"yt.MaxOperationFiles"},{"name":"yt.MaxOutputTables"},{"name":"yt.MaxReplicationFactorToFuseMultiOuts"},{"name":"yt.MaxReplicationFactorToFuseOperations"},{"name":"yt.MaxRowWeight"},{"name":"yt.MaxSpeculativeJobCountPerTask"},{"name":"yt.MergeAdjacentPointRanges"},{"name":"yt.MinColumnGroupSize"},{"name":"yt.MinLocalityInputDataWeight"},{"name":"yt.MinPublishedAvgChunkSize"},{"name":"yt.MinTempAvgChunkSize"},{"name":"yt.NativeYtTypeCompatibility"},{"name":"yt.NetworkProject"},{"name":"yt.NightlyCompress"},{"name":"yt.OperationReaders"},{"name":"yt.OperationSpec"},{"name":"yt.OptimizeFor"},{"name":"yt.Owners"},{"name":"yt.ParallelOperationsLimit"},{"name":"yt.PartitionByConstantKeysViaMap"},{"name":"yt.Pool"},{"name":"yt.PoolTrees"},{"name":"yt.PrimaryMedium"},{"name":"yt.PruneKeyFilterLambda"},{"name":"yt.PruneQLFilterLambda"},{"name":"yt.PublishedAutoMerge"},{"name":"yt.PublishedCompressionCodec"},{"name":"yt.PublishedErasureCodec"},{"name":"yt.PublishedMedia"},{"name":"yt.PublishedPrimaryMedium"},{"name":"yt.PublishedReplicationFactor"},{"name":"yt.PythonCpu"},{"name":"yt.QueryCacheChunkLimit"},{"name":"yt.QueryCacheIgnoreTableRevision"},{"name":"yt.QueryCacheMode"},{"name":"yt.QueryCacheSalt"},{"name":"yt.QueryCacheTtl"},{"name":"yt.QueryCacheUseExpirationTimeout"},{"name":"yt.QueryCacheUseForCalc"},{"name":"yt.ReduceLocalityTimeout"},{"name":"yt.ReleaseTempData"},{"name":"yt.ReportEquiJoinStats"},{"name":"yt.RuntimeCluster"},{"name":"yt.RuntimeClusterSelection"},{"name":"yt.SamplingIoBlockSize"},{"name":"yt.SchedulingTag"},{"name":"yt.SchedulingTagFilter"},{"name":"yt.ScriptCpu"},{"name":"yt.SortLocalityTimeout"},{"name":"yt.StartedBy"},{"name":"yt.StaticPool"},{"name":"yt.SuspendIfAccountLimitExceeded"},{"name":"yt.SwitchLimit"},{"name":"yt.TableContentColumnarStatistics"},{"name":"yt.TableContentCompressLevel"},{"name":"yt.TableContentDeliveryMode"},{"name":"yt.TableContentLocalExecution"},{"name":"yt.TableContentMaxChunksForNativeDelivery"},{"name":"yt.TableContentMaxInputTables"},{"name":"yt.TableContentMinAvgChunkSize"},{"name":"yt.TableContentTmpFolder"},{"name":"yt.TableContentUseSkiff"},{"name":"yt.TablesTmpFolder"},{"name":"yt.TempTablesTtl"},{"name":"yt.TemporaryAutoMerge"},{"name":"yt.TemporaryCompressionCodec"},{"name":"yt.TemporaryErasureCodec"},{"name":"yt.TemporaryMedia"},{"name":"yt.TemporaryPrimaryMedium"},{"name":"yt.TemporaryReplicationFactor"},{"name":"yt.TentativePoolTrees"},{"name":"yt.TentativeTreeEligibilityMaxJobDurationRatio"},{"name":"yt.TentativeTreeEligibilityMinJobDuration"},{"name":"yt.TentativeTreeEligibilitySampleJobCount"},{"name":"yt.TmpFolder"},{"name":"yt.TopSortMaxLimit"},{"name":"yt.TopSortRowMultiplierPerJob"},{"name":"yt.TopSortSizePerJob"},{"name":"yt.UseAggPhases"},{"name":"yt.UseColumnGroupsFromInputTables"},{"name":"yt.UseColumnarStatistics"},{"name":"yt.UseDefaultTentativePoolTrees"},{"name":"yt.UseFlow"},{"name":"yt.UseIntermediateSchema"},{"name":"yt.UseIntermediateStreams"},{"name":"yt.UseNativeDescSort"},{"name":"yt.UseNativeDynamicTableRead"},{"name":"yt.UseNativeYtTypes"},{"name":"yt.UseNewPredicateExtraction"},{"name":"yt.UsePartitionsByKeysForFinalAgg"},{"name":"yt.UseQLFilter"},{"name":"yt.UseRPCReaderInDQ"},{"name":"yt.UseSkiff"},{"name":"yt.UseSystemColumns"},{"name":"yt.UseTmpfs"},{"name":"yt.UseTypeV2"},{"name":"yt.UseYqlRowSpecCompactForm"},{"name":"yt.UserSlots"},{"name":"yt.ViewIsolation"},{"name":"yt.WideFlowLimit"},{"name":"dq.AggregateStatsByStage"},{"name":"dq.AnalyticsHopping"},{"name":"dq.AnalyzeQuery"},{"name":"dq.ChannelBufferSize"},{"name":"dq.ChunkSizeLimit"},{"name":"dq.CollectCoreDumps"},{"name":"dq.ComputeActorType"},{"name":"dq.DataSizePerJob"},{"name":"dq.DisableCheckpoints"},{"name":"dq.DisableLLVMForBlockStages"},{"name":"dq.EnableChannelStats"},{"name":"dq.EnableComputeActor"},{"name":"dq.EnableDqReplicate"},{"name":"dq.EnableFullResultWrite"},{"name":"dq.EnableInsert"},{"name":"dq.EnableSpillingInChannels"},{"name":"dq.EnableSpillingNodes"},{"name":"dq.EnableStrip"},{"name":"dq.ExportStats"},{"name":"dq.FallbackPolicy"},{"name":"dq.HashJoinMode"},{"name":"dq.HashShuffleMaxTasks"},{"name":"dq.HashShuffleTasksRatio"},{"name":"dq.MaxDataSizePerJob"},{"name":"dq.MaxDataSizePerQuery"},{"name":"dq.MaxNetworkRetries"},{"name":"dq.MaxRetries"},{"name":"dq.MaxTasksPerOperation"},{"name":"dq.MaxTasksPerStage"},{"name":"dq.MemoryLimit"},{"name":"dq.OptLLVM"},{"name":"dq.OutputChunkMaxSize"},{"name":"dq.ParallelOperationsLimit"},{"name":"dq.PingTimeoutMs"},{"name":"dq.PullRequestTimeoutMs"},{"name":"dq.QueryTimeout"},{"name":"dq.RetryBackoffMs"},{"name":"dq.Scheduler"},{"name":"dq.SpillingEngine"},{"name":"dq.SplitStageOnDqReplicate"},{"name":"dq.TaskRunnerStats"},{"name":"dq.UseAggPhases"},{"name":"dq.UseBlockReader"},{"name":"dq.UseFastPickleTransport"},{"name":"dq.UseFinalizeByKey"},{"name":"dq.UseGraceJoinCoreForMap"},{"name":"dq.UseOOBTransport"},{"name":"dq.UseSimpleYtReader"},{"name":"dq.UseWideBlockChannels"},{"name":"dq.UseWideChannels"},{"name":"dq.WatermarksEnableIdlePartitions"},{"name":"dq.WatermarksGranularityMs"},{"name":"dq.WatermarksLateArrivalDelayMs"},{"name":"dq.WatermarksMode"},{"name":"dq.WorkerFilter"},{"name":"dq.WorkersPerOperation"},{"name":"AllowDotInAlias"},{"name":"AllowUnnamedColumns"},{"name":"AnsiCurrentRow"},{"name":"AnsiImplicitCrossJoin"},{"name":"AnsiInForEmptyOrNullableItemsCollections"},{"name":"AnsiLike"},{"name":"AnsiOptionalAs"},{"name":"AnsiRankForNullableKeys"},{"name":"AutoCommit"},{"name":"BlockEngine"},{"name":"BlockEngineEnable"},{"name":"BlockEngineForce"},{"name":"BogousStarInGroupByOverJoin"},{"name":"CheckedOps"},{"name":"ClassicDivision"},{"name":"CoalesceJoinKeysOnQualifiedAll"},{"name":"CompactGroupBy"},{"name":"CompactNamedExprs"},{"name":"CostBasedOptimizer"},{"name":"DataWatermarks"},{"name":"DeriveColumnOrder"},{"name":"DirectRead"},{"name":"DisableAnsiCurrentRow"},{"name":"DisableAnsiImplicitCrossJoin"},{"name":"DisableAnsiInForEmptyOrNullableItemsCollections"},{"name":"DisableAnsiLike"},{"name":"DisableAnsiOptionalAs"},{"name":"DisableAnsiRankForNullableKeys"},{"name":"DisableBlockEngineEnable"},{"name":"DisableBlockEngineForce"},{"name":"DisableBogousStarInGroupByOverJoin"},{"name":"DisableCoalesceJoinKeysOnQualifiedAll"},{"name":"DisableCompactGroupBy"},{"name":"DisableCompactNamedExprs"},{"name":"DisableDeriveColumnOrder"},{"name":"DisableDistinctOverKeys"},{"name":"DisableDistinctOverWindow"},{"name":"DisableDqEngineEnable"},{"name":"DisableDqEngineForce"},{"name":"DisableEmitAggApply"},{"name":"DisableEmitStartsWith"},{"name":"DisableEmitTableSource"},{"name":"DisableEmitUnionMerge"},{"name":"DisableFailOnGroupByExprOverride"},{"name":"DisableFilterPushdownOverJoinOptionalSide"},{"name":"DisableFlexibleTypes"},{"name":"DisableGroupByExprAfterWhere"},{"name":"DisableJsonQueryReturnsJsonDocument"},{"name":"DisableOptimizeSimpleILIKE"},{"name":"DisableOrderedColumns"},{"name":"DisablePullUpFlatMapOverJoin"},{"name":"DisableRegexUseRe2"},{"name":"DisableRotateJoinTree"},{"name":"DisableSeqMode"},{"name":"DisableSimpleColumns"},{"name":"DisableStrictJoinKeyTypes"},{"name":"DisableUnicodeLiterals"},{"name":"DisableUnorderedResult"},{"name":"DisableUnorderedSubqueries"},{"name":"DisableUseBlocks"},{"name":"DisableValidateUnusedExprs"},{"name":"DisableWarnOnAnsiAliasShadowing"},{"name":"DisableWarnUntypedStringLiterals"},{"name":"DiscoveryMode"},{"name":"DistinctOverKeys"},{"name":"DistinctOverWindow"},{"name":"DqEngine"},{"name":"DqEngineEnable"},{"name":"DqEngineForce"},{"name":"EmitAggApply"},{"name":"EmitStartsWith"},{"name":"EmitTableSource"},{"name":"EmitUnionMerge"},{"name":"EnableSystemColumns"},{"name":"Engine"},{"name":"ErrorMsg"},{"name":"FailOnGroupByExprOverride"},{"name":"FeatureR010"},{"name":"File"},{"name":"FileOption"},{"name":"FilterPushdownOverJoinOptionalSide"},{"name":"FlexibleTypes"},{"name":"Folder"},{"name":"Greetings"},{"name":"GroupByCubeLimit"},{"name":"GroupByExprAfterWhere"},{"name":"GroupByLimit"},{"name":"JsonQueryReturnsJsonDocument"},{"name":"Library"},{"name":"OptimizeSimpleILIKE"},{"name":"OrderedColumns"},{"name":"OverrideLibrary"},{"name":"Package"},{"name":"PackageVersion"},{"name":"PathPrefix"},{"name":"PositionalUnionAll"},{"name":"PqReadBy"},{"name":"PullUpFlatMapOverJoin"},{"name":"RefSelect"},{"name":"RegexUseRe2"},{"name":"ResultRowsLimit"},{"name":"ResultSizeLimit"},{"name":"RotateJoinTree"},{"name":"RuntimeLogLevel"},{"name":"SampleSelect"},{"name":"SeqMode"},{"name":"SimpleColumns"},{"name":"StrictJoinKeyTypes"},{"name":"Udf"},{"name":"UnicodeLiterals"},{"name":"UnorderedResult"},{"name":"UnorderedSubqueries"},{"name":"UseBlocks"},{"name":"UseTablePrefixForEach"},{"name":"ValidateUnusedExprs"},{"name":"WarnOnAnsiAliasShadowing"},{"name":"WarnUnnamedColumns"},{"name":"WarnUntypedStringLiterals"},{"name":"Warning"},{"name":"WarningMsg"},{"name":"yson.AutoConvert"},{"name":"yson.CastToString"},{"name":"yson.DisableCastToString"},{"name":"yson.DisableStrict"},{"name":"yson.Strict"}]
+[
+  {
+    "name": "yt.Annotations"
+  },
+  {
+    "name": "yt.ApplyStoredConstraints"
+  },
+  {
+    "name": "yt.Auth"
+  },
+  {
+    "name": "yt.AutoMerge"
+  },
+  {
+    "name": "yt.BatchListFolderConcurrency"
+  },
+  {
+    "name": "yt.BinaryExpirationInterval"
+  },
+  {
+    "name": "yt.BinaryTmpFolder"
+  },
+  {
+    "name": "yt.BlockMapJoin"
+  },
+  {
+    "name": "yt.BlockReaderSupportedDataTypes"
+  },
+  {
+    "name": "yt.BlockReaderSupportedTypes"
+  },
+  {
+    "name": "yt.BufferRowCount"
+  },
+  {
+    "name": "yt.ColumnGroupMode"
+  },
+  {
+    "name": "yt.CombineCoreLimit"
+  },
+  {
+    "name": "yt.CommonJoinCoreLimit"
+  },
+  {
+    "name": "yt.CompactForDistinct"
+  },
+  {
+    "name": "yt.CoreDumpPath"
+  },
+  {
+    "name": "yt.DQRPCReaderInflight"
+  },
+  {
+    "name": "yt.DQRPCReaderTimeout"
+  },
+  {
+    "name": "yt.DataSizePerJob"
+  },
+  {
+    "name": "yt.DataSizePerMapJob"
+  },
+  {
+    "name": "yt.DataSizePerPartition"
+  },
+  {
+    "name": "yt.DataSizePerSortJob"
+  },
+  {
+    "name": "yt.DefaultCalcMemoryLimit"
+  },
+  {
+    "name": "yt.DefaultCluster"
+  },
+  {
+    "name": "yt.DefaultLocalityTimeout"
+  },
+  {
+    "name": "yt.DefaultMapSelectivityFactor"
+  },
+  {
+    "name": "yt.DefaultMaxJobFails"
+  },
+  {
+    "name": "yt.DefaultMemoryDigestLowerBound"
+  },
+  {
+    "name": "yt.DefaultMemoryLimit"
+  },
+  {
+    "name": "yt.DefaultMemoryReserveFactor"
+  },
+  {
+    "name": "yt.DefaultOperationWeight"
+  },
+  {
+    "name": "yt.DefaultRuntimeCluster"
+  },
+  {
+    "name": "yt.Description"
+  },
+  {
+    "name": "yt.DisableFuseOperations"
+  },
+  {
+    "name": "yt.DisableJobSplitting"
+  },
+  {
+    "name": "yt.DisableOptimizers"
+  },
+  {
+    "name": "yt.DockerImage"
+  },
+  {
+    "name": "yt.DontForceTransformForInputTables"
+  },
+  {
+    "name": "yt.DqPruneKeyFilterLambda"
+  },
+  {
+    "name": "yt.DropUnusedKeysFromKeyFilter"
+  },
+  {
+    "name": "yt.EnableDynamicStoreReadInDQ"
+  },
+  {
+    "name": "yt.EnableFuseMapToMapReduce"
+  },
+  {
+    "name": "yt.EnforceJobUtc"
+  },
+  {
+    "name": "yt.ErasureCodecCpu"
+  },
+  {
+    "name": "yt.ErasureCodecCpuForDq"
+  },
+  {
+    "name": "yt.EvaluationTableSizeLimit"
+  },
+  {
+    "name": "yt.ExpirationDeadline"
+  },
+  {
+    "name": "yt.ExpirationInterval"
+  },
+  {
+    "name": "yt.ExtendedStatsMaxChunkCount"
+  },
+  {
+    "name": "yt.ExternalTx"
+  },
+  {
+    "name": "yt.ExtraTmpfsSize"
+  },
+  {
+    "name": "yt.FileCacheTtl"
+  },
+  {
+    "name": "yt.FmrOperationSpec"
+  },
+  {
+    "name": "yt.FolderInlineDataLimit"
+  },
+  {
+    "name": "yt.FolderInlineItemsLimit"
+  },
+  {
+    "name": "yt.ForceInferSchema"
+  },
+  {
+    "name": "yt.ForceJobSizeAdjuster"
+  },
+  {
+    "name": "yt.ForceTmpSecurity"
+  },
+  {
+    "name": "yt.GeobaseDownloadUrl"
+  },
+  {
+    "name": "yt.HybridDqDataSizeLimitForOrdered"
+  },
+  {
+    "name": "yt.HybridDqDataSizeLimitForUnordered"
+  },
+  {
+    "name": "yt.HybridDqExecution"
+  },
+  {
+    "name": "yt.HybridDqExecutionFallback"
+  },
+  {
+    "name": "yt.IgnoreTypeV3"
+  },
+  {
+    "name": "yt.IgnoreWeakSchema"
+  },
+  {
+    "name": "yt.IgnoreYamrDsv"
+  },
+  {
+    "name": "yt.InferSchema"
+  },
+  {
+    "name": "yt.InferSchemaMode"
+  },
+  {
+    "name": "yt.InferSchemaTableCountThreshold"
+  },
+  {
+    "name": "yt.InflightTempTablesLimit"
+  },
+  {
+    "name": "yt.IntermediateAccount"
+  },
+  {
+    "name": "yt.IntermediateDataMedium"
+  },
+  {
+    "name": "yt.IntermediateReplicationFactor"
+  },
+  {
+    "name": "yt.JavascriptCpu"
+  },
+  {
+    "name": "yt.JobBlockInput"
+  },
+  {
+    "name": "yt.JobBlockInputSupportedDataTypes"
+  },
+  {
+    "name": "yt.JobBlockInputSupportedTypes"
+  },
+  {
+    "name": "yt.JobBlockOutput"
+  },
+  {
+    "name": "yt.JobBlockOutputSupportedDataTypes"
+  },
+  {
+    "name": "yt.JobBlockOutputSupportedTypes"
+  },
+  {
+    "name": "yt.JobBlockTableContent"
+  },
+  {
+    "name": "yt.JobEnv"
+  },
+  {
+    "name": "yt.JoinAllowColumnRenames"
+  },
+  {
+    "name": "yt.JoinCollectColumnarStatistics"
+  },
+  {
+    "name": "yt.JoinColumnarStatisticsFetcherMode"
+  },
+  {
+    "name": "yt.JoinCommonUseMapMultiOut"
+  },
+  {
+    "name": "yt.JoinEnableStarJoin"
+  },
+  {
+    "name": "yt.JoinMergeForce"
+  },
+  {
+    "name": "yt.JoinMergeReduceJobMaxSize"
+  },
+  {
+    "name": "yt.JoinMergeSetTopLevelFullSort"
+  },
+  {
+    "name": "yt.JoinMergeTablesLimit"
+  },
+  {
+    "name": "yt.JoinMergeUnsortedFactor"
+  },
+  {
+    "name": "yt.JoinMergeUseSmallAsPrimary"
+  },
+  {
+    "name": "yt.JoinWaitAllInputs"
+  },
+  {
+    "name": "yt.KeepTempTables"
+  },
+  {
+    "name": "yt.KeyFilterForStartsWith"
+  },
+  {
+    "name": "yt.LLVMMemSize"
+  },
+  {
+    "name": "yt.LLVMNodeCountLimit"
+  },
+  {
+    "name": "yt.LLVMPerNodeMemSize"
+  },
+  {
+    "name": "yt.LayerPaths"
+  },
+  {
+    "name": "yt.LocalCalcLimit"
+  },
+  {
+    "name": "yt.LookupJoinLimit"
+  },
+  {
+    "name": "yt.LookupJoinMaxRows"
+  },
+  {
+    "name": "yt.MapJoinLimit"
+  },
+  {
+    "name": "yt.MapJoinShardCount"
+  },
+  {
+    "name": "yt.MapJoinShardMinRows"
+  },
+  {
+    "name": "yt.MapJoinUseFlow"
+  },
+  {
+    "name": "yt.MapLocalityTimeout"
+  },
+  {
+    "name": "yt.MaxChunksForDqRead"
+  },
+  {
+    "name": "yt.MaxColumnGroups"
+  },
+  {
+    "name": "yt.MaxCpuUsageToFuseMultiOuts"
+  },
+  {
+    "name": "yt.MaxExtraJobMemoryToFuseOperations"
+  },
+  {
+    "name": "yt.MaxInputTables"
+  },
+  {
+    "name": "yt.MaxInputTablesForSortedMerge"
+  },
+  {
+    "name": "yt.MaxJobCount"
+  },
+  {
+    "name": "yt.MaxKeyRangeCount"
+  },
+  {
+    "name": "yt.MaxKeyWeight"
+  },
+  {
+    "name": "yt.MaxOperationFiles"
+  },
+  {
+    "name": "yt.MaxOutputTables"
+  },
+  {
+    "name": "yt.MaxReplicationFactorToFuseMultiOuts"
+  },
+  {
+    "name": "yt.MaxReplicationFactorToFuseOperations"
+  },
+  {
+    "name": "yt.MaxRowWeight"
+  },
+  {
+    "name": "yt.MaxSpeculativeJobCountPerTask"
+  },
+  {
+    "name": "yt.MergeAdjacentPointRanges"
+  },
+  {
+    "name": "yt.MinColumnGroupSize"
+  },
+  {
+    "name": "yt.MinLocalityInputDataWeight"
+  },
+  {
+    "name": "yt.MinPublishedAvgChunkSize"
+  },
+  {
+    "name": "yt.MinTempAvgChunkSize"
+  },
+  {
+    "name": "yt.NativeYtTypeCompatibility"
+  },
+  {
+    "name": "yt.NetworkProject"
+  },
+  {
+    "name": "yt.NightlyCompress"
+  },
+  {
+    "name": "yt.OperationReaders"
+  },
+  {
+    "name": "yt.OperationSpec"
+  },
+  {
+    "name": "yt.OptimizeFor"
+  },
+  {
+    "name": "yt.Owners"
+  },
+  {
+    "name": "yt.ParallelOperationsLimit"
+  },
+  {
+    "name": "yt.PartitionByConstantKeysViaMap"
+  },
+  {
+    "name": "yt.Pool"
+  },
+  {
+    "name": "yt.PoolTrees"
+  },
+  {
+    "name": "yt.PrimaryMedium"
+  },
+  {
+    "name": "yt.PruneKeyFilterLambda"
+  },
+  {
+    "name": "yt.PruneQLFilterLambda"
+  },
+  {
+    "name": "yt.PublishedAutoMerge"
+  },
+  {
+    "name": "yt.PublishedCompressionCodec"
+  },
+  {
+    "name": "yt.PublishedErasureCodec"
+  },
+  {
+    "name": "yt.PublishedMedia"
+  },
+  {
+    "name": "yt.PublishedPrimaryMedium"
+  },
+  {
+    "name": "yt.PublishedReplicationFactor"
+  },
+  {
+    "name": "yt.PythonCpu"
+  },
+  {
+    "name": "yt.QueryCacheChunkLimit"
+  },
+  {
+    "name": "yt.QueryCacheIgnoreTableRevision"
+  },
+  {
+    "name": "yt.QueryCacheMode"
+  },
+  {
+    "name": "yt.QueryCacheSalt"
+  },
+  {
+    "name": "yt.QueryCacheTtl"
+  },
+  {
+    "name": "yt.QueryCacheUseExpirationTimeout"
+  },
+  {
+    "name": "yt.QueryCacheUseForCalc"
+  },
+  {
+    "name": "yt.ReduceLocalityTimeout"
+  },
+  {
+    "name": "yt.ReleaseTempData"
+  },
+  {
+    "name": "yt.ReportEquiJoinStats"
+  },
+  {
+    "name": "yt.RuntimeCluster"
+  },
+  {
+    "name": "yt.RuntimeClusterSelection"
+  },
+  {
+    "name": "yt.SamplingIoBlockSize"
+  },
+  {
+    "name": "yt.SchedulingTag"
+  },
+  {
+    "name": "yt.SchedulingTagFilter"
+  },
+  {
+    "name": "yt.ScriptCpu"
+  },
+  {
+    "name": "yt.SortLocalityTimeout"
+  },
+  {
+    "name": "yt.StartedBy"
+  },
+  {
+    "name": "yt.StaticNetworkProject"
+  },
+  {
+    "name": "yt.StaticPool"
+  },
+  {
+    "name": "yt.SuspendIfAccountLimitExceeded"
+  },
+  {
+    "name": "yt.SwitchLimit"
+  },
+  {
+    "name": "yt.TableContentColumnarStatistics"
+  },
+  {
+    "name": "yt.TableContentCompressLevel"
+  },
+  {
+    "name": "yt.TableContentDeliveryMode"
+  },
+  {
+    "name": "yt.TableContentLocalExecution"
+  },
+  {
+    "name": "yt.TableContentMaxChunksForNativeDelivery"
+  },
+  {
+    "name": "yt.TableContentMaxInputTables"
+  },
+  {
+    "name": "yt.TableContentMinAvgChunkSize"
+  },
+  {
+    "name": "yt.TableContentTmpFolder"
+  },
+  {
+    "name": "yt.TableContentUseSkiff"
+  },
+  {
+    "name": "yt.TablesTmpFolder"
+  },
+  {
+    "name": "yt.TempTablesTtl"
+  },
+  {
+    "name": "yt.TemporaryAutoMerge"
+  },
+  {
+    "name": "yt.TemporaryCompressionCodec"
+  },
+  {
+    "name": "yt.TemporaryErasureCodec"
+  },
+  {
+    "name": "yt.TemporaryMedia"
+  },
+  {
+    "name": "yt.TemporaryPrimaryMedium"
+  },
+  {
+    "name": "yt.TemporaryReplicationFactor"
+  },
+  {
+    "name": "yt.TentativePoolTrees"
+  },
+  {
+    "name": "yt.TentativeTreeEligibilityMaxJobDurationRatio"
+  },
+  {
+    "name": "yt.TentativeTreeEligibilityMinJobDuration"
+  },
+  {
+    "name": "yt.TentativeTreeEligibilitySampleJobCount"
+  },
+  {
+    "name": "yt.TmpFolder"
+  },
+  {
+    "name": "yt.TopSortMaxLimit"
+  },
+  {
+    "name": "yt.TopSortRowMultiplierPerJob"
+  },
+  {
+    "name": "yt.TopSortSizePerJob"
+  },
+  {
+    "name": "yt.UseAggPhases"
+  },
+  {
+    "name": "yt.UseColumnGroupsFromInputTables"
+  },
+  {
+    "name": "yt.UseColumnarStatistics"
+  },
+  {
+    "name": "yt.UseDefaultArrowAllocatorInJobs"
+  },
+  {
+    "name": "yt.UseDefaultTentativePoolTrees"
+  },
+  {
+    "name": "yt.UseFlow"
+  },
+  {
+    "name": "yt.UseIntermediateStreams"
+  },
+  {
+    "name": "yt.UseNativeDescSort"
+  },
+  {
+    "name": "yt.UseNativeDynamicTableRead"
+  },
+  {
+    "name": "yt.UseNativeYtTypes"
+  },
+  {
+    "name": "yt.UseNewPredicateExtraction"
+  },
+  {
+    "name": "yt.UsePartitionsByKeysForFinalAgg"
+  },
+  {
+    "name": "yt.UseQLFilter"
+  },
+  {
+    "name": "yt.UseRPCReaderInDQ"
+  },
+  {
+    "name": "yt.UseSkiff"
+  },
+  {
+    "name": "yt.UseSystemColumns"
+  },
+  {
+    "name": "yt.UseTmpfs"
+  },
+  {
+    "name": "yt.UseYqlRowSpecCompactForm"
+  },
+  {
+    "name": "yt.UserSlots"
+  },
+  {
+    "name": "yt.ViewIsolation"
+  },
+  {
+    "name": "yt.WideFlowLimit"
+  },
+  {
+    "name": "dq.AggregateStatsByStage"
+  },
+  {
+    "name": "dq.AnalyticsHopping"
+  },
+  {
+    "name": "dq.AnalyzeQuery"
+  },
+  {
+    "name": "dq.ChannelBufferSize"
+  },
+  {
+    "name": "dq.ChunkSizeLimit"
+  },
+  {
+    "name": "dq.CollectCoreDumps"
+  },
+  {
+    "name": "dq.ComputeActorType"
+  },
+  {
+    "name": "dq.DataSizePerJob"
+  },
+  {
+    "name": "dq.DisableCheckpoints"
+  },
+  {
+    "name": "dq.DisableLLVMForBlockStages"
+  },
+  {
+    "name": "dq.EnableChannelStats"
+  },
+  {
+    "name": "dq.EnableComputeActor"
+  },
+  {
+    "name": "dq.EnableDqReplicate"
+  },
+  {
+    "name": "dq.EnableFullResultWrite"
+  },
+  {
+    "name": "dq.EnableInsert"
+  },
+  {
+    "name": "dq.EnableSpillingInChannels"
+  },
+  {
+    "name": "dq.EnableSpillingNodes"
+  },
+  {
+    "name": "dq.EnableStrip"
+  },
+  {
+    "name": "dq.ExportStats"
+  },
+  {
+    "name": "dq.FallbackPolicy"
+  },
+  {
+    "name": "dq.HashJoinMode"
+  },
+  {
+    "name": "dq.HashShuffleMaxTasks"
+  },
+  {
+    "name": "dq.HashShuffleTasksRatio"
+  },
+  {
+    "name": "dq.MaxDataSizePerJob"
+  },
+  {
+    "name": "dq.MaxDataSizePerQuery"
+  },
+  {
+    "name": "dq.MaxNetworkRetries"
+  },
+  {
+    "name": "dq.MaxRetries"
+  },
+  {
+    "name": "dq.MaxTasksPerOperation"
+  },
+  {
+    "name": "dq.MaxTasksPerStage"
+  },
+  {
+    "name": "dq.MemoryLimit"
+  },
+  {
+    "name": "dq.OptLLVM"
+  },
+  {
+    "name": "dq.OutputChunkMaxSize"
+  },
+  {
+    "name": "dq.ParallelOperationsLimit"
+  },
+  {
+    "name": "dq.PingTimeoutMs"
+  },
+  {
+    "name": "dq.PullRequestTimeoutMs"
+  },
+  {
+    "name": "dq.QueryTimeout"
+  },
+  {
+    "name": "dq.RetryBackoffMs"
+  },
+  {
+    "name": "dq.Scheduler"
+  },
+  {
+    "name": "dq.SpillingEngine"
+  },
+  {
+    "name": "dq.SplitStageOnDqReplicate"
+  },
+  {
+    "name": "dq.TaskRunnerStats"
+  },
+  {
+    "name": "dq.UseAggPhases"
+  },
+  {
+    "name": "dq.UseBlockReader"
+  },
+  {
+    "name": "dq.UseFastPickleTransport"
+  },
+  {
+    "name": "dq.UseFinalizeByKey"
+  },
+  {
+    "name": "dq.UseGraceJoinCoreForMap"
+  },
+  {
+    "name": "dq.UseOOBTransport"
+  },
+  {
+    "name": "dq.UseSimpleYtReader"
+  },
+  {
+    "name": "dq.UseWideBlockChannels"
+  },
+  {
+    "name": "dq.UseWideChannels"
+  },
+  {
+    "name": "dq.WatermarksEnableIdlePartitions"
+  },
+  {
+    "name": "dq.WatermarksGranularityMs"
+  },
+  {
+    "name": "dq.WatermarksLateArrivalDelayMs"
+  },
+  {
+    "name": "dq.WatermarksMode"
+  },
+  {
+    "name": "dq.WorkerFilter"
+  },
+  {
+    "name": "dq.WorkersPerOperation"
+  },
+  {
+    "name": "AllowDotInAlias"
+  },
+  {
+    "name": "AllowUnnamedColumns"
+  },
+  {
+    "name": "AnsiCurrentRow"
+  },
+  {
+    "name": "AnsiImplicitCrossJoin"
+  },
+  {
+    "name": "AnsiInForEmptyOrNullableItemsCollections"
+  },
+  {
+    "name": "AnsiLike"
+  },
+  {
+    "name": "AnsiOptionalAs"
+  },
+  {
+    "name": "AnsiRankForNullableKeys"
+  },
+  {
+    "name": "AutoCommit"
+  },
+  {
+    "name": "BlockEngine"
+  },
+  {
+    "name": "BlockEngineEnable"
+  },
+  {
+    "name": "BlockEngineForce"
+  },
+  {
+    "name": "BogousStarInGroupByOverJoin"
+  },
+  {
+    "name": "CheckedOps"
+  },
+  {
+    "name": "ClassicDivision"
+  },
+  {
+    "name": "CoalesceJoinKeysOnQualifiedAll"
+  },
+  {
+    "name": "CompactGroupBy"
+  },
+  {
+    "name": "CompactNamedExprs"
+  },
+  {
+    "name": "CostBasedOptimizer"
+  },
+  {
+    "name": "DataWatermarks"
+  },
+  {
+    "name": "DeriveColumnOrder"
+  },
+  {
+    "name": "DirectRead"
+  },
+  {
+    "name": "DisableAnsiCurrentRow"
+  },
+  {
+    "name": "DisableAnsiImplicitCrossJoin"
+  },
+  {
+    "name": "DisableAnsiInForEmptyOrNullableItemsCollections"
+  },
+  {
+    "name": "DisableAnsiLike"
+  },
+  {
+    "name": "DisableAnsiOptionalAs"
+  },
+  {
+    "name": "DisableAnsiRankForNullableKeys"
+  },
+  {
+    "name": "DisableBlockEngineEnable"
+  },
+  {
+    "name": "DisableBlockEngineForce"
+  },
+  {
+    "name": "DisableBogousStarInGroupByOverJoin"
+  },
+  {
+    "name": "DisableCoalesceJoinKeysOnQualifiedAll"
+  },
+  {
+    "name": "DisableCompactGroupBy"
+  },
+  {
+    "name": "DisableCompactNamedExprs"
+  },
+  {
+    "name": "DisableDeriveColumnOrder"
+  },
+  {
+    "name": "DisableDistinctOverKeys"
+  },
+  {
+    "name": "DisableDistinctOverWindow"
+  },
+  {
+    "name": "DisableDqEngineEnable"
+  },
+  {
+    "name": "DisableDqEngineForce"
+  },
+  {
+    "name": "DisableEmitAggApply"
+  },
+  {
+    "name": "DisableEmitStartsWith"
+  },
+  {
+    "name": "DisableEmitTableSource"
+  },
+  {
+    "name": "DisableEmitUnionMerge"
+  },
+  {
+    "name": "DisableFailOnGroupByExprOverride"
+  },
+  {
+    "name": "DisableFilterPushdownOverJoinOptionalSide"
+  },
+  {
+    "name": "DisableFlexibleTypes"
+  },
+  {
+    "name": "DisableGroupByExprAfterWhere"
+  },
+  {
+    "name": "DisableJsonQueryReturnsJsonDocument"
+  },
+  {
+    "name": "DisableOptimizeSimpleILIKE"
+  },
+  {
+    "name": "DisableOrderedColumns"
+  },
+  {
+    "name": "DisablePullUpFlatMapOverJoin"
+  },
+  {
+    "name": "DisableRegexUseRe2"
+  },
+  {
+    "name": "DisableRotateJoinTree"
+  },
+  {
+    "name": "DisableSeqMode"
+  },
+  {
+    "name": "DisableSimpleColumns"
+  },
+  {
+    "name": "DisableStrictJoinKeyTypes"
+  },
+  {
+    "name": "DisableUnicodeLiterals"
+  },
+  {
+    "name": "DisableUnorderedResult"
+  },
+  {
+    "name": "DisableUnorderedSubqueries"
+  },
+  {
+    "name": "DisableUseBlocks"
+  },
+  {
+    "name": "DisableValidateUnusedExprs"
+  },
+  {
+    "name": "DisableWarnOnAnsiAliasShadowing"
+  },
+  {
+    "name": "DisableWarnUntypedStringLiterals"
+  },
+  {
+    "name": "DiscoveryMode"
+  },
+  {
+    "name": "DistinctOverKeys"
+  },
+  {
+    "name": "DistinctOverWindow"
+  },
+  {
+    "name": "DqEngine"
+  },
+  {
+    "name": "DqEngineEnable"
+  },
+  {
+    "name": "DqEngineForce"
+  },
+  {
+    "name": "EmitAggApply"
+  },
+  {
+    "name": "EmitStartsWith"
+  },
+  {
+    "name": "EmitTableSource"
+  },
+  {
+    "name": "EmitUnionMerge"
+  },
+  {
+    "name": "EnableSystemColumns"
+  },
+  {
+    "name": "Engine"
+  },
+  {
+    "name": "ErrorMsg"
+  },
+  {
+    "name": "FailOnGroupByExprOverride"
+  },
+  {
+    "name": "FeatureR010"
+  },
+  {
+    "name": "File"
+  },
+  {
+    "name": "FileOption"
+  },
+  {
+    "name": "FilterPushdownOverJoinOptionalSide"
+  },
+  {
+    "name": "FlexibleTypes"
+  },
+  {
+    "name": "Folder"
+  },
+  {
+    "name": "Greetings"
+  },
+  {
+    "name": "GroupByCubeLimit"
+  },
+  {
+    "name": "GroupByExprAfterWhere"
+  },
+  {
+    "name": "GroupByLimit"
+  },
+  {
+    "name": "JsonQueryReturnsJsonDocument"
+  },
+  {
+    "name": "Library"
+  },
+  {
+    "name": "OptimizeSimpleILIKE"
+  },
+  {
+    "name": "OrderedColumns"
+  },
+  {
+    "name": "OverrideLibrary"
+  },
+  {
+    "name": "Package"
+  },
+  {
+    "name": "PackageVersion"
+  },
+  {
+    "name": "PathPrefix"
+  },
+  {
+    "name": "PositionalUnionAll"
+  },
+  {
+    "name": "PqReadBy"
+  },
+  {
+    "name": "PullUpFlatMapOverJoin"
+  },
+  {
+    "name": "RefSelect"
+  },
+  {
+    "name": "RegexUseRe2"
+  },
+  {
+    "name": "ResultRowsLimit"
+  },
+  {
+    "name": "ResultSizeLimit"
+  },
+  {
+    "name": "RotateJoinTree"
+  },
+  {
+    "name": "RuntimeLogLevel"
+  },
+  {
+    "name": "SampleSelect"
+  },
+  {
+    "name": "SeqMode"
+  },
+  {
+    "name": "SimpleColumns"
+  },
+  {
+    "name": "StrictJoinKeyTypes"
+  },
+  {
+    "name": "Udf"
+  },
+  {
+    "name": "UnicodeLiterals"
+  },
+  {
+    "name": "UnorderedResult"
+  },
+  {
+    "name": "UnorderedSubqueries"
+  },
+  {
+    "name": "UseBlocks"
+  },
+  {
+    "name": "UseTablePrefixForEach"
+  },
+  {
+    "name": "ValidateUnusedExprs"
+  },
+  {
+    "name": "WarnOnAnsiAliasShadowing"
+  },
+  {
+    "name": "WarnUnnamedColumns"
+  },
+  {
+    "name": "WarnUntypedStringLiterals"
+  },
+  {
+    "name": "Warning"
+  },
+  {
+    "name": "WarningMsg"
+  },
+  {
+    "name": "yson.AutoConvert"
+  },
+  {
+    "name": "yson.CastToString"
+  },
+  {
+    "name": "yson.DisableCastToString"
+  },
+  {
+    "name": "yson.DisableStrict"
+  },
+  {
+    "name": "yson.Strict"
+  }
+]

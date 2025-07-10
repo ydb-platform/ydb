@@ -6,13 +6,13 @@ extern "C" {
 #endif
 
 #include "dict.h"
-#include "pair_list.h"
+#include "hashtable.h"
 #include "state.h"
 
 typedef struct multidict_iter {
     PyObject_HEAD
     MultiDictObject *md;  // MultiDict or CIMultiDict
-    pair_list_pos_t current;
+    md_pos_t current;
 } MultidictIter;
 
 static inline void
@@ -21,14 +21,14 @@ _init_iter(MultidictIter *it, MultiDictObject *md)
     Py_INCREF(md);
 
     it->md = md;
-    pair_list_init_pos(&md->pairs, &it->current);
+    md_init_pos(md, &it->current);
 }
 
 static inline PyObject *
 multidict_items_iter_new(MultiDictObject *md)
 {
-    MultidictIter *it = PyObject_GC_New(
-        MultidictIter, md->pairs.state->ItemsIterType);
+    MultidictIter *it =
+        PyObject_GC_New(MultidictIter, md->state->ItemsIterType);
     if (it == NULL) {
         return NULL;
     }
@@ -42,8 +42,8 @@ multidict_items_iter_new(MultiDictObject *md)
 static inline PyObject *
 multidict_keys_iter_new(MultiDictObject *md)
 {
-    MultidictIter *it = PyObject_GC_New(
-        MultidictIter, md->pairs.state->KeysIterType);
+    MultidictIter *it =
+        PyObject_GC_New(MultidictIter, md->state->KeysIterType);
     if (it == NULL) {
         return NULL;
     }
@@ -57,8 +57,8 @@ multidict_keys_iter_new(MultiDictObject *md)
 static inline PyObject *
 multidict_values_iter_new(MultiDictObject *md)
 {
-    MultidictIter *it = PyObject_GC_New(
-        MultidictIter, md->pairs.state->ValuesIterType);
+    MultidictIter *it =
+        PyObject_GC_New(MultidictIter, md->state->ValuesIterType);
     if (it == NULL) {
         return NULL;
     }
@@ -76,8 +76,7 @@ multidict_items_iter_iternext(MultidictIter *self)
     PyObject *value = NULL;
     PyObject *ret = NULL;
 
-    int res = pair_list_next(&self->md->pairs, &self->current,
-                             NULL, &key, &value);
+    int res = md_next(self->md, &self->current, NULL, &key, &value);
     if (res < 0) {
         return NULL;
     }
@@ -103,8 +102,7 @@ multidict_values_iter_iternext(MultidictIter *self)
 {
     PyObject *value = NULL;
 
-    int res = pair_list_next(&self->md->pairs, &self->current,
-                             NULL, NULL, &value);
+    int res = md_next(self->md, &self->current, NULL, NULL, &value);
     if (res < 0) {
         return NULL;
     }
@@ -121,8 +119,7 @@ multidict_keys_iter_iternext(MultidictIter *self)
 {
     PyObject *key = NULL;
 
-    int res = pair_list_next(&self->md->pairs, &self->current,
-                             NULL, &key, NULL);
+    int res = md_next(self->md, &self->current, NULL, &key, NULL);
     if (res < 0) {
         return NULL;
     }
@@ -159,23 +156,18 @@ multidict_iter_clear(MultidictIter *self)
 static inline PyObject *
 multidict_iter_len(MultidictIter *self)
 {
-    return PyLong_FromLong(pair_list_len(&self->md->pairs));
+    return PyLong_FromLong(md_len(self->md));
 }
 
 PyDoc_STRVAR(length_hint_doc,
              "Private method returning an estimate of len(list(it)).");
 
 static PyMethodDef multidict_iter_methods[] = {
-    {
-        "__length_hint__",
-        (PyCFunction)(void(*)(void))multidict_iter_len,
-        METH_NOARGS,
-        length_hint_doc
-    },
-    {
-        NULL,
-        NULL
-    }   /* sentinel */
+    {"__length_hint__",
+     (PyCFunction)(void (*)(void))multidict_iter_len,
+     METH_NOARGS,
+     length_hint_doc},
+    {NULL, NULL} /* sentinel */
 };
 
 /***********************************************************************/
@@ -222,7 +214,6 @@ static PyType_Spec multidict_values_iter_spec = {
     .slots = multidict_values_iter_slots,
 };
 
-
 static PyType_Slot multidict_keys_iter_slots[] = {
     {Py_tp_dealloc, multidict_iter_dealloc},
     {Py_tp_methods, multidict_iter_methods},
@@ -247,7 +238,7 @@ static PyType_Spec multidict_keys_iter_spec = {
 static inline int
 multidict_iter_init(PyObject *module, mod_state *state)
 {
-    PyObject * tmp;
+    PyObject *tmp;
     tmp = PyType_FromModuleAndSpec(module, &multidict_items_iter_spec, NULL);
     if (tmp == NULL) {
         return -1;

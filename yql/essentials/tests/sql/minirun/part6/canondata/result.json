@@ -324,6 +324,27 @@
             "uri": "file://test.test_bitcast_implicit-mod_bitcast-default.txt-Results_/extracted"
         }
     ],
+    "test.test[blocks-agg_with_optional_string_keys-default.txt-Debug]": [
+        {
+            "checksum": "c4c01814bb43ce233a32b92dbde44870",
+            "size": 1114,
+            "uri": "https://{canondata_backend}/1881367/91257b77defd2cabf8041b14bff63c8d29b9acc0/resource.tar.gz#test.test_blocks-agg_with_optional_string_keys-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-agg_with_optional_string_keys-default.txt-Peephole]": [
+        {
+            "checksum": "746a1d389eb41491e1275c5323df00bf",
+            "size": 1547,
+            "uri": "https://{canondata_backend}/1881367/91257b77defd2cabf8041b14bff63c8d29b9acc0/resource.tar.gz#test.test_blocks-agg_with_optional_string_keys-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-agg_with_optional_string_keys-default.txt-Results]": [
+        {
+            "checksum": "bddaea9e12611287fc78163411a25cdc",
+            "size": 73787,
+            "uri": "https://{canondata_backend}/1881367/91257b77defd2cabf8041b14bff63c8d29b9acc0/resource.tar.gz#test.test_blocks-agg_with_optional_string_keys-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[blocks-coalesce_scalar-default.txt-Debug]": [
         {
             "checksum": "5ee084040bec68362ce741c283ddead6",
@@ -957,6 +978,20 @@
             "checksum": "ab3484aa4ec4147ef8f68b360895054e",
             "size": 3172,
             "uri": "https://{canondata_backend}/937458/93a2295cbb0ac9d315a89547c42228d659f5e886/resource.tar.gz#test.test_optimizers-yson_dup_serialize--Results_/results.txt"
+        }
+    ],
+    "test.test[params-pg_missing-default.txt-Debug]": [
+        {
+            "checksum": "60096d53898c9a26b48c9aba00db555d",
+            "size": 237,
+            "uri": "https://{canondata_backend}/1599023/041960bbcc0b2c1a25dbe74f1422a99e4f82f82f/resource.tar.gz#test.test_params-pg_missing-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[params-pg_missing-default.txt-Results]": [
+        {
+            "checksum": "83e0c8294d6b27a963521291b0640dc4",
+            "size": 731,
+            "uri": "https://{canondata_backend}/1599023/041960bbcc0b2c1a25dbe74f1422a99e4f82f82f/resource.tar.gz#test.test_params-pg_missing-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-join_using_multiple1-default.txt-Debug]": [

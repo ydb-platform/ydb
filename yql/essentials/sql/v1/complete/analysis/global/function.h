@@ -1,15 +1,13 @@
 #pragma once
 
-#include "parse_tree.h"
+#include "global.h"
+#include "input.h"
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 
 namespace NSQLComplete {
 
-    TMaybe<TString> EnclosingFunction(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition);
+    TMaybe<TFunctionContext> EnclosingFunction(TParsedInput input);
 
 } // namespace NSQLComplete

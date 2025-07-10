@@ -61,9 +61,3 @@ In previous versions of {{ ydb-short-name }}, queries were typically executed us
 | Maximum query result size | 50 MB | The complete results of some queries may exceed the set limit. If this occurs, the query will fail and return no data. | PRECONDITION_FAILED |
 
 {% endcut %}
-
-## Topic Limits {#topic}
-
-| Parameter | Value |
-| :--- | :--- |
-| Maximum size of a transmitted message | 12 MB |

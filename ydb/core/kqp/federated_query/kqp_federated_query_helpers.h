@@ -16,6 +16,7 @@
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <ydb/library/logger/actor.h>
@@ -190,7 +191,7 @@ namespace NKikimr::NKqp {
     NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
 
     using TGetSchemeEntryResult = TMaybe<NYdb::NScheme::ESchemeEntryType>;
-    
+
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TString& endpoint,

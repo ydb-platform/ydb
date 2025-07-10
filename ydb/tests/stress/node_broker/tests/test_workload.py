@@ -32,7 +32,7 @@ class TestYdbWorkload(StressFixture):
         yatest.common.execute(cmd, wait=True)
 
 
-class TestDeltaProtocol(object):
+class TestDeltaProtocol(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(

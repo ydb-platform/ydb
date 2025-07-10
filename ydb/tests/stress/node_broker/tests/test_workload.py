@@ -33,23 +33,18 @@ class TestYdbWorkload(StressFixture):
 
 
 class TestDeltaProtocol(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                erasure=Erasure.MIRROR_3_DC,
-                extra_feature_flags=["enable_node_broker_delta_protocol"],
-                additional_log_configs={
-                    "NODE_BROKER": LogLevels.TRACE,
-                    "NAMESERVICE": LogLevels.TRACE,
-                },
-            )
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            erasure=Erasure.MIRROR_3_DC,
+            additional_log_configs={
+                "NODE_BROKER": LogLevels.TRACE,
+                "NAMESERVICE": LogLevels.TRACE,
+            },
+            extra_feature_flags={
+                "enable_node_broker_delta_protocol": True
+            }
         )
-        cls.cluster.start()
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
 
     def test(self):
         cmd = [

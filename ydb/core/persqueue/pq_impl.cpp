@@ -3436,11 +3436,6 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
     PQ_LOG_TX_I("Handle TEvTxProcessing::TEvReadSet tx " << event.GetTxId() << " tabletProducer " << event.GetTabletProducer());
 
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx && tx->PredicatesReceived.contains(event.GetTabletProducer())) {
-        //auto span = tx->WaitRSSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
-        //                                        "Topic.Transaction.ReadSet",
-        //                                        NWilson::EFlags::AUTO_END);
-        //span.Attribute("TabletProducer", static_cast<i64>(event.GetTabletProducer()));
-
         tx->WaitRSSpan.Attribute("LastTabletId", static_cast<i64>(event.GetTabletProducer()));
 
         if ((tx->State > NKikimrPQ::TTransaction::EXECUTED) ||
@@ -3455,7 +3450,6 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
         tx->OnReadSet(event, ev->Sender, std::move(ack));
 
         if (tx->HaveParticipantsDecision()) {
-            //DumpEndWaitRS(TabletID(), tx->TxId, !!tx->WaitRSSpan);
             if (tx->WaitRSSpan) {
                 tx->WaitRSSpan.End();
                 tx->WaitRSSpan = {};
@@ -3805,7 +3799,6 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
                         tx.WaitRSSpan.Attribute("TxId", static_cast<i64>(txId));
                         tx.WaitRSSpan.Attribute("TabletId", static_cast<i64>(TabletID()));
                     }
-                    //DumpBeginWaitRS(TabletID(), tx.TxId);
                     Y_ABORT_UNLESS(tx.MaxStep >= step);
 
                     if (tx.Step == Max<ui64>()) {
@@ -4526,7 +4519,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_TX_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
-            //DumpEndWaitRS(TabletID(), tx.TxId, !!tx.WaitRSSpan);
             if (tx.WaitRSSpan) {
                 tx.WaitRSSpan.End();
                 tx.WaitRSSpan = {};
@@ -5380,16 +5372,6 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
             return false;
     }
     return true;
-}
-
-void TPersQueue::DumpBeginWaitRS(const ui64 tabletId, const ui64 txId)
-{
-    PQ_LOG_ERROR("begin wait RS, TabletId " << tabletId << ", TxId " << txId);
-}
-
-void TPersQueue::DumpEndWaitRS(const ui64 tabletId, const ui64 txId, const bool hasSpan)
-{
-    PQ_LOG_ERROR("end wait RS, TabletId " << tabletId << ", TxId " << txId << ", has span " << hasSpan);
 }
 
 } // namespace NKikimr::NPQ

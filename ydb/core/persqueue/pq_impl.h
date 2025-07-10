@@ -577,9 +577,6 @@ private:
 
     NWilson::TSpan WriteTxsSpan;
 
-    void DumpBeginWaitRS(const ui64 tabletId, const ui64 txId);
-    void DumpEndWaitRS(const ui64 tabletId, const ui64 txId, const bool hasSpan);
-
     void InitPipeClientCache();
 };
 

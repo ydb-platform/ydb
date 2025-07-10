@@ -62,7 +62,6 @@ target_link_libraries(ydbd PUBLIC
   yson2_udf
   dsv_udf
   ydb-library-breakpad
-  client-ydb_persqueue_public-codecs
 )
 
 target_allocator(ydbd

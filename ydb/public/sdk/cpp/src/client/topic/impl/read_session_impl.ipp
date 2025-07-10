@@ -1961,6 +1961,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransact
             return;
         }
 
+        txInfo->IsActive = true;
+        txInfo->Subscribed = true;
+
         auto callback = [cbContext = this->SelfContext, txId, txInfo, consumer = Settings.ConsumerName_, client]() {
             std::vector<TTopicOffsets> offsets;
 
@@ -1983,9 +1986,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransact
         };
 
         tx.AddPrecommitCallback(std::move(callback));
-
-        txInfo->IsActive = true;
-        txInfo->Subscribed = true;
     }
 }
 

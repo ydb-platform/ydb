@@ -33,8 +33,7 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
         InitStageData(std::make_unique<TFetchedData>(
             GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
         ProcessingStarted = true;
-        SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
-            GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());
+        SourceGroupGuard = GetContext()->GetProcessScopeGuard()->BuildGroupGuard();
         SetMemoryGroupId(SourceGroupGuard->GetGroupId());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
         //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));

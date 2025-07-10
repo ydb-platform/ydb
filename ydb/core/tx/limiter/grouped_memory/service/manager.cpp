@@ -96,6 +96,7 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
         process->RegisterAllocation(externalScopeId, externalGroupId, task, stageIdx);
     } else {
         AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
+                                                               "process", externalProcessId)("scope", externalScopeId)(
                                                                "ext_group", externalGroupId)("stage_idx", stageIdx);
     }
     RefreshSignals();

@@ -26,12 +26,12 @@ struct TDecimalBlockExec {
     const U* GetScalarValue(const arrow::Scalar& scalar) const {
         return reinterpret_cast<const U*>(GetPrimitiveScalarValuePtr(scalar));
     }
-    
+
     template<>
     const NYql::NDecimal::TInt128* GetScalarValue<NYql::NDecimal::TInt128>(const arrow::Scalar& scalar) const {
         return reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(scalar).data());
     }
- 
+
     void ArrayScalarCore(
         const NYql::NDecimal::TInt128* val1Ptr,
         const ui8* valid1,
@@ -103,7 +103,7 @@ struct TDecimalBlockExec {
     }
 
     arrow::Status ExecScalarScalar(arrow::compute::KernelContext* kernelCtx,
-        const arrow::compute::ExecBatch& batch, arrow::Datum* res) const 
+        const arrow::compute::ExecBatch& batch, arrow::Datum* res) const
     {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
@@ -119,7 +119,7 @@ struct TDecimalBlockExec {
             *mem = Apply(*val1Ptr, *val2Ptr);
             *res = resDatum;
         }
-    
+
         return arrow::Status::OK();
     }
 
@@ -142,7 +142,7 @@ struct TDecimalBlockExec {
         } else {
             GetBitmap(resArr, 0).SetBitsTo(false);
         }
-    
+
         return arrow::Status::OK();
     }
 
@@ -266,12 +266,12 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TTyp
     MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
 
     auto createKernel = [&](auto exec) {
-        auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), 
+        auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
             [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
             return exec->Exec(ctx, batch, res);
         });
         k->null_handling = arrow::compute::NullHandling::INTERSECTION;
-        return k;       
+        return k;
     };
 
     switch (dataType2->GetSchemeType()) {
@@ -283,7 +283,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TTyp
         return createKernel(std::make_shared<TExec<type>>(precision, scale)); \
     }
     INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MUL)
-#undef MAKE_PRIMITIVE_TYPE_MUL    
+#undef MAKE_PRIMITIVE_TYPE_MUL
     default:
         Y_ABORT("Unupported type.");
     }
@@ -305,7 +305,7 @@ IComputationNode* WrapBlockDecimal(TStringBuf name, TCallable& callable, const T
     TVector<TType*> argsTypes = { firstType, secondType };
 
     std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TExec>(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, name, std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), name, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 }

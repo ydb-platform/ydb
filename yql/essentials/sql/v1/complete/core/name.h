@@ -10,6 +10,11 @@ namespace NSQLComplete {
         Table,
     };
 
+    enum class ENodeKind {
+        Any,
+        Table,
+    };
+
     struct TTableId {
         TString Cluster;
         TString Path;

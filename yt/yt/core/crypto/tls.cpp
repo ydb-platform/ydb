@@ -26,6 +26,7 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <openssl/x509v3.h>
 
 namespace NYT::NCrypto {
 
@@ -183,6 +184,8 @@ struct TSslContextImpl
         return SSL_get_SSL_CTX(ssl) == ActiveContext_.get();
     }
 
+    DEFINE_BYVAL_RW_BOOLEAN_PROPERTY(InsecureSkipVerify, DefaultInsecureSkipVerify);
+
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
     TSslCtxPtr Context_;
@@ -227,6 +230,10 @@ public:
 
     void SetHost(const TString& host)
     {
+        // Verify hostname in server certificate.
+        SSL_set_hostflags(Ssl_.get(), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        SSL_set1_host(Ssl_.get(), host.c_str());
+
         SSL_set_tlsext_host_name(Ssl_.get(), host.c_str());
     }
 
@@ -234,8 +241,14 @@ public:
     {
     }
 
-    void StartClient()
+    void StartClient(bool insecureSkipVerify)
     {
+        YT_LOG_WARNING_IF(insecureSkipVerify, "Started insecure TLS client connection");
+        if (!insecureSkipVerify) {
+            // Require and verify server certificate.
+            SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
+        }
+
         SSL_set_connect_state(Ssl_.get());
         auto sslResult = SSL_do_handshake(Ssl_.get());
         sslResult = SSL_get_error(Ssl_.get(), sslResult);
@@ -626,15 +639,20 @@ public:
 
     TFuture<IConnectionPtr> Dial(const TNetworkAddress& remoteAddress, TDialerContextPtr context) override
     {
-        return Underlying_->Dial(remoteAddress)
-            .Apply(BIND([ctx = Context_, poller = Poller_, context = std::move(context)] (const IConnectionPtr& underlying) -> IConnectionPtr {
+        return Underlying_->Dial(remoteAddress).Apply(BIND(
+            [
+                ctx = Context_,
+                poller = Poller_,
+                context = std::move(context),
+                insecureSkipVerify = Context_->IsInsecureSkipVerify()
+            ] (const IConnectionPtr& underlying) -> IConnectionPtr {
                 auto connection = New<TTlsConnection>(ctx, poller, underlying);
                 if (context && context->Host) {
                     connection->SetHost(*context->Host);
                 }
-                connection->StartClient();
+                connection->StartClient(insecureSkipVerify);
                 return connection;
-        }));
+            }));
     }
 
 private:
@@ -742,6 +760,7 @@ void TSslContext::ApplyConfig(const TSslContextConfigPtr& config, TCertificatePa
     AddCertificateAuthority(config->CertificateAuthority, pathResolver);
     AddCertificateChain(config->CertificateChain, pathResolver);
     AddPrivateKey(config->PrivateKey, pathResolver);
+    Impl_->SetInsecureSkipVerify(config->InsecureSkipVerify);
 }
 
 void TSslContext::UseBuiltinOpenSslX509Store()

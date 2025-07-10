@@ -863,7 +863,7 @@ template <typename T>
 T MakeKey(TStringBuf s, ui32 keyLength) {
     Y_UNUSED(keyLength);
     Y_ASSERT(s.Size() <= sizeof(T));
-    return *(const T*)s.Data();
+    return ReadUnaligned<T>(s.Data());
 }
 
 template <>
@@ -1280,8 +1280,10 @@ public:
         }
 
         std::array<TOutputBuffer, PrefetchBatchSize> out;
-        for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
-            out[i].Resize(sizeof(TKey));
+        if constexpr (!std::is_same<TKey, TSSOKey>::value && !std::is_same<TKey, TExternalFixedSizeKey>::value) {
+            for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
+                out[i].Resize(sizeof(TKey));
+            }
         }
 
         std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
@@ -1374,13 +1376,18 @@ public:
             }
 
             // encode key
-            out[insertBatchLen].Rewind();
+            auto& buf = out[insertBatchLen];
+            buf.Rewind();
+            if constexpr (!std::is_same<TKey, TSSOKey>::value && !std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                WriteUnaligned<TKey>(buf.Data(), TKey{});
+            }
+
             for (ui32 i = 0; i < keysDatum.size(); ++i) {
                 if (keysDatum[i].is_scalar()) {
                     // TODO: more efficient code when grouping by scalar
-                    Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
+                    Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), buf);
                 } else {
-                    Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
+                    Readers_[i]->SaveItem(*keysDatum[i].array(), row, buf);
                 }
             }
 

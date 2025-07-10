@@ -45,7 +45,9 @@ namespace NSQLComplete {
     };
 
     struct TFunctionName: TIdentifier, TDescribed {
-        struct TConstraints: TNamespaced {};
+        struct TConstraints: TNamespaced {
+            ENodeKind ReturnType;
+        };
     };
 
     struct THintName: TIdentifier {

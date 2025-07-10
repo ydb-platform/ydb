@@ -289,6 +289,17 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         check(tester22);
         check(tester35);
     }
+
+    Y_UNIT_TEST(TestPMInfDecimal) {
+        TDecimalTestCase tester22(22, 9);
+        tester22.PrepareTable1();
+        auto inserter = tester22.Inserter();
+        inserter.AddRow().Add(1).Add(5).Add(TDecimalValue("999999999999999999999", 22, 9));
+        inserter.AddRow().Add(1).Add(5).Add(TDecimalValue("-999999999999999999999", 22, 9));
+        tester22.Upsert(inserter);
+        tester22.CheckQuery("SELECT max(dec) FROM `/Root/Table1`", "[[[\"inf\"]]]");
+        tester22.CheckQuery("SELECT min(dec) FROM `/Root/Table1`", "[[[\"-inf\"]]]");
+    }
 }
 
 }   // namespace NKqp

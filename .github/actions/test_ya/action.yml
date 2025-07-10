@@ -192,14 +192,14 @@ runs:
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
-        # -DTEST_ICRDMA - Enable rdma tests for interconnect. Our CI environment has configured soft RoCE, so we can run tests.
+        export TEST_ICRDMA=1
+
         params=(
           -T
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
-          -DTEST_ICRDMA
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}

@@ -1,9 +1,18 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+#include <util/system/env.h>
 #include <errno.h>
+
+static bool IsRdmaTestDisabled() {
+    return GetEnv("TEST_ICRDMA").empty();
+}
 
 Y_UNIT_TEST_SUITE(Ibv) {
     Y_UNIT_TEST(ListDevice) {
+        if (IsRdmaTestDisabled()) {
+            Cerr << "RDMA test skipped" << Endl;
+            return;
+        }
         int numDevices = 0;
 
         ibv_device** deviceList  = ibv_get_device_list(&numDevices);

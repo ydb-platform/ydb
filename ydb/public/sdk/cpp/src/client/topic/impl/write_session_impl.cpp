@@ -554,31 +554,31 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransactionBase* tx)
         txInfo->IsActive = true;
         txInfo->Subscribed = true;
         txInfo->AllAcksReceived = NThreading::NewPromise<TStatus>();
-    }
 
-    auto callback = [cbContext = this->SelfContext, txId, txInfo]() {
-        with_lock(txInfo->Lock) {
-            Y_ABORT_UNLESS(!txInfo->CommitCalled);
+        auto callback = [cbContext = this->SelfContext, txId, txInfo]() {
+            with_lock(txInfo->Lock) {
+                Y_ABORT_UNLESS(!txInfo->CommitCalled);
 
-            txInfo->CommitCalled = true;
+                txInfo->CommitCalled = true;
 
-            if (txInfo->WriteCount == txInfo->AckCount) {
-                txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
-                if (auto self = cbContext->LockShared()) {
-                    self->DeleteTx(txId);
+                if (txInfo->WriteCount == txInfo->AckCount) {
+                    txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+                    if (auto self = cbContext->LockShared()) {
+                        self->DeleteTx(txId);
+                    }
+                    return txInfo->AllAcksReceived.GetFuture();
                 }
-                return txInfo->AllAcksReceived.GetFuture();
+
+                if (txInfo->IsActive) {
+                    return txInfo->AllAcksReceived.GetFuture();
+                }
             }
 
-            if (txInfo->IsActive) {
-                return txInfo->AllAcksReceived.GetFuture();
-            }
-        }
+            return NThreading::MakeFuture(MakeSessionExpiredError());
+        };
 
-        return NThreading::MakeFuture(MakeSessionExpiredError());
-    };
-
-    tx->AddPrecommitCallback(std::move(callback));
+        tx->AddPrecommitCallback(std::move(callback));
+    }
 }
 
 void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)

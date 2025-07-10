@@ -46,6 +46,8 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_sasl_handshake_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_metrics_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_list_offsets_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_list_groups_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_describe_groups_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_topic_offsets_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_fetch_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_find_coordinator_actor.cpp
@@ -61,6 +63,7 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/txn_actor_response_builder.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_transaction_actor_sql.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_transaction_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_state_name_to_int.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.cpp

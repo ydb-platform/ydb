@@ -23,6 +23,7 @@ target_link_libraries(essentials-utils-fetch PUBLIC
   cpp-http-misc
   cpp-openssl-io
   library-cpp-uri
+  library-cpp-retry
   essentials-utils-log
 )
 

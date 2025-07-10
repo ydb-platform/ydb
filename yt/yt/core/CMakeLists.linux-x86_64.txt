@@ -115,6 +115,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/async_stream_pipe.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/async_stream.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/config.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/context_switch_aware_periodic_yielder.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/coroutine.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/delayed_executor.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/execution_stack.cpp

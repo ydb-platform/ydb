@@ -6,10 +6,15 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/executor_thread.h>
 
+#include <ydb/public/sdk/cpp/src/library/string_utils/base64/base64.h>
+
+#include <library/cpp/json/json_reader.h>
+
 namespace NEtcd {
 
 using namespace NActors;
 using namespace NYdb::NQuery;
+using namespace NYdb::NTopic;
 
 namespace {
 
@@ -123,7 +128,7 @@ private:
 
             if ((EWatchKind::OnChanges == Kind || (data.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == Kind)
                 && data.Modified >= FromRevision && (!WithPrevious || buff.first || data.Created == data.Modified))
-                changes.emplace_back(std::move(key), data.Modified, WithPrevious && buff.first ? std::move(*buff.first) : TData(), data.Version > 0LL ? TData(data) : TData());
+                changes.emplace_back(std::move(key), WithPrevious && buff.first ? std::move(*buff.first) : TData(), data.Version > 0LL ? TData(data) : TData());
 
             if (data.Version > 0LL)
                 buff.first.emplace(std::move(data));
@@ -175,8 +180,8 @@ private:
 
             if (AwaitHistory)
                 Buffer[ev->Get()->Key].second.emplace(std::move(*ev->Get()));
-            else if (ev->Get()->Revision >= FromRevision)
-                ctx.Send(Watchman, new TEvChanges(Id, {TChange(std::move(ev->Get()->Key), ev->Get()->Revision, WithPrevious && ev->Get()->OldData.Version ? std::move(ev->Get()->OldData) : TData(), std::move(ev->Get()->NewData))}));
+            else if (ev->Get()->NewData.Modified >= FromRevision)
+                ctx.Send(Watchman, new TEvChanges(Id, {TChange(std::move(ev->Get()->Key), WithPrevious && ev->Get()->OldData.Version ? std::move(ev->Get()->OldData) : TData(), std::move(ev->Get()->NewData))}));
         }
     }
 
@@ -376,8 +381,7 @@ private:
                 kv->set_lease(change.NewData.Lease);
                 kv->set_mod_revision(change.NewData.Modified);
                 kv->set_create_revision(change.NewData.Created);
-            } else
-                kv->set_mod_revision(change.Revision);
+            }
 
             std::cout << (change.NewData.Version ? change.OldData.Version ? "Updated" : "Created" : "Deleted") << '(' << change.Key;
             if (change.OldData.Version) {
@@ -419,7 +423,48 @@ public:
 
     void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
-        Stuff->Watchtower = SelfId();
+
+        TReadSessionSettings settings;
+        settings.WithoutConsumer().ReadFromTimestamp(TInstant::Now()).AppendTopics(TTopicReadSettings(Stuff->Folder + "/current/changes").AppendPartitionIds(0ULL));
+        settings.EventHandlers_.SimpleDataHandlers(
+        [my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](TReadSessionEvent::TDataReceivedEvent& event) {
+            if (const auto lock = stuff.lock()) {
+                NJson::TJsonReaderConfig config;
+                config.MaxDepth = 3UL;
+
+                for (const auto& message : event.GetMessages()) {
+                    if (NJson::TJsonValue v; NJson::ReadJsonTree(message.GetData(), &config, &v)) try {
+                        TData oldData, newData;
+                        if (v.Has("oldImage")) {
+                            const auto& map = v["oldImage"];
+                            oldData.Version = map["version"].GetIntegerSafe();
+                            oldData.Created = map["created"].GetIntegerSafe();
+                            oldData.Modified = map["modified"].GetIntegerSafe();
+                            oldData.Lease = map["lease"].GetIntegerSafe();
+                            oldData.Value = Base64Decode(map["value"].GetStringSafe());
+                        }
+
+                        if (v.Has("newImage")) {
+                            const auto& map = v["newImage"];
+                            newData.Version = map["version"].GetIntegerSafe();
+                            newData.Created = map["created"].GetIntegerSafe();
+                            newData.Modified = map["modified"].GetIntegerSafe();
+                            newData.Lease = map["lease"].GetIntegerSafe();
+                            newData.Value = Base64Decode(map["value"].GetStringSafe());
+                        }
+
+                        lock->ActorSystem->Send(my, new TEvChange(Base64Decode(v["key"].Back().GetStringSafe()), std::move(oldData), std::move(newData)));
+                    } catch (const NJson::TJsonException& ex) {
+                        std::cout << "Error on parsing json: " << ex.what() << std::endl;
+                    } else {
+                        std::cout << "Invalid message format." << std::endl;
+                    }
+                }
+            }
+        }, false, false);
+
+        ReadSession = Stuff->TopicClient->CreateReadSession(settings);
+        Y_ABORT_UNLESS(ReadSession);
     }
 private:
     struct TSubscriptions {
@@ -513,6 +558,8 @@ private:
 
     const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     const TSharedStuff::TPtr Stuff;
+
+    std::shared_ptr<IReadSession> ReadSession;
 
     TWatchmanSubscriptionsMap WatchmanSubscriptionsMap;
 

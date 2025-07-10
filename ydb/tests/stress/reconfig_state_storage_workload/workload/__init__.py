@@ -25,11 +25,9 @@ supported_pk_types = [
     "Uint64",
     "Decimal(22,9)",
     # "DyNumber", https://github.com/ydb-platform/ydb/issues/13048
-
     "String",
     "Utf8",
     # Uuid", https://github.com/ydb-platform/ydb/issues/13047
-
     "Date",
     "Datetime",
     "Datetime64",
@@ -37,19 +35,13 @@ supported_pk_types = [
     # "Interval", https://github.com/ydb-platform/ydb/issues/13050
 ]
 
-supported_types = supported_pk_types + [
-    "Float",
-    "Double",
-    "Json",
-    "JsonDocument",
-    "Yson"
-]
+supported_types = supported_pk_types + ["Float", "Double", "Json", "JsonDocument", "Yson"]
 
 
 class WorkloadTablesCreateDrop(WorkloadBase):
     class TableStatus(Enum):
-        CREATING = "Creating",
-        AVAILABLE = "Available",
+        CREATING = "Creating"
+        AVAILABLE = "Available"
         DELETING = "Deleting"
 
     def __init__(self, client, prefix, stop):
@@ -221,27 +213,57 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             cfg = self.do_request_config()[f"{self.config_name}Config"]
             defaultRingGroup = [cfg["Ring"]] if "Ring" in cfg else cfg["RingGroups"]
             newRingGroup = [
-                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
-                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset, "NToSelect": 3, "Ring": [{"Node": [1]}, {"Node": [2]}, {"Node": [3]}]}
-                ]
+                {
+                    "RingGroupActorIdOffset": self.ringGroupActorIdOffset,
+                    "NToSelect": 3,
+                    "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}],
+                },
+                {
+                    "RingGroupActorIdOffset": self.ringGroupActorIdOffset,
+                    "NToSelect": 3,
+                    "Ring": [{"Node": [1]}, {"Node": [2]}, {"Node": [3]}],
+                },
+            ]
             logger.info(f"From: {defaultRingGroup} To: {newRingGroup}")
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = True
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": defaultRingGroup + newRingGroup}}}))
+            logger.info(
+                self.do_request(
+                    {
+                        "ReconfigStateStorage": {
+                            f"{self.config_name}Config": {"RingGroups": defaultRingGroup + newRingGroup}
+                        }
+                    }
+                )
+            )
             time.sleep(self.wait_for)
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = False
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": defaultRingGroup + newRingGroup}}}))
+            logger.info(
+                self.do_request(
+                    {
+                        "ReconfigStateStorage": {
+                            f"{self.config_name}Config": {"RingGroups": defaultRingGroup + newRingGroup}
+                        }
+                    }
+                )
+            )
             time.sleep(self.wait_for)
             for i in range(len(defaultRingGroup)):
                 defaultRingGroup[i]["WriteOnly"] = True
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": newRingGroup + defaultRingGroup}}}))
+            logger.info(
+                self.do_request(
+                    {
+                        "ReconfigStateStorage": {
+                            f"{self.config_name}Config": {"RingGroups": newRingGroup + defaultRingGroup}
+                        }
+                    }
+                )
+            )
             time.sleep(self.wait_for)
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": newRingGroup}}}))
+            logger.info(
+                self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {"RingGroups": newRingGroup}}})
+            )
             time.sleep(self.wait_for)
             curConfig = self.do_request_config()[f"{self.config_name}Config"]
             expectedConfig = {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup}
@@ -317,7 +339,7 @@ class WorkloadRunner:
             WorkloadTablesCreateDrop(self.client, self.name, stop),
             WorkloadInsertDelete(self.client, self.name, stop),
             WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop, self.config_name),
-            WorkloadDiscovery(self.client, self.cluster, self.name, stop)
+            WorkloadDiscovery(self.client, self.cluster, self.name, stop),
         ]
         for w in workloads:
             w.start()

@@ -402,6 +402,10 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     info->SetLayoutCorrect(groupInfo->LayoutCorrect);
     info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.OperatingStatus));
     info->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.ExpectedStatus));
+
+    if (groupInfo->BridgePileId) {
+        info->SetBridgePileId(groupInfo->BridgePileId->GetRawId());
+    }
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo) {
@@ -560,6 +564,13 @@ void TBlobStorageController::UpdateSystemViews() {
                         pb->SetLayoutCorrect(layout.IsCorrect());
                     } else if (groupInfo) {
                         // TODO(alexvru): fill in layout for static group
+                    }
+
+                    for (ui32 bridgeGroupRawId : group.GetBridgeGroupIds()) {
+                        auto bridgeGroupId = TGroupId::FromValue(bridgeGroupRawId);
+                        if (SysViewChangedGroups.contains(bridgeGroupId)) {
+                            state.Groups[bridgeGroupId].SetProxyGroupId(group.GetGroupID());
+                        }
                     }
                 }
             }

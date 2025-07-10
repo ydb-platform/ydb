@@ -18,6 +18,7 @@ TEST_SRCS(
     test_data_type.py
     test_vector_index.py
     test_batch_operations.py
+    test_node_broker_delta_protocol.py
     udf/test_datetime2.py
     udf/test_digest.py
     udf/test_digest_regression.py

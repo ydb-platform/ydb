@@ -35,21 +35,22 @@
   * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) [автоматическая блокировка пользователя](./reference/configuration/auth_config#account-lockout) при исчерпании лимита попыток ввода пароля;
   * [Добавлена](https://github.com/ydb-platform/ydb/pull/12983) возможность самостоятельной смены пароля пользователем.
 * [Реализована](https://github.com/ydb-platform/ydb/issues/9748) возможность переключения функциональных флагов во время работы сервера {{ ydb-short-name }}. Флаги, для которых в [proto-файле](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) не указан параметр `(RequireRestart) = true`, будут применяться без рестарта кластера.
-* [Теперь](https://github.com/ydb-platform/ydb/pull/11329) самые старые (а не новые) блокировки меняются на полношардовые при превышении количества блокировок на шардах.
+* Теперь самые старые (а не новые) блокировки [меняются на полношардовые](https://github.com/ydb-platform/ydb/pull/11329) при превышении количества блокировок на шардах.
 * [Реализовано](https://github.com/ydb-platform/ydb/pull/12567) сохранение оптимистичных блокировок в памяти при плавном перезапуске даташардов, что должно уменьшить число ошибок ABORTED из-за потери блокировок при балансировке таблиц между узлами.
 * [Реализована](https://github.com/ydb-platform/ydb/pull/12689) отмена волатильных транзакций со статусом ABORTED при плавном перезапуске даташардов.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6342) возможность удалить `NOT NULL`-ограничения на столбец в таблице с помощью запроса `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL`.
 * [Добавлено](https://github.com/ydb-platform/ydb/pull/9168) ограничение в 100 000 на число одновременных запросов на создание сессий в сервисе координации.
 * [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [число столбцов в первичном ключе](./concepts/limits-ydb.md?#schema-object) с 20 до 30.
+* Улучшена диагностика и интроспекция ошибок, связанных с памятью.
 * **_(Экспериментально)_** [Добавлены](https://github.com/ydb-platform/ydb/pull/14075) строгие проверки прав доступа, включаемые установкой следующих флагов:
-  * `enable_strict_acl_check`;
+  * `enable_strict_acl_check` – не позволять выдавать права несуществующим пользователям и удалять пользователя с правами записи на схемных объектах;
   * `enable_strict_user_management` — строгие проверки для локальных пользователей;
   * `enable_database_admin` — функции администратора базы данных;
   * `enable_data_erasure` — включает процедуру многократной перезаписи удалённых данных для снижения риска их чтения при прямом обращении к блочным устройствам средствами операционной системы [(PR #14460)](https://github.com/ydb-platform/ydb/pull/14460).
 
 #### Изменения с потерей обратной совместимости
 
-* Если вы используете [temporal over YDB](https://github.com/yandex/temporal-over-ydb), обновите его на версию [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) перед обновление YDB на текущую версию, чтобы избежать ошибок в выполнении запросов.
+* Если вы используете запросы, в которых происходит обращение к именованным выражениям как к таблицам с помощью [AS_TABLE](./yql/reference/syntax/select/from_as_table), обновите [temporal over YDB](https://github.com/yandex/temporal-over-ydb) на версию [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) перед обновление YDB на текущую версию, чтобы избежать ошибок в выполнении таких запросов.
 
 #### YDB UI
 
@@ -76,7 +77,6 @@
 * [Оптимизировано](https://github.com/ydb-platform/ydb/pull/10969) время запуска Hive.
 * [Оптимизирован](https://github.com/ydb-platform/ydb/pull/6561) процесс репликации в распределённом хранилище.
 * [Оптимизирован](https://github.com/ydb-platform/ydb/pull/9491) размер заголовка больших двоичных объектов в VDisk.
-* Улучшена диагностика и интроспекция ошибок, связанных с памятью.
 * Уменьшено потребление памяти за счёт очистки страниц аллокатора.
 
 #### Исправления ошибок

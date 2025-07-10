@@ -17,6 +17,7 @@ add_subdirectory(portions)
 add_subdirectory(chunks)
 add_subdirectory(granules)
 add_subdirectory(optimizer)
+add_subdirectory(schemas)
 
 add_library(simple_reader-iterator-sys_view INTERFACE)
 
@@ -30,5 +31,6 @@ target_link_libraries(simple_reader-iterator-sys_view INTERFACE
   iterator-sys_view-chunks
   iterator-sys_view-granules
   iterator-sys_view-optimizer
+  iterator-sys_view-schemas
 )
 

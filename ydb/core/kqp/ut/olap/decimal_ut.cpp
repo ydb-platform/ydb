@@ -244,9 +244,9 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         tester35.PrepareTable1();
 
         auto check = [](const TDecimalTestCase& tester) {
-            tester.CheckQuery("SELECT min(dec) FROM `/Root/Table1`", "[[[\"3.14\"]]]");
-            tester.CheckQuery("SELECT max(dec) FROM `/Root/Table1`", "[[[\"12.46\"]]]");
-            tester.CheckQuery("SELECT sum(dec) FROM `/Root/Table1`", "[[[\"32.252\"]]]");
+            tester.CheckQuery("SELECT min(dec) FROM `/Root/Table1`", "[[[\"3.14\"]]]", EQueryMode::EXECUTE_QUERY);
+            tester.CheckQuery("SELECT max(dec) FROM `/Root/Table1`", "[[[\"12.46\"]]]", EQueryMode::EXECUTE_QUERY);
+            tester.CheckQuery("SELECT sum(dec) FROM `/Root/Table1`", "[[[\"32.252\"]]]", EQueryMode::EXECUTE_QUERY);
         };
 
         check(tester22);

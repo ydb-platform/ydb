@@ -1,6 +1,7 @@
 #include "columnshard.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/testlib/cs_helper.h>
@@ -390,8 +391,16 @@ namespace NKqp {
             return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
-        case NScheme::NTypeIds::Decimal:
-            return arrow::field(name, arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale()), nullable);
+        case NScheme::NTypeIds::Decimal: {
+            auto meta = arrow::KeyValueMetadata::Make(
+                std::vector<std::string>{"precision", "scale"},
+                std::vector<std::string>{
+                    ToString(typeInfo.GetDecimalType().GetPrecision()),
+                    ToString(typeInfo.GetDecimalType().GetScale())
+                }
+            );
+            return arrow::field(name, arrow::fixed_size_binary(16), nullable, meta);
+        }
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:

@@ -96,6 +96,7 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
         process->RegisterAllocation(externalScopeId, externalGroupId, task, stageIdx);
     } else {
         AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
+                                                               "process", externalProcessId)("scope", externalScopeId)(
                                                                "ext_group", externalGroupId)("stage_idx", stageIdx);
     }
     RefreshSignals();
@@ -148,10 +149,14 @@ void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 e
     RefreshSignals();
 }
 
-void TManager::UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit) {
-    if (!DefaultStage) {
-        return;
-    }
+void TManager::SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
+    AFL_ENSURE(DefaultStage);
+
+    DefaultStage->SetMemoryConsumer(std::move(consumer));
+}
+
+void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit) {
+    AFL_ENSURE(DefaultStage);
 
     bool isLimitIncreased = false;
     DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased);

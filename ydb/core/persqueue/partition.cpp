@@ -624,7 +624,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     ScheduleUpdateAvailableSize(ctx);
 
-    if (Config.GetPartitionConfig().HasMirrorFrom()) {
+    if (MirroringEnabled(Config)) {
         CreateMirrorerActor();
     }
 
@@ -2892,7 +2892,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
-    if (Config.GetPartitionConfig().HasMirrorFrom()) {
+    if (MirroringEnabled(Config)) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
                                                                           Config));

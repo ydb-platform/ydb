@@ -1040,6 +1040,13 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 this->Send(proxy, new TEvents::TEvPoisonPill());
             }
         }
+
+        if (CurrentSyncRequest) {
+            SBS_LOG_I("Delay current sync request: " << CurrentSyncRequest);
+            DelayedSyncRequest = Max(DelayedSyncRequest, CurrentSyncRequest);
+            CurrentSyncRequest = 0;
+        }
+
         ProxyToGroupMap.clear();
         ProxyGroups.clear();
         States.clear();

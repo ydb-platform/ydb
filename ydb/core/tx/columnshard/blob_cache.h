@@ -39,7 +39,6 @@ struct TEvBlobCache {
         EvReadBlobRangeResult,
         EvCacheBlobRange,
         EvForgetBlob,
-        EvUpdateMemoryLimit,
 
         EvEnd
     };
@@ -108,14 +107,6 @@ struct TEvBlobCache {
         explicit TEvForgetBlob(const TUnifiedBlobId& blobId)
             : BlobId(blobId)
         {}
-    };
-
-    struct TEvUpdateMaxCacheDataSize: public NActors::TEventLocal<TEvUpdateMaxCacheDataSize, EvUpdateMemoryLimit> {
-        i64 MaxCacheDataSize = 0;
-
-        explicit TEvUpdateMaxCacheDataSize(const i64 maxCacheDataSize)
-            : MaxCacheDataSize(maxCacheDataSize) {
-        }
     };
 };
 

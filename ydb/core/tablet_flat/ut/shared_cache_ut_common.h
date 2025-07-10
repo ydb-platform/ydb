@@ -14,7 +14,7 @@ namespace NKikimr::NSharedCache::NTest {
         {}
 
         ui32 CacheId : 4 = 0;
-        ECacheTier CacheTier : CacheTierBits = ECacheTier::None;
+        ECacheTier CacheTier : 2 = ECacheTier::Regular;
     };
 
     struct TPageTraits {
@@ -113,6 +113,10 @@ namespace NKikimr::NSharedCache::NTest {
             }
             Y_ENSURE(Map.size() == count);
             return result;
+        }
+
+        ui64 GetLimit() const {
+            return Limit;
         }
     
     private:

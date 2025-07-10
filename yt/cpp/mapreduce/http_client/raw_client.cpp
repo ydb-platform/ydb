@@ -767,6 +767,48 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
+struct THttpRequestStream
+    : public IOutputStream
+{
+public:
+    THttpRequestStream(NHttpClient::IHttpRequestPtr request)
+        : Request_(std::move(request))
+        , Underlying_(Request_->GetStream())
+    { }
+
+private:
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Request_->Finish()->GetResponse();
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    IOutputStream* Underlying_;
+};
+
+std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options)
+{
+    THttpHeader header("PUT", GetWriteFileCommand(Context_.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetRequestCompression(ToString(Context_.Config->ContentEncoding));
+    header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto request = StartRequestWithoutRetry(Context_, header, config);
+    return std::make_unique<THttpRequestStream>(std::move(request));
+}
+
 std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
     const TString& cookie,
     const TMaybe<TFormat>& format,

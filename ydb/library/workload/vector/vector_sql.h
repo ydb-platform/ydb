@@ -1,12 +1,6 @@
 #pragma once
 
-#include <ydb/library/workload/abstract/workload_query_generator.h>
-
-#include <cctype>
-#include <mutex>
-#include <vector>
-#include <string>
-#include <atomic>
+#include "vector_workload_params.h"
 
 namespace NYdbWorkload {
 
@@ -17,12 +11,10 @@ std::tuple<std::string, bool> GetMetricInfo(NYdb::NTable::TVectorIndexSettings::
 
 
 // Utility function to create select query
-std::string MakeSelect(const TString& tableName, const TString& indexName, 
-    const std::string& keyColumn, const std::string& embeddingColumn, const std::optional<std::string>& prefixColumn, 
-    size_t kmeansTreeClusters, NYdb::NTable::TVectorIndexSettings::EMetric metric);
+std::string MakeSelect(const TVectorWorkloadParams& params, const TString& indexName);
 
 
 // Utility function to create parameters for select query
-NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, std::optional<i64> prefixValue, ui64 limit);
+NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, const std::optional<NYdb::TValue>& prefixValue, ui64 limit);
 
 } // namespace NYdbWorkload

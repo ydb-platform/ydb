@@ -18,6 +18,7 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_pb.h>

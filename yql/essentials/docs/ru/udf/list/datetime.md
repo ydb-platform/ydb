@@ -172,7 +172,8 @@ SELECT
 * `DateTime::ToHours(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`
 * `DateTime::ToMinutes(Interval64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32` - до версии [2025.03](../../changelog/2025.03.md)
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int64` - с версии [2025.03](../../changelog/2025.03.md)
 * `DateTime::ToSeconds(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval64{Flags:AutoMap}) -> Int64`
@@ -184,7 +185,8 @@ SELECT
 * `DateTime::Interval64FromHours(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMinutes(Int64{Flags:AutoMap}) -> Interval64`
-* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval` - до версии [2025.03](../../changelog/2025.03.md)
+* `DateTime::IntervalFromSeconds(Int64{Flags:AutoMap}) -> Interval` - с версии [2025.03](../../changelog/2025.03.md)
 * `DateTime::Interval64FromSeconds(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMilliseconds(Int64{Flags:AutoMap}) -> Interval64`
@@ -193,7 +195,7 @@ SELECT
 
 {% note warning %}
 
-Функция `DateTime::ToSeconds` не поддерживает работу с интервалами с длительностью большей чем 68 лет, в этом случае можно использовать выражение `DateTime::ToMilliseconds(x) / 1000`
+Функция `DateTime::ToSeconds` до `2025.03` не поддерживает работу с интервалами с длительностью большей чем 68 лет, в этом случае можно использовать выражение `DateTime::ToMilliseconds(x) / 1000`
 
 {% endnote %}
 

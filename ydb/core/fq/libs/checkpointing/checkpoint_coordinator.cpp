@@ -50,9 +50,14 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
     ControlId = ev->Sender;
+<<<<<<< HEAD
     NeedSendRunToCA = ev->Get()->NeedSendRunToCA;
 
     for (const auto& task: ev->Get()->Tasks) {
+=======
+
+    for (const auto& task : ev->Get()->Tasks) {
+>>>>>>> upstream/main
         auto& actorId = TaskIdToActor[task.Id];
         if (actorId) {
             OnInternalError(TStringBuilder() << "Duplicate task id: " << task.Id);
@@ -80,6 +85,14 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         }
         AllActorsSet.insert(actorId);
     }
+    CC_LOG_D("AllActors count: " << AllActors.size() << ", ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
+
+    if (ActorsToTrigger.empty()) {
+        CC_LOG_D("No ingress tasks, coordinator was disabled");
+        StartAllTasks();
+        return;
+    }
+
     CC_LOG_D("AllActors count: " << AllActors.size() << ", ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
 
     if (ActorsToTrigger.empty()) {
@@ -492,7 +505,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
         return;
     }
 
-    CC_LOG_I("[" << checkpointId << "] Checkpoint status changed to 'PendingCommit', committing states  to " << ActorsToNotify.size() << " actor(s)");
+    CC_LOG_I("[" << checkpointId << "] Checkpoint status changed to 'PendingCommit', committing states to " << ActorsToNotify.size() << " actor(s)");
     PendingCommitCheckpoints.emplace(checkpointId, TPendingCheckpoint(ActorsToNotifySet, it->second.GetType(), it->second.GetStats()));
     PendingCheckpoints.erase(it);
     UpdateInProgressMetric();
@@ -603,7 +616,7 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) 
     }
 
     TStringBuilder message;
-    message << "Undelivered777 Event " << ev->Get()->SourceType
+    message << "Undelivered Event " << ev->Get()->SourceType
         << " from " << SelfId() << " (Self) to " << ev->Sender
         << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
     OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, {});
@@ -622,6 +635,7 @@ void TCheckpointCoordinator::PassAway() {
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }
+    NActors::TActor<TCheckpointCoordinator>::PassAway();
 }
 
 void TCheckpointCoordinator::HandleException(const std::exception& err) {

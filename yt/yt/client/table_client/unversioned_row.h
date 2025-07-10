@@ -7,7 +7,6 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/serialize.h>
 
 #include <yt/yt/core/yson/public.h>
@@ -18,6 +17,7 @@
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
+#include <library/cpp/yt/memory/blob.h>
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 namespace NYT::NTableClient {

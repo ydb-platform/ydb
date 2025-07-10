@@ -54,6 +54,9 @@ PY_SRCS(
 
 PEERDIR(
     ydb/core/protos
+    ydb/public/api/protos
+    ydb/public/api/grpc
+    ydb/public/api/grpc/draft
 )
 
 END()

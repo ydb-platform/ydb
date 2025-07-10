@@ -5,12 +5,13 @@
 
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
+#include "scheme/versions/preset_schemas.h"
 #include "storage/granule/granule.h"
 #include "storage/granule/storage.h"
 
 #include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/counters/portion_index.h>
@@ -36,15 +37,10 @@ class TDestinationSession;
 namespace NEngineLoading {
 class TEngineShardingInfoReader;
 class TEngineCountersReader;
-}
+}   // namespace NEngineLoading
 
 struct TReadMetadata;
 
-/// Engine with 2 tables:
-/// - Granules: PK -> granules (use part of PK)
-/// - Columns: granule -> blobs
-///
-/// @note One instance per tablet.
 class TColumnEngineForLogs: public IColumnEngine {
     friend class TCompactColumnEngineChanges;
     friend class TTTLColumnEngineChanges;
@@ -66,19 +62,24 @@ private:
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
     std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache;
-    TVersionedIndex VersionedIndex;
-    std::shared_ptr<TVersionedIndex> VersionedIndexCopy;
+    TVersionedPresetSchemas VersionedSchemas;
 
 public:
-    virtual const std::shared_ptr<TVersionedIndex>& GetVersionedIndexReadonlyCopy() override {
-        if (!VersionedIndexCopy || !VersionedIndexCopy->IsEqualTo(VersionedIndex)) {
-            VersionedIndexCopy = std::make_shared<TVersionedIndex>(VersionedIndex);
-        }
-        return VersionedIndexCopy;
+
+    const TVersionedPresetSchemas& GetVersionedSchemas() const {
+        return VersionedSchemas;
+    }
+
+    TVersionedPresetSchemas& MutableVersionedSchemas() {
+        return VersionedSchemas;
+    }
+
+    virtual const std::shared_ptr<const TVersionedIndex>& GetVersionedIndexReadonlyCopy() override {
+        return VersionedSchemas.GetDefaultVersionedIndexCopy();
     }
 
     TVersionedIndex& MutableVersionedIndex() {
-        return VersionedIndex;
+        return VersionedSchemas.MutableDefaultVersionedIndex();
     }
 
     const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
@@ -117,12 +118,8 @@ public:
     void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) override;
     void OnTieringModified(const THashMap<TInternalPathId, NOlap::TTiering>& ttl) override;
 
-    virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const override {
-        return std::make_shared<TVersionedIndex>(VersionedIndex);
-    }
-
-    const TVersionedIndex& GetVersionedIndex() const override {
-        return VersionedIndex;
+    virtual const TVersionedIndex& GetVersionedIndex() const override {
+        return VersionedSchemas.GetDefaultVersionedIndex();
     }
 
     TSnapshot LastUpdate() const override {
@@ -152,8 +149,8 @@ public:
     ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) const noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
-    std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<TInternalPathId>& pathsToDrop,
-        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot,
+        const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept override;
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
@@ -169,7 +166,7 @@ public:
     void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) override;
     void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) override;
 
-    std::shared_ptr<TSelectInfo> Select(
+    std::vector<std::shared_ptr<TPortionInfo>> Select(
         TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const override;
 
     bool IsPortionExists(const TInternalPathId pathId, const ui64 portionId) const {
@@ -214,6 +211,10 @@ public:
         return GranulesStorage->GetGranuleOptional(pathId);
     }
 
+    const THashMap<NColumnShard::TInternalPathId, std::shared_ptr<TGranuleMeta>>& GetTables() const {
+        return GranulesStorage->GetTables();
+    }
+
     ui64 GetTabletId() const {
         return TabletId;
     }
@@ -223,7 +224,7 @@ public:
         CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
-        VersionedIndex.AddShardingInfo(shardingInfo);
+        VersionedSchemas.MutableDefaultVersionedIndex().AddShardingInfo(shardingInfo);
     }
 
     bool TestingLoad(IDbWrapper& db);

@@ -1,0 +1,37 @@
+name: Sync from stable
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - prestable_branch: dev-prestable-20359
+            stable_branch:  stable-25-1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git user
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git config --local github.token ${{ env.GH_TOKEN }}
+
+      - name: Sync ${{ matrix.stable_branch }} to ${{ matrix.prestable_branch }}
+        run: |
+          git checkout ${{ matrix.prestable_branch }}
+          git rebase origin/${{ matrix.stable_branch }}
+          git push origin ${{ matrix.prestable_branch }} --force

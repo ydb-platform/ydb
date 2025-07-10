@@ -44,15 +44,6 @@ ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScript
 ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap *.[*/*] chunk
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterEqual
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterNulls
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestJoinByDecimal
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestJoinById
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestOrderByDecimal
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestSimpleQueries
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal
 ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal35

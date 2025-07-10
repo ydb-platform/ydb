@@ -266,17 +266,17 @@ protected:
                             ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << GetResponseDebugText() << ") (incomplete)");
                             Send(RequestOwner, new TEvHttpProxy::TEvHttpIncompleteIncomingResponse(Request, Response));
                             StreamState = EStreamState::Approved;
+                            Response->SwitchToStreaming();
                         } else {
                             StreamState = EStreamState::Declined;
                         }
                     }
 
-                    if (Response->HasNewDataChunk() && StreamState == EStreamState::Approved) {
+                    if (Response->HasNewStreamingDataChunk()) {
                         ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (data chunk " << Response->ChunkLength << " bytes)");
                         auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
-                        dataChunk->SetData(std::move(Response->Content));
+                        dataChunk->SetData(Response->ExtractDataChunk());
                         Send(RequestOwner, dataChunk.release());
-                        Response->Content.clear();
                         if (res == 0) {
                             // when we finish reading at the end of a chunk we could remove processed chunks to save memory and allocations very easily
                             Response->TruncateToHeaders();

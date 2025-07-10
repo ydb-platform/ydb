@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.9.13)
+VERSION(2.14.4)
 
-ORIGINAL_SOURCE(https://gitlab.gnome.org/api/v4/projects/GNOME%2Flibxml2/repository/archive.tar.gz?sha=v2.9.13)
+ORIGINAL_SOURCE(https://gitlab.gnome.org/api/v4/projects/GNOME%2Flibxml2/repository/archive.tar.gz?sha=v2.14.4)
 
 PEERDIR(
     contrib/libs/libiconv
@@ -33,7 +33,6 @@ CFLAGS(
 SRCS(
     HTMLparser.c
     HTMLtree.c
-    SAX.c
     SAX2.c
     buf.c
     c14n.c
@@ -46,15 +45,14 @@ SRCS(
     error.c
     globals.c
     hash.c
-    legacy.c
     list.c
-    nanoftp.c
     nanohttp.c
     parser.c
     parserInternals.c
     pattern.c
     relaxng.c
     schematron.c
+    shell.c
     threads.c
     tree.c
     uri.c
@@ -77,19 +75,7 @@ SRCS(
     xzlib.c
 )
 
-IF (ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS)
-    NO_RUNTIME()
-    CFLAGS(
-        -DARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS
-    )
-ELSE()
-    PEERDIR(
-        library/cpp/charset
-    )
-    SRCS(
-        yencoding.cpp
-    )
-ENDIF()
+NO_RUNTIME()
 
 END()
 

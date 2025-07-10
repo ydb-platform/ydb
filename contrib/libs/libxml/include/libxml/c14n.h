@@ -17,13 +17,12 @@
 #ifndef __XML_C14N_H__
 #define __XML_C14N_H__
 
-#include "xmlversion.h"
+#include <libxml/xmlversion.h>
 
 #ifdef LIBXML_C14N_ENABLED
-#ifdef LIBXML_OUTPUT_ENABLED
 
-#include "tree.h"
-#include "xpath.h"
+#include <libxml/tree.h>
+#include <libxml/xpath.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,18 +39,7 @@ extern "C" {
  *  a) default attributes (if any) are added to all nodes
  *  b) all character and parsed entity references are resolved
  * In order to achieve this in libxml2 the document MUST be loaded with
- * following global settings:
- *
- *    xmlLoadExtDtdDefaultValue = XML_DETECT_IDS | XML_COMPLETE_ATTRS;
- *    xmlSubstituteEntitiesDefault(1);
- *
- * or corresponding parser context setting:
- *    xmlParserCtxtPtr ctxt;
- *
- *    ...
- *    ctxt->loadsubset = XML_DETECT_IDS | XML_COMPLETE_ATTRS;
- *    ctxt->replaceEntities = 1;
- *    ...
+ * following options: XML_PARSE_DTDATTR | XML_PARSE_NOENT
  */
 
 /*
@@ -66,7 +54,7 @@ typedef enum {
     XML_C14N_1_1            = 2     /* C14N 1.1 spec */
 } xmlC14NMode;
 
-XMLPUBFUN int XMLCALL
+XMLPUBFUN int
 		xmlC14NDocSaveTo	(xmlDocPtr doc,
 					 xmlNodeSetPtr nodes,
 					 int mode, /* a xmlC14NMode */
@@ -74,7 +62,7 @@ XMLPUBFUN int XMLCALL
 					 int with_comments,
 					 xmlOutputBufferPtr buf);
 
-XMLPUBFUN int XMLCALL
+XMLPUBFUN int
 		xmlC14NDocDumpMemory	(xmlDocPtr doc,
 					 xmlNodeSetPtr nodes,
 					 int mode, /* a xmlC14NMode */
@@ -82,7 +70,7 @@ XMLPUBFUN int XMLCALL
 					 int with_comments,
 					 xmlChar **doc_txt_ptr);
 
-XMLPUBFUN int XMLCALL
+XMLPUBFUN int
 		xmlC14NDocSave		(xmlDocPtr doc,
 					 xmlNodeSetPtr nodes,
 					 int mode, /* a xmlC14NMode */
@@ -109,7 +97,7 @@ typedef int (*xmlC14NIsVisibleCallback)	(void* user_data,
 					 xmlNodePtr node,
 					 xmlNodePtr parent);
 
-XMLPUBFUN int XMLCALL
+XMLPUBFUN int
 		xmlC14NExecute		(xmlDocPtr doc,
 					 xmlC14NIsVisibleCallback is_visible_callback,
 					 void* user_data,
@@ -122,7 +110,6 @@ XMLPUBFUN int XMLCALL
 }
 #endif /* __cplusplus */
 
-#endif /* LIBXML_OUTPUT_ENABLED */
 #endif /* LIBXML_C14N_ENABLED */
 #endif /* __XML_C14N_H__ */
 

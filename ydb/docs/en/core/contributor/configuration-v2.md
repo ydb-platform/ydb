@@ -4,12 +4,12 @@ The V2 configuration in {{ ydb-short-name }} provides a unified approach to mana
 
 The {{ ydb-short-name }} cluster configuration is stored in several locations, and various cluster components coordinate synchronization between them:
 
-- as a set of node configuration files in the file system of each {{ ydb-short-name }} node (required for use when a node starts up to connect to the rest of the cluster).
+- as a set of node configuration files in the file system of each {{ ydb-short-name }} node (required to connect to the cluster when a node starts up).
 - in a special metadata storage area on each [PDisk](../concepts/glossary.md#pdisk) (a quorum of PDisks is considered the single source of truth for the configuration).
-- in the local database of the [DS Controller](../concepts/glossary.md#ds-controller) tablet (for the needs of the [distributed storage](../concepts/glossary.md#distributed-storage)).
+- in the local database of the [DS Controller](../concepts/glossary.md#ds-controller) tablet (required for the [distributed storage](../concepts/glossary.md#distributed-storage)).
 - in the local database of the [Console](../concepts/glossary.md#console) tablet.
 
-Some parameters take effect on a node immediately after the modified configuration is delivered there, while others only take effect after the node is restarted.
+Some parameters take effect on a node immediately after the modified configuration is delivered to its location, while others only take effect after the node is restarted.
 
 ## Distributed configuration system (Distconf)
 
@@ -38,8 +38,8 @@ Leader election in Distconf is carried out through the `Binding` process, descri
 
 1. **Discovery**: Storage nodes get a full list of static cluster nodes through the standard `TEvInterconnect::TEvNodesInfo` mechanism.
 2. **Building the binding tree**: Each node initiates a `bind` to a random node from the common list to which it is not yet subordinate. This process forms an acyclic graph, which in intermediate stages is a forest (a set of disconnected trees), and eventually a single tree spanning all nodes.
-3. **Cycle prevention and topology exchange**: The cycle prevention mechanism is based on the constant exchange of information about the current topology. When node `A` tries to connect to node `B`, it sends `B` its entire known subtree. Node `B` rejects the request if `A` is already its descendant. In case of a simultaneous attempt at mutual connection, the conflict is resolved in favor of the node with the larger `NodeId`.
-4. **Leader determination**: In the process of merging trees, one node inevitably remains that cannot connect to anyone because all other nodes are already in its subtree. This node becomes the root of the final tree and is declared the **leader**.
+3. **Cycle prevention and topology exchange**: The cycle prevention mechanism is based on the constant exchange of information about the current topology. When node `A` tries to connect to node `B`, it sends its entire known subtree to `B`. Node `B` rejects the request if `A` is already its descendant. In case of a simultaneous attempt at a mutual connection, the conflict is resolved in favor of the node with the greater `NodeId` value.
+4. **Leader determination**: In the process of merging trees, there inevitably remains one node that cannot connect to anyone other node because all other nodes are already in its subtree. This node becomes the root of the final tree and is declared the **leader**.
 
 If the current leader fails, the `Binding` process is restarted, and the cluster elects a new leader.
 
@@ -68,7 +68,7 @@ After the successful completion or cancellation of the operation, the FSM return
 
 [`TEvNodeConfigInvokeOnRoot`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/blobstorage_distributed_config.proto#L177) requests are a unified mechanism for any cluster configuration changes. These commands can be initiated by both a **system administrator** (for example, via the CLI) and **other YDB components** in automatic mode (for example, by the `BlobStorageController` tablet during the `Self-Heal` process).
 
-Regardless of the source, any such request is processed according to a single scenario:
+Regardless of the source, any such request is processed according to the same scenario:
 
 1. The request is delivered to the Distconf leader node (if it was not sent to it, it is redirected automatically).
 2. The leader starts the FSM and performs the Scatter/Gather process as described above.
@@ -108,7 +108,7 @@ In addition to the main processes, Distconf works closely with other system comp
 
 1. When a node starts, Distconf tries to read the configuration from local PDisks.
 2. It connects to a random storage node to check if the configuration is up-to-date.
-3. If it fails to connect but has a quorum of connected nodes, it becomes the leader.
+3. If it fails to connect, but has a quorum of connected nodes, the node becomes the leader.
 4. The leader tries to initiate the initial cluster setup, if allowed.
 5. The leader sends the current configuration to all nodes via Scatter/Gather.
 6. Nodes save the received configuration in the local PDisk metadata area and in the `--config-dir` directories.

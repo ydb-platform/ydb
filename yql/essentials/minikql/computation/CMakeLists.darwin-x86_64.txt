@@ -40,6 +40,7 @@ target_sources(essentials-minikql-computation PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_transport.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_trimmer.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_datum_validate.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_holders.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_impl.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_pack.cpp

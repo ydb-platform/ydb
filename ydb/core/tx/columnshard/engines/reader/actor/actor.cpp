@@ -6,6 +6,69 @@
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
+namespace {
+
+#include <arrow/table.h>
+
+static inline bool IsDecimal128(const std::shared_ptr<arrow::DataType>& t) {
+    return t->id() == arrow::Type::DECIMAL128;
+}
+
+static std::shared_ptr<arrow::Array> PatchArray(const std::shared_ptr<arrow::Array>& arr) {
+    if (!IsDecimal128(arr->type())) {
+        return arr;
+    }
+
+    auto data = arr->data()->Copy();
+    data->type = arrow::fixed_size_binary(16);
+    return arrow::MakeArray(data);
+}
+
+std::shared_ptr<arrow::Table> RewriteDecimalToBinary16(const std::shared_ptr<arrow::Table>& src) {
+    if (!src) {
+        return src;
+    }
+
+    bool need = false;
+    for (auto& f : src->schema()->fields()) {
+        if (IsDecimal128(f->type())) {
+            need = true;
+            break;
+        }
+    }
+
+    if (!need) {
+        return src;
+    }
+
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> cols;
+    fields.reserve(src->num_columns());
+    cols.reserve(src->num_columns());
+
+    for (int c = 0; c < src->num_columns(); ++c) {
+        auto field = src->schema()->field(c);
+        auto column = src->column(c);
+
+        if (IsDecimal128(field->type())) {
+            std::vector<std::shared_ptr<arrow::Array>> chunks;
+            chunks.reserve(column->num_chunks());
+            for (int k = 0; k < column->num_chunks(); ++k) {
+                chunks.push_back(PatchArray(column->chunk(k)));
+            }
+            column = std::make_shared<arrow::ChunkedArray>(std::move(chunks), arrow::fixed_size_binary(16));
+            field = field->WithType(arrow::fixed_size_binary(16));
+        }
+        fields.push_back(std::move(field));
+        cols.push_back(std::move(column));
+    }
+
+    return arrow::Table::Make(arrow::schema(std::move(fields), src->schema()->metadata()), std::move(cols), src->num_rows());
+}
+
+}   // anonymous namespace
+    
+
 namespace NKikimr::NOlap::NReader {
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
 constexpr TDuration COMPUTE_HARD_TIMEOUT = TDuration::Minutes(10);
@@ -235,7 +298,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
     }
 
     auto& shardedBatch = result.GetShardedBatch();
-    auto batch = shardedBatch.GetRecordBatch();
+    auto batch = RewriteDecimalToBinary16(shardedBatch.GetRecordBatch());
     int numRows = batch->num_rows();
     int numColumns = batch->num_columns();
     ACFL_DEBUG("stage", "ready result")("iterator", ScanIterator->DebugString())("columns", numColumns)("rows", result.GetRecordsCount());
@@ -254,7 +317,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
             }
         }
         TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        Result->ArrowBatch = shardedBatch.GetRecordBatch();
+        Result->ArrowBatch = batch;
         Rows += batch->num_rows();
         Bytes += NArrow::GetTableDataSize(Result->ArrowBatch);
 

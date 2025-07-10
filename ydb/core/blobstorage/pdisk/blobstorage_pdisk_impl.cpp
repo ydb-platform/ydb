@@ -230,6 +230,10 @@ bool TPDisk::CheckFormatComplete() {
     return !Format.IsFormatInProgress();
 }
 
+bool TPDisk::CheckPlainChunksNotUsed() {
+    return !Format.IsPlainDataChunks();
+}
+
 void TPDisk::InitFreeChunks() {
     TGuard<TMutex> guard(StateMutex);
     for (ui32 i = 0; i < ChunkState.size(); ++i) {

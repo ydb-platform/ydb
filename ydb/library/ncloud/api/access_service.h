@@ -2,7 +2,7 @@
 #include "events.h"
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <ydb/public/api/client/nc_private/accessservice/access_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/access_service.grpc.pb.h>
 
 namespace NNebiusCloud {
     using namespace NKikimr;

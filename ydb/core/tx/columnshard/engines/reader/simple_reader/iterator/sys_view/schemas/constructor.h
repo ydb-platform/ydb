@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/constructor.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 class TDataConstructor {
@@ -49,7 +48,7 @@ public:
             : IsReverse(isReverse) {
         }
 
-        bool operator()(const TGranuleDataConstructor& l, const TGranuleDataConstructor& r) const {
+        bool operator()(const TDataConstructor& l, const TDataConstructor& r) const {
             if (IsReverse) {
                 return r.Finish < l.Finish;
             } else {

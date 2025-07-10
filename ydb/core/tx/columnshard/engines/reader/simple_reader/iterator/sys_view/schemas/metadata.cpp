@@ -16,9 +16,8 @@ TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TSchemeShardL
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
     const NReader::TReadDescription& readDescription, const bool /*withUncommitted*/, const bool isPlain) const {
     AFL_VERIFY(!isPlain);
-    return std::make_unique<TConstructor>(context.GetPathIdTranslator(), context.GetEngine(), readDescription.GetTabletId(),
-        PathId.GetInternalPathId().GetRawValue() ? PathId.GetInternalPathId() : std::optional<NColumnShard::TInternalPathId>(),
-        readDescription.PKRangesFilter, readDescription.IsReverseSort());
+    return std::make_unique<TConstructor>(
+        context.GetEngine(), readDescription.GetTabletId(), readDescription.PKRangesFilter, readDescription.IsReverseSort());
 }
 
 std::shared_ptr<ISnapshotSchema> TAccessor::GetSnapshotSchemaOptional(

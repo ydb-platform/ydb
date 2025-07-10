@@ -7,7 +7,7 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const ui64 tabletId, const ui6
     NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2);
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(presetId);
-    writer.Append<ui64>(versionId);
+    writer.Append<ui64>(schemaVersion);
     return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
 }
 

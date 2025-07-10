@@ -36,10 +36,12 @@ constexpr TStringBuf TabletsName = "hive_tablets";
 constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
+constexpr TStringBuf StorePrimaryIndexSchemaStatsName = "store_primary_index_schema_stats";
 constexpr TStringBuf StorePrimaryIndexPortionStatsName = "store_primary_index_portion_stats";
 constexpr TStringBuf StorePrimaryIndexGranuleStatsName = "store_primary_index_granule_stats";
 constexpr TStringBuf StorePrimaryIndexOptimizerStatsName = "store_primary_index_optimizer_stats";
 constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
+constexpr TStringBuf TablePrimaryIndexSchemaStatsName = "primary_index_schema_stats";
 constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
 constexpr TStringBuf TablePrimaryIndexGranuleStatsName = "primary_index_granule_stats";
 constexpr TStringBuf TablePrimaryIndexOptimizerStatsName = "primary_index_optimizer_stats";

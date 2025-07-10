@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/chunks
     ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/granules
     ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/optimizer
+    ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/schemas
 )
 
 END()

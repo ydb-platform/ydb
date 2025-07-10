@@ -185,6 +185,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         READ: SELECT Col1, Col4, Col5, Col7, Col8 FROM `/Root/ColumnTable` ORDER BY Col1;
         EXPECTED: [[1u;#;#;#;#];[2u;#;#;#;#];[3u;#;#;#;#];[4u;[4u];#;#;#];[5u;[5u];[5u];#;#];[6u;[6u];[6u];#;#];[7u;[7u];[7u];[7u];#];[8u;[8u];[8u];[8u];[8u]];[9u;[9u];[9u];[9u];[9u]]]
         ------
+        READ: SELECT SchemaVersion FROM `/Root/ColumnTable/.sys/primary_index_schema_stats` WHERE PresetId = 0 ORDER BY SchemaVersion;
+        EXPECTED: [[[6u]];[[9u]];[[11u]]]
+        ------
         DATA:
         DELETE FROM `/Root/ColumnTable`
         ------

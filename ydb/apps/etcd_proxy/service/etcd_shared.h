@@ -9,8 +9,6 @@
 
 namespace NEtcd {
 
-constexpr bool NotifyWatchtower = false;
-
 constexpr auto Endless = "\0"sv;
 
 constexpr auto DataSizeLimit = 59999999ULL;
@@ -24,7 +22,7 @@ struct TSharedStuff {
 
     std::atomic<i64> Revision = 0LL;
     NActors::TActorSystem* ActorSystem = nullptr;
-    NActors::TActorId Watchtower, MainGate, HolderHouse;
+    NActors::TActorId MainGate, HolderHouse;
     std::string Folder, TablePrefix;
 
     void UpdateRevision(i64 revision);

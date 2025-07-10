@@ -423,7 +423,6 @@ public:
 
     void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
-        Stuff->Watchtower = SelfId();
 
         TReadSessionSettings settings;
         settings.WithoutConsumer().ReadFromTimestamp(TInstant::Now()).AppendTopics(TTopicReadSettings(Stuff->Folder + "/current/changes").AppendPartitionIds(0ULL));

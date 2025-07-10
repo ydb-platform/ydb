@@ -402,6 +402,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                 if (error == EKafkaErrors::NONE_ERROR) {
                     ruPerRequest = false;
                     Send(writer.second, std::move(ev));
+                    result.ErrorCode = NONE_ERROR;
                 } else {
                     result.ErrorCode = error;
                 }

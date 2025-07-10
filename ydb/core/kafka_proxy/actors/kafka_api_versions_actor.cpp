@@ -37,6 +37,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TAddPartitionsToTxnRequestData>(response->ApiKeys, ADD_PARTITIONS_TO_TXN, {.MaxVersion=3});
     AddApiKey<TAddOffsetsToTxnRequestData>(response->ApiKeys, ADD_OFFSETS_TO_TXN, {.MaxVersion=3});
     AddApiKey<TTxnOffsetCommitRequestData>(response->ApiKeys, TXN_OFFSET_COMMIT, {.MaxVersion=3});
+    AddApiKey<TDescribeConfigsRequestData>(response->ApiKeys, DESCRIBE_CONFIGS, {.MaxVersion=4});
     AddApiKey<TEndTxnRequestData>(response->ApiKeys, END_TXN, {.MaxVersion=3});
     AddApiKey<TSaslHandshakeRequestData>(response->ApiKeys, SASL_HANDSHAKE, {.MaxVersion=1});
     AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE, {.MaxVersion=2});

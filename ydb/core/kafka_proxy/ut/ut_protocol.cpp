@@ -2577,7 +2577,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TKafkaWritable writable(buf);
         writable << version;
         subscribtion.Write(writable, version);
-        protocol.Metadata = TKafkaRawBytes(buf.GetBuffer().data(), buf.GetBuffer().size());
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
 
         joinReq.Protocols.push_back(protocol);
 

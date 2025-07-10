@@ -80,9 +80,13 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         }
         AllActorsSet.insert(actorId);
     }
-    if (ActorsToTrigger.empty())
-        // Use NeedSendRunToCA     // TODO
+    CC_LOG_D("AllActors count: " << AllActors.size() << ", ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
+
+    if (ActorsToTrigger.empty()) {
+        CC_LOG_D("No ingress tasks, coordinator was disabled");
+        StartAllTasks();
         return;
+    }
 
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());
 
@@ -413,13 +417,15 @@ void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId,
     for (const auto& [toTrigger, transport] : ActorsToTrigger) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, type));
     }
+    StartAllTasks();
+}
 
+void TCheckpointCoordinator::StartAllTasks() {
     if (!GraphIsRunning) {
-        CC_LOG_I("[" << checkpointId << "] Send TEvRun to all actors");
+        CC_LOG_I("Send TEvRun to all actors");
         for (const auto& [actor, transport] : AllActors) {
             transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
         }
-        GraphIsRunning = true;
     }
 }
 

@@ -95,6 +95,8 @@ private:
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const NYql::TIssues& subIssues);
     void OnInternalError(const TString& message, const NYql::TIssues& subIssues = {});
 
+    void StartAllTasks();
+
     template <class TEvPtr>
     bool OnComputeActorEventReceived(TEvPtr& ev) {
         const auto actorIt = AllActors.find(ev->Sender);

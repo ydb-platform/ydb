@@ -23,7 +23,6 @@
 #include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
-#include <array>
 #include <atomic>
 #include <stop_token>
 #include <thread>
@@ -134,11 +133,12 @@ public:
     struct TCalculatedStatusData {
         // Phase and timing (computed values only)
         std::string Phase;
-        int ElapsedMinutes = 0;
-        int ElapsedSeconds = 0;
-        int RemainingMinutes = 0;
-        int RemainingSeconds = 0;
-        double ProgressPercent = 0.0;
+        int ElapsedMinutesTotal = 0;
+        int ElapsedSecondsTotal = 0;
+        int RemainingMinutesTotal = 0;
+        int RemainingSecondsTotal = 0;
+        double ProgressPercentTotal = 0.0;
+        double WarmupPercent = 0.0;
 
         // Computed metrics not in LastStatisticsSnapshot
 
@@ -393,6 +393,9 @@ void TPCCRunner::RunSync() {
     WarmupStartTs = Clock::now();
     WarmupStopDeadline = WarmupStartTs + std::chrono::seconds(warmupSeconds);
 
+    // not precise, but quite good: needed for TUI/text status updates to calculated remaining time
+    StopDeadline = WarmupStopDeadline + std::chrono::seconds(Config.RunDuration.Seconds());
+
     // we want to switch buffers and draw UI ASAP to properly display logs
     // produced after this point and before the first screen update
     if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
@@ -407,9 +410,6 @@ void TPCCRunner::RunSync() {
 
     size_t startedTerminalId = 0;
     for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {
-        if (now >= WarmupStopDeadline) {
-            break;
-        }
         Terminals[startedTerminalId]->Start();
 
         std::this_thread::sleep_for(MinWarmupPerTerminal);
@@ -423,8 +423,14 @@ void TPCCRunner::RunSync() {
         Terminals[startedTerminalId]->Start();
     }
 
-    // in case we were starting the rest of terminals for too long (doubtfully)
-    UpdateDisplayIfNeeded(Clock::now());
+    while (!GetGlobalInterruptSource().stop_requested()) {
+        now = Clock::now();
+        if (now >= WarmupStopDeadline) {
+            break;
+        }
+
+        UpdateDisplayIfNeeded(Clock::now());
+    }
 
     StopWarmup.store(true, std::memory_order_relaxed);
 
@@ -433,10 +439,12 @@ void TPCCRunner::RunSync() {
     MeasurementsStartTs = Clock::now();
     MeasurementsStartTsWall = TInstant::Now();
 
+    // update to be precise, but actually it is not required
+    StopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunDuration.Seconds());
+
     // reset statistics
     LastStatisticsSnapshot = std::make_unique<TAllStatistics>(PerThreadTerminalStats.size(), MeasurementsStartTs);
 
-    StopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunDuration.Seconds());
     while (!GetGlobalInterruptSource().stop_requested()) {
         if (now >= StopDeadline) {
             break;
@@ -485,14 +493,11 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     PrintTransactionStatisticsPretty(transactionsSs);
 
     std::stringstream ss;
-    ss << data.Phase << " - " << data.ElapsedMinutes << ":"
-       << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " elapsed";
-
-    if (data.ProgressPercent > 0) {
-        ss << std::fixed << std::setprecision(1) << " (" << data.ProgressPercent << "%, "
-           << data.RemainingMinutes << ":" << std::setfill('0') << std::setw(2)
-           << data.RemainingSeconds << " remaining)";
-    }
+    ss << data.ElapsedMinutesTotal << ":"
+       << std::setfill('0') << std::setw(2) << data.ElapsedSecondsTotal << " elapsed"
+       << std::fixed << std::setprecision(1) << " (" << data.ProgressPercentTotal << "%, "
+       << data.RemainingMinutesTotal << ":" << std::setfill('0') << std::setw(2)
+       << data.RemainingSecondsTotal << " remaining)";
 
     ss << " | Efficiency: " << std::setprecision(1) << data.Efficiency << "% | "
        << "tpmC: " << std::setprecision(1) << data.Tpmc;
@@ -571,6 +576,12 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
 void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     using namespace ftxui;
 
+    // Get window width to determine which columns to show
+    constexpr int MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS = 140;
+    auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
+    const int windowWidth = screen.dimx();
+    const bool showExtendedColumns = windowWidth >= MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS;
+
     // First update is special: we switch buffers and capture stderr to display live logs
     static bool firstUpdate = true;
     if (firstUpdate) {
@@ -585,31 +596,30 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     // Left side of header: runner info, efficiency, phase, progress
 
     std::stringstream headerSs;
-    headerSs << "Result preview";
+    headerSs << "Result preview: " << data.Phase;
 
     std::stringstream metricsSs;
     metricsSs << "Efficiency: " << std::setw(3) << std::fixed << std::setprecision(1) << data.Efficiency << "%   "
         << "tpmC: " << std::fixed << std::setprecision(0) << data.Tpmc;
 
     std::stringstream timingSs;
-    timingSs << data.Phase << ": " << data.ElapsedMinutes << ":"
-             << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " elapsed";
-    if (data.ProgressPercent > 0) {
-        timingSs << "   "
-            << data.RemainingMinutes << ":" << std::setfill('0') << std::setw(2) << data.RemainingSeconds
-            << " remaining";
-    }
+    timingSs << data.ElapsedMinutesTotal << ":"
+             << std::setfill('0') << std::setw(2) << data.ElapsedSecondsTotal << " elapsed"
+             << ", "
+             << data.RemainingMinutesTotal << ":" << std::setfill('0') << std::setw(2) << data.RemainingSecondsTotal
+             << " remaining";
 
     // Calculate progress ratio for gauge
-    float progressRatio = static_cast<float>(data.ProgressPercent / 100.0);
+    float progressRatio = static_cast<float>(data.ProgressPercentTotal / 100.0);
+    constexpr int progressBarWidth = 15;
 
     auto topLeftMainInfo = vbox({
-        text(metricsSs.str()),
+        text(metricsSs.str()) | bold,
         text(timingSs.str()),
         hbox({
             text("Progress: ["),
-            gauge(progressRatio) | size(WIDTH, EQUAL, 20),
-            text("] " + std::to_string(static_cast<int>(data.ProgressPercent)) + "%")
+            gauge(progressRatio) | size(WIDTH, EQUAL, progressBarWidth),
+            text("] " + std::to_string(static_cast<int>(data.ProgressPercentTotal)) + "%")
         })
     });
 
@@ -654,24 +664,30 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     size_t threadCount = LastStatisticsSnapshot->StatVec.size();
     size_t halfCount = (threadCount + 1) / 2;
 
-    auto headerRow = hbox({
-        text("Thr") | size(WIDTH, EQUAL, 4),
-        text("Load") | center | size(WIDTH, EQUAL, 24),
-        text("QPS") | align_right | size(WIDTH, EQUAL, 8),
-        text("Queue") | align_right | size(WIDTH, EQUAL, 10),
-        text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20)
-    });
+    // Create header row elements
+    Elements headerLeftColumn;
+    headerLeftColumn.push_back(text("Thr") | size(WIDTH, EQUAL, 4));
+    headerLeftColumn.push_back(text("Load") | center | size(WIDTH, EQUAL, 24));
+    headerLeftColumn.push_back(text("QPS") | align_right | size(WIDTH, EQUAL, 8));
+    if (showExtendedColumns) {
+        headerLeftColumn.push_back(text("Queue") | align_right | size(WIDTH, EQUAL, 10));
+        headerLeftColumn.push_back(text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20));
+    }
 
-    auto headerRow2 = hbox({
-        text("Thr") | size(WIDTH, EQUAL, 4),
-        text("Load") | center | size(WIDTH, EQUAL, 24),
-        text("QPS") | align_right | size(WIDTH, EQUAL, 8),
-        text("Queue") | align_right | size(WIDTH, EQUAL, 10),
-        text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20)
-    });
+    Elements headerRightColumn;
+    headerRightColumn.push_back(text("Thr") | size(WIDTH, EQUAL, 4));
+    headerRightColumn.push_back(text("Load") | center | size(WIDTH, EQUAL, 24));
+    headerRightColumn.push_back(text("QPS") | align_right | size(WIDTH, EQUAL, 8));
+    if (showExtendedColumns) {
+        headerRightColumn.push_back(text("Queue") | align_right | size(WIDTH, EQUAL, 10));
+        headerRightColumn.push_back(text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20));
+    }
 
-    leftThreadElements.push_back(headerRow);
-    rightThreadElements.push_back(headerRow2);
+    auto headerLeft = hbox(headerLeftColumn);
+    auto headerRight = hbox(headerRightColumn);
+
+    leftThreadElements.push_back(headerLeft);
+    rightThreadElements.push_back(headerRight);
 
     for (size_t i = 0; i < threadCount; ++i) {
         const auto& stats = LastStatisticsSnapshot->StatVec[i];
@@ -698,22 +714,26 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
 
         std::stringstream loadPercentSs, qpsSs, queueSizeSs, queueP90Ss;
         loadPercentSs << std::fixed << std::setprecision(1) << std::setw(4) << std::right << (load * 100) << "%";
-        qpsSs << std::fixed << std::setprecision(0) << stats.QueriesPerSecond;
+        qpsSs << std::fixed << std::setprecision(0) << std::setw(8) << std::right << stats.QueriesPerSecond;
         queueSizeSs << stats.TaskThreadStats->InternalTasksWaitingInflight;
         queueP90Ss << std::fixed << std::setprecision(1) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
 
-        auto threadLine = hbox({
-            text(std::to_string(i + 1)) | size(WIDTH, EQUAL, 4),
-            hbox({
-                text("["),
-                loadBar | size(WIDTH, EQUAL, 10),
-                text("] "),
-                text(loadPercentSs.str()) | color(loadColor)
-            }) |  size(WIDTH, EQUAL, 24),
-            text(qpsSs.str()) | align_right | size(WIDTH, EQUAL, 8),
-            text(queueSizeSs.str()) | align_right | size(WIDTH, EQUAL, 10),
-            text(queueP90Ss.str()) | align_right | size(WIDTH, EQUAL, 20)
-        });
+        // Create thread line elements
+        Elements threadLineElements;
+        threadLineElements.push_back(text(std::to_string(i + 1)) | size(WIDTH, EQUAL, 4));
+        threadLineElements.push_back(hbox({
+            text("["),
+            loadBar | size(WIDTH, EQUAL, 10),
+            text("] "),
+            text(loadPercentSs.str()) | color(loadColor)
+        }) | size(WIDTH, EQUAL, 24));
+        threadLineElements.push_back(text(qpsSs.str()) | align_right | size(WIDTH, EQUAL, 8));
+        if (showExtendedColumns) {
+            threadLineElements.push_back(text(queueSizeSs.str()) | align_right | size(WIDTH, EQUAL, 10));
+            threadLineElements.push_back(text(queueP90Ss.str()) | align_right | size(WIDTH, EQUAL, 20));
+        }
+
+        auto threadLine = hbox(threadLineElements);
 
         if (i < halfCount) {
             leftThreadElements.push_back(threadLine);
@@ -744,8 +764,10 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
         logElements.push_back(paragraph(line));
     });
 
+    auto logsContent = vbox(logElements);
+
     auto logsSection = window(text("Logs"),
-        vbox(logElements) | size(HEIGHT, EQUAL, 12));
+        logsContent | flex);
 
     // Main layout
 
@@ -758,7 +780,6 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     // Render full screen
 
     std::cout << "\033[H"; // Move cursor to top
-    auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
     Render(screen, layout);
     std::cout << screen.ToString();
 }
@@ -781,54 +802,61 @@ TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_po
     TCalculatedStatusData data;
 
     // calculate time and estimation
+    Clock::time_point currentPhaseStartTs;
 
-    Clock::time_point startTs;
-    Clock::time_point deadline;
-    std::chrono::duration<long long> duration;
+    std::chrono::duration<long long> warmupDuration;
+    std::chrono::duration<long long> totalDuration;
+
+    totalDuration = std::chrono::duration_cast<std::chrono::seconds>(StopDeadline - WarmupStartTs);
+    warmupDuration = std::chrono::duration_cast<std::chrono::seconds>(WarmupStopDeadline - WarmupStartTs);
+
+    auto elapsedTotal = std::chrono::duration_cast<std::chrono::seconds>(now - WarmupStartTs);
+    auto remainingTotal = std::chrono::duration_cast<std::chrono::seconds>(StopDeadline - now);
+
+    data.ElapsedMinutesTotal = static_cast<int>(elapsedTotal.count() / 60);
+    data.ElapsedSecondsTotal = static_cast<int>(elapsedTotal.count() % 60);
+    data.RemainingMinutesTotal = std::max(0LL, remainingTotal.count() / 60);
+    data.RemainingSecondsTotal = std::max(0LL, remainingTotal.count() % 60);
+
+    if (totalDuration.count() != 0) {
+        data.ProgressPercentTotal = (static_cast<double>(elapsedTotal.count()) / totalDuration.count()) * 100.0;
+    }
+
+    if (totalDuration.count() > 0) {
+        data.WarmupPercent = (static_cast<double>(warmupDuration.count()) / totalDuration.count()) * 100.0;
+    }
+
+    // Phase-specific calculations (for display)
     if (MeasurementsStartTs == Clock::time_point{}) {
         data.Phase = "Warming up";
-        startTs = WarmupStartTs;
-        deadline = WarmupStopDeadline;
-        duration = std::chrono::duration_cast<std::chrono::seconds>(WarmupStopDeadline - WarmupStartTs);
+        currentPhaseStartTs = WarmupStartTs;
     } else {
         data.Phase = "Measuring";
-        startTs = MeasurementsStartTs;
-        deadline = StopDeadline;
-        duration = std::chrono::duration_cast<std::chrono::seconds>(StopDeadline - MeasurementsStartTs);
+        currentPhaseStartTs = MeasurementsStartTs;
     }
 
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTs);
-    auto remaining = std::chrono::duration_cast<std::chrono::seconds>(deadline - now);
+    auto currentPhaseElapsed = std::chrono::duration_cast<std::chrono::seconds>(now - currentPhaseStartTs);
 
-    data.ElapsedMinutes = static_cast<int>(elapsed.count() / 60);
-    data.ElapsedSeconds = static_cast<int>(elapsed.count() % 60);
-    data.RemainingMinutes = std::max(0LL, remaining.count() / 60);
-    data.RemainingSeconds = std::max(0LL, remaining.count() % 60);
+    // Calculate tpmC and efficiency based on currentPhaseElapsed
 
-    if (duration.count() != 0) {
-        data.ProgressPercent = (static_cast<double>(elapsed.count()) / duration.count()) * 100.0;
-    }
-
-    // Calculate tpmC and efficiency
     double maxPossibleTpmc = 0;
     data.Efficiency = 0;
-    if (data.ElapsedMinutes == 0 && data.ElapsedSeconds == 0) {
+    if (currentPhaseElapsed.count() == 0) {
         data.Tpmc = 0;
     } else {
         // approximate
         const auto& newOrderStats = LastStatisticsSnapshot->TotalTerminalStats.GetStats(ETransactionType::NewOrder);
         auto newOrdersCount = newOrderStats.OK.load(std::memory_order_relaxed);
-        double tpmc = newOrdersCount * 60 / elapsed.count();
+        double tpmc = newOrdersCount * 60 / currentPhaseElapsed.count();
 
         // there are two errors: rounding + approximation, we might overshoot
         // 100% efficiency very slightly because of errors and it's OK to "round down"
-        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / elapsed.count();
+        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / currentPhaseElapsed.count();
         data.Tpmc = std::min(maxPossibleTpmc, tpmc);
     }
 
     if (maxPossibleTpmc != 0) {
         data.Efficiency = (data.Tpmc * 100.0) / maxPossibleTpmc;
-
         // avoid slight rounding errors
         data.Efficiency = std::min(data.Efficiency, 100.0);
     }

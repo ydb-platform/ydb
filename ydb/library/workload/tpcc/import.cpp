@@ -1274,7 +1274,7 @@ private:
 
         auto indicesRow = window(text(indexText), vbox(indexElements));
 
-        // Create scrollable logs panel
+        // Logs section (last 10 lines, full width)
 
         Elements logElements;
         LogBackend->GetLogLines([&](const std::string& line) {
@@ -1282,7 +1282,8 @@ private:
         });
 
         auto logsContent = vbox(logElements);
-        auto logsPanel = window(text(" Logs "), logsContent | vscroll_indicator | frame | flex);
+        auto logsPanel = window(text(" Logs "),
+            logsContent | flex);
 
         // Main layout - fill the entire screen
 

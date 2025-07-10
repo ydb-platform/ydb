@@ -26,6 +26,7 @@ namespace NSQLComplete {
 
         struct TFunction {
             TString Namespace;
+            ENodeKind ReturnType = ENodeKind::Any;
         };
 
         struct THint {
@@ -44,6 +45,10 @@ namespace NSQLComplete {
 
             bool HasCluster() const {
                 return !Cluster.empty();
+            }
+
+            bool IsDeferred() const {
+                return Kinds.empty();
             }
         };
 

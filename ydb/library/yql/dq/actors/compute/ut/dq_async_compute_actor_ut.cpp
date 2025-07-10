@@ -665,10 +665,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 #define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
 #define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
 #endif
-    void BasicTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
+    void BasicTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets
-           << " doWatermark=" << doWatermark
+           << " watermarkPeriod=" << watermarkPeriod
            << " waitIntermediateAcks=" << waitIntermediateAcks
            << " ";
         NDqProto::TDqTask task;
@@ -682,14 +682,16 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         ActorSystem.EnableScheduleForActor(asyncCA, true);
 
         ui32 val = 0;
+        TMaybe<TInstant> expectedWatermark;
         SendData([&](auto packet) {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
-            if (doWatermark) {
+            if (watermarkPeriod && packet % watermarkPeriod == 0) {
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));
+                expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
             }
         },
         asyncCA, dqOutputChannel, packets, waitIntermediateAcks);
@@ -729,12 +731,24 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         for (; val > 0; --val) {
             UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
         }
+        if (expectedWatermark) {
+            WEAK_UNIT_ASSERT(!!watermark);
+            if (watermark) {
+                UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
+                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark);
+                LOG_D("Last watermark " << *watermark);
+            } else {
+                LOG_E("NO WATERMARK");
+            }
+        } else {
+            UNIT_ASSERT(!watermark);
+        }
     }
 
-    void InputTransformTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
+    void InputTransformTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks) {
         LogPrefix = TStringBuilder() << "InputTransform Test for:"
            << " packets=" << packets
-           << " doWatermark=" << doWatermark
+           << " watermarkPeriod=" << watermarkPeriod
            << " waitIntermediateAcks=" << waitIntermediateAcks
            << " ";
         NDqProto::TDqTask task;
@@ -763,6 +777,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         auto asyncCA = CreateTestAsyncCA(task);
         ActorSystem.EnableScheduleForActor(asyncCA, true);
         ui32 val = 0;
+        TMaybe<TInstant> expectedWatermark;
         SendData([&](auto packet) {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             ++expectedData[val];
@@ -777,10 +792,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             ++expectedData[val];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             ++expectedData[val];
-            if (doWatermark) {
+            if (watermarkPeriod && packet % watermarkPeriod == 0) {
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));
+                expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
             }
         },
         asyncCA, dqOutputChannel, packets, waitIntermediateAcks);
@@ -851,13 +867,17 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         for (auto [receivedVal, receivedCnt] : receivedData) {
             UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);
         }
-        if (doWatermark) {
+        if (expectedWatermark) {
             WEAK_UNIT_ASSERT(!!watermark);
             if (watermark) {
+                WEAK_UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
+                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark);
                 LOG_D("Last watermark " << *watermark);
             } else {
                 LOG_E("NO WATERMARK");
             }
+        } else {
+            UNIT_ASSERT(!watermark);
         }
     }
 };
@@ -869,9 +889,9 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
 
     Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
         for (bool waitIntermediateAcks : { false, true }) {
-            for (bool doWatermark : { false, true }) {
+            for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                 for (ui32 packets : { 1, 2, 3, 4, 5 }) {
-                    BasicTests(packets, doWatermark, waitIntermediateAcks);
+                    BasicTests(packets, watermarkPeriod, waitIntermediateAcks);
                 }
             }
         }
@@ -879,9 +899,9 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
 
     Y_UNIT_TEST_F(InputTransform, TAsyncCATestFixture) {
         for (bool waitIntermediateAcks : { false, true }) {
-            for (bool doWatermark : { false, true }) {
+            for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                 for (ui32 packets : { 1, 2, 3, 4, 5, 111 }) {
-                    InputTransformTests(packets, doWatermark, waitIntermediateAcks);
+                    InputTransformTests(packets, watermarkPeriod, waitIntermediateAcks);
                 }
             }
         }

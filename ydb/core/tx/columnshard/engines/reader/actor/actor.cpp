@@ -45,19 +45,21 @@ std::shared_ptr<arrow::Table> RewriteDecimalToBinary16(const std::shared_ptr<arr
     fields.reserve(src->num_columns());
     cols.reserve(src->num_columns());
 
-    for (int c = 0; c < src->num_columns(); ++c) {
+    for (i32 c = 0; c < src->num_columns(); ++c) {
         auto field = src->schema()->field(c);
         auto column = src->column(c);
 
         if (IsDecimal128(field->type())) {
             std::vector<std::shared_ptr<arrow::Array>> chunks;
             chunks.reserve(column->num_chunks());
-            for (int k = 0; k < column->num_chunks(); ++k) {
+            for (i32 k = 0; k < column->num_chunks(); ++k) {
                 chunks.push_back(PatchArray(column->chunk(k)));
             }
+
             column = std::make_shared<arrow::ChunkedArray>(std::move(chunks), arrow::fixed_size_binary(16));
             field = field->WithType(arrow::fixed_size_binary(16));
         }
+
         fields.push_back(std::move(field));
         cols.push_back(std::move(column));
     }

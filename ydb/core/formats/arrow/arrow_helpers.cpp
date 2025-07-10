@@ -241,14 +241,14 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
     }
 
     auto batch = DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
-    for (int i = 0; i < batch->num_columns(); ++i) {
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
         auto arr = batch->column(i);
         if (arr->type()->id() == arrow::Type::DECIMAL128) {
             auto data = arr->data();
             auto buf = data->buffers[1];
             size_t arrLen = static_cast<size_t>(arr->length());
             if (buf && static_cast<size_t>(buf->size()) >= 16 * arrLen) {
-                auto raw = reinterpret_cast<TInt128*>(const_cast<uint8_t*>(buf->data()));
+                auto raw = reinterpret_cast<TInt128*>(const_cast<ui8*>(buf->data()));
                 for (size_t j = 0; j < arrLen; ++j) {
                     raw[j] = NormalizeDecimal128(raw[j]);
                 }
@@ -269,14 +269,14 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
     for (auto&& i : batches) {
         i = NArrow::TStatusValidator::GetValid(
             NArrow::NSerialization::TNativeSerializer(pool).Deserialize(NArrow::NSerialization::TNativeSerializer(pool).SerializeFull(i)));
-        for (int col = 0; col < i->num_columns(); ++col) {
+        for (i32 col = 0; col < i->num_columns(); ++col) {
             auto arr = i->column(col);
             if (arr->type()->id() == arrow::Type::DECIMAL128) {
                 auto data = arr->data();
                 auto buf = data->buffers[1];
                 size_t arrLen = static_cast<size_t>(arr->length());
                 if (buf && static_cast<size_t>(buf->size()) >= 16 * arrLen) {
-                    auto raw = reinterpret_cast<TInt128*>(const_cast<uint8_t*>(buf->data()));
+                    auto raw = reinterpret_cast<TInt128*>(const_cast<ui8*>(buf->data()));
                     for (size_t j = 0; j < arrLen; ++j) {
                         raw[j] = NormalizeDecimal128(raw[j]);
                     }

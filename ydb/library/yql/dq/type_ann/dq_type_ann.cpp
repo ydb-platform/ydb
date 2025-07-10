@@ -1233,6 +1233,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqConnection(input, ctx);
             }
 
+            if (TDqCnParallelUnionAll::Match(input.Get())) {
+                return AnnotateDqConnection(input, ctx);
+            }
+
             if (TDqCnHashShuffle::Match(input.Get())) {
                 return AnnotateDqCnHashShuffle(input, ctx);
             }

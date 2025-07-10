@@ -4,11 +4,10 @@
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 
+#include <arrow/table.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace {
-
-#include <arrow/table.h>
 
 static inline bool IsDecimal128(const std::shared_ptr<arrow::DataType>& t) {
     return t->id() == arrow::Type::DECIMAL128;
@@ -67,7 +66,6 @@ std::shared_ptr<arrow::Table> RewriteDecimalToBinary16(const std::shared_ptr<arr
 }
 
 }   // anonymous namespace
-    
 
 namespace NKikimr::NOlap::NReader {
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
@@ -118,9 +116,9 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     ResourceSubscribeActorId = ctx.Register(new NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
     ReadCoordinatorActorId = ctx.Register(new NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
-    std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ScanCountersPool,
-        ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId, CPULimits,
-        std::move(SchedulableTask));
+    std::shared_ptr<TReadContext> context =
+        std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ScanCountersPool, ReadMetadataRange, SelfId(),
+            ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId, CPULimits, std::move(SchedulableTask));
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();
@@ -236,8 +234,8 @@ void TColumnShardScan::CheckHanging(const bool logging) const {
     ("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
         "counters", ScanCountersPool.DebugString());
     if (!ok) {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("error", "CheckHanging")("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)(
-            "tablet", TabletId)("debug", ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("error", "CheckHanging")("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)(
+            "gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
         ScanCountersPool.OnHangingRequestDetected();
     }
 }
@@ -250,7 +248,8 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=0");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_continue")("deadline", GetComputeDeadlineOptional())("timeout", Timeout)("now", TMonotonic::Now());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_continue")("deadline", GetComputeDeadlineOptional())("timeout", Timeout)(
+            "now", TMonotonic::Now());
         ScheduleWakeup(TMonotonic::Now() + Timeout / 5);
     }
 }

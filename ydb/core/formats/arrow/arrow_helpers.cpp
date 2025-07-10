@@ -23,9 +23,9 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/string/join.h>
 #include <util/system/yassert.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <memory>
-#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
@@ -45,7 +45,6 @@ inline TInt128 NormalizeDecimal128(const TInt128& v) {
 
     return v;
 }
-    
 
 template <typename TType>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& typeInfo) {

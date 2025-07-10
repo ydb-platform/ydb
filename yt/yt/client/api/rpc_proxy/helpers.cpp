@@ -1821,24 +1821,24 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     YT_ABORT();
 }
 
-NExecNode::EJobStderrType ConvertJobStderrTypeFromProto(
+NApi::EJobStderrType ConvertJobStderrTypeFromProto(
     NProto::EJobStderrType proto)
 {
     switch (proto) {
         case NProto::EJobStderrType::JST_USER_JOB_STDERR:
-            return NExecNode::EJobStderrType::UserJobStderr;
+            return NApi::EJobStderrType::UserJobStderr;
         case NProto::EJobStderrType::JST_GPU_CHECK_STDERR:
-            return NExecNode::EJobStderrType::GpuCheckStderr;
+            return NApi::EJobStderrType::GpuCheckStderr;
     }
 }
 
 NProto::EJobStderrType ConvertJobStderrTypeToProto(
-    NExecNode::EJobStderrType jobStderrType)
+    NApi::EJobStderrType jobStderrType)
 {
     switch (jobStderrType) {
-        case NExecNode::EJobStderrType::UserJobStderr:
+        case NApi::EJobStderrType::UserJobStderr:
             return NProto::EJobStderrType::JST_USER_JOB_STDERR;
-        case NExecNode::EJobStderrType::GpuCheckStderr:
+        case NApi::EJobStderrType::GpuCheckStderr:
             return NProto::EJobStderrType::JST_GPU_CHECK_STDERR;
     }
 }

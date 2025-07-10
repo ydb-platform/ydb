@@ -12,6 +12,10 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
+class TGroupGuard;
+class TScopeGuard;
+class TProcessGuard;
+
 class TGroupGuard {
 private:
     const NActors::TActorId ActorId;
@@ -33,6 +37,10 @@ private:
 public:
     TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
 
+    std::shared_ptr<TScopeGuard> BuildScopeGuard(const ui32 scopeId) const {
+        return std::make_shared<TScopeGuard>(ActorId, ProcessId, scopeId);
+    }
+
     ~TProcessGuard();
 };
 
@@ -44,6 +52,11 @@ private:
 
 public:
     TScopeGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 scopeId);
+
+    std::shared_ptr<TGroupGuard> BuildGroupGuard() const {
+        static TAtomicCounter counter = 0;
+        return std::make_shared<TGroupGuard>(ActorId, ProcessId, ScopeId, counter.Inc());
+    }
 
     ~TScopeGuard();
 };

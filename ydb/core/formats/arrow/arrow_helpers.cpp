@@ -25,10 +25,27 @@
 #include <util/system/yassert.h>
 
 #include <memory>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
 namespace NKikimr::NArrow {
+
+using TInt128 = NYql::NDecimal::TInt128;
+inline TInt128 NormalizeDecimal128(const TInt128& v) {
+    constexpr TInt128 PInf128 = +NYql::NDecimal::Inf();
+    constexpr TInt128 NInf128 = -NYql::NDecimal::Inf();
+    if (v > PInf128) {
+        return PInf128;
+    }
+
+    if (v < NInf128) {
+        return NInf128;
+    }
+
+    return v;
+}
+    
 
 template <typename TType>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& typeInfo) {
@@ -223,7 +240,24 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
     if (!original) {
         return nullptr;
     }
-    return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
+
+    auto batch = DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
+    for (int i = 0; i < batch->num_columns(); ++i) {
+        auto arr = batch->column(i);
+        if (arr->type()->id() == arrow::Type::DECIMAL128) {
+            auto data = arr->data();
+            auto buf = data->buffers[1];
+            size_t arrLen = static_cast<size_t>(arr->length());
+            if (buf && static_cast<size_t>(buf->size()) >= 16 * arrLen) {
+                auto raw = reinterpret_cast<TInt128*>(const_cast<uint8_t*>(buf->data()));
+                for (size_t j = 0; j < arrLen; ++j) {
+                    raw[j] = NormalizeDecimal128(raw[j]);
+                }
+            }
+        }
+    }
+
+    return batch;
 }
 
 std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool) {
@@ -236,7 +270,22 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
     for (auto&& i : batches) {
         i = NArrow::TStatusValidator::GetValid(
             NArrow::NSerialization::TNativeSerializer(pool).Deserialize(NArrow::NSerialization::TNativeSerializer(pool).SerializeFull(i)));
+        for (int col = 0; col < i->num_columns(); ++col) {
+            auto arr = i->column(col);
+            if (arr->type()->id() == arrow::Type::DECIMAL128) {
+                auto data = arr->data();
+                auto buf = data->buffers[1];
+                size_t arrLen = static_cast<size_t>(arr->length());
+                if (buf && static_cast<size_t>(buf->size()) >= 16 * arrLen) {
+                    auto raw = reinterpret_cast<TInt128*>(const_cast<uint8_t*>(buf->data()));
+                    for (size_t j = 0; j < arrLen; ++j) {
+                        raw[j] = NormalizeDecimal128(raw[j]);
+                    }
+                }
+            }
+        }
     }
+
     return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
 }
 

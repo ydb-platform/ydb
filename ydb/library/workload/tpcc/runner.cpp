@@ -23,7 +23,6 @@
 #include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
-#include <array>
 #include <atomic>
 #include <stop_token>
 #include <thread>
@@ -765,8 +764,10 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
         logElements.push_back(paragraph(line));
     });
 
+    auto logsContent = vbox(logElements);
+
     auto logsSection = window(text("Logs"),
-        vbox(logElements) | size(HEIGHT, EQUAL, 12));
+        logsContent | flex);
 
     // Main layout
 

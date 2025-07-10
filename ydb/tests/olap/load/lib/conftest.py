@@ -38,6 +38,7 @@ class LoadSuiteBase:
     scale: Optional[int] = None
     query_prefix: str = get_external_param('query-prefix', '')
     verify_data: bool = True
+    float_mode: str = ''
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
 
     @classmethod
@@ -465,6 +466,7 @@ class LoadSuiteBase:
             scale=self.scale,
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
+            float_mode=self.float_mode,
         )[query_name]
         self.process_query_result(result, query_name, True)
 
@@ -827,7 +829,8 @@ class LoadSuiteParallel(LoadSuiteBase):
             scale=cls.scale,
             query_prefix=qparams.query_prefix,
             external_path=cls.get_external_path(),
-            threads=cls.threads
+            threads=cls.threads,
+            float_mode=cls.float_mode,
         )
 
     def test(self, query_name):

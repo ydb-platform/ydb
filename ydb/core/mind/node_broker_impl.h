@@ -305,6 +305,8 @@ private:
     void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
     bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
 
+    void UpdateCommittedStateCounters();
+
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

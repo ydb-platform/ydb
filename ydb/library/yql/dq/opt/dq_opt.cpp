@@ -140,6 +140,15 @@ bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {
     });
 }
 
+bool IsDqDependsOnOtherStage(const TExprBase& node, const TDqStageBase& stage) {
+    return !!FindNode(node.Ptr(), [ptr = stage.Raw()](const TExprNode::TPtr& node) {
+        if (TMaybeNode<TDqStage>(node)) {
+            return node.Get() != ptr;
+        }
+        return false;
+    });
+}
+
 bool IsDqDependsOnStageOutput(const TExprBase& node, const TDqStageBase& stage, ui32 outputIndex) {
     return !!FindNode(node.Ptr(), [ptr = stage.Raw(), outputIndex](const TExprNode::TPtr& exprNode) {
         if (TDqOutput::Match(exprNode.Get())) {

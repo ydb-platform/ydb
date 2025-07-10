@@ -238,7 +238,8 @@ public:
 };
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
-        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false, bool createDynamicGroups = false)
+        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false, bool createDynamicGroups = false,
+        bool isBridgeMode = false, ui32 pilesCount = 2)
 {   
     constexpr ui32 MIRROR_3DC_VDISKS_COUNT = 9;
     constexpr ui32 BLOCK_4_2_VDISKS_COUNT = 8;
@@ -262,7 +263,10 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
     for (ui32 i = 0; i < numGroups; ++i) {
         ui32 groupId;
 
-        if (createDynamicGroups) {
+        if (isBridgeMode) {
+            TGroupID fullGroupId(i < pilesCount ? EGroupConfigurationType::Static : EGroupConfigurationType::Dynamic, i % pilesCount, i);
+            groupId = fullGroupId.GetRaw();
+        } else if (createDynamicGroups) {
             TGroupID fullGroupId(i == 0 ? EGroupConfigurationType::Static : EGroupConfigurationType::Dynamic, 1, i);
             groupId = fullGroupId.GetRaw();
         } else {
@@ -280,6 +284,14 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             group.SetErasureSpecies("block-4-2");
         else
             group.SetErasureSpecies("none");
+        
+        if (isBridgeMode && i < numGroups / pilesCount) {
+            auto& proxyGroup = *config->AddGroup();
+            proxyGroup.CopyFrom(group);
+            TGroupID fullGroupId(EGroupConfigurationType::Dynamic, i % pilesCount, i + 10000);
+            proxyGroup.SetGroupId(fullGroupId.GetRaw());
+            proxyGroup.SetIsProxyGroup(true);
+        }
     }
 
     for (ui32 nodeIndex = 0; nodeIndex < numNodes; ++nodeIndex) {

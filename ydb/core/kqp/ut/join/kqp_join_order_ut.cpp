@@ -851,6 +851,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, false, ColumnStore);
     }
 
+    Y_UNIT_TEST(BytesHintForceGraceJoin) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/bytes_hint_force_grace_join.sql", "stats/basic.json", false, true, true);
+        auto joinFinder = TFindJoinWithLabels(plan);
+        auto join = joinFinder.Find({"R", "S"});
+        UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+    }
+
     Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
         auto joinFinder = TFindJoinWithLabels(plan);

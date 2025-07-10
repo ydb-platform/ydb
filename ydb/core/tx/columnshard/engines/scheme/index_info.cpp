@@ -28,7 +28,8 @@ TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    AFL_VERIFY(!!id)("column_name", name)("names", JoinSeq(",", ColumnIdxSortedByName));
+    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))(
+        "names", JoinSeq(",", GetColumnNames()));
     return *id;
 }
 
@@ -76,6 +77,14 @@ std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) co
     out.reserve(ids.size());
     for (ui32 id : ids) {
         out.push_back(GetColumnName(id));
+    }
+    return out;
+}
+
+std::vector<TString> TIndexInfo::GetColumnNames() const {
+    std::vector<TString> out;
+    for (auto&& i : ColumnFeatures) {
+        out.push_back(i->GetColumnName());
     }
     return out;
 }

@@ -415,7 +415,7 @@ NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams&
         auto protoFmrTableRef = FmrTableRefToProto(fmrTableRef);
         protoMapOperationParams.AddOutput()->Swap(&protoFmrTableRef);
     }
-    protoMapOperationParams.SetExecutable(mapOperationParams.Executable);
+    protoMapOperationParams.SetSerializedMapJobState(mapOperationParams.SerializedMapJobState);
     return protoMapOperationParams;
 }
 
@@ -428,7 +428,7 @@ TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParam
     for (auto& protoFmrTableRef: protoMapOperationParams.GetOutput()) {
         outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
     }
-    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .Executable = protoMapOperationParams.GetExecutable()};
+    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState()};
 }
 
 NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams) {
@@ -439,7 +439,7 @@ NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams)
         auto protoFmrTableOutputRef = FmrTableOutputRefToProto(fmrTableOutputRef);
         protoMapTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
     }
-    protoMapTaskParams.SetExecutable(mapTaskParams.Executable);
+    protoMapTaskParams.SetSerializedMapJobState(mapTaskParams.SerializedMapJobState);
     return protoMapTaskParams;
 }
 
@@ -451,7 +451,7 @@ TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTask
         outputTables.emplace_back(FmrTableOutputRefFromProto(protoFmrTableOutputRef));
     }
     mapTaskParams.Output = outputTables;
-    mapTaskParams.Executable = protoMapTaskParams.GetExecutable();
+    mapTaskParams.SerializedMapJobState = protoMapTaskParams.GetSerializedMapJobState();
     return mapTaskParams;
 }
 

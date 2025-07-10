@@ -73,6 +73,62 @@ void ToCamelCase(std::string & s)
     std::transform(s.begin(),s.end(),s.begin(),f);
 }
 
+TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext& ctx) {
+        if (input->IsLambda()) {
+            auto lambda = TCoLambda(input);
+
+            return Build<TCoLambda>(ctx, input->Pos())
+                .Args(lambda.Args())
+                .Body(ReplacePgOps(lambda.Body().Ptr(), ctx))
+                .Done().Ptr();
+        }
+        else if (input->IsCallable("PgAnd")) {
+            return ctx.Builder(input->Pos())
+                .Callable("ToPg")
+                    .Callable(0, "And")
+                        .Callable(0, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
+                        .Seal()
+                        .Callable(1, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(1), ctx))
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+        else if (input->IsCallable("PgOr")) {
+            return ctx.Builder(input->Pos())
+                .Callable("ToPg")
+                    .Callable(0, "Or")
+                        .Callable(0, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
+                        .Seal()
+                        .Callable(1, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(1), ctx))
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+        else if (input->IsCallable()){
+            TVector<TExprNode::TPtr> newChildren;
+            for (auto c : input->Children()) {
+                newChildren.push_back(ReplacePgOps(c, ctx));
+            }
+            return ctx.Builder(input->Pos()).Callable(input->Content()).Add(std::move(newChildren)).Seal().Build();
+        }
+        else if(input->IsList()){
+            TVector<TExprNode::TPtr> newChildren;
+            for (auto c : input->Children()) {
+                newChildren.push_back(ReplacePgOps(c, ctx));
+            }
+            return ctx.Builder(input->Pos()).List().Add(std::move(newChildren)).Seal().Build();
+        }
+        else {
+            return input;
+        }
+    }
+
 TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     Y_UNUSED(typeCtx);
     auto setItems = GetSetting(node->Head(), "set_items");
@@ -195,7 +251,8 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
     auto where = GetSetting(setItem->Tail(), "where");
 
     if (where) {
-        auto lambda = where->Child(1)->Child(1);
+        TExprNode::TPtr lambda = where->Child(1)->Child(1);
+        lambda = ReplacePgOps(lambda, ctx);
         filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
             .Input(filterExpr)
             .Lambda(lambda)
@@ -235,7 +292,9 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                  << "Conversion to PG type is different at typization (" << expectedType->GetId()
                  << ") and optimization (" << actualPgTypeId << ") stages.");
 
-            auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {lambda.Body().Ptr()});
+            TExprNode::TPtr lambdaBody = lambda.Body().Ptr();
+            lambdaBody = ReplacePgOps(lambdaBody, ctx);
+            auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {lambdaBody});
 
             lambda = Build<TCoLambda>(ctx, node->Pos())
                 .Args(lambda.Args())
@@ -244,7 +303,9 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
         }
         else if (needPgCast) {
             auto pgType = ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NPg::LookupType(expectedType->GetId()).Name)});
-            auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {lambda.Body().Ptr(), pgType});
+            TExprNode::TPtr lambdaBody = lambda.Body().Ptr();
+            lambdaBody = ReplacePgOps(lambdaBody, ctx);
+            auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {lambdaBody, pgType});
 
             lambda = Build<TCoLambda>(ctx, node->Pos())
                 .Args(lambda.Args())

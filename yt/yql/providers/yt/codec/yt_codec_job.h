@@ -42,7 +42,7 @@ public:
 
 class TJobMkqlWriterImpl: protected NPrivate::TOutStreamsHolder, public TMkqlWriterImpl {
 public:
-    TJobMkqlWriterImpl(const TMkqlIOSpecs& specs, const TVector<TFile>& outHandles);
+    TJobMkqlWriterImpl(const TVector<TFile>& outHandles);
     ~TJobMkqlWriterImpl() = default;
 
 private:

@@ -103,7 +103,7 @@ TConclusionStatus TScanHead::Start() {
     return TConclusionStatus::Success();
 }
 
-TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
+TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     if (HasAppData()) {
         if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
@@ -116,11 +116,10 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
     } else {
         InFlightLimit = MaxInFlight;
     }
-    while (sources.size()) {
-        auto source = sources.front();
+    while (!sources->IsFinished()) {
+        auto source = std::static_pointer_cast<IDataSource>(sources->ExtractNext(context));
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
-        sources.pop_front();
     }
 }
 

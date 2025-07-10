@@ -16,8 +16,8 @@ syntax = "proto3";
 
 package buf.validate;
 
-import "buf/validate/expression.proto";
-import "buf/validate/priv/private.proto";
+import "ydb/public/api/client/nc_private/buf/validate/expression.proto";
+import "ydb/public/api/client/nc_private/buf/validate/priv/private.proto";
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";

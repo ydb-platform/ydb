@@ -5,8 +5,8 @@ package nebius.common.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
-import "buf/validate/validate.proto";
-import "nebius/annotations.proto";
+import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
 
 option java_multiple_files = true;
 option java_outer_classname = "OperationProto";

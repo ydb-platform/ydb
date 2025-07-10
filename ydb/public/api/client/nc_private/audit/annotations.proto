@@ -3,7 +3,7 @@ syntax = "proto3";
 package nebius.audit;
 
 import "google/protobuf/descriptor.proto";
-import "nebius/audit/v1/common/action.proto";
+import "ydb/public/api/client/nc_private/audit/v1/common/action.proto";
 
 option java_multiple_files = true;
 option java_outer_classname = "AnnotationsProto";

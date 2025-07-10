@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package nebius.audit.v1.common;
 
-import "nebius/audit/v1/common/action_type.proto";
+import "ydb/public/api/client/nc_private/audit/v1/common/action_type.proto";
 
 option java_multiple_files = true;
 option java_outer_classname = "ActionProto";

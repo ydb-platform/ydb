@@ -3,9 +3,9 @@ syntax = "proto3";
 package nebius.iam.v1;
 
 import "google/protobuf/timestamp.proto";
-import "nebius/annotations.proto";
-import "nebius/audit/annotations.proto";
-import "nebius/iam/v1/token.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+import "ydb/public/api/client/nc_private/audit/annotations.proto";
+import "ydb/public/api/client/nc_private/iam/v1/token.proto";
 
 option java_multiple_files = true;
 option java_outer_classname = "TokenServiceProto";

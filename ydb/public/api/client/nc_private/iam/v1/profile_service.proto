@@ -3,13 +3,13 @@ syntax = "proto3";
 package nebius.iam.v1;
 
 
-import "buf/validate/validate.proto";
-import "nebius/annotations.proto";
-import "nebius/audit/annotations.proto";
-import "nebius/common/v1/operation.proto";
-import "nebius/iam/v1/tenant_user_account.proto";
-import "nebius/iam/v1/service_account.proto";
-import "nebius/iam/v1/user_account.proto";
+import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+import "ydb/public/api/client/nc_private/audit/annotations.proto";
+import "ydb/public/api/client/nc_private/common/v1/operation.proto";
+import "ydb/public/api/client/nc_private/iam/v1/tenant_user_account.proto";
+import "ydb/public/api/client/nc_private/iam/v1/service_account.proto";
+import "ydb/public/api/client/nc_private/iam/v1/user_account.proto";
 
 
 option java_multiple_files = true;
@@ -84,4 +84,3 @@ message UpdateProfileAttributesRequest {
     (buf.validate.field).required = true
   ];
 }
-

@@ -332,7 +332,7 @@ private:
 
         html << "<h3>OutputChannels</h3>";
         for (const auto& [id, info]: OutputChannelsMap) {
-            html << "<h4>Input Channel Id: " << id << "</h4>";
+            html << "<h4>Output Channel Id: " << id << "</h4>";
             DUMP(info, ChannelId);
             DUMP(info, DstStageId);
             DUMP(info, HasPeer);
@@ -370,7 +370,7 @@ private:
                 html << "DqOutputChannel.FillLevel: " << static_cast<ui32>(channel->GetFillLevel()) << "<br />";
                 html << "DqOutputChannel.HasData: " << channel->HasData() << "<br />";
                 html << "DqOutputChannel.IsFinished: " << channel->IsFinished() << "<br />";
-                html << "DqInputChannel.OutputType: " << (channel->GetOutputType() ? channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqOutputChannel.OutputType: " << (channel->GetOutputType() ? channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
 
                 const auto& pushStats = channel->GetPushStats();
                 dumpOutputStats("DqOutputChannel.PushStats."sv, pushStats);

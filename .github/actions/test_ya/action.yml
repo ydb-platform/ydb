@@ -198,6 +198,7 @@ runs:
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
+          -DTEST_ICRDMA #Enable rdma tests for interconnect. Our CI environment has configured soft RoCE, so we can run tests.
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}

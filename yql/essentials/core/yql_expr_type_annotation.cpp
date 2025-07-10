@@ -6305,6 +6305,19 @@ const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, boo
     return type.Cast<TScalarExprType>()->GetItemType();
 }
 
+const TTypeAnnotationNode* UnpackOptionalBlockItemType(const TTypeAnnotationNode& type, TExprContext& ctx, bool convertToScalar) {
+    YQL_ENSURE(type.IsBlockOrScalar());
+    bool isScalar;
+    auto* underlyingOptionalType = GetBlockItemType(type, isScalar);
+    YQL_ENSURE(underlyingOptionalType->GetKind() == ETypeAnnotationKind::Optional);
+    auto* underlyingType = underlyingOptionalType->Cast<TOptionalExprType>()->GetItemType();
+    if (isScalar || convertToScalar) {
+        return ctx.MakeType<TScalarExprType>(underlyingType);
+    } else {
+        return ctx.MakeType<TBlockExprType>(underlyingType);
+    }
+}
+
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto name = input->Child(0)->Content();
     if (name == "count" || name == "count_all" || name == "min" || name == "max" || name == "some") {

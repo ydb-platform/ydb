@@ -2,6 +2,8 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
+#include <arrow/memory_pool.h>
+
 #include <util/system/align.h>
 #include <util/generic/scope.h>
 
@@ -320,7 +322,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
         return reinterpret_cast<void*>(ZeroSizeObject);
     }
 
-    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+    if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
         if (size <= ArrowSizeForArena) {
             return MKQLArrowAllocateOnArena(size);
         }
@@ -334,11 +336,15 @@ void* MKQLArrowAllocateImpl(ui64 size) {
     }
 
     void* ptr;
-    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
-        ptr = malloc(fullSize);
-        if (!ptr) {
+    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+        auto pool = arrow::default_memory_pool();
+        Y_ENSURE(pool);
+        uint8_t* res;
+        if (!pool->Allocate(fullSize, &res).ok()) {
             throw TMemoryLimitExceededException();
         }
+        Y_ENSURE(res);
+        ptr = res;
     } else {
         ptr = GetAlignedPage(fullSize);
     }
@@ -385,7 +391,7 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
         return;
     }
 
-    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+    if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
         if (size <= ArrowSizeForArena) {
             return MKQLArrowFreeOnArena(mem);
         }
@@ -405,8 +411,10 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
 
     Y_ENSURE(size == header->Size);
 
-    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
-        free(header);
+    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+        auto pool = arrow::default_memory_pool();
+        Y_ABORT_UNLESS(pool);
+        pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));
         return;
     }
 
@@ -447,7 +455,7 @@ void MKQLArrowUntrack(const void* mem, ui64 size) {
         return;
     }
 
-    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+    if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
         if (size <= ArrowSizeForArena) {
             auto* page = (TMkqlArrowHeader*)TAllocState::GetPageStart(mem);
 

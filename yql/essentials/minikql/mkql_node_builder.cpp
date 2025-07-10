@@ -86,6 +86,15 @@ TDataType* UnpackOptionalData(TRuntimeNode data, bool& isOptional) {
     return UnpackOptionalData(data.GetStaticType(), isOptional);
 }
 
+TType* UnpackOptionalBlockItemType(TBlockType* type, const TTypeEnvironment& env) {
+    MKQL_ENSURE(type->IsBlock(), "Expected block type.");
+    bool isOptional;
+    auto* unpackedType = UnpackOptional(type->GetItemType(), isOptional);
+    MKQL_ENSURE(isOptional, "Must be optional type.");
+
+    return TBlockType::Create(unpackedType, type->GetShape(), env);
+}
+
 TDataType* UnpackOptionalData(TType* type, bool& isOptional) {
     auto unpackedType = UnpackOptional(type, isOptional);
     MKQL_ENSURE(unpackedType->IsData(),

@@ -158,6 +158,11 @@ bool TClientRequest::IsAttachmentCompressionEnabled() const
     return attachmentCodecId != NCompression::ECodec::None;
 }
 
+bool TClientRequest::HasAttachments() const
+{
+    return !Attachments_.empty();
+}
+
 NCompression::ECodec TClientRequest::GetEffectiveAttachmentCompressionCodec() const
 {
     return EnableLegacyRpcCodecs_ ? NCompression::ECodec::None : RequestCodec_;

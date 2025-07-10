@@ -466,7 +466,7 @@ i64 CheckAndTransformTimestamp(i64 arrowValue, arrow::TimeUnit::type timeUnit, i
         case arrow::TimeUnit::type::NANO:
             resultValue = arrowValue / MicroToNanoCoefficient;
             minArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(minAllowedTimestamp, MicroToNanoCoefficient);
-            maxArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(minAllowedTimestamp, MicroToNanoCoefficient);
+            maxArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(maxAllowedTimestamp, MicroToNanoCoefficient);
             break;
 
         case arrow::TimeUnit::type::SECOND:

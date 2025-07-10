@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(Ibv) {
 
         ibv_device** deviceList  = ibv_get_device_list(&numDevices);
 
-        UNIT_ASSERT_C(!deviceList, "unable to get device list");
+        UNIT_ASSERT_C(deviceList, "unable to get device list");
 
         for (int i = 0; i < numDevices; i++) {
             ibv_device* dev = deviceList[i];

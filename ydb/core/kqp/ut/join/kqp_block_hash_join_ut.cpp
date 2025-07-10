@@ -42,14 +42,14 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             auto status = queryClient.ExecuteQuery(
                 R"(
                     INSERT INTO `/Root/left_table` (id, data) VALUES
-                        (1, "left1"),
-                        (2, "left2"),
-                        (3, "left3");
+                        (1, "1"),
+                        (2, "2"),
+                        (3, "3");
 
                     INSERT INTO `/Root/right_table` (id, data) VALUES
-                        (1, "right1"),
-                        (2, "right2"),
-                        (3, "right3");
+                        (1, "1"),
+                        (2, "2"),
+                        (3, "3");
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
             ).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());

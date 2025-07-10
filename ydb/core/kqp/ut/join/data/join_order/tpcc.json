@@ -12,7 +12,7 @@
             },
             {
               "op_name":"TableRangeScan",
-              "table":"test\/tpcc\/order_line"
+              "table":"order_line"
             }
           ]
       }

@@ -2512,6 +2512,7 @@ private:
             }
         }
 
+        // erase some redundant info from the table scan
         if (op.IsMap()) {
             auto& map = op.GetMapSafe();
 

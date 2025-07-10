@@ -40,14 +40,16 @@ Release date: 2025.
 * [Added](https://github.com/ydb-platform/ydb/pull/6342) support for removing `NOT NULL` constraints from a table column using the `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL` statement.
 * [Added](https://github.com/ydb-platform/ydb/pull/9168) a limit of 100,000 concurrent session-creation requests in the coordination service.
 * [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum number of columns in the primary key from 20 to 30.
-* **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) strict access control checks, enabled by setting the `enable_strict_acl_check` flag and these additional flags:
+* Improved diagnostics and introspection of memory errors.
+* **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) strict access control checks, enabled by setting these flags:
+  * `enable_strict_acl_check` do not allow granting rights to non-existent users and deleting a user with write permissions on schema objects;
   * `enable_strict_user_management` enables strict checks for local users.
   * `enable_database_admin` enables database administrator functions.
   * `enable_data_erasure` [enables](https://github.com/ydb-platform/ydb/pull/14460) a procedure that repeatedly overwrites deleted data to minimize recovery risk when accessing block devices directly via operating system functions.
 
 #### Backward Incompatible Changes
 
-* If you are using [temporal over YDB](https://github.com/yandex/temporal-over-ydb), update it to version [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) before updating {{ ydb-short-name }} to the current version to avoid errors in query execution.
+* If you are using queries that access named expressions as tables using the AS_TABLE function, update [temporary over YDB](https://github.com/yandex/temporal-over-ydb) to version [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) before updating {{ ydb-short-name }} to the current version to avoid errors in query execution.
 
 #### YDB UI
 
@@ -74,7 +76,6 @@ Release date: 2025.
 * [Improved](https://github.com/ydb-platform/ydb/pull/10969) Hive startup times.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/6561) the distributed storage replication process.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/9491) the header size of large binary objects in VDisk.
-* Improved diagnostics and introspection of memory errors.
 * Reduced memory consumption through allocator page cleaning.
 
 #### Bug Fixes

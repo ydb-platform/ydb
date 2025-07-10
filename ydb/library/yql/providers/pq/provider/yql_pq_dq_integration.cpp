@@ -115,8 +115,10 @@ public:
         return read;
     }
 
-    TMaybe<bool> CanWrite(const TExprNode&, TExprContext&) override {
-        YQL_ENSURE(false, "Unimplemented");
+    TMaybe<bool> CanWrite(const TExprNode& write, TExprContext&) override {
+       // TPqWriteTopic::M
+        return TPqWriteTopic::Match(&write);
+        //YQL_ENSURE(false, "Unimplemented");
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {

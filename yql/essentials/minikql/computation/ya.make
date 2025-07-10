@@ -7,6 +7,7 @@ SRCS(
     mkql_block_transport.cpp
     mkql_block_trimmer.cpp
     mkql_computation_node.cpp
+    mkql_datum_validate.cpp
     mkql_computation_node_holders.cpp
     mkql_computation_node_impl.cpp
     mkql_computation_node_pack.cpp

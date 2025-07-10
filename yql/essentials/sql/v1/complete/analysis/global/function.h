@@ -1,5 +1,6 @@
 #pragma once
 
+#include "global.h"
 #include "input.h"
 
 #include <util/generic/maybe.h>
@@ -7,6 +8,6 @@
 
 namespace NSQLComplete {
 
-    TMaybe<TString> EnclosingFunction(TParsedInput input);
+    TMaybe<TFunctionContext> EnclosingFunction(TParsedInput input);
 
 } // namespace NSQLComplete

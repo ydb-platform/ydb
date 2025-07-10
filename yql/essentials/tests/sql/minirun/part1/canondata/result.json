@@ -755,6 +755,20 @@
             "uri": "https://{canondata_backend}/1942100/1013b32caebd140d1dc9278f326196c687df1d88/resource.tar.gz#test.test_in-small_in_YQL-19183-ansi-Results_/results.txt"
         }
     ],
+    "test.test[intersect-intersect_mix-default.txt-Debug]": [
+        {
+            "checksum": "9c0083b439d15cc700b1f47cad03d5f7",
+            "size": 1735,
+            "uri": "https://{canondata_backend}/1916746/2ac7ca2ee06357a0ae2df3c4927fc906e2649791/resource.tar.gz#test.test_intersect-intersect_mix-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[intersect-intersect_mix-default.txt-Results]": [
+        {
+            "checksum": "880bc2c5f1cdd2ea8a714c3bb367ac9f",
+            "size": 689,
+            "uri": "https://{canondata_backend}/1916746/2ac7ca2ee06357a0ae2df3c4927fc906e2649791/resource.tar.gz#test.test_intersect-intersect_mix-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[join-inmem_by_uncomparable_structs-default.txt-Debug]": [
         {
             "checksum": "8c3db3c0b89d765d8902292c8ad33420",
@@ -781,6 +795,20 @@
             "checksum": "6c1a46be45448e088bce485a414db8a6",
             "size": 9730,
             "uri": "https://{canondata_backend}/1936273/dc5c7fc322621a2828a94006237d3583f38248e5/resource.tar.gz#test.test_join-inmem_by_uncomparable_tuples-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[join-left_join_right_pushdown_onlykeys-default.txt-Debug]": [
+        {
+            "checksum": "9ad3d328a795b8b31fe7f2a9d9e45234",
+            "size": 1005,
+            "uri": "https://{canondata_backend}/1777230/022f155f4d9d52fd451cd8dbf4fd4800c232e6e6/resource.tar.gz#test.test_join-left_join_right_pushdown_onlykeys-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-left_join_right_pushdown_onlykeys-default.txt-Results]": [
+        {
+            "checksum": "2182e1fb6e05db41666915a30cbd5d69",
+            "size": 1328,
+            "uri": "https://{canondata_backend}/1777230/022f155f4d9d52fd451cd8dbf4fd4800c232e6e6/resource.tar.gz#test.test_join-left_join_right_pushdown_onlykeys-default.txt-Results_/results.txt"
         }
     ],
     "test.test[join-yql-19192-default.txt-Debug]": [

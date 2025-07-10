@@ -297,16 +297,12 @@ TExprNode::TPtr OptimizeBlockCompress(const TExprNode::TPtr& node, TExprContext&
 TExprNode::TPtr OptimizeBlocksTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
     const auto& input = node->HeadPtr();
-    if (input->IsCallable("ToFlow") && input->Head().IsCallable("ReplicateScalars")) {
-        const auto& replicateScalars = input->HeadPtr();
+    if (input->IsCallable("ReplicateScalars")) {
         // Technically, the code below rewrites the following sequence
-        // (Wide{Top,TopSort,Sort}Blocks (ToFlow (ReplicateScalars (<input>))))
-        // into (ToFlow (ReplicateScalars (FromFlow (Wide{Top,TopSort,Sort}Blocks (<input>))))),
-        // but ToFlow/FromFlow wrappers will be removed when all other
-        // nodes in block pipeline start using WideStream instead of the
-        // WideFlow. Hence, the logging is left intact.
-        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << replicateScalars->Content();
-        return SwapFlowNodeWithStreamNode(node, replicateScalars, ctx);
+        // (Wide{Top,TopSort,Sort}Blocks (ReplicateScalars (<input>)))
+        // into (ReplicateScalars (Wide{Top,TopSort,Sort}Blocks (<input>))).
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input->Content();
+        return ctx.SwapWithHead(*node);
     }
 
     return node;
@@ -6933,24 +6929,25 @@ TExprNode::TPtr OptimizeTopOrSortBlocks(const TExprNode::TPtr& node, TExprContex
     TString newName = node->Content() + TString("Blocks");
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
     auto children = node->ChildrenList();
+    // clang-format off
     children[0] = ctx.Builder(node->Pos())
-        .Callable("ToFlow")
-            .Callable(0, "WideToBlocks")
-                .Callable(0, "FromFlow")
-                    .Add(0, children[0])
-                .Seal()
+        .Callable("WideToBlocks")
+            .Callable(0, "FromFlow")
+                .Add(0, children[0])
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
+
+    // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
-                .Callable(0, "FromFlow")
-                    .Add(0, ctx.NewCallable(node->Pos(), newName, std::move(children)))
-                .Seal()
+                .Add(0, ctx.NewCallable(node->Pos(), newName, std::move(children)))
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 // TODO(YQL): Implement one more optimization for block types.

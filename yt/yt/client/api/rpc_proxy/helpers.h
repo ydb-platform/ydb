@@ -308,11 +308,11 @@ NProto::EQueryState ConvertQueryStateToProto(
 NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     NProto::EQueryState proto);
 
-NExecNode::EJobStderrType ConvertJobStderrTypeFromProto(
+NApi::EJobStderrType ConvertJobStderrTypeFromProto(
     NProto::EJobStderrType proto);
 
 NProto::EJobStderrType ConvertJobStderrTypeToProto(
-    NExecNode::EJobStderrType jobStderrType);
+    NApi::EJobStderrType jobStderrType);
 
 ////////////////////////////////////////////////////////////////////////////////
 

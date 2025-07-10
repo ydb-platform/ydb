@@ -151,7 +151,7 @@ void TGetJobStderrCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ true);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<NExecNode::EJobStderrType>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EJobStderrType>>(
         "type",
         [] (TThis* command) -> auto& {
             return command->Options.Type;

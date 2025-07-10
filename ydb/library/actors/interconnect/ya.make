@@ -99,6 +99,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    rdma
+)
+
 RECURSE_FOR_TESTS(
     ut
     ut_fat

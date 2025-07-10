@@ -51,7 +51,7 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/base_table_types_script_script/TableTypes",
                                                         "ReadColumns": [
-                                                            "Key",
+                                                            "Key (-\u221e, +\u221e)",
                                                             "Value01",
                                                             "Value02",
                                                             "Value03",
@@ -70,9 +70,6 @@
                                                             "Value32",
                                                             "Value33",
                                                             "Value34"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "Scan": "Parallel",
                                                         "Table": "base_table_types_script_script/TableTypes"

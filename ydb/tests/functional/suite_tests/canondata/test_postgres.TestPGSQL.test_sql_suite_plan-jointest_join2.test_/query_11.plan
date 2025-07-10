@@ -155,10 +155,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join2.test_plan/x",
                                                                         "ReadColumns": [
-                                                                            "x1",
-                                                                            "x2"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "x1 (-\u221e, +\u221e)",
                                                                             "x2 (-\u221e, +\u221e)"
                                                                         ],
@@ -214,10 +210,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join2.test_plan/x",
                                                         "ReadColumns": [
-                                                            "x1",
-                                                            "x2"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "x1 (-\u221e, +\u221e)",
                                                             "x2 (-\u221e, +\u221e)"
                                                         ],

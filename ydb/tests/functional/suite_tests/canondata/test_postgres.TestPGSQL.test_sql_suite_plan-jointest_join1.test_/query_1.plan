@@ -150,9 +150,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join1.test_plan/J1_TBL",
                                                         "ReadColumns": [
-                                                            "i"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "i (-\u221e, +\u221e)",
                                                             "j (-\u221e, +\u221e)",
                                                             "t (-\u221e, +\u221e)"

@@ -83,4 +83,13 @@ TString TFilteredSnapshotSchema::DoDebugString() const {
         ;
 }
 
+NJson::TJsonValue TFilteredSnapshotSchema::DoDebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("schema", Schema->ToString());
+    result.InsertValue("snapshot", Snapshot.DebugString());
+    result.InsertValue("column_ids", JoinSeq(",", ColumnIds));
+    result.InsertValue("index_info", IndexInfo->DebugString());
+    return result;
+}
+
 }

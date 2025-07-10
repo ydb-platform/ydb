@@ -804,6 +804,26 @@ struct Schema : NIceDb::Schema {
             IndexSize,
             FollowerId>;
     };
+
+    struct PrimaryIndexSchemaStats : Table<24> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PresetId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SchemaVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct SchemaSnapshotPlanStep : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct SchemaSnapshotTxId : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct SchemaDetails : Column<6, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<TabletId, PresetId, SchemaVersion>;
+        using TColumns = TableColumns<
+            TabletId,
+            PresetId,
+            SchemaVersion,
+            SchemaSnapshotPlanStep,
+            SchemaSnapshotTxId,
+            SchemaDetails
+        >;
+    };
+
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);

@@ -1287,7 +1287,7 @@ public:
     }
 
     void Bootstrap() {
-        SBR_LOG_D("Bootstrap");
+        SBR_LOG_T("Bootstrap");
         TMonitorableActor::Bootstrap();
         auto localNodeId = SelfId().NodeId();
         auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);

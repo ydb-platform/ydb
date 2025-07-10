@@ -718,9 +718,10 @@ Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), 0);
 }
 
-Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
+Y_UNIT_TEST_QUAD(OneShardNonLocalExec, UseSink, EnableParallelPointReadConsolidation) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+    app.MutableTableServiceConfig()->SetEnableParallelPointReadConsolidation(EnableParallelPointReadConsolidation);
     TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2).SetAppConfig(app));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -790,6 +791,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -797,6 +799,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -804,6 +807,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -811,6 +815,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -818,6 +823,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -825,8 +831,10 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
+
     expectedNonLocalSingleNodeReqCount += 6;
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), expectedNonLocalSingleNodeReqCount);
 
@@ -878,7 +886,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
-        {
+    {
         auto result = session.ExecuteDataQuery(R"(
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;

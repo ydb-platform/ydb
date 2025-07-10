@@ -284,14 +284,6 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             group.SetErasureSpecies("block-4-2");
         else
             group.SetErasureSpecies("none");
-        
-        if (options.IsBridgeMode && i < numGroups / options.PileCount) {
-            auto& proxyGroup = *config->AddGroup();
-            proxyGroup.CopyFrom(group);
-            TGroupID fullGroupId(EGroupConfigurationType::Dynamic, i % options.PileCount, i + 10000);
-            proxyGroup.SetGroupId(fullGroupId.GetRaw());
-            proxyGroup.SetIsProxyGroup(true);
-        }
     }
 
     for (ui32 nodeIndex = 0; nodeIndex < numNodes; ++nodeIndex) {
@@ -399,6 +391,19 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                     ->CopyFrom(vdiskConfig.GetVSlotId());
             }
         }
+    }
+    for (ui32 i = 0; i < numGroups / options.PileCount; ++i) {
+        auto& proxyGroup = *config->AddGroup();
+        proxyGroup.SetGroupGeneration(1);
+        if (options.UseMirror3dcErasure)
+            proxyGroup.SetErasureSpecies("mirror-3-dc");
+        else if (numNodes >= BLOCK_4_2_VDISKS_COUNT)
+            proxyGroup.SetErasureSpecies("block-4-2");
+        else
+            proxyGroup.SetErasureSpecies("none");
+        TGroupID fullGroupId(EGroupConfigurationType::Dynamic, i % options.PileCount, i + 10000);
+        proxyGroup.SetGroupId(fullGroupId.GetRaw());
+        proxyGroup.SetIsProxyGroup(true);
     }
 }
 

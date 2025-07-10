@@ -5097,6 +5097,8 @@ public:
             
             TString MemberAssignmentStr;
             
+            TString MemberMetadataStr;
+            
             i32 Size(TKafkaVersion version) const override;
             void Read(TKafkaReadable& readable, TKafkaVersion version) override;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;

@@ -121,16 +121,18 @@ void TKafkaDescribeGroupsActor::FillInMemberMetadata(NKafka::TDescribeGroupsResp
         NKafka::TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember& groupMember,
         const TString& protoStr) {
     NKafka::TWorkerState workerState;
+    groupMember.MemberMetadataStr = "";
     if (protoStr.empty() || workerState.ParseFromString(protoStr)) {
         const auto& protocols = workerState.protocols();
         TString protocol = *describedGroup.ProtocolData;
         for (const auto& p : protocols) {
             if (p.protocol_name() == protocol) {
-                groupMember.MemberMetadata = p.metadata();
+                groupMember.MemberMetadataStr = TString(p.metadata());
                 break;
             }
         }
     }
+    groupMember.MemberMetadata = groupMember.MemberMetadataStr;
 }
 
 void TKafkaDescribeGroupsActor::ParseGroupMetadata(const NKqp::TEvKqp::TEvQueryResponse& response) {
@@ -212,8 +214,6 @@ std::shared_ptr<TDescribeGroupsResponseData> TKafkaDescribeGroupsActor::BuildRes
             TDescribeGroupsResponseData::TDescribedGroup groupDescription;
             groupDescription.ErrorCode = EKafkaErrors::GROUP_ID_NOT_FOUND;
             groupDescription.GroupId = groupId;
-            // GroupIdToDescription.insert({*groupId, groupDescription});
-            // auto& groupDescription = GroupIdToDescription[*groupId];
             describeGroupsResponse.Groups.push_back(std::move(groupDescription));
         }
     }

@@ -86,7 +86,7 @@ public:
         NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
         TDqSolomonReadParams&& readParams,
         ui64 computeActorBatchSize,
-        ui64 truePointsFindRange,
+        ui32 truePointsFindRange,
         ui64 metricsQueueConsumersCountDelta,
         NActors::TActorId metricsQueueActor,
         const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -101,6 +101,8 @@ public:
         , ReadParams(std::move(readParams))
         , ComputeActorBatchSize(computeActorBatchSize)
         , TruePointsFindRange(truePointsFindRange)
+        , TrueRangeFrom(TInstant::Seconds(std::max<i64>(ReadParams.Source.GetFrom() - (i64)TruePointsFindRange, 0)))
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo() + (i64)TruePointsFindRange))
         , MetricsQueueConsumersCountDelta(metricsQueueConsumersCountDelta)
         , MetricsQueueActor(metricsQueueActor)
         , CredentialsProvider(credentialsProvider)
@@ -424,7 +426,7 @@ private:
         NSo::TMetric requestMetric = ListedMetrics.back();
         ListedMetrics.pop_back();
 
-        auto getPointsCountFuture = SolomonClient->GetPointsCount(requestMetric.Labels);
+        auto getPointsCountFuture = SolomonClient->GetPointsCount(requestMetric.Labels, TrueRangeFrom, TrueRangeTo);
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         getPointsCountFuture.Subscribe([actorSystem, metric = std::move(requestMetric), selfId = SelfId()](
@@ -495,8 +497,8 @@ private:
     }
 
     std::vector<std::pair<TInstant, TInstant>> SplitTimeIntervalIntoRanges(ui64 pointsCount) const {
-        TInstant from = TInstant::Seconds(ReadParams.Source.GetFrom() - TruePointsFindRange);
-        TInstant to = TInstant::Seconds(ReadParams.Source.GetTo() + TruePointsFindRange);
+        TInstant from = TrueRangeFrom;
+        TInstant to = TrueRangeTo;
 
         std::vector<std::pair<TInstant, TInstant>> result;
         if (pointsCount == 0) {
@@ -527,7 +529,9 @@ private:
     const TString LogPrefix;
     const TDqSolomonReadParams ReadParams;
     const ui64 ComputeActorBatchSize;
-    const ui64 TruePointsFindRange;
+    const ui32 TruePointsFindRange;
+    const TInstant TrueRangeFrom;
+    const TInstant TrueRangeTo;
     const ui64 MetricsQueueConsumersCountDelta;
 
     bool UseMetricsQueue;
@@ -590,9 +594,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         computeActorBatchSize = FromString<ui64>(it->second);
     }
 
-     ui64 truePointsFindRange = 1;
+    ui32 truePointsFindRange = 301;
     if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
-        truePointsFindRange = FromString<ui64>(it->second);
+        truePointsFindRange = FromString<ui32>(it->second);
     }
 
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);

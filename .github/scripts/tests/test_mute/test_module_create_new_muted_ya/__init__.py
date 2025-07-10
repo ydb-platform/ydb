@@ -1,0 +1,1 @@
+# Тесты для create_new_muted_ya.py модуля 

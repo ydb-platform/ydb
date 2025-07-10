@@ -29,7 +29,10 @@ DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
-def execute_query(driver, branch='main', build_type='relwithdebinfo'):
+def execute_query(driver, branch='main', build_type='relwithdebinfo', days_back=1):
+    # Handle days_back=0 case - don't add date filter for flaky tests
+    date_filter = "AND date_window >= CurrentUtcDate()" if days_back == 0 else f"AND date_window >= CurrentUtcDate() - {days_back}*Interval(\"P1D\")"
+    
     query_string = f'''
     SELECT * from (
         SELECT data.*,
@@ -46,8 +49,8 @@ def execute_query(driver, branch='main', build_type='relwithdebinfo'):
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Flaky'
-            AND days_in_state = 1
-            AND date_window = CurrentUtcDate()
+            AND days_in_state <= 2
+            {date_filter}
             )as new_flaky
         ON 
             data.full_name = new_flaky.full_name
@@ -57,7 +60,7 @@ def execute_query(driver, branch='main', build_type='relwithdebinfo'):
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Flaky'
-            AND date_window = CurrentUtcDate()
+            {date_filter}
             )as flaky
         ON 
             data.full_name = flaky.full_name
@@ -78,7 +81,7 @@ def execute_query(driver, branch='main', build_type='relwithdebinfo'):
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor`
             WHERE state= 'Muted Stable'
-            AND days_in_state >= 14
+            AND days_in_state >= 5
             AND date_window = CurrentUtcDate()
             and is_test_chunk = 0
             )as muted_stable_n_days
@@ -92,7 +95,7 @@ def execute_query(driver, branch='main', build_type='relwithdebinfo'):
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor`
             WHERE state = 'no_runs'
-            AND days_in_state >= 14
+            AND days_in_state >= 10
             AND date_window = CurrentUtcDate()
             and is_test_chunk = 0
             )as deleted
@@ -130,9 +133,18 @@ def add_lines_to_file(file_path, lines_to_add):
         logging.error(f"Error adding lines to {file_path}: {e}")
 
 
-def apply_and_add_mutes(all_tests, output_path, mute_check):
+def apply_and_add_mutes(all_tests, output_path, mute_check, days_back=1):
 
     output_path = os.path.join(output_path, 'mute_update')
+    
+    # Add base date for date_window conversion
+    base_date = datetime.datetime(1970, 1, 1)
+    
+    # Calculate period info for debug strings
+    if days_back == 0:
+        period_info = "period today"
+    else:
+        period_info = f"period {days_back + 1}d"
 
     all_tests = sorted(all_tests, key=lambda d: d['full_name'])
 
@@ -146,7 +158,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         add_lines_to_file(os.path.join(output_path, 'deleted.txt'), deleted_tests)
 
         deleted_tests_debug = set(
-            f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')} days in state {test.get('days_in_state')}\n"
+            f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner')} success_rate {test.get('success_rate')}% runs {(test.get('pass_count') or 0) + (test.get('fail_count') or 0) + (test.get('mute_count') or 0) + (test.get('skip_count') or 0)} ({test.get('pass_count') or 0}p/{test.get('fail_count') or 0}f/{test.get('mute_count') or 0}m/{test.get('skip_count') or 0}s), state {test.get('state')} days in state {test.get('days_in_state')}, {period_info}, snapshot_date {(base_date + datetime.timedelta(days=test.get('date_window'))).date()}\n"
             for test in all_tests
             if test.get('deleted_today')
         )
@@ -165,7 +177,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
 
         muted_stable_tests_debug = set(
             f"{test.get('suite_folder')} {test.get('test_name')} "
-            + f"# owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')} days in state {test.get('days_in_state')}\n"
+            + f"# owner {test.get('owner')} success_rate {test.get('success_rate')}% runs {(test.get('pass_count') or 0) + (test.get('fail_count') or 0) + (test.get('mute_count') or 0) + (test.get('skip_count') or 0)} ({test.get('pass_count') or 0}p/{test.get('fail_count') or 0}f/{test.get('mute_count') or 0}m/{test.get('skip_count') or 0}s), state {test.get('state')} days in state {test.get('days_in_state')}, {period_info}, snapshot_date {(base_date + datetime.timedelta(days=test.get('date_window'))).date()}\n"
             for test in all_tests
             if test.get('muted_stable_n_days_today')
         )
@@ -177,24 +189,18 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         flaky_tests = set(
             re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}\n")
             for test in all_tests
-            if test.get('days_in_state') >= 1
-            and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) >= 2
+            if test.get('flaky_today')
             and test.get('fail_count') >= 2
-            and test.get('fail_count')/(test.get('pass_count') + test.get('fail_count')) > 0.2 # <=80% success rate
         )
         flaky_tests = sorted(flaky_tests)
         add_lines_to_file(os.path.join(output_path, 'flaky.txt'), flaky_tests)
 
         flaky_tests_debug = set(
             re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}")
-            + f" # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')}, days in state {test.get('days_in_state')}, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
+            + f" # owner {test.get('owner')} success_rate {test.get('success_rate')}% runs {(test.get('pass_count') or 0) + (test.get('fail_count') or 0) + (test.get('mute_count') or 0) + (test.get('skip_count') or 0)} ({test.get('pass_count') or 0}p/{test.get('fail_count') or 0}f/{test.get('mute_count') or 0}m/{test.get('skip_count') or 0}s), state {test.get('state')}, days in state {test.get('days_in_state')}, {period_info}, snapshot_date {(base_date + datetime.timedelta(days=test.get('date_window'))).date()}\n"
             for test in all_tests
-            if test.get('days_in_state') >= 1
-            and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) >=2
+            if test.get('flaky_today')
             and test.get('fail_count') >= 2
-            and test.get('fail_count')/(test.get('pass_count') + test.get('fail_count')) > 0.2 # <=80% success rate
         )
         ## тесты может запускаться 1 раз в день. если за последние 7 дней набирается трешход то мьютим
         ## падения сегодня более весомы ??  
@@ -225,8 +231,14 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             days_in_state = test.get('days_in_state')
             owner = test.get('owner')
             state = test.get('state')
+            pass_count = test.get('pass_count')
+            fail_count = test.get('fail_count')
+            mute_count = test.get('mute_count')
+            skip_count = test.get('skip_count')
+            date_window = test.get('date_window')
+            
             test_string = f"{testsuite} {testcase}\n"
-            test_string_debug = f"{testsuite} {testcase} # owner {owner} success_rate {success_rate}%, state {state} days in state {days_in_state}\n"
+            test_string_debug = f"{testsuite} {testcase} # owner {owner} success_rate {success_rate}% runs {(pass_count or 0) + (fail_count or 0) + (mute_count or 0) + (skip_count or 0)} ({pass_count or 0}p/{fail_count or 0}f/{mute_count or 0}m/{skip_count or 0}s), state {state} days in state {days_in_state}, {period_info}, snapshot_date {(base_date + datetime.timedelta(days=date_window)).date()}\n"
             test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
             if (
                 testsuite and testcase and mute_check(testsuite, testcase) or test_string in flaky_tests
@@ -282,7 +294,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         logging.info(f"Result: Unmuted tests : stable {unmuted_stable} and deleted {unmuted_deleted}")
     except (KeyError, TypeError) as e:
         logging.error(f"Error processing test data: {e}. Check your query results for valid keys.")
-        return []
+        return 0
 
     return len(new_muted_ya_tests)
 
@@ -479,11 +491,11 @@ def mute_worker(args):
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
 
-        all_tests = execute_query(driver, args.branch)
+        all_tests = execute_query(driver, args.branch, args.build_type, args.days_back)
     if args.mode == 'update_muted_ya':
         output_path = args.output_folder
         os.makedirs(output_path, exist_ok=True)
-        apply_and_add_mutes(all_tests, output_path, mute_check)
+        apply_and_add_mutes(all_tests, output_path, mute_check, args.days_back)
 
     elif args.mode == 'create_issues':
         file_path = args.file_path
@@ -498,6 +510,8 @@ if __name__ == "__main__":
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
+    update_muted_ya_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type to get history')
+    update_muted_ya_parser.add_argument('--days_back', type=int, default=1, help='Number of days to look back for flaky tests')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',
@@ -507,6 +521,8 @@ if __name__ == "__main__":
         '--file_path', default=f'{repo_path}/mute_update/flaky.txt', required=False, help='file path'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
+    create_issues_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type to get history')
+    create_issues_parser.add_argument('--days_back', type=int, default=1, help='Number of days to look back for flaky tests')
     create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')
 
     args = parser.parse_args()

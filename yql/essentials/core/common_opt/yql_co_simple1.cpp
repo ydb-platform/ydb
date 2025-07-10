@@ -5522,7 +5522,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (auto maybeAggregate = self.Input().Maybe<TCoAggregate>()) {
             auto child = maybeAggregate.Cast();
-            if (!HasPayload(self) && !HasPayload(child) && self.Keys().Size() == child.Keys().Size()) {
+            if (!HasPayload(self) && !HasPayload(child) && self.Keys().Size() == child.Keys().Size()
+                && self.Settings().Size() == 0 && child.Settings().Size() == 0) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Content() << " without payload with same keys";
                 return self.Input().Ptr();
             }

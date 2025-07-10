@@ -72,6 +72,8 @@ void TSslContextConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("ssl_configuration_commands", &TThis::SslConfigurationCommands)
         .Optional();
+    registrar.Parameter("insecure_skip_verify", &TThis::InsecureSkipVerify)
+        .Default(DefaultInsecureSkipVerify);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

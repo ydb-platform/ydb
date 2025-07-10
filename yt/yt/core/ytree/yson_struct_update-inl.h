@@ -11,7 +11,8 @@ namespace NYT::NYTree {
 namespace NDetail {
 
 template <CYsonStructDerived TStruct>
-const IYsonStructMeta* GetYsonStructMeta() {
+const IYsonStructMeta* GetYsonStructMeta()
+{
     return New<TStruct>()->GetMeta();
 }
 

@@ -63,6 +63,8 @@ public:
 
     bool IsAttachmentCompressionEnabled() const override;
 
+    bool HasAttachments() const override;
+
     bool IsStreamingEnabled() const override;
 
     const NRpc::TStreamingParameters& ClientAttachmentsStreamingParameters() const override;

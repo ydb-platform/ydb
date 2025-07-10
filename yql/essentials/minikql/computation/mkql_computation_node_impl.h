@@ -39,7 +39,7 @@ class TUnboxedImmutableComputationNode: public TRefCountedComputationNode<ICompu
 public:
     TUnboxedImmutableComputationNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value);
 
-    ~TUnboxedImmutableComputationNode();
+    ~TUnboxedImmutableComputationNode() override;
 
 private:
     void InitNode(TComputationContext&) const override {}
@@ -866,7 +866,7 @@ public:
     {
     }
 
-    ~TComputationValueBaseNotSupportedStub() {
+    ~TComputationValueBaseNotSupportedStub() override {
     }
 
 private:
@@ -933,7 +933,7 @@ public:
     {
     }
 
-    ~TComputationValueBase() {
+    ~TComputationValueBase() override {
     }
 
     TString DebugString() const {

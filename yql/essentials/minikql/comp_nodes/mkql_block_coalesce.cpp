@@ -253,7 +253,7 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
 
     auto firstItemType = firstType->GetItemType();
     auto secondItemType = secondType->GetItemType();
-    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), "Expecting Optional or Pg type as first argument");
+    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), TStringBuilder() << "Expecting Optional or Pg type as first argument, but got: " << *firstItemType);
 
     bool needUnwrapFirst = false;
     if (!firstItemType->IsSameType(*secondItemType)) {

@@ -31,7 +31,7 @@ public:
         auto driverConfig = NYdb::TDriverConfig()
             .SetMaxMessageSize(MaxMessageSize)
             .SetNetworkThreadsNum(settings.GetThreadsCount())
-	    .SetGRpcKeepAliveTimeout(TDuration::Seconds(30));
+	    .SetGRpcKeepAliveTimeout(TDuration::Seconds(10));
         Driver = std::make_shared<NYdb::TDriver>(driverConfig);
     }
 

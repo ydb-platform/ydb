@@ -9,7 +9,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/core/testlib/cs_helper.h>
@@ -4989,7 +4989,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
 
             auto rs = result.GetResultSet(0);
-            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 34);
+            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 39);
             UNIT_ASSERT_VALUES_EQUAL(rs.ColumnsCount(), 30);
         }
     }
@@ -7315,9 +7315,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
-        auto checkNotFound = [](const auto& result) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path does not exist", result.GetIssues().ToString());
+        auto checkNotFound = [](const auto& result, const TString& error) {
+            const auto& issuesString = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, issuesString);
+            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, "Path does not exist", issuesString);
+            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, error, issuesString);
         };
 
         const auto& createSourceSql = R"(
@@ -7360,8 +7362,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
         checkDisabled(ydb->ExecuteQuery(createSourceSql, settings));
         checkDisabled(ydb->ExecuteQuery(createTableSql, settings));
-        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings));
-        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings));
+        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), "Executing ESchemeOpDropExternalTable");
+        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), "Executing operation with object \"EXTERNAL_DATA_SOURCE\"");
     }
 
     Y_UNIT_TEST(CreateExternalDataSource) {

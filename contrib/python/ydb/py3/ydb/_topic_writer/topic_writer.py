@@ -213,10 +213,10 @@ def messages_to_proto_requests(
     tx_identity: Optional[TransactionIdentity],
 ) -> List[StreamWriteMessage.FromClient]:
 
-    gropus = _slit_messages_for_send(messages)
+    groups = _split_messages_for_send(messages)
 
     res = []  # type: List[StreamWriteMessage.FromClient]
-    for group in gropus:
+    for group in groups:
         req = StreamWriteMessage.FromClient(
             StreamWriteMessage.WriteRequest(
                 messages=list(map(InternalMessage.to_message_data, group)),
@@ -254,7 +254,7 @@ _message_data_overhead = (
 )
 
 
-def _slit_messages_for_send(
+def _split_messages_for_send(
     messages: List[InternalMessage],
 ) -> List[List[InternalMessage]]:
     codec_groups = []  # type: List[List[InternalMessage]]

@@ -4962,7 +4962,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             auto ret = ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
             const auto tupleType = node->Head().Head().GetTypeAnn()->Cast<TTupleExprType>();
             const auto elemType = tupleType->GetItems()[FromString<ui32>(node->Tail().Content())];
-            return ctx.WrapByCallableIf(elemType->GetKind() != ETypeAnnotationKind::Optional, "Just", std::move(ret));
+            return ctx.WrapByCallableIf(!elemType->IsOptionalOrNull(), "Just", std::move(ret));
         }
 
         if (node->Head().IsCallable("Nothing")) {

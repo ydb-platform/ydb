@@ -31,11 +31,11 @@ namespace NSQLComplete {
         return std::visit([&](auto&& name) -> TGenericName {
             using T = std::decay_t<decltype(name)>;
             if constexpr (std::is_same_v<T, TPragmaName>) {
-                SetPrefix(name.Indentifier, ".", *Pragma);
+                SetPrefix(name.Identifier, ".", *Pragma);
             } else if constexpr (std::is_same_v<T, TFunctionName>) {
-                SetPrefix(name.Indentifier, "::", *Function);
+                SetPrefix(name.Identifier, "::", *Function);
             } else if constexpr (std::is_same_v<T, TClusterName>) {
-                SetPrefix(name.Indentifier, ":", *Cluster);
+                SetPrefix(name.Identifier, ":", *Cluster);
             }
             return name;
         }, std::move(unqualified));
@@ -45,11 +45,11 @@ namespace NSQLComplete {
         return std::visit([&](auto&& name) -> TGenericName {
             using T = std::decay_t<decltype(name)>;
             if constexpr (std::is_same_v<T, TPragmaName>) {
-                FixPrefix(name.Indentifier, ".", *Pragma);
+                FixPrefix(name.Identifier, ".", *Pragma);
             } else if constexpr (std::is_same_v<T, TFunctionName>) {
-                FixPrefix(name.Indentifier, "::", *Function);
+                FixPrefix(name.Identifier, "::", *Function);
             } else if constexpr (std::is_same_v<T, TClusterName>) {
-                FixPrefix(name.Indentifier, ":", *Cluster);
+                FixPrefix(name.Identifier, ":", *Cluster);
             }
             return name;
         }, std::move(qualified));

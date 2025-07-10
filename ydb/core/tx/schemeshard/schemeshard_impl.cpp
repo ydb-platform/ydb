@@ -5248,8 +5248,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         //data erasure
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasure, DataErasureManager->WakeupToRunDataErasure);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureRequest, Handle);
-        HFuncTraced(TEvDataShard::TEvForceDataCleanupResult, Handle);
-        HFuncTraced(TEvKeyValue::TEvCleanUpDataResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvVacuumResult, Handle);
+        HFuncTraced(TEvKeyValue::TEvVacuumResponse, Handle);
         HFuncTraced(TEvPrivate::TEvAddNewShardToDataErasure, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureInfoRequest, Handle);
@@ -6875,6 +6875,8 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
         return Execute(CreateTxProgressExport(ev), ctx);
     } else if (Imports.contains(id)) {
         return Execute(CreateTxProgressImport(ev), ctx);
+    } else if (IncrementalRestoreContexts.contains(id)) {
+        return Execute(CreateTxProgressIncrementalRestore(ev), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);
     }
@@ -6899,6 +6901,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressExport(ev), ctx);
     } else if (TxIdToImport.contains(txId)) {
         return Execute(CreateTxProgressImport(ev), ctx);
+    } else if (TxIdToIncrementalRestore.contains(txId)) {
+        return Execute(CreateTxProgressIncrementalRestore(ev), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
     } else if (BackgroundCleaningTxToDirPathId.contains(txId)) {
@@ -6951,6 +6955,10 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
     }
     if (TxIdToImport.contains(txId)) {
         Execute(CreateTxProgressImport(txId), ctx);
+        executed = true;
+    }
+    if (TxIdToIncrementalRestore.contains(txId)) {
+        Execute(CreateTxProgressIncrementalRestore(txId), ctx);
         executed = true;
     }
     if (TxIdToIndexBuilds.contains(txId)) {
@@ -7977,11 +7985,11 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev,
     Execute(CreateTxRunTenantDataErasure(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxCompleteDataErasureShard<TEvDataShard::TEvForceDataCleanupResult::TPtr>(ev), ctx);
+void TSchemeShard::Handle(TEvDataShard::TEvVacuumResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxCompleteDataErasureShard<TEvDataShard::TEvVacuumResult::TPtr>(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvKeyValue::TEvVacuumResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(this->CreateTxCompleteDataErasureShard(ev), ctx);
 }
 

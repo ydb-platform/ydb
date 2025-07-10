@@ -13,23 +13,26 @@ class TVectorWorkloadParams;
 class TVectorSampler {
 public:
     TVectorSampler(const TVectorWorkloadParams& params);
-    
+
     // Core functionality for vector sampling
+    void SelectPredefinedVectors();
     void SampleExistingVectors();
 
     // Target access methods
     const std::string& GetTargetEmbedding(size_t index) const;
     size_t GetTargetCount() const;
-    i64 GetPrefixValue(size_t targetIndex) const;
+    const NYdb::TValue GetPrefixValue(size_t targetIndex) const;
 
 private:
     const TVectorWorkloadParams& Params;
 
     struct TSelectTarget {
-        std::string EmbeddingBytes;             // Sample targets to use in select workload
-        i64 PrefixValue = 0;                    // Sample prefix value
+        std::string EmbeddingBytes;                 // Sample targets to use in select workload
+        std::optional<NYdb::TValue> PrefixValue;    // Sample prefix value
     };
     std::vector<TSelectTarget> SelectTargets;
+
+    ui64 SelectOneId(bool min);
 };
 
-} // namespace NYdbWorkload 
+} // namespace NYdbWorkload

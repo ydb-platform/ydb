@@ -606,13 +606,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
             badRequest("Should be requested partition on at least two rows");
         }
 
-        if (!request.HasLevelName()) {
+        if (!request.GetLevelName()) {
             badRequest(TStringBuilder() << "Empty level table name");
         }
-        if (!request.HasOutputName()) {
+        if (!request.GetOutputName()) {
             badRequest(TStringBuilder() << "Empty output table name");
         }
-        if (!request.HasPrefixName()) {
+        if (!request.GetPrefixName()) {
             badRequest(TStringBuilder() << "Empty prefix table name");
         }
 

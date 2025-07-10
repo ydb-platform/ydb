@@ -263,6 +263,7 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TSwitchBridgeClusterState {
         NKikimrBridge.TClusterState NewClusterState = 1;
+        repeated uint32 SpecificBridgePileIds = 2; // obtain quorum only for specific pile set
     }
 
     message TNotifyBridgeSyncFinished {

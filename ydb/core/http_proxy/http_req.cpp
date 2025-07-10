@@ -181,7 +181,6 @@ namespace NKikimr::NHttpProxy {
     constexpr TStringBuf REQUEST_FORWARDED_FOR = "x-forwarded-for";
     constexpr TStringBuf REQUEST_TARGET_HEADER = "x-amz-target";
     constexpr TStringBuf REQUEST_CONTENT_TYPE_HEADER = "content-type";
-    constexpr TStringBuf CRC32_HEADER = "x-amz-crc32";
     constexpr TStringBuf CREDENTIAL_PARAM = "Credential";
 
 
@@ -1173,7 +1172,6 @@ namespace NKikimr::NHttpProxy {
             response->Set<&NHttp::THttpResponse::Connection>(request->GetConnection());
             response->Set(REQUEST_ID_HEADER_EXT, RequestId);
             if (!contentType.empty() && !body.empty()) {
-                response->Set(CRC32_HEADER, ToString(crc32(body.data(), body.size())));
                 response->Set<&NHttp::THttpResponse::ContentType>(contentType);
                 if (!request->Endpoint->CompressContentTypes.empty()) {
                     contentType = NHttp::Trim(contentType.Before(';'), ' ');

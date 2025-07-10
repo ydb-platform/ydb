@@ -367,7 +367,7 @@ private:
             if (channel) {
                 html << "DqOutputChannel.ChannelId: " << channel->GetChannelId() << "<br />";
                 html << "DqOutputChannel.ValuesCount: " << channel->GetValuesCount() << "<br />";
-                html << "DqOutputChannel.IsFull: " << channel->IsFull() << "<br />";
+                html << "DqOutputChannel.FillLevel: " << static_cast<ui32>(channel->GetFillLevel()) << "<br />";
                 html << "DqOutputChannel.HasData: " << channel->HasData() << "<br />";
                 html << "DqOutputChannel.IsFinished: " << channel->IsFinished() << "<br />";
                 html << "DqInputChannel.OutputType: " << (channel->GetOutputType() ? channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
@@ -399,7 +399,7 @@ private:
             if (info.Buffer || TaskRunnerStats.GetSink(id)) {
                 const auto& buffer = info.Buffer ? *info.Buffer : *TaskRunnerStats.GetSink(id);
                 html << "DqOutputBuffer.OutputIndex: " << buffer.GetOutputIndex() << "<br />";
-                html << "DqOutputBuffer.IsFull: " << buffer.IsFull() << "<br />";
+                html << "DqOutputBuffer.FillLevel: " << static_cast<ui32>(buffer.GetFillLevel()) << "<br />";
                 html << "DqOutputBuffer.OutputType: " << (buffer.GetOutputType() ? buffer.GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
                 html << "DqOutputBuffer.IsFinished: " << buffer.IsFinished() << "<br />";
                 html << "DqOutputBuffer.HasData: " << buffer.HasData() << "<br />";

@@ -8,6 +8,10 @@ SRCS(
     annotations.proto
 )
 
+PEERDIR(
+    ydb/public/api/client/nc_private/audit/v1/common
+)
+
 USE_COMMON_GOOGLE_APIS(
     api/annotations
 )
@@ -15,8 +19,5 @@ USE_COMMON_GOOGLE_APIS(
 END()
 
 RECURSE(
-    audit
-    buf
-    common
-    iam
+    v1
 )

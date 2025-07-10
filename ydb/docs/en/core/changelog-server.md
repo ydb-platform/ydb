@@ -73,7 +73,7 @@ Release date: 2025.
 * [Improved](https://github.com/ydb-platform/ydb/pull/15607) Node Broker resilience under increased cluster load.
 * [Enabled](https://github.com/ydb-platform/ydb/pull/19440) evictable B-Tree indexes by default instead of non-evictable SST indexes, reducing memory consumption when storing cold data.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/15264) memory consumption by storage nodes.
-* [Improved](https://github.com/ydb-platform/ydb/pull/10969) Hive startup times.
+* [Reduced](https://github.com/ydb-platform/ydb/pull/10969) Hive startup times to 30%.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/6561) the distributed storage replication process.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/9491) the header size of large binary objects in VDisk.
 * Reduced memory consumption through allocator page cleaning.

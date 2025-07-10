@@ -28,8 +28,10 @@ public:
         : TabletId(tabletId)
         , Schemas(std::move(schemas))
         , Start(TSchemaAdapter::GetPKSimpleRow(TabletId, Schemas.front()->GetIndexInfo().GetPresetId(), Schemas.front()->GetVersion()))
-        , Finish(TSchemaAdapter::GetPKSimpleRow(TabletId, Schemas.front()->GetIndexInfo().GetPresetId(), Schemas.front()->GetVersion())) {
-        AFL_VERIFY(Start < Finish);
+        , Finish(TSchemaAdapter::GetPKSimpleRow(TabletId, Schemas.back()->GetIndexInfo().GetPresetId(), Schemas.back()->GetVersion())) {
+        if (Schemas.size() > 1) {
+            AFL_VERIFY(Start < Finish)("start", Start.DebugString())("finish", Finish.DebugString());
+        }
     }
 
     const NArrow::TSimpleRow& GetStart() const {

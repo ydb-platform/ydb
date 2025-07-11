@@ -100,9 +100,8 @@ public:
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", TDqSolomonReadActor: ")
         , ReadParams(std::move(readParams))
         , ComputeActorBatchSize(computeActorBatchSize)
-        , TruePointsFindRange(truePointsFindRange)
-        , TrueRangeFrom(TInstant::Seconds(std::max<i64>(ReadParams.Source.GetFrom() - (i64)TruePointsFindRange, 0)))
-        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo() + (i64)TruePointsFindRange))
+        , TrueRangeFrom(TInstant::Seconds(std::max<i64>(ReadParams.Source.GetFrom() - (i64)truePointsFindRange, 0)))
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo() + (i64)truePointsFindRange))
         , MetricsQueueConsumersCountDelta(metricsQueueConsumersCountDelta)
         , MetricsQueueActor(metricsQueueActor)
         , CredentialsProvider(credentialsProvider)
@@ -529,7 +528,6 @@ private:
     const TString LogPrefix;
     const TDqSolomonReadParams ReadParams;
     const ui64 ComputeActorBatchSize;
-    const ui32 TruePointsFindRange;
     const TInstant TrueRangeFrom;
     const TInstant TrueRangeTo;
     const ui64 MetricsQueueConsumersCountDelta;

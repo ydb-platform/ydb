@@ -77,9 +77,8 @@ public:
         , PageSize(pageSize)
         , PrefetchSize(prefetchSize)
         , BatchCountLimit(batchCountLimit)
-        , TruePointsFindRange(truePointsFindRange)
-        , TrueRangeFrom(TInstant::Seconds(std::max<i64>(ReadParams.Source.GetFrom() - (i64)TruePointsFindRange, 0)))
-        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo() + TruePointsFindRange))
+        , TrueRangeFrom(TInstant::Seconds(std::max<i64>(ReadParams.Source.GetFrom() - (i64)truePointsFindRange, 0)))
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo() + truePointsFindRange))
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {}
@@ -427,7 +426,6 @@ private:
     const ui64 PageSize;
     const ui64 PrefetchSize;
     const ui64 BatchCountLimit;
-    const ui32 TruePointsFindRange;
     const TInstant TrueRangeFrom;
     const TInstant TrueRangeTo;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;

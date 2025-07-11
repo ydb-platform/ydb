@@ -53,11 +53,15 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
 
     void Bootstrap(const NActors::TActorContext& ctx) override {
         Y_UNUSED(ctx);
-        KAFKA_LOG_D("TopicOffsetActor: Get commited offsets for topic '" << OriginalTopicName
+        KAFKA_LOG_D("Get commited offsets for topic '" << OriginalTopicName
             << "' for user '" << UserSID << "'");
         SendDescribeProposeRequest();
         Become(&TTopicOffsetActor::StateWork);
     };
+
+    TStringBuilder LogPrefix() const {
+        return TStringBuilder() << "KafkaTopicOffsetActor: ";
+    }
 
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
@@ -75,7 +79,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
-        KAFKA_LOG_D("TopicOffsetActor: error raised for '" << OriginalTopicName << "'"
+        KAFKA_LOG_D("Error raised for '" << OriginalTopicName << "'"
             << " for user '" << UserSID << "'."
             << " Error: '" << error << "',"
             << " ErrorCode: '" << static_cast<int>(errorCode) << "',"
@@ -133,7 +137,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
 
     void HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override {
         const auto& response = ev->Get()->Request.Get()->ResultSet.front();
-        KAFKA_LOG_D("TopicOffsetActor: TEvNavigateKeySetResult recieved for topic '" << OriginalTopicName
+        KAFKA_LOG_D("TEvNavigateKeySetResult recieved for topic '" << OriginalTopicName
             << "' for user '" << UserSID << "'. PQGroupInfo is present: " << (response.PQGroupInfo.Get() != nullptr));
         if (!response.PQGroupInfo) {
             THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
@@ -149,7 +153,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
     }
 
     void Reply(const TActorContext& ctx) override {
-        KAFKA_LOG_D("TopicOffsetActor: replying for topic '" << OriginalTopicName
+        KAFKA_LOG_D("Replying for topic '" << OriginalTopicName
             << "' for user '" << UserSID << "'" << " with status NONE_ERROR");
         THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
         response->TopicName = OriginalTopicName;
@@ -173,7 +177,7 @@ NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const
 
 void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
     // If API level <= 7, Groups would be empty. In this case we convert message to level 8 and process it uniformely later
-    KAFKA_LOG_D("TopicOffsetActor: new request for user " << GetUsernameOrAnonymous(Context));
+    KAFKA_LOG_D("New request for user " << GetUsernameOrAnonymous(Context));
     if (Message->Groups.empty()) {
         TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
         group.GroupId = Message->GroupId.value();
@@ -233,7 +237,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
 
     if (InflyTopics == 0) {
         auto response = GetOffsetFetchResponse();
-        KAFKA_LOG_D("TopicOffsetActor: sending response to user " << GetUsernameOrAnonymous(Context));
+        KAFKA_LOG_D("Sending response to user " << GetUsernameOrAnonymous(Context));
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
         Die(ctx);
     }

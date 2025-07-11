@@ -38,7 +38,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "KafkaOffsetFetchActor{DatabasePath=" << DatabasePath << "}";
+        return TStringBuilder() << "KafkaOffsetFetchActor{DatabasePath=" << DatabasePath << "}: ";
     }
 
     STATEFN(StateWork) {

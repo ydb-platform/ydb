@@ -13,8 +13,7 @@
 namespace NKikimr::NKqp {
 
 struct TKqpPartitionedExecuterSettings {
-    IKqpGateway::TExecPhysicalRequest&& LiteralRequest;
-    IKqpGateway::TExecPhysicalRequest&& PhysicalRequest;
+    IKqpGateway::TExecPhysicalRequest&& Request;
     TActorId SessionActorId;
     const NMiniKQL::IFunctionRegistry* FuncRegistry;
     TIntrusivePtr<ITimeProvider> TimeProvider;

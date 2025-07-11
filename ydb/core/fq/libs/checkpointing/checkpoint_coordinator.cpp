@@ -50,6 +50,7 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
     ControlId = ev->Sender;
+    NeedSendRunToCA = ev->Get()->NeedSendRunToCA;
 
     for (const auto& task : ev->Get()->Tasks) {
         auto& actorId = TaskIdToActor[task.Id];
@@ -79,6 +80,13 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         }
         AllActorsSet.insert(actorId);
     }
+    CC_LOG_D("AllActors count: " << AllActors.size() << ", ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
+
+    if (ActorsToTrigger.empty()) {
+        CC_LOG_D("No ingress tasks, coordinator was disabled");
+        StartAllTasks();
+        return;
+    }
 
     CC_LOG_D("AllActors count: " << AllActors.size() << ", ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
 
@@ -90,7 +98,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
 
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());
 
-    CC_LOG_D("Send TEvRegisterCoordinatorRequest");
+    CC_LOG_D("Send TEvRegisterCoordinatorRequest, AllActorsSet " << AllActorsSet.size() << " ActorsToTrigger " << ActorsToTrigger.size() << " ActorsToNotify " << ActorsToNotify.size());
     Send(StorageProxy, new TEvCheckpointStorage::TEvRegisterCoordinatorRequest(CoordinatorId), IEventHandle::FlagTrackDelivery);
 }
 
@@ -315,9 +323,11 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
         }
 
         ScheduleNextCheckpoint();
-        CC_LOG_I("[" << checkpoint << "] State restored, send TEvRun to " << AllActors.size() << " actors");
-        for (const auto& [actor, transport] : AllActors) {
-            transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
+        if (NeedSendRunToCA) {
+            CC_LOG_I("[" << checkpoint << "] State restored, send TEvRun to " << AllActors.size() << " actors");
+            for (const auto& [actor, transport] : AllActors) {
+                transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
+            }
         }
     }
 }
@@ -415,7 +425,6 @@ void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId,
     for (const auto& [toTrigger, transport] : ActorsToTrigger) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, type));
     }
-
     StartAllTasks();
 }
 
@@ -425,7 +434,6 @@ void TCheckpointCoordinator::StartAllTasks() {
         for (const auto& [actor, transport] : AllActors) {
             transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
         }
-        GraphIsRunning = true;
     }
 }
 

@@ -91,10 +91,9 @@ private:
     void PassAway() override;
     void RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint);
     void TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint);
-    void StartAllTasks();
-
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const NYql::TIssues& subIssues);
     void OnInternalError(const TString& message, const NYql::TIssues& subIssues = {});
+    void StartAllTasks();
 
     template <class TEvPtr>
     bool OnComputeActorEventReceived(TEvPtr& ev) {
@@ -181,6 +180,7 @@ private:
     bool InitingZeroCheckpoint = false;
     bool FailedZeroCheckpoint = false;
     bool RestoringFromForeignCheckpoint = false;
+    bool NeedSendRunToCA = true;
 
     TCheckpointCoordinatorMetrics Metrics;
 

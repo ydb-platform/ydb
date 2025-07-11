@@ -91,6 +91,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
     NKikimrConfig::TImmediateControlsConfig Controls;
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
+    bool EnableStorageProxy = false;
 
     TKikimrSettings()
     {
@@ -135,6 +136,8 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         return *this;
     }
     TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
+    TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
+
 };
 
 class TKikimrRunner {

@@ -674,18 +674,24 @@ TFuture<TIssues> TCheckpointStorage::Init()
 
     // TODO: list at first?
     if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
-        auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
+        auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix,
+            NYdb::NScheme::TMakeDirectorySettings()
+            .ClientTimeout(TDuration::Seconds(10))
+            .OperationTimeout(TDuration::Seconds(10)).CancelAfter(TDuration::Seconds(10))).GetValueSync();
         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
-
+            
             TStringStream ss;
-            ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "': " << status.GetStatus();
+            ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "'";
+            NYql::TIssue issue(ss.Str());
+            auto issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
             if (issues) {
-                ss << ", issues: ";
-                issues.PrintTo(ss);
+                for (const NYql::TIssue& i : issues) {
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+                }
             }
-
-            return MakeFuture(std::move(issues));
+            NYql::TIssues newIssues;
+            newIssues.AddIssue(std::move(issue));
+            return MakeFuture(std::move(newIssues));
         }
     }
 
@@ -749,9 +755,11 @@ TFuture<TIssues> TCheckpointStorage::Init()
 
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)
 {
+    Cerr << "RegisterGraphCoordinator 0" << Endl;
     auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator,
          execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+            Cerr << "RegisterGraphCoordinator 1" << Endl;
             auto context = MakeIntrusive<TGenerationContext>(
                 session,
                 true,

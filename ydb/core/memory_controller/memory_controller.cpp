@@ -375,6 +375,7 @@ private:
                 break;
             case EMemoryConsumerKind::ScanGroupedMemoryLimiter:
             case EMemoryConsumerKind::CompGroupedMemoryLimiter:
+            case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient, limitBytes));
                 break;
         }
@@ -492,8 +493,10 @@ private:
                 stats.SetColumnTablesCacheLimit((stats.HasColumnTablesCacheLimit() ? stats.GetColumnTablesCacheLimit() : 0) + limitBytes);
                 break;
             }
-            default:
-                Y_ABORT("Unhandled consumer");
+            case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
+                stats.SetColumnTablesDeduplicationConsumption(consumer.Consumption);
+                stats.SetColumnTablesDeduplicationLimit(limitBytes);
+                break;
         }
     }
 
@@ -529,8 +532,10 @@ private:
                 result.ExactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DataAccessorCoefficient;
                 break;
             }
-            default:
-                Y_ABORT("Unhandled consumer");
+            case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter: {
+                result.ExactLimit = GetColumnTablesDeduplicationLimitBytes(Config, hardLimitBytes);
+                break;
+            }
         }
 
         if (result.MinBytes > result.MaxBytes) {

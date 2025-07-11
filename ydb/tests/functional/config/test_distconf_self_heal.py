@@ -111,6 +111,17 @@ class KiKiMRDistConfSelfHealTest(object):
         logger.info(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
                     "RingGroups": newRingGroup}}}))
 
+    def do_bad_config(self, configName):
+        defaultConfig = [get_ring_group(self.do_request_config(), configName)]
+        newRingGroup = deepcopy(defaultConfig)
+        newRingGroup[0]["NToSelect"] = 5
+        newRingGroup[0]["RingGroupActorIdOffset"] = self.rgOffset
+        self.rgOffset += 1
+        self.change_state_storage(defaultConfig, newRingGroup, configName)
+        rg = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg["NToSelect"], 5)
+        assert_eq(len(rg["Ring"]), 9)
+
     def test(self):
         self.do_test("StateStorage")
         self.do_test("StateStorageBoard")
@@ -123,15 +134,7 @@ class TestKiKiMRDistConfSelfHeal(KiKiMRDistConfSelfHealTest):
     rgOffset = 1
 
     def do_test(self, configName):
-        defaultConfig = [get_ring_group(self.do_request_config(), configName)]
-        newRingGroup = deepcopy(defaultConfig)
-        newRingGroup[0]["NToSelect"] = 5
-        newRingGroup[0]["RingGroupActorIdOffset"] = self.rgOffset
-        self.rgOffset += 1
-        self.change_state_storage(defaultConfig, newRingGroup, configName)
-        rg = get_ring_group(self.do_request_config(), configName)
-        assert_eq(rg["NToSelect"], 5)
-        assert_eq(len(rg["Ring"]), 9)
+        self.do_bad_config(configName)
 
         logger.info("Start SelfHeal")
         logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1}}))
@@ -160,3 +163,55 @@ class TestKiKiMRDistConfSelfHealNotNeed(KiKiMRDistConfSelfHealTest):
 
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg, rg2)
+
+
+class TestKiKiMRDistConfSelfHealParallelCall(KiKiMRDistConfSelfHealTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 9
+    rgOffset = 1
+
+    def do_test(self, configName):
+        self.do_bad_config(configName)
+
+        logger.info("Start SelfHeal")
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3}}))
+        time.sleep(1)
+        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
+        assert_eq(len(rg), 2)
+        assert_eq(rg[0]["WriteOnly"], False)
+        assert_eq(rg[1]["WriteOnly"], True)
+
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2}}))
+        time.sleep(1)
+        assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 2)
+        time.sleep(10)
+
+        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
+
+
+class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 9
+    rgOffset = 1
+
+    def do_test(self, configName):
+        self.do_bad_config(configName)
+
+        logger.info("Start SelfHeal")
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3}}))
+        time.sleep(4)
+        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
+        assert_eq(len(rg), 2)
+        assert_eq(rg[0]["WriteOnly"], False)
+        assert_eq(rg[1]["WriteOnly"], False)
+
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2}}))
+        time.sleep(1)
+        assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 3)
+        time.sleep(10)
+
+        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)

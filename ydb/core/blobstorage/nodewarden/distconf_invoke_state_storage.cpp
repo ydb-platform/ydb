@@ -17,20 +17,13 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         auto testNewConfig = [](auto newSSInfo, auto oldSSInfo) {
             THashSet<TActorId> replicas;
-            for (auto& ringGroup : oldSSInfo->RingGroups) {
-                for(auto& ring : ringGroup.Rings) {
-                    for(auto& node : ring.Replicas) {
-                        if(!replicas.insert(node).second) {
-                            return false;
-                        }
-                    }
-                }
-            }
-            for (auto& ringGroup : newSSInfo->RingGroups) {
-                for(auto& ring : ringGroup.Rings) {
-                    for(auto& node : ring.Replicas) {
-                        if(!replicas.insert(node).second) {
-                            return false;
+            for (const auto& ssInfo : { newSSInfo, oldSSInfo }) {
+                for (auto& ringGroup : ssInfo->RingGroups) {
+                    for (auto& ring : ringGroup.Rings) {
+                        for (auto& node : ring.Replicas) {
+                            if (!replicas.insert(node).second) {
+                                return false;
+                            }
                         }
                     }
                 }
@@ -100,6 +93,10 @@ namespace NKikimr::NStorage {
         if (!RunCommonChecks()) {
             return;
         }
+        if (Self->StateStorageSelfHealActor) {
+            Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->StateStorageSelfHealActor.value(), Self->SelfId(), nullptr, 0));
+            Self->StateStorageSelfHealActor.reset();
+        }
         NKikimrBlobStorage::TStateStorageConfig currentConfig;
         GetCurrentStateStorageConfig(&currentConfig);
 
@@ -142,7 +139,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        RegisterWithSameMailbox(new TStateStorageSelfhealActor(Sender, Cookie, cmd.GetWaitForConfigStep(), std::move(currentConfig), std::move(targetConfig)));
+        Self->StateStorageSelfHealActor = RegisterWithSameMailbox(new TStateStorageSelfhealActor(Sender, Cookie, TDuration::Seconds(cmd.GetWaitForConfigStep()), std::move(currentConfig), std::move(targetConfig)));
         auto ev = PrepareResult(TResult::OK, std::nullopt);
         Finish(Sender, SelfId(), ev.release(), 0, Cookie);
     }

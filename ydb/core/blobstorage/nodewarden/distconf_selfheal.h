@@ -14,7 +14,7 @@ namespace NKikimr::NStorage {
             INVALID_RECONFIGURATION_STEP
         };
 
-        const ui32 WaitForConfigStep;
+        const TDuration WaitForConfigStep;
         EReconfigurationStep StateStorageReconfigurationStep;
         const TActorId Sender;
         const ui64 Cookie;
@@ -32,7 +32,7 @@ namespace NKikimr::NStorage {
         EReconfigurationStep GetNextStep(EReconfigurationStep prevStep);
 
     public:
-        TStateStorageSelfhealActor(TActorId sender, ui64 cookie, ui32 waitForConfigStep
+        TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
             , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig);
 
         void Bootstrap(TActorId parentId);

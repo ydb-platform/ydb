@@ -2,12 +2,12 @@
 #include "distconf_selfheal.h"
 
 namespace NKikimr::NStorage {
-    static const ui32 DefaultWaitForConfigStep = 60;
-    static const ui32 MaxWaitForConfigStep = DefaultWaitForConfigStep * 10;
+    static constexpr TDuration DefaultWaitForConfigStep = TDuration::Minutes(1);
+    static constexpr TDuration MaxWaitForConfigStep = TDuration::Minutes(10);
 
-    TStateStorageSelfhealActor::TStateStorageSelfhealActor(TActorId sender, ui64 cookie, ui32 waitForConfigStep
+    TStateStorageSelfhealActor::TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
         , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig)
-        : WaitForConfigStep(waitForConfigStep > 0 && waitForConfigStep < MaxWaitForConfigStep ? waitForConfigStep : DefaultWaitForConfigStep)
+        : WaitForConfigStep(waitForConfigStep > TDuration::Seconds(0) && waitForConfigStep < MaxWaitForConfigStep ? waitForConfigStep : DefaultWaitForConfigStep)
         , StateStorageReconfigurationStep(NONE)
         , Sender(sender)
         , Cookie(cookie)
@@ -22,8 +22,12 @@ namespace NKikimr::NStorage {
         auto fillRingGroupsForCurrentCfg = [&](auto *cfg, auto *currentCfg) {
             if (currentCfg->RingGroupsSize()) {
                 for (ui32 i : xrange(currentCfg->RingGroupsSize())) {
+                    auto &rg = currentCfg->GetRingGroups(i);
+                    if (rg.GetWriteOnly()) {
+                        continue;
+                    }
                     auto *ringGroup = cfg->AddRingGroups();
-                    ringGroup->CopyFrom(currentCfg->GetRingGroups(i));
+                    ringGroup->CopyFrom(rg);
                     ringGroup->SetWriteOnly(StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY);
                 }
             } else {
@@ -66,7 +70,7 @@ namespace NKikimr::NStorage {
     void TStateStorageSelfhealActor::Bootstrap(TActorId /*parentId*/) {
         StateStorageReconfigurationStep = INTRODUCE_NEW_GROUP;
         RequestChangeStateStorage();
-        Schedule(TDuration::Seconds(WaitForConfigStep), new TEvents::TEvWakeup());
+        Schedule(WaitForConfigStep, new TEvents::TEvWakeup());
         Become(&TThis::StateFunc);
     }
 
@@ -109,7 +113,7 @@ namespace NKikimr::NStorage {
         }
         StateStorageReconfigurationStep = GetNextStep(StateStorageReconfigurationStep);
         RequestChangeStateStorage();
-        Schedule(TDuration::Seconds(WaitForConfigStep), new TEvents::TEvWakeup());
+        Schedule(WaitForConfigStep, new TEvents::TEvWakeup());
     }
 
     void TStateStorageSelfhealActor::HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {

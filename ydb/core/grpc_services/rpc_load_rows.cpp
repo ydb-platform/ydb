@@ -18,6 +18,7 @@
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -28,7 +29,7 @@ using namespace Ydb;
 namespace {
 
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
-bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
+bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, const arrow::Field* field = nullptr) {
     switch (type.id()) {
         case arrow::Type::BOOL:
             toType.set_type_id(Ydb::Type::BOOL);
@@ -82,9 +83,32 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
             decimalType->set_scale(arrowDecimal->scale());
             return true;
         }
+        case arrow::Type::FIXED_SIZE_BINARY: {
+            auto& fsb = static_cast<const arrow::FixedSizeBinaryType&>(type);
+            if (fsb.byte_width() == 16) {
+                Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+                ui32 precision = 22, scale = 9;
+                if (field && field->metadata()) {
+                    auto precisionMeta = field->metadata()->Get("precision").ValueOr("");
+                    auto scaleMeta = field->metadata()->Get("scale").ValueOr("");
+                    if (!precisionMeta.empty()) {
+                        precision = FromString<ui32>(precisionMeta);
+                    }
+
+                    if (!scaleMeta.empty()) {
+                        scale = FromString<ui32>(scaleMeta);
+                    }
+                }
+
+                decimalType->set_precision(precision);
+                decimalType->set_scale(scale);
+                return true;
+            }
+
+            break;
+        }
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
-        case arrow::Type::FIXED_SIZE_BINARY:
         case arrow::Type::DATE32:
         case arrow::Type::DATE64:
         case arrow::Type::TIME32:
@@ -410,7 +434,7 @@ private:
             auto& type = field->type();
 
             Ydb::Type ydbType;
-            if (!ConvertArrowToYdbPrimitive(*type, ydbType)) {
+            if (!ConvertArrowToYdbPrimitive(*type, ydbType, field.get())) {
                 return TConclusionStatus::Fail("Cannot convert arrow type to ydb one: " + type->ToString());
             }
             out.emplace_back(name, std::move(ydbType));

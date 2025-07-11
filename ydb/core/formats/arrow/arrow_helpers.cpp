@@ -42,6 +42,12 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>(con
 }
 
 template <>
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
+    return arrow::fixed_size_binary(16);
+}
+
+template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>(const NScheme::TTypeInfo& typeInfo) {
     Y_UNUSED(typeInfo);
     return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);

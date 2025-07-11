@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import logging
+import sys
 from ydb.tests.stress.reconfig_state_storage_workload.workload import WorkloadRunner
 
 

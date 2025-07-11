@@ -32,27 +32,48 @@ SELECT ...
 
 {% note info %}
 
-Векторный индекс не будет автоматически выбран  [оптимизатором](../../../../concepts/glossary.md#optimizer), поэтому его нужно указывать явно с помощью выражения `VIEW IndexName`.
+Векторный индекс поддерживает функцию расстояния или сходства [расширения Knn](../../udf/list/knn#functions-distance), выбранную при создании индекса.
+
+Векторный индекс не будет автоматически выбран [оптимизатором](../../../../concepts/glossary.md#optimizer), поэтому его нужно указывать явно с помощью выражения `VIEW IndexName`.
 
 {% endnote %}
 
+## KMeansTreeSearchTopSize
+
+Векторный поиск по индексу основан на приближённом алгоритме (ANN, Approximate Nearest Neighbors). Это значит, что результат поиска по векторному индексу может отличаться от результата поиска при полном сканировании таблицы.
+
+Полнота поиска по индексу может быть отрегулирована параметром: `PRAGMA ydb.KMeansTreeSearchTopSize`.
+
+Данный параметр задаёт максимальное число сканируемых кластеров, ближайших к запрашиваемому вектору, на каждом уровне дерева поиска.
+Необходимо явно задавать значение данного параметра для каждого запроса.
+
+Значение по умолчанию - 1. То есть, по умолчанию сканируется только 1 ближайший кластер на каждом уровне дерева поиска. Такое значение оптимально с точки зрения производительности и будет достаточным для векторов, близких к центру какого-либо кластера. Однако для векторов, примерно одинаково близких к нескольким кластерам, значения 1 не достаточно. Для увеличения полноты поиска (ценой некоторого замедления) следует увеличить значение PRAGMA, например:
+
+```yql
+PRAGMA ydb.KMeansTreeSearchTopSize="10";
+SELECT *
+    FROM TableName VIEW IndexName
+    ORDER BY Knn::CosineDistance(embedding, $target)
+    LIMIT 10
+```
+
 ## Примеры
 
-* Выбор всех полей из таблицы `series` с использованием векторного индекса `views_index`, созданного для `embedding` с мерой близости "скалярное произведение":  
+* Выбор всех полей из таблицы `series` с использованием векторного индекса `views_index`, созданного для `embedding` с мерой близости "косинусное расстояние":
 
   ```yql
-  SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::InnerProductSimilarity(embedding, $target) as similarity
+  SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::CosineSimilarity(embedding, $target) as similarity
       FROM series VIEW views_index
       ORDER BY similarity DESC
       LIMIT 10
   ```
 
-* Выбор всех полей из таблицы `series` с использованием префиксного векторного индекса `views_index2`, созданного для `embedding` с мерой близости "скалярное произведение" и префиксной колонкой `release_date`:  
+* Выбор всех полей из таблицы `series` с использованием префиксного векторного индекса `views_index2`, созданного для `embedding` с мерой близости "косинусное расстояние" и префиксной колонкой `release_date`:
 
   ```yql
-  SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::InnerProductSimilarity(embedding, $target) as similarity
+  SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::CosineSimilarity(embedding, $target) as similarity
       FROM series VIEW views_index2
       WHERE release_date = "2025-03-31"
-      ORDER BY Knn::InnerProductSimilarity(embedding, $TargetEmbedding) DESC
+      ORDER BY similarity DESC
       LIMIT 10
   ```

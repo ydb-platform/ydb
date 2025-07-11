@@ -183,6 +183,8 @@ public:
         NKikimrKqp::TExecuterTxResult ExecuterResult;
         NLongTxService::TLockHandle LockHandle;
         TVector<NKikimrMiniKQL::TResult> Results;
+        TVector<TString> BinaryResults;
+        bool ExpectBinaryResults = false;
     };
 
     struct TAstQuerySettings {

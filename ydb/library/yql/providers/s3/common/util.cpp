@@ -220,7 +220,7 @@ bool ValidateS3WriteSchema(TPositionHandle pos, std::string_view format, const T
 
         const auto* rowType = schemaStructRowType->GetItems().front()->GetItemType();
         if (rowType->GetKind() != ETypeAnnotationKind::Data) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Only column with primitive type allowed for raw format (you have field with type " << *rowType << ")"));
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Only a column with a primitive type is allowed for the raw format (you have field with type " << *rowType << ")"));
             return false;
         }
 

@@ -87,8 +87,8 @@ class NodeBrokerTestMixin:
             query = f"""SELECT id, value FROM `{self.table_name}` WHERE id = 1;"""
             result_sets = session_pool.execute_with_retries(query)
 
-            assert result_sets[0].rows[0]["id"] == 1
-            assert result_sets[0].rows[0]["value"] == self.value
+            assert result_sets[0].rows[0]["id"] == 1, "cluster aliveness check failed"
+            assert result_sets[0].rows[0]["value"] == self.value, "cluster aliveness check failed"
 
 
 class TestNodeBrokerDeltaProtocolMixedCluster(MixedClusterFixture, NodeBrokerTestMixin):

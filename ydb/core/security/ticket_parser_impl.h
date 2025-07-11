@@ -458,7 +458,7 @@ private:
     }
 
     static void SetNebiusContainerId(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
-        pathsContainer->set_container_id(id);
+        pathsContainer->set_managed_resource_id(id);
     }
 
     template <typename TTokenRecord>
@@ -1178,8 +1178,8 @@ private:
                                 if (permissionRecord.IsRequired()) {
                                     hasRequiredPermissionFailed = true;
                                     errorMessage << permissionIt->first << " for";
-                                    if (check.container_id()) {
-                                        errorMessage << ' ' << check.container_id();
+                                    if (check.managed_resource_id()) {
+                                        errorMessage << ' ' << check.managed_resource_id();
                                     }
                                     for (const auto& resourcePath : check.resource_path().path()) {
                                         errorMessage << ' ' << resourcePath.id();

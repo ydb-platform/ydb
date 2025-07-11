@@ -5,7 +5,9 @@ EXCLUDE_TAGS(GO_PROTO)
 GRPC()
 
 SRCS(
-    annotations.proto
+    expression.proto
+    validate.proto
+    priv/private.proto
 )
 
 USE_COMMON_GOOGLE_APIS(
@@ -13,10 +15,3 @@ USE_COMMON_GOOGLE_APIS(
 )
 
 END()
-
-RECURSE(
-    audit
-    buf
-    common
-    iam
-)

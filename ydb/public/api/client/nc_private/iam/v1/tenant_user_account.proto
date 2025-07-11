@@ -2,8 +2,9 @@ syntax = "proto3";
 
 package nebius.iam.v1;
 
-import "ydb/public/api/client/nc_private/iam/validate.proto";
-import "ydb/public/api/client/nc_private/iam/sensitive.proto";
+import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+import "ydb/public/api/client/nc_private/common/v1/metadata.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
 
 option java_multiple_files = true;
 option java_outer_classname = "TenantUserAccountProto";
@@ -14,6 +15,24 @@ option java_package = "ai.nebius.iam.identity.v1";
 // inside those tenants where access to their resources is granted to them
 //
 // global user accounts are described separately in user_account*.proto
+
+message TenantUserAccount {
+  option (resource_behavior) = UNNAMED;
+  option (resource) = "tenantuseraccount";
+
+  common.v1.ResourceMetadata metadata = 1 [(buf.validate.field).required = true];
+  TenantUserAccountSpec spec = 2 [(buf.validate.field).required = true];
+  TenantUserAccountStatus status = 3 [(field_behavior) = OUTPUT_ONLY];
+}
+
+message TenantUserAccountWithAttributes {
+  TenantUserAccount tenant_user_account = 1;
+  oneof attributesOptional {
+    UserAttributes attributes = 2;
+    //in a case of issues of getting attributes from pds service, we can still return some data from cpl
+    Error error = 3;
+  }
+}
 
 message UserAttributes {
   optional string sub = 20 [(sensitive) = true];
@@ -44,6 +63,17 @@ message UserAttributes {
 
 message Error {
   string message = 1;
+}
+
+message TenantUserAccountSpec {
+  // when a global user account is projected to a specific tenant
+  // they can give consent for that tenant's owner to view specific personal data
+  // by listing explicitly visible PDS attributes
+  // complete list of PDS attributes is described in ../../pds/inner/v1alpha1/iam_identifier.proto
+  message VisibleAttributes {
+    repeated string attribute = 1 [(sensitive) = true];
+  }
+  VisibleAttributes visible_attributes = 1;
 }
 
 message TenantUserAccountStatus {

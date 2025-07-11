@@ -64,7 +64,7 @@ private:
 
             virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>>&& objectAddresses,
                 THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses,
-                THashMap<NGeneralCache::TGlobalPortionAddress, TString>&& errorAddresses) const override {
+                THashMap<NGeneralCache::TGlobalPortionAddress, TString>&& errorAddresses) override {
                 AFL_VERIFY(removedAddresses.empty());
                 THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> objects;
                 for (auto&& i : objectAddresses) {

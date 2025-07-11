@@ -39,19 +39,36 @@ public:
 class TEvDuplicateSourceCacheResult
     : public NActors::TEventLocal<TEvDuplicateSourceCacheResult, NColumnShard::TEvPrivate::EvDuplicateSourceCacheResult> {
 private:
-    using TDataBySource = THashMap<ui64, std::shared_ptr<TColumnsData>>;
-    TConclusion<TDataBySource> ColumnData;
+    using TDataBySource = THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>;
+    TConclusion<TDataBySource> Result;
     YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
 public:
-    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TConclusion<TDataBySource>&& data)
-        : ColumnData(std::move(data))
+    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TDataBySource&& data,
+        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard)
+        : Result(std::move(data))
+        , Context(context)
+        , AllocationGuard(std::move(allocationGuard))
+    {
+        AFL_VERIFY(!!AllocationGuard);
+    }
+
+    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TString errorMessage)
+        : Result(std::move(errorMessage))
         , Context(context)
     {
     }
 
     const TConclusion<TDataBySource>& GetConclusion() const {
-        return ColumnData;
+        return Result;
+    }
+
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> ExtractAllocationGuard() {
+        AFL_VERIFY(!!AllocationGuard);
+        auto result = std::move(AllocationGuard);
+        AllocationGuard.reset();
+        return result;
     }
 };
 

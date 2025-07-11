@@ -20,13 +20,13 @@ private:
     std::shared_ptr<TInternalFilterConstructor> Context;
     std::map<ui32, std::shared_ptr<arrow::Field>> Columns;
     std::vector<TPortionInfo::TConstPtr> Portions;
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
 private:
     virtual void DoOnResultReady(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& /*removedAddresses*/,
-        THashMap<TAddress, TString>&& errorAddresses) const override {
+        THashMap<TAddress, TString>&& errorAddresses) override {
         if (!errorAddresses.empty()) {
-            TActorContext::AsActorContext().Send(
-                Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, TConclusionStatus::Fail(errorAddresses.begin()->second)));
+            TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, errorAddresses.begin()->second));
             return;
         }
 
@@ -35,22 +35,20 @@ private:
             fields.emplace_back(field);
         }
 
-        THashMap<ui64, std::shared_ptr<TColumnsData>> result;
-        std::shared_ptr<NGroupedMemoryManager::TCompositeAllocationGuard> allocationGuard =
-            std::make_shared<NGroupedMemoryManager::TCompositeAllocationGuard>();
+        THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> result;
         for (const TPortionInfo::TConstPtr& portion : Portions) {
             std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
             for (const auto& [columnId, field] : Columns) {
-                NGeneralCache::TColumnData* findColumn =
+                std::shared_ptr<NArrow::NAccessor::IChunkedArray>* findColumn =
                     objectAddresses.FindPtr(NGeneralCache::TGlobalColumnAddress(ColumnShardActorId, portion->GetAddress(), columnId));
                 AFL_VERIFY(findColumn)("portion", portion->DebugString())("column", columnId);
-                columns.emplace_back(findColumn->GetData());
-                allocationGuard->Add(findColumn->GetMemoryGuard());
+                columns.emplace_back(*findColumn);
             }
             std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
-            result.emplace(portion->GetPortionId(), std::make_shared<TColumnsData>(std::move(container), std::move(allocationGuard)));
+            result.emplace(portion->GetPortionId(), std::move(container));
         }
-        TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, std::move(result)));
+        TActorContext::AsActorContext().Send(
+            Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, std::move(result), std::move(AllocationGuard)));
     }
 
     virtual bool DoIsAborted() const override {
@@ -59,12 +57,14 @@ private:
 
 public:
     TColumnFetchingCallback(const TActorId& owner, const TActorId& columnShardActorId, std::shared_ptr<TInternalFilterConstructor>&& context,
-        std::map<ui32, std::shared_ptr<arrow::Field>>&& columns, std::vector<TPortionInfo::TConstPtr>&& portions)
+        std::map<ui32, std::shared_ptr<arrow::Field>>&& columns, std::vector<TPortionInfo::TConstPtr>&& portions,
+        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard)
         : Owner(owner)
         , ColumnShardActorId(columnShardActorId)
         , Context(std::move(context))
         , Columns(std::move(columns))
         , Portions(std::move(portions))
+        , AllocationGuard(std::move(allocationGuard))
     {
     }
 };

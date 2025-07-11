@@ -484,6 +484,7 @@ enum EFormatFlags {
     FormatFlagEncryptFormat = 1 << 5,  // Always on, flag is useless
     FormatFlagEncryptData = 1 << 6,  // Always on, flag is useless
     FormatFlagFormatInProgress = 1 << 7,  // Not implemented (Must be OFF for a formatted disk)
+    FormatFlagPlainDataChunks = 1 << 8, // Default is off, means "encrypted", for backward compatibility
 };
 
 struct TDiskFormat {
@@ -530,6 +531,7 @@ struct TDiskFormat {
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagEncryptFormat, "EncryptFormat", str);
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagEncryptData, "EncryptData", str);
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagFormatInProgress, "FormatFlagFormatInProgress", str);
+        isFirst = NText::OutFlag(isFirst, flags & FormatFlagPlainDataChunks, "FormatFlagPlainDataChunks", str);
         NText::OutFlag(isFirst, isFirst, "Unknown", str);
         return str.Str();
     }
@@ -597,6 +599,10 @@ struct TDiskFormat {
 
     bool IsFormatInProgress() const {
         return FormatFlags & FormatFlagFormatInProgress;
+    }
+
+    bool IsPlainDataChunks() const {
+        return FormatFlags & FormatFlagPlainDataChunks;
     }
 
     void SetFormatInProgress(bool isInProgress) {

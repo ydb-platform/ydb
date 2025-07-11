@@ -80,6 +80,22 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                         }
                     }
                 }
+                TABLER() {
+                    TABLED() {str << "PlainDataChunks";}
+                    TABLED() {
+                        if (Format.IsPlainDataChunks()) {
+                            RED_TEXT(str, "Plain data chunks are not supported in this version");
+                            if (!Cfg->PlainDataChunks) {
+                                YELLOW_TEXT(str, "notice: config is set for encrypted chunks");
+                            }
+                        } else {
+                            GREEN_TEXT(str, "Encrypted data chunks are in use");
+                            if (Cfg->PlainDataChunks) {
+                                YELLOW_TEXT(str, "notice: config is set for plain chunks<br>(not supported in this version, nothing is gonna happen)");
+                            }
+                        }
+                    }
+                }
             }
         }
         TAG(TH4) {str << "State description"; }

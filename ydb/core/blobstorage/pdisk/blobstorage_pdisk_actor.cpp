@@ -557,6 +557,16 @@ public:
                         << "We are sure you did this or something even more creative, like killing the formatter.";
                     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
                     InitError(str.Str());
+                } else if (!PDisk->CheckPlainChunksNotUsed()) {
+                    *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
+                    *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
+                    *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatRead;
+                    PDisk->ErrorStr = "This disk used plain chunks. The feature is not supported in current version!";
+                    TStringStream str;
+                    str << "PDiskId# " << PDisk->PDiskId << " " << PDisk->ErrorStr << " "
+                        << "data is not corrupted, but can be retrieved only with PDisk of newer version (25-1+)";
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+                    InitError(str.Str());
                 } else {
                     // PDisk GUID is OK and format is complete
                     *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;

@@ -209,6 +209,7 @@ public:
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize); // Called by actor
     bool CheckGuid(TString *outReason); // Called by actor
     bool CheckFormatComplete(); // Called by actor
+    bool CheckPlainChunksNotUsed(); // Called by actor
     void ReadSysLog(const TActorId &pDiskActor); // Called by actor
     bool ProcessChunk0(const TEvReadLogResult &readLogResult, TString& errorReason);
     void PrintChunksDebugInfo();

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "counters.h"
 
 #include <ydb/core/base/memory_controller_iface.h>
@@ -34,7 +33,7 @@ private:
 
     TPositiveControlInteger WaitObjectsCount;
 
-    YDB_READONLY_DEF(std::shared_ptr<ICallback>, Callback);
+    std::shared_ptr<ICallback> Callback;
     const EConsumer Consumer;
 
     bool RemoveAddrOnFinished(const TAddress addr) {

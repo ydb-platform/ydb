@@ -3349,9 +3349,8 @@ namespace NTypeAnnImpl {
             bool isOptional = false;
             const TDataExprType* dataType = nullptr;
             if ((!IsDataOrOptionalOfData(type, isOptional, dataType) ||
-                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8) ||
-                dataType->IsOptionalOrNull()) &&
-                (!IsNull(*type) && ignoreNulls)
+                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8))
+                && (!ignoreNulls || !IsNull(*type))
             )
             {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder()

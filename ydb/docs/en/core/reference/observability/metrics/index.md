@@ -5,7 +5,7 @@
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
 | `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`. |
-| `resources.storage.table.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored by tables in distributed network storage. Service data includes the data of the primary and [secondary indexes](../../../concepts/secondary_indexes.md). |
+| `resources.storage.table.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored by tables in distributed network storage. Service data includes the data of the primary, [secondary indexes](../../../concepts/glossary.md#secondary-index) and [vector indexes](../../../concepts/glossary.md#vector-index). |
 | `resources.storage.topic.used_bytes`<br/>`IGAUGE`, bytes | The size of storage used by topics. This metric sums the `topic.storage_bytes` values of all topics. |
 | `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | A limit on the size of user and service data that a database can store in distributed network storage. |
 

@@ -11,8 +11,16 @@ TConstructorContainer TConstructorContainer::GetDefaultConstructor() {
 TString IConstructor::SerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     AFL_VERIFY(columnData);
     AFL_VERIFY(columnData->GetType() == Type)("column", columnData->GetType())("current", Type);
-    AFL_VERIFY(columnData->GetDataType()->Equals(externalInfo.GetColumnType()))("column", columnData->GetDataType()->ToString())(
-        "external", externalInfo.GetColumnType()->ToString());
+    
+    bool isDecimalConversion = (columnData->GetDataType()->id() == arrow::Type::FIXED_SIZE_BINARY && 
+                               externalInfo.GetColumnType()->id() == arrow::Type::DECIMAL128) ||
+                              (columnData->GetDataType()->id() == arrow::Type::DECIMAL128 && 
+                               externalInfo.GetColumnType()->id() == arrow::Type::FIXED_SIZE_BINARY);
+    
+    if (!columnData->GetDataType()->Equals(externalInfo.GetColumnType()) && !isDecimalConversion) {
+        AFL_VERIFY(false)("column", columnData->GetDataType()->ToString())("external", externalInfo.GetColumnType()->ToString());
+    }
+    
     return DoSerializeToString(columnData, externalInfo);
 }
 

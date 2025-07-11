@@ -14,8 +14,93 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <util/string/join.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+
+std::shared_ptr<arrow::Array> ConvertDecimal128ToFixedSizeBinary16(const std::shared_ptr<arrow::Array>& arr) {
+    if (arr->type()->id() != arrow::Type::DECIMAL128) {
+        return arr;
+    }
+
+    auto data = arr->data()->Copy();
+    data->type = arrow::fixed_size_binary(16);
+    return arrow::MakeArray(data);
+}
+
+std::shared_ptr<arrow::RecordBatch> ConvertDecimal128ToFixedSizeBinary16InBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+    if (!batch) {
+        return batch;
+    }
+
+    bool needConversion = false;
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        if (batch->column(i)->type()->id() == arrow::Type::DECIMAL128) {
+            needConversion = true;
+            break;
+        }
+    }
+
+    if (!needConversion) {
+        return batch;
+    }
+
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    fields.reserve(batch->num_columns());
+    columns.reserve(batch->num_columns());
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        auto field = batch->schema()->field(i);
+        auto column = batch->column(i);
+        if (column->type()->id() == arrow::Type::DECIMAL128) {
+            column = ConvertDecimal128ToFixedSizeBinary16(column);
+            field = field->WithType(arrow::fixed_size_binary(16));
+        }
+
+        fields.push_back(std::move(field));
+        columns.push_back(std::move(column));
+    }
+
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), batch->num_rows(), std::move(columns));
+}
 
 namespace NKikimr::NOlap {
+
+using TInt128 = NYql::NDecimal::TInt128;
+
+inline TInt128 NormalizeDecimal128(const TInt128& v) {
+    constexpr TInt128 PInf128 = +NYql::NDecimal::Inf();
+    constexpr TInt128 NInf128 = -NYql::NDecimal::Inf();
+    if (v > PInf128) {
+        return PInf128;
+    }
+
+    if (v < NInf128) {
+        return NInf128;
+    }
+
+    return v;
+}
+
+void NormalizeDecimal128InBatch(std::shared_ptr<arrow::RecordBatch>& batch) {
+    if (!batch) {
+        return;
+    }
+
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        auto arr = batch->column(i);
+        if (arr->type()->id() == arrow::Type::DECIMAL128) {
+            auto data = arr->data();
+            auto buf = data->buffers[1];
+            size_t arrLen = static_cast<size_t>(arr->length());
+            if (buf && static_cast<size_t>(buf->size()) >= 16 * arrLen) {
+                auto raw = reinterpret_cast<TInt128*>(const_cast<ui8*>(buf->data()));
+                for (size_t j = 0; j < arrLen; ++j) {
+                    raw[j] = NormalizeDecimal128(raw[j]);
+                }
+            }
+        }
+    }
+}
+
 
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) const {
     auto schema = GetSchema();
@@ -106,7 +191,24 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
         const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
         if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
-            if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
+            bool typesMatch = features.GetArrowField()->type()->Equals(incomingColumn->type());
+            if (!typesMatch) {
+                if (features.GetArrowField()->type()->id() == arrow::Type::DECIMAL128 && 
+                    incomingColumn->type()->id() == arrow::Type::FIXED_SIZE_BINARY) {
+                    auto fixedSizeBinary = std::static_pointer_cast<arrow::FixedSizeBinaryType>(incomingColumn->type());
+                    if (fixedSizeBinary->byte_width() == 16) {
+                        typesMatch = true;
+                    }
+                } else if (features.GetArrowField()->type()->id() == arrow::Type::FIXED_SIZE_BINARY && 
+                         incomingColumn->type()->id() == arrow::Type::DECIMAL128) {
+                    auto fixedSizeBinary = std::static_pointer_cast<arrow::FixedSizeBinaryType>(features.GetArrowField()->type());
+                    if (fixedSizeBinary->byte_width() == 16) {
+                        typesMatch = true;
+                    }
+                }
+            }
+            
+            if (!typesMatch) {
                 return TConclusionStatus::Fail(
                     "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
                     + " vs " + incomingColumn->type()->ToString());
@@ -150,6 +252,10 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
     }
     auto result = batchConclusion.DetachResult();
     result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), pkColumns, true);
+    
+    NormalizeDecimal128InBatch(result.MutableContainer());
+    result.MutableContainer() = ConvertDecimal128ToFixedSizeBinary16InBatch(result.GetContainer());
+    
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKey()));
     return result;
 }

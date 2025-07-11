@@ -204,6 +204,15 @@ static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<
             newData->type = arrow::int64();
             return std::make_shared<arrow::NumericArray<arrow::Int64Type>>(newData);
         }
+        case NScheme::NTypeIds::Decimal: {
+            if (column->type()->id() == arrow::Type::DECIMAL128) {
+                auto newData = column->data()->Copy();
+                newData->type = arrow::fixed_size_binary(16);
+                return std::make_shared<arrow::FixedSizeBinaryArray>(newData);
+            }
+
+            return column;
+        }
         default:
             return {};
     }
@@ -305,18 +314,48 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema_) {
             auto& column = allColumns[col];
-            bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-                Y_UNUSED(typeHolder);
-                for (i32 i = 0; i < unroll; ++i) {
-                    i32 realRow = row + i;
-                    if (column->IsNull(realRow)) {
-                        cells[i][col] = TCell();
-                    } else {
-                        cells[i][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, realRow);
-                    }
+            bool success = false;
+
+            if (colType.GetTypeId() == NScheme::NTypeIds::Decimal && column->type()->id() == arrow::Type::FIXED_SIZE_BINARY) {
+                auto fixedSizeBinary = std::static_pointer_cast<arrow::FixedSizeBinaryType>(column->type());
+                if (fixedSizeBinary->byte_width() == 16) {
+                    auto fixedSizeBinaryArray = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
+                    
+                    success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
+                        Y_UNUSED(typeHolder);
+                        for (i32 i = 0; i < unroll; ++i) {
+                            i32 realRow = row + i;
+                            if (fixedSizeBinaryArray->IsNull(realRow)) {
+                                cells[i][col] = TCell();
+                            } else {
+                                auto value = fixedSizeBinaryArray->GetValue(realRow);
+                                NYql::NDecimal::TInt128 int128Value;
+                                std::memcpy(&int128Value, value, 16);
+                                
+                                cells[i][col] = TCell::Make<NYql::NDecimal::TInt128>(int128Value);
+                            }
+                        }
+
+                        return true;
+                    });
                 }
-                return true;
-            });
+            }
+            
+            if (!success) {
+                success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
+                    Y_UNUSED(typeHolder);
+                    for (i32 i = 0; i < unroll; ++i) {
+                        i32 realRow = row + i;
+                        if (column->IsNull(realRow)) {
+                            cells[i][col] = TCell();
+                        } else {
+                            cells[i][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, realRow);
+                        }
+                    }
+
+                    return true;
+                });
+            }
 
             if (!success) {
                 errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType.GetTypeId())
@@ -359,11 +398,30 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                 continue;
             }
 
-            bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-                Y_UNUSED(typeHolder);
-                curCell = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row);
-                return true;
-            });
+            bool success = false;
+            
+            if (colType.GetTypeId() == NScheme::NTypeIds::Decimal && column->type()->id() == arrow::Type::FIXED_SIZE_BINARY) {
+                auto fixedSizeBinary = std::static_pointer_cast<arrow::FixedSizeBinaryType>(column->type());
+                if (fixedSizeBinary->byte_width() == 16) {
+                    auto newData = column->data()->Copy();
+                    newData->type = arrow::decimal(colType.GetDecimalType().GetPrecision(), colType.GetDecimalType().GetScale());
+                    auto decimalColumn = std::make_shared<arrow::Decimal128Array>(newData);
+                    
+                    success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
+                        Y_UNUSED(typeHolder);
+                        curCell = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(decimalColumn, row);
+                        return true;
+                    });
+                }
+            }
+            
+            if (!success) {
+                success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
+                    Y_UNUSED(typeHolder);
+                    curCell = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row);
+                    return true;
+                });
+            }
 
             if (!success) {
                 errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType.GetTypeId())

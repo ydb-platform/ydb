@@ -41,7 +41,8 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
 }
 
 TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
+    auto actualType = columnData->GetDataType();
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", actualType) }));
     std::shared_ptr<arrow::RecordBatch> rb;
     if (columnData->GetType() == IChunkedArray::EType::Array) {
         const auto* arr = static_cast<const TTrivialArray*>(columnData.get());
@@ -56,11 +57,31 @@ TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& 
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     const std::shared_ptr<IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const {
-    if (!originalArray->GetDataType()->Equals(externalInfo.GetColumnType())) {
+    bool isDecimalConversion = (originalArray->GetDataType()->id() == arrow::Type::FIXED_SIZE_BINARY && 
+                               externalInfo.GetColumnType()->id() == arrow::Type::DECIMAL128) ||
+                              (originalArray->GetDataType()->id() == arrow::Type::DECIMAL128 && 
+                               externalInfo.GetColumnType()->id() == arrow::Type::FIXED_SIZE_BINARY);
+    
+    if (!originalArray->GetDataType()->Equals(externalInfo.GetColumnType()) && !isDecimalConversion) {
         return TConclusionStatus::Fail("plain accessor cannot convert types for transfer: " + originalArray->GetDataType()->ToString() + " to " +
                                        externalInfo.GetColumnType()->ToString());
     }
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
+
+    if (originalArray->GetDataType()->id() == arrow::Type::DECIMAL128 && externalInfo.GetColumnType()->id() == arrow::Type::FIXED_SIZE_BINARY) {
+        auto arr = originalArray->GetChunkedArray();
+        std::vector<std::shared_ptr<arrow::Array>> chunks;
+        for (int i = 0; i < arr->num_chunks(); ++i) {
+            auto data = arr->chunk(i)->data()->Copy();
+            data->type = arrow::fixed_size_binary(16);
+            chunks.push_back(arrow::MakeArray(data));
+        }
+
+        auto chunked = std::make_shared<arrow::ChunkedArray>(chunks, arrow::fixed_size_binary(16));
+        return std::make_shared<TTrivialArray>(chunked->chunk(0));
+    }
+    
+    auto actualType = originalArray->GetDataType();
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", actualType) }));
     auto chunked = originalArray->GetChunkedArray();
     auto table = arrow::Table::Make(schema, { chunked }, originalArray->GetRecordsCount());
     return std::make_shared<TTrivialArray>(NArrow::ToBatch(table)->column(0));

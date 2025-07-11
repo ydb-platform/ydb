@@ -322,6 +322,10 @@ private:
     }
 
     static bool SameOrConvertableDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
+        if (type1.GetTypeId() == NScheme::NTypeIds::Decimal && type2.GetTypeId() == NScheme::NTypeIds::Decimal) {
+            return true;
+        }
+        
         bool ok = SameDstType(type1, type2, allowConvert) || NArrow::TArrowToYdbConverter::NeedInplaceConversion(type1, type2);
         if (!ok && allowConvert) {
             ok = NArrow::TArrowToYdbConverter::NeedConversion(type1, type2);

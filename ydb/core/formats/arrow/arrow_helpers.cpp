@@ -240,23 +240,7 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
         return nullptr;
     }
 
-    auto batch = DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
-    for (i32 i = 0; i < batch->num_columns(); ++i) {
-        auto arr = batch->column(i);
-        if (arr->type()->id() == arrow::Type::DECIMAL128) {
-            auto data = arr->data();
-            auto buf = data->buffers[1];
-            size_t arrLen = static_cast<size_t>(arr->length());
-            if (buf && static_cast<size_t>(buf->size()) >= 16 * arrLen) {
-                auto raw = reinterpret_cast<TInt128*>(const_cast<ui8*>(buf->data()));
-                for (size_t j = 0; j < arrLen; ++j) {
-                    raw[j] = NormalizeDecimal128(raw[j]);
-                }
-            }
-        }
-    }
-
-    return batch;
+    return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
 }
 
 std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool) {
@@ -269,20 +253,6 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
     for (auto&& i : batches) {
         i = NArrow::TStatusValidator::GetValid(
             NArrow::NSerialization::TNativeSerializer(pool).Deserialize(NArrow::NSerialization::TNativeSerializer(pool).SerializeFull(i)));
-        for (i32 col = 0; col < i->num_columns(); ++col) {
-            auto arr = i->column(col);
-            if (arr->type()->id() == arrow::Type::DECIMAL128) {
-                auto data = arr->data();
-                auto buf = data->buffers[1];
-                size_t arrLen = static_cast<size_t>(arr->length());
-                if (buf && static_cast<size_t>(buf->size()) >= 16 * arrLen) {
-                    auto raw = reinterpret_cast<TInt128*>(const_cast<ui8*>(buf->data()));
-                    for (size_t j = 0; j < arrLen; ++j) {
-                        raw[j] = NormalizeDecimal128(raw[j]);
-                    }
-                }
-            }
-        }
     }
 
     return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));

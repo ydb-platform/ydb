@@ -654,6 +654,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
             options.PileCount - 1,
             TStateStorageInfo::TRingGroup{.State = SYNCHRONIZED, .NToSelect = options.NToSelect}
         );
+
         THashMap<ui32, TVector<ui32>> ringGroupIdToNodeIds;
         for (ui32 i = 1; i <= GetNodeCount(); ++i) {
             ringGroupIdToNodeIds[i % options.PileCount].push_back(i - 1);

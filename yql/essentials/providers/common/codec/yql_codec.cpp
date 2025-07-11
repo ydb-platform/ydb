@@ -532,6 +532,10 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
             NUdf::TUnboxedValue res = ValueToString(EDataSlot::DyNumber, value);
             return ToString(TStringBuf(res.AsStringRef()));
         }
+        case NUdf::EDataSlot::DyNumber: {
+            NUdf::TUnboxedValue res = ValueToString(EDataSlot::DyNumber, value);
+            return ToString(TStringBuf(res.AsStringRef()));
+        }
     }
 
     Y_ABORT("Unexpected");

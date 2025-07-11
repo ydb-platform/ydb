@@ -2041,7 +2041,7 @@ struct Schema : NIceDb::Schema {
 
     struct DataErasureGenerations : Table<115> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<Generation>;
@@ -2051,11 +2051,12 @@ struct Schema : NIceDb::Schema {
             StartTime
         >;
     };
+    using ShredGenerations = DataErasureGenerations;
 
     struct WaitingDataErasureTenants : Table<116> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -2064,10 +2065,11 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using WaitingShredTenants = WaitingDataErasureTenants;
 
     struct TenantDataErasureGenerations : Table<117> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
 
         using TKey = TableKey<Generation>;
         using TColumns = TableColumns<
@@ -2075,11 +2077,12 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using TenantShredGenerations = TenantDataErasureGenerations;
 
     struct WaitingDataErasureShards : Table<118> {
         struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
-        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
 
         using TKey = TableKey<OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
@@ -2088,6 +2091,7 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using WaitingShredShards = WaitingDataErasureShards;
 
     struct SysView : Table<119> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };

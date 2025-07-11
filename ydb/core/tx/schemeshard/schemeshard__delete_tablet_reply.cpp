@@ -2,7 +2,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/schemeshard/schemeshard__data_erasure_manager.h>
+#include <ydb/core/tx/schemeshard/schemeshard__shred_manager.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -180,8 +180,8 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
                             "Close pipe to deleted shardIdx " << ShardIdx << " tabletId " << TabletId);
                 Self->PipeClientCache->ForceClose(ctx, ui64(TabletId));
             }
-            if (Self->EnableDataErasure && Self->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Self->Execute(Self->CreateTxCancelDataErasureShards({ShardIdx}));
+            if (Self->EnableShred && Self->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+                Self->Execute(Self->CreateTxCancelShredShards({ShardIdx}));
             }
         }
     }

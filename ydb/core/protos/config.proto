@@ -2139,7 +2139,26 @@ message TBackgroundCleaningConfig {
     optional TRetrySettings RetrySettings = 5;
 }
 
+message TShredConfig {
+    message TTenantShredConfig {
+        optional double MaxRate = 1 [default = 1]; // unlimited
+        optional uint64 InflightLimit = 2 [default = 10];
+        // After this interval started shred in shard is considered as finished
+        optional uint64 TimeoutSeconds = 3 [default = 15];
+    }
 
+    optional double MaxRate = 1 [default = 0]; // unlimited
+    optional uint64 InflightLimit = 2 [default = 10];
+    // After this interval started shred in tenant is considered as finished
+    optional uint64 TimeoutSeconds = 3 [default = 600];
+    // Run shred every week
+    optional uint64 ShredIntervalSeconds = 4 [default = 604800];
+    // Every 10 m do request to BSC
+    optional uint64 BlobStorageControllerRequestIntervalSeconds = 5 [default = 600];
+    optional TTenantShredConfig TenantShredConfig = 6;
+}
+
+// deprecated, use TShredConfig
 message TDataErasureConfig {
     message TTenantDataErasureConfig {
         optional double MaxRate = 1 [default = 1]; // unlimited
@@ -2455,7 +2474,7 @@ message TAppConfig {
     optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
     optional TSelfManagementConfig SelfManagementConfig = 86;
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
-    optional TDataErasureConfig DataErasureConfig = 88;
+    optional TDataErasureConfig DataErasureConfig = 88 [deprecated=true]; // deprecated, use ShredConfig. TODO: remove from config
     optional THealthCheckConfig HealthCheckConfig = 89;
     optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
     optional TBridgeConfig BridgeConfig = 91;
@@ -2473,6 +2492,7 @@ message TAppConfig {
     optional string StartupStorageYaml = 108;
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
+    optional TShredConfig ShredConfig = 111;
 }
 
 message TYdbVersion {

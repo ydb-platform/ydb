@@ -73,7 +73,7 @@ namespace NKikimrConfig {
     class TAwsCompatibilityConfig;
     class TS3ProxyResolverConfig;
     class TBackgroundCleaningConfig;
-    class TDataErasureConfig;
+    class TShredConfig;
     class TGraphConfig;
     class TMetadataCacheConfig;
     class TMemoryControllerConfig;
@@ -256,7 +256,7 @@ struct TAppData {
     NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults& ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
-    NKikimrConfig::TDataErasureConfig& DataErasureConfig;
+    NKikimrConfig::TShredConfig& ShredConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;

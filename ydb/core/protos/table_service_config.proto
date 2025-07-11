@@ -395,5 +395,5 @@ message TTableServiceConfig {
 
     optional bool EnableOlapPushdownProjections = 91  [ default = true ];
 
-    optional bool EnableHashShuffleConnectionsForExtend = 92  [ default = false ];
+    optional bool EnableHashShuffleConnectionsForExtend = 92  [ default = true ];
 };

@@ -464,8 +464,8 @@ public:
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
-            cFunc(TEvents::TEvUndelivered::EventType, PassAway);
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, PassAway);
+            cFunc(TEvents::TEvUndelivered::EventType, PassAway);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -551,10 +551,9 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
             CurrentSyncRequest = 0;
         }
-        this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
 
         ReplicaSubscriber = TActorId();
-
+        this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
         this->Become(&TDerived::StateSleep, Delay, new TEvents::TEvWakeup());
         Delay = Min(Delay * 2, MaxDelay);
     }

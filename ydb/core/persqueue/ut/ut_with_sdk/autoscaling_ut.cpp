@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, false);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, true);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PQv1) {
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionMerge_PreferedPartition_PQv1) {
-        PartitionMerge_PreferedPartition(SdkVersion::Topic, false);
+        PartitionMerge_PreferedPartition(SdkVersion::PQv1, false);
     }
 
     void PartitionSplit_ReadEmptyPartitions(SdkVersion sdk, bool autoscaleAwareSDK) {

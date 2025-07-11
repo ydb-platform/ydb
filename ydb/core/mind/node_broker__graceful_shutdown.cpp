@@ -30,8 +30,8 @@ public:
 
         if (it != Self->Dirty.Nodes.end()) {
             auto& node = it->second;
-            Self->Dirty.DbReleaseSlotIndex(node, txc);
             Self->Dirty.ReleaseSlotIndex(node);
+            Self->Dirty.DbAddNode(node, txc);
 
             Response->Record.MutableStatus()->SetCode(TStatus::OK);
 
@@ -52,6 +52,8 @@ public:
             Self->Committed.ReleaseSlotIndex(Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId()));
         }
         ctx.Send(Event->Sender, Response.Release());
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

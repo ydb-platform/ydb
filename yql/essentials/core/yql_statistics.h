@@ -10,6 +10,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
+#include <util/string/builder.h>
 
 #include <util/generic/string.h>
 #include <optional>
@@ -27,6 +29,32 @@ enum EStorageType : ui32 {
     NA,
     RowStorage,
     ColumnStorage
+};
+
+class TShufflingOrderingsByJoinLabels {
+public:
+    void Add(TVector<TString> joinLabels, NDq::TOrderingsStateMachine::TLogicalOrderings shufflings) {
+        std::sort(joinLabels.begin(), joinLabels.end());
+        ShufflingOrderingsByJoinLabels_.emplace_back(joinLabels, shufflings);
+    }
+
+    TMaybe<NDq::TOrderingsStateMachine::TLogicalOrderings> GetShufflingOrderigsByJoinLabels(
+        TVector<TString> searchingLabels
+    ) {
+        std::sort(searchingLabels.begin(), searchingLabels.end());
+        for (const auto& [joinLabels, shufflings]: ShufflingOrderingsByJoinLabels_) {
+            if (searchingLabels == joinLabels) {
+                return shufflings;
+            }
+        }
+
+        return Nothing();
+    }
+
+    TString ToString() const;
+
+private:
+    TVector<std::pair<TVector<TString>, NDq::TOrderingsStateMachine::TLogicalOrderings>> ShufflingOrderingsByJoinLabels_;
 };
 
 // Providers may subclass this struct to associate specific statistics, useful to
@@ -129,6 +157,7 @@ struct TOptimizerStatistics {
 
     std::optional<std::size_t> ShuffleOrderingIdx;
     std::int64_t SortingOrderingIdx = -1;
+    std::int64_t ShufflingOrderingIdx = -1;
 
     // special flag for equijoin
     bool CBOFired = false;

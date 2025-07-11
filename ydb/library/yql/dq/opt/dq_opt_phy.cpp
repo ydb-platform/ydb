@@ -2,6 +2,7 @@
 #include "dq_opt_join.h"
 #include "dq_opt.h"
 
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -2849,6 +2850,7 @@ TExprBase DqBuildJoin(
     EHashJoinMode hashJoin,
     bool shuffleMapJoin,
     bool useGraceCoreForMap,
+    bool useBlockHashJoin,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool buildCollectStage
@@ -2890,7 +2892,7 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

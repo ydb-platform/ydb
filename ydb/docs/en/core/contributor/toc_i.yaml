@@ -28,6 +28,8 @@ items:
       href: datashard-locks-and-change-visibility.md
     - name: Distributed transactions
       href: datashard-distributed-txs.md
+  - name: Configuration V2
+    href: configuration-v2.md
   - name: Testing with load actors
     href: load-actors-overview.md
     items:

@@ -1499,6 +1499,8 @@ namespace NKikimr::NYaml {
             Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
                        "'config' must be an object when 'metadata' is present");
 
+            config.SetYamlConfigEnabled(true);
+
             jsonNode = json["config"];
         }
 

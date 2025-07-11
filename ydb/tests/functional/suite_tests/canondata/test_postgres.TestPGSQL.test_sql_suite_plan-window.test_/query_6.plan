@@ -78,10 +78,8 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_window.test_plan/empsalary",
                                                                         "ReadColumns": [
+                                                                            "empno (-\u221e, +\u221e)",
                                                                             "salary"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "empno (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
                                                                         "Scan": "Parallel",

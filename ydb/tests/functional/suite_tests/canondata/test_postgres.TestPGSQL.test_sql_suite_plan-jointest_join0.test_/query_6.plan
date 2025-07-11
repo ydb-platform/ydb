@@ -201,12 +201,9 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                         "ReadColumns": [
-                                                            "stringu1",
-                                                            "unique2"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "unique1 (-\u221e, +\u221e)",
-                                                            "unique2 (-\u221e, +\u221e)"
+                                                            "unique2 (-\u221e, +\u221e)",
+                                                            "stringu1"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",
@@ -249,9 +246,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/int4_tbl",
                                                                         "ReadColumns": [
-                                                                            "f1"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "f1 (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
@@ -295,10 +289,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/ononequery1",
                                                                                         "ReadColumns": [
-                                                                                            "x1",
-                                                                                            "x2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "x1 (-\u221e, +\u221e)",
                                                                                             "x2 (-\u221e, +\u221e)"
                                                                                         ],
@@ -329,10 +319,6 @@
                                                                                                         "Name": "TableFullScan",
                                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/ononequery2",
                                                                                                         "ReadColumns": [
-                                                                                                            "y1",
-                                                                                                            "y2"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
                                                                                                             "y1 (-\u221e, +\u221e)",
                                                                                                             "y2 (-\u221e, +\u221e)"
                                                                                                         ],

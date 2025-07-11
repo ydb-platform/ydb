@@ -83,4 +83,5 @@ GET_LIMIT(QueryExecutionLimit)
 GET_LIMIT(ColumnTablesReadExecutionLimit)
 GET_LIMIT(ColumnTablesCompactionLimit)
 GET_LIMIT(ColumnTablesCacheLimit)
+GET_LIMIT(ColumnTablesDeduplicationLimit)
 }

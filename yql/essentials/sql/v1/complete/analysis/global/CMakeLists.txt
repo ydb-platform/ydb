@@ -12,13 +12,30 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(complete-analysis-global)
+
+
+target_link_libraries(complete-analysis-global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  v1-complete-core
+  v1-complete-syntax
+  v1-complete-text
+  antlr_ast-gen-v1_antlr4
+  antlr_ast-gen-v1_ansi_antlr4
+)
+
+target_sources(complete-analysis-global PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/base_visitor.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/column.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/evaluate.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/function.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/global.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/input.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/named_node.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/narrowing_visitor.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/parse_tree.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/analysis/global/use.cpp
+)
 

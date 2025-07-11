@@ -12,13 +12,62 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(restricted-aws-aws-c-s3)
+
+
+target_compile_options(restricted-aws-aws-c-s3 PRIVATE
+  -DAWS_AUTH_USE_IMPORT_EXPORT
+  -DAWS_CAL_USE_IMPORT_EXPORT
+  -DAWS_CHECKSUMS_USE_IMPORT_EXPORT
+  -DAWS_COMMON_USE_IMPORT_EXPORT
+  -DAWS_COMPRESSION_USE_IMPORT_EXPORT
+  -DAWS_HTTP_USE_IMPORT_EXPORT
+  -DAWS_IO_USE_IMPORT_EXPORT
+  -DAWS_S3_USE_IMPORT_EXPORT
+  -DAWS_SDKUTILS_USE_IMPORT_EXPORT
+  -DAWS_USE_EPOLL
+  -DCJSON_HIDE_SYMBOLS
+  -DHAVE_SYSCONF
+  -DINTEL_NO_ITTNOTIFY_API
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(restricted-aws-aws-c-s3 PUBLIC
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/include
+)
+
+target_link_libraries(restricted-aws-aws-c-s3 PUBLIC
+  contrib-libs-linux-headers
+  restricted-aws-aws-c-auth
+  restricted-aws-aws-c-cal
+  restricted-aws-aws-c-common
+  restricted-aws-aws-c-http
+  restricted-aws-aws-c-io
+  restricted-aws-aws-c-sdkutils
+  restricted-aws-aws-checksums
+)
+
+target_sources(restricted-aws-aws-c-s3 PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_auto_ranged_get.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_auto_ranged_put.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_buffer_pool.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_checksum_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_checksums.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_chunk_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_client.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_copy_object.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_default_meta_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_endpoint.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_list_objects.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_list_parts.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_meta_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_paginator.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_parallel_input_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_platform_info.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_request_messages.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_util.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3express_credentials_provider.c
+)
 

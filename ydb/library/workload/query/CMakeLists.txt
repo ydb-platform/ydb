@@ -12,13 +12,36 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(library-workload-query)
+
+
+target_link_libraries(library-workload-query PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-workload-benchmark_base
+  library-cpp-json
+)
+
+target_sources(library-workload-query PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/query/data_generator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/query/query.cpp
+)
+
+
+add_global_library_for(library-workload-query.global
+  library-workload-query)
+
+
+target_link_libraries(library-workload-query.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-workload-benchmark_base
+  library-cpp-json
+)
+
+target_sources(library-workload-query.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/query/registrar.cpp
+)
 

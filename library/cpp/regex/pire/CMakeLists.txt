@@ -12,13 +12,42 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(cpp-regex-pire)
 
+
+target_include_directories(cpp-regex-pire PUBLIC
+  ${PROJECT_BINARY_DIR}/library/cpp/regex/pire/_/pire
+)
+
+target_link_libraries(cpp-regex-pire PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-charset
+  build-induced-by_bison
+)
+
+target_sources(cpp-regex-pire PRIVATE
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pcre2pire.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/extraencodings.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/classes.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/encoding.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/fsm.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/scanner_io.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/easy.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/scanners/null.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/extra/capture.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/extra/count.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/extra/glyphs.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/re_lexer.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/read_unicode.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/approx_matching.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/half_final_fsm.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/regex/pire/_/pire/re_parser.h
+)
+
+
+target_bison_parser(cpp-regex-pire
+  PRIVATE
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pire/re_parser.y
+)

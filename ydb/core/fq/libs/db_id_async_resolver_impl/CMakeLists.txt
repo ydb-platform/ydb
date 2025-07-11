@@ -12,13 +12,38 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_subdirectory(ut)
+
+add_library(fq-libs-db_id_async_resolver_impl)
+
+
+target_compile_options(fq-libs-db_id_async_resolver_impl PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(fq-libs-db_id_async_resolver_impl PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-json
+  cpp-threading-future
+  fq-libs-common
+  libs-config-protos
+  fq-libs-events
+  ydb-core-util
+  library-actors-core
+  library-actors-http
+  ydb-library-services
+  providers-common-db_id_async_resolver
+  common-token_accessor-client
+  providers-dq-actors
+  yql-essentials-utils
+)
+
+target_sources(fq-libs-db_id_async_resolver_impl PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.cpp
+)
 

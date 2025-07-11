@@ -12,13 +12,68 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(essentials-tools-yql_facade_run)
+
+
+target_compile_options(essentials-tools-yql_facade_run PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(essentials-tools-yql_facade_run PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  providers-pg-provider
+  providers-common-provider
+  providers-common-proto
+  providers-common-udf_resolve
+  essentials-core-file_storage
+  core-file_storage-proto
+  core-file_storage-defs
+  core-url_lister-interface
+  core-services-mounts
+  essentials-core-services
+  essentials-core-credentials
+  essentials-core-pg_ext
+  essentials-core-facade
+  essentials-core-url_lister
+  essentials-core-url_preprocessing
+  essentials-core-peephole_opt
+  qplayer-storage-interface
+  qplayer-storage-file
+  yql-essentials-core
+  essentials-minikql-invoke_builtins
+  yql-essentials-minikql
+  yql-essentials-ast
+  parser-pg_wrapper-interface
+  essentials-parser-pg_catalog
+  essentials-public-udf
+  essentials-public-result_format
+  essentials-utils-failure_injector
+  essentials-utils-backtrace
+  essentials-utils-log
+  yql-essentials-protos
+  essentials-sql-settings
+  v1-complete-check
+  sql-v1-format
+  v1-lexer-check
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  essentials-sql-v1
+  yql-essentials-sql
+  essentials-public-langver
+  essentials-core-langver
+  library-cpp-resource
+  library-cpp-getopt
+  cpp-yson-node
+  library-cpp-yson
+  library-cpp-logger
+  contrib-libs-protobuf
+)
+
+target_sources(essentials-tools-yql_facade_run PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/tools/yql_facade_run/yql_facade_run.cpp
+)
 

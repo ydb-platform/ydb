@@ -12,13 +12,50 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_library(ydb-library-breakpad INTERFACE)
+
+
+target_link_libraries(ydb-library-breakpad INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  libs-breakpad-src
+  src-client-linux
+  library-cpp-resource
+)
+
+
+add_global_library_for(ydb-library-breakpad.global
+  ydb-library-breakpad)
+
+
+target_link_libraries(ydb-library-breakpad.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  libs-breakpad-src
+  src-client-linux
+  library-cpp-resource
+)
+
+target_sources(ydb-library-breakpad.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/breakpad/minidumps.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/breakpad/8e79af847c99a66d1a44a28fc0afce5f.cpp
+)
+
+
+resources(ydb-library-breakpad.global
+  ${PROJECT_BINARY_DIR}/ydb/library/breakpad/8e79af847c99a66d1a44a28fc0afce5f.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/library/breakpad/about.txt
+  KEYS
+  internal_breakpad_about
+  OPTS
+)

@@ -12,13 +12,34 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(fmr-job-impl)
+
+
+target_compile_options(fmr-job-impl PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(fmr-job-impl PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-threading-future
+  cpp-yson-node
+  cpp-mapreduce-interface
+  fmr-job-interface
+  yt-fmr-utils
+  yt-fmr-process
+  fmr-table_data_service-interface
+  yql-essentials-utils
+  essentials-utils-log
+)
+
+target_sources(fmr-job-impl PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.cpp
+)
 

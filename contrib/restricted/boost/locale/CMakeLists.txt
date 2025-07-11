@@ -12,13 +12,71 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(restricted-boost-locale)
+
+
+target_compile_options(restricted-boost-locale PRIVATE
+  -DBOOST_LOCALE_WITH_ICU
+  -DBOOST_LOCALE_NO_WINAPI_BACKEND
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(restricted-boost-locale PUBLIC
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/include
+)
+
+target_include_directories(restricted-boost-locale PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src
+)
+
+target_link_libraries(restricted-boost-locale PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-icu
+  restricted-boost-assert
+  restricted-boost-charconv
+  restricted-boost-config
+  restricted-boost-core
+  restricted-boost-iterator
+  restricted-boost-predef
+  restricted-boost-thread
+)
+
+target_sources(restricted-boost-locale PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/codecvt.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/collate.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/converter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/numeric.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/posix_backend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/encoding/codepage.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/boundary.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/codecvt.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/collator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/conversion.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/date_time.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/formatter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/formatters_cache.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/icu_backend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/numeric.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/date_time.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/format.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/formatting.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/generator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/iconv_codecvt.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/ids.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/localization_backend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/message.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/mo_lambda.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/codecvt.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/collate.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/converter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/numeric.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/std_backend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/codecvt_converter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/default_locale.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/encoding.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/gregorian.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/info.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/locale_data.cpp
+)
 

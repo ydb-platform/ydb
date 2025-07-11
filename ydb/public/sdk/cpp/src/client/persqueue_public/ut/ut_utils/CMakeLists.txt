@@ -12,13 +12,36 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(persqueue_public-ut-ut_utils)
+
+
+target_compile_options(persqueue_public-ut-ut_utils PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(persqueue_public-ut-ut_utils PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-grpc-server
+  cpp-testing-unittest
+  cpp-threading-chunk_queue
+  core-testlib-default
+  sdk-library-persqueue-topic_parser_public-v3
+  src-client-driver
+  src-client-topic
+  src-client-persqueue_public
+  src-client-table
+)
+
+target_sources(persqueue_public-ut-ut_utils PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/sdk_test_setup.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_utils.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h
+)
 

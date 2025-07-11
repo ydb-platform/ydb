@@ -12,13 +12,73 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(arrow-accessor-sub_columns)
+
+
+target_compile_options(arrow-accessor-sub_columns PRIVATE
+  -Wno-assume
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(arrow-accessor-sub_columns PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  arrow-accessor-abstract
+  arrow-accessor-plain
+  arrow-accessor-sparsed
+  arrow-accessor-composite_serial
+  formats-arrow-save_load
+  formats-arrow-common
+  ydb-library-signals
+  library-formats-arrow
+  library-formats-arrow-protos
+  essentials-types-binary_json
+)
+
+target_sources(arrow-accessor-sub_columns PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/header.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/partial.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/data_extractor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/json_extractors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/accessor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/direct_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/settings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/others_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/columns_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/iterators.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/signals.cpp
+)
+
+
+add_global_library_for(arrow-accessor-sub_columns.global
+  arrow-accessor-sub_columns)
+
+
+target_compile_options(arrow-accessor-sub_columns.global PRIVATE
+  -Wno-assume
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(arrow-accessor-sub_columns.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  arrow-accessor-abstract
+  arrow-accessor-plain
+  arrow-accessor-sparsed
+  arrow-accessor-composite_serial
+  formats-arrow-save_load
+  formats-arrow-common
+  ydb-library-signals
+  library-formats-arrow
+  library-formats-arrow-protos
+  essentials-types-binary_json
+)
+
+target_sources(arrow-accessor-sub_columns.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/constructor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/request.cpp
+)
 

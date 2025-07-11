@@ -12,13 +12,57 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_subdirectory(protos)
+
+add_library(essentials-core-issue)
+
+
+target_link_libraries(essentials-core-issue PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  contrib-libs-protobuf
+  essentials-public-issue
+  core-issue-protos
+)
+
+target_sources(essentials-core-issue PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/issue/yql_issue.cpp
+)
+
+
+add_global_library_for(essentials-core-issue.global
+  essentials-core-issue)
+
+
+target_link_libraries(essentials-core-issue.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  contrib-libs-protobuf
+  essentials-public-issue
+  core-issue-protos
+)
+
+target_sources(essentials-core-issue.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/issue/bc236c5e583a254aee315f00e84d8633.cpp
+)
+
+
+resources(essentials-core-issue.global
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/issue/bc236c5e583a254aee315f00e84d8633.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/issue/yql_issue.txt
+  KEYS
+  yql_issue.txt
+  OPTS
+)

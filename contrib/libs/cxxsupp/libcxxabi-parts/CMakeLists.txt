@@ -12,13 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(libs-cxxsupp-libcxxabi-parts)
+
+
+target_compile_options(libs-cxxsupp-libcxxabi-parts PUBLIC
+  -nostdinc++
+)
+
+target_compile_options(libs-cxxsupp-libcxxabi-parts PRIVATE
+  -D_LIBCPP_BUILDING_LIBRARY
+  -D_LIBCXXABI_BUILDING_LIBRARY
+  -DHAVE___CXA_THREAD_ATEXIT_IMPL
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(libs-cxxsupp-libcxxabi-parts PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/cxxsupp/libcxxabi/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx
+)
+
+target_link_libraries(libs-cxxsupp-libcxxabi-parts PUBLIC
+  contrib-libs-linux-headers
+)
+
+target_sources(libs-cxxsupp-libcxxabi-parts PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/cxxsupp/libcxxabi/src/abort_message.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/cxxsupp/libcxxabi/src/cxa_demangle.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/cxxsupp/libcxxabi/src/cxa_thread_atexit.cpp
+)
 

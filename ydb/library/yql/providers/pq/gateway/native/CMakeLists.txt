@@ -12,13 +12,27 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(pq-gateway-native)
+
+
+target_link_libraries(pq-gateway-native PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  providers-common-metrics
+  providers-common-proto
+  common-token_accessor-client
+  providers-pq-cm_client
+  providers-pq-provider
+  yql-essentials-utils
+  src-client-datastreams
+  src-client-driver
+  src-client-federated_topic
+  src-client-topic
+)
+
+target_sources(pq-gateway-native PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_session.cpp
+)
 

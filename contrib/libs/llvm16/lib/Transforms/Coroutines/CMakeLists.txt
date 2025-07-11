@@ -12,13 +12,37 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(lib-Transforms-Coroutines)
+
+
+target_compile_options(lib-Transforms-Coroutines PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(lib-Transforms-Coroutines PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Transforms/Coroutines
+)
+
+target_link_libraries(lib-Transforms-Coroutines PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm16
+  libs-llvm16-include
+  llvm16-lib-Analysis
+  llvm16-lib-IR
+  llvm16-lib-Support
+  lib-Transforms-IPO
+  lib-Transforms-Scalar
+  lib-Transforms-Utils
+)
+
+target_sources(lib-Transforms-Coroutines PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Transforms/Coroutines/CoroCleanup.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Transforms/Coroutines/CoroConditionalWrapper.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Transforms/Coroutines/CoroEarly.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Transforms/Coroutines/CoroElide.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Transforms/Coroutines/CoroFrame.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Transforms/Coroutines/CoroSplit.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Transforms/Coroutines/Coroutines.cpp
+)
 

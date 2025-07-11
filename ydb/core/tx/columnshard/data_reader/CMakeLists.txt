@@ -12,13 +12,39 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_library(tx-columnshard-data_reader)
+
+
+target_link_libraries(tx-columnshard-data_reader PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-blobs_action-abstract
+  library-actors-core
+  columnshard-engines-writer
+  columnshard-export-events
+  core-kqp-compute_actor
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(tx-columnshard-data_reader PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_reader/actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_reader/fetcher.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_reader/fetching_executor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_reader/fetching_steps.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_reader/contexts.cpp
+)
+
+
+generate_enum_serilization(tx-columnshard-data_reader
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_reader/contexts.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/data_reader/contexts.h
+)

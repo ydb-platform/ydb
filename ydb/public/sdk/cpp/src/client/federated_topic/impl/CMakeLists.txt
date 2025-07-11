@@ -12,13 +12,38 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(client-federated_topic-impl)
+
+
+target_link_libraries(client-federated_topic-impl PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  sdk-library-grpc-client-v3
+  cpp-monlib-dynamic_counters
+  cpp-monlib-metrics
+  cpp-string_utils-url
+  sdk-library-persqueue-obfuscate-v3
+  api-grpc-draft
+  api-grpc
+  impl-ydb_internal-make_request
+  client-common_client-impl
+  src-client-driver
+  client-topic-impl
+  src-client-proto
+)
+
+target_sources(client-federated_topic-impl PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_read_session.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_read_session_event.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_write_session.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federation_observer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_deferred_commit.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_read_session.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_write_session.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federation_observer.h
+)
 

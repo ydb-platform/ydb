@@ -12,13 +12,34 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_library(src-client-monitoring)
+
+
+target_link_libraries(src-client-monitoring PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  src-client-proto
+  impl-ydb_internal-make_request
+  client-common_client-impl
+  src-client-driver
+)
+
+target_sources(src-client-monitoring PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/monitoring/monitoring.cpp
+)
+
+
+generate_enum_serilization(src-client-monitoring
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/monitoring/monitoring.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/monitoring/monitoring.h
+)

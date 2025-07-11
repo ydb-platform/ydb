@@ -12,13 +12,36 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_library(engines-changes-counters)
+
+
+target_link_libraries(engines-changes-counters PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-protos
+  library-actors-core
+  ydb-core-tablet_flat
+  columnshard-blobs_action-counters
+  ydb-library-signals
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(engines-changes-counters PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/counters/general.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/counters/changes.cpp
+)
+
+
+generate_enum_serilization(engines-changes-counters
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/counters/changes.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/engines/changes/counters/changes.h
+)

@@ -12,13 +12,42 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_subdirectory(selector)
+add_subdirectory(level)
+
+add_library(optimizer-lcbuckets-constructor INTERFACE)
+
+
+target_link_libraries(optimizer-lcbuckets-constructor INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  libs-apache-arrow
+  ydb-core-protos
+  core-formats-arrow
+  engines-changes-abstract
+  lcbuckets-constructor-selector
+  lcbuckets-constructor-level
+)
+
+
+add_global_library_for(optimizer-lcbuckets-constructor.global
+  optimizer-lcbuckets-constructor)
+
+
+target_link_libraries(optimizer-lcbuckets-constructor.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  libs-apache-arrow
+  ydb-core-protos
+  core-formats-arrow
+  engines-changes-abstract
+  lcbuckets-constructor-selector
+  lcbuckets-constructor-level
+)
+
+target_sources(optimizer-lcbuckets-constructor.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.cpp
+)
 

@@ -12,13 +12,26 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(fmr-yt_job_service-impl)
+
+
+target_compile_options(fmr-yt_job_service-impl PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(fmr-yt_job_service-impl PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-yt-error
+  cpp-mapreduce-client
+  cpp-mapreduce-common
+  fmr-yt_job_service-interface
+  yql-essentials-utils
+  essentials-utils-log
+)
+
+target_sources(fmr-yt_job_service-impl PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.cpp
+)
 

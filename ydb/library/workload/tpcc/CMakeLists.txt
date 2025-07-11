@@ -12,13 +12,63 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_subdirectory(ut)
+
+add_library(library-workload-tpcc)
+
+
+target_link_libraries(library-workload-tpcc PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-ftxui
+  api-grpc
+  api-protos
+  src-client-driver
+  src-client-proto
+  src-client-query
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(library-workload-tpcc PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/clean.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/common_queries.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/data_splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/histogram.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/import.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/log_backend.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/runner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/task_queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/terminal.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_delivery.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_neworder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_orderstatus.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_payment.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_simulation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_stocklevel.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/util.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcc/constants.h_serialized.h
+)
+
+
+generate_enum_serilization(library-workload-tpcc
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/runner.h
+  INCLUDE_HEADERS
+  ydb/library/workload/tpcc/runner.h
+)
+
+generate_enum_serilization(library-workload-tpcc
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/constants.h
+  GEN_HEADER
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcc/constants.h_serialized.h
+  INCLUDE_HEADERS
+  ydb/library/workload/tpcc/constants.h
+)

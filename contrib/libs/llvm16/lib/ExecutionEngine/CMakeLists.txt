@@ -12,13 +12,42 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_subdirectory(MCJIT)
+add_subdirectory(Orc)
+add_subdirectory(RuntimeDyld)
+add_subdirectory(PerfJITEvents)
+
+add_library(llvm16-lib-ExecutionEngine)
+
+
+target_compile_options(llvm16-lib-ExecutionEngine PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(llvm16-lib-ExecutionEngine PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine
+)
+
+target_link_libraries(llvm16-lib-ExecutionEngine PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm16
+  libs-llvm16-include
+  ExecutionEngine-Orc-TargetProcess
+  lib-ExecutionEngine-RuntimeDyld
+  llvm16-lib-IR
+  llvm16-lib-MC
+  llvm16-lib-Object
+  llvm16-lib-Support
+  llvm16-lib-Target
+  llvm16-lib-TargetParser
+)
+
+target_sources(llvm16-lib-ExecutionEngine PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/ExecutionEngine.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/ExecutionEngineBindings.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/GDBRegistrationListener.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/SectionMemoryManager.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/TargetSelect.cpp
+)
 

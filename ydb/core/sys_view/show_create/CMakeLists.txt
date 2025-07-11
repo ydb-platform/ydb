@@ -12,13 +12,50 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(core-sys_view-show_create)
+
+
+target_compile_options(core-sys_view-show_create PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-sys_view-show_create PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+  formats-arrow-serializer
+  core-kqp-runtime
+  ydb-core-protos
+  core-sys_view-common
+  scheme-defaults-protos
+  core-tx-schemeshard
+  core-tx-sequenceproxy
+  core-tx-tx_proxy
+  ydb-core-ydb_convert
+  library-actors-core
+  api-protos
+  public-lib-json_value
+  ydb_cli-dump-util
+  src-client-types
+  yql-essentials-ast
+  essentials-public-issue
+  essentials-sql-settings
+  essentials-sql-v1
+  v1-lexer-antlr3
+  v1-lexer-antlr3_ansi
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr3
+  v1-proto_parser-antlr3_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+)
+
+target_sources(core-sys_view-show_create PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/create_table_formatter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/create_view_formatter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/formatters_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/show_create.cpp
+)
 

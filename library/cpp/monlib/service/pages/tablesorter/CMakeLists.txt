@@ -12,13 +12,49 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_library(service-pages-tablesorter INTERFACE)
+
+
+target_link_libraries(service-pages-tablesorter INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-monlib-dynamic_counters
+)
+
+
+add_global_library_for(service-pages-tablesorter.global
+  service-pages-tablesorter)
+
+
+target_link_libraries(service-pages-tablesorter.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-monlib-dynamic_counters
+)
+
+target_sources(service-pages-tablesorter.global PRIVATE
+  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/b12ac0e7d0b2766cdd2b0361542b8b80.cpp
+)
+
+
+resources(service-pages-tablesorter.global
+  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/b12ac0e7d0b2766cdd2b0361542b8b80.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/tablesorter/resources/jquery.tablesorter.css
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/tablesorter/resources/jquery.tablesorter.js
+  KEYS
+  jquery.tablesorter.css
+  jquery.tablesorter.js
+  OPTS
+)

@@ -12,13 +12,35 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(restricted-boost-regex)
+
+
+target_compile_options(restricted-boost-regex PRIVATE
+  -DBOOST_HAS_ICU
+  -DBOOST_NO_CXX98_BINDERS
+  -DBOOST_REGEX_STANDALONE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(restricted-boost-regex PUBLIC
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/regex/include
+)
+
+target_link_libraries(restricted-boost-regex PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-icu
+  restricted-boost-assert
+  restricted-boost-config
+  restricted-boost-predef
+  restricted-boost-throw_exception
+)
+
+target_sources(restricted-boost-regex PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/regex/src/posix_api.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/regex/src/regex.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/regex/src/regex_debug.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/regex/src/static_mutex.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/regex/src/wide_posix_api.cpp
+)
 

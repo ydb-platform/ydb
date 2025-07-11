@@ -12,13 +12,55 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_library(sql-v1-highlight)
+
+
+target_link_libraries(sql-v1-highlight PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  v1-lexer-regex
+  sql-v1-reflect
+  library-cpp-resource
+)
+
+target_sources(sql-v1-highlight PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/highlight/sql_highlight_json.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/highlight/sql_highlight.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/highlight/sql_highlighter.cpp
+)
+
+
+add_global_library_for(sql-v1-highlight.global
+  sql-v1-highlight)
+
+
+target_link_libraries(sql-v1-highlight.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  v1-lexer-regex
+  sql-v1-reflect
+  library-cpp-resource
+)
+
+target_sources(sql-v1-highlight.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/highlight/6860bd7635255977a0ca9054d8d72ebc.cpp
+)
+
+
+resources(sql-v1-highlight.global
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/highlight/6860bd7635255977a0ca9054d8d72ebc.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/highlight/ut/suite.json
+  KEYS
+  suite.json
+  OPTS
+)

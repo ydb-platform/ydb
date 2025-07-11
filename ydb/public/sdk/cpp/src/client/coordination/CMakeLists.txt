@@ -12,13 +12,39 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_library(src-client-coordination)
+
+
+target_link_libraries(src-client-coordination PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  api-grpc
+  impl-ydb_internal-make_request
+  src-client-common_client
+  client-common_client-impl
+  src-client-driver
+  src-client-proto
+  src-client-types
+  client-types-status
+)
+
+target_sources(src-client-coordination PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/coordination/coordination.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/coordination/proto_accessor.cpp
+)
+
+
+generate_enum_serilization(src-client-coordination
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h
+)

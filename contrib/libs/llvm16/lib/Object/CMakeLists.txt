@@ -12,13 +12,66 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(llvm16-lib-Object)
+
+
+target_compile_options(llvm16-lib-Object PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(llvm16-lib-Object PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object
+)
+
+target_link_libraries(llvm16-lib-Object PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm16
+  libs-llvm16-include
+  llvm16-lib-BinaryFormat
+  lib-Bitcode-Reader
+  llvm16-lib-IR
+  llvm16-lib-IRReader
+  llvm16-lib-MC
+  lib-MC-MCParser
+  llvm16-lib-Support
+  llvm16-lib-TargetParser
+  llvm16-lib-TextAPI
+)
+
+target_sources(llvm16-lib-Object PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/Archive.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/ArchiveWriter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/Binary.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/BuildID.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/COFFImportFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/COFFModuleDefinition.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/COFFObjectFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/DXContainer.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/Decompressor.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/ELF.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/ELFObjectFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/Error.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/FaultMapParser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/IRObjectFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/IRSymtab.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/MachOObjectFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/MachOUniversal.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/MachOUniversalWriter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/Minidump.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/ModuleSymbolTable.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/Object.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/ObjectFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/OffloadBinary.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/RecordStreamer.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/RelocationResolver.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/SymbolSize.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/SymbolicFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/TapiFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/TapiUniversal.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/WasmObjectFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/WindowsMachineFlag.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/WindowsResource.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Object/XCOFFObjectFile.cpp
+)
 

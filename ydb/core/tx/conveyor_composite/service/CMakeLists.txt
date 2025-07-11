@@ -12,13 +12,27 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(tx-conveyor_composite-service)
+
+
+target_link_libraries(tx-conveyor_composite-service PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tx-conveyor_composite-usage
+  ydb-core-protos
+)
+
+target_sources(tx-conveyor_composite-service PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/worker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/process.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/workers_pool.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/category.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/scope.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/service/events.cpp
+)
 

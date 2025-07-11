@@ -12,13 +12,79 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(tools-dqrun-lib)
+
+
+target_compile_options(tools-dqrun-lib PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(tools-dqrun-lib PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-ytrun-lib
+  yt-gateway-file
+  yt-gateway-native
+  providers-yt-provider
+  yt-comp_nodes-dq
+  providers-yt-mkql_dq
+  providers-common-provider
+  providers-common-comp_nodes
+  providers-common-metrics
+  essentials-core-cbo
+  essentials-core-dq_integration
+  core-dq_integration-transform
+  essentials-minikql-computation
+  parser-pg_wrapper-interface
+  essentials-tools-yql_facade_run
+  essentials-sql-settings
+  essentials-utils-log
+  fq-libs-row_dispatcher
+  fq-libs-db_id_async_resolver_impl
+  libs-shared_resources-interface
+  libs-config-protos
+  fq-libs-init
+  fq-libs-actors
+  providers-clickhouse-provider
+  providers-clickhouse-actors
+  providers-ydb-provider
+  providers-ydb-comp_nodes
+  providers-ydb-actors
+  providers-s3-provider
+  providers-s3-actors
+  providers-pq-provider
+  pq-gateway-dummy
+  pq-gateway-native
+  providers-pq-async_io
+  providers-solomon-provider
+  providers-solomon-gateway
+  providers-solomon-actors
+  generic-connector-libcpp
+  providers-generic-provider
+  providers-generic-actors
+  providers-dq-interface
+  providers-dq-local_gateway
+  dq-provider-exec
+  providers-dq-provider
+  providers-dq-helper
+  providers-yt-dq_task_preprocessor
+  providers-yt-actors
+  common-token_accessor-client
+  providers-common-http_gateway
+  providers-common-db_id_async_resolver
+  yql-dq-comp_nodes
+  yql-dq-opt
+  yql-dq-transform
+  dq-actors-compute
+  dq-actors-input_transforms
+  yql-utils-bindings
+  yql-utils-actor_system
+  library-actors-core
+  library-actors-http
+)
+
+target_sources(tools-dqrun-lib PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/dqrun/lib/dqrun_lib.cpp
+)
 

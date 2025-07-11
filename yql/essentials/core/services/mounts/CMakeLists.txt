@@ -12,13 +12,86 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_library(core-services-mounts)
+
+
+target_compile_options(core-services-mounts PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-services-mounts PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  essentials-core-user_data
+  yql-essentials-core
+  essentials-utils-log
+  yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+)
+
+target_sources(core-services-mounts PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/services/mounts/yql_mounts.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/services/mounts/yql_mounts.h
+)
+
+
+add_global_library_for(core-services-mounts.global
+  core-services-mounts)
+
+
+target_compile_options(core-services-mounts.global PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-services-mounts.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  essentials-core-user_data
+  yql-essentials-core
+  essentials-utils-log
+  yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+)
+
+target_sources(core-services-mounts.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/a14b14967a1ebf018128e2ef561ab897.cpp
+)
+
+
+resources(core-services-mounts.global
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/a14b14967a1ebf018128e2ef561ab897.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/aggregate.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/window.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/id.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/sqr.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/core.yqls
+  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/walk_folders.yqls
+  KEYS
+  /lib/yql/aggregate.yqls
+  /lib/yql/window.yqls
+  /lib/yql/id.yqls
+  /lib/yql/sqr.yqls
+  /lib/yql/core.yqls
+  /lib/yql/walk_folders.yqls
+  OPTS
+)

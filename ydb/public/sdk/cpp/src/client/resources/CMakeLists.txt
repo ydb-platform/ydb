@@ -12,13 +12,50 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_library(src-client-resources)
+
+
+target_link_libraries(src-client-resources PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+)
+
+target_sources(src-client-resources PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/resources/ydb_resources.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/resources/ydb_ca.cpp
+)
+
+
+add_global_library_for(src-client-resources.global
+  src-client-resources)
+
+
+target_link_libraries(src-client-resources.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+)
+
+target_sources(src-client-resources.global PRIVATE
+  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/resources/37f684f8d65bbc0f412b90175d55eb97.cpp
+)
+
+
+resources(src-client-resources.global
+  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/resources/37f684f8d65bbc0f412b90175d55eb97.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/resources/ydb_root_ca.pem
+  KEYS
+  ydb_root_ca_dev.pem
+  OPTS
+)

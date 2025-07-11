@@ -12,13 +12,35 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(llvm16-lib-TargetParser)
+
+
+target_compile_options(llvm16-lib-TargetParser PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(llvm16-lib-TargetParser PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser
+)
+
+target_link_libraries(llvm16-lib-TargetParser PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm16
+  libs-llvm16-include
+  llvm16-lib-Support
+)
+
+target_sources(llvm16-lib-TargetParser PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/AArch64TargetParser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/ARMTargetParser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/ARMTargetParserCommon.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/CSKYTargetParser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/Host.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/LoongArchTargetParser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/RISCVTargetParser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/TargetParser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/Triple.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/TargetParser/X86TargetParser.cpp
+)
 

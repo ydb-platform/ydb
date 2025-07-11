@@ -12,13 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_subdirectory(common)
+add_subdirectory(filters)
+add_subdirectory(parsers)
+add_subdirectory(ut)
+
+add_library(libs-row_dispatcher-format_handler)
+
+
+target_compile_options(libs-row_dispatcher-format_handler PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(libs-row_dispatcher-format_handler PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  libs-actors-logging
+  libs-row_dispatcher-events
+  row_dispatcher-format_handler-common
+  row_dispatcher-format_handler-filters
+  row_dispatcher-format_handler-parsers
+  library-actors-core
+  library-actors-util
+  yql-dq-common
+)
+
+target_sources(libs-row_dispatcher-format_handler PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.cpp
+)
 

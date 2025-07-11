@@ -12,13 +12,30 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_subdirectory(impl)
+
+add_library(src-client-query)
+
+
+target_link_libraries(src-client-query PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  impl-ydb_internal-make_request
+  impl-ydb_internal-kqp_session_common
+  impl-ydb_internal-session_pool
+  impl-ydb_internal-retry
+  src-client-common_client
+  src-client-driver
+  client-query-impl
+  src-client-result
+  client-types-operation
+)
+
+target_sources(src-client-query PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/query/client.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/query/query.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/query/stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/query/tx.cpp
+)
 

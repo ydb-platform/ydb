@@ -12,13 +12,62 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
+add_library(reader-common_reader-iterator)
+
+
+target_link_libraries(reader-common_reader-iterator PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-engines-scheme
+  arrow-accessor-sub_columns
+  yql-essentials-minikql
+  core-util-evlog
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(reader-common_reader-iterator PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetched_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetching.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/iterator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.cpp
+)
+
+
+generate_enum_serilization(reader-common_reader-iterator
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h
+)
+
+add_global_library_for(reader-common_reader-iterator.global
+  reader-common_reader-iterator)
+
+
+target_link_libraries(reader-common_reader-iterator.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-engines-scheme
+  arrow-accessor-sub_columns
+  yql-essentials-minikql
+  core-util-evlog
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(reader-common_reader-iterator.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.cpp
+)
 

@@ -12,13 +12,61 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_subdirectory(aggregation)
+
+add_library(tx-columnshard-counters)
+
+
+target_link_libraries(tx-columnshard-counters PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-monlib-dynamic_counters
+  columnshard-counters-aggregation
+  ydb-library-signals
+  ydb-core-base
+  library-actors-core
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(tx-columnshard-counters PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/background_controller.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/counters_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/blobs_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/column_tables.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/engine_logs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/indexation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/req_tracer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/portions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/writes_monitor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/portion_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/duplicate_filtering.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/error_collector.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/counters/columnshard.h_serialized.h
+)
+
+
+generate_enum_serilization(tx-columnshard-counters
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.h
+  GEN_HEADER
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/counters/columnshard.h_serialized.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/counters/columnshard.h
+)
+
+generate_enum_serilization(tx-columnshard-counters
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/counters/scan.h
+)

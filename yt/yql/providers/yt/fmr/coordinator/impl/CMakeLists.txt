@@ -12,13 +12,78 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_library(fmr-coordinator-impl)
+
+
+target_compile_options(fmr-coordinator-impl PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(fmr-coordinator-impl PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-random_provider
+  library-cpp-resource
+  cpp-threading-future
+  cpp-yson-node
+  cpp-mapreduce-common
+  fmr-coordinator-interface
+  coordinator-yt_coordinator_service-interface
+  coordinator-yt_coordinator_service-impl
+  fmr-gc_service-impl
+  yql-essentials-utils
+  essentials-utils-log
+)
+
+target_sources(fmr-coordinator-impl PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_partitioner.cpp
+)
+
+
+add_global_library_for(fmr-coordinator-impl.global
+  fmr-coordinator-impl)
+
+
+target_compile_options(fmr-coordinator-impl.global PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(fmr-coordinator-impl.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-random_provider
+  library-cpp-resource
+  cpp-threading-future
+  cpp-yson-node
+  cpp-mapreduce-common
+  fmr-coordinator-interface
+  coordinator-yt_coordinator_service-interface
+  coordinator-yt_coordinator_service-impl
+  fmr-gc_service-impl
+  yql-essentials-utils
+  essentials-utils-log
+)
+
+target_sources(fmr-coordinator-impl.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/b15dd0b0d2c9d5dc8728d90e15e0b6b6.cpp
+)
+
+
+resources(fmr-coordinator-impl.global
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/b15dd0b0d2c9d5dc8728d90e15e0b6b6.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/default_operation_settings.yson
+  KEYS
+  default_operation_settings.yson
+  OPTS
+)

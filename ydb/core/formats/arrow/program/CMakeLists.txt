@@ -12,13 +12,114 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
+add_library(formats-arrow-program)
+
+
+target_compile_options(formats-arrow-program PRIVATE
+  -Wno-unused-parameter
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_include_directories(formats-arrow-program PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse
+)
+
+target_link_libraries(formats-arrow-program PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-library-conclusion
+  library-actors-core
+  ydb-library-services
+  arrow-accessor-sub_columns
+  core-arrow_kernels-registry
+  core-arrow_kernels-request
+  minikql-comp_nodes-llvm16
+  essentials-minikql-computation
+  minikql-invoke_builtins-llvm16
+  ydb-library-arrow_clickhouse
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(formats-arrow-program PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/stream_logic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/visitor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/header.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/execution.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/graph_optimization.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/graph_execute.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/original.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/collection.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/functions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/aggr_keys.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/aggr_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/projection.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/assign_const.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/assign_internal.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/custom_registry.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/reserve.cpp
+)
+
+
+generate_enum_serilization(formats-arrow-program
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/abstract.h
+  INCLUDE_HEADERS
+  ydb/core/formats/arrow/program/abstract.h
+)
+
+generate_enum_serilization(formats-arrow-program
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/aggr_common.h
+  INCLUDE_HEADERS
+  ydb/core/formats/arrow/program/aggr_common.h
+)
+
+generate_enum_serilization(formats-arrow-program
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/execution.h
+  INCLUDE_HEADERS
+  ydb/core/formats/arrow/program/execution.h
+)
+
+add_global_library_for(formats-arrow-program.global
+  formats-arrow-program)
+
+
+target_compile_options(formats-arrow-program.global PRIVATE
+  -Wno-unused-parameter
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_include_directories(formats-arrow-program.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse
+)
+
+target_link_libraries(formats-arrow-program.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-library-conclusion
+  library-actors-core
+  ydb-library-services
+  arrow-accessor-sub_columns
+  core-arrow_kernels-registry
+  core-arrow_kernels-request
+  minikql-comp_nodes-llvm16
+  essentials-minikql-computation
+  minikql-invoke_builtins-llvm16
+  ydb-library-arrow_clickhouse
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(formats-arrow-program.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/kernel_logic.cpp
+)
 

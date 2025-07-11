@@ -12,13 +12,64 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(antlr_ast-gen-v1_antlr4)
 
+
+target_link_libraries(antlr_ast-gen-v1_antlr4 PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-antlr4_cpp_runtime
+)
+
+target_sources(antlr_ast-gen-v1_antlr4 PRIVATE
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Visitor.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4BaseVisitor.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Visitor.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4BaseVisitor.h
+)
+
+
+copy_file(
+  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/antlr_ast/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg
+)
+
+copy_file(
+  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/antlr_ast/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg
+)
+
+run_antlr4(
+  OUTPUT
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Visitor.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Visitor.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4BaseVisitor.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4BaseVisitor.h
+  WORKING_DIRECTORY
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4
+  ANTLER_ARGS
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4.g
+  -no-listener
+  -visitor
+  -package
+  NALADefaultAntlr4
+  -lib
+  .
+)
+set(GRAMMAR_STRING_CORE_SINGLE "~(['\\\\]) | (BACKSLASH .)")
+set(GRAMMAR_STRING_CORE_DOUBLE "~([\"\\\\]) | (BACKSLASH .)")
+set(GRAMMAR_MULTILINE_COMMENT_CORE ".")
+
+configure_file(
+  ${CMAKE_SOURCE_DIR}/yql/essentials/sql/v1/SQLv1Antlr4.g.in
+  ${CMAKE_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4.g
+)

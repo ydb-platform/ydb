@@ -12,13 +12,29 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_subdirectory(ut)
+
+add_library(actors-core-harmonizer)
+
+
+target_link_libraries(actors-core-harmonizer PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-actors-util
+  library-actors-protos
+  ydb-library-services
+  library-cpp-logger
+  library-cpp-lwtrace
+  cpp-monlib-dynamic_counters
+  library-cpp-time_provider
+)
+
+target_sources(actors-core-harmonizer PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer/cpu_consumption.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer/pool.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer/shared_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer/waiting_stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer/harmonizer.cpp
+)
 

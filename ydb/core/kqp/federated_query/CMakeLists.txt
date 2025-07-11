@@ -12,13 +12,38 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_subdirectory(ut)
+
+add_library(core-kqp-federated_query)
+
+
+target_compile_options(core-kqp-federated_query PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-kqp-federated_query PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+  fq-libs-grpc
+  fq-libs-db_id_async_resolver_impl
+  library-db_pool-protos
+  ydb-library-logger
+  providers-common-http_gateway
+  generic-connector-libcpp
+  providers-s3-actors_factory
+  pq-gateway-native
+  providers-solomon-gateway
+  core-dq_integration-transform
+  essentials-public-issue
+  yt-gateway-native
+  yt-lib-yt_download
+  providers-yt-mkql_dq
+)
+
+target_sources(core-kqp-federated_query PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/federated_query/kqp_federated_query_actors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/federated_query/kqp_federated_query_helpers.cpp
+)
 

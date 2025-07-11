@@ -12,13 +12,75 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_library(apps-etcd_proxy-service)
+
+
+target_link_libraries(apps-etcd_proxy-service PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  src-client-driver
+  src-client-query
+  etcd-grpc
+  library-grpc-server
+  ydb-core-grpc_services
+  core-grpc_services-base
+  core-kesus-tablet
+  ydb-core-keyvalue
+  library-cpp-resource
+)
+
+target_sources(apps-etcd_proxy-service PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_base_init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_gate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_grpc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_lease.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_shared.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/etcd_watch.cpp
+)
+
+
+add_global_library_for(apps-etcd_proxy-service.global
+  apps-etcd_proxy-service)
+
+
+target_link_libraries(apps-etcd_proxy-service.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  src-client-driver
+  src-client-query
+  etcd-grpc
+  library-grpc-server
+  ydb-core-grpc_services
+  core-grpc_services-base
+  core-kesus-tablet
+  ydb-core-keyvalue
+  library-cpp-resource
+)
+
+target_sources(apps-etcd_proxy-service.global PRIVATE
+  ${PROJECT_BINARY_DIR}/ydb/apps/etcd_proxy/service/1a7d02afaa604f1e97abeff27ebf6647.cpp
+)
+
+
+resources(apps-etcd_proxy-service.global
+  ${PROJECT_BINARY_DIR}/ydb/apps/etcd_proxy/service/1a7d02afaa604f1e97abeff27ebf6647.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/create.sql
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/leases.sql
+  ${PROJECT_SOURCE_DIR}/ydb/apps/etcd_proxy/service/revision.sql
+  KEYS
+  create.sql
+  leases.sql
+  revision.sql
+  OPTS
+)

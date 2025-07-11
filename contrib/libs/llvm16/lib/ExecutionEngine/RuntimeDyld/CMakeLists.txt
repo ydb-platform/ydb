@@ -12,13 +12,37 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(lib-ExecutionEngine-RuntimeDyld)
+
+
+target_compile_options(lib-ExecutionEngine-RuntimeDyld PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(lib-ExecutionEngine-RuntimeDyld PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld
+)
+
+target_link_libraries(lib-ExecutionEngine-RuntimeDyld PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm16
+  libs-llvm16-include
+  llvm16-lib-IR
+  llvm16-lib-MC
+  llvm16-lib-Object
+  llvm16-lib-Support
+  llvm16-lib-TargetParser
+)
+
+target_sources(lib-ExecutionEngine-RuntimeDyld PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld/JITSymbol.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld/RTDyldMemoryManager.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld/RuntimeDyldCOFF.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld/RuntimeDyldChecker.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld/RuntimeDyldELF.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld/RuntimeDyldMachO.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld/Targets/RuntimeDyldELFMips.cpp
+)
 

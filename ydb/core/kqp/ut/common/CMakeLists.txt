@@ -12,13 +12,47 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(kqp-ut-common)
+
+
+target_compile_options(kqp-ut-common PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(kqp-ut-common PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-common
+  core-kqp-federated_query
+  ydb-core-testlib
+  providers-s3-actors_factory
+  essentials-public-udf
+  string_udf
+  math_udf
+  unicode_udf
+  essentials-utils-backtrace
+  public-lib-yson_value
+  tx-columnshard-test_helper
+  src-client-draft
+  src-client-query
+  src-client-proto
+  src-client-scheme
+  src-client-table
+  src-client-topic
+  contrib-libs-highwayhash
+)
+
+target_sources(kqp-ut-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/json2_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/kqp_ut_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/re2_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/string_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/columnshard.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/datetime2_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/math_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/unicode_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/digest_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/kqp_ut_common.h
+)
 

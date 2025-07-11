@@ -12,13 +12,52 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(library-profiling-resource_tracker)
+
+
+target_compile_options(library-profiling-resource_tracker PRIVATE
+  -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
+  -Wparentheses
+  -Wno-logical-op-parentheses
+  -Wno-bitwise-op-parentheses
+)
+
+target_link_libraries(library-profiling-resource_tracker PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yt-library-profiling
+  yt_proto-yt-core
+)
+
+target_sources(library-profiling-resource_tracker PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/resource_tracker/config.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/resource_tracker/resource_tracker.cpp
+)
+
+
+add_global_library_for(library-profiling-resource_tracker.global
+  library-profiling-resource_tracker)
+
+
+target_compile_options(library-profiling-resource_tracker.global PRIVATE
+  -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
+  -Wparentheses
+  -Wno-logical-op-parentheses
+  -Wno-bitwise-op-parentheses
+)
+
+target_link_libraries(library-profiling-resource_tracker.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yt-library-profiling
+  yt_proto-yt-core
+)
+
+target_sources(library-profiling-resource_tracker.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/resource_tracker/configure_resource_tracker.cpp
+)
 

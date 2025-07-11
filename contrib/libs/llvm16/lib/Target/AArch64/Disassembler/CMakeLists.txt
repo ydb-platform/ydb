@@ -12,9 +12,34 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(Target-AArch64-Disassembler)
+
+
+target_compile_options(Target-AArch64-Disassembler PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(Target-AArch64-Disassembler PRIVATE
+  ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/AArch64
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/AArch64
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/AArch64/Disassembler
+)
+
+target_link_libraries(Target-AArch64-Disassembler PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm16
+  libs-llvm16-include
+  llvm16-lib-MC
+  lib-MC-MCDisassembler
+  llvm16-lib-Support
+  Target-AArch64-MCTargetDesc
+  Target-AArch64-TargetInfo
+  Target-AArch64-Utils
+)
+
+target_sources(Target-AArch64-Disassembler PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/AArch64/Disassembler/AArch64Disassembler.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/AArch64/Disassembler/AArch64ExternalSymbolizer.cpp
+)
 

@@ -12,13 +12,62 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_library(ydb-cpp-sdk-client-topic)
+
+
+target_link_libraries(ydb-cpp-sdk-client-topic PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  api-grpc
+  api-protos
+  cpp-streams-zstd
+)
+
+target_sources(ydb-cpp-sdk-client-topic PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/counters.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/events_common.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/executor.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/retry_policy.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_events.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h
+)
+
+
+generate_enum_serilization(ydb-cpp-sdk-client-topic
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h
+)
+
+generate_enum_serilization(ydb-cpp-sdk-client-topic
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h
+)
+
+generate_enum_serilization(ydb-cpp-sdk-client-topic
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h
+)
+
+generate_enum_serilization(ydb-cpp-sdk-client-topic
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_events.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_events.h
+)

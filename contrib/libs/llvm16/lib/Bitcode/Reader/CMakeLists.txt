@@ -12,13 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(lib-Bitcode-Reader)
+
+
+target_compile_options(lib-Bitcode-Reader PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(lib-Bitcode-Reader PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Bitcode/Reader
+)
+
+target_link_libraries(lib-Bitcode-Reader PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm16
+  libs-llvm16-include
+  lib-Bitstream-Reader
+  llvm16-lib-IR
+  llvm16-lib-Support
+  llvm16-lib-TargetParser
+)
+
+target_sources(lib-Bitcode-Reader PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Bitcode/Reader/BitReader.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Bitcode/Reader/BitcodeAnalyzer.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Bitcode/Reader/BitcodeReader.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Bitcode/Reader/MetadataLoader.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Bitcode/Reader/ValueList.cpp
+)
 

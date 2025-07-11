@@ -12,13 +12,51 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_library(sql-v1-reflect)
+
+
+target_link_libraries(sql-v1-reflect PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-case_insensitive_string
+  library-cpp-resource
+)
+
+target_sources(sql-v1-reflect PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/reflect/sql_reflect.cpp
+)
+
+
+add_global_library_for(sql-v1-reflect.global
+  sql-v1-reflect)
+
+
+target_link_libraries(sql-v1-reflect.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-case_insensitive_string
+  library-cpp-resource
+)
+
+target_sources(sql-v1-reflect.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/reflect/c5c6e8218c03924468ead58ac2b74fd8.cpp
+)
+
+
+resources(sql-v1-reflect.global
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/reflect/c5c6e8218c03924468ead58ac2b74fd8.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/SQLv1Antlr4.g.in
+  KEYS
+  SQLv1Antlr4.g.in
+  OPTS
+)

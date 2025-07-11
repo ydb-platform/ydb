@@ -12,13 +12,32 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(yt-fmr-fmr_tool_lib)
+
+
+target_compile_options(yt-fmr-fmr_tool_lib PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(yt-fmr-fmr_tool_lib PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yt-gateway-fmr
+  fmr-coordinator-client
+  fmr-coordinator-impl
+  coordinator-yt_coordinator_service-file
+  coordinator-yt_coordinator_service-impl
+  fmr-gc_service-impl
+  fmr-job-impl
+  fmr-job_factory-impl
+  table_data_service-local-impl
+  fmr-worker-impl
+  fmr-yt_job_service-file
+  fmr-yt_job_service-impl
+)
+
+target_sources(yt-fmr-fmr_tool_lib PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/fmr_tool_lib/yql_yt_fmr_initializer.cpp
+)
 

@@ -12,13 +12,50 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(client-topic-impl)
+
+
+target_link_libraries(client-topic-impl PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  sdk-library-grpc-client-v3
+  cpp-monlib-dynamic_counters
+  cpp-monlib-metrics
+  cpp-string_utils-url
+  sdk-library-persqueue-obfuscate-v3
+  api-grpc-draft
+  api-grpc
+  impl-ydb_internal-make_request
+  client-common_client-impl
+  src-client-driver
+  client-topic-codecs
+  client-topic-common
+  ydb-cpp-sdk-client-topic
+  src-client-proto
+)
+
+target_sources(client-topic-impl PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/deferred_commit.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/direct_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/event_handlers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/offsets_collector.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/proto_accessor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/read_session_event.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/read_session.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/topic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/transaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/write_session_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/write_session.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/common.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/counters_logger.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/direct_reader.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.ipp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/read_session.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/write_session_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/write_session.h
+)
 

@@ -12,13 +12,37 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(ydb_cli-dump-util)
+
+
+target_link_libraries(ydb_cli-dump-util PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  common
+  src-client-draft
+  src-client-scheme
+  src-client-table
+  client-types-status
+  proto_ast-gen-v1
+  proto_ast-gen-v1_proto_split
+  essentials-sql-settings
+  sql-v1-format
+  sql-v1-proto_parser
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  v1-lexer-antlr3
+  v1-lexer-antlr3_ansi
+  v1-proto_parser-antlr3
+  v1-proto_parser-antlr3_ansi
+  cpp-protobuf-util
+)
+
+target_sources(ydb_cli-dump-util PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/util/query_utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/util/util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/util/view_utils.cpp
+)
 

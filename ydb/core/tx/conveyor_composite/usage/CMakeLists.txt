@@ -12,13 +12,35 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_library(tx-conveyor_composite-usage)
+
+
+target_link_libraries(tx-conveyor_composite-usage PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-actors-core
+  services-metadata-request
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(tx-conveyor_composite-usage PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/usage/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/usage/config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/usage/service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/usage/common.cpp
+)
+
+
+generate_enum_serilization(tx-conveyor_composite-usage
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/conveyor_composite/usage/common.h
+  INCLUDE_HEADERS
+  ydb/core/tx/conveyor_composite/usage/common.h
+)

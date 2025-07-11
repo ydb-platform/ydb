@@ -12,13 +12,28 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(types-credentials-oauth2_token_exchange)
+
+
+target_link_libraries(types-credentials-oauth2_token_exchange PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-jwt-cpp
+  library-cpp-cgiparam
+  cpp-http-misc
+  cpp-http-simple
+  library-cpp-json
+  library-cpp-retry
+  cpp-string_utils-base64
+  library-cpp-uri
+  src-client-types
+  client-types-credentials
+)
+
+target_sources(types-credentials-oauth2_token_exchange PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange/credentials.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange/from_file.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange/jwt_token_source.cpp
+)
 

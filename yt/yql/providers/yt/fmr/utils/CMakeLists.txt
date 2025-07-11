@@ -12,13 +12,32 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(yt-fmr-utils)
+
+
+target_compile_options(yt-fmr-utils PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(yt-fmr-utils PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-http-io
+  cpp-mapreduce-client
+  cpp-mapreduce-interface
+  yt-fmr-request_options
+  fmr-yt_job_service-interface
+  fmr-table_data_service-interface
+  providers-yt-codec
+  yql-essentials-utils
+)
+
+target_sources(yt-fmr-utils PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_client.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_log_context.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.cpp
+)
 

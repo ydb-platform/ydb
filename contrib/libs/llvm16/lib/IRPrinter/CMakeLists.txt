@@ -12,13 +12,28 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(llvm16-lib-IRPrinter)
+
+
+target_compile_options(llvm16-lib-IRPrinter PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(llvm16-lib-IRPrinter PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/IRPrinter
+)
+
+target_link_libraries(llvm16-lib-IRPrinter PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm16
+  libs-llvm16-include
+  llvm16-lib-Analysis
+  llvm16-lib-IR
+  llvm16-lib-Support
+)
+
+target_sources(llvm16-lib-IRPrinter PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/IRPrinter/IRPrintingPasses.cpp
+)
 

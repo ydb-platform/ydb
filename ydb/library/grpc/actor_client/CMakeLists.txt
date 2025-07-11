@@ -12,13 +12,23 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(library-grpc-actor_client INTERFACE)
+
+
+target_link_libraries(library-grpc-actor_client INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-actors-core
+  ydb-core-util
+  cpp-digest-crc32c
+  sdk-library-grpc-client-v3
+  ydb-library-services
+)
+
+target_sources(library-grpc-actor_client INTERFACE
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/actor_client/grpc_service_cache.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/actor_client/grpc_service_client.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/actor_client/grpc_service_settings.h
+)
 

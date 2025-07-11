@@ -12,13 +12,68 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_library(contrib-libs-libssh2)
+
+
+target_compile_options(contrib-libs-libssh2 PRIVATE
+  -DBlowfish_decipher=__libssh2_Blowfish_decipher
+  -DBlowfish_encipher=__libssh2_Blowfish_encipher
+  -DBlowfish_expand0state=__libssh2_Blowfish_expand0state
+  -DBlowfish_expandstate=__libssh2_Blowfish_expandstate
+  -DBlowfish_initstate=__libssh2_Blowfish_initstate
+  -DBlowfish_stream2word=__libssh2_Blowfish_stream2word
+  -Dagent_ops_unix=__libssh2_agent_ops_unix
+  -Dbcrypt_pbkdf=__libssh2_bcrypt_pbkdf
+  -Dblf_cbc_decrypt=__libssh2_blf_cbc_decrypt
+  -Dblf_cbc_encrypt=__libssh2_blf_cbc_encrypt
+  -Dblf_dec=__libssh2_blf_dec
+  -Dblf_ecb_decrypt=__libssh2_blf_ecb_decrypt
+  -Dblf_ecb_encrypt=__libssh2_blf_ecb_encrypt
+  -Dblf_enc=__libssh2_blf_enc
+  -Dblf_key=__libssh2_blf_key
+  -Dread_openssh_private_key_from_memory=__libssh2_read_openssh_private_key_from_memory
+  -DHAVE_CONFIG_H
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(contrib-libs-libssh2 PUBLIC
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/include
+)
+
+target_include_directories(contrib-libs-libssh2 PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src
+)
+
+target_link_libraries(contrib-libs-libssh2 PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-openssl
+  contrib-libs-zlib
+)
+
+target_sources(contrib-libs-libssh2 PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/agent.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/agent_win.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/bcrypt_pbkdf.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/blowfish.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/channel.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/comp.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/crypt.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/global.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/hostkey.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/keepalive.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/kex.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/knownhost.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/mac.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/misc.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/openssl.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/packet.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/pem.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/publickey.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/scp.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/session.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/sftp.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/transport.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/userauth.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libssh2/src/version.c
+)
 

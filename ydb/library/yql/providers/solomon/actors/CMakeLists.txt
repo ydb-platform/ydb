@@ -12,13 +12,38 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-endif()
+add_subdirectory(ut)
+
+add_library(providers-solomon-actors)
+
+
+target_compile_options(providers-solomon-actors PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(providers-solomon-actors PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-json-easy_parse
+  monlib-encode-json
+  cpp-protobuf-util
+  dq-actors-compute
+  common-token_accessor-client
+  providers-solomon-events
+  providers-solomon-proto
+  providers-solomon-scheme
+  solomon-solomon_accessor-client
+  client-types-credentials
+  essentials-public-types
+  essentials-public-udf
+  essentials-utils-log
+)
+
+target_sources(providers-solomon-actors PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/actors/dq_solomon_actors_util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.cpp
+)
 

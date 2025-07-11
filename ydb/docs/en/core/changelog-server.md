@@ -8,7 +8,7 @@ Release date: 2025.
 
 #### Functionality
 
-* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector similarity search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./reference/configuration/index.md), but rolling back to previous {{ ydb-short-name }} versions won't be possible after this.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector similarity search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./reference/configuration/index.md). Attention! After enabling the flag, rollback to previous versions of {{ ydb-short-name }} is not possible.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
 * [Implemented] `BATCH UPDATE` and `BATCH DELETE` statements, allowing the application of changes to large row-oriented tables outside of transactional constraints.
 * Added [configuration mechanism V2](./devops/configuration-management/configuration-v2/config-overview) that simplifies the deployment of new {{ ydb-short-name }} clusters and further work with them. [Comparison](./devops/configuration-management/compare-configs) of configuration mechanisms V1 and V2.

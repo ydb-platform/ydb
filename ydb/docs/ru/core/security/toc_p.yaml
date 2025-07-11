@@ -15,4 +15,4 @@ items:
 - name: Краткая запись управления доступом
   href: short-access-control-notation.md
 - name: Очистка данных с диска
-  href: data-erasure.md
+  href: shred.md

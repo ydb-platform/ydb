@@ -11,5 +11,5 @@ items:
   href: security_config.md
 - name: Настройка TLS
   href: tls.md
-- name: data_erasure_config
-  href: data_erasure_config.md
+- name: shred_config
+  href: shred_config.md

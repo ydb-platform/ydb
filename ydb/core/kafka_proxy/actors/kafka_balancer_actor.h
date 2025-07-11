@@ -61,10 +61,10 @@ extern const TString UPDATE_GROUP_STATE;
 extern const TString CHECK_MASTER_ALIVE;
 
 struct TGroupStatus {
-    bool Exists;
-    ui64 Generation;
-    ui64 LastSuccessGeneration;
-    ui64 State;
+    bool Exists = false;
+    ui64 Generation = 0;
+    ui64 LastSuccessGeneration = std::numeric_limits<ui64>::max();
+    ui64 State = 0;
     TString MasterId;
     TInstant LastHeartbeat;
     TString ProtocolName;

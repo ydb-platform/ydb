@@ -46,14 +46,19 @@ VALUES
 
 ## Шаг 3. Построение векторного индекса {#step3}
 
-Для создания векторного индекса `Index` на таблице `Vectors` нужно использовать команду:
+Для создания векторного индекса `EmbeddingIndex` на таблице `Vectors` нужно использовать команду:
 
 ```yql
 ALTER TABLE Vectors
-ADD INDEX Index
+ADD INDEX EmbeddingIndex
 GLOBAL USING vector_kmeans_tree 
 ON (embedding)
-WITH (distance=cosine, vector_type="float", vector_dimension=5, levels=1, clusters=2)
+WITH (
+  distance=cosine, 
+  vector_type="float", 
+  vector_dimension=5, 
+  levels=1, 
+  clusters=2)
 ```
 
 Данная команда создаёт индекс типа `vector_kmeans_tree`. Подробнее об индексах такого типа вы можете прочитать [здесь](../../dev/vector-indexes.md#kmeans-tree-type). В данном модельном примере указан параметр `clusters=2` (разбиение множества векторов при построении индекса на два кластера на каждом уровне); для реальных данных рекомендованы значения в диапазоне от 64 до 512.
@@ -93,17 +98,19 @@ id CosineDistance
 
 ## Шаг 5. Поиск в таблице с использованием векторного индекса {#step5}
 
-Для поиска 3-х ближайших соседей вектора `[1.f, 1.f, 1.f, 1.f, 4.f]` с использованием индекса `Index`, который был создан на [шаге 3](#step3), нужно выполнить запрос:
+Для поиска 3-х ближайших соседей вектора `[1.f, 1.f, 1.f, 1.f, 4.f]` с использованием индекса `EmbeddingIndex`, который был создан на [шаге 3](#step3), нужно выполнить запрос:
 
 ```yql
 $K = 3;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.f, 1.f, 1.f, 1.f, 4.f]);
 
 SELECT id, Knn::CosineDistance(embedding, $TargetEmbedding) As CosineDistance
-FROM Vectors VIEW Index
+FROM Vectors VIEW EmbeddingIndex
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
+
+Обратите внимание, что в данном запросе после названия таблицы указано, что отбор записей в ней следует производить с помощью векторного индекса: `FROM Vectors VIEW EmbeddingIndex`.
 
 Результат выполнения запроса:
 

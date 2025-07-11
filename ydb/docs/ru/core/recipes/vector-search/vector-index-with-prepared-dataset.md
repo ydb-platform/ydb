@@ -117,7 +117,12 @@ ALTER TABLE wikipedia
 ADD INDEX idx_vector
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
-WITH (distance=cosine, vector_type="float", vector_dimension=768, levels=1, clusters=200);
+WITH (
+  distance=cosine, 
+  vector_type="float", 
+  vector_dimension=768, 
+  levels=1, 
+  clusters=200);
 ```
 
 Данный запрос создаёт индекс типа `vector_kmeans_tree`. Подробнее о индексах такого типа вы можете прочитать [здесь](../../dev/vector-indexes.md#kmeans-tree-type).
@@ -126,13 +131,13 @@ WITH (distance=cosine, vector_type="float", vector_dimension=768, levels=1, clus
 
 ## Шаг 5. Поиск в таблице без использования векторного индекса {#step5}
 
-На данном шаге выполняется точный поиск 3-х ближайших соседей для заданного вектора без использования индекса. Предполагается, что входной текст для поиска в таблице `wikipedia` преобразован в данный вектор с помощью модели-энкодера (например, [Embed от cohere.com](https://cohere.com/embed)).
+На данном шаге выполняется точный поиск 3-х ближайших соседей для заданного вектора **без** использования индекса. Предполагается, что входной текст для поиска в таблице `wikipedia` преобразован в данный вектор с помощью модели-энкодера ([Embed от cohere.com](https://cohere.com/embed)).
 
 Сначала целевой вектор кодируется в бинарное представление с помощью [`Knn::ToBinaryStringFloat`](../../yql/reference/udf/list/knn#functions-convert).
 
 Затем вычисляется косинусное расстояние от `embedding` каждой строки до целевого вектора.
 
-Записи сортируются по увеличению расстояния, выбираются три ближайших.
+Записи сортируются по возрастанию расстояния, и выбираются три (`$K`) первых записей, которые являются ближайшими.
 
 ```yql
 $K = 3;

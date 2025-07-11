@@ -1265,6 +1265,201 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         Y_UNUSED(client);
     }
 
+    class TTabletStuckOnStop
+        : public TActor<TTabletStuckOnStop>
+        , public NTabletFlatExecutor::TTabletExecutedFlat
+    {
+    public:
+        TTabletStuckOnStop(const TActorId& tablet, TTabletStorageInfo* info)
+            : TActor(&TThis::StateInit)
+            , TTabletExecutedFlat(info, tablet, nullptr)
+        {}
+
+    private:
+        void DefaultSignalTabletActive(const TActorContext&) override {
+            // must be empty
+        }
+
+        void OnActivateExecutor(const TActorContext& ctx) override {
+            Become(&TThis::StateWork);
+            SignalTabletActive(ctx);
+        }
+
+        void OnDetach(const TActorContext& ctx) override {
+            return Die(ctx);
+        }
+
+        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext& ctx) override {
+            return Die(ctx);
+        }
+
+        void OnTabletStop(TEvTablet::TEvTabletStop::TPtr&, const TActorContext&) override {
+            Cerr << "... received OnTabletStop" << Endl;
+            // refuse to stop
+        }
+
+        STFUNC(StateInit) {
+            StateInitImpl(ev, SelfId());
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+            default:
+                HandleDefaultEvents(ev, SelfId());
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TestPipeReconnectAfterRestartWithoutRetries) {
+        TTestBasicRuntime runtime(3);
+        SetupTabletServices(runtime);
+
+        StartTestTablet(runtime,
+            CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
+            [](const TActorId & tablet, TTabletStorageInfo* info) {
+                return new TTabletStuckOnStop(tablet, info);
+            },
+            1);
+
+        {
+            Cerr << "... waiting for boot1" << Endl;
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+            runtime.DispatchEvents(options);
+        }
+
+        auto sender1 = runtime.AllocateEdgeActor();
+        auto client1 = runtime.Register(NTabletPipe::CreateClient(sender1, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
+            .ExpectShutdown = true,
+            .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
+        }));
+        Y_UNUSED(client1);
+
+        ui32 gen1;
+        {
+            Cerr << "... waiting for connect1" << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender1);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+            gen1 = msg->Generation;
+        }
+
+        StartTestTablet(runtime,
+            CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
+            [](const TActorId & tablet, TTabletStorageInfo* info) {
+                return new TTabletStuckOnStop(tablet, info);
+            },
+            2);
+
+        {
+            Cerr << "... waiting for boot2" << Endl;
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+            runtime.DispatchEvents(options);
+        }
+
+        {
+            Cerr << "... waiting for client shutting down notification" << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientShuttingDown>(sender1);
+            UNIT_ASSERT(ev);
+        }
+
+        auto sender2 = runtime.AllocateEdgeActor();
+        auto client2 = runtime.Register(NTabletPipe::CreateClient(sender2, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
+            .ExpectShutdown = true,
+            .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
+        }));
+        Y_UNUSED(client2);
+
+        ui32 gen2;
+        {
+            Cerr << "... waiting for connect2" << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender2);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+            gen2 = msg->Generation;
+        }
+
+        UNIT_ASSERT_C(gen2 > gen1, "gen1: " << gen1 << ", gen2: " << gen2);
+    }
+
+    Y_UNIT_TEST(TestPipeReconnectAfterKillWithoutRetries) {
+        TTestBasicRuntime runtime(3);
+        SetupTabletServices(runtime);
+
+        auto tablet1 = StartTestTablet(runtime,
+            CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
+            [](const TActorId & tablet, TTabletStorageInfo* info) {
+                return new TTabletStuckOnStop(tablet, info);
+            },
+            1);
+
+        {
+            Cerr << "... waiting for boot1" << Endl;
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+            runtime.DispatchEvents(options);
+        }
+
+        auto sender1 = runtime.AllocateEdgeActor();
+        auto client1 = runtime.Register(NTabletPipe::CreateClient(sender1, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
+            .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
+        }));
+        Y_UNUSED(client1);
+
+        ui32 gen1;
+        {
+            Cerr << "... waiting for connect1" << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender1);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+            gen1 = msg->Generation;
+        }
+
+        runtime.Send(tablet1, TActorId(), new TEvents::TEvPoison);
+
+        StartTestTablet(runtime,
+            CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
+            [](const TActorId & tablet, TTabletStorageInfo* info) {
+                return new TTabletStuckOnStop(tablet, info);
+            },
+            2);
+
+        {
+            Cerr << "... waiting for boot2" << Endl;
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+            runtime.DispatchEvents(options);
+        }
+
+        {
+            Cerr << "... waiting for client destroyed notification" << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientDestroyed>(sender1);
+            UNIT_ASSERT(ev);
+        }
+
+        auto sender2 = runtime.AllocateEdgeActor();
+        auto client2 = runtime.Register(NTabletPipe::CreateClient(sender2, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
+            .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
+        }));
+        Y_UNUSED(client2);
+
+        ui32 gen2;
+        {
+            Cerr << "... waiting for connect2" << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender2);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+            gen2 = msg->Generation;
+        }
+
+        UNIT_ASSERT_C(gen2 > gen1, "gen1: " << gen1 << ", gen2: " << gen2);
+    }
+
 }
 
 }

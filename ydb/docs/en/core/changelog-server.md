@@ -40,12 +40,11 @@ Release date: 2025.
 * [Added](https://github.com/ydb-platform/ydb/pull/6342) support for removing `NOT NULL` constraints from a table column using the `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL` statement.
 * [Added](https://github.com/ydb-platform/ydb/pull/9168) a limit of 100,000 concurrent session-creation requests in the coordination service.
 * [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum number of columns in the primary key from 20 to 30.
-* Improved diagnostics and introspection of memory errors.
-* **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) strict access control checks, enabled by setting these flags:
-  * `enable_strict_acl_check` do not allow granting rights to non-existent users and deleting a user with write permissions on schema objects;
-  * `enable_strict_user_management` enables strict checks for local users.
-  * `enable_database_admin` enables database administrator functions.
-  * `enable_data_erasure` [enables](https://github.com/ydb-platform/ydb/pull/14460) a procedure that repeatedly overwrites deleted data to minimize recovery risk when accessing block devices directly via operating system functions.
+* Improved diagnostics and introspection of memory errors ([#10419](https://github.com/ydb-platform/ydb/pull/10419), [#11968](https://github.com/ydb-platform/ydb/pull/11968)).
+* **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) an experimental mode with strict access control checks. This mode is enabled by setting these flags:
+  * `enable_strict_acl_check` – do not allow granting rights to non-existent users and delete users with permissions;
+  * `enable_strict_user_management` – enables strict checks for local users (i.e. only the cluster or database administrator can administer local users);
+  * `enable_database_admin` – add the role of database administrator;
 
 #### Backward Incompatible Changes
 
@@ -76,7 +75,7 @@ Release date: 2025.
 * [Reduced](https://github.com/ydb-platform/ydb/pull/10969) Hive startup times to 30%.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/6561) the distributed storage replication process.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/9491) the header size of large binary objects in VDisk.
-* Reduced memory consumption through allocator page cleaning.
+* [Reduced](https://github.com/ydb-platform/ydb/pull/15517) memory consumption through allocator page cleaning.
 
 #### Bug Fixes
 

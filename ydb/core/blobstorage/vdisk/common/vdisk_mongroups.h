@@ -933,6 +933,35 @@ public:                                                                         
             COUNTER_DEF(BarriersBalance);
         };
 
+        class TDeepScrubbingGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TDeepScrubbingGroup)
+            {
+                COUNTER_INIT(SmallBlobsChecked, true);
+                COUNTER_INIT(HugeBlobsChecked, true);
+                COUNTER_INIT(CheckIntegritySuccesses, false);
+                COUNTER_INIT(CheckIntegrityErrors, false);
+
+                COUNTER_INIT(PlacementIssuesSmallBlobs, false);
+                COUNTER_INIT(DataIssuesSmallBlobs, false);
+
+                COUNTER_INIT(PlacementIssuesHugeBlobs, false);
+                COUNTER_INIT(DataIssuesHugeBlobs, false);
+            }
+
+            COUNTER_DEF(SmallBlobsChecked);
+            COUNTER_DEF(HugeBlobsChecked);
+
+            COUNTER_DEF(CheckIntegritySuccesses);
+            COUNTER_DEF(CheckIntegrityErrors);
+
+            COUNTER_DEF(PlacementIssuesSmallBlobs);
+            COUNTER_DEF(DataIssuesSmallBlobs);
+
+            COUNTER_DEF(PlacementIssuesHugeBlobs);
+            COUNTER_DEF(DataIssuesHugeBlobs);
+        };
+
         ///////////////////////////////////////////////////////////////////////////////////
         // TCounterGroup
         ///////////////////////////////////////////////////////////////////////////////////

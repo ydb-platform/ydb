@@ -1267,6 +1267,7 @@ private:
     }
 
     void PassAway() override {
+        SBR_LOG_T("PassAway");
         for (const auto& [_, info] : Populators) {
             if (const auto& actorId = info.PopulatorActor) {
                 Send(actorId, new TEvStateStorage::TEvReplicaShutdown());
@@ -1286,6 +1287,7 @@ public:
     }
 
     void Bootstrap() {
+        SBR_LOG_T("Bootstrap");
         TMonitorableActor::Bootstrap();
         auto localNodeId = SelfId().NodeId();
         auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);

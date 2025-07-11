@@ -5,7 +5,6 @@ import random
 import threading
 import requests
 import logging
-import grpc
 from enum import Enum
 
 from ydb.tests.stress.common.common import WorkloadBase
@@ -48,11 +47,9 @@ supported_types = supported_pk_types + [
 
 class WorkloadTablesCreateDrop(WorkloadBase):
     class TableStatus(Enum):
-        CREATING = "Creating",
-        AVAILABLE = "Available",
-        DELITING = "Deleting"
-
-    create_table_canceled_cnt = 0
+        CREATING = "Creating"
+        AVAILABLE = "Available"
+        DELETING = "Deleting"
 
     def __init__(self, client, prefix, stop):
         super().__init__(client, prefix, "create_drop", stop)
@@ -77,7 +74,7 @@ class WorkloadTablesCreateDrop(WorkloadBase):
         with self.lock:
             for n, s in self.tables.items():
                 if s == WorkloadTablesCreateDrop.TableStatus.AVAILABLE:
-                    self.tables[n] = WorkloadTablesCreateDrop.TableStatus.DELITING
+                    self.tables[n] = WorkloadTablesCreateDrop.TableStatus.DELETING
                     return n
         return None
 
@@ -102,17 +99,7 @@ class WorkloadTablesCreateDrop(WorkloadBase):
                     PRIMARY KEY({", ".join(["c" + str(i) for i in range(primary_key_column_n)])})
                 )
             """
-        try:
-            self.client.query(stmt, True)
-            return
-        except Exception as e:
-            if e.code() == grpc.StatusCode.CANCELLED:
-                self.create_table_canceled_cnt += 1
-                if self.create_table_canceled_cnt > 3:
-                    raise e
-                logger.info(f"Create table cancelled {e}")
-            else:
-                raise e
+        self.client.query(stmt, True)
 
     def _create_tables_loop(self):
         while not self.is_stop_requested():
@@ -329,7 +316,7 @@ class WorkloadRunner:
             WorkloadTablesCreateDrop(self.client, self.name, stop),
             WorkloadInsertDelete(self.client, self.name, stop),
             WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop, self.config_name),
-            WorkloadDiscovery(self.client, self.cluster, self.name, stop)
+            WorkloadDiscovery(self.client, self.cluster, self.name, stop),
         ]
         for w in workloads:
             w.start()

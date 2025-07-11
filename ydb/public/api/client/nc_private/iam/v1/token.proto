@@ -4,16 +4,19 @@ package nebius.iam.v1;
 
 import "google/protobuf/timestamp.proto";
 
-// DO NOT REMOVE! THESE OPTIONS ARE NEEDED FOR Bazel BUILD TO CORRESPOND TO buf generate:
 option java_multiple_files = true;
 option java_outer_classname = "TokenProto";
 option java_package = "ai.nebius.iam.token.v1";
-// END
 
 // Public payload has an payload in encrypted format, key and public data
 message AccessTokenPublicPayload {
   bytes encrypted_payload = 1; // encrypted data
   string encrypt_key_id = 2; // key id to process decrypt of pub
+}
+
+message DelegationInfo {
+  string application = 1; // application, which is used for delegation
+  Actor act = 2; // Delegators chain
 }
 
 message AccessTokenPayload {
@@ -26,6 +29,10 @@ message AccessTokenPayload {
   google.protobuf.Timestamp expires_in = 7;
   TokenType token_type = 8;
   int64 active_session_version = 9; // current user session version
+  repeated Impersonator impersonated_by_chain = 10;
+  string region_id = 11;
+  repeated string resource_scopes = 12;
+  DelegationInfo delegation_info = 13;
 }
 
 message SignaturePublicKey {
@@ -47,9 +54,18 @@ enum ActorType {
   TOKEN = 2; // if it is created under us (created by other token)
   SUBJECT = 3; //if it is impersonated by some user
   SESSION = 4; //if it is created from session
+  FEDERATED_CREDENTIALS = 5; //if it is created from federated credentials
+  STATIC = 6; // if it is created by us from static token
+
 }
 
 enum TokenType {
   ACCESS_TOKEN = 0; // by default token is an access token
   SESSION_TOKEN = 1; // session token
+  STATIC_TOKEN = 2; // static token
+}
+
+message Impersonator {
+  string id = 1;
+//  int64 active_session_version = 2;
 }

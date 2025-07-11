@@ -11,7 +11,7 @@
 
 * [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска. Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/index.md), возвращение кластера на предыдущие версии {{ ydb-short-name }} перестаёт быть возможен после этого.
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](./concepts/async-replication.md).
-* Поддержаны запросы `BATCH UPDATE` и `BATCH DELETE`, позволяющие изменять большие строковые таблицы вне транзакционных ограничений.
+* Поддержаны запросы `BATCH UPDATE` и `BATCH DELETE`, позволяющие изменять большие строковые таблицы вне транзакционных ограничений. Включается установкой флага `enable_batch_updates` в конфигурации кластера.
 * Добавлен [механизм конфигурации V2](./devops/configuration-management/configuration-v2/config-overview), упрощающий развёртывание новых кластеров {{ ydb-short-name }} и дальнейшую работу с ними. [Сравнение](./devops/configuration-management/compare-configs) механизмов конфигурации V1 и V2.
 * Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric).
 * Реализована клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (как у самой Kafka). Раньше балансировка происходила на сервере. Включается установкой флага `enable_kafka_native_balancing` в конфигурации кластера.
@@ -26,7 +26,7 @@
 * Добавлено автоудаление временных директорий и таблиц при экспорте в S3. Включается установкой флага `enable_export_auto_dropping` в конфигурации кластера.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, предотвращающая восстановление из повреждённых резервных копий и защищающая от потери данных.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений, использующих [UDF](./yql/reference/builtins/basic.md#udf) в запросах.
-* Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth), [истории перегруженных партиций](./dev/system-views#top-overload-partitions) и [истории партиций строковых таблиц со сломанными блокировками (TLI)](./dev/system-views#top-tli-partitions).
+* Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth), [истории перегруженных партиций](./dev/system-views#top-overload-partitions) - включается установкой флага `enable_followers_stats` в конфигурации кластера,  [истории партиций строковых таблиц со сломанными блокировками (TLI)](./dev/system-views#top-tli-partitions).
 * Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user.md) и [ALTER USER](./yql/reference/syntax/alter-user.md):
   * `HASH` — возможность задания пароля в зашифрованном виде;
   * `LOGIN` и `NOLOGIN` — разблокировка и блокировка пользователя.

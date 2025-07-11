@@ -17,7 +17,8 @@ public:
     void Update(std::shared_ptr<TDisplayData> data);
 
 private:
-    ftxui::Element BuildTuiLayout();
+    ftxui::Element BuildUpperPart(); // everything except logs
+    ftxui::Component BuildComponent();
 
 private:
     TLogBackendWithCapture& LogBackend;

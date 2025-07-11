@@ -10,6 +10,7 @@ SRCS(
     log_backend.cpp
     runner.cpp
     runner_tui.cpp
+    scroller.cpp
     task_queue.cpp
     terminal.cpp
     transaction_delivery.cpp

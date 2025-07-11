@@ -2,6 +2,7 @@
 
 #include "log_backend.h"
 #include "runner.h"
+#include "scroller.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>
@@ -13,12 +14,10 @@ namespace NYdb::NTPCC {
 TRunnerTui::TRunnerTui(TLogBackendWithCapture& logBacked, std::shared_ptr<TDisplayData> data)
     : LogBackend(logBacked)
     , DataToDisplay(std::move(data))
-    , Screen(ftxui::ScreenInteractive::Fullscreen())
+    , Screen(ScreenInteractive::Fullscreen())
 {
     TuiThread = std::thread([&] {
-        Screen.Loop(ftxui::Renderer([&] {
-            return BuildTuiLayout();
-        }));
+        Screen.Loop(BuildComponent());
 
         // ftxui catches signals and breaks the loop above, but
         // we have to let know the rest of app
@@ -38,15 +37,11 @@ void TRunnerTui::Update(std::shared_ptr<TDisplayData> data) {
     Screen.PostEvent(Event::Custom);
 }
 
-ftxui::Element TRunnerTui::BuildTuiLayout() {
+Element TRunnerTui::BuildUpperPart() {
     // Get window width to determine which columns to show
     constexpr int MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS = 140;
 
     std::shared_ptr<TDisplayData> data = std::atomic_load(&DataToDisplay);
-    if (data == nullptr) {
-        // just sanity check, normally should never happen
-        return filler();
-    }
 
     auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
     const int windowWidth = screen.dimx();
@@ -224,28 +219,32 @@ ftxui::Element TRunnerTui::BuildTuiLayout() {
         vbox(rightThreadElements) | flex
     }));
 
+    return vbox({
+        topSection,
+        threadSection,
+    });
+}
+
+Component TRunnerTui::BuildComponent() {
     // Logs section (last 10 lines, full width)
 
-    Elements logElements;
+    auto scrollableLogs = Scroller(Renderer([&] {
+        Elements logElements;
 
-    LogBackend.GetLogLines([&](const std::string& line) {
-        logElements.push_back(paragraph(line));
-    });
+        LogBackend.GetLogLines([&](const std::string& line) {
+            logElements.push_back(paragraph(line));
+        });
 
-    auto logsContent = vbox(logElements);
-
-    auto logsSection = window(text("Logs"),
-        logsContent | flex);
+        auto logsContent = vbox(logElements) | flex;
+        return logsContent;
+    }), "Logs");
 
     // Main layout
 
-    auto layout = vbox({
-        topSection,
-        threadSection,
-        logsSection
+    return Container::Vertical({
+        Renderer([=]{ return BuildUpperPart(); }),
+        scrollableLogs,
     });
-
-    return layout;
 }
 
 } // namespace NYdb::NTPCC

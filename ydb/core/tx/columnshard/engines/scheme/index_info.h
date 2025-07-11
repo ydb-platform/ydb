@@ -104,7 +104,7 @@ private:
 
     static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
         std::shared_ptr<arrow::DataType> arrowType;
-        
+
         if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
             arrowType = arrow::fixed_size_binary(16);
         } else {
@@ -112,7 +112,7 @@ private:
             AFL_VERIFY(result.ok());
             arrowType = result.ValueUnsafe();
         }
-        
+
         auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
         if (cache) {
             return cache->GetOrInsertField(f);

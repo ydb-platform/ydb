@@ -5,6 +5,7 @@
 #include <util/string/builder.h>
 #include <util/system/type_name.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NConnector {

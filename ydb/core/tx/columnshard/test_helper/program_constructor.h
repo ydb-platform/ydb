@@ -1,4 +1,6 @@
 #pragma once
+#include "kernels_wrapper.h"
+
 #include <ydb/core/formats/arrow/program/aggr_common.h>
 
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>

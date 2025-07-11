@@ -901,13 +901,26 @@ static void s_route_message_by_type(
             struct aws_hash_element *continuation_element = NULL;
             if (aws_hash_table_find(&connection->continuation_table, &stream_id, &continuation_element) ||
                 !continuation_element) {
-                AWS_LOGF_ERROR(
-                    AWS_LS_EVENT_STREAM_RPC_SERVER,
-                    "id=%p: stream_id does not have a corresponding continuation",
-                    (void *)connection);
-                aws_raise_error(AWS_ERROR_EVENT_STREAM_RPC_PROTOCOL_ERROR);
-                s_send_connection_level_error(
-                    connection, AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_PROTOCOL_ERROR, 0, &s_invalid_client_stream_id_error);
+                if ((message_flags & AWS_EVENT_STREAM_RPC_MESSAGE_FLAG_TERMINATE_STREAM) == 0) {
+                    AWS_LOGF_ERROR(
+                        AWS_LS_EVENT_STREAM_RPC_SERVER,
+                        "id=%p: stream_id does not have a corresponding continuation",
+                        (void *)connection);
+                    aws_raise_error(AWS_ERROR_EVENT_STREAM_RPC_PROTOCOL_ERROR);
+                    s_send_connection_level_error(
+                        connection,
+                        AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_PROTOCOL_ERROR,
+                        0,
+                        &s_invalid_client_stream_id_error);
+                } else {
+                    /* Simultaneous close can trip this condition */
+                    AWS_LOGF_DEBUG(
+                        AWS_LS_EVENT_STREAM_RPC_SERVER,
+                        "id=%p: received a terminate stream message for stream_id %d, which no longer has a "
+                        "corresponding continuation",
+                        (void *)connection,
+                        (int)stream_id);
+                }
                 return;
             }
 

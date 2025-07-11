@@ -238,7 +238,8 @@ public:
 };
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
-        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false, bool createDynamicGroups = false)
+        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false, bool createDynamicGroups = false,
+        bool isBridgeMode = false, ui32 pilesCount = 2)
 {   
     constexpr ui32 MIRROR_3DC_VDISKS_COUNT = 9;
     constexpr ui32 BLOCK_4_2_VDISKS_COUNT = 8;
@@ -262,7 +263,10 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
     for (ui32 i = 0; i < numGroups; ++i) {
         ui32 groupId;
 
-        if (createDynamicGroups) {
+        if (isBridgeMode) {
+            TGroupID fullGroupId(i < pilesCount ? EGroupConfigurationType::Static : EGroupConfigurationType::Dynamic, i % pilesCount, i);
+            groupId = fullGroupId.GetRaw();
+        } else if (createDynamicGroups) {
             TGroupID fullGroupId(i == 0 ? EGroupConfigurationType::Static : EGroupConfigurationType::Dynamic, 1, i);
             groupId = fullGroupId.GetRaw();
         } else {
@@ -280,6 +284,14 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             group.SetErasureSpecies("block-4-2");
         else
             group.SetErasureSpecies("none");
+        
+        if (isBridgeMode && i < numGroups / pilesCount) {
+            auto& proxyGroup = *config->AddGroup();
+            proxyGroup.CopyFrom(group);
+            TGroupID fullGroupId(EGroupConfigurationType::Dynamic, i % pilesCount, i + 10000);
+            proxyGroup.SetGroupId(fullGroupId.GetRaw());
+            proxyGroup.SetIsProxyGroup(true);
+        }
     }
 
     for (ui32 nodeIndex = 0; nodeIndex < numNodes; ++nodeIndex) {
@@ -565,6 +577,12 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
+    
+    if (options.IsBridgeMode) {
+        for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {
+            runtime.GetAppData().BridgeConfig->AddPiles()->SetName("r" + ToString(pileId));
+        }
+    }
 
     NKikimrCms::TCmsConfig cmsConfig;
     cmsConfig.MutableSentinelConfig()->SetEnable(options.EnableSentinel);
@@ -622,11 +640,25 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     mallocInfo.SetParam("FillMemoryOnAllocation", "false");
     SetupLogging();
 
-    for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
-        if (options.NRings > 1) {
-            SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize);
-        } else {
-            SetupStateStorage(*this, nodeIndex);
+    if (options.IsBridgeMode) {
+        TVector<TStateStorageInfo::TRingGroup> ringGroups = {{.State = PRIMARY, .NToSelect = options.NToSelect}};
+        std::fill_n(
+            std::back_inserter(ringGroups),
+            options.PileCount - 1,
+            TStateStorageInfo::TRingGroup{.State = SYNCHRONIZED, .NToSelect = options.NToSelect}
+        );
+        auto setuper = CreateCustomStateStorageSetupper(ringGroups, options.NRings * options.RingSize);
+
+        for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+            setuper(*this, nodeIndex);
+        }
+    } else {
+        for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+            if (options.NRings > 1) {
+                SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize);
+            } else {
+                SetupStateStorage(*this, nodeIndex);
+            }
         }
     }
     SetupServices(*this, options);

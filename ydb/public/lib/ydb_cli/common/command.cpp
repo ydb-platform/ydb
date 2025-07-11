@@ -12,6 +12,18 @@ bool TClientCommand::PROGRESS_REQUESTS = false; // display progress of long requ
 
 using namespace NUtils;
 
+namespace {
+    void PrintUsageAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
+        parser->PrintUsage();
+        throw TNeedToExitWithCode(EXIT_SUCCESS);
+    }
+
+    void PrintSvnVersionAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
+        parser->PrintUsage();
+        throw TNeedToExitWithCode(EXIT_SUCCESS);
+    }
+}
+
 TClientCommand::TClientCommand(
     const TString& name,
     const std::initializer_list<TString>& aliases,
@@ -22,12 +34,18 @@ TClientCommand::TClientCommand(
         , Description(description)
         , Visible(visible)
         , Parent(nullptr)
-        , Opts(NLastGetopt::TOpts::Default())
 {
-    HideOption("svnrevision");
-    Opts.GetOpts().AddHelpOption('h');
+    Opts.GetOpts().Opts_.clear();
+    Opts.AddLongOption('V', "svnrevision", "print svn version")
+        .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
+        .IfPresentDisableCompletion()
+        .Handler(&PrintSvnVersionAndThrowHelpPrinted)
+        .Hidden();
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    ChangeOptionDescription("help", TStringBuilder() << "Print usage, " << colors.Green() << "-hh" << colors.OldColor() << " for detailed help");
+    Opts.AddLongOption('h', "help", TStringBuilder() << "Print usage, " << colors.Green() << "-hh" << colors.OldColor() << " for detailed help")
+        .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
+        .IfPresentDisableCompletion()
+        .Handler(&PrintUsageAndThrowHelpPrinted);
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
     Opts.GetOpts().SetWrap(Max(Opts.GetOpts().Wrap_, static_cast<ui32>(lineLength)));
@@ -157,11 +175,15 @@ std::pair<int, const char**> TClientCommand::TOptsParseOneLevelResult::GetArgv(T
         }
         ++_argc;
     }
+    if (_argc > config.ArgC) {
+        // This is possible if the last option should have an argument, but it is not provided
+        _argc = config.ArgC;
+    }
     return std::pair(_argc, const_cast<const char**>(config.ArgV));
 }
 
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv)
-    : TOptionsParseResult(config.Opts, argv.first, argv.second, config.ThrowOnOptsParseError)
+    : TOptionsParseResult(config.Opts, argv.first, argv.second)
 {
 }
 
@@ -231,12 +253,21 @@ int TClientCommand::Run(TConfig& config) {
 }
 
 int TClientCommand::Process(TConfig& config) {
-    Prepare(config);
-    return ValidateAndRun(config);
+    try {
+        Prepare(config);
+        return ValidateAndRun(config);
+    } catch (const TNeedToExitWithCode& e) {
+        return e.GetCode();
+    }
+    catch (const NYdb::NConsoleClient::TMisuseException& e) {
+        Cerr << e.what() << Endl;
+        Cerr << "Try \"--help\" option for more info." << Endl;
+        return EXIT_FAILURE;
+    }
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
-    ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV, config.ThrowOnOptsParseError);
+    ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV);
 
     // Parse options from env and apply default parameters.
     // Parsing from profiles is only supported at high level commands and occure in ExtractParams() stage.

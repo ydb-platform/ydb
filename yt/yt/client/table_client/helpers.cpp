@@ -791,6 +791,19 @@ void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    NYson::TYsonStringBuf value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    YT_VERIFY(value.GetType() == EYsonType::Node);
+    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedCompositeValue(value.AsStringBuf(), id, flags));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ProtobufToUnversionedValueImpl(
     TUnversionedValue* unversionedValue,
     const Message& value,

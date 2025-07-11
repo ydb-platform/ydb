@@ -35,11 +35,23 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "argument.foo1.join_key"
+                                                "TopSortBy": "row.foo1_id"
                                             },
                                             {
                                                 "Condition": "foo1.join_key = foo3.foo2.f1",
@@ -144,7 +156,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "foo1.join_key (Asc)"
+                                    "foo1_id (Asc)"
                                 ]
                             }
                         ]

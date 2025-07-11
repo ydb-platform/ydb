@@ -38,10 +38,12 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TAddOffsetsToTxnRequestData>(response->ApiKeys, ADD_OFFSETS_TO_TXN, {.MaxVersion=3});
     AddApiKey<TTxnOffsetCommitRequestData>(response->ApiKeys, TXN_OFFSET_COMMIT, {.MaxVersion=3});
     AddApiKey<TDescribeConfigsRequestData>(response->ApiKeys, DESCRIBE_CONFIGS, {.MaxVersion=4});
-    AddApiKey<TEndTxnRequestData>(response->ApiKeys, END_TXN, {.MaxVersion=3});
-    AddApiKey<TSaslHandshakeRequestData>(response->ApiKeys, SASL_HANDSHAKE, {.MaxVersion=1});
     AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE, {.MaxVersion=2});
     AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MinVersion=0, .MaxVersion=7});
+    AddApiKey<TEndTxnRequestData>(response->ApiKeys, END_TXN, {.MaxVersion=3});
+    AddApiKey<TSaslHandshakeRequestData>(response->ApiKeys, SASL_HANDSHAKE, {.MaxVersion=1});
+    AddApiKey<TListGroupsRequestData>(response->ApiKeys, LIST_GROUPS, {.MinVersion=0, .MaxVersion=4});
+    AddApiKey<TDescribeGroupsRequestData>(response->ApiKeys, DESCRIBE_GROUPS, {.MinVersion=0, .MaxVersion=5});
     AddApiKey<TFetchRequestData>(response->ApiKeys, FETCH, {.MaxVersion=3});
     AddApiKey<TJoinGroupRequestData>(response->ApiKeys, JOIN_GROUP, {.MaxVersion=9});
     AddApiKey<TSyncGroupRequestData>(response->ApiKeys, SYNC_GROUP, {.MaxVersion=3});

@@ -716,6 +716,7 @@ public:
 
         if (dstParent.IsUnderOperation()) {
             dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
+            dstParent = dstPath.Parent();
         }
 
         {
@@ -748,7 +749,7 @@ public:
             if (checks) {
                 checks
                     .DepthLimit()
-                    .IsValidLeafName();
+                    .IsValidLeafName(context.UserToken.Get());
             }
 
             if (!checks) {

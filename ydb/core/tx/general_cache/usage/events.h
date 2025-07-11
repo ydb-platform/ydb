@@ -14,10 +14,12 @@ template <class TPolicy>
 struct TEvents {
     using TAddress = typename TPolicy::TAddress;
     using EConsumer = typename TPolicy::EConsumer;
+    using TSourceId = typename TPolicy::TSourceId;
     using ICallback = ICallback<TPolicy>;
 
     enum EEv {
         EvAskData = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_PUBLIC),
+        EvKillSource,
         EvEnd
     };
 
@@ -49,6 +51,20 @@ struct TEvents {
             AFL_VERIFY(!CallbackExtracted);
             CallbackExtracted = true;
             return std::move(Callback);
+        }
+    };
+
+    class TEvKillSource: public NActors::TEventLocal<TEvKillSource, EvKillSource> {
+    private:
+        const TSourceId SourceId;
+
+    public:
+        TEvKillSource(const TSourceId sourceId)
+            : SourceId(sourceId) {
+        }
+
+        TSourceId GetSourceId() const {
+            return SourceId;
         }
     };
 };

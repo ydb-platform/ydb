@@ -1200,7 +1200,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     void AuditLogLoginTest(TTestBasicRuntime& runtime, bool isUserAdmin) {
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
 
@@ -1270,7 +1270,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
 
@@ -1314,7 +1314,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1410,7 +1410,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1505,7 +1505,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1598,10 +1598,10 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadBind) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1693,8 +1693,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLogout) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime);
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // Add ticket parser to the mix
         {
@@ -1799,7 +1799,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         ui64 txId = 100;
 
@@ -1877,5 +1877,73 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 7);
             check("MODIFY USER", {"password", "blocking"});
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
+
+    void TestSuccess(const TVector<TString>& admins, const TString& testUser, bool isAdmin) {
+        TTestBasicRuntime runtime;
+        if (!admins.empty()) {
+            runtime.AddAppDataInit([&admins](ui32, NKikimr::TAppData& appData){
+                for (const auto& admin : admins) {
+                    appData.AdministrationAllowedSIDs.emplace_back(admin);
+                }
+            });
+        }
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", testUser, "password1");
+
+        const auto check = NLogin::TLoginProvider::TPasswordCheckResult{.Status =
+            NLogin::TLoginProvider::TPasswordCheckResult::EStatus::SUCCESS};
+        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = testUser});
+        // public keys are filled after the first login
+        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, testUser, "wrong-password1").error(), "Invalid password");
+        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        CheckToken(resultLogin.token(), describe, testUser);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetIsAdmin(), isAdmin);
+    }
+
+    Y_UNIT_TEST(NoPublicKeys) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+
+        NLogin::TLoginProvider::TPasswordCheckResult check;
+        check.FillInvalidPassword();
+        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
+        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
+        // public keys are filled after the first login
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "No key to generate token");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
+    }
+
+    Y_UNIT_TEST(InvalidPassword) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+
+        NLogin::TLoginProvider::TPasswordCheckResult check;
+        check.FillInvalidPassword();
+        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
+        // public keys are filled after the first login
+        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", "password1").error(), "");
+        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
+    }
+
+    Y_UNIT_TEST(Success) {
+        TestSuccess({}, "user1", true);
+        TestSuccess({"user-admin"}, "user1", false);
+        TestSuccess({"user1"}, "user1", true);
     }
 }

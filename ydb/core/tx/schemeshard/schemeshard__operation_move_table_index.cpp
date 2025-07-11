@@ -423,6 +423,7 @@ public:
 
         if (dstParentPath.IsUnderOperation()) {
             dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
+            dstParentPath = dstPath.Parent();
         } else {
             Y_ABORT("NONO");
         }
@@ -458,7 +459,7 @@ public:
             if (checks) {
                 checks
                     .DepthLimit()
-                    .IsValidLeafName();
+                    .IsValidLeafName(context.UserToken.Get());
             }
 
             if (!checks) {

@@ -1496,32 +1496,32 @@ message TImmediateControlsConfig {
         optional uint64 ThrottlingMinLevel0SstCount = 15 [(ControlOptions) = {
             Description: "Minimum level 0 SST count - throttling is turned on",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 100 }];
         optional uint64 ThrottlingMaxLevel0SstCount = 16 [(ControlOptions) = {
             Description: "Maximum level 0 SST count - throttling speed is zero",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 250 }];
         optional uint64 ThrottlingMinInplacedSizeHDD = 17 [(ControlOptions) = {
             Description: "Minimum size of all inplaced blobs (HDD) - throttling is turned on",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 21474836480 }];
         optional uint64 ThrottlingMaxInplacedSizeHDD = 18 [(ControlOptions) = {
             Description: "Maximum size of all inplaced blobs (HDD) - throttling speed is zero",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 64424509440 }];
         optional uint64 ThrottlingMinInplacedSizeSSD = 24 [(ControlOptions) = {
             Description: "Minimum size of all inplaced blobs (SSD) - throttling is turned on",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 21474836480 }];
         optional uint64 ThrottlingMaxInplacedSizeSSD = 25 [(ControlOptions) = {
             Description: "Maximum size of all inplaced blobs (SSD) - throttling speed is zero",
             MinValue: 1048576,
-            MaxValue: 536870912000,
+            MaxValue: 549755813888000,
             DefaultValue: 64424509440 }];
         optional uint64 ThrottlingMinOccupancyPerMille = 19 [(ControlOptions) = {
             Description: "Minimum occupancy of disk per mille - throttling is turned on",
@@ -1536,12 +1536,12 @@ message TImmediateControlsConfig {
         optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
             Description: "Minimum pdisk log chunk count - throttling is turned on",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 100 }];
         optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
             Description: "Maximum pdisk log chunk count - throttling speed is zero",
             MinValue: 1,
-            MaxValue: 1000,
+            MaxValue: 100000,
             DefaultValue: 130 }];
 
         optional uint64 MaxInProgressSyncCount = 27 [(ControlOptions) = {
@@ -1549,6 +1549,32 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000,
             DefaultValue: 0 }];
+
+        reserved 28;
+
+        optional uint64 FreshCompMaxInFlightWrites = 29 [(ControlOptions) = {
+            Description: "Max writes inflight for fresh level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+
+        optional uint64 FreshCompMaxInFlightReads = 30 [(ControlOptions) = {
+            Description: "Max reads inflight for fresh level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+        
+        optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
+            Description: "Max writes inflight for level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+
+        optional uint64 HullCompMaxInFlightReads = 32 [(ControlOptions) = {
+            Description: "Max reads inflight for level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 20 }];
     }
 
     message TTabletControls {
@@ -1900,6 +1926,7 @@ message THiveConfig {
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
     optional bool UseTabletUsageEstimate = 86 [default = true];
     repeated TBootPriority TabletTypeToBootPriority = 87;
+    optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
 }
 
 message THealthCheckConfig {
@@ -1990,6 +2017,7 @@ message TColumnShardConfig {
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
     optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
     optional bool ProxyWritingEnabled = 44 [default = true];
+    optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2340,7 +2368,8 @@ message TLabel {
 
 message TGeneralCacheConfig {
     optional uint64 MemoryLimit = 1;
-    optional uint64 DirectInflightLimit = 2;
+    optional uint64 DirectInflightSourceLimit = 2;
+    optional uint64 DirectInflightGlobalLimit = 3;
 }
 
 message TAppConfig {

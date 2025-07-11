@@ -9,6 +9,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
 
@@ -17,36 +18,20 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
-    template <class T>
-        requires std::regular<T> &&
-                 requires(T x) { {x < x} -> std::convertible_to<bool>; }
-    struct TAliased: T {
-        TString Alias;
-
-        TAliased(TString alias, T value)
-            : T(std::move(value))
-            , Alias(std::move(alias))
-        {
-        }
-
-        TAliased(T value)
-            : T(std::move(value))
-        {
-        }
-
-        friend bool operator<(const TAliased& lhs, const TAliased& rhs) {
-            return std::tie(lhs.Alias, static_cast<const T&>(lhs)) < std::tie(rhs.Alias, static_cast<const T&>(rhs));
-        }
-
-        friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;
-    };
-
+    // TODO(YQL-19747): Try to refactor to use Map/Set data structures
     struct TColumnContext {
         TVector<TAliased<TTableId>> Tables;
+        TVector<TColumnId> Columns;
+        THashMap<TString, THashSet<TString>> WithoutByTableAlias;
 
-        TVector<TTableId> TablesWithAlias(TStringBuf alias) const;
+        bool IsAsterisk() const;
+        TColumnContext ExtractAliased(TMaybe<TStringBuf> alias);
+        TColumnContext Renamed(TStringBuf alias) &&;
 
         friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
+        friend TColumnContext operator|(TColumnContext lhs, TColumnContext rhs);
+
+        static TColumnContext Asterisk();
     };
 
     struct TGlobalContext {

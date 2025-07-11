@@ -2,6 +2,7 @@
 
 #include <yt/yt/client/table_client/comparator.h>
 #include <yt/yt/client/table_client/helpers.h>
+#include <yt/yt/client/table_client/logical_type.h>
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/client/table_client/schema.h>
@@ -18,6 +19,7 @@ namespace NYT::NTableClient::NDetail {
 void ValidateKeyValueCount(TLegacyKey key, int count);
 int GetColumnIdOrThrow(std::optional<int> optionalId, TStringBuf name);
 void ValidateRowValueCount(TUnversionedRow row, int id);
+TLogicalTypePtr FromRecordCodegenTypeV3(TStringBuf data);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -50,11 +50,13 @@ jdk_path="str"
 
 source_sets="list"
 source_sets-dir="str"
+source_sets-realdir="str"
 source_sets-globs="list"
 source_sets-prefix="str"
 
 resource_sets="list"
 resource_sets-dir="str"
+resource_sets-realdir="str"
 resource_sets-globs="list"
 resource_sets-prefix="str"
 

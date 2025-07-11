@@ -19,6 +19,8 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
@@ -1350,9 +1352,6 @@ private:
                 &effectiveSettings
             );
             SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
-            if (astRes.ActualSyntaxType == NYql::ESyntaxType::Pg) {
-                SessionCtx->Config().IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX;
-            }
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
             queryAst = query.AstResult->Ast;
@@ -1919,6 +1918,22 @@ private:
         TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
     }
 
+    void InitPqProvider() {
+        TString sessionId = CreateGuidAsString();
+        auto state = MakeIntrusive<TPqState>(sessionId);
+        state->SupportRtmrMode = false;
+        state->Types = TypesCtx.Get();
+        state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
+        state->FunctionRegistry = FuncRegistry;
+        state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
+        state->Gateway = FederatedQuerySetup->PqGateway;;
+        state->DqIntegration = NYql::CreatePqDqIntegration(state);
+        state->Gateway->OpenSession(sessionId, "username");
+
+        TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
+        TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
+    }
+
     void Init(EKikimrQueryType queryType) {
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem);
@@ -1962,6 +1977,9 @@ private:
             }
             if (FederatedQuerySetup->SolomonGateway) {
                 InitSolomonProvider();
+            }
+            if (FederatedQuerySetup->PqGateway) {
+                InitPqProvider();
             }
         }
 
@@ -2026,6 +2044,50 @@ private:
             .AddRun(&NullProgressWriter)
             .Build();
 
+        auto typesCtx = TypesCtx;
+        EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION;
+        auto RBOOptimizationTransformer = CreateCompositeGraphTransformer(
+            {
+                TTransformStage(
+                    CreateChoiceGraphTransformer(
+                    [typesCtx](const TExprNode::TPtr&, TExprContext&) {
+                        return typesCtx->EngineType == EEngineType::Ytflow;
+                    },
+                    TTransformStage(
+                        CreateRecaptureDataProposalsInspector(*typesCtx, TString{YtflowProviderName}),
+                        "RecaptureDataProposalsYtflow",
+                        issueCode),
+                    TTransformStage(
+                        CreateRecaptureDataProposalsInspector(*typesCtx, TString{DqProviderName}),
+                        "RecaptureDataProposalsDq",
+                        issueCode)),
+                    "RecaptureDataProposals",
+                    issueCode),
+                TTransformStage(
+                    CreateStatisticsProposalsInspector(*typesCtx, TString{DqProviderName}),
+                    "StatisticsProposals",
+                    issueCode
+                ),
+                TTransformStage(
+                    CreateLogicalDataProposalsInspector(*typesCtx),
+                    "LogicalDataProposals",
+                    issueCode),
+                TTransformStage(
+                    CreatePhysicalDataProposalsInspector(*typesCtx),
+                    "PhysicalDataProposals",
+                    issueCode),
+                TTransformStage(
+                    CreatePhysicalFinalizers(*typesCtx),
+                    "PhysicalFinalizers",
+                    issueCode),
+                TTransformStage(
+                    CreateCheckExecutionTransformer(*typesCtx, true),
+                    "CheckExecution",
+                    issueCode)
+                },
+                false
+            );
+
         YqlTransformerNewRBO = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
@@ -2037,7 +2099,8 @@ private:
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()
-            .AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
+            //.AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
+            .Add(RBOOptimizationTransformer.Release(), "RBOOptimizationTransformer")
             .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
             .AddRun(&NullProgressWriter)

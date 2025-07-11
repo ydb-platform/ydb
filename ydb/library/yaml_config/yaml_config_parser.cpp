@@ -368,7 +368,7 @@ namespace NKikimr::NYaml {
 
         auto* asConfig = config.MutableActorSystemConfig();
 
-        if (asConfig->GetUseAutoConfig()) {
+        if (asConfig->GetUseAutoConfig() || asConfig->HasCpuCount() || asConfig->HasNodeType()) {
             return; // do nothing for auto config
         }
 
@@ -1619,6 +1619,8 @@ endDiskTypeCheck:   ;
 
             Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
                        "'config' must be an object when 'metadata' is present");
+
+            config.SetYamlConfigEnabled(true);
 
             jsonNode = json["config"];
         }

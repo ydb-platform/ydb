@@ -63,7 +63,7 @@ public:
         Retries = FromStringWithDefault<ui32>(Params.Get("retries"), 3);
         RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(Params.Get("retry_period"), RetryPeriod.MilliSeconds()));
 
-        SendWhiteboardRequest();
+        SendWhiteboardRequests();
         SendBSCRequest();
 
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
@@ -83,7 +83,7 @@ public:
         }
     }
 
-    void SendWhiteboardRequest() {
+    void SendWhiteboardRequests() {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
         WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
             whiteboardServiceId,
@@ -104,7 +104,7 @@ public:
 
     bool RetryRequest() {
         if (Retries) {
-            if (++ActualRetries <= Retries) {
+            if (++ActualRetries < Retries) {
                 TBase::Schedule(RetryPeriod, new TEvRetryNodeRequest());
                 return true;
             }
@@ -174,12 +174,17 @@ public:
     }
 
     void HandleRetry() {
-        SendWhiteboardRequest();
+        SendWhiteboardRequests();
+        TBase::RequestDone(2); // complete previous requests
     }
 
     void PassAway() override {
         TBase::Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe());
         TBase::PassAway();
+    }
+
+    void HandleTimeout() {
+        ReplyAndPassAway(); // try to respond with what we have
     }
 
     void ReplyAndPassAway() override {

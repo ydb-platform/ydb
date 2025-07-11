@@ -133,8 +133,7 @@ public:
 
     virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const = 0;
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
-    virtual const std::shared_ptr<TVersionedIndex>& GetVersionedIndexReadonlyCopy() = 0;
-    virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
+    virtual const std::shared_ptr<const TVersionedIndex>& GetVersionedIndexReadonlyCopy() = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 
     virtual bool HasDataInPathId(const TInternalPathId pathId) const = 0;
@@ -145,7 +144,7 @@ public:
         return DoRegisterTable(pathId);
     }
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
-    virtual std::shared_ptr<TSelectInfo> Select(
+    virtual std::vector<std::shared_ptr<TPortionInfo>> Select(
         TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
@@ -157,7 +156,7 @@ public:
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& info) = 0;
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
     virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
 

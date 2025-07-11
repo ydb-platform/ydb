@@ -29,26 +29,33 @@ def kikimr_cluster_factory(configurator=None, config_path=None):
 class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def __init__(
             self,
-            config_path,
+            cluster_template,
             kikimr_configure_binary_path,
             kikimr_path,
             kikimr_next_path=None,
             ssh_username=None,
             deploy_cluster=False,
-            ):
-        self.__config_path = config_path
-        with open(config_path, 'r') as r:
-            self.__yaml_config = yaml.safe_load(r.read())
+            yaml_config=None):
+        with open(cluster_template, 'r') as r:
+            self.__cluster_template = yaml.safe_load(r.read())
+        if yaml_config is not None:
+            with open(yaml_config, 'r') as r:
+                self.__yaml_config = yaml.safe_load(r.read())
         self.__kikimr_configure_binary_path = kikimr_configure_binary_path
-        self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         self._slots = None
         self.__kikimr_path = kikimr_path
         self.__kikimr_next_path = kikimr_next_path
         self.__ssh_username = ssh_username
         self.__deploy_cluster = deploy_cluster
-        self.__slot_count = 0
 
-        for domain in self.__yaml_config['domains']:
+        if yaml_config is not None:
+            self.__hosts = [host.get('name', host.get('host')) for host in self.__yaml_config.get('config', {}).get('hosts')]
+        else:
+            # Backward compatibility for cluster_template
+            self.__hosts = [host.get('name', host.get('host')) for host in self.__cluster_template.get('hosts')]
+
+        self.__slot_count = 0
+        for domain in self.__cluster_template['domains']:
             self.__slot_count = max(self.__slot_count, domain['dynamic_slots'])
 
         super(ExternalKiKiMRCluster, self).__init__()
@@ -133,7 +140,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             self._run_on(
                 inst_set,
                 lambda x: x.prepare_artifacts(
-                    self.__config_path
+                    self.__cluster_template
                 )
             )
 

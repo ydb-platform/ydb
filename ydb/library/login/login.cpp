@@ -474,7 +474,7 @@ bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TPasswordC
     Y_ENSURE(checkResult);
     Y_ENSURE(passwordHash);
 
-    if (FillNoKeys(checkResult)) {
+    if (FillUnavailableKey(checkResult)) {
         return false;
     }
 
@@ -499,10 +499,9 @@ void TLoginProvider::UpdateCache(const TLoginUserRequest& request, const TString
     Impl->UpdateCache({.User = request.User, .Password = request.Password, .Hash = passwordHash}, isSuccessVerifying);
 }
 
-bool TLoginProvider::FillNoKeys(TPasswordCheckResult* checkResult) const {
+bool TLoginProvider::FillUnavailableKey(TPasswordCheckResult* checkResult) const {
     if (Keys.empty() || Keys.back().PrivateKey.empty()) {
-        checkResult->Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
-        checkResult->Error = "No key to generate token";
+        checkResult->FillUnavailableKey();
         return true;
     }
     return false;
@@ -518,8 +517,7 @@ TLoginProvider::TSidRecord* TLoginProvider::GetUserSid(const TString& user) {
 
 bool TLoginProvider::FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const {
     if (!sid) {
-        checkResult->Status = TLoginUserResponse::EStatus::INVALID_USER;
-        checkResult->Error = "Invalid user";
+        checkResult->FillInvalidUser("Invalid user");
         return true;
     }
     return false;
@@ -527,7 +525,16 @@ bool TLoginProvider::FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult
 
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request, const TPasswordCheckResult& checkResult) {
     TLoginUserResponse response;
-    if (FillNoKeys(&response)) {
+    if (checkResult.Status == TLoginUserResponse::EStatus::UNAVAILABLE_KEY) {
+        response.FillUnavailableKey();
+        return response;
+    }
+    if (checkResult.Status == TLoginUserResponse::EStatus::INVALID_USER) {
+        response.FillInvalidUser(checkResult.Error);
+        return response;
+    }
+
+    if (FillUnavailableKey(&response)) {
         return response;
     }
 
@@ -539,13 +546,13 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         }
 
         if (checkResult.Status == TLoginUserResponse::EStatus::INVALID_PASSWORD) {
-            response.Status = checkResult.Status;
-            response.Error = checkResult.Error;
+            response.FillInvalidPassword();
             sid->LastFailedLogin = std::chrono::system_clock::now();
             sid->FailedLoginAttemptCount++;
             return response;
         }
     }
+    Y_ENSURE(!checkResult.Error);
 
     const TKeyRecord& key = Keys.back();
     auto keyId = ToString(key.KeyId);
@@ -599,8 +606,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         const auto isSuccessVerifying = VerifyHash(request, passwordHash);
         UpdateCache(request, passwordHash, isSuccessVerifying);
         if (!isSuccessVerifying) {
-            checkResult.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
-            checkResult.Error = "Invalid password";
+            checkResult.FillInvalidPassword();
         }
     }
     return LoginUser(request, checkResult);
@@ -847,8 +853,7 @@ bool TLoginProvider::TImpl::NeedVerifyHash(const TLruCache::TKey& key, TPassword
     }
 
     if (WrongPasswordsCache.Find(key) != WrongPasswordsCache.End()) {
-        checkResult->Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
-        checkResult->Error = "Invalid password";
+        checkResult->FillInvalidPassword();
         return false;
     }
 

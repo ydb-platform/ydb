@@ -2,250 +2,122 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
+#include <ydb/public/sdk/cpp/tests/integration/topic/utils/describe.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NYdb::NTopic::NTests {
+
+namespace NYdb::inline Dev::NTopic::NTests {
 
     Y_UNIT_TEST_SUITE(Describe) {
 
-        void DescribeTopic(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        void DescribeTopicWithKillTablets(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation)
         {
             TDescribeTopicSettings settings;
             settings.IncludeStats(requireStats);
             settings.IncludeLocation(requireLocation);
 
+            DescribeTopicTest(setup, client, requireStats, requireNonEmptyStats, requireLocation);
+
+            setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());
+
+            auto result = client.DescribeTopic(setup.GetTopicPath(), settings).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& description = result.GetTopicDescription();
+
+            const auto& partitions = description.GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+
+            const auto& partition = partitions[0];
+            UNIT_ASSERT(partition.GetActive());
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+
+            if (requireStats)
             {
-                auto result = client.DescribeTopic(TEST_TOPIC, settings).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                const auto& stats = description.GetTopicStats();
 
-                const auto& description = result.GetTopicDescription();
-
-                const auto& partitions = description.GetPartitions();
-                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-
-                const auto& partition = partitions[0];
-                UNIT_ASSERT(partition.GetActive());
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-
-                if (requireStats)
+                if (requireNonEmptyStats)
                 {
-                    const auto& stats = description.GetTopicStats();
-
-                    if (requireNonEmptyStats)
-                    {
-                        UNIT_ASSERT_GT(stats.GetStoreSizeBytes(), 0);
-                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerMinute(), 0);
-                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerHour(), 0);
-                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerDay(), 0);
-                        UNIT_ASSERT_GT(stats.GetMaxWriteTimeLag(), TDuration::Zero());
-                        UNIT_ASSERT_GT(stats.GetMinLastWriteTime(), TInstant::Zero());
-                    } else {
-                        UNIT_ASSERT_VALUES_EQUAL(stats.GetStoreSizeBytes(), 0);
-                    }
-                }
-
-                if (requireLocation)
-                {
-                    UNIT_ASSERT(partition.GetPartitionLocation());
-                    const auto& partitionLocation = *partition.GetPartitionLocation();
-                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
-                    UNIT_ASSERT_GE(partitionLocation.GetGeneration(), 0); // greater-or-equal 0
+                    UNIT_ASSERT_GT(stats.GetStoreSizeBytes(), 0);
+                    UNIT_ASSERT_GT(stats.GetBytesWrittenPerMinute(), 0);
+                    UNIT_ASSERT_GT(stats.GetBytesWrittenPerHour(), 0);
+                    UNIT_ASSERT_GT(stats.GetBytesWrittenPerDay(), 0);
+                    UNIT_ASSERT_GT(stats.GetMaxWriteTimeLag(), TDuration::Zero());
+                    UNIT_ASSERT_GT(stats.GetMinLastWriteTime(), TInstant::Zero());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.GetStoreSizeBytes(), 0);
                 }
             }
 
-            if (killTablets)
+            if (requireLocation)
             {
-                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
-
-                auto result = client.DescribeTopic(TEST_TOPIC, settings).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-                const auto& description = result.GetTopicDescription();
-
-                const auto& partitions = description.GetPartitions();
-                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-
-                const auto& partition = partitions[0];
-                UNIT_ASSERT(partition.GetActive());
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-
-                if (requireStats)
-                {
-                    const auto& stats = description.GetTopicStats();
-
-                    if (requireNonEmptyStats)
-                    {
-                        UNIT_ASSERT_GT(stats.GetStoreSizeBytes(), 0);
-                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerMinute(), 0);
-                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerHour(), 0);
-                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerDay(), 0);
-                        UNIT_ASSERT_GT(stats.GetMaxWriteTimeLag(), TDuration::Zero());
-                        UNIT_ASSERT_GT(stats.GetMinLastWriteTime(), TInstant::Zero());
-                    } else {
-                        UNIT_ASSERT_VALUES_EQUAL(stats.GetStoreSizeBytes(), 0);
-                    }
-                }
-
-                if (requireLocation)
-                {
-                    UNIT_ASSERT(partition.GetPartitionLocation());
-                    const auto& partitionLocation = *partition.GetPartitionLocation();
-                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
-                    UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
-                }
+                UNIT_ASSERT(partition.GetPartitionLocation());
+                const auto& partitionLocation = *partition.GetPartitionLocation();
+                UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
             }
+        
         }
 
-        void DescribeConsumer(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        void DescribeConsumerWithKillTablets(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation)
         {
             TDescribeConsumerSettings settings;
             settings.IncludeStats(requireStats);
             settings.IncludeLocation(requireLocation);
 
+            DescribeConsumerTest(setup, client, requireStats, requireNonEmptyStats, requireLocation);
+
+            setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());
+
+            auto result = client.DescribeConsumer(setup.GetTopicPath(), setup.GetConsumerName(), settings).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& description = result.GetConsumerDescription();
+
+            const auto& partitions = description.GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+
+            const auto& partition = partitions[0];
+            UNIT_ASSERT(partition.GetActive());
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+
+            if (requireLocation)
             {
-                auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, settings).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-                const auto& description = result.GetConsumerDescription();
-
-                const auto& partitions = description.GetPartitions();
-                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-
-                const auto& partition = partitions[0];
-                UNIT_ASSERT(partition.GetActive());
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-
-                if (requireStats)
-                {
-                    const auto& stats = partition.GetPartitionStats();
-                    const auto& consumerStats = partition.GetPartitionConsumerStats();
-                    UNIT_ASSERT(stats);
-                    UNIT_ASSERT(consumerStats);
-
-                    if (requireNonEmptyStats)
-                    {
-                        UNIT_ASSERT_GE(stats->GetStartOffset(), 0);
-                        UNIT_ASSERT_GE(stats->GetEndOffset(), 0);
-                        UNIT_ASSERT_GT(stats->GetStoreSizeBytes(), 0);
-                        UNIT_ASSERT_GT(stats->GetLastWriteTime(), TInstant::Zero());
-                        UNIT_ASSERT_GT(stats->GetMaxWriteTimeLag(), TDuration::Zero());
-                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerMinute(), 0);
-                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerHour(), 0);
-                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerDay(), 0);
-
-                        UNIT_ASSERT_GT(consumerStats->GetLastReadOffset(), 0);
-                        UNIT_ASSERT_GT(consumerStats->GetCommittedOffset(), 0);
-                        UNIT_ASSERT_GE(TString{consumerStats->GetReadSessionId()}, 0);
-                        UNIT_ASSERT_VALUES_EQUAL(consumerStats->GetReaderName(), "");
-                        UNIT_ASSERT_GE(consumerStats->GetMaxWriteTimeLag(), TDuration::Seconds(100));
-                    } else {
-                        UNIT_ASSERT_VALUES_EQUAL(stats->GetStartOffset(), 0);
-                        UNIT_ASSERT_VALUES_EQUAL(consumerStats->GetLastReadOffset(), 0);
-                    }
-                }
-
-                if (requireLocation)
-                {
-                    UNIT_ASSERT(partition.GetPartitionLocation());
-                    const auto& partitionLocation = *partition.GetPartitionLocation();
-                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
-                    UNIT_ASSERT_GE(partitionLocation.GetGeneration(), 0); // greater-or-equal 0
-                }
-            }
-
-            if (killTablets)
-            {
-                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
-
-                auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, settings).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-                const auto& description = result.GetConsumerDescription();
-
-                const auto& partitions = description.GetPartitions();
-                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-
-                const auto& partition = partitions[0];
-                UNIT_ASSERT(partition.GetActive());
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-
-                if (requireLocation)
-                {
-                    UNIT_ASSERT(partition.GetPartitionLocation());
-                    const auto& partitionLocation = *partition.GetPartitionLocation();
-                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
-                    UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
-                }
+                UNIT_ASSERT(partition.GetPartitionLocation());
+                const auto& partitionLocation = *partition.GetPartitionLocation();
+                UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
             }
         }
 
-        void DescribePartition(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        void DescribePartitionWithKillTablets(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation)
         {
             TDescribePartitionSettings settings;
             settings.IncludeStats(requireStats);
             settings.IncludeLocation(requireLocation);
 
-            i64 testPartitionId = 0;
+            std::int64_t testPartitionId = 0;
 
+            DescribePartitionTest(setup, client, requireStats, requireNonEmptyStats, requireLocation);
+
+            setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());
+
+            auto result = client.DescribePartition(setup.GetTopicPath(), testPartitionId, settings).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& description = result.GetPartitionDescription();
+
+            const auto& partition = description.GetPartition();
+            UNIT_ASSERT(partition.GetActive());
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), testPartitionId);
+
+            if (requireLocation)
             {
-                auto result = client.DescribePartition(TEST_TOPIC, testPartitionId, settings).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-                const auto& description = result.GetPartitionDescription();
-
-                const auto& partition = description.GetPartition();
-                UNIT_ASSERT(partition.GetActive());
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), testPartitionId);
-
-                if (requireStats)
-                {
-                    const auto& stats = partition.GetPartitionStats();
-                    UNIT_ASSERT(stats);
-
-                    if (requireNonEmptyStats)
-                    {
-                        UNIT_ASSERT_GE(stats->GetStartOffset(), 0);
-                        UNIT_ASSERT_GE(stats->GetEndOffset(), 0);
-                        UNIT_ASSERT_GT(stats->GetStoreSizeBytes(), 0);
-                        UNIT_ASSERT_GT(stats->GetLastWriteTime(), TInstant::Zero());
-                        UNIT_ASSERT_GT(stats->GetMaxWriteTimeLag(), TDuration::Zero());
-                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerMinute(), 0);
-                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerHour(), 0);
-                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerDay(), 0);
-                    } else {
-                        UNIT_ASSERT_VALUES_EQUAL(stats->GetStoreSizeBytes(), 0);
-                    }
-                }
-
-                if (requireLocation)
-                {
-                    UNIT_ASSERT(partition.GetPartitionLocation());
-                    const auto& partitionLocation = *partition.GetPartitionLocation();
-                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
-                    UNIT_ASSERT_GE(partitionLocation.GetGeneration(), 0); // greater-or-equal 0
-                }
-            }
-
-            if (killTablets)
-            {
-                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
-
-                auto result = client.DescribePartition(TEST_TOPIC, testPartitionId, settings).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-                const auto& description = result.GetPartitionDescription();
-
-                const auto& partition = description.GetPartition();
-                UNIT_ASSERT(partition.GetActive());
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), testPartitionId);
-
-                if (requireLocation)
-                {
-                    UNIT_ASSERT(partition.GetPartitionLocation());
-                    const auto& partitionLocation = *partition.GetPartitionLocation();
-                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
-                    UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
-                }
+                UNIT_ASSERT(partition.GetPartitionLocation());
+                const auto& partitionLocation = *partition.GetPartitionLocation();
+                UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
             }
         }
 
@@ -254,39 +126,40 @@ namespace NYdb::NTopic::NTests {
             TTopicClient client = setup.MakeClient();
 
             // Describe with KillTablets
-            DescribeTopic(setup, client, false, false, true, true);
-            DescribeConsumer(setup, client, false, false, true, true);
-            DescribePartition(setup, client, false, false, true, true);
+            DescribeTopicWithKillTablets(setup, client, false, false, true);
+            DescribeConsumerWithKillTablets(setup, client, false, false, true);
+            DescribePartitionWithKillTablets(setup, client, false, false, true);
         }
 
         TDescribePartitionResult RunPermissionTest(TTopicSdkTestSetup& setup, int userId, bool existingTopic, bool allowUpdateRow, bool allowDescribeSchema) {
-            TString authToken = TStringBuilder() << "x-user-" << userId << "@builtin";
-            Cerr << std::format("=== existingTopic={} allowUpdateRow={} allowDescribeSchema={} authToken={}\n",
+            std::string authToken = TStringBuilder() << "x-user-" << userId << "@builtin";
+            std::cerr << std::format("=== existingTopic={} allowUpdateRow={} allowDescribeSchema={} authToken={}\n",
                                 existingTopic, allowUpdateRow, allowDescribeSchema, std::string(authToken));
 
-            setup.GetServer().AnnoyingClient->GrantConnect(authToken);
+            setup.GetServer().AnnoyingClient->GrantConnect(TString(authToken));
 
             auto driverConfig = setup.MakeDriverConfig().SetAuthToken(authToken);
             auto client = TTopicClient(TDriver(driverConfig));
             auto settings = TDescribePartitionSettings().IncludeLocation(true);
-            i64 testPartitionId = 0;
+            std::int64_t testPartitionId = 0;
 
             NACLib::TDiffACL acl;
             if (allowDescribeSchema) {
-                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, authToken);
+                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, NACLib::TSID(authToken));
             }
             if (allowUpdateRow) {
-                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
+                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, NACLib::TSID(authToken));
             }
-            setup.GetServer().AnnoyingClient->ModifyACL("/Root", TString{TEST_TOPIC}, acl.SerializeAsString());
+            setup.GetServer().AnnoyingClient->ModifyACL("/Root", setup.GetTopicPath(), acl.SerializeAsString());
 
             while (true) { 
-                TDescribePartitionResult result = client.DescribePartition(existingTopic ? TEST_TOPIC : "bad-topic", testPartitionId, settings).GetValueSync();
+                TDescribePartitionResult result = client.DescribePartition(existingTopic ? setup.GetTopicPath() : "bad-topic", testPartitionId, settings).GetValueSync();
                 UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SCHEME_ERROR || result.GetStatus() == EStatus::UNAUTHORIZED, result.GetIssues());
                 // Connect access may appear later
-                if (result.GetStatus() != EStatus::UNAUTHORIZED)
+                if (result.GetStatus() != EStatus::UNAUTHORIZED) {
                     return result;
-                Sleep(TDuration::Seconds(1));
+                }
+                std::this_thread::sleep_for(std::chrono::seconds(1));
             }
         }
 
@@ -324,7 +197,7 @@ namespace NYdb::NTopic::NTests {
                     resultIssue = result.GetIssues().begin()->GetCode();
                     line << " issueCode=" << resultIssue;
                 }
-                Cerr << (line << " issues=" << result.GetIssues().ToOneLineString() << Endl);
+                std::cerr << line << " issues=" << result.GetIssues().ToOneLineString() << std::endl;
 
                 UNIT_ASSERT_EQUAL(resultStatus, status);
                 UNIT_ASSERT_EQUAL(resultIssue, issue);

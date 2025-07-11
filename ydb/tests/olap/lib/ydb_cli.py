@@ -29,18 +29,21 @@ class CheckCanonicalPolicy(Enum):
 
 class YdbCliHelper:
     @staticmethod
+    def get_cli_path() -> str:
+        cli = get_external_param('ydb-cli', 'main')
+        if cli == 'git':
+            return yatest.common.work_path('ydb')
+        if cli == 'main':
+            return yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))
+        return cli
+
+    @staticmethod
     def get_cli_command() -> list[str]:
-        args = [
+        return [
+            YdbCliHelper.get_cli_path(),
             '-e', YdbCluster.ydb_endpoint,
             '-d', f'/{YdbCluster.ydb_database}'
         ]
-        cli = get_external_param('ydb-cli', 'main')
-        if cli == 'git':
-            return [yatest.common.work_path('ydb')] + args
-        elif cli == 'main':
-            return [yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))] + args
-        else:
-            return [cli] + args
 
     class QueryPlan:
         def __init__(self) -> None:
@@ -79,6 +82,8 @@ class YdbCliHelper:
             self.stderr: str = ''
             self.error_message: str = ''
             self.warning_message: str = ''
+            self.errors: list[str] = []
+            self.warnings: list[str] = []
             self.plans: Optional[list[YdbCliHelper.QueryPlan]] = None
             self.explain = YdbCliHelper.Iteration()
             self.iterations: dict[int, YdbCliHelper.Iteration] = {}
@@ -87,13 +92,14 @@ class YdbCliHelper:
 
         @property
         def success(self) -> bool:
-            return len(self.error_message) == 0
+            return len(self.errors) == 0
 
         def get_stats(self, test: str) -> dict[str, dict[str, Any]]:
             result = self._stats.get(test, {})
             result.update({
-                'with_warrnings': bool(self.warning_message),
-                'with_errors': bool(self.error_message),
+                'with_warnings': bool(self.warnings) or bool(self.warning_message),
+                'with_warrnings': bool(self.warnings) or bool(self.warning_message),
+                'with_errors': bool(self.errors) or bool(self.error_message),
                 'errors': self.get_error_stats()
             })
             return result
@@ -116,6 +122,7 @@ class YdbCliHelper:
 
         def add_error(self, msg: Optional[str]) -> bool:
             if msg:
+                self.errors.append(msg)
                 if len(self.error_message) > 0:
                     self.error_message += f'\n\n{msg}'
                 else:
@@ -125,6 +132,7 @@ class YdbCliHelper:
 
         def add_warning(self, msg: Optional[str]):
             if msg:
+                self.warnings.append(msg)
                 if len(self.warning_message) > 0:
                     self.warning_message += f'\n\n{msg}'
                 else:

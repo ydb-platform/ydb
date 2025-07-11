@@ -1,7 +1,7 @@
 #include "name_service.h"
 
 #include <library/cpp/threading/future/wait/wait.h>
-#include <library/cpp/iterator/functools.h>
+#include <library/cpp/iterator/iterate_values.h>
 
 namespace NSQLComplete {
 
@@ -14,7 +14,7 @@ namespace NSQLComplete {
             {
             }
 
-            NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+            NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
                 if (request.Constraints.Object) {
                     return Schema_
                         ->List(ToListRequest(std::move(request)))
@@ -24,6 +24,7 @@ namespace NSQLComplete {
                 if (request.Constraints.Column && !request.Constraints.Column->Tables.empty()) {
                     return BatchDescribe(
                         std::move(request.Constraints.Column->Tables),
+                        std::move(request.Constraints.Column->WithoutByTableAlias),
                         request.Prefix,
                         request.Limit);
                 }
@@ -33,37 +34,61 @@ namespace NSQLComplete {
 
         private:
             NThreading::TFuture<TNameResponse> BatchDescribe(
-                TVector<TTableId> tables, TString prefix, ui64 limit) const {
-                TVector<NThreading::TFuture<TDescribeTableResponse>> futures;
-                for (const auto& table : tables) {
+                TVector<TAliased<TTableId>> tables,
+                THashMap<TString, THashSet<TString>> withoutByTableAlias,
+                TString prefix,
+                ui64 limit) const {
+                THashMap<TTableId, TVector<TString>> aliasesByTable;
+                for (TAliased<TTableId> table : std::move(tables)) {
+                    aliasesByTable[std::move(static_cast<TTableId&>(table))]
+                        .emplace_back(std::move(table.Alias));
+                }
+
+                THashMap<TTableId, NThreading::TFuture<TDescribeTableResponse>> futuresByTable;
+                for (const auto& [table, _] : aliasesByTable) {
                     TDescribeTableRequest request = {
                         .TableCluster = table.Cluster,
                         .TablePath = table.Path,
                         .ColumnPrefix = prefix,
                         .ColumnsLimit = limit,
                     };
-                    futures.emplace_back(Schema_->Describe(request));
+
+                    futuresByTable.emplace(table, Schema_->Describe(request));
                 }
 
-                return NThreading::WaitAll(futures).Apply([tables, futures](auto) mutable {
-                    TNameResponse response;
+                auto futuresIt = IterateValues(futuresByTable);
+                TVector<NThreading::TFuture<TDescribeTableResponse>> futures(begin(futuresIt), end(futuresIt));
 
-                    for (auto [table, f] : NFuncTools::Zip(tables, futures)) {
-                        TDescribeTableResponse description = f.ExtractValue();
-                        for (TString& column : description.Columns) {
-                            TColumnName name;
-                            name.Indentifier = std::move(column);
-                            name.Table = table;
+                return NThreading::WaitAll(std::move(futures))
+                    .Apply([aliasesByTable = std::move(aliasesByTable),
+                            futuresByTable = std::move(futuresByTable),
+                            withoutByTableAlias = std::move(withoutByTableAlias)](auto) mutable {
+                        TNameResponse response;
 
-                            response.RankedNames.emplace_back(std::move(name));
+                        for (auto [table, f] : futuresByTable) {
+                            TDescribeTableResponse description = f.ExtractValue();
+                            for (const TString& column : description.Columns) {
+                                const auto& aliases = aliasesByTable[table];
+                                for (const TString& alias : aliases) {
+                                    if ((withoutByTableAlias[alias].contains(column)) ||
+                                        (alias.empty() && 1 < aliases.size())) {
+                                        continue;
+                                    }
+
+                                    TColumnName name;
+                                    name.Identifier = column;
+                                    name.TableAlias = alias;
+
+                                    response.RankedNames.emplace_back(std::move(name));
+                                }
+                            }
                         }
-                    }
 
-                    return response;
-                });
+                        return response;
+                    });
             }
 
-            static TListRequest ToListRequest(TNameRequest request) {
+            static TListRequest ToListRequest(const TNameRequest& request) {
                 return {
                     .Cluster = ClusterName(*request.Constraints.Object),
                     .Path = request.Prefix,
@@ -109,14 +134,14 @@ namespace NSQLComplete {
                 TGenericName name;
                 if (entry.Type == TFolderEntry::Folder) {
                     TFolderName local;
-                    local.Indentifier = std::move(entry.Name);
+                    local.Identifier = std::move(entry.Name);
                     name = std::move(local);
                 } else if (entry.Type == TFolderEntry::Table) {
                     TTableName local;
-                    local.Indentifier = std::move(entry.Name);
+                    local.Identifier = std::move(entry.Name);
                     name = std::move(local);
                 } else {
-                    TUnkownName local;
+                    TUnknownName local;
                     local.Content = std::move(entry.Name);
                     local.Type = std::move(entry.Type);
                     name = std::move(local);

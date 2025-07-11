@@ -200,10 +200,11 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     TGetDataResult result;
 
     if (!status.Ok()) {
+        TString error = TStringBuilder{} << "Error while sending data request to monitoring api: " << status.Msg;
         if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED || status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE) {
-            return TGetDataResponse();
+            return TGetDataResponse(error, EStatus::STATUS_RETRIABLE_ERROR);
         }
-        return TGetDataResponse(TStringBuilder{} << "Error while sending data request to monitoring api: " << status.Msg);
+        return TGetDataResponse(error);
     }
 
     if (response.response_per_query_size() != 1) {
@@ -418,9 +419,10 @@ private:
                 }
                 return ERetryErrorClass::NoRetry;
             },
-            TDuration::MilliSeconds(5),
+            TDuration::MilliSeconds(50),
             TDuration::MilliSeconds(200),
-            TDuration::MilliSeconds(500)
+            TDuration::MilliSeconds(1000),
+            5
         );
 
         if (!body.empty()) {
@@ -579,8 +581,8 @@ private:
 private:
     const TString DefaultReplica;
     const ui64 ListSizeLimit = 1ull << 20;
-    const ui64 HttpMaxInflight = 1000;
-    const ui64 GrpcMaxInflight = 1000;
+    const ui64 HttpMaxInflight = 50;
+    const ui64 GrpcMaxInflight = 50;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 

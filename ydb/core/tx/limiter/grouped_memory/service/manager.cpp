@@ -25,6 +25,7 @@ void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 external
     AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "unregister_group")("external_process_id", externalProcessId)(
         "external_group_id", externalGroupId)("size", ProcessIds.GetSize());
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
+        auto g = BuildProcessOrderGuard(*process);
         process->UnregisterGroup(externalScopeId, externalGroupId);
     }
     RefreshSignals();
@@ -32,7 +33,16 @@ void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 external
 
 void TManager::UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
     TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
-    if (process.UpdateAllocation(externalScopeId, allocationId, volume)) {
+    bool updated = false;
+    {
+        auto g = BuildProcessOrderGuard(process);
+        updated = process.UpdateAllocation(externalScopeId, allocationId, volume);
+        if (!updated) {
+            g.Release();
+        }
+    }
+
+    if (updated) {
         TryAllocateWaiting();
     }
 
@@ -46,15 +56,18 @@ void TManager::TryAllocateWaiting() {
         AFL_VERIFY(it->second.IsPriorityProcess());
         it->second.TryAllocateWaiting(0);
     }
-    while (true) {
-        bool found = false;
-        for (auto&& i : Processes) {
-            if (i.second.TryAllocateWaiting(1)) {
-                found = true;
+    for (auto it = ProcessesOrdered.begin(); it != ProcessesOrdered.end();) {
+        if (it->second->TryAllocateWaiting(1)) {
+            TProcessMemory* process = it->second;
+            it = ProcessesOrdered.erase(it);
+            auto info = ProcessesOrdered.emplace(process->BuildUsageAddress(), process);
+            AFL_VERIFY(info.second);
+            auto itNew = info.first;
+            if (it == ProcessesOrdered.end() || itNew->first < it->first) {
+                it = itNew;
             }
-        }
-        if (!found) {
-            break;
+        } else {
+            ++it;
         }
     }
     RefreshSignals();
@@ -62,7 +75,15 @@ void TManager::TryAllocateWaiting() {
 
 void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId) {
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
-        if (process->UnregisterAllocation(externalScopeId, allocationId)) {
+        bool unregistered = false;
+        {
+            auto g = BuildProcessOrderGuard(*process);
+            unregistered = process->UnregisterAllocation(externalScopeId, allocationId);
+            if (!unregistered) {
+                g.Release();
+            }
+        }
+        if (unregistered) {
             TryAllocateWaiting();
         }
     }
@@ -75,7 +96,8 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
         process->RegisterAllocation(externalScopeId, externalGroupId, task, stageIdx);
     } else {
         AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
-                                                                                  "ext_group", externalGroupId)("stage_idx", stageIdx);
+                                                               "process", externalProcessId)("scope", externalScopeId)(
+                                                               "ext_group", externalGroupId)("stage_idx", stageIdx);
     }
     RefreshSignals();
 }
@@ -84,7 +106,10 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
     auto internalId = ProcessIds.GetInternalIdOptional(externalProcessId);
     if (!internalId) {
         const ui64 internalProcessId = ProcessIds.RegisterExternalIdOrGet(externalProcessId);
-        AFL_VERIFY(Processes.emplace(internalProcessId, TProcessMemory(externalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage)).second);
+        auto info = Processes.emplace(
+            internalProcessId, TProcessMemory(externalProcessId, internalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage));
+        AFL_VERIFY(info.second);
+        ProcessesOrdered.emplace(info.first->second.BuildUsageAddress(), &info.first->second);
     } else {
         ++Processes.find(*internalId)->second.MutableLinksCount();
     }
@@ -99,6 +124,7 @@ void TManager::UnregisterProcess(const ui64 externalProcessId) {
         return;
     }
     Y_UNUSED(ProcessIds.ExtractInternalIdVerified(externalProcessId));
+    AFL_VERIFY(ProcessesOrdered.erase(it->second.BuildUsageAddress()));
     it->second.Unregister();
     Processes.erase(it);
     const ui64 nextInternalProcessId = ProcessIds.GetMinInternalIdDef(internalProcessId);
@@ -110,13 +136,33 @@ void TManager::UnregisterProcess(const ui64 externalProcessId) {
 }
 
 void TManager::RegisterProcessScope(const ui64 externalProcessId, const ui64 externalProcessScopeId) {
-    GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId)).RegisterScope(externalProcessScopeId);
+    auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
+    auto g = BuildProcessOrderGuard(process);
+    process.RegisterScope(externalProcessScopeId);
     RefreshSignals();
 }
 
 void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 externalProcessScopeId) {
-    GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId)).UnregisterScope(externalProcessScopeId);
+    auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
+    auto g = BuildProcessOrderGuard(process);
+    process.UnregisterScope(externalProcessScopeId);
     RefreshSignals();
+}
+
+void TManager::SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
+    AFL_ENSURE(DefaultStage);
+
+    DefaultStage->SetMemoryConsumer(std::move(consumer));
+}
+
+void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit) {
+    AFL_ENSURE(DefaultStage);
+
+    bool isLimitIncreased = false;
+    DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased);
+    if (isLimitIncreased) {
+        TryAllocateWaiting();
+    }
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

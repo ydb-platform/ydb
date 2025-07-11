@@ -105,6 +105,7 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
+        const auto acceptExisting = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& sysViewDescription = Transaction.GetCreateSysView();
 
@@ -150,7 +151,7 @@ public:
             if (dstPath.IsResolved()) {
                 checks
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeSysView, /* acceptAlreadyExist */ false);
+                    .FailOnExist(TPathElement::EPathType::EPathTypeSysView, acceptExisting);
             } else {
                 checks
                     .NotEmpty();
@@ -158,7 +159,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()

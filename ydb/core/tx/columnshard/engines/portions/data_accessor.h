@@ -203,10 +203,11 @@ public:
     }
 };
 
-}
+}   // namespace NAssembling
 
-class TPortionDataAccessor {
+class TPortionDataAccessor: public TPortionMetaBase {
 private:
+    using TBase = TPortionMetaBase;
     TPortionInfo::TConstPtr PortionInfo;
     std::optional<std::vector<TColumnRecord>> Records;
     std::optional<std::vector<TIndexChunk>> Indexes;
@@ -231,6 +232,10 @@ private:
     void FullValidation() const;
     TPortionDataAccessor() = default;
 
+private:
+    THashMap<TChunkAddress, TString> DecodeBlobAddressesImpl(
+        NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
+
 public:
     using TColumnAssemblingInfo = NAssembling::TColumnAssemblingInfo;
     using TAssembleBlobInfo = NAssembling::TAssembleBlobInfo;
@@ -238,8 +243,8 @@ public:
     using TPreparedBatchData = NAssembling::TPreparedBatchData;
 
     ui64 GetMetadataSize() const {
-        return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + 
-            (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0);
+        return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0) +
+               sizeof(TPortionInfo::TConstPtr) + TBase::GetMetadataMemorySize();
     }
 
     class TExtractContext {
@@ -294,7 +299,8 @@ public:
             extractedIndexes = *Indexes;
         }
 
-        return TPortionDataAccessor(PortionInfo, std::move(extractedRecords), std::move(extractedIndexes), false);
+        std::vector<TUnifiedBlobId> blobIds = BlobIds;
+        return TPortionDataAccessor(PortionInfo, std::move(blobIds), std::move(extractedRecords), std::move(extractedIndexes), false);
     }
 
     const std::vector<TColumnRecord>& TestGetRecords() const {
@@ -311,7 +317,7 @@ public:
     }
 
     TPortionDataAccessor SwitchPortionInfo(std::shared_ptr<TPortionInfo>&& newPortion) const {
-        return TPortionDataAccessor(newPortion, GetRecordsVerified(), GetIndexesVerified(), true);
+        return TPortionDataAccessor(newPortion, BlobIds, GetRecordsVerified(), GetIndexesVerified(), true);
     }
 
     template <class TAggregator, class TChunkInfo>
@@ -342,19 +348,22 @@ public:
         }
     }
 
-    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, std::vector<TColumnRecord>&& records,
-        std::vector<TIndexChunk>&& indexes, const bool validate)
-        : PortionInfo(portionInfo)
+    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, std::vector<TUnifiedBlobId>&& blobIds,
+        std::vector<TColumnRecord>&& records, std::vector<TIndexChunk>&& indexes, const bool validate)
+        : TBase(std::move(blobIds))
+        , PortionInfo(portionInfo)
         , Records(std::move(records))
         , Indexes(std::move(indexes)) {
+        AFL_VERIFY(BlobIds.size());
         if (validate) {
             FullValidation();
         }
     }
 
-    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, const std::vector<TColumnRecord>& records,
-        const std::vector<TIndexChunk>& indexes, const bool validate)
-        : PortionInfo(portionInfo)
+    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, const std::vector<TUnifiedBlobId>& blobIds,
+        const std::vector<TColumnRecord>& records, const std::vector<TIndexChunk>& indexes, const bool validate)
+        : TBase(blobIds)
+        , PortionInfo(portionInfo)
         , Records(records)
         , Indexes(indexes) {
         if (validate) {
@@ -405,12 +414,38 @@ public:
     void RemoveFromDatabase(IDbWrapper& db) const;
     void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
 
-    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
+    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema, const bool zeroIfAbsent = false) const {
         NArrow::NSplitter::TSerializationStats result;
-        for (auto&& i : GetRecordsVerified()) {
-            if (auto col = schema.GetFieldByColumnIdOptional(i.ColumnId)) {
-                result.AddStat(i.GetSerializationStat(col->name()));
+        if (!zeroIfAbsent) {
+            for (auto&& i : GetRecordsVerified()) {
+                if (auto col = schema.GetFieldByColumnIdOptional(i.ColumnId)) {
+                    result.AddStat(i.GetSerializationStat(col->name()));
+                }
             }
+        } else {
+            auto itSchema = schema.GetColumnIds().begin();
+            auto itRecords = GetRecordsVerified().begin();
+            ui32 schemaIdx = 0;
+            while (itSchema != schema.GetColumnIds().end() && itRecords != GetRecordsVerified().end()) {
+                if (*itSchema < itRecords->ColumnId) {
+                    NArrow::NSplitter::TColumnSerializationStat stat(*itSchema, schema.GetFieldByIndexVerified(schemaIdx)->name());
+                    NArrow::NSplitter::TSimpleSerializationStat simpleStat(0, GetPortionInfo().GetRecordsCount(), 0);
+                    stat.Merge(simpleStat);
+                    result.AddStat(stat);
+                    ++itSchema;
+                    ++schemaIdx;
+                } else if (itRecords->ColumnId < *itSchema) {
+                    ++itRecords;
+                } else {
+                    while (itRecords != GetRecordsVerified().end() && itRecords->ColumnId == *itSchema) {
+                        result.AddStat(itRecords->GetSerializationStat(schema.GetFieldByIndexVerified(schemaIdx)->name()));
+                        ++itRecords;
+                    }
+                    ++itSchema;
+                    ++schemaIdx;
+                }
+            }
+        
         }
         return result;
     }
@@ -427,7 +462,8 @@ public:
     void FillBlobRangesByStorage(
         THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo, const std::set<ui32>* entityIds = nullptr) const;
     void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const;
-    void FillBlobRangesByStorage(THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result, const TIndexInfo& indexInfo, const THashSet<ui32>& entityIds) const;
+    void FillBlobRangesByStorage(
+        THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result, const TIndexInfo& indexInfo, const THashSet<ui32>& entityIds) const;
     void FillBlobRangesByStorage(
         THashMap<ui32, THashMap<TString, THashSet<TBlobRange>>>& result, const TVersionedIndex& index, const THashSet<ui32>& entityIds) const;
     void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const;
@@ -440,6 +476,8 @@ public:
     std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
 
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+    static std::vector<THashMap<TChunkAddress, TString>> DecodeBlobAddresses(const std::vector<TPortionDataAccessor>& accessors,
+        const std::vector<ISnapshotSchema::TPtr>& schemas, NBlobOperations::NRead::TCompositeReadBlobs&& blobs);
 
     THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
         THashMap<TString, THashSet<TUnifiedBlobId>> result;
@@ -472,7 +510,8 @@ public:
         THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
         const bool restoreAbsent = true) const;
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt, const bool restoreAbsent = true) const;
+        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
+        const bool restoreAbsent = true) const;
 
     class TPage {
     private:

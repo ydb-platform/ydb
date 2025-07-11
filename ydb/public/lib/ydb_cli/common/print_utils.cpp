@@ -107,6 +107,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "view";
     case NScheme::ESchemeEntryType::Replication:
         return "replication";
+    case NScheme::ESchemeEntryType::Transfer:
+        return "transfer";
     case NScheme::ESchemeEntryType::ResourcePool:
         return "resource-pool";
     case NScheme::ESchemeEntryType::SysView:
@@ -136,6 +138,14 @@ int PrintProtoJsonBase64(const google::protobuf::Message& msg) {
 
     Cout << json << Endl;
     return EXIT_SUCCESS;
+}
+
+FHANDLE GetStdinFileno() {
+#if defined(_win32_)
+    return GetStdHandle(STD_INPUT_HANDLE);
+#elif defined(_unix_)
+    return STDIN_FILENO;
+#endif
 }
 
 }

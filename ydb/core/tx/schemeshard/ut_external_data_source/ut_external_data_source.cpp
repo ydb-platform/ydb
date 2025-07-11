@@ -463,6 +463,65 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         }
     }
 
+    Y_UNIT_TEST(ParallelReplaceExternalDataSourceIfNotExists) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
+                Name: "MyExternalDataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
+                Auth {
+                    None {
+                    }
+                }
+                ReplaceIfExists: true
+            )", {NKikimrScheme::StatusAccepted}
+        );
+
+        env.TestWaitNotification(runtime, txId);
+
+        constexpr ui32 TEST_RUNS = 30;
+        TSet<ui64> txIds;
+        for (ui32 i = 0; i < TEST_RUNS; ++i) {
+            AsyncCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
+                    Name: "MyExternalDataSource"
+                    SourceType: "ObjectStorage"
+                    Location: "https://s3.cloud.net/other_bucket"
+                    Auth {
+                        None {
+                        }
+                    }
+                    ReplaceIfExists: true
+                )"
+            );
+
+            txIds.insert(txId);
+        }
+
+        ui32 acceptedCount = 0;
+        for (auto testTx : txIds) {
+            const auto result = TestModificationResults(runtime, testTx, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            acceptedCount += result == NKikimrScheme::StatusAccepted;
+        }
+        UNIT_ASSERT_GE(acceptedCount, 1);
+
+        env.TestWaitNotification(runtime, txIds);
+
+        {
+            auto describeResult =  DescribePath(runtime, "/MyRoot/MyExternalDataSource");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalDataSourceDescription());
+            const auto& externalDataSourceDescription = describeResult.GetPathDescription().GetExternalDataSourceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetName(), "MyExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetVersion(), acceptedCount + 1);
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetLocation(), "https://s3.cloud.net/other_bucket");
+            UNIT_ASSERT_EQUAL(externalDataSourceDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
+        }
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceShouldFailIfSuchEntityAlreadyExists) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));

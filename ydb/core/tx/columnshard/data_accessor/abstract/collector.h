@@ -9,6 +9,11 @@ class TGranuleMeta;
 class TPortionInfo;
 }
 
+namespace NKikimr::NOlap {
+class TGranuleMeta;
+class TPortionInfo;
+}
+
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IAccessorCallback {
 public:

@@ -2,7 +2,6 @@ log-levels:
   YFM001: 'error' # Inline code length
   MD009:  'error' # Trailing spaces
   MD023:  'error' # Headings must start at the beginning of the line
-  MD024:  'error' # Multiple headings with the same content
   MD026:  'error' # Trailing punctuation in heading
 
 # Inline code length

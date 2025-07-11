@@ -4,6 +4,8 @@
 
 #include <util/datetime/base.h>
 
+#include <google/protobuf/arena.h>
+
 #include <optional>
 #include <memory>
 
@@ -272,7 +274,7 @@ class TTableClient;
 class TValue {
     friend class TValueParser;
     friend class TProtoAccessor;
-    friend class ::NYdb::Dev::NTable::TTableClient;
+    friend class NTable::TTableClient;
 public:
     TValue(const TType& type, const Ydb::Value& valueProto);
     TValue(const TType& type, Ydb::Value&& valueProto);
@@ -528,7 +530,7 @@ public:
 protected:
     TValueBuilderBase(TValueBuilderBase&&);
 
-    TValueBuilderBase();
+    TValueBuilderBase(google::protobuf::Arena* arena = nullptr);
 
     TValueBuilderBase(const TType& type);
 
@@ -544,7 +546,7 @@ private:
 
 class TValueBuilder : public TValueBuilderBase<TValueBuilder> {
 public:
-    TValueBuilder();
+    TValueBuilder(google::protobuf::Arena* arena = nullptr);
 
     TValueBuilder(const TType& type);
 

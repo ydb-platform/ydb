@@ -43,6 +43,8 @@ class YdbCluster:
                 for e in ss.get('Endpoints', [])
             }
             self.ic_port: int = ports.get('ic', 0)
+            self.mon_port: int = ports.get('http-mon', 0)
+            self.grpc_port: int = ports.get('grpc', 0)
             self.disconnected: bool = desc.get('Disconnected', False)
             self.version: str = ss.get('Version', '')
             self.start_time: float = 0.001 * int(ss.get('StartTime', time() * 1000))
@@ -132,6 +134,27 @@ class YdbCluster:
         except Exception as e:
             LOGGER.error(e)
         return []
+
+    @classmethod
+    def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None) -> dict[str, dict[str, float]]:
+        def sensor_has_labels(sensor, labels: dict[str, str]) -> bool:
+            for k, v in labels.items():
+                if sensor.get('labels', {}).get(k, '') != v:
+                    return False
+            return True
+        nodes = cls.get_cluster_nodes(db_only=db_only, role=role)
+        result = {}
+        for node in nodes:
+            response = requests.get(f'http://{node.host}:{node.mon_port}/counters/counters=tablets/json')
+            response.raise_for_status()
+            sensor_values = {}
+            for name, labels in metrics.items():
+                for sensor in response.json()['sensors']:
+                    if sensor_has_labels(sensor, labels):
+                        sensor_values.setdefault(name, 0.)
+                        sensor_values[name] += sensor['value']
+            result[node.slot] = sensor_values
+        return result
 
     @classmethod
     def get_cluster_info(cls):

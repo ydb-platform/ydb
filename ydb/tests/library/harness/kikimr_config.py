@@ -174,6 +174,7 @@ class KikimrConfigGenerator(object):
             explicit_hosts_and_host_configs=False,
             table_service_config=None,  # dict[name]=value
             bridge_config=None,
+            memory_controller_config=None,
             verbose_memory_limit_exception=False,
     ):
         if extra_feature_flags is None:
@@ -439,8 +440,13 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if memory_controller_config:
+            self.yaml_config["memory_controller_config"] = memory_controller_config
+
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
-            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+            if "memory_controller_config" not in self.yaml_config:
+                self.yaml_config["memory_controller_config"] = {}
+            self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
 
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
@@ -780,7 +786,8 @@ class KikimrConfigGenerator(object):
             }
             if self.bridge_config:
                 host_dict["bridge_pile_name"] = self.bridge_config.get("piles", [])[node_id % len(self.bridge_config.get("piles", []))].get("name")
-
+            elif self.static_erasure == Erasure.MIRROR_3_DC:
+                host_dict["location"] = {"data_center": "zone-%d" % (node_id % 3)}
             hosts.append(host_dict)
 
         self.yaml_config["host_configs"] = host_configs
@@ -802,6 +809,7 @@ class KikimrConfigGenerator(object):
         for dc in self._dcs:
             self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"].append({"fail_domains": []})
 
-        self._add_state_storage_config()
+        if not self.use_self_management:
+            self._add_state_storage_config()
         if not self.use_self_management and not self.explicit_hosts_and_host_configs:
             self._initialize_pdisks_info()

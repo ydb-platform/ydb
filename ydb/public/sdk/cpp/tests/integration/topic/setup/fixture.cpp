@@ -1,8 +1,12 @@
 #include "fixture.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <util/system/execpath.h>
+
+using namespace NYdb::NScheme;
+using namespace NYdb::NTable;
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
@@ -17,85 +21,86 @@ void TTopicTestFixture::SetUp() {
 
     TTopicClient client(MakeDriver());
 
-    const testing::TestInfo* const testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    std::filesystem::path execPath(std::string{GetExecPath()});
+    const auto& testInfo = testing::UnitTest::GetInstance()->current_test_info();
 
     std::stringstream topicBuilder;
-    topicBuilder << std::getenv("YDB_TEST_ROOT") << "/" << testInfo->test_suite_name() << "-" << testInfo->name();
-    TopicPath_ = topicBuilder.str();
+    topicBuilder << std::getenv("YDB_TEST_ROOT") << "/" << testInfo->test_suite_name() << "-" << testInfo->name() << "/";
+    TopicPrefix_ = topicBuilder.str();
     
     std::stringstream consumerBuilder;
-    consumerBuilder << testInfo->test_suite_name() << "-" << testInfo->name() << "-consumer";
-    ConsumerName_ = consumerBuilder.str();
+    consumerBuilder << testInfo->test_suite_name() << "-" << testInfo->name() << "-";
+    ConsumerPrefix_ = consumerBuilder.str();
 
-    client.DropTopic(TopicPath_).GetValueSync();
-    CreateTopic(TopicPath_);
+    RemoveDirectoryRecurive(GetDatabase() + "/" + TopicPrefix_);
+
+    CreateTopic();
 }
 
-void TTopicTestFixture::CreateTopic(const std::string& path, const std::string& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount) {
-    TTopicClient client(MakeDriver());
+void TTopicTestFixture::RemoveDirectoryRecurive(const std::string& path) const {
+    TSchemeClient schemeClient(MakeDriver());
 
-    TCreateTopicSettings topics;
-    topics
-        .BeginConfigurePartitioningSettings()
-        .MinActivePartitions(partitionCount)
-        .MaxActivePartitions(maxPartitionCount.value_or(partitionCount));
-
-    if (maxPartitionCount.has_value() && maxPartitionCount.value() > partitionCount) {
-        topics
-            .BeginConfigurePartitioningSettings()
-            .BeginConfigureAutoPartitioningSettings()
-            .Strategy(EAutoPartitioningStrategy::ScaleUp);
+    auto describeResult = schemeClient.DescribePath(path).GetValueSync();
+    if (describeResult.GetStatus() == EStatus::SCHEME_ERROR) {
+        return;
     }
+    NStatusHelpers::ThrowOnError(describeResult);
+    auto entry = describeResult.GetEntry();
 
-    TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
-    topics.AppendConsumers(consumers);
-
-    auto status = client.CreateTopic(path, topics).GetValueSync();
-    Y_ENSURE(status.IsSuccess(), status);
+    if (entry.Type == ESchemeEntryType::Table || entry.Type == ESchemeEntryType::ColumnTable) {
+        TTableClient client(MakeDriver());
+        NStatusHelpers::ThrowOnError(client.RetryOperationSync([&path](TSession session) {
+            return session.DropTable(path).GetValueSync();
+        }));
+    } else if (entry.Type == ESchemeEntryType::Topic) {
+        TTopicClient client(MakeDriver());
+        NStatusHelpers::ThrowOnError(client.DropTopic(path).GetValueSync());
+    } else if (entry.Type == ESchemeEntryType::Directory) {
+        auto listResult = schemeClient.ListDirectory(path).GetValueSync();
+        NStatusHelpers::ThrowOnError(listResult);
+        for (const auto& entry : listResult.GetChildren()) {
+            RemoveDirectoryRecurive(path + "/" + entry.Name);
+        }
+    } else {
+        ythrow TYdbException() << "Entry type " << entry.Type << " is not supported" << Endl;
+    }
 }
 
-void TTopicTestFixture::CreateTopic(const std::string& path, size_t partitionCount, std::optional<size_t> maxPartitionCount) {
-    CreateTopic(path, GetConsumerName(), partitionCount, maxPartitionCount);
+std::string TTopicTestFixture::GetEndpoint() const {
+    auto endpoint = std::getenv("YDB_ENDPOINT");
+    Y_ENSURE_BT(endpoint, "YDB_ENDPOINT is not set");
+    return endpoint;
 }
 
-std::string TTopicTestFixture::GetTopicPath() {
-    return TopicPath_;
+std::string TTopicTestFixture::GetDatabase() const {
+    auto database = std::getenv("YDB_DATABASE");
+    Y_ENSURE_BT(database, "YDB_DATABASE is not set");
+    return database;
 }
 
-std::string TTopicTestFixture::GetConsumerName() {
-    return ConsumerName_;
-}
-
-void TTopicTestFixture::DropTopic(const std::string& path) {
+void TTopicTestFixture::DropTopic(const std::string& name) {
     TTopicClient client(MakeDriver());
-    auto status = client.DropTopic(path).GetValueSync();
-    Y_ENSURE(status.IsSuccess(), status);
+    auto status = client.DropTopic(GetTopicPath(name)).GetValueSync();
+    Y_ENSURE_BT(status.IsSuccess(), status);
 }
 
 TDriverConfig TTopicTestFixture::MakeDriverConfig() const {
     return TDriverConfig()
-        .SetEndpoint(std::getenv("YDB_ENDPOINT"))
-        .SetDatabase(std::getenv("YDB_DATABASE"))
+        .SetEndpoint(GetEndpoint())
+        .SetDatabase(GetDatabase())
         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
 }
 
-TDriver TTopicTestFixture::MakeDriver() const {
-    return TDriver(MakeDriverConfig());
-}
-
 std::uint16_t TTopicTestFixture::GetPort() const {
-    auto endpoint = std::getenv("YDB_ENDPOINT");
-    Y_ENSURE(endpoint, "YDB_ENDPOINT is not set");
+    auto endpoint = GetEndpoint();
 
     auto portPos = std::string(endpoint).find(":");
     return std::stoi(std::string(endpoint).substr(portPos + 1));
 }
 
-std::vector<std::uint32_t> TTopicTestFixture::GetNodeIds() const {
+std::vector<std::uint32_t> TTopicTestFixture::GetNodeIds() {
     NDiscovery::TDiscoveryClient client(MakeDriver());
     auto result = client.ListEndpoints().GetValueSync();
-    Y_ENSURE(result.IsSuccess(), static_cast<TStatus>(result));
+    Y_ENSURE_BT(result.IsSuccess(), static_cast<TStatus>(result));
 
     std::vector<std::uint32_t> nodeIds;
     for (const auto& endpoint : result.GetEndpointsInfo()) {

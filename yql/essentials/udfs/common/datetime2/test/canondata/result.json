@@ -49,6 +49,16 @@
             "uri": "file://test.test_Format_/results.txt"
         }
     ],
+    "test.test[FromSeconds_2025.02]": [
+        {
+            "uri": "file://test.test_FromSeconds_2025.02_/extracted"
+        }
+    ],
+    "test.test[FromSeconds_2025.03]": [
+        {
+            "uri": "file://test.test_FromSeconds_2025.03_/results.txt"
+        }
+    ],
     "test.test[From]": [
         {
             "uri": "file://test.test_From_/results.txt"
@@ -117,6 +127,16 @@
     "test.test[StartOf]": [
         {
             "uri": "file://test.test_StartOf_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.02]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.02_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.03]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.03_/results.txt"
         }
     ],
     "test.test[To]": [

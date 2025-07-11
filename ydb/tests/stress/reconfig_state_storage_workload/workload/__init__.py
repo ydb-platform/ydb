@@ -9,6 +9,7 @@ import grpc
 from enum import Enum
 
 from ydb.tests.stress.common.common import WorkloadBase
+from ydb.tests.stress.common.common import YdbClient
 
 logger = logging.getLogger(__name__)
 
@@ -207,10 +208,10 @@ class WorkloadReconfigStateStorage(WorkloadBase):
     loop_cnt = 0
     wait_for = 1
 
-    def __init__(self, client, cluster, prefix, stop, config_name):
+    def __init__(self, client, http_endpoint, prefix, stop, config_name):
         super().__init__(client, prefix, "reconfig_statestorage", stop)
         self.ringGroupActorIdOffset = 1
-        self.cluster = cluster
+        self.http_endpoint = http_endpoint
         self.lock = threading.Lock()
         self.config_name = config_name
 
@@ -219,7 +220,7 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             return f"Reconfig: {self.loop_cnt}"
 
     def do_request(self, json_req):
-        url = f'http://{self.cluster.nodes[1].host}:{self.cluster.nodes[1].mon_port}/actors/nodewarden?page=distconf'
+        url = f'{self.http_endpoint}/actors/nodewarden?page=distconf'
         return requests.post(url, headers={'content-type': 'application/json'}, json=json_req).json()
 
     def do_request_config(self):
@@ -270,9 +271,9 @@ class WorkloadReconfigStateStorage(WorkloadBase):
 
 class WorkloadDiscovery(WorkloadBase):
 
-    def __init__(self, client, cluster, prefix, stop):
+    def __init__(self, client, grpc_endpoint, prefix, stop):
         super().__init__(client, prefix, "discovery", stop)
-        self.cluster = cluster
+        self.grpc_endpoint = grpc_endpoint
         self.lock = threading.Lock()
         self.cnt = 0
 
@@ -281,8 +282,7 @@ class WorkloadDiscovery(WorkloadBase):
             return f"Discovery: {self.cnt}"
 
     def _loop(self):
-        url = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
-        driver_config = ydb.DriverConfig(url, self.client.database)
+        driver_config = ydb.DriverConfig(self.grpc_endpoint, self.client.database)
         while not self.is_stop_requested():
             time.sleep(3)
             resolver = ydb.DiscoveryEndpointsResolver(driver_config)
@@ -301,10 +301,12 @@ class WorkloadDiscovery(WorkloadBase):
 class WorkloadRunner:
     config_name = "StateStorage"
 
-    def __init__(self, client, cluster, path, duration, config_name):
-        self.client = client
+    def __init__(self, grpc_endpoint, http_endpoint, database, path, duration, config_name):
+        self.client = YdbClient(grpc_endpoint, database, True)
+        self.client.wait_connection()
+        self.grpc_endpoint = grpc_endpoint
+        self.http_endpoint = http_endpoint
         self.name = path
-        self.cluster = cluster
         self.tables_prefix = "/".join([self.client.database, self.name])
         self.duration = duration
         self.config_name = config_name
@@ -325,11 +327,12 @@ class WorkloadRunner:
     def run(self):
         stop = threading.Event()
 
+        reconfigWorkload = WorkloadReconfigStateStorage(self.client, self.http_endpoint, self.name, stop, self.config_name)
         workloads = [
             WorkloadTablesCreateDrop(self.client, self.name, stop),
             WorkloadInsertDelete(self.client, self.name, stop),
-            WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop, self.config_name),
-            WorkloadDiscovery(self.client, self.cluster, self.name, stop)
+            reconfigWorkload,
+            WorkloadDiscovery(self.client, self.grpc_endpoint, self.name, stop)
         ]
         for w in workloads:
             w.start()
@@ -344,3 +347,4 @@ class WorkloadRunner:
         for w in workloads:
             w.join()
         logger.info("Waiting for stop... stopped")
+        return reconfigWorkload.loop_cnt

@@ -484,6 +484,9 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
                 (PDiskId, pdiskId.PDiskId));
         }
+        if (pdisk.InferPDiskSlotCountFromUnitSize) {
+            pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+        }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
     pDisk->SetManagementStage(SerialManagementStage);
@@ -684,4 +687,3 @@ void TBlobStorageController::SendInReply(const IEventHandle& query, std::unique_
 }
 
 } // NKikimr::NBsController
-

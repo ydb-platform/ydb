@@ -23,6 +23,7 @@ message THostConfigDrive {
 
     // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
     NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
+    uint64 InferPDiskSlotCountFromUnitSize = 7;
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -681,6 +682,7 @@ message TBaseConfig {
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
         TMaintenanceStatus.E MaintenanceStatus = 20;
+        uint64 InferPDiskSlotCountFromUnitSize = 21;
     }
     message TVSlot {
         message TDonorDisk {

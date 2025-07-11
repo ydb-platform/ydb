@@ -115,16 +115,14 @@
                                                                                         "Name": "TableRangeScan",
                                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
+                                                                                            "CounterID [62, 62]",
+                                                                                            "EventDate [15887, 15917]",
                                                                                             "IsDownload",
                                                                                             "IsLink",
                                                                                             "IsRefresh",
                                                                                             "URL"
                                                                                         ],
-                                                                                        "ReadRanges": [
-                                                                                            "CounterID [62, 62]",
-                                                                                            "EventDate [15887, 15917]"
-                                                                                        ],
-                                                                                        "ReadRangesExpectedSize": 1,
+                                                                                        "ReadRangesExpectedSize": "1",
                                                                                         "ReadRangesKeys": [
                                                                                             "CounterID",
                                                                                             "EventDate"

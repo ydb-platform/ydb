@@ -3,7 +3,7 @@
 #include "error.h"
 
 #include <library/cpp/threading/future/core/future.h>
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/utils.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/error.pb.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>

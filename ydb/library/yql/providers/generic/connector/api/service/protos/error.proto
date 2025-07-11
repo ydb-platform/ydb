@@ -5,9 +5,7 @@ package NYql.NConnector.NApi;
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
-option go_package = "a.yandex-team.ru/ydb/library/yql/providers/generic/connector/libgo/service/protos";
-
-// ---------- Utils ----------
+option go_package = "a.yandex-team.ru/contrib/ydb/library/yql/providers/generic/connector/libgo/service/protos";
 
 // Special type to describe the result of any operation
 message TError {

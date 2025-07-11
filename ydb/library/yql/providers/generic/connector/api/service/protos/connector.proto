@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package NYql.NConnector.NApi;
 
-import "ydb/library/yql/providers/generic/connector/api/service/protos/utils.proto";
+import "ydb/library/yql/providers/generic/connector/api/service/protos/error.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";

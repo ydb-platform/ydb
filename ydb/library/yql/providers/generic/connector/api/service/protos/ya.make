@@ -10,7 +10,7 @@ EXCLUDE_TAGS(GO_PROTO)
 
 SRCS(
     connector.proto
-    utils.proto
+    error.proto
 )
 
 END()

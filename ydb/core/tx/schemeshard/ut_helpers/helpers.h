@@ -411,7 +411,7 @@ namespace NSchemeShardUT_Private {
         const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
-    void TestBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TString column, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    void TestBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     TEvIndexBuilder::TEvCancelRequest* CreateCancelBuildIndexRequest(const ui64 id, const TString& dbName, const ui64 buildIndexId);
     NKikimrIndexBuilder::TEvCancelResponse TestCancelBuildIndex(TTestActorRuntime& runtime, const ui64 id, const ui64 schemeShard, const TString &dbName, const ui64 buildIndexId, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
     TEvIndexBuilder::TEvListRequest* ListBuildIndexRequest(const TString& dbName);
@@ -659,8 +659,6 @@ namespace NSchemeShardUT_Private {
 
     NKikimrTxDataShard::TEvCompactTableResult CompactTable(
         TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false, bool compactSinglePartedShards = false);
-
-    NKikimrPQ::TDescribeResponse GetDescribeFromPQBalancer(TTestActorRuntime& runtime, ui64 balancerId);
 
     void SendTEvPeriodicTopicStats(TTestActorRuntime& runtime, ui64 topicId, ui64 generation, ui64 round, ui64 dataSize, ui64 usedReserveSize);
     void WriteToTopic(TTestActorRuntime& runtime, const TString& path, ui32& msgSeqNo, const TString& message);

@@ -169,7 +169,10 @@ private:
         return Source->GetContext()->GetCommonContext()->GetAbortionFlag();
     }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
-        AFL_VERIFY(!result.HasErrors());
+        if (result.HasErrors()) {
+            Source->GetContext()->GetCommonContext()->AbortWithError("has errors on portion accessors restore");
+            return;
+        }
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         AFL_VERIFY(Step.Next());

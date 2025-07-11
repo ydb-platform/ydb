@@ -35,6 +35,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
     , MaxChunksToDefragInflight(10, 1, 50)
+    , FreshCompMaxInFlightWrites(10, 1, 1000)
+    , FreshCompMaxInFlightReads(10, 1, 1000)
+    , HullCompMaxInFlightWrites(10, 1, 1000)
+    , HullCompMaxInFlightReads(20, 1, 1000)
     , ThrottlingDryRun(1, 0, 1)
     , ThrottlingMinLevel0SstCount(100, 1, 100000)
     , ThrottlingMaxLevel0SstCount(250, 1, 100000)
@@ -175,6 +179,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
+
+        hFunc(TEvNodeWardenManageSyncers, HandleManageSyncers);
 
         default:
             EnqueuePendingMessage(ev);
@@ -368,6 +374,10 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
         icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
         icb->RegisterSharedControl(MaxChunksToDefragInflight, "VDiskControls.MaxChunksToDefragInflight");
+        icb->RegisterSharedControl(FreshCompMaxInFlightWrites, "VDiskControls.FreshCompMaxInFlightWrites");
+        icb->RegisterSharedControl(FreshCompMaxInFlightReads, "VDiskControls.FreshCompMaxInFlightReads");
+        icb->RegisterSharedControl(HullCompMaxInFlightWrites, "VDiskControls.HullCompMaxInFlightWrites");
+        icb->RegisterSharedControl(HullCompMaxInFlightReads, "VDiskControls.HullCompMaxInFlightReads");
 
         icb->RegisterSharedControl(ThrottlingDryRun, "VDiskControls.ThrottlingDryRun");
         icb->RegisterSharedControl(ThrottlingMinLevel0SstCount, "VDiskControls.ThrottlingMinLevel0SstCount");

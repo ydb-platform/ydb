@@ -222,6 +222,35 @@ IGraphTransformer::TStatus BlockExistsWrapper(const TExprNode::TPtr& input, TExp
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockValidUnwrapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& arg = *input->Child(0);
+
+    if (!EnsureComputable(arg, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    // Arg type must be block.
+    if (!EnsureBlockOrScalarType(arg, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    // Arg type must be optional.
+    bool argItemIsScalar;
+    const auto* argItemType = GetBlockItemType(*arg.GetTypeAnn(), argItemIsScalar);
+    if (!EnsureOptionalType(arg.Pos(), *argItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(UnpackOptionalBlockItemType(*arg.GetTypeAnn(), ctx.Expr, /*convertToScalar=*/false));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
@@ -1000,7 +1029,7 @@ IGraphTransformer::TStatus WideTopBlocksWrapper(const TExprNode::TPtr& input, TE
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -1031,7 +1060,7 @@ IGraphTransformer::TStatus WideSortBlocksWrapper(const TExprNode::TPtr& input, T
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 

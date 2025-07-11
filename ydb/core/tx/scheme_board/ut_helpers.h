@@ -5,6 +5,7 @@
 #include "events_internal.h"
 #include "subscriber.h"
 
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -27,6 +28,7 @@ namespace NSchemeBoard {
 void SetupMinimalRuntime(TTestActorRuntime& runtime, const TStateStorageSetupper& setupStateStorage = CreateDefaultStateStorageSetupper());
 
 TIntrusiveConstPtr<TStateStorageInfo> GetStateStorageInfo(TTestActorRuntime& runtime);
+TEvStateStorage::TEvResolveReplicasList::TPtr ResolveReplicas(TTestActorRuntime& runtime, const TString& path);
 
 class TTestContext: public TTestBasicRuntime {
 public:
@@ -241,16 +243,53 @@ protected:
         return TTestContext::DefaultObserverFunc;
     }
 
+    void AddSysViewsRosterUpdateObserver() {
+        if (!Context->IsRealThreads()) {
+            SysViewsRosterUpdateFinished = false;
+            SysViewsRosterUpdateObserver = Context->AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
+                SysViewsRosterUpdateFinished = true;
+            });
+        }
+    }
+
+    void WaitForSysViewsRosterUpdate() {
+        if (!Context->IsRealThreads()) {
+            Context->WaitFor("SysViewsRoster update finished", [this] {
+                return SysViewsRosterUpdateFinished;
+            });
+            SysViewsRosterUpdateObserver.Remove();
+        }
+    }
+
 public:
-    void SetUp() override {
+    void PrepareContext() {
         Context = MakeHolder<TTestContext>();
         Context->SetObserverFunc(ObserverFunc());
 
         SetupRuntime(*Context);
+    }
+
+    void BootActors() {
+        // Create Observer to catch an event of system views update finished.
+        // For more info, see comments in ydb/core/testlib/test_client.cpp
+        if (Context->GetAppData().FeatureFlags.GetEnableRealSystemViewPaths()) {
+            AddSysViewsRosterUpdateObserver();
+        }
+
         BootSchemeShard(*Context, TTestTxConfig::SchemeShard);
         BootTxAllocator(*Context, TTestTxConfig::TxAllocator);
         BootCoordinator(*Context, TTestTxConfig::Coordinator);
         BootHive(*Context, TTestTxConfig::Hive);
+
+        // Wait until schemeshard completes creating system view paths
+        if (Context->GetAppData().FeatureFlags.GetEnableRealSystemViewPaths()) {
+            WaitForSysViewsRosterUpdate();
+        }
+    }
+
+    void SetUp() override {
+        PrepareContext();
+        BootActors();
     }
 
     void TurnOnTabletsScheduling() {
@@ -276,11 +315,15 @@ public:
         SchedulingGuard.Reset();
         CoordinatorState.Drop();
         HiveState.Drop();
+        SysViewsRosterUpdateObserver.Remove();
         Context.Reset();
     }
 
 protected:
     THolder<TTestContext> Context;
+
+    TTestContext::TEventObserverHolder SysViewsRosterUpdateObserver;
+    bool SysViewsRosterUpdateFinished;
 
 private:
     TFakeCoordinator::TState::TPtr CoordinatorState;

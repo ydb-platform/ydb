@@ -76,7 +76,7 @@ class WriterSync:
     def __del__(self):
         if not self._closed:
             try:
-                logger.warning("Topic writer was not closed properly. Consider using method close().")
+                logger.debug("Topic writer was not closed properly. Consider using method close().")
                 self.close(flush=False)
             except BaseException:
                 logger.warning("Something went wrong during writer close in __del__")
@@ -85,6 +85,7 @@ class WriterSync:
         if self._closed:
             return
 
+        logger.debug("Close topic writer")
         self._closed = True
 
         self._caller.safe_call_with_result(self._async_writer.close(flush=flush), timeout)
@@ -101,15 +102,21 @@ class WriterSync:
     def flush(self, *, timeout=None):
         self._check_closed()
 
+        logger.debug("flush writer")
+
         return self._caller.unsafe_call_with_result(self._async_writer.flush(), timeout)
 
     def async_wait_init(self) -> Future[PublicWriterInitInfo]:
         self._check_closed()
 
+        logger.debug("wait writer init")
+
         return self._caller.unsafe_call_with_future(self._async_writer.wait_init())
 
     def wait_init(self, *, timeout: TimeoutType = None) -> PublicWriterInitInfo:
         self._check_closed()
+
+        logger.debug("wait writer init")
 
         return self._caller.unsafe_call_with_result(self._async_writer.wait_init(), timeout)
 
@@ -119,6 +126,11 @@ class WriterSync:
         timeout: TimeoutType = None,
     ):
         self._check_closed()
+
+        logger.debug(
+            "write %s messages",
+            len(messages) if isinstance(messages, list) else 1,
+        )
 
         self._caller.safe_call_with_result(self._async_writer.write(messages), timeout)
 
@@ -136,6 +148,11 @@ class WriterSync:
         timeout: Union[float, None] = None,
     ) -> Union[PublicWriteResult, List[PublicWriteResult]]:
         self._check_closed()
+
+        logger.debug(
+            "write_with_ack %s messages",
+            len(messages) if isinstance(messages, list) else 1,
+        )
 
         return self._caller.unsafe_call_with_result(self._async_writer.write_with_ack(messages), timeout=timeout)
 

@@ -5305,6 +5305,35 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
             }
+
+            // Check for orphaned incremental restore operations during restart
+            for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
+                TTxId txId = opId.GetTxId();
+                bool controlOperationExists = false;
+                
+                for (const auto& [txOpId, txState] : Self->TxInFlight) {
+                    if (txOpId.GetTxId() == txId) {
+                        controlOperationExists = true;
+                        break;
+                    }
+                }
+                
+                if (!controlOperationExists) {
+                    TPathId backupCollectionPathId;
+                    backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
+                    backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
+                    
+                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TTxInit detected orphaned incremental restore operation during recovery"
+                            << ", operationId: " << opId
+                            << ", txId: " << txId
+                            << ", backupCollectionPathId: " << backupCollectionPathId
+                            << ", scheduling TTxProgress to continue operation"
+                            << ", at schemeshard: " << Self->TabletID());
+                    
+                    OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
+                }
+            }
         }
 
         CollectObjectsToClean();

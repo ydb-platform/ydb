@@ -122,7 +122,7 @@ class TopicClientAsyncIO:
     def __del__(self):
         if not self._closed:
             try:
-                logger.warning("Topic client was not closed properly. Consider using method close().")
+                logger.debug("Topic client was not closed properly. Consider using method close().")
                 self.close()
             except BaseException:
                 logger.warning("Something went wrong during topic client close in __del__")
@@ -161,6 +161,7 @@ class TopicClientAsyncIO:
         :param consumers: List of consumers for this topic
         :param metering_mode: Metering mode for the topic in a serverless database
         """
+        logger.debug("Create topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         req = _ydb_topic_public_types.CreateTopicRequestParams(**args)
@@ -210,6 +211,7 @@ class TopicClientAsyncIO:
         :param set_supported_codecs: List of allowed codecs for writers. Writes with codec not from this list are forbidden.
             Empty list mean disable codec compatibility checks for the topic.
         """
+        logger.debug("Alter topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
@@ -222,6 +224,7 @@ class TopicClientAsyncIO:
         )
 
     async def describe_topic(self, path: str, include_stats: bool = False) -> TopicDescription:
+        logger.debug("Describe topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         req = _ydb_topic_public_types.DescribeTopicRequestParams(**args)
@@ -234,6 +237,7 @@ class TopicClientAsyncIO:
         return res.to_public()
 
     async def drop_topic(self, path: str):
+        logger.debug("Drop topic request: path=%s", path)
         req = _ydb_topic_public_types.DropTopicRequestParams(path=path)
         await self._driver(
             req.to_proto(),
@@ -256,6 +260,8 @@ class TopicClientAsyncIO:
         auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
         event_handler: Optional[TopicReaderEvents.EventHandler] = None,
     ) -> TopicReaderAsyncIO:
+
+        logger.debug("Create reader for topic=%s consumer=%s", topic, consumer)
 
         if not decoder_executor:
             decoder_executor = self._executor
@@ -301,6 +307,7 @@ class TopicClientAsyncIO:
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,
     ) -> TopicWriterAsyncIO:
+        logger.debug("Create writer for topic=%s producer_id=%s", topic, producer_id)
         args = locals().copy()
         del args["self"]
 
@@ -329,6 +336,7 @@ class TopicClientAsyncIO:
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,
     ) -> TopicTxWriterAsyncIO:
+        logger.debug("Create tx writer for topic=%s tx=%s", topic, tx)
         args = locals().copy()
         del args["self"]
         del args["tx"]
@@ -343,6 +351,13 @@ class TopicClientAsyncIO:
     async def commit_offset(
         self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
     ) -> None:
+        logger.debug(
+            "Commit offset: path=%s partition_id=%s offset=%s consumer=%s",
+            path,
+            partition_id,
+            offset,
+            consumer,
+        )
         req = _ydb_topic.CommitOffsetRequest(
             path=path,
             consumer=consumer,
@@ -362,6 +377,7 @@ class TopicClientAsyncIO:
         if self._closed:
             return
 
+        logger.debug("Close topic client")
         self._closed = True
         self._executor.shutdown(wait=False)
 
@@ -433,6 +449,7 @@ class TopicClient:
         :param consumers: List of consumers for this topic
         :param metering_mode: Metering mode for the topic in a serverless database
         """
+        logger.debug("Create topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         self._check_closed()
@@ -484,6 +501,7 @@ class TopicClient:
         :param set_supported_codecs: List of allowed codecs for writers. Writes with codec not from this list are forbidden.
             Empty list mean disable codec compatibility checks for the topic.
         """
+        logger.debug("Alter topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         self._check_closed()
@@ -498,6 +516,7 @@ class TopicClient:
         )
 
     def describe_topic(self, path: str, include_stats: bool = False) -> TopicDescription:
+        logger.debug("Describe topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
         self._check_closed()
@@ -513,6 +532,8 @@ class TopicClient:
 
     def drop_topic(self, path: str):
         self._check_closed()
+
+        logger.debug("Drop topic request: path=%s", path)
 
         req = _ydb_topic_public_types.DropTopicRequestParams(path=path)
         self._driver(
@@ -536,6 +557,7 @@ class TopicClient:
         auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
         event_handler: Optional[TopicReaderEvents.EventHandler] = None,
     ) -> TopicReader:
+        logger.debug("Create reader for topic=%s consumer=%s", topic, consumer)
         if not decoder_executor:
             decoder_executor = self._executor
 
@@ -580,6 +602,7 @@ class TopicClient:
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicWriter:
+        logger.debug("Create writer for topic=%s producer_id=%s", topic, producer_id)
         args = locals().copy()
         del args["self"]
         self._check_closed()
@@ -609,6 +632,7 @@ class TopicClient:
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicWriter:
+        logger.debug("Create tx writer for topic=%s tx=%s", topic, tx)
         args = locals().copy()
         del args["self"]
         del args["tx"]
@@ -624,6 +648,13 @@ class TopicClient:
     def commit_offset(
         self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
     ) -> None:
+        logger.debug(
+            "Commit offset: path=%s partition_id=%s offset=%s consumer=%s",
+            path,
+            partition_id,
+            offset,
+            consumer,
+        )
         req = _ydb_topic.CommitOffsetRequest(
             path=path,
             consumer=consumer,
@@ -643,8 +674,10 @@ class TopicClient:
         if self._closed:
             return
 
+        logger.debug("Close topic client")
         self._closed = True
         self._executor.shutdown(wait=False)
+        logger.debug("Topic client was closed")
 
     def _check_closed(self):
         if not self._closed:

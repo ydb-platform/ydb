@@ -189,13 +189,13 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const auto &record = ev->Record;
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
-        if (Info->ClusterStateGeneration < clusterStateGeneration || 
+        if (Info->ClusterStateGeneration < clusterStateGeneration ||
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             BLOG_D("StateStorageProxy TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " clusterStateGeneration=" << clusterStateGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " clusterStateGuid=" << clusterStateGuid);
             if (NotifyRingGroupProxy) {
                 Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
             }
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), clusterStateGeneration, clusterStateGuid));
             ReplyAndDie(NKikimrProto::ERROR);
             return false;
@@ -214,7 +214,12 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
+
+        if (Signature.HasReplicaSignature(replicaId)) {
+            BLOG_ERROR("TStateStorageProxyRequest::MergeReply duplicated TEvReplicaInfo cookie:" << cookie
+                << " replica:" << replicaId << " signature:" << Signature.GetReplicaSignature(replicaId) << " ev: " << ev->ToString());
+            return;
+        }
         UndeliveredReplicas.erase(replicaId);
         Signature.SetReplicaSignature(replicaId, ev->Record.GetSignature());
         ++RepliesMerged;
@@ -484,7 +489,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
         if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || !Signature.HasReplicaSignature(replicaId)) {
-            Signature.SetReplicaSignature(replicaId, sig);
+            if (sig != Max<ui64>()) {
+                Signature.SetReplicaSignature(replicaId, sig);
+            }
             ++RepliesAfterReply;
             ++SignaturesMerged;
 
@@ -522,7 +529,11 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const ui64 cookie = msg->Record.GetCookie();
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
+        if (Signature.HasReplicaSignature(replicaId)) {
+            BLOG_ERROR("TStateStorageProxyRequest::HandleUpdateSig duplicated TEvReplicaInfo cookie:" << cookie
+                << " replica:" << replicaId << " signature:" << Signature.GetReplicaSignature(replicaId) << " ev: " << ev->ToString());
+            return;
+        }
         UndeliveredReplicas.erase(replicaId);
         return UpdateSigFor(cookie, msg->Record.GetSignature());
     }
@@ -742,7 +753,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
         TEvStateStorage::TEvConfigVersionInfo *msg = ev->Get();
-        if (Info->ClusterStateGeneration < msg->ClusterStateGeneration || 
+        if (Info->ClusterStateGeneration < msg->ClusterStateGeneration ||
             (Info->ClusterStateGeneration == msg->ClusterStateGeneration && Info->ClusterStateGuid != msg->ClusterStateGuid)) {
             Reply(NKikimrProto::ERROR);
             PassAway();
@@ -920,9 +931,9 @@ public:
         auto &record = ev->Get()->Record;
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
-        if (Info->ClusterStateGeneration < clusterStateGeneration || 
+        if (Info->ClusterStateGeneration < clusterStateGeneration ||
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), clusterStateGeneration, clusterStateGuid));
             SendResponse();
             return;
@@ -1052,7 +1063,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     }
 
     void Handle(TEvStateStorage::TEvRingGroupPassAway::TPtr& /*ev*/) {
-        // Do nothng 
+        // Do nothng
     }
 
     template<typename TEventPtr>

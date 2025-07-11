@@ -1,7 +1,7 @@
 #pragma once
 
 #include "global.h"
-#include "parse_tree.h"
+#include "input.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
@@ -9,10 +9,6 @@
 
 namespace NSQLComplete {
 
-    TMaybe<TUseContext> FindUseStatement(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition,
-        const TEnvironment& env);
+    TMaybe<TUseContext> FindUseStatement(TParsedInput input, const TEnvironment& env);
 
 } // namespace NSQLComplete

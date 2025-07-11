@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST(CreateAndWait) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
         AsyncMkDir(runtime, ++txId, "MyRoot", "dir");
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot/dir",
@@ -121,7 +121,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(CreateAndAlterWithoutEnablingTx, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "dir");
@@ -636,7 +640,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAG(CreateWithExtraPathSymbolsAllowed, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -1375,7 +1383,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(Drop, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
 
@@ -1468,7 +1480,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAG(CreateThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -1508,7 +1524,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(CreateAndAlterThenDropChangesParent, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",

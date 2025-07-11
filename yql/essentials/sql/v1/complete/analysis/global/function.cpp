@@ -2,14 +2,16 @@
 
 #include "narrowing_visitor.h"
 
+#include <library/cpp/iterator/enumerate.h>
+
 namespace NSQLComplete {
 
     namespace {
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(antlr4::TokenStream* tokens, size_t cursorPosition)
-                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
+            TVisitor(const TParsedInput& input)
+                : TSQLv1NarrowingVisitor(input)
             {
             }
 
@@ -26,26 +28,35 @@ namespace NSQLComplete {
                 if (function == nullptr || lparen == nullptr) {
                     return {};
                 }
-
                 if (CursorPosition() <= TextInterval(lparen).b) {
                     return {};
                 }
 
-                return function->getText();
+                return TFunctionContext{
+                    .Name = function->getText(),
+                    .ArgumentNumber = ArgumentNumber(ctx).GetOrElse(0),
+                };
+            }
+
+        private:
+            TMaybe<size_t> ArgumentNumber(SQLv1::Table_refContext* ctx) {
+                for (auto [i, arg] : Enumerate(ctx->table_arg())) {
+                    if (IsEnclosing(arg)) {
+                        return i;
+                    }
+                }
+                return Nothing();
             }
         };
 
     } // namespace
 
-    TMaybe<TString> EnclosingFunction(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition) {
-        std::any result = TVisitor(tokens, cursorPosition).visit(ctx);
+    TMaybe<TFunctionContext> EnclosingFunction(TParsedInput input) {
+        std::any result = TVisitor(input).visit(input.SqlQuery);
         if (!result.has_value()) {
             return Nothing();
         }
-        return std::any_cast<std::string>(result);
+        return std::any_cast<TFunctionContext>(result);
     }
 
 } // namespace NSQLComplete

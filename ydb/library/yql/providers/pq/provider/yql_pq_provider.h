@@ -56,13 +56,15 @@ public:
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     NPq::NProto::StreamingDisposition Disposition;
+    std::vector<std::pair<TString, TString>> TaskSensorLabels;
 };
 
 TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode = false,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr,
-    const NPq::NProto::StreamingDisposition& disposition = {}
+    const NPq::NProto::StreamingDisposition& disposition = {},
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels = {}
 );
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);

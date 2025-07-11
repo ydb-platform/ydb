@@ -117,11 +117,32 @@ struct TQueryStatKeyHash {
 };
 
 struct TAggQueryStat {
+    TAggQueryStat() = default;
+    TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams)
+        : QueryId(queryId)
+        , SubGroup(counters) {
+        for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+            SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+        }
+        auto queryGroup = SubGroup->GetSubgroup("query_id", queryId);
+        auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
+        MaxQueuedBytesCounter = topicGroup->GetCounter("MaxQueuedBytes");
+        AvgQueuedBytesCounter = topicGroup->GetCounter("AvgQueuedBytes");
+        MaxReadLagCounter = topicGroup->GetCounter("MaxReadLag");
+    }
+
+    TString QueryId;
+    ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MaxQueuedBytesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr AvgQueuedBytesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MaxReadLagCounter;
+
     NYql::TCounters::TEntry FilteredBytes;
     NYql::TCounters::TEntry QueuedBytes;
     NYql::TCounters::TEntry QueuedRows;
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;
+    bool Updated = false;
 
     void Add(const TTopicSessionClientStatistic& stat, ui64 filteredBytes) {
         FilteredBytes.Add(NYql::TCounters::TEntry(filteredBytes));
@@ -129,7 +150,38 @@ struct TAggQueryStat {
         QueuedRows.Add(NYql::TCounters::TEntry(stat.QueuedRows));
         ReadLagMessages.Add(NYql::TCounters::TEntry(stat.ReadLagMessages));
         IsWaiting = IsWaiting || stat.IsWaiting;
-    }        
+        Updated = true;
+    }
+
+    void SetMetrics() {
+        SetMetrics(QueuedBytes.Max, QueuedBytes.Avg, ReadLagMessages.Max);
+    }
+
+    void SetMetrics(ui64 queuedBytesMax, ui64 queuedBytesAvg, i64 readLagMessagesMax) {
+        if (!SubGroup) {
+            return;
+        }
+        MaxQueuedBytesCounter->Set(queuedBytesMax);
+        AvgQueuedBytesCounter->Set(queuedBytesAvg);
+        MaxReadLagCounter->Set(readLagMessagesMax);
+    }
+
+    void Remove() {
+        if (!SubGroup) {
+            return;
+        }
+        SetMetrics(0, 0, 0);
+        SubGroup->RemoveSubgroup("query_id", QueryId);
+    }
+
+    void Clear() {
+        Updated = false;
+        FilteredBytes = NYql::TCounters::TEntry{};
+        QueuedBytes = NYql::TCounters::TEntry{};
+        QueuedRows = NYql::TCounters::TEntry{};
+        ReadLagMessages = NYql::TCounters::TEntry{};
+        IsWaiting = false;
+    }
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
@@ -266,7 +318,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     };
 
     struct TAggregatedStats{
-        THashMap<TQueryStatKey, TMaybe<TAggQueryStat>, TQueryStatKeyHash> LastQueryStats;
+        THashMap<TQueryStatKey, TAggQueryStat, TQueryStatKeyHash> LastQueryStats;
         TDuration LastUpdateMetricsPeriod;
     };
 
@@ -410,7 +462,6 @@ public:
     void UpdateReadActorsInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, const TEventPtr& ev);
-    void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 queuedBytesMax, ui64 queuedBytesAvg, i64 readLagMessagesMax);
     void PrintStateToLog();
     void UpdateCpuTime();
 
@@ -585,7 +636,7 @@ void TRowDispatcher::UpdateMetrics() {
 
     AllSessionsDateRate = NYql::TCounters::TEntry();
     for (auto& [queryId, stat] : AggrStats.LastQueryStats) {
-        stat = Nothing();
+        stat.Clear();
     }
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
@@ -601,37 +652,28 @@ void TRowDispatcher::UpdateMetrics() {
                     continue;
                 }
                 auto& partition = partionIt->second;
-                auto& stat = AggrStats.LastQueryStats[TQueryStatKey{consumer->QueryId, key.ReadGroup}];
-                if (!stat) {
-                    stat = TAggQueryStat();
-                }
-                stat->Add(partition.Stat, partition.FilteredBytes);
+                TQueryStatKey statKey{consumer->QueryId, key.ReadGroup};
+                auto& stats = AggrStats.LastQueryStats.emplace(
+                    statKey,
+                    TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams)).first->second;
+                stats.Add(partition.Stat, partition.FilteredBytes);
                 partition.FilteredBytes = 0;
             }
         }
     }
     THashSet<TQueryStatKey, TQueryStatKeyHash> toDelete;
-    for (const auto& [key, stats] : AggrStats.LastQueryStats) {
-        if (!stats) {
+    for (auto& [key, stats] : AggrStats.LastQueryStats) {
+        if (!stats.Updated) {
             toDelete.insert(key);
+            stats.Remove();
             continue;
         }
-        SetQueryMetrics(key, stats->QueuedBytes.Max, stats->QueuedBytes.Avg, stats->ReadLagMessages.Max);
+        stats.SetMetrics();
     }
     for (const auto& key : toDelete) {
-         SetQueryMetrics(key, 0, 0, 0);
-         Metrics.Counters->RemoveSubgroup("query_id", key.QueryId);
          AggrStats.LastQueryStats.erase(key);
     }
     PrintStateToLog();
-}
-
-void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 queuedBytesMax, ui64 queuedBytesAvg, i64 readLagMessagesMax) {
-    auto queryGroup = Metrics.Counters->GetSubgroup("query_id", queryKey.QueryId);
-    auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(queryKey.ReadGroup));
-    topicGroup->GetCounter("MaxQueuedBytes")->Set(queuedBytesMax);
-    topicGroup->GetCounter("AvgQueuedBytes")->Set(queuedBytesAvg);
-    topicGroup->GetCounter("MaxReadLag")->Set(readLagMessagesMax);
 }
 
 TString TRowDispatcher::GetInternalState() {
@@ -693,12 +735,12 @@ TString TRowDispatcher::GetInternalState() {
     str << "Queries:\n";
     for (const auto& [queryStatKey, stat]: queryState) {
         auto [queryId, readGroup] = queryStatKey;
-        const auto& aggStat = AggrStats.LastQueryStats[queryStatKey];
         auto sessionsBufferSumSize = sessionCountByQuery[queryStatKey] * MaxSessionBufferSizeBytes;
         auto used = sessionsBufferSumSize ? (stat.QueuedBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
         str << "  " << queryId << " / " << readGroup << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.QueuedBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.QueuedBytes.Max) << " data rate";
-        if (aggStat) {
-            printDataRate(aggStat->FilteredBytes);
+        auto statIt = AggrStats.LastQueryStats.find(queryStatKey);
+        if (statIt != AggrStats.LastQueryStats.end()) {
+            printDataRate(statIt->second.FilteredBytes);
         }
         str << " waiting " << stat.IsWaiting << " max read lag " << stat.ReadLagMessages.Max;
         str << "\n";

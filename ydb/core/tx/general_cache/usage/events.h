@@ -14,11 +14,12 @@ template <class TPolicy>
 struct TEvents {
     using TAddress = typename TPolicy::TAddress;
     using EConsumer = typename TPolicy::EConsumer;
+    using TSourceId = typename TPolicy::TSourceId;
     using ICallback = ICallback<TPolicy>;
 
     enum EEv {
         EvAskData = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_PUBLIC),
-        EvUpdateMaxCacheSize,
+        EvKillSource,
         EvEnd
     };
 
@@ -53,13 +54,17 @@ struct TEvents {
         }
     };
 
-    class TEvUpdateMaxCacheSize: public NActors::TEventLocal<TEvUpdateMaxCacheSize, EvUpdateMaxCacheSize> {
+    class TEvKillSource: public NActors::TEventLocal<TEvKillSource, EvKillSource> {
     private:
-        YDB_READONLY_CONST(ui64, MaxCacheSize);
+        const TSourceId SourceId;
 
     public:
-        TEvUpdateMaxCacheSize(const ui64 maxCacheSize)
-            : MaxCacheSize(maxCacheSize) {
+        TEvKillSource(const TSourceId sourceId)
+            : SourceId(sourceId) {
+        }
+
+        TSourceId GetSourceId() const {
+            return SourceId;
         }
     };
 };

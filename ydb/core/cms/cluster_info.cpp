@@ -361,7 +361,9 @@ void TClusterInfo::AddNode(const TEvInterconnect::TNodeInfo &info, const TActorC
     node->IcPort = info.Port;
     node->Location = info.Location;
     node->State = NKikimrCms::UNKNOWN;
-    node->PileId = NodeIdToPileId[info.NodeId];
+    if (auto it = NodeIdToPileId.find(info.NodeId); it != NodeIdToPileId.end()) {
+        node->PileId = it->second;
+    }
 
     if (ctx) {
         const auto maxStaticNodeId = AppData(*ctx)->DynamicNameserviceConfig->MaxStaticNodeId;
@@ -379,8 +381,6 @@ void TClusterInfo::AddNode(const TEvInterconnect::TNodeInfo &info, const TActorC
             break;
         }
     }
-
-    node->AddNodeGroup(ClusterNodes);
 
     HostNameToNodeId.emplace(node->Host, node->NodeId);
     LockableItems[node->ItemName()] = node;
@@ -686,10 +686,14 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
 
 void TClusterInfo::ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit)
 {
-    ClusterNodes->ApplyLimits(clusterLimit, clusterRatioLimit);
+    for (auto &[_, clusterNodes] : ClusterNodes) {
+        clusterNodes->ApplyLimits(clusterLimit, clusterRatioLimit);
+    }
 
-    for (auto &[_, tenantChecker] : TenantNodesChecker) {
-        tenantChecker->ApplyLimits(tenantLimit, tenantRatioLimit);
+    for (auto &[_, tenantInPileCheckers] : TenantNodesChecker) {
+        for (auto &[_, tenantChecker] : tenantInPileCheckers) {
+            tenantChecker->ApplyLimits(tenantLimit, tenantRatioLimit);
+        }
     }
 }
 
@@ -943,18 +947,17 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
 void TClusterInfo::GenerateTenantNodesCheckers() {
     for (auto &[nodeId, nodeInfo] : Nodes) {
         if (nodeInfo->Tenant) {
-            if (!TenantNodesChecker.contains(nodeInfo->Tenant))
-                TenantNodesChecker[nodeInfo->Tenant] = TSimpleSharedPtr<TNodesLimitsCounterBase>(new TTenantLimitsCounter(nodeInfo->Tenant, 0, 0));
+            const ui32 pileId = nodeInfo->PileId.GetOrElse(0);
+            if (!TenantNodesChecker.contains(pileId) || !TenantNodesChecker[pileId].contains(nodeInfo->Tenant))
+                TenantNodesChecker[pileId][nodeInfo->Tenant] = TSimpleSharedPtr<TNodesLimitsCounterBase>(new TTenantLimitsCounter(nodeInfo->Tenant, 0, 0));
 
-            nodeInfo->AddNodeGroup(TenantNodesChecker[nodeInfo->Tenant]);
+            nodeInfo->AddNodeGroup(TenantNodesChecker[pileId][nodeInfo->Tenant]);
         }
     }
 }
 
 void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     for (auto tablet : BootstrapConfig.GetTablet()) {
-        SysNodesCheckers[tablet.GetType()] = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
-
         for (auto nodeId : tablet.GetNode()) {
             if (!HasNode(nodeId)) {
                 BLOG_ERROR(TStringBuilder() << "Got node " << nodeId
@@ -962,9 +965,23 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
                                                "but does not exist in cluster.");
                 continue;
             }
+            const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
+            auto& sysNodesChecker = SysNodesCheckers[pileId][tablet.GetType()];
+            if (!sysNodesChecker)
+                sysNodesChecker = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
             NodeToTabletTypes[nodeId].push_back(tablet.GetType());
-            NodeRef(nodeId).AddNodeGroup(SysNodesCheckers[tablet.GetType()]);
+            NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
+    }
+}
+
+void TClusterInfo::GenerateClusterNodesCheckers() {
+    for (auto &[nodeId, nodeInfo] : Nodes) {
+        const ui32 pileId = nodeInfo->PileId.GetOrElse(0);
+        if (!ClusterNodes.contains(pileId))
+            ClusterNodes[pileId] = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u);
+
+        nodeInfo->AddNodeGroup(ClusterNodes[pileId]);
     }
 }
 

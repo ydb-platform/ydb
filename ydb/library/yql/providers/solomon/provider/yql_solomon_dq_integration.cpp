@@ -349,13 +349,13 @@ public:
         auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(10000);
         sourceSettings.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
 
-        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(250);
+        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(125);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
         auto solomonClientDefaultReplica = solomonConfig->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
         sourceSettings.insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
 
-        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(1000);
+        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
         if (!selectors.empty()) {

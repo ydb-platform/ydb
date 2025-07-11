@@ -168,6 +168,28 @@ class Configurator(object):
     def hosts_names(self):
         return self.detail.hosts_names
 
+    @property
+    def group_hosts_by_datacenter(self):
+        """
+        Groups hosts by datacenter.
+        Stub implementation - returns empty dict.
+
+        Returns:
+            dict: Empty dictionary (stub)
+        """
+        return {}
+
+    @property
+    def group_hosts_by_bridge_pile(self):
+        """
+        Groups hosts by bridge pile name.
+        Stub implementation - returns empty dict.
+
+        Returns:
+            dict: Empty dictionary (stub)
+        """
+        return {}
+
     @staticmethod
     def _generate_fake_keys():
         content = 'Keys {\n'

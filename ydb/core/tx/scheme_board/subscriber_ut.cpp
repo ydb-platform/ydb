@@ -523,6 +523,10 @@ NInternalEvents::TEvHandshakeResponse::TPtr HandshakeReplica(
     return nullptr;
 }
 
+bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
+}
+
 ui32 CountReplicas(const TStateStorageInfo::TRingGroup& ringGroup) {
     ui32 replicas = 0;
     for (const auto& ring : ringGroup.Rings) {
@@ -564,6 +568,35 @@ TVector<TActorId> GetReplicasRequiredForQuorum(const TVector<TStateStorageInfo::
     }
 
     return requiredReplicas;
+}
+
+TStateStorageInfo::TRingGroup GetReplicaRingGroup(TActorId target, const TVector<TStateStorageInfo::TRingGroup>& ringGroups) {
+    for (const auto& ringGroup : ringGroups) {
+        for (const auto& ring : ringGroup.Rings) {
+            for (const auto& replica : ring.Replicas) {
+                if (replica == target) {
+                    return ringGroup;
+                }
+            }
+        }
+    }
+    UNIT_FAIL("Replica: " << target << " is not a part of any ring group.");
+    return {};
+}
+
+TActorId GetFirstParticipatingReplica(const TVector<TStateStorageInfo::TRingGroup>& ringGroups) {
+    for (const auto& ringGroup : ringGroups) {
+        if (ShouldIgnore(ringGroup)) {
+            continue;
+        }
+        for (const auto& ring : ringGroup.Rings) {
+            for (const auto& replica : ring.Replicas) {
+                return replica;
+            }
+        }
+    }
+    UNIT_FAIL("All the replicas are ignored.");
+    return {};
 }
 
 }
@@ -630,8 +663,58 @@ Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
         TestSinglePathUpdate({ {.State = PRIMARY}, {.State = DISCONNECTED} });
     }
 
+    Y_UNIT_TEST(OneSynchronizedRingGroup) {
+        TestSinglePathUpdate({ {.State = PRIMARY}, {.State = SYNCHRONIZED} });
+    }
+
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {
         TestSinglePathUpdate({ {.State = PRIMARY}, {.State = PRIMARY, .WriteOnly = true} });
+    }
+
+    Y_UNIT_TEST(ReplicaConfigMismatch) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr TPathId PathId = TPathId(DomainId, 1);
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        const TActorId replica = GetFirstParticipatingReplica(stateStorageInfo->RingGroups);
+        HandshakeReplica(runtime, replica, edge);
+        ui64 pathVersion = 1;
+        runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, pathVersion)));
+        {
+            const auto ev = runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Sender, subscriber, ev->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(Path, ev->Get()->Path);
+        }
+
+        auto newConfig = MakeIntrusive<TStateStorageInfo>(*stateStorageInfo);
+        newConfig->ClusterStateGeneration++;
+        runtime.Send(replica, edge, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, newConfig));
+
+        ++pathVersion;
+        runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, pathVersion)));
+        UNIT_CHECK_GENERATED_EXCEPTION(
+            runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10)),
+            TEmptyEventQueueException
+        );
     }
 }
 
@@ -678,7 +761,8 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
 
         {
             const auto replicaToKill = requiredReplicas[RandomNumber(requiredReplicas.size())];
-            Cerr << "Poisoning replica: " << replicaToKill << '\n';
+            const auto& ringGroup = GetReplicaRingGroup(replicaToKill, stateStorageInfo->RingGroups);
+            Cerr << "Poisoning replica: " << replicaToKill << " whose ring group state is: " << static_cast<int>(ringGroup.State) << '\n';
             runtime.Send(replicaToKill, edge, new TEvents::TEvPoisonPill());
 
             ++cookie;
@@ -702,8 +786,160 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
         TestSyncQuorum({ {.State = PRIMARY}, {.State = DISCONNECTED} });
     }
 
+    Y_UNIT_TEST(OneSynchronizedRingGroup) {
+        TestSyncQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} });
+    }
+
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {
         TestSyncQuorum({ {.State = PRIMARY}, {.State = PRIMARY, .WriteOnly = true} });
+    }
+
+    Y_UNIT_TEST(ReplicaConfigMismatch) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        const auto requiredReplicas = GetReplicasRequiredForQuorum(stateStorageInfo->RingGroups);
+        for (const auto& replica : stateStorageInfo->SelectAllReplicas()) {
+            if (!FindPtr(requiredReplicas, replica)) {
+                Cerr << "Poisoning replica: " << replica << '\n';
+                runtime.Send(replica, edge, new TEvents::TEvPoisonPill());
+            }
+        }
+
+        ui64 cookie = 12345;
+        {
+            runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+            const auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
+        }
+
+        {
+            const auto replica = requiredReplicas[RandomNumber(requiredReplicas.size())];
+
+            auto newConfig = MakeIntrusive<TStateStorageInfo>(*stateStorageInfo);
+            newConfig->ClusterStateGeneration++;
+            Cerr << "Updating cluster state generation on replica: " << replica << '\n';
+            runtime.Send(replica, edge, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, newConfig));
+
+            ++cookie;
+            runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+            const auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, true, syncResponse->ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ReconfigurationWithDelayedSyncRequest) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+
+        // Send sync request: subscriber will queue it in DelayedSyncRequest since it cannot process syncs before finishing its initialization.
+        constexpr ui64 cookie = 12345;
+        runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+
+        auto replicas = ResolveReplicas(runtime, Path);
+        runtime.Send(subscriber, edge, replicas->Release().Release());
+
+        // Now allow all notifications through so that initialization completes.
+        notificationBlocker.Stop().Unblock();
+
+        auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Cookie, cookie, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
+
+        // No additional sync responses.
+        UNIT_CHECK_GENERATED_EXCEPTION(
+            runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10)),
+            TEmptyEventQueueException
+        );
+    }
+
+    Y_UNIT_TEST(ReconfigurationWithCurrentSyncRequest) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<NInternalEvents::TEvSyncVersionResponse> syncResponseBlocker(runtime, [&](const NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
+            return ev->Recipient == subscriber && ev->Cookie == cookie;
+        });
+        runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+        runtime.WaitFor("some sync responses", [&]() {
+            return !syncResponseBlocker.empty();
+        }, TDuration::Seconds(10));
+        syncResponseBlocker.Unblock(1);
+
+        auto replicas = ResolveReplicas(runtime, Path);
+        runtime.Send(subscriber, edge, replicas->Release().Release());
+        syncResponseBlocker.Stop().Unblock();
+
+        auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Cookie, cookie, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
+
+        // No additional sync responses.
+        UNIT_CHECK_GENERATED_EXCEPTION(
+            runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10)),
+            TEmptyEventQueueException
+        );
     }
 }
 

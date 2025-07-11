@@ -117,7 +117,7 @@ void TRetryfulWriter::Send(const TBuffer& buffer)
             std::visit([this, &attemptTx, &stream] (const auto& options) -> void {
                 using TType = std::decay_t<decltype(options)>;
                 if constexpr (std::is_same_v<TType, TFileWriterOptions>) {
-                    stream = NDetail::NRawClient::WriteFile(Context_, attemptTx.GetId(), Path_, options);
+                    stream = RawClient_->WriteFile(attemptTx.GetId(), Path_, options);
                 } else if constexpr (std::is_same_v<TType, TTableWriterOptions>) {
                     stream = NDetail::NRawClient::WriteTable(Context_, attemptTx.GetId(), Path_, Format_, options);
                 } else {

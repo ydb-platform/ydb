@@ -54,7 +54,7 @@ void ExternalNodesFromInputTuple(const TComputationNodeFactoryContext& ctx, TCal
 namespace NDqHashOperatorParams
 {
     enum : ui32 {
-        Flow = 0,
+        Input = 0,
         OperatorParams = 1,
         KeyArgs = 2,
         StateArgs = 3,

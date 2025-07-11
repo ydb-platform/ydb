@@ -174,7 +174,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     FETCH_CONFIG(stateStorage, StateStorage)
     FETCH_CONFIG(board, StateStorageBoard)
     FETCH_CONFIG(schemeBoard, SchemeBoard)
-    
+
     STLOG(PRI_DEBUG, BS_NODE, NW55, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig->GetStateStorageConfig()),
         (NewStateStorageInfo, *stateStorageInfo),
@@ -209,7 +209,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
             || !std::equal(prev.CompatibleVersions.begin(), prev.CompatibleVersions.end(), cur.CompatibleVersions.begin());
     };
 
-    
+
     TActorSystem *as = TActivationContext::ActorSystem();
     const bool changedStateStorage = !StateStorageProxyConfigured || changed(*StateStorageInfo, *stateStorageInfo);
     const bool changedBoard = !StateStorageProxyConfigured || changed(*BoardInfo, *boardInfo);
@@ -249,8 +249,8 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
                             Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
                         } else if (which == &BoardInfo && !newActorIds.contains(replicaId)) {
                             Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, info, nullptr));
-                        } else {
-                            // TODO(alexvru): update other kinds of replicas
+                        } else if (which == &SchemeBoardInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, info));
                         }
                         newActorIds.insert(replicaId);
                     }
@@ -334,7 +334,7 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
 void TNodeWarden::Handle(TEvNodeWardenNotifyConfigMismatch::TPtr ev) {
     //TODO: config mismatch with node
     auto *msg = ev->Get();
-    STLOG(PRI_INFO, BS_NODE, NW51, "TEvNodeWardenNotifyConfigMismatch: NodeId: " << msg->NodeId 
+    STLOG(PRI_INFO, BS_NODE, NW51, "TEvNodeWardenNotifyConfigMismatch: NodeId: " << msg->NodeId
         << " ClusterStateGeneration: " << msg->ClusterStateGeneration << " ClusterStateGuid: " << msg->ClusterStateGuid);
 }
 

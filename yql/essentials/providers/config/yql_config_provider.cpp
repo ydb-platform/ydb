@@ -61,19 +61,15 @@ namespace {
                         writer.OnKeyedItem("Data");
                         writer.OnBeginList();
                         if (tag == "data_sinks") {
-                            writer.OnListItem();
-                            writer.OnStringScalar(KikimrProviderName);
-                            writer.OnListItem();
-                            writer.OnStringScalar(YtProviderName);
-                            writer.OnListItem();
-                            writer.OnStringScalar(ResultProviderName);
+                            for (const auto& ds: Types_.DataSinks) {
+                                writer.OnListItem();
+                                writer.OnStringScalar(ds->GetName());
+                            }
                         } else if (tag == "data_sources") {
-                            writer.OnListItem();
-                            writer.OnStringScalar(KikimrProviderName);
-                            writer.OnListItem();
-                            writer.OnStringScalar(YtProviderName);
-                            writer.OnListItem();
-                            writer.OnStringScalar(ConfigProviderName);
+                            for (const auto& ds: Types_.DataSources) {
+                                writer.OnListItem();
+                                writer.OnStringScalar(ds->GetName());
+                            }
                         }
                         writer.OnEndList();
                         writer.OnEndMap();
@@ -1086,7 +1082,7 @@ namespace {
             TString errorMessage;
             const TUserDataBlock* udfSource = nullptr;
             if (!Types_.QContext.CanRead()) {
-                udfSource = Types_.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix, Types_.RuntimeLogLevel);
+                udfSource = Types_.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix, Types_.RuntimeLogLevel, fileAlias);
                 if (!udfSource) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
                     return false;

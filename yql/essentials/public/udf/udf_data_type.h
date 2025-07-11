@@ -172,6 +172,7 @@ constexpr i64 MAX_TIMESTAMP64 = 4611669811199999999ll;
 constexpr i64 MAX_INTERVAL64 = MAX_TIMESTAMP64 - MIN_TIMESTAMP64;
 constexpr i32 MIN_YEAR32 = -144169; // inclusive
 constexpr i32 MAX_YEAR32 = 148108; // non-inclusive
+constexpr size_t UUID_SIZE = 16;
 
 #define UDF_TYPE_ID_MAP(XX)  \
     XX(Bool, NYql::NProto::Bool, bool, CommonType, bool, 0) \

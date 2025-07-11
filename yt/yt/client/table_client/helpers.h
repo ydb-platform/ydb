@@ -245,6 +245,33 @@ auto ToUnversionedValues(
     Ts&&... values)
 -> std::array<TUnversionedValue, sizeof...(Ts)>;
 
+/////////////////////////////////////////////////////////////////////////////////
+
+// NB(apachee): FromUnversionedValue can handle unversioned composite value, but ToUnversionedValue always returns unversioned any value,
+// to produce unversioned composite values these helpers were introduced.
+
+template <class T>
+TUnversionedValue ToUnversionedCompositeValue(
+    T&& value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+
+template <class T>
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    const std::optional<T>& value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    NYson::TYsonStringBuf value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>

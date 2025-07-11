@@ -65,8 +65,6 @@ protected:
 
         virtual void Close() = 0;
 
-        virtual TAsyncStatus AsyncCommitTx(TTransactionBase& tx) = 0;
-
         virtual ~ISession() = default;
     };
 
@@ -101,8 +99,6 @@ protected:
                                TDuration stabilizationWindow,
                                std::uint64_t downUtilizationPercent,
                                std::uint64_t upUtilizationPercent);
-    void SetPartitionWriteSpeed(const std::string& topicName,
-                                std::size_t bytesPerSeconds);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
@@ -162,12 +158,6 @@ protected:
 
     void TestWriteToTopicTwoWriteSession();
 
-    void TestWriteRandomSizedMessagesInWideTransactions();
-
-    void TestWriteOnlyBigMessagesInWideTransactions();
-
-    void TestTransactionsConflictOnSeqNo();
-
     void TestWriteToTopic1();
 
     void TestWriteToTopic2();
@@ -216,19 +206,7 @@ protected:
 
     void TestWriteToTopic37();
 
-    void TestWriteToTopic38();
-
     void TestWriteToTopic39();
-
-    void TestWriteToTopic40();
-
-    void TestWriteToTopic41();
-
-    void TestWriteToTopic42();
-
-    void TestWriteToTopic43();
-
-    void TestWriteToTopic44();
 
     void TestWriteToTopic48();
 
@@ -260,8 +238,6 @@ private:
 
         void Close() override;
 
-        TAsyncStatus AsyncCommitTx(TTransactionBase& tx) override;
-
     private:
         NTable::TSession Init(NTable::TTableClient& client);
 
@@ -288,8 +264,6 @@ private:
         void RollbackTx(TTransactionBase& tx, EStatus status = EStatus::SUCCESS) override;
 
         void Close() override;
-
-        TAsyncStatus AsyncCommitTx(TTransactionBase& tx) override;
 
     private:
         NQuery::TSession Init(NQuery::TQueryClient& client);
@@ -339,6 +313,12 @@ TxUsage::TTableRecord::TTableRecord(const std::string& key, const std::string& v
 
 void TxUsage::SetUp()
 {
+    char* ydbVersion = std::getenv("YDB_VERSION");
+
+    if (ydbVersion != nullptr && std::string(ydbVersion) != "trunk" && std::string(ydbVersion) <= "24.3") {
+        GTEST_SKIP() << "Skipping test for YDB version " << ydbVersion;
+    }
+
     TTopicTestFixture::SetUp();
 
     Driver = std::make_unique<TDriver>(MakeDriver());
@@ -433,14 +413,6 @@ void TxUsage::TTableSession::RollbackTx(TTransactionBase& tx, EStatus status)
 void TxUsage::TTableSession::Close()
 {
     Session_.Close();
-}
-
-TAsyncStatus TxUsage::TTableSession::AsyncCommitTx(TTransactionBase& tx)
-{
-    auto txTable = dynamic_cast<NTable::TTransaction&>(tx);
-    return txTable.Commit().Apply([](auto result) {
-        return TStatus(result.GetValue());
-    });
 }
 
 TxUsage::TQuerySession::TQuerySession(NQuery::TQueryClient& client,
@@ -543,14 +515,6 @@ void TxUsage::TQuerySession::Close()
     NYdb::NIssue::IssuesFromMessage(response.issues(), issues);
     Y_ENSURE_BT(status.ok(), status.error_message());
     Y_ENSURE_BT(response.status() == Ydb::StatusIds::SUCCESS, issues.ToString());
-}
-
-TAsyncStatus TxUsage::TQuerySession::AsyncCommitTx(TTransactionBase& tx)
-{
-    auto txQuery = dynamic_cast<NQuery::TTransaction&>(tx);
-    return txQuery.Commit().Apply([](auto result) {
-        return TStatus(result.GetValue());
-    });
 }
 
 std::unique_ptr<TxUsage::ISession> TxUsage::CreateSession()
@@ -721,18 +685,6 @@ void TxUsage::AlterAutoPartitioning(const std::string& topicName,
     Y_ENSURE_BT(result.IsSuccess(), ToString(static_cast<TStatus>(result)));
 }
 
-void TxUsage::SetPartitionWriteSpeed(const std::string& topicName,
-                                     std::size_t bytesPerSeconds)
-{
-    NTopic::TTopicClient client(GetDriver());
-    NTopic::TAlterTopicSettings settings;
-
-    settings.SetPartitionWriteSpeedBytesPerSecond(bytesPerSeconds);
-
-    auto result = client.AlterTopic(GetTopicPath(topicName), settings).GetValueSync();
-    Y_ENSURE_BT(result.IsSuccess(), ToString(static_cast<TStatus>(result)));
-}
-
 const TDriver& TxUsage::GetDriver() const
 {
     return *Driver;
@@ -819,12 +771,12 @@ void TxUsage::TestSessionAbort()
     }
 }
 
-TEST_F(TxUsageTable, SessionAbort)
+TEST_F(TxUsageTable, TEST_NAME(SessionAbort))
 {
     TestSessionAbort();
 }
 
-TEST_F(TxUsageQuery, SessionAbort)
+TEST_F(TxUsageQuery, TEST_NAME(SessionAbort))
 {
     TestSessionAbort();
 }
@@ -855,12 +807,12 @@ void TxUsage::TestTwoSessionOneConsumer()
     session1->CommitTx(*tx1, EStatus::ABORTED);
 }
 
-TEST_F(TxUsageTable, TwoSessionOneConsumer)
+TEST_F(TxUsageTable, TEST_NAME(TwoSessionOneConsumer))
 {
     TestTwoSessionOneConsumer();
 }
 
-TEST_F(TxUsageQuery, TwoSessionOneConsumer)
+TEST_F(TxUsageQuery, TEST_NAME(TwoSessionOneConsumer))
 {
     TestTwoSessionOneConsumer();
 }
@@ -878,22 +830,22 @@ void TxUsage::TestOffsetsCannotBePromotedWhenReadingInATransaction()
     ASSERT_THROW(ReadMessage(reader, {.Tx = *tx, .CommitOffsets = true}), yexception);
 }
 
-TEST_F(TxUsageTable, Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction)
+TEST_F(TxUsageTable, TEST_NAME(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction))
 {
     TestOffsetsCannotBePromotedWhenReadingInATransaction();
 }
 
-TEST_F(TxUsageQuery, Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction)
+TEST_F(TxUsageQuery, TEST_NAME(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction))
 {
     TestOffsetsCannotBePromotedWhenReadingInATransaction();
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Invalid_Session)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Invalid_Session))
 {
     WriteToTopicWithInvalidTxId(false);
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Invalid_Session)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Invalid_Session))
 {
     WriteToTopicWithInvalidTxId(false);
 }
@@ -968,12 +920,12 @@ void TxUsage::TestWriteToTopicTwoWriteSession()
     ASSERT_EQ(acks, 2u);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Two_WriteSession)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Two_WriteSession))
 {
     TestWriteToTopicTwoWriteSession();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Two_WriteSession)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Two_WriteSession))
 {
     TestWriteToTopicTwoWriteSession();
 }
@@ -1412,12 +1364,12 @@ void TxUsage::TestWriteToTopic26()
     ASSERT_EQ(messages.size(), 3u);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_1)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_1))
 {
     TestWriteToTopic1();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_1)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_1))
 {
     TestWriteToTopic1();
 }
@@ -1469,12 +1421,12 @@ void TxUsage::TestWriteToTopic2()
     }
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_2)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_2))
 {
     TestWriteToTopic2();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_2)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_2))
 {
     TestWriteToTopic2();
 }
@@ -1514,22 +1466,22 @@ void TxUsage::TestWriteToTopic3()
     ASSERT_EQ(messages[0], "message #2");
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_3)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_3))
 {
     TestWriteToTopic3();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_3)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_3))
 {
     TestWriteToTopic3();
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_4)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_4))
 {
     TestWriteToTopic4();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_4)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_4))
 {
     TestWriteToTopic4();
 }
@@ -1572,12 +1524,12 @@ void TxUsage::TestWriteToTopic5()
     }
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_5)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_5))
 {
     TestWriteToTopic5();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic))
 {
     TestWriteToTopic5();
 }
@@ -1608,22 +1560,22 @@ void TxUsage::TestWriteToTopic6()
     DescribeTopic("topic_A");
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_6)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_6))
 {
     TestWriteToTopic6();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_6)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_6))
 {
     TestWriteToTopic6();
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_7)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_7))
 {
     TestWriteToTopic7();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_7)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_7))
 {
     TestWriteToTopic7();
 }
@@ -1660,32 +1612,32 @@ void TxUsage::TestWriteToTopic8()
     }
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_8)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_8))
 {
     TestWriteToTopic8();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_8)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_8))
 {
     TestWriteToTopic8();
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_9)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_9))
 {
     TestWriteToTopic9();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_9)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_9))
 {
     TestWriteToTopic9();
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_10)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_10))
 {
     TestWriteToTopic10();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_10)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_10))
 {
     TestWriteToTopic10();
 }
@@ -1711,12 +1663,12 @@ void TxUsage::TestWriteToTopic15()
     ASSERT_EQ(messages[1], "message #2");
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_15)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_15))
 {
     TestWriteToTopic15();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_15)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_15))
 {
     TestWriteToTopic15();
 }
@@ -1756,12 +1708,12 @@ void TxUsage::TestWriteToTopic17()
     ASSERT_EQ(messages[7].size(),  7'000'000u);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_17)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_17))
 {
     TestWriteToTopic17();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_17)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_17))
 {
     TestWriteToTopic17();
 }
@@ -1793,22 +1745,22 @@ void TxUsage::TestWriteToTopic25()
     Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 3);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_25)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_25))
 {
     TestWriteToTopic25();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_25)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_25))
 {
     TestWriteToTopic25();
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_26)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_26))
 {
     TestWriteToTopic26();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_26)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_26))
 {
     TestWriteToTopic26();
 }
@@ -1834,12 +1786,12 @@ void TxUsage::TestWriteToTopic28()
     ASSERT_EQ(messages.size(), 2u);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_28)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_28))
 {
     TestWriteToTopic28();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_28)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_28))
 {
     TestWriteToTopic28();
 }
@@ -1868,12 +1820,12 @@ void TxUsage::TestWriteToTopic29()
     WriteMessagesInTx(1, 0);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_29)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_29))
 {
     TestWriteToTopic29();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_29)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_29))
 {
     TestWriteToTopic29();
 }
@@ -1884,12 +1836,12 @@ void TxUsage::TestWriteToTopic30()
     WriteMessagesInTx(0, 1);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_30)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_30))
 {
     TestWriteToTopic30();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_30)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_30))
 {
     TestWriteToTopic30();
 }
@@ -1900,12 +1852,12 @@ void TxUsage::TestWriteToTopic31()
     WriteMessagesInTx(1, 1);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_31)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_31))
 {
     TestWriteToTopic31();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_31)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_31))
 {
     TestWriteToTopic31();
 }
@@ -1916,12 +1868,12 @@ void TxUsage::TestWriteToTopic32()
     WriteMessagesInTx(1, 0);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_32)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_32))
 {
     TestWriteToTopic32();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_32)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_32))
 {
     TestWriteToTopic32();
 }
@@ -1932,12 +1884,12 @@ void TxUsage::TestWriteToTopic33()
     WriteMessagesInTx(0, 1);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_33)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_33))
 {
     TestWriteToTopic33();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_33)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_33))
 {
     TestWriteToTopic33();
 }
@@ -1948,12 +1900,12 @@ void TxUsage::TestWriteToTopic34()
     WriteMessagesInTx(1, 1);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_34)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_34))
 {
     TestWriteToTopic34();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_34)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_34))
 {
     TestWriteToTopic34();
 }
@@ -1964,12 +1916,12 @@ void TxUsage::TestWriteToTopic35()
     WriteMessagesInTx(1, 0);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_35)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_35))
 {
     TestWriteToTopic35();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_35)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_35))
 {
     TestWriteToTopic35();
 }
@@ -1980,12 +1932,12 @@ void TxUsage::TestWriteToTopic36()
     WriteMessagesInTx(0, 1);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_36)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_36))
 {
     TestWriteToTopic36();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_36)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_36))
 {
     TestWriteToTopic36();
 }
@@ -1996,33 +1948,14 @@ void TxUsage::TestWriteToTopic37()
     WriteMessagesInTx(1, 1);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_37)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_37))
 {
     TestWriteToTopic37();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_37)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_37))
 {
     TestWriteToTopic37();
-}
-
-void TxUsage::TestWriteToTopic38()
-{
-    WriteMessagesInTx(2, 202);
-    WriteMessagesInTx(2, 200);
-    WriteMessagesInTx(0, 1);
-    WriteMessagesInTx(4, 0);
-    WriteMessagesInTx(0, 1);
-}
-
-TEST_F(TxUsageTable, WriteToTopic_Demo_38)
-{
-    TestWriteToTopic38();
-}
-
-TEST_F(TxUsageQuery, WriteToTopic_Demo_38)
-{
-    TestWriteToTopic38();
 }
 
 void TxUsage::TestWriteToTopic39()
@@ -2042,157 +1975,14 @@ void TxUsage::TestWriteToTopic39()
     Read_Exactly_N_Messages_From_Topic("topic_A", "consumer", 2);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_39)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_39))
 {
     TestWriteToTopic39();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_39)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_39))
 {
     TestWriteToTopic39();
-}
-
-void TxUsage::TestWriteToTopic40()
-{
-    // The recording stream will run into a quota. Before the commit, the client will receive confirmations
-    // for some of the messages. The `CommitTx` call will wait for the rest.
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    for (std::size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
-    }
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
-}
-
-TEST_F(TxUsageTable, WriteToTopic_Demo_40)
-{
-    TestWriteToTopic40();
-}
-
-TEST_F(TxUsageQuery, WriteToTopic_Demo_40)
-{
-    TestWriteToTopic40();
-}
-
-void TxUsage::TestWriteToTopic41()
-{
-    // If the recording session does not wait for confirmations, the commit will fail
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    for (std::size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
-    }
-
-    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID, true); // force close
-
-    session->CommitTx(*tx, EStatus::SESSION_EXPIRED);
-}
-
-TEST_F(TxUsageTable, WriteToTopic_Demo_41)
-{
-    TestWriteToTopic41();
-}
-
-TEST_F(TxUsageQuery, WriteToTopic_Demo_41)
-{
-    TestWriteToTopic41();
-}
-
-void TxUsage::TestWriteToTopic42()
-{
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    for (std::size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
-    }
-
-    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID); // gracefully close
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
-}
-
-TEST_F(TxUsageTable, WriteToTopic_Demo_42)
-{
-    TestWriteToTopic42();
-}
-
-TEST_F(TxUsageQuery, WriteToTopic_Demo_42)
-{
-    TestWriteToTopic42();
-}
-
-void TxUsage::TestWriteToTopic43()
-{
-    // The recording stream will run into a quota. Before the commit, the client will receive confirmations
-    // for some of the messages. The `ExecuteDataQuery` call will wait for the rest.
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    for (std::size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
-    }
-
-    session->Execute("SELECT 1", tx.get());
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
-}
-
-TEST_F(TxUsageTable, WriteToTopic_Demo_43)
-{
-    TestWriteToTopic43();
-}
-
-TEST_F(TxUsageQuery, WriteToTopic_Demo_43)
-{
-    TestWriteToTopic43();
-}
-
-void TxUsage::TestWriteToTopic44()
-{
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-
-    auto [_, tx] = session->ExecuteInTx("SELECT 1", false);
-
-    for (std::size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
-    }
-
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
-
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    ASSERT_EQ(messages.size(), 0u);
-
-    session->Execute("SELECT 2", tx.get());
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
-}
-
-TEST_F(TxUsageTable, WriteToTopic_Demo_44)
-{
-    TestWriteToTopic44();
-}
-
-TEST_F(TxUsageQuery, WriteToTopic_Demo_44)
-{
-    TestWriteToTopic44();
 }
 
 void TxUsage::TestWriteToTopic48()
@@ -2225,237 +2015,17 @@ void TxUsage::TestWriteToTopic48()
     ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2u);
 }
 
-TEST_F(TxUsageTable, WriteToTopic_Demo_48)
+TEST_F(TxUsageTable, TEST_NAME(WriteToTopic_Demo_48))
 {
     TestWriteToTopic48();
 }
 
-TEST_F(TxUsageQuery, WriteToTopic_Demo_48)
+TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_48))
 {
     TestWriteToTopic48();
 }
 
-void TxUsage::TestWriteRandomSizedMessagesInWideTransactions()
-{
-    // The test verifies the simultaneous execution of several transactions. There is a topic
-    // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
-    // The size of the messages is random. Such that both large blobs in the body and small ones in
-    // the head of the partition are obtained. Message sizes are multiples of 500 KB. This way we
-    // will make sure that when committing transactions, the division into blocks is taken into account.
-
-    const std::size_t PARTITIONS_COUNT = 20;
-    const std::size_t TXS_COUNT = 10;
-
-    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
-
-    SetPartitionWriteSpeed("topic_A", 50'000'000);
-
-    std::vector<std::unique_ptr<TxUsage::ISession>> sessions;
-    std::vector<std::unique_ptr<TTransactionBase>> transactions;
-
-    // We open TXS_COUNT transactions and write messages to the topic.
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        sessions.push_back(CreateSession());
-        auto& session = sessions.back();
-
-        transactions.push_back(session->BeginTx());
-        auto& tx = transactions.back();
-
-        for (std::size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            std::string sourceId = TEST_MESSAGE_GROUP_ID;
-            sourceId += "_";
-            sourceId += ToString(i);
-            sourceId += "_";
-            sourceId += ToString(j);
-
-            std::size_t count = RandomNumber<std::size_t>(20) + 3;
-            WriteToTopic("topic_A", sourceId, std::string(512 * 1000 * count, 'x'), tx.get(), j);
-
-            WaitForAcks("topic_A", sourceId);
-        }
-    }
-
-    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
-    std::vector<TAsyncStatus> futures;
-
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
-    }
-
-    // All transactions must be completed successfully.
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        futures[i].Wait();
-        const auto& result = futures[i].GetValueSync();
-        ASSERT_EQ(result.GetStatus(), EStatus::SUCCESS) << result.GetIssues().ToString();
-    }
-}
-
-TEST_F(TxUsageTable, Write_Random_Sized_Messages_In_Wide_Transactions)
-{
-    TestWriteRandomSizedMessagesInWideTransactions();
-}
-
-TEST_F(TxUsageQuery, Write_Random_Sized_Messages_In_Wide_Transactions)
-{
-    TestWriteRandomSizedMessagesInWideTransactions();
-}
-
-void TxUsage::TestWriteOnlyBigMessagesInWideTransactions()
-{
-    // The test verifies the simultaneous execution of several transactions. There is a topic `topic_A` and
-    // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.
-    // The size of the messages is chosen so that only large blobs are recorded in the transaction and there
-    // are no records in the head. Thus, we verify that transaction bundling is working correctly.
-
-    const std::size_t PARTITIONS_COUNT = 20;
-    const std::size_t TXS_COUNT = 100;
-
-    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
-
-    SetPartitionWriteSpeed("topic_A", 50'000'000);
-
-    std::vector<std::unique_ptr<TxUsage::ISession>> sessions;
-    std::vector<std::unique_ptr<TTransactionBase>> transactions;
-
-    // We open TXS_COUNT transactions and write messages to the topic.
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        sessions.push_back(CreateSession());
-        auto& session = sessions.back();
-
-        transactions.push_back(session->BeginTx());
-        auto& tx = transactions.back();
-
-        for (std::size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            std::string sourceId = TEST_MESSAGE_GROUP_ID;
-            sourceId += "_";
-            sourceId += ToString(i);
-            sourceId += "_";
-            sourceId += ToString(j);
-
-            WriteToTopic("topic_A", sourceId, std::string(6'500'000, 'x'), tx.get(), j);
-
-            WaitForAcks("topic_A", sourceId);
-        }
-    }
-
-    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
-    std::vector<TAsyncStatus> futures;
-
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
-    }
-
-    // All transactions must be completed successfully.
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        futures[i].Wait();
-        const auto& result = futures[i].GetValueSync();
-        ASSERT_EQ(result.GetStatus(), EStatus::SUCCESS) << result.GetIssues().ToString();
-    }
-}
-
-TEST_F(TxUsageTable, Write_Only_Big_Messages_In_Wide_Transactions)
-{
-    TestWriteOnlyBigMessagesInWideTransactions();
-}
-
-TEST_F(TxUsageQuery, Write_Only_Big_Messages_In_Wide_Transactions)
-{
-    TestWriteOnlyBigMessagesInWideTransactions();
-}
-
-void TxUsage::TestTransactionsConflictOnSeqNo()
-{
-    const std::uint32_t PARTITIONS_COUNT = 20;
-    const std::size_t TXS_COUNT = 100;
-
-    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
-
-    SetPartitionWriteSpeed("topic_A", 50'000'000);
-
-    auto session = CreateSession();
-    std::vector<std::shared_ptr<NTopic::ISimpleBlockingWriteSession>> topicWriteSessions;
-
-    for (std::uint32_t i = 0; i < PARTITIONS_COUNT; ++i) {
-        std::string sourceId = TEST_MESSAGE_GROUP_ID;
-        sourceId += "_";
-        sourceId += ToString(i);
-
-        NTopic::TTopicClient client(GetDriver());
-        NTopic::TWriteSessionSettings options;
-        options.Path(GetTopicPath("topic_A"));
-        options.ProducerId(sourceId);
-        options.MessageGroupId(sourceId);
-        options.PartitionId(i);
-        options.Codec(ECodec::RAW);
-
-        auto session = client.CreateSimpleBlockingWriteSession(options);
-
-        topicWriteSessions.push_back(std::move(session));
-    }
-
-    std::vector<std::unique_ptr<TxUsage::ISession>> sessions;
-    std::vector<std::unique_ptr<TTransactionBase>> transactions;
-
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        sessions.push_back(CreateSession());
-        auto& session = sessions.back();
-
-        transactions.push_back(session->BeginTx());
-        auto& tx = transactions.back();
-
-        for (std::size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            std::string sourceId = TEST_MESSAGE_GROUP_ID;
-            sourceId += "_";
-            sourceId += ToString(j);
-
-            for (std::size_t k = 0, count = RandomNumber<std::size_t>(20) + 1; k < count; ++k) {
-                const std::string data(RandomNumber<std::size_t>(1'000) + 100, 'x');
-                NTopic::TWriteMessage params(data);
-                params.Tx(*tx);
-
-                topicWriteSessions[j]->Write(std::move(params));
-            }
-        }
-    }
-
-    std::vector<TAsyncStatus> futures;
-
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
-    }
-
-    // Some transactions should end with the error `ABORTED`
-    std::size_t successCount = 0;
-
-    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
-        futures[i].Wait();
-        const auto& result = futures[i].GetValueSync();
-        switch (result.GetStatus()) {
-        case EStatus::SUCCESS:
-            ++successCount;
-            break;
-        case EStatus::ABORTED:
-            break;
-        default:
-            ADD_FAILURE() << "unexpected status: " << ToString(static_cast<TStatus>(result));
-            break;
-        }
-    }
-
-    ASSERT_NE(successCount, TXS_COUNT);
-}
-
-TEST_F(TxUsageTable, Transactions_Conflict_On_SeqNo)
-{
-    TestTransactionsConflictOnSeqNo();
-}
-
-TEST_F(TxUsageQuery, Transactions_Conflict_On_SeqNo)
-{
-    TestTransactionsConflictOnSeqNo();
-}
-
-TEST_F(TxUsageQuery, TestRetentionOnLongTxAndBigMessages)
+TEST_F(TxUsageQuery, TEST_NAME(TestRetentionOnLongTxAndBigMessages))
 {
     // TODO uncomment
     return;

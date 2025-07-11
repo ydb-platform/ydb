@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/fq/libs/config/protos/pinger.pb.h>
 #include <yql/essentials/providers/common/metrics/service_counters.h>
 #include <ydb/public/lib/fq/scope.h>

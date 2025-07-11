@@ -170,23 +170,3 @@ def get_no_lint_value(unit):
     if no_lint_value and no_lint_value not in supported_no_lint_values:
         ymake.report_configure_error('Unsupported value for NO_LINT macro: {}'.format(no_lint_value))
     return no_lint_value
-
-
-def ugly_conftest_exception(path):
-    """
-    FIXME:
-    TAXICOMMON-9288: Taxi abused bug with absolute paths and built conftest descovery upon it
-    until the issue is filed let's limit impact only to existing files.
-    Never let this list grow!!! Fix issue before adding any new violating conftests
-    """
-    exceptions = [
-        'taxi/uservices/userver-arc-utils/functional_tests/basic/conftest.py',
-        'taxi/uservices/userver-arc-utils/functional_tests/basic_chaos/conftest.py',
-    ]
-
-    if not path.endswith('conftest.py'):
-        return False
-    for e in exceptions:
-        if path.endswith(e):
-            return True
-    return False

@@ -2406,5 +2406,259 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         );
     }
 
+    Y_UNIT_TEST(WriteUniqueRowsInsertDuplicateBeforeCommit) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/counts` (key int, rows int, PRIMARY KEY (key));
+                CREATE TABLE `/Root/rows` (key int, subkey int, value int, PRIMARY KEY (key, subkey));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/counts` (key, rows) VALUES
+                (42, 2);
+            UPSERT INTO `/Root/rows` (key, subkey, value) VALUES
+                (42, 1, 101),
+                (42, 2, 102);
+        )");
+
+        TString sessionId1, txId1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId1, txId1, R"(
+                UPDATE `/Root/counts` SET rows = rows + 1 WHERE key = 42;
+                SELECT rows FROM `/Root/counts` WHERE key = 42;
+            )"),
+            "{ items { int32_value: 3 } }"
+        );
+
+        TString sessionId2, txId2;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId2, txId2, R"(
+                UPDATE `/Root/counts` SET rows = rows + 1 WHERE key = 42;
+                SELECT rows FROM `/Root/counts` WHERE key = 42;
+            )"),
+            "{ items { int32_value: 3 } }"
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId2, txId2, R"(
+                INSERT INTO `/Root/rows` (key, subkey, value) VALUES
+                    (42, 3, 203);
+            )"),
+            "<empty>"
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId1, txId1, R"(
+                INSERT INTO `/Root/rows` (key, subkey, value) VALUES
+                    (42, 3, 303);
+            )"),
+            "ERROR: ABORTED"
+        );
+    }
+
+    Y_UNIT_TEST(WriteUniqueRowsInsertDuplicateAtCommit) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/counts` (key int, rows int, PRIMARY KEY (key));
+                CREATE TABLE `/Root/rows` (key int, subkey int, value int, PRIMARY KEY (key, subkey));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/counts` (key, rows) VALUES
+                (42, 2);
+            UPSERT INTO `/Root/rows` (key, subkey, value) VALUES
+                (42, 1, 101),
+                (42, 2, 102);
+        )");
+
+        TString sessionId1, txId1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId1, txId1, R"(
+                UPDATE `/Root/counts` SET rows = rows + 1 WHERE key = 42;
+                SELECT rows FROM `/Root/counts` WHERE key = 42;
+            )"),
+            "{ items { int32_value: 3 } }"
+        );
+
+        TString sessionId2, txId2;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId2, txId2, R"(
+                UPDATE `/Root/counts` SET rows = rows + 1 WHERE key = 42;
+                SELECT rows FROM `/Root/counts` WHERE key = 42;
+            )"),
+            "{ items { int32_value: 3 } }"
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId2, txId2, R"(
+                INSERT INTO `/Root/rows` (key, subkey, value) VALUES
+                    (42, 3, 203);
+            )"),
+            "<empty>"
+        );
+
+        TBlockEvents<NEvents::TDataEvents::TEvWriteResult> blockedLocksBroken(runtime, [&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
+                return true;
+            }
+            return false;
+        });
+
+        auto commitFuture = KqpSimpleSendCommit(runtime, sessionId1, txId1, R"(
+            INSERT INTO `/Root/rows` (key, subkey, value) VALUES
+                (42, 3, 303);
+        )");
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        blockedLocksBroken.Stop().Unblock();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleWaitCommit(runtime, std::move(commitFuture)),
+            "ERROR: ABORTED"
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(DistributedInsertReadSetWithoutLocks, Volatile) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        auto shard1 = shards.at(0);
+        auto shard2 = shards.at(1);
+
+        TVector<TShardedTableOptions::TColumn> columns{
+            {"key", "Int32", true, false},
+            {"value", "Int32", false, false},
+        };
+
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        // Prepare an insert (readsets flow between shards)
+        ui64 txId1 = 1234567890011;
+        auto tx1sender = runtime.AllocateEdgeActor();
+        {
+            auto req1 = MakeWriteRequestOneKeyValue(
+                txId1,
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
+                tableId,
+                columns,
+                2, 1003);
+            req1->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            req1->Record.MutableLocks()->AddSendingShards(shard1);
+            req1->Record.MutableLocks()->AddSendingShards(shard2);
+            req1->Record.MutableLocks()->AddReceivingShards(shard1);
+            req1->Record.MutableLocks()->AddReceivingShards(shard2);
+
+            auto req2 = MakeWriteRequestOneKeyValue(
+                txId1,
+                Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
+                tableId,
+                columns,
+                12, 1004);
+            req2->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            req2->Record.MutableLocks()->AddSendingShards(shard1);
+            req2->Record.MutableLocks()->AddSendingShards(shard2);
+            req2->Record.MutableLocks()->AddReceivingShards(shard1);
+            req2->Record.MutableLocks()->AddReceivingShards(shard2);
+
+            Cerr << "... preparing tx1 at " << shard1 << Endl;
+            auto res1 = Write(runtime, tx1sender, shard1, std::move(req1));
+            Cerr << "... preparing tx1 at " << shard2 << Endl;
+            auto res2 = Write(runtime, tx1sender, shard2, std::move(req2));
+
+            ui64 minStep = Max(res1.GetMinStep(), res2.GetMinStep());
+            ui64 maxStep = Min(res1.GetMaxStep(), res2.GetMaxStep());
+
+            Cerr << "... planning tx1 at " << coordinator << Endl;
+            SendProposeToCoordinator(
+                runtime, tx1sender, shards, {
+                    .TxId = txId1,
+                    .Coordinator = coordinator,
+                    .MinStep = minStep,
+                    .MaxStep = maxStep,
+                    .Volatile = Volatile,
+                });
+        }
+
+        // Check tx1 replies
+        {
+            auto ev1 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx1sender);
+            auto ev2 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx1sender);
+            UNIT_ASSERT_C(
+                ev1->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED &&
+                ev2->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+                "Unexpected status: " << ev1->Get()->Record.GetStatus() << " and " << ev2->Get()->Record.GetStatus()
+            );
+        }
+
+        // Validate commit was fully applied
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 1003 } }, "
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }, "
+            "{ items { int32_value: 12 } items { int32_value: 1004 } }"
+        );
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

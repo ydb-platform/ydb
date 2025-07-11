@@ -10,6 +10,7 @@
 AWS_PUSH_SANE_WARNING_LEVEL
 
 struct aws_channel;
+struct aws_event_loop;
 struct aws_event_stream_rpc_client_connection;
 struct aws_event_stream_rpc_client_continuation_token;
 
@@ -30,9 +31,15 @@ typedef void(aws_event_stream_rpc_client_stream_continuation_closed_fn)(
     struct aws_event_stream_rpc_client_continuation_token *token,
     void *user_data);
 
+/**
+ * Invoked after a continuation has been fully destroyed.  Listeners know that no further callbacks are possible.
+ */
+typedef void(aws_event_stream_rpc_client_stream_continuation_terminated_fn)(void *user_data);
+
 struct aws_event_stream_rpc_client_stream_continuation_options {
     aws_event_stream_rpc_client_stream_continuation_fn *on_continuation;
     aws_event_stream_rpc_client_stream_continuation_closed_fn *on_continuation_closed;
+    aws_event_stream_rpc_client_stream_continuation_terminated_fn *on_continuation_terminated;
     void *user_data;
 };
 
@@ -74,6 +81,11 @@ typedef void(aws_event_stream_rpc_client_on_connection_setup_fn)(
     void *user_data);
 
 /**
+ * Invoked when a connection has been completely destroyed.
+ */
+typedef void(aws_event_stream_rpc_client_on_connection_terminated_fn)(void *user_data);
+
+/**
  * Invoked whenever a message has been flushed to the channel.
  */
 typedef void(aws_event_stream_rpc_client_message_flush_fn)(int error_code, void *user_data);
@@ -93,6 +105,7 @@ struct aws_event_stream_rpc_client_connection_options {
     aws_event_stream_rpc_client_on_connection_setup_fn *on_connection_setup;
     aws_event_stream_rpc_client_connection_protocol_message_fn *on_connection_protocol_message;
     aws_event_stream_rpc_client_on_connection_shutdown_fn *on_connection_shutdown;
+    aws_event_stream_rpc_client_on_connection_terminated_fn *on_connection_terminated;
     void *user_data;
 };
 
@@ -141,6 +154,12 @@ AWS_EVENT_STREAM_API int aws_event_stream_rpc_client_connection_send_protocol_me
     const struct aws_event_stream_rpc_message_args *message_args,
     aws_event_stream_rpc_client_message_flush_fn *flush_fn,
     void *user_data);
+
+/**
+ * Returns the event loop that a connection is seated on.
+ */
+AWS_EVENT_STREAM_API struct aws_event_loop *aws_event_stream_rpc_client_connection_get_event_loop(
+    const struct aws_event_stream_rpc_client_connection *connection);
 
 /**
  * Create a new stream. continuation_option's callbacks will not be invoked, and nothing will be sent across the wire

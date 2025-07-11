@@ -21,8 +21,12 @@ TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* 
 
 void TVectorWorkloadGenerator::Init() {
     VectorSampler = MakeHolder<TVectorSampler>(Params);
-    VectorSampler->SampleExistingVectors();
-    
+    if (Params.QueryTableName.empty()) {
+        VectorSampler->SampleExistingVectors();
+    } else {
+        VectorSampler->SelectPredefinedVectors();
+    }
+
     if (Params.Recall) {
         TVectorRecallEvaluator vectorRecallEvaluator(Params);
         vectorRecallEvaluator.MeasureRecall(*VectorSampler);
@@ -34,7 +38,7 @@ std::string TVectorWorkloadGenerator::GetDDLQueries() const {
         CREATE TABLE `{0}/{1}`(
             id Uint64,
             embedding Utf8,
-            PRIMARY KEY(id)) 
+            PRIMARY KEY(id))
         WITH (
             AUTO_PARTITIONING_BY_SIZE = ENABLED,
             AUTO_PARTITIONING_PARTITION_SIZE_MB = 500,
@@ -78,30 +82,22 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     CurrentIndex = (CurrentIndex + 1) % VectorSampler->GetTargetCount();
 
     // Create the query string
-    std::string query = MakeSelect(
-        Params.TableName, 
-        Params.IndexName,
-        Params.KeyColumn,
-        Params.EmbeddingColumn,
-        Params.PrefixColumn,
-        Params.KmeansTreeSearchClusters,
-        Params.Metric
-    );
-    
+    std::string query = MakeSelect(Params, Params.IndexName);
+
     // Get the embedding for the specified target
     const auto& targetEmbedding = VectorSampler->GetTargetEmbedding(CurrentIndex);
-    
+
     // Get the prefix value if needed
-    std::optional<i64> prefixValue;
+    std::optional<NYdb::TValue> prefixValue;
     if (Params.PrefixColumn.has_value()) {
         prefixValue = VectorSampler->GetPrefixValue(CurrentIndex);
     }
-    
+
     NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.Limit);
-    
+
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));
-    
+
     return TQueryInfoList(1, queryInfo);
 }
 

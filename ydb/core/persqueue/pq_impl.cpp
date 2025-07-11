@@ -2029,7 +2029,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
 
-    bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
+    bool mirroredPartition = MirroringEnabled(Config);
 
     if (!req.GetIsDirectWrite()) {
         if (!req.HasMessageNo()) {

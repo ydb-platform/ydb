@@ -121,7 +121,6 @@ SRCS(
     schemeshard__operation_backup_incremental_backup_collection.cpp
     schemeshard__operation_blob_depot.cpp
     schemeshard__operation_cancel_tx.cpp
-    schemeshard__operation_cansel_build_index.cpp
     schemeshard__operation_change_path_state.cpp
     schemeshard__operation_common.cpp
     schemeshard__operation_common.h
@@ -231,6 +230,7 @@ SRCS(
     schemeshard_build_index_tx_base.cpp
     schemeshard_cdc_stream_common.cpp
     schemeshard_cdc_stream_scan.cpp
+    schemeshard_incremental_restore_scan.cpp
     schemeshard_domain_links.cpp
     schemeshard_domain_links.h
     schemeshard_effective_acl.cpp
@@ -271,6 +271,7 @@ SRCS(
     schemeshard_svp_migration.h
     schemeshard_system_names.cpp
     schemeshard_system_names.h
+    schemeshard_sysviews_update.cpp
     schemeshard_tx_infly.h
     schemeshard_types.cpp
     schemeshard_types.h
@@ -316,6 +317,7 @@ PEERDIR(
     ydb/core/resource_pools
     ydb/core/scheme
     ydb/core/statistics
+    ydb/core/sys_view/common
     ydb/core/sys_view/partition_stats
     ydb/core/tablet
     ydb/core/tablet_flat

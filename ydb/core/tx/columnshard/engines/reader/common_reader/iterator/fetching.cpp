@@ -5,6 +5,7 @@
 #include "source.h"
 #include "sub_columns_fetching.h"
 
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 
 #include <util/string/builder.h>
@@ -65,9 +66,21 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)("source_id", source->GetSourceId());
 
+        auto& schedulableTask = source->GetContext()->GetCommonContext()->GetSchedulableTask();
+        if (schedulableTask) {
+            schedulableTask->IncreaseExtraUsage();
+        }
+
         const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
-        FlushDuration(TMonotonic::Now() - startInstant);
+        const auto executionTime = TMonotonic::Now() - startInstant;
+        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionTime);
+
+        if (schedulableTask) {
+            schedulableTask->DecreaseExtraUsage(executionTime);
+        }
+
+        FlushDuration(executionTime);
         if (!resultStep) {
             return resultStep;
         }

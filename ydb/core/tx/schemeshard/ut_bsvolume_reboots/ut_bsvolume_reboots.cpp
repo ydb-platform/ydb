@@ -255,6 +255,7 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
 
     Y_UNIT_TEST(SimultaneousCreateDropNbs) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

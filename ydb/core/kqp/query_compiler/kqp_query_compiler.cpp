@@ -613,6 +613,8 @@ public:
         queryProto.SetEnableOltpSink(Config->EnableOltpSink);
         queryProto.SetEnableOlapSink(Config->EnableOlapSink);
         queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+        queryProto.SetForceImmediateEffectsExecution(
+            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
@@ -1388,6 +1390,10 @@ private:
 
             if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
                 settingsProto.SetIsBatch(true);
+            }
+
+            if (const auto isIndexImplTable = settings.IsIndexImplTable().Cast(); isIndexImplTable.StringValue() == "true") {
+                settingsProto.SetIsIndexImplTable(true);
             }
 
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);

@@ -94,6 +94,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
+    bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
+    TString RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const;
 
     void HandleDie(const TActorContext& ctx) override;
 

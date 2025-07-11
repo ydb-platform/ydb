@@ -228,6 +228,8 @@ public:
             ParentSpan.Link(Span.GetTraceId());
             Span.Attribute("GroupId", Info->GroupID.GetRawId());
             Span.Attribute("RestartCounter", RestartCounter);
+            Span.Attribute("database", AppData()->TenantName);
+            Span.Attribute("storagePool", Info->GetStoragePoolName());
             params.Common.Event->ToSpan(Span);
         }
 

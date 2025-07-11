@@ -192,6 +192,8 @@ runs:
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
+        export TEST_ICRDMA=1
+
         params=(
           -T
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}

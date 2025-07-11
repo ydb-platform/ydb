@@ -574,6 +574,10 @@ private:
     void ProcessPendingEvents();
 
     void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
+
+    NWilson::TSpan WriteTxsSpan;
+
+    void InitPipeClientCache();
 };
 
 

@@ -278,7 +278,7 @@ protected:
 
     static bool IsSuccess(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
     static TString GetError(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
-    
+
     static bool IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
     static TString GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
 

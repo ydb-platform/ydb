@@ -17,7 +17,7 @@ items:
   include:
     mode: link
     path: ../olap/toc_p.yaml
-- name: AI (векторный поиск)
+- name: AI
   href: vector-search/index.md
   include:
     mode: link

@@ -38,13 +38,7 @@ template <class T>
 concept CArray = std::ranges::range<T> && !CTuple<T>;
 
 template <class T>
-concept CMapping = requires(T) {
-    typename T::key_type;
-    typename T::mapped_type;
-};
-
-template <class T>
-concept CAssociativeArray = CArray<T> && CMapping<T>;
+concept CAssociativeArray = CArray<T> && NMpl::CMapping<T>;
 
 template <class T>
 concept CHasWriteSchema = requires (

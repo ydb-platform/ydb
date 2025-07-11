@@ -23,28 +23,12 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/string/join.h>
 #include <util/system/yassert.h>
-#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <memory>
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
 namespace NKikimr::NArrow {
-
-using TInt128 = NYql::NDecimal::TInt128;
-inline TInt128 NormalizeDecimal128(const TInt128& v) {
-    constexpr TInt128 PInf128 = +NYql::NDecimal::Inf();
-    constexpr TInt128 NInf128 = -NYql::NDecimal::Inf();
-    if (v > PInf128) {
-        return PInf128;
-    }
-
-    if (v < NInf128) {
-        return NInf128;
-    }
-
-    return v;
-}
 
 template <typename TType>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& typeInfo) {
@@ -239,7 +223,6 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
     if (!original) {
         return nullptr;
     }
-
     return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
 }
 
@@ -254,7 +237,6 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
         i = NArrow::TStatusValidator::GetValid(
             NArrow::NSerialization::TNativeSerializer(pool).Deserialize(NArrow::NSerialization::TNativeSerializer(pool).SerializeFull(i)));
     }
-
     return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
 }
 

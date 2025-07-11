@@ -67,18 +67,18 @@ public:
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, soReadObject.Object().Project().StringValue());
 
-                TInstant From;
+                TInstant from;
                 if (auto time = ExtractSetting(settings, "from")) {
-                    From = TInstant::ParseIso8601(*time);
+                    from = TInstant::ParseIso8601(*time);
                 } else {
-                    From = TInstant::Now() - TDuration::Days(7);
+                    from = TInstant::Now() - TDuration::Days(7);
                 }
                 
-                TInstant To;
+                TInstant to;
                 if (auto time = ExtractSetting(settings, "to")) {
-                    To = TInstant::ParseIso8601(*time);
+                    to = TInstant::ParseIso8601(*time);
                 } else {
-                    To = TInstant::Now();
+                    to = TInstant::Now();
                 }
                 
                 auto selectors = NSo::ExtractSelectorValues(*maybeSelectors);
@@ -97,8 +97,8 @@ public:
                 auto credentialsProvider = providerFactory->CreateProvider();
 
                 auto solomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
-                auto labelNamesFuture = solomonClient->GetLabelNames(selectors, From, To);
-                auto listMetricsFuture = solomonClient->ListMetrics(selectors, From, To, 30, 0);
+                auto labelNamesFuture = solomonClient->GetLabelNames(selectors, from, to);
+                auto listMetricsFuture = solomonClient->ListMetrics(selectors, from, to, 30, 0);
 
                 LabelNamesRequests_[soReadObject.Raw()] = {
                     .SolomonClient = solomonClient,

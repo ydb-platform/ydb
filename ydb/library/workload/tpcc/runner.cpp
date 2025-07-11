@@ -4,6 +4,7 @@
 #include "log.h"
 #include "log_backend.h"
 #include "runner_display_data.h"
+#include "runner_tui.h"
 #include "task_queue.h"
 #include "terminal.h"
 #include "transactions.h"
@@ -18,11 +19,6 @@
 
 #include <util/string/cast.h>
 #include <util/system/info.h>
-
-#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
-#include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>
-#include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
-#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
 #include <atomic>
 #include <stop_token>
@@ -76,7 +72,6 @@ private:
     void UpdateDisplayTextMode();
 
     ftxui::Element BuildTuiLayout();
-    void UpdateDisplayTuiMode();
     void ExitTuiMode();
 
     void PrintTransactionStatisticsPretty(IOutputStream& os);
@@ -112,19 +107,9 @@ private:
     Clock::time_point MeasurementsStartTs;
     Clock::time_point StopDeadline;
 
-    struct TScreenWrapper {
-        TScreenWrapper()
-            : Screen(ftxui::ScreenInteractive::Fullscreen())
-        {}
-
-        ftxui::ScreenInteractive Screen;
-    };
-
-    std::unique_ptr<TScreenWrapper> TuiScreen;
-    std::optional<std::thread> TuiThread;
-
-    // main controlling thread publish calculated data to the Tui thread to display
     std::shared_ptr<TDisplayData> DataToDisplay;
+
+    std::unique_ptr<TRunnerTui> Tui;
 };
 
 //-----------------------------------------------------------------------------
@@ -323,16 +308,7 @@ void TPCCRunner::RunSync() {
     // produced after this point and before the first screen update
     if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
         LogBackend->StartCapture(); // start earlier?
-        TuiScreen = std::make_unique<TScreenWrapper>();
-        TuiThread = std::thread([&] {
-            TuiScreen->Screen.Loop(ftxui::Renderer([&] {
-                return BuildTuiLayout();
-            }));
-
-            // ftxui catches signals and breaks the loop above, but
-            // we have to let know the rest of app
-            GetGlobalInterruptSource().request_stop();
-        });
+        Tui = std::make_unique<TRunnerTui>(*LogBackend, DataToDisplay);
     }
 
     if (forcedWarmup) {
@@ -376,8 +352,7 @@ void TPCCRunner::RunSync() {
     StopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunDuration.Seconds());
 
     // reset statistics
-    auto newDisplayData = std::make_shared<TDisplayData>(PerThreadTerminalStats.size(), MeasurementsStartTs);
-    std::atomic_store(&DataToDisplay, newDisplayData);
+    DataToDisplay = std::make_shared<TDisplayData>(PerThreadTerminalStats.size(), MeasurementsStartTs);
 
     while (!GetGlobalInterruptSource().stop_requested()) {
         if (now >= StopDeadline) {
@@ -416,7 +391,7 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
         UpdateDisplayTextMode();
         break;
     case TRunConfig::EDisplayMode::Tui:
-        UpdateDisplayTuiMode();
+        Tui->Update(DataToDisplay);
         break;
     default:
         ;
@@ -508,222 +483,6 @@ void TPCCRunner::UpdateDisplayTextMode() {
     LOG_D(debugSs.str());
 }
 
-ftxui::Element TPCCRunner::BuildTuiLayout() {
-    using namespace ftxui;
-
-    // Get window width to determine which columns to show
-    constexpr int MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS = 140;
-
-    std::shared_ptr<TDisplayData> data = std::atomic_load(&DataToDisplay);
-    if (data == nullptr) {
-        // just sanity check, normally should never happen
-        return filler();
-    }
-
-    auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
-    const int windowWidth = screen.dimx();
-    const bool showExtendedColumns = windowWidth >= MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS;
-
-    // First update is special: we switch buffers and capture stderr to display live logs
-    static bool firstUpdate = true;
-    if (firstUpdate) {
-        // Switch to alternate screen buffer (like htop)
-        std::cout << "\033[?1049h";
-        std::cout << "\033[2J\033[H"; // Clear screen and move to top
-        firstUpdate = false;
-    }
-
-    // Left side of header: runner info, efficiency, phase, progress
-
-    std::stringstream headerSs;
-    headerSs << "Result preview: " << data->StatusData.Phase;
-
-    std::stringstream metricsSs;
-    metricsSs << "Efficiency: " << std::setw(3) << std::fixed << std::setprecision(1) << data->StatusData.Efficiency << "%   "
-        << "tpmC: " << std::fixed << std::setprecision(0) << data->StatusData.Tpmc;
-
-    std::stringstream timingSs;
-    timingSs << data->StatusData.ElapsedMinutesTotal << ":"
-             << std::setfill('0') << std::setw(2) << data->StatusData.ElapsedSecondsTotal << " elapsed"
-             << ", "
-             << data->StatusData.RemainingMinutesTotal << ":" << std::setfill('0') << std::setw(2) << data->StatusData.RemainingSecondsTotal
-             << " remaining";
-
-    // Calculate progress ratio for gauge
-    float progressRatio = static_cast<float>(data->StatusData.ProgressPercentTotal / 100.0);
-    constexpr int progressBarWidth = 15;
-
-    auto topLeftMainInfo = vbox({
-        text(metricsSs.str()) | bold,
-        text(timingSs.str()),
-        hbox({
-            text("Progress: ["),
-            gauge(progressRatio) | size(WIDTH, EQUAL, progressBarWidth),
-            text("] " + std::to_string(static_cast<int>(data->StatusData.ProgressPercentTotal)) + "%")
-        })
-    });
-
-    // Right side of header: Transaction statistics table (without header)
-
-    Elements txRows;
-    // Add header row for transaction table
-    txRows.push_back(hbox({
-        text("Transaction") | size(WIDTH, EQUAL, 12),
-        text("p50, ms") | align_right | size(WIDTH, EQUAL, 9),
-        text("p90, ms") | align_right | size(WIDTH, EQUAL, 9),
-        text("p99, ms") | align_right | size(WIDTH, EQUAL, 9)
-    }));
-
-    for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
-        auto type = static_cast<ETransactionType>(i);
-        const auto& totalForType = data->Statistics.TotalTerminalStats.GetStats(type);
-
-        std::stringstream p50Ss, p90Ss, p99Ss;
-        p50Ss << std::fixed << std::setprecision(0) << totalForType.LatencyHistogramFullMs.GetValueAtPercentile(50);
-        p90Ss << std::fixed << std::setprecision(0) << totalForType.LatencyHistogramFullMs.GetValueAtPercentile(90);
-        p99Ss << std::fixed << std::setprecision(0) << totalForType.LatencyHistogramFullMs.GetValueAtPercentile(99);
-
-        txRows.push_back(hbox({
-            text(std::string(ToString(type))) | size(WIDTH, EQUAL, 12),
-            text(p50Ss.str()) | align_right | size(WIDTH, EQUAL, 9),
-            text(p90Ss.str()) | align_right | size(WIDTH, EQUAL, 9),
-            text(p99Ss.str()) | align_right | size(WIDTH, EQUAL, 9)
-        }));
-    }
-    auto topRightTransactionStats = vbox(txRows);
-
-    auto topSection = window(text(headerSs.str()), hbox({
-        topLeftMainInfo | flex,
-        separator(),
-        topRightTransactionStats | flex
-    }));
-
-    // Per-thread statistics in two columns with header
-
-    Elements leftThreadElements, rightThreadElements;
-    size_t threadCount = data->Statistics.StatVec.size();
-    size_t halfCount = (threadCount + 1) / 2;
-
-    // Create header row elements
-    Elements headerLeftColumn;
-    headerLeftColumn.push_back(text("Thr") | size(WIDTH, EQUAL, 4));
-    headerLeftColumn.push_back(text("Load") | center | size(WIDTH, EQUAL, 24));
-    headerLeftColumn.push_back(text("QPS") | align_right | size(WIDTH, EQUAL, 8));
-    if (showExtendedColumns) {
-        headerLeftColumn.push_back(text("Queue") | align_right | size(WIDTH, EQUAL, 10));
-        headerLeftColumn.push_back(text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20));
-    }
-
-    Elements headerRightColumn;
-    headerRightColumn.push_back(text("Thr") | size(WIDTH, EQUAL, 4));
-    headerRightColumn.push_back(text("Load") | center | size(WIDTH, EQUAL, 24));
-    headerRightColumn.push_back(text("QPS") | align_right | size(WIDTH, EQUAL, 8));
-    if (showExtendedColumns) {
-        headerRightColumn.push_back(text("Queue") | align_right | size(WIDTH, EQUAL, 10));
-        headerRightColumn.push_back(text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20));
-    }
-
-    auto headerLeft = hbox(headerLeftColumn);
-    auto headerRight = hbox(headerRightColumn);
-
-    leftThreadElements.push_back(headerLeft);
-    rightThreadElements.push_back(headerRight);
-
-    for (size_t i = 0; i < threadCount; ++i) {
-        const auto& stats = data->Statistics.StatVec[i];
-        double load = stats.TotalTime != 0 ? stats.ExecutingTime / stats.TotalTime : 0;
-
-        // Create custom progress bar with individual "|" characters
-        constexpr int barWidth = 10;
-        int filledBars = static_cast<int>(load * barWidth);
-        std::string barContent(filledBars, '|');
-        barContent += std::string(barWidth - filledBars, ' ');
-
-        auto loadBar = text(barContent);
-        Color loadColor;
-        if (load < 0.6) {
-            loadBar = loadBar | color(Color::Green);
-            loadColor = Color::Green;
-        } else if (load < 0.8) {
-            loadBar = loadBar | color(Color::Yellow);
-            loadColor = Color::Yellow;
-        } else {
-            loadBar = loadBar | color(Color::Red);
-            loadColor = Color::Red;
-        }
-
-        std::stringstream loadPercentSs, qpsSs, queueSizeSs, queueP90Ss;
-        loadPercentSs << std::fixed << std::setprecision(1) << std::setw(4) << std::right << (load * 100) << "%";
-        qpsSs << std::fixed << std::setprecision(0) << std::setw(8) << std::right << stats.QueriesPerSecond;
-        queueSizeSs << stats.TaskThreadStats->InternalTasksWaitingInflight;
-        queueP90Ss << std::fixed << std::setprecision(1) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
-
-        // Create thread line elements
-        Elements threadLineElements;
-        threadLineElements.push_back(text(std::to_string(i + 1)) | size(WIDTH, EQUAL, 4));
-        threadLineElements.push_back(hbox({
-            text("["),
-            loadBar | size(WIDTH, EQUAL, 10),
-            text("] "),
-            text(loadPercentSs.str()) | color(loadColor)
-        }) | size(WIDTH, EQUAL, 24));
-        threadLineElements.push_back(text(qpsSs.str()) | align_right | size(WIDTH, EQUAL, 8));
-        if (showExtendedColumns) {
-            threadLineElements.push_back(text(queueSizeSs.str()) | align_right | size(WIDTH, EQUAL, 10));
-            threadLineElements.push_back(text(queueP90Ss.str()) | align_right | size(WIDTH, EQUAL, 20));
-        }
-
-        auto threadLine = hbox(threadLineElements);
-
-        if (i < halfCount) {
-            leftThreadElements.push_back(threadLine);
-        } else {
-            rightThreadElements.push_back(threadLine);
-        }
-    }
-
-    // Pad the shorter column with empty lines
-    while (leftThreadElements.size() < rightThreadElements.size()) {
-        leftThreadElements.push_back(text(""));
-    }
-    while (rightThreadElements.size() < leftThreadElements.size()) {
-        rightThreadElements.push_back(text(""));
-    }
-
-    auto threadSection = window(text("TPC-C client state"), hbox({
-        vbox(leftThreadElements) | flex,
-        separator(),
-        vbox(rightThreadElements) | flex
-    }));
-
-    // Logs section (last 10 lines, full width)
-
-    Elements logElements;
-
-    LogBackend->GetLogLines([&](const std::string& line) {
-        logElements.push_back(paragraph(line));
-    });
-
-    auto logsContent = vbox(logElements);
-
-    auto logsSection = window(text("Logs"),
-        logsContent | flex);
-
-    // Main layout
-
-    auto layout = vbox({
-        topSection,
-        threadSection,
-        logsSection
-    });
-
-    return layout;
-}
-
-void TPCCRunner::UpdateDisplayTuiMode() {
-    TuiScreen->Screen.PostEvent(ftxui::Event::Custom);
-}
-
 void TPCCRunner::CollectDataToDisplay(Clock::time_point now) {
     auto newDisplayData = std::make_shared<TDisplayData>(PerThreadTerminalStats.size(), now);
 
@@ -731,7 +490,7 @@ void TPCCRunner::CollectDataToDisplay(Clock::time_point now) {
     CollectStatistics(newDisplayData->Statistics);
     CalculateStatusData(now, *newDisplayData);
 
-    std::atomic_store(&DataToDisplay, newDisplayData);
+    DataToDisplay.swap(newDisplayData);
 }
 
 void TPCCRunner::CollectStatistics(TAllStatistics& statistics) {
@@ -740,9 +499,9 @@ void TPCCRunner::CollectStatistics(TAllStatistics& statistics) {
         TaskQueue->CollectStats(i, *statistics.StatVec[i].TaskThreadStats);
     }
 
-    std::shared_ptr<TDisplayData> currentData = std::atomic_load(&DataToDisplay);
-    if (currentData) {
-        statistics.CalculateDerivativeAndTotal(currentData->Statistics);
+    if (DataToDisplay) {
+        // DataToDisplay contains current Statistics, while statistics is the new one
+        statistics.CalculateDerivativeAndTotal(DataToDisplay->Statistics);
     }
 }
 
@@ -815,8 +574,7 @@ void TPCCRunner::CalculateStatusData(Clock::time_point now, TDisplayData& data) 
 void TPCCRunner::ExitTuiMode() {
     LogBackend->StopCapture();
 
-    TuiScreen->Screen.Exit();
-    TuiThread->join();
+    Tui.reset();
 
     // Switch back to main screen buffer (restore original content)
     std::cout << "\033[?1049l";

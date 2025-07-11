@@ -9,6 +9,7 @@ SRCS(
     import.cpp
     log_backend.cpp
     runner.cpp
+    runner_tui.cpp
     task_queue.cpp
     terminal.cpp
     transaction_delivery.cpp

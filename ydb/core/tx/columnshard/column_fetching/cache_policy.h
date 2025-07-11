@@ -9,25 +9,6 @@
 
 namespace NKikimr::NOlap::NGeneralCache {
 
-class TColumnData {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::NAccessor::IChunkedArray>, Data);
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, MemoryGuard);
-
-public:
-    TColumnData(
-        const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& data, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& memory)
-        : Data(data)
-        , MemoryGuard(memory)
-    {
-        AFL_VERIFY(MemoryGuard);
-    }
-
-    ui64 GetRawSize() const {
-        return MemoryGuard->GetMemory();
-    }
-};
-
 class TGlobalColumnAddress {
 private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
@@ -70,7 +51,7 @@ public:
 class TColumnDataCachePolicy {
 public:
     using TAddress = TGlobalColumnAddress;
-    using TObject = TColumnData;
+    using TObject = std::shared_ptr<NArrow::NAccessor::IChunkedArray>;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
     using TSourceId = TActorId;
 
@@ -81,7 +62,7 @@ public:
     class TSizeCalcer {
     public:
         size_t operator()(const TObject& data) {
-            return sizeof(TAddress) + data.GetRawSize();
+            return sizeof(TAddress) + data->GetRawSizeVerified();
         }
     };
 

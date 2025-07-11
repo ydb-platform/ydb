@@ -14,7 +14,6 @@ private:
     using TAddress = TColumnDataCachePolicy::TAddress;
     using TObject = TColumnDataCachePolicy::TObject;
     using TSourceId = TActorId;
-    using TFetchingContext = NKikimr::NGeneralCache::NSource::TFetchingContext<TColumnDataCachePolicy>;
     using EConsumer = TColumnDataCachePolicy::EConsumer;
     using TSelf = NKikimr::NGeneralCache::NSource::IObjectsProcessor<TColumnDataCachePolicy>;
 

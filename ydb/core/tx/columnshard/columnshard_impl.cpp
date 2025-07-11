@@ -1350,10 +1350,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         }
 
         virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
-            THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, NOlap::NGeneralCache::TColumnData> result;
-
-            AFL_VERIFY(context.GetResourceGuards().size() == 2)("size", context.GetResourceGuards().size());
-            auto memoryGuard = context.GetResourceGuards().back();
+            THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, NOlap::NGeneralCache::TColumnDataCachePolicy::TObject> result;
 
             auto rawBlobs = context.ExtractBlobs();
             auto portionsData = context.ExtractAssembledData();
@@ -1363,8 +1360,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
                 const auto& portionAddress = Portions[i]->GetAddress();
 
                 AFL_VERIFY(container->GetColumnsCount() == 1);
-                result.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, portionAddress, ColumnId),
-                    NOlap::NGeneralCache::TColumnData(container->GetColumnVerified(0), memoryGuard));
+                result.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, portionAddress, ColumnId), container->GetColumnVerified(0));
             }
 
             CacheCallback->OnReceiveData(Owner, std::move(result), {}, {});
@@ -1389,13 +1385,15 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         }
     };
 
-    std::shared_ptr<NOlap::NGroupedMemoryManager::TFullGroupGuard> memoryGroupGuard = NOlap::NDataFetcher::TCurrentContext::BuildGroupGuard();
+    static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
+        NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+    auto processGuard = NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
     for (const auto& [consumer, requestsByColumn] : ev->Get()->GetRequests()) {
         for (const auto& [columnId, portionAddresses] : requestsByColumn) {
             std::vector<NOlap::TPortionInfo::TConstPtr> portions;
 
             auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-            NOlap::NDataFetcher::TRequestInput rInput(portions, actualIndexInfo, consumer, "", memoryGroupGuard);
+            NOlap::NDataFetcher::TRequestInput rInput(portions, actualIndexInfo, consumer, "", processGuard);
             auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
 
             NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetching(std::move(rInput),

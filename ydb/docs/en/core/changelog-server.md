@@ -25,13 +25,13 @@ Release date: 2025.
 * [Added](https://github.com/ydb-platform/ydb/issues/17734) automatic cleanup of temporary tables and directories during export to S3. This mode is enabled by setting the `enable_export_auto_dropping` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity checks of backups during import, which prevent restoration from corrupted backups and protect against data loss.
 * [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic.md#udf) in queries.
-* Added system views with information about [access right settings](./dev/system-views.md#auth), [history of overloaded partitions](./dev/system-views.md#top-overload-partitions), [history of partitions with broken locks](./dev/system-views#top-tli-partitions).
+* Added system views with information about [access right settings](./dev/system-views.md#auth), [history of overloaded partitions](./dev/system-views.md#top-overload-partitions), [history of partitions with broken locks](./dev/system-views.md#top-tli-partitions).
 * Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md) and [ALTER USER](./yql/reference/syntax/alter-user.md) operators:
   * `HASH` — sets a password in encrypted form.
   * `LOGIN` and `NOLOGIN` — unlocks and blocks a user, respectively.
 * Enhanced account security:
   * [Added](https://github.com/ydb-platform/ydb/pull/11963) user [password complexity](./reference/configuration/auth_config#password-complexity) verification.
-  * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) [automatic user lockout](./reference/configuration/auth_config#account-lockout) after a specified number of failed attempts to enter the correct password.
+  * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) [automatic user lockout](./reference/configuration/auth_config.md#account-lockout) after a specified number of failed attempts to enter the correct password.
   * [Added](https://github.com/ydb-platform/ydb/pull/12983) the ability for users to change their own passwords.
 * [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to flags that do not specify `(RequireRestart) = true` in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) are applied without a cluster restart.
 * [Changed](https://github.com/ydb-platform/ydb/pull/11329) lock behavior when shard locks exceed the limit. Once the limit is exceeded, the oldest locks (rather than the newest) are converted into full-shard locks.

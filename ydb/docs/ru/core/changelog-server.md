@@ -9,8 +9,8 @@
 
 #### Функциональность
 
-* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска. Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/index.md), возвращение кластера на предыдущие версии {{ ydb-short-name }} перестаёт быть возможен после этого.
-* [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](./concepts/async-replication.md).
+* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска. Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/index.md). Внимание! После включения флага откат на предыдущие версии {{ ydb-short-name }} невозможен.
+* [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка [консистентной асинхронной репликации](./concepts/async-replication.md).
 * Поддержаны запросы `BATCH UPDATE` и `BATCH DELETE`, позволяющие изменять большие строковые таблицы вне транзакционных ограничений. Включается установкой флага `enable_batch_updates` в конфигурации кластера.
 * Добавлен [механизм конфигурации V2](./devops/configuration-management/configuration-v2/config-overview), упрощающий развёртывание новых кластеров {{ ydb-short-name }} и дальнейшую работу с ними. [Сравнение](./devops/configuration-management/compare-configs) механизмов конфигурации V1 и V2.
 * Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric).
@@ -18,10 +18,10 @@
 * Добавлена поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions) в CDC для строковых таблиц. Включается установкой флага `enable_topic_autopartitioning_for_cdc` в конфигурации кластера.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](./concepts/cdc.md#topic-options) в CDC-топике с использованием выражения `ALTER TOPIC`.
 * [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) [формат DEBEZIUM_JSON](./concepts/cdc.md#debezium-json-record-structure) для потоков изменений (changefeed).
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/19507) возможность создавать потоки изменений (changefeed) к индексным таблицам.
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/19507) возможность создавать потоки изменений к индексным таблицам.
 * Добавлена возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md) для вторичного индекса. Включается установкой флага `enable_access_to_index_impl_tables` в конфигурации кластера.
 * В операциях резервного копирования и восстановления расширен состав поддерживаемых объектов. Включается установкой флагов, указанных в скобках:
-  * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (changefeed) (флаги `enable_changefeeds_export` и `enable_changefeeds_import`);
+  * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (флаги `enable_changefeeds_export` и `enable_changefeeds_import`);
   * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представлений (`VIEW`) (флаг `enable_view_export`).
 * Добавлено автоудаление временных директорий и таблиц при экспорте в S3. Включается установкой флага `enable_export_auto_dropping` в конфигурации кластера.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, предотвращающая восстановление из повреждённых резервных копий и защищающая от потери данных.

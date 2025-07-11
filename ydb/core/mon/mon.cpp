@@ -507,7 +507,7 @@ public:
     void ReplyForbiddenAndPassAway(const TString& error = {}) {
         NYql::TIssues issues;
         issues.AddIssue(error);
-        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, false);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
@@ -1143,7 +1143,7 @@ public:
     void ReplyForbiddenAndPassAway(const TString& error = {}) {
         NYql::TIssues issues;
         issues.AddIssue(error);
-        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, false);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {

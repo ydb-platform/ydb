@@ -309,7 +309,7 @@ private:
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 
-class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
+class TUploadColumnsRPCPublic: public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
@@ -406,35 +406,11 @@ private:
 
         out.reserve(schema->num_fields());
 
-        const NSchemeCache::TSchemeCacheNavigate* resolveResult = GetResolveNameResult();
-        THashMap<TString, NScheme::TTypeInfo> tableColumnTypes;
-        if (resolveResult && resolveResult->ResultSet.size() == 1) {
-            const auto& entry = resolveResult->ResultSet.front();
-            for (const auto& [_, colInfo] : entry.Columns) {
-                tableColumnTypes[colInfo.Name] = colInfo.PType;
-            }
-        }
-
         for (auto& field : schema->fields()) {
             auto& name = field->name();
             auto& type = field->type();
 
             Ydb::Type ydbType;
-            
-            if (type->id() == arrow::Type::FIXED_SIZE_BINARY) {
-                auto fixedSizeBinary = std::static_pointer_cast<arrow::FixedSizeBinaryType>(type);
-                if (fixedSizeBinary->byte_width() == 16) {
-                    auto tableTypeIt = tableColumnTypes.find(name);
-                    if (tableTypeIt != tableColumnTypes.end() && tableTypeIt->second.GetTypeId() == NScheme::NTypeIds::Decimal) {
-                        Ydb::DecimalType* decimalType = ydbType.mutable_decimal_type();
-                        decimalType->set_precision(tableTypeIt->second.GetDecimalType().GetPrecision());
-                        decimalType->set_scale(tableTypeIt->second.GetDecimalType().GetScale());
-                        out.emplace_back(name, std::move(ydbType));
-                        continue;
-                    }
-                }
-            }
-            
             if (!ConvertArrowToYdbPrimitive(*type, ydbType)) {
                 return TConclusionStatus::Fail("Cannot convert arrow type to ydb one: " + type->ToString());
             }

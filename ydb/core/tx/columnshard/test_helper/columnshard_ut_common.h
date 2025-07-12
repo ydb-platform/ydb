@@ -540,13 +540,6 @@ public:
                         Y_ABORT_UNLESS(typedBuilder.Append(arrow::Decimal128(data.Hi_, data.Low_)).ok());
                         return true;
                     }
-
-                    if constexpr (arrow::is_fixed_size_binary_type<T>::value) {
-                        arrow::Decimal128 decimal(data.Hi_, data.Low_);
-                        auto bytes = decimal.ToBytes();
-                        Y_ABORT_UNLESS(typedBuilder.Append(bytes.data()).ok());
-                        return true;
-                    }
                 }
                 Y_ABORT("Unknown type combination");
                 return false;

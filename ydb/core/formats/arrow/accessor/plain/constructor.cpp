@@ -60,7 +60,6 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
         return TConclusionStatus::Fail("plain accessor cannot convert types for transfer: " + originalArray->GetDataType()->ToString() + " to " +
                                        externalInfo.GetColumnType()->ToString());
     }
-
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
     auto chunked = originalArray->GetChunkedArray();
     auto table = arrow::Table::Make(schema, { chunked }, originalArray->GetRecordsCount());

@@ -461,6 +461,32 @@ node_broker_config:
   stable_node_name_prefix: <new prefix>
 ```
 
+## feature_flags - functional flags {#feature_flags}
+
+To enable the functional flag, add it to the feature_flags section of the cluster configuration. For example, to enable the vector index and auto-partitioning of topics in the CDC, you need to add to the config:
+
+```yaml
+feature_flags:
+  enable_vector_index: true
+  enable_topic_autopartitioning_for_cdc: true
+```
+### Functional flags
+
+| Флаг          | Функция |
+|---------------------------| ----------------------------------------------------|
+| `enable_vector_index`                                    | [Vector index](../../dev/vector-indexes.md) for approximate vector similarity search |
+| `enable_batch_updates`                                   | Enabled `BATCH UPDATE` and `BATCH DELETE` statements |
+| `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_autopartitioning_for_cdc`                  | [Auto-partitioning topics](../../concepts/cdc.md#topic-partitions) for row-oriented tables in CDC |
+| `enable_access_to_index_impl_tables`                     | [Enable followers (read replicas)](../../yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes |
+| `enable_changefeeds_export`, `enable_changefeeds_import` | Support for changefeeds in backup and restore operations |
+| `enable_view_export`                                     | Support for views in backup and restore operations |
+| `enable_export_auto_dropping`                            | Automatic cleanup of temporary tables and directories during export to S3 |
+| `enable_followers_stats`                                 | System views with information about [history of overloaded partitions](../../dev/system-views.md#top-overload-partitions) |
+| `enable_strict_acl_check`                                | Do not allow granting rights to non-existent users and delete users with permissions |
+| `enable_strict_user_management`                          | Enables strict checks for local users (i.e. only the cluster or database administrator can administer local users)|
+| `enable_database_admin`                                  | Add the role of database administrator |
+
 ## Configuring Health Check {#healthcheck-config}
 
 This section configures thresholds and timeout settings used by the {{ ydb-short-name }} [health check service](../ydb-sdk/health-check-api.md). These parameters help configure detection of potential [issues](../ydb-sdk/health-check-api.md#issues), such as excessive restarts or time drift between dynamic nodes.

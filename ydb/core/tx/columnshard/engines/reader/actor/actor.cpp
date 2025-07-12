@@ -4,7 +4,6 @@
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 
-#include <arrow/table.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -56,9 +55,9 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     ResourceSubscribeActorId = ctx.Register(new NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
     ReadCoordinatorActorId = ctx.Register(new NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
-    std::shared_ptr<TReadContext> context =
-        std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ScanCountersPool, ReadMetadataRange, SelfId(),
-            ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId, CPULimits, std::move(SchedulableTask));
+    std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ScanCountersPool,
+        ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId, CPULimits,
+        std::move(SchedulableTask));
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();

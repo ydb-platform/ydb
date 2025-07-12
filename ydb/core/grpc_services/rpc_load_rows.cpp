@@ -106,7 +106,6 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::STRUCT:
             break;
     }
-
     return false;
 }
 
@@ -309,7 +308,7 @@ private:
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 
-class TUploadColumnsRPCPublic: public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
+class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)

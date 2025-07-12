@@ -16,16 +16,6 @@
 #include <util/string/join.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
-std::shared_ptr<arrow::Array> ConvertDecimalToFixedSizeBinary(const std::shared_ptr<arrow::Array>& arr) {
-    if (arr->type()->id() != arrow::Type::DECIMAL128) {
-        return arr;
-    }
-
-    auto data = arr->data()->Copy();
-    data->type = arrow::fixed_size_binary(16);
-    return arrow::MakeArray(data);
-}
-
 std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::shared_ptr<arrow::RecordBatch> batch) {
     if (!batch) {
         return batch;
@@ -51,7 +41,8 @@ std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::sh
         auto field = batch->schema()->field(i);
         auto column = batch->column(i);
         if (column->type()->id() == arrow::Type::DECIMAL128) {
-            column = ConvertDecimalToFixedSizeBinary(column);
+            column->data()->type = arrow::fixed_size_binary(16);
+            column = arrow::MakeArray(column->data());
             field = field->WithType(arrow::fixed_size_binary(16));
         }
 

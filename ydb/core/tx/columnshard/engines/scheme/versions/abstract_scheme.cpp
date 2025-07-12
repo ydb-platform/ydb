@@ -41,8 +41,7 @@ std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::sh
         auto field = batch->schema()->field(i);
         auto column = batch->column(i);
         if (column->type()->id() == arrow::Type::DECIMAL128) {
-            column->data()->type = arrow::fixed_size_binary(16);
-            column = arrow::MakeArray(column->data());
+            const_cast<arrow::ArrayData*>(column->data().get())->type = arrow::fixed_size_binary(16);
             field = field->WithType(arrow::fixed_size_binary(16));
         }
 
@@ -89,6 +88,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             return batch;
         }
     }
+
     const std::shared_ptr<NArrow::TSchemaLite>& resultArrowSchema = GetSchema();
 
     std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>(batch->GetRecordsCount());
@@ -106,12 +106,14 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
                 continue;
             }
         }
+
         if (restoreColumnIds.contains(columnId)) {
             AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
                                                                         GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
+
     return result;
 }
 
@@ -146,12 +148,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
             bool typesMatch = features.GetArrowField()->type()->Equals(incomingColumn->type());
             if (!typesMatch) {
-                if (features.GetArrowField()->type()->id() == arrow::Type::DECIMAL128 &&
-                    incomingColumn->type()->id() == arrow::Type::FIXED_SIZE_BINARY) {
-                    if (std::static_pointer_cast<arrow::FixedSizeBinaryType>(incomingColumn->type())->byte_width() == 16) {
-                        typesMatch = true;
-                    }
-                } else if (features.GetArrowField()->type()->id() == arrow::Type::FIXED_SIZE_BINARY &&
+                if (features.GetArrowField()->type()->id() == arrow::Type::FIXED_SIZE_BINARY &&
                            incomingColumn->type()->id() == arrow::Type::DECIMAL128) {
                     if (std::static_pointer_cast<arrow::FixedSizeBinaryType>(features.GetArrowField()->type())->byte_width() == 16) {
                         typesMatch = true;
@@ -164,9 +161,11 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                                                features.GetArrowField()->type()->ToString() + " vs " + incomingColumn->type()->ToString());
             }
         }
+
         if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
             return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
         }
+
         if (hasNull) {
             switch (mType) {
                 case NEvWrite::EModificationType::Replace:
@@ -183,25 +182,31 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                     break;
             }
         }
+
         if (pkFieldIdx) {
             AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
             AFL_VERIFY(!pkColumns[*pkFieldIdx]);
             pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
             ++pkColumnsCount;
         }
+
         return TConclusionStatus::Success();
     };
+
     const auto nameResolver = [&](const std::string& fieldName) -> i32 {
         return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
     };
+
     auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().IgnoreOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
         incomingBatch, dstSchema, pred, nameResolver);
     if (batchConclusion.IsFail()) {
         return batchConclusion;
     }
+
     if (pkColumnsCount < pkColumns.size()) {
         return TConclusionStatus::Fail("not enough pk fields");
     }
+
     auto result = batchConclusion.DetachResult();
     result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), pkColumns, true);
 

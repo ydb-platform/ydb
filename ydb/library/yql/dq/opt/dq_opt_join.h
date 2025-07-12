@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include "dq_opt.h"
@@ -5,6 +6,8 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <util/generic/map.h>
+#include <util/generic/vector.h>
 
 namespace NYql {
 
@@ -37,7 +40,19 @@ NNodes::TExprBase DqBuildJoin(
 
 NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false);
 
-NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
+// Updated DqBuildBlockHashJoin function signature with all necessary parameters
+NNodes::TExprBase DqBuildBlockHashJoin(
+    const NNodes::TDqJoin& join, 
+    const TStructExprType* leftStructType, 
+    const TStructExprType* rightStructType, 
+    const std::map<std::string_view, ui32>& leftNames, 
+    const std::map<std::string_view, ui32>& rightNames,
+    const TVector<NNodes::TCoAtom>& leftJoinKeys, 
+    const TVector<NNodes::TCoAtom>& rightJoinKeys,
+    NNodes::TCoArgument leftInputArg, 
+    NNodes::TCoArgument rightInputArg, 
+    TExprContext& ctx
+);
 
 NNodes::TExprBase DqBuildJoinDict(const NNodes::TDqJoin& join, TExprContext& ctx);
 
@@ -51,3 +66,4 @@ bool DqCollectJoinRelationsWithStats(
 
 } // namespace NDq
 } // namespace NYql
+

@@ -10,7 +10,7 @@
 
 using namespace NKafka;
 
-static constexpr ui32 EXPECTED_API_KEYS_COUNT = 24u;
+static constexpr ui32 EXPECTED_API_KEYS_COUNT = 25u;
 struct TTopicConfig {
     inline static const std::map<TString, TString> DummyMap;
 

@@ -249,7 +249,7 @@ class PnpmPackageManager(BasePackageManager):
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
         self._replace_internal_lockfile_with_original(virtual_store_dir)
 
-        if not local_cli and nm_bundle:
+        if nm_bundle:
             bundle_node_modules(
                 build_root=self.build_root,
                 node_modules_path=self._nm_path(),

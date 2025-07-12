@@ -821,9 +821,6 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
 
 
 def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
-    if unit.get("TS_LOCAL_CLI") == "yes":
-        return False
-
     if unit.get("_WITH_NODE_MODULES") == "yes":
         return True
 

@@ -57,7 +57,27 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default()
         .DontSerializeDefault();
 
+    registrar.ExternalBaseClassParameter("with_interruption_info", &TThat::WithInterruptionInfo)
+        .Default()
+        .DontSerializeDefault();
+
     registrar.ExternalBaseClassParameter("task_name", &TThat::TaskName)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("operation_incarnation", &TThat::OperationIncarnation)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("from_time", &TThat::FromTime)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("to_time", &TThat::ToTime)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("attributes", &TThat::Attributes)
         .Default()
         .DontSerializeDefault();
 

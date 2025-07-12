@@ -432,7 +432,9 @@ int BuildAST(int argc, char* argv[]) {
                     parseRes = NSQLTranslation::SqlToYql(translators, query, settings);
                 }
             }
-
+            if (noDebug && parseRes.IsOk()) {
+                continue;
+            }
             if (parseRes.Root) {
                 TStringStream yqlProgram;
                 parseRes.Root->PrettyPrintTo(yqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);

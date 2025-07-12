@@ -164,7 +164,8 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
-            grouped_memory_limiter_config=None,
+            scan_grouped_memory_limiter_config=None,
+            comp_grouped_memory_limiter_config=None,
             query_service_config=None,
             domain_login_only=None,
             use_self_management=False,
@@ -391,6 +392,14 @@ class KikimrConfigGenerator(object):
 
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config
+
+        if query_service_config:
+            self.yaml_config["query_service_config"] = query_service_config
+
+        if scan_grouped_memory_limiter_config:
+            self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
+        if comp_grouped_memory_limiter_config:
+            self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
 
         self.__build()
 

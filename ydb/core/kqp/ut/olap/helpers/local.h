@@ -36,7 +36,7 @@ public:
         CreateOlapTablesWithStore(tableNames, storeName, storeShardsCount, tableShardsCount);
     }
 
-    void CreateTestOlapTableWithoutStore(TString tableName = "olapTable", ui32 tableShardsCount = 3) {
+    void CreateTestOlapStandaloneTable(TString tableName = "olapTable", ui32 tableShardsCount = 3) {
         CreateOlapTables({tableName}, tableShardsCount);
     }
 

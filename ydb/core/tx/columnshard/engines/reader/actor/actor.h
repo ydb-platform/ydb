@@ -7,7 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
-#include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -35,15 +35,15 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
         TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-        const NColumnShard::TScanCounters& scanCountersPool, const NConveyor::TCPULimitsConfig& cpuLimits);
+        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
 
     void Bootstrap(const TActorContext& ctx);
 
 private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing");
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
-            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
+            TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
@@ -130,7 +130,7 @@ private:
     const ui64 RequestCookie;
     const NKikimrDataEvents::EDataFormat DataFormat;
     const ui64 TabletId;
-    const NConveyor::TCPULimitsConfig CPULimits;
+    const NConveyorComposite::TCPULimitsConfig CPULimits;
 
     TReadMetadataBase::TConstPtr ReadMetadataRange;
     std::unique_ptr<TScanIteratorBase> ScanIterator;
@@ -193,6 +193,8 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
+    TInstant StartWaitTime;
+    TDuration WaitTime;
 };
 
 }   // namespace NKikimr::NOlap::NReader

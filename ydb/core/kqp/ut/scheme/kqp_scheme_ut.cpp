@@ -1156,20 +1156,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithPartitionSize(true);
     }
 
-    Y_UNIT_TEST(RenameTable) {
+    Y_UNIT_TEST_TWIN(RenameTable, СolumnTable) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            TString query = R"(
+            TString query = ToString(R"(
             --!syntax_v1
             CREATE TABLE `/Root/table` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value String,
                 PRIMARY KEY (Key)
-            );
-            )";
+            )
+            )") 
+            + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -1204,11 +1205,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `/Root/second` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value String,
                 PRIMARY KEY (Key)
-            );
-            )";
+            )
+            )" + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -11405,13 +11406,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
     }
 
-    void TestDropThenAddColumn(bool enableIndexation, bool enableCompaction) {
-        if (enableCompaction) {
-            Y_ABORT_UNLESS(enableIndexation);
-        }
-
+    void TestDropThenAddColumn(bool enableCompaction) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
 
         TKikimrSettings runnerSettings;
@@ -11435,11 +11431,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
 
         if (enableCompaction) {
-            csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
             csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
-            csController->WaitIndexation(TDuration::Seconds(5));
             csController->WaitCompactions(TDuration::Seconds(5));
-            csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
             csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
         }
 
@@ -11462,10 +11455,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        if (enableIndexation) {
-            csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-            csController->WaitIndexation(TDuration::Seconds(5));
-        }
         if (enableCompaction) {
             csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
             csController->WaitCompactions(TDuration::Seconds(5));
@@ -11475,15 +11464,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(DropThenAddColumn) {
-        TestDropThenAddColumn(false, false);
-    }
-
-    Y_UNIT_TEST(DropThenAddColumnIndexation) {
-        TestDropThenAddColumn(true, true);
+        TestDropThenAddColumn(false);
     }
 
     Y_UNIT_TEST(DropThenAddColumnCompaction) {
-        TestDropThenAddColumn(true, true);
+        TestDropThenAddColumn(true);
     }
 
     Y_UNIT_TEST(DropTtlColumn) {
@@ -11638,7 +11623,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         using namespace NArrow;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -11665,18 +11649,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
 
-        csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
-    void TestInsertAddInsertDrop(
-        bool autoIndexation, bool indexationAfterInsertAddColumn, bool indexationAfterInsertDropColumn, bool indexationInEnd) {
+    void TestInsertAddInsertDrop() {
         using namespace NArrow;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        if (!autoIndexation) {
-            csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        }
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -11704,42 +11682,22 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
 
-            if (!autoIndexation && indexationAfterInsertAddColumn) {
-                csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-                csController->WaitIndexation(TDuration::Seconds(5));
-                csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
-            }
-
             testHelper.BulkUpsert(testTable, batch);
             auto alterQueryDrop = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN column" << i << ";";
             auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
 
-            if (!autoIndexation && indexationAfterInsertDropColumn) {
-                csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-                csController->WaitIndexation(TDuration::Seconds(5));
-                csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
-            }
-        }
-
-        if (!autoIndexation && indexationInEnd) {
-            csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-            csController->WaitIndexation(TDuration::Seconds(5));
         }
     }
 
     Y_UNIT_TEST(InsertAddInsertDrop) {
-        TestInsertAddInsertDrop(true, false, false, false);
-        for (i32 i = 0; i < 8; i++) {
-            TestInsertAddInsertDrop(false, i & 1, i & 2, i & 3);
-        }
+        TestInsertAddInsertDrop();
     }
 
     Y_UNIT_TEST(DropTableAfterInsert) {
         using namespace NArrow;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -11766,16 +11724,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto alterQueryDrop = TStringBuilder() << "DROP TABLE `" << testTable.GetName() << "`;";
         auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
-
-        csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
     Y_UNIT_TEST(InsertDropAddColumn) {
         using namespace NArrow;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -11804,9 +11758,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         auto alterQueryAdd = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN int_column Int32;";
         auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
-
-        csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
     Y_UNIT_TEST(CreateWithoutColumnFamily) {

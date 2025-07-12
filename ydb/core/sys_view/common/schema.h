@@ -596,6 +596,7 @@ struct Schema : NIceDb::Schema {
         struct PortionsCount: Column<3, NScheme::NTypeIds::Uint64> {};
         struct HostName: Column<4, NScheme::NTypeIds::Utf8> {};
         struct NodeId: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct InternalPathId: Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, TabletId>;
         using TColumns = TableColumns<
@@ -603,7 +604,8 @@ struct Schema : NIceDb::Schema {
             TabletId,
             PortionsCount,
             HostName,
-            NodeId
+            NodeId,
+            InternalPathId
         >;
     };
 

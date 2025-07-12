@@ -84,7 +84,7 @@
 #include <yql/essentials/public/result_format/yql_result_format_type.h>
 #include <yql/essentials/public/result_format/yql_result_format_data.h>
 
-#include <ydb/core/fq/libs/actors/database_resolver.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>

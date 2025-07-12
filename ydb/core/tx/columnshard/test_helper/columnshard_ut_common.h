@@ -12,6 +12,7 @@
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
@@ -283,7 +284,7 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         tx.MutableSeqNo()->SetGeneration(generation);
         auto* table = tx.MutableEnsureTables()->AddTables();
-        table->SetPathId(pathId);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         {   // preset
             auto* preset = table->MutableSchemaPreset();
@@ -309,7 +310,7 @@ struct TTestSchema {
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(ownerPath);
         tx.MutableInitShard()->SetOwnerPathId(pathId);
-        table->SetPathId(pathId);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         {   // preset
             auto* preset = table->MutableSchemaPreset();
@@ -335,7 +336,7 @@ struct TTestSchema {
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(path);
         tx.MutableInitShard()->SetOwnerPathId(pathId);
-        table->SetPathId(pathId);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -351,7 +352,7 @@ struct TTestSchema {
         const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
-        table->SetPathId(pathId);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
         tx.MutableSeqNo()->SetRound(version);
 
         auto* preset = table->MutableSchemaPreset();
@@ -373,9 +374,19 @@ struct TTestSchema {
 
     static TString DropTableTxBody(ui64 pathId, ui32 version) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
-        tx.MutableDropTable()->SetPathId(pathId);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*tx.MutableDropTable());
         tx.MutableSeqNo()->SetRound(version);
 
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
+    static TString MoveTableTxBody(ui64 srcPathId, ui64 dstPathId, ui32 version) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        tx.MutableMoveTable()->SetSrcPathId(srcPathId);
+        tx.MutableMoveTable()->SetDstPathId(dstPathId);
+        tx.MutableSeqNo()->SetRound(version);
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
         return out;
@@ -438,10 +449,6 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId,
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr,
     const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const ui64 lockId = 1);
-
-std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
-    const ui64 writePartId, const TString& data, const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
-    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 

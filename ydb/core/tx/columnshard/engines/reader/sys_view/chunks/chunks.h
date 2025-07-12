@@ -58,9 +58,6 @@ private:
     mutable THashMap<ui32, TViewContainer> ColumnNamesById;
     mutable THashMap<NPortion::EProduced, TViewContainer> PortionType;
     mutable THashMap<TString, THashMap<ui32, TViewContainer>> EntityStorageNames;
-    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
-    std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TGroupGuard>> GroupGuards;
 
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats>;
 
@@ -68,69 +65,9 @@ private:
     virtual bool AppendStats(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
-    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portion) const;
+    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const NColumnShard::TSchemeShardLocalPathId schemshardLocalPathId, const TPortionDataAccessor& portion) const;
 
-    class TApplyResult: public IApplyAction {
-    private:
-        using TBase = IDataTasksProcessor::ITask;
-        YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, Accessors);
-
-    public:
-        TApplyResult(const std::vector<TPortionDataAccessor>& accessors)
-            : Accessors(accessors) {
-        }
-
-        virtual bool DoApply(IDataReader& /*indexedDataRead*/) const override {
-            AFL_VERIFY(false);
-            return false;
-        }
-    };
-
-    class TFetchingAccessorAllocation: public NGroupedMemoryManager::IAllocation, public IDataAccessorRequestsSubscriber {
-    private:
-        using TBase = NGroupedMemoryManager::IAllocation;
-        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> Guard;
-        std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> AccessorsManager;
-        std::shared_ptr<TDataAccessorsRequest> Request;
-        NColumnShard::TCounterGuard WaitingCountersGuard;
-        const NActors::TActorId OwnerId;
-        const std::shared_ptr<NReader::TReadContext> Context;
-
-        virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override;
-        virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
-            const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*selfPtr*/) override {
-            Guard = std::move(guard);
-            AccessorsManager->AskData(std::move(Request));
-            return true;
-        }
-        virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
-
-        virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
-            if (result.HasErrors()) {
-                NActors::TActivationContext::AsActorContext().Send(
-                    OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 TConclusionStatus::Fail("cannot fetch accessors"), std::move(WaitingCountersGuard)));
-            } else {
-                AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
-                NActors::TActivationContext::AsActorContext().Send(
-                    OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector()), std::move(WaitingCountersGuard)));
-            }
-        }
-
-    public:
-        TFetchingAccessorAllocation(const std::shared_ptr<TDataAccessorsRequest>& request, const ui64 mem, const std::shared_ptr<NReader::TReadContext>& context);
-    };
-
-    virtual void Apply(const std::shared_ptr<IApplyAction>& task) override {
-        if (IndexGranules.empty()) {
-            return;
-        }
-        auto result = std::dynamic_pointer_cast<TApplyResult>(task);
-        AFL_VERIFY(result);
-        AFL_VERIFY(result->GetAccessors().size() == 1);
-        FetchedAccessors.emplace(result->GetAccessors().front().GetPortionInfo().GetPortionId(), result->GetAccessors().front());
-    }
+    virtual void Apply(const std::shared_ptr<IApplyAction>& task) override;
 
     virtual TConclusionStatus Start() override;
 

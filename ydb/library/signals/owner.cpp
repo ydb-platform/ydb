@@ -27,8 +27,8 @@ TCommonCountersOwner::TCommonCountersOwner(const TString& module, TIntrusivePtr<
 {
     if (baseSignals) {
         SubGroup = baseSignals->GetSubgroup("module_id", module);
-    } else if (NActors::TlsActivationContext) {
-        SubGroup = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id", module);
+    } else if (NActors::TlsActivationContext && HasAppData()) {
+        SubGroup = GetServiceCounters(AppDataVerified().Counters, "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id", module);
     } else {
         SubGroup = new NMonitoring::TDynamicCounters();
     }

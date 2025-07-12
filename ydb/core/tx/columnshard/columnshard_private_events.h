@@ -47,8 +47,6 @@ struct TEvPrivate {
         EvStartResourceUsageTask,
         EvNormalizerResult,
 
-        EvWritingAddDataToBuffer,
-        EvWritingFlushBuffer,
         EvWritingPortionsAddDataToBuffer,
         EvWritingPortionsFlushBuffer,
 
@@ -68,7 +66,11 @@ struct TEvPrivate {
         EvAskServiceDataAccessors,
         EvAddPortionDataAccessor,
         EvRemovePortionDataAccessor,
+        EvClearCacheDataAccessor,
         EvMetadataAccessorsInfo,
+
+        EvRequestFilter,
+        EvFilterConstructionResult,
 
         EvEnd
     };
@@ -100,6 +102,20 @@ struct TEvPrivate {
             : Processor(processor)
             , Generation(gen)
             , Result(std::move(result)) {
+        }
+    };
+
+    class TEvAskTabletDataAccessors
+        : public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
+    private:
+        using TPortions = THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>;
+        YDB_ACCESSOR_DEF(TPortions, Portions);
+        YDB_READONLY_DEF(std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>, Callback);
+
+    public:
+        explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback)
+            : Portions(std::move(portions))
+            , Callback(callback) {
         }
     };
 
@@ -162,18 +178,16 @@ struct TEvPrivate {
 
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
     struct TEvWriteIndex: public TEventLocal<TEvWriteIndex, EvWriteIndex> {
-        std::shared_ptr<NOlap::TVersionedIndex> IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         bool GranuleCompaction{ false };
         TUsage ResourceUsage;
         bool CacheData{ false };
         TDuration Duration;
         TBlobPutResult::TPtr PutResult;
+        TString ErrorMessage;
 
-        TEvWriteIndex(
-            const std::shared_ptr<NOlap::TVersionedIndex>& indexInfo, std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges, bool cacheData)
-            : IndexInfo(indexInfo)
-            , IndexChanges(indexChanges)
+        TEvWriteIndex(std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges, bool cacheData)
+            : IndexChanges(indexChanges)
             , CacheData(cacheData) {
             PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
         }

@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     optimizer.cpp
+    counters.cpp
 )
 
 PEERDIR(

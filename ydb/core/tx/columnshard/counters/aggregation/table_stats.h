@@ -15,11 +15,6 @@ private:
 
     void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from) const {
         to.SetRowCount(from.GetRecordsCount());
-        for (const auto& [channel, bytes] : from.GetBytesByChannel()) {
-            auto item = to.AddChannels();
-            item->SetChannel(channel);
-            item->SetDataSize(bytes);
-        }
         to.SetDataSize(from.GetBlobBytes());
     }
 

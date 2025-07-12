@@ -35,9 +35,13 @@ public:
         }
     }
 
-    static std::shared_ptr<TPortionCategoryCounters> BuildPortionsCounter(const ui32 levelId) {
+    static std::shared_ptr<TLevelAgents> GetLevelAgents(const ui32 levelId) {
         AFL_VERIFY(levelId < Singleton<TGlobalCounters>()->Levels.size());
-        return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->Levels[levelId]->Portions);
+        return Singleton<TGlobalCounters>()->Levels[levelId];
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildPortionsCounter(const ui32 levelId) {
+        return std::make_shared<TPortionCategoryCounters>(*GetLevelAgents(levelId)->Portions);
     }
 };
 

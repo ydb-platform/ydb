@@ -2,9 +2,8 @@
 #include "group.h"
 #include "ids.h"
 
-#include <ydb/library/signals/object_counter.h>
-
 #include <ydb/library/accessor/validator.h>
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
@@ -76,9 +75,9 @@ public:
         AFL_VERIFY(stage);
         const std::optional<ui64> internalGroupIdOptional = GroupIds.GetInternalIdOptional(externalGroupId);
         if (!internalGroupIdOptional) {
-            AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
-                                                                   "ext_group", externalGroupId)(
-                                                                   "min_group", GroupIds.GetMinInternalIdOptional())("stage", stage->GetName());
+            AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))("ext_group", externalGroupId)(
+                                         "min_int_group", GroupIds.GetMinInternalIdOptional())(
+                                         "min_ext_group", GroupIds.GetMinExternalIdOptional())("stage", stage->GetName());
             AFL_VERIFY(!AllocationInfo.contains(task->GetIdentifier()));
         } else {
             const ui64 internalGroupId = *internalGroupIdOptional;
@@ -152,12 +151,32 @@ public:
     }
 };
 
+class TProcessMemoryUsage {
+private:
+    YDB_READONLY(ui64, MemoryUsage, 0);
+    YDB_READONLY(ui64, InternalProcessId, 0);
+
+public:
+    TProcessMemoryUsage(const ui64 memoryUsage, const ui64 internalProcessId)
+        : MemoryUsage(memoryUsage)
+        , InternalProcessId(internalProcessId) {
+    }
+
+    TString DebugString() const;
+
+    bool operator<(const TProcessMemoryUsage& item) const {
+        return std::tuple(MemoryUsage, InternalProcessId) < std::tuple(item.MemoryUsage, item.InternalProcessId);
+    }
+};
+
 class TProcessMemory: public NColumnShard::TMonitoringObjectsCounter<TProcessMemory> {
 private:
     const ui64 ExternalProcessId;
+    const ui64 InternalProcessId;
 
     const NActors::TActorId OwnerActorId;
     bool PriorityProcessFlag = false;
+    ui64 MemoryUsage = 0;
 
     YDB_ACCESSOR(ui32, LinksCount, 1);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TStageFeatures>>, Stages);
@@ -176,13 +195,30 @@ private:
         return *TValidator::CheckNotNull(GetAllocationScopeOptional(externalScopeId));
     }
 
+    void RefreshMemoryUsage() {
+        ui64 result = 0;
+        for (auto&& i : Stages) {
+            result += i->GetUsage().Val();
+        }
+        MemoryUsage = result;
+    }
+
 public:
+    TProcessMemoryUsage BuildUsageAddress() const {
+        return TProcessMemoryUsage(MemoryUsage, InternalProcessId);
+    }
+
     bool IsPriorityProcess() const {
         return PriorityProcessFlag;
     }
 
     bool UpdateAllocation(const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
-        return GetAllocationScopeVerified(externalScopeId).UpdateAllocation(allocationId, volume);
+        if (GetAllocationScopeVerified(externalScopeId).UpdateAllocation(allocationId, volume)) {
+            RefreshMemoryUsage();
+            return true;
+        } else {
+            return false;
+        }
     }
 
     void RegisterAllocation(
@@ -204,7 +240,10 @@ public:
 
     bool UnregisterAllocation(const ui64 externalScopeId, const ui64 allocationId) {
         if (auto* scope = GetAllocationScopeOptional(externalScopeId)) {
-            return scope->UnregisterAllocation(allocationId);
+            if (scope->UnregisterAllocation(allocationId)) {
+                RefreshMemoryUsage();
+                return true;
+            }
         }
         return false;
     }
@@ -212,6 +251,7 @@ public:
     void UnregisterGroup(const ui64 externalScopeId, const ui64 externalGroupId) {
         if (auto* scope = GetAllocationScopeOptional(externalScopeId)) {
             scope->UnregisterGroup(IsPriorityProcess(), externalGroupId);
+            RefreshMemoryUsage();
         }
     }
 
@@ -224,6 +264,7 @@ public:
         AFL_VERIFY(it != AllocationScopes.end());
         if (it->second->Unregister()) {
             AllocationScopes.erase(it);
+            RefreshMemoryUsage();
         }
     }
 
@@ -241,9 +282,10 @@ public:
         PriorityProcessFlag = true;
     }
 
-    TProcessMemory(const ui64 externalProcessId, const NActors::TActorId& ownerActorId, const bool isPriority,
+    TProcessMemory(const ui64 externalProcessId, const ui64 internalProcessId, const NActors::TActorId& ownerActorId, const bool isPriority,
         const std::vector<std::shared_ptr<TStageFeatures>>& stages, const std::shared_ptr<TStageFeatures>& defaultStage)
         : ExternalProcessId(externalProcessId)
+        , InternalProcessId(internalProcessId)
         , OwnerActorId(ownerActorId)
         , PriorityProcessFlag(isPriority)
         , Stages(stages)
@@ -257,6 +299,9 @@ public:
                 allocated = true;
             }
         }
+        if (allocated) {
+            RefreshMemoryUsage();
+        }
         return allocated;
     }
 
@@ -264,6 +309,8 @@ public:
         for (auto&& i : AllocationScopes) {
             Y_UNUSED(i.second->Unregister());
         }
+        RefreshMemoryUsage();
+//        AFL_VERIFY(MemoryUsage == 0)("usage", MemoryUsage);
         AllocationScopes.clear();
     }
 };

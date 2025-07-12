@@ -62,7 +62,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksV0MetaNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
+    TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
         std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TChunksV0MetaNormalizer")("error", "can't initialize tables manager");

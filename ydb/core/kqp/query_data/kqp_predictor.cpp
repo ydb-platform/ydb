@@ -127,7 +127,7 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
 
 ui32 TStagePredictor::GetUsableThreads() {
     std::optional<ui32> userPoolSize;
-    if (TlsActivationContext && TlsActivationContext->ActorSystem()) {
+    if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
     }
     if (!userPoolSize) {

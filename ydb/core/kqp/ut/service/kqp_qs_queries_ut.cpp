@@ -4510,7 +4510,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
             csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
             csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
             const TString query = Sprintf(R"(
                 CREATE TABLE `/Root/DataShard` (
@@ -4527,8 +4526,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             DoExecute();
-            csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-            csController->WaitIndexation(TDuration::Seconds(5));
         }
 
     };

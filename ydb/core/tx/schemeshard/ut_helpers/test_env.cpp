@@ -17,6 +17,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

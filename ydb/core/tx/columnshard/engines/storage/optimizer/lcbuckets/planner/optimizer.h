@@ -86,9 +86,10 @@ protected:
                 continue;
             }
             PortionsInfo->AddPortion(i);
-            addPortionsByLevels[i->GetMeta().GetCompactionLevel()].emplace_back(i);
-            if (i->GetCompactionLevel() && i->GetCompactionLevel() >= Levels.size()) {
+            if (i->GetCompactionLevel() >= Levels.size()) {
                 problemPortions.emplace_back(i);
+            } else {
+                addPortionsByLevels[i->GetMeta().GetCompactionLevel()].emplace_back(i);
             }
         }
         for (ui32 i = 0; i < Levels.size(); ++i) {
@@ -151,9 +152,11 @@ public:
         return result;
     }
 
+    ~TOptimizerPlanner() = default;
+
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo,
-        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors);
+        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const ui32 nodePortionsCountLimit);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

@@ -40,7 +40,6 @@ public:
         using TPtr = std::shared_ptr<IShardInfo>;
         virtual ~IShardInfo() {}
 
-        virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const = 0;
         virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion) const = 0;
         virtual ui64 GetBytes() const = 0;
         virtual ui32 GetRowsCount() const = 0;

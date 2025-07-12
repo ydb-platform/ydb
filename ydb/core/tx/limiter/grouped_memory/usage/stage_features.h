@@ -10,7 +10,7 @@ class TStageFeatures {
 private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY(ui64, Limit, 0);
-    YDB_READONLY(ui64, HardLimit, 0);
+    YDB_READONLY_DEF(std::optional<ui64>, HardLimit);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Usage);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;
@@ -23,7 +23,7 @@ public:
         return Usage.Val() + Waiting.Val();
     }
 
-    TStageFeatures(const TString& name, const ui64 limit, const ui64 hardLimit, const std::shared_ptr<TStageFeatures>& owner,
+    TStageFeatures(const TString& name, const ui64 limit, const std::optional<ui64>& hardLimit, const std::shared_ptr<TStageFeatures>& owner,
         const std::shared_ptr<TStageCounters>& counters);
 
     [[nodiscard]] TConclusionStatus Allocate(const ui64 volume);

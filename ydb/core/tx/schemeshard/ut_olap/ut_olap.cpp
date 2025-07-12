@@ -940,7 +940,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
             planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
             NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         }
-        csController->WaitIndexation(TDuration::Seconds(5));
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
             Cerr << description.DebugString() << Endl;
@@ -1023,7 +1022,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
-        csController->SetOverrideAllowMergeFull(true);
 
         // disable stats batching
         auto& appData = runtime.GetAppData();

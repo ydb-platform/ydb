@@ -22,6 +22,7 @@ namespace NKikimr {
 // Call this method once at the start of the process - to enable usage of default allocator.
 void UseDefaultAllocator();
 #endif
+void UseDefaultArrowAllocator();
 
 struct TAlignedPagePoolCounters {
     explicit TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
@@ -238,6 +239,7 @@ public:
         return false;
     }
 #endif
+    static bool IsDefaultArrowAllocatorUsed();
 
 protected:
     void* Alloc(size_t size);

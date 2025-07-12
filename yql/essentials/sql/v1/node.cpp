@@ -1544,9 +1544,11 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
 
         if (GetColumnName()) {
             auto fullName = Source_ ? DotJoin(Source_, *GetColumnName()) : *GetColumnName();
-            auto alias = src->GetGroupByColumnAlias(fullName);
-            if (alias) {
-                ResetColumn(alias, {});
+            if (!ctx.GroupByExprAfterWhere) {
+                auto alias = src->GetGroupByColumnAlias(fullName);
+                if (alias) {
+                    ResetColumn(alias, {});
+                }
             }
             Artificial_ = !Source_ && src->IsExprAlias(*GetColumnName());
         }

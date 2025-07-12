@@ -163,10 +163,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join4.test_plan/tt5",
                                                         "ReadColumns": [
-                                                            "f1",
-                                                            "f2"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "f1 (-\u221e, +\u221e)",
                                                             "f2 (-\u221e, +\u221e)"
                                                         ],

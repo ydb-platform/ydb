@@ -97,10 +97,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join2.test_plan/t2",
                                                                                         "ReadColumns": [
-                                                                                            "n",
-                                                                                            "name"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "name (-\u221e, +\u221e)",
                                                                                             "n (-\u221e, +\u221e)"
                                                                                         ],
@@ -152,10 +148,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join2.test_plan/t3",
                                                                                         "ReadColumns": [
-                                                                                            "n",
-                                                                                            "name"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "name (-\u221e, +\u221e)",
                                                                                             "n (-\u221e, +\u221e)"
                                                                                         ],

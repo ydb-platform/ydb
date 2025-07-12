@@ -436,6 +436,48 @@
             "uri": "https://{canondata_backend}/1937150/d87c401e99a94fad9fdc66f7c4a0d9c670b84949/resource.tar.gz#test.test_blocks-filter-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[blocks-ifpresent_nested-default.txt-Debug]": [
+        {
+            "checksum": "ddcfe20f2bbb9cc9572f1b3d8b4ff631",
+            "size": 846,
+            "uri": "https://{canondata_backend}/1784826/8b2dfe900f1a2cf05edaef0dcca8b0a30c33c35a/resource.tar.gz#test.test_blocks-ifpresent_nested-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-ifpresent_nested-default.txt-Peephole]": [
+        {
+            "checksum": "3b0d95b0cb5aa7a5edb8d2d0f56a704a",
+            "size": 1238,
+            "uri": "https://{canondata_backend}/1784826/8b2dfe900f1a2cf05edaef0dcca8b0a30c33c35a/resource.tar.gz#test.test_blocks-ifpresent_nested-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-ifpresent_nested-default.txt-Results]": [
+        {
+            "checksum": "19a9a197e064354322b9093949bf4b6d",
+            "size": 920,
+            "uri": "https://{canondata_backend}/1784826/8b2dfe900f1a2cf05edaef0dcca8b0a30c33c35a/resource.tar.gz#test.test_blocks-ifpresent_nested-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[blocks-ifpresent_single_arg-default.txt-Debug]": [
+        {
+            "checksum": "1775f71ed2e65a608b8c2e920df57f92",
+            "size": 732,
+            "uri": "https://{canondata_backend}/1784826/8b2dfe900f1a2cf05edaef0dcca8b0a30c33c35a/resource.tar.gz#test.test_blocks-ifpresent_single_arg-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-ifpresent_single_arg-default.txt-Peephole]": [
+        {
+            "checksum": "8230e516d8a0f99cea0fb0566d2fbd8d",
+            "size": 1038,
+            "uri": "https://{canondata_backend}/1784826/8b2dfe900f1a2cf05edaef0dcca8b0a30c33c35a/resource.tar.gz#test.test_blocks-ifpresent_single_arg-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-ifpresent_single_arg-default.txt-Results]": [
+        {
+            "checksum": "a0d4bae8b4b42360a314e56b8e851940",
+            "size": 918,
+            "uri": "https://{canondata_backend}/1784826/8b2dfe900f1a2cf05edaef0dcca8b0a30c33c35a/resource.tar.gz#test.test_blocks-ifpresent_single_arg-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[blocks-just-default.txt-Debug]": [
         {
             "checksum": "248412653c63c6892f76b6ed3c91a2ae",

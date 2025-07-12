@@ -178,14 +178,35 @@ namespace NSQLComplete {
         TFunctionNameService(IRanking::TPtr ranking, TVector<TString> functions)
             : IRankingNameService(std::move(ranking))
             , Functions_(BuildNameIndex(std::move(functions), NormalizeName))
+            , TableFunctions_(BuildNameIndex(
+                  {
+                      "CONCAT",
+                      "RANGE",
+                      "LIKE",
+                      "REGEXP",
+                      "FILTER",
+                      "FOLDER",
+                      "WalkFolders",
+                      "EACH",
+                  }, NormalizeName))
         {
         }
 
         NThreading::TFuture<TNameResponse> LookupAllUnranked(const TNameRequest& request) const override {
             TNameResponse response;
-            if (request.Constraints.Function) {
+            if (auto function = request.Constraints.Function) {
+                const TNameIndex* index = nullptr;
+                switch (function->ReturnType) {
+                    case ENodeKind::Any: {
+                        index = &Functions_;
+                    } break;
+                    case ENodeKind::Table: {
+                        index = &TableFunctions_;
+                    } break;
+                }
+
                 NameIndexScan<TFunctionName>(
-                    Functions_,
+                    *index,
                     request.Prefix,
                     request.Constraints,
                     response.RankedNames);
@@ -195,6 +216,7 @@ namespace NSQLComplete {
 
     private:
         TNameIndex Functions_;
+        TNameIndex TableFunctions_;
     };
 
     class THintNameService: public IRankingNameService {

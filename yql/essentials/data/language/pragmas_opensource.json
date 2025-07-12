@@ -597,6 +597,9 @@
     "name": "yt.UseColumnarStatistics"
   },
   {
+    "name": "yt.UseDefaultArrowAllocatorInJobs"
+  },
+  {
     "name": "yt.UseDefaultTentativePoolTrees"
   },
   {

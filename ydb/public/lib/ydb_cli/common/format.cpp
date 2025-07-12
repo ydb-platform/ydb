@@ -492,8 +492,8 @@ void TQueryPlanPrinter::PrintSimplifyJson(const NJson::TJsonValue& plan) {
 }
 
 void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
-    static const TVector<TString> explainColumnNames = {"Operation", "E-Cost", "E-Rows", "E-Size"};
-    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "A-Cpu", "A-Rows", "E-Cost", "E-Rows", "E-Size"};
+    static const TVector<TString> explainColumnNames = {"E-Cost", "E-Rows", "E-Size", "Operation"};
+    static const TVector<TString> explainAnalyzeColumnNames = {"A-Cpu", "A-Rows", "E-Cost", "E-Rows", "E-Size", "Operation"};
 
     if (plan.GetMapSafe().contains("SimplifiedPlan")) {
         auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
@@ -579,7 +579,11 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 arrowOffset << "└──> ";
             }
         } else {
-            arrowOffset << "├──> ";
+            if (hasChildren) {
+                arrowOffset << "├─┬> ";
+            } else {
+                arrowOffset << "├──> ";
+            }
         }
     }
 
@@ -628,24 +632,24 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                      << " (" << JoinStrings(info, ", ") << ")";
             }
 
-            newRow.Column(0, std::move(operation));
             if (AnalyzeMode) {
-                newRow.Column(1, std::move(aCpu));
-                newRow.Column(2, std::move(aRows));
-                newRow.Column(3, std::move(eCost));
-                newRow.Column(4, std::move(eRows));
-                newRow.Column(5, std::move(eSize));
+                newRow.Column(0, std::move(aCpu));
+                newRow.Column(1, std::move(aRows));
+                newRow.Column(2, std::move(eCost));
+                newRow.Column(3, std::move(eRows));
+                newRow.Column(4, std::move(eSize));
             }
             else {
-                newRow.Column(1, std::move(eCost));
-                newRow.Column(2, std::move(eRows));
-                newRow.Column(3, std::move(eSize));
+                newRow.Column(0, std::move(eCost));
+                newRow.Column(1, std::move(eRows));
+                newRow.Column(2, std::move(eSize));
             }
+            newRow.WriteToLastColumn(std::move(operation));
         }
     } else {
         TStringBuilder operation;
         operation << arrowOffset << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
-        newRow.Column(0, std::move(operation));
+        newRow.WriteToLastColumn(std::move(operation));
     }
 
     if (node.contains("Plans")) {

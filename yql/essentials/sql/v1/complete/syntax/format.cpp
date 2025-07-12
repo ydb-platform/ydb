@@ -59,4 +59,13 @@ namespace NSQLComplete {
         return content.SubStr(1, content.size() - 2);
     }
 
+    bool IsBinding(TStringBuf content) {
+        return 1 <= content.size() && content.front() == '$';
+    }
+
+    TStringBuf Unbinded(TStringBuf content) {
+        Y_ENSURE(IsBinding(content));
+        return content.SubStr(1);
+    }
+
 } // namespace NSQLComplete

@@ -54,11 +54,8 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join3.test_plan/parent",
                                                         "ReadColumns": [
-                                                            "k",
+                                                            "k (-\u221e, +\u221e)",
                                                             "pd"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "k (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",
@@ -87,9 +84,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join3.test_plan/child",
                                                                         "ReadColumns": [
-                                                                            "k"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "k (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",

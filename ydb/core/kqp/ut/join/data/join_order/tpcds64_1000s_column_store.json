@@ -28,7 +28,7 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"test\/ds\/catalog_sales"
+                                            "table":"catalog_sales"
                                           },
                                           {
                                             "op_name":"HashShuffle",
@@ -36,7 +36,7 @@
                                               [
                                                 {
                                                   "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/catalog_returns"
+                                                  "table":"catalog_returns"
                                                 }
                                               ]
                                           }
@@ -88,7 +88,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
+                                                                                      "table":"customer_address"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -106,7 +106,7 @@
                                                                                               [
                                                                                                 {
                                                                                                   "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/customer_demographics"
+                                                                                                  "table":"customer_demographics"
                                                                                                 }
                                                                                               ]
                                                                                           },
@@ -128,7 +128,7 @@
                                                                                                                 [
                                                                                                                   {
                                                                                                                     "op_name":"TableFullScan",
-                                                                                                                    "table":"test\/ds\/customer"
+                                                                                                                    "table":"customer"
                                                                                                                   },
                                                                                                                   {
                                                                                                                     "op_name":"HashShuffle",
@@ -144,7 +144,7 @@
                                                                                                                                   [
                                                                                                                                     {
                                                                                                                                       "op_name":"TableFullScan",
-                                                                                                                                      "table":"test\/ds\/customer_demographics"
+                                                                                                                                      "table":"customer_demographics"
                                                                                                                                     }
                                                                                                                                   ]
                                                                                                                               },
@@ -162,7 +162,7 @@
                                                                                                                                               [
                                                                                                                                                 {
                                                                                                                                                   "op_name":"TableFullScan",
-                                                                                                                                                  "table":"test\/ds\/customer_address"
+                                                                                                                                                  "table":"customer_address"
                                                                                                                                                 }
                                                                                                                                               ]
                                                                                                                                           },
@@ -176,7 +176,7 @@
                                                                                                                                                     [
                                                                                                                                                       {
                                                                                                                                                         "op_name":"TableFullScan",
-                                                                                                                                                        "table":"test\/ds\/store_returns"
+                                                                                                                                                        "table":"store_returns"
                                                                                                                                                       },
                                                                                                                                                       {
                                                                                                                                                         "op_name":"HashShuffle",
@@ -188,11 +188,11 @@
                                                                                                                                                                 [
                                                                                                                                                                   {
                                                                                                                                                                     "op_name":"TableFullScan",
-                                                                                                                                                                    "table":"test\/ds\/store_sales"
+                                                                                                                                                                    "table":"store_sales"
                                                                                                                                                                   },
                                                                                                                                                                   {
                                                                                                                                                                     "op_name":"TableFullScan",
-                                                                                                                                                                    "table":"test\/ds\/item"
+                                                                                                                                                                    "table":"item"
                                                                                                                                                                   }
                                                                                                                                                                 ]
                                                                                                                                                             }
@@ -214,13 +214,13 @@
                                                                                                             },
                                                                                                             {
                                                                                                               "op_name":"TableFullScan",
-                                                                                                              "table":"test\/ds\/date_dim"
+                                                                                                              "table":"date_dim"
                                                                                                             }
                                                                                                           ]
                                                                                                       },
                                                                                                       {
                                                                                                         "op_name":"TableFullScan",
-                                                                                                        "table":"test\/ds\/store"
+                                                                                                        "table":"store"
                                                                                                       }
                                                                                                     ]
                                                                                                 }
@@ -234,19 +234,19 @@
                                                                         },
                                                                         {
                                                                           "op_name":"TableFullScan",
-                                                                          "table":"test\/ds\/date_dim"
+                                                                          "table":"date_dim"
                                                                         }
                                                                       ]
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"test\/ds\/date_dim"
+                                                                    "table":"date_dim"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/promotion"
+                                                              "table":"promotion"
                                                             }
                                                           ]
                                                       }
@@ -262,11 +262,11 @@
                                                           [
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/household_demographics"
+                                                              "table":"household_demographics"
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/income_band"
+                                                              "table":"income_band"
                                                             }
                                                           ]
                                                       }
@@ -286,11 +286,11 @@
                                               [
                                                 {
                                                   "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/household_demographics"
+                                                  "table":"household_demographics"
                                                 },
                                                 {
                                                   "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/income_band"
+                                                  "table":"income_band"
                                                 }
                                               ]
                                           }
@@ -332,7 +332,7 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"test\/ds\/catalog_sales"
+                                            "table":"catalog_sales"
                                           },
                                           {
                                             "op_name":"HashShuffle",
@@ -340,7 +340,7 @@
                                               [
                                                 {
                                                   "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/catalog_returns"
+                                                  "table":"catalog_returns"
                                                 }
                                               ]
                                           }
@@ -392,7 +392,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
+                                                                                      "table":"customer_address"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -410,7 +410,7 @@
                                                                                               [
                                                                                                 {
                                                                                                   "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/customer_demographics"
+                                                                                                  "table":"customer_demographics"
                                                                                                 }
                                                                                               ]
                                                                                           },
@@ -432,7 +432,7 @@
                                                                                                                 [
                                                                                                                   {
                                                                                                                     "op_name":"TableFullScan",
-                                                                                                                    "table":"test\/ds\/customer"
+                                                                                                                    "table":"customer"
                                                                                                                   },
                                                                                                                   {
                                                                                                                     "op_name":"HashShuffle",
@@ -448,7 +448,7 @@
                                                                                                                                   [
                                                                                                                                     {
                                                                                                                                       "op_name":"TableFullScan",
-                                                                                                                                      "table":"test\/ds\/customer_demographics"
+                                                                                                                                      "table":"customer_demographics"
                                                                                                                                     }
                                                                                                                                   ]
                                                                                                                               },
@@ -466,7 +466,7 @@
                                                                                                                                               [
                                                                                                                                                 {
                                                                                                                                                   "op_name":"TableFullScan",
-                                                                                                                                                  "table":"test\/ds\/customer_address"
+                                                                                                                                                  "table":"customer_address"
                                                                                                                                                 }
                                                                                                                                               ]
                                                                                                                                           },
@@ -480,7 +480,7 @@
                                                                                                                                                     [
                                                                                                                                                       {
                                                                                                                                                         "op_name":"TableFullScan",
-                                                                                                                                                        "table":"test\/ds\/store_returns"
+                                                                                                                                                        "table":"store_returns"
                                                                                                                                                       },
                                                                                                                                                       {
                                                                                                                                                         "op_name":"HashShuffle",
@@ -492,11 +492,11 @@
                                                                                                                                                                 [
                                                                                                                                                                   {
                                                                                                                                                                     "op_name":"TableFullScan",
-                                                                                                                                                                    "table":"test\/ds\/store_sales"
+                                                                                                                                                                    "table":"store_sales"
                                                                                                                                                                   },
                                                                                                                                                                   {
                                                                                                                                                                     "op_name":"TableFullScan",
-                                                                                                                                                                    "table":"test\/ds\/item"
+                                                                                                                                                                    "table":"item"
                                                                                                                                                                   }
                                                                                                                                                                 ]
                                                                                                                                                             }
@@ -518,13 +518,13 @@
                                                                                                             },
                                                                                                             {
                                                                                                               "op_name":"TableFullScan",
-                                                                                                              "table":"test\/ds\/date_dim"
+                                                                                                              "table":"date_dim"
                                                                                                             }
                                                                                                           ]
                                                                                                       },
                                                                                                       {
                                                                                                         "op_name":"TableFullScan",
-                                                                                                        "table":"test\/ds\/store"
+                                                                                                        "table":"store"
                                                                                                       }
                                                                                                     ]
                                                                                                 }
@@ -538,19 +538,19 @@
                                                                         },
                                                                         {
                                                                           "op_name":"TableFullScan",
-                                                                          "table":"test\/ds\/date_dim"
+                                                                          "table":"date_dim"
                                                                         }
                                                                       ]
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"test\/ds\/date_dim"
+                                                                    "table":"date_dim"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/promotion"
+                                                              "table":"promotion"
                                                             }
                                                           ]
                                                       }
@@ -566,11 +566,11 @@
                                                           [
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/household_demographics"
+                                                              "table":"household_demographics"
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/income_band"
+                                                              "table":"income_band"
                                                             }
                                                           ]
                                                       }
@@ -590,11 +590,11 @@
                                               [
                                                 {
                                                   "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/household_demographics"
+                                                  "table":"household_demographics"
                                                 },
                                                 {
                                                   "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/income_band"
+                                                  "table":"income_band"
                                                 }
                                               ]
                                           }

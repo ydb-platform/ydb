@@ -2724,7 +2724,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
         const auto& issues = result.GetIssues().ToString();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, issues);
-        UNIT_ASSERT_STRING_CONTAINS(issues, "Only column with primitive type allowed for raw format");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Only a column with a primitive type is allowed for the raw format");
     }
 
     Y_UNIT_TEST(TestPartitionedByInsertValidation) {

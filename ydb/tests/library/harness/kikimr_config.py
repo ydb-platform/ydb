@@ -176,6 +176,8 @@ class KikimrConfigGenerator(object):
             bridge_config=None,
             memory_controller_config=None,
             verbose_memory_limit_exception=False,
+            config={},  # dict[name]=value
+            enable_proper_auth=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -264,6 +266,8 @@ class KikimrConfigGenerator(object):
         self.__bs_cache_file_path = bs_cache_file_path
 
         self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+
+        self.deep_merge_no_overwrite(self.yaml_config, config)
 
         security_config_root = self.yaml_config["domains_config"]
         if self.use_self_management:
@@ -541,6 +545,19 @@ class KikimrConfigGenerator(object):
             security_config = self.yaml_config["domains_config"]["security_config"]
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+        self.__enable_proper_auth = enable_proper_auth
+
+    def deep_merge_no_overwrite(self, a, b):
+        for k, v in b.items():
+            if k not in a:
+                a[k] = v
+            elif isinstance(a[k], dict) and isinstance(v, dict):
+                self.deep_merge_no_overwrite(a[k], v)
+            # else: do nothing if key exists and is not a dict
+
+    @property
+    def enable_proper_auth(self):
+        return self.__enable_proper_auth
 
     @property
     def default_clusteradmin(self):

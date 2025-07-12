@@ -2319,10 +2319,18 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
     for (const auto& arg: extend) {
         if (arg.Maybe<TDqConnection>()) {
             auto conn = arg.Cast<TDqConnection>();
-            TCoArgument programArg = Build<TCoArgument>(ctx, conn.Pos())
+            TCoArgument programArg = Build<TCoArgument>(ctx, node.Pos())
                 .Name("arg")
                 .Done();
-            inputConns.push_back(conn);
+
+            auto newconn = Build<TDqCnParallelUnionAll>(ctx, node.Pos())
+                .Output()
+                    .Stage(conn.Output().Stage())
+                    .Index(conn.Output().Index())
+                .Build()
+            .Done();
+
+            inputConns.push_back(newconn);
             inputArgs.push_back(programArg);
             extendArgs.push_back(programArg);
         } else if (IsDqCompletePureExpr(arg)) {

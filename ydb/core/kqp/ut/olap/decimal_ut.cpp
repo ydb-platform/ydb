@@ -127,8 +127,14 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         auto check = [mode](const TDecimalTestCase& tester) {
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE id=1", "[[[\"3.14\"];1;[4]]]", mode);
-            tester.CheckQuery(
-                "SELECT * FROM `/Root/Table1` order by id", "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", mode);
+            
+            TString expected;
+            if (tester.GetPrecision() == 12 && tester.GetScale() == 2) {
+                expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.49\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            } else {
+                expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            }
+            tester.CheckQuery("SELECT * FROM `/Root/Table1` order by id", expected, mode);
         };
 
         check(tester22);
@@ -148,8 +154,14 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         auto check = [mode](const TDecimalTestCase& tester, ui32 precision, ui32 scale) {
             tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec == cast(\"3.14\" as decimal(", ToString(precision), ",", ToString(scale), "))"), "[[[\"3.14\"];1;[4]]]", mode);
-            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec != cast(\"3.14\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"),
-                "[[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", mode);
+            
+            TString expected;
+            if (precision == 12 && scale == 2) {
+                expected = "[[[\"8.16\"];2;[3]];[[\"8.49\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            } else {
+                expected = "[[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            }
+            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec != cast(\"3.14\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"), expected, mode);
         };
 
         check(tester22, 22, 9);
@@ -177,8 +189,13 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         auto check = [mode](const TDecimalTestCase& tester) {
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is NULL order by id", "[[#;5;[5]];[#;6;[6]]]", mode);
 
-            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is not NULL order by id",
-                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", mode);
+            TString expected;
+            if (tester.GetPrecision() == 12 && tester.GetScale() == 2) {
+                expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.49\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            } else {
+                expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            }
+            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is not NULL order by id", expected, mode);
         };
 
         insert(tester22);
@@ -201,17 +218,27 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
 
         auto check = [mode](const TDecimalTestCase& tester, ui32 precision, ui32 scale) {
-            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec < cast(\"12.46\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"),
-                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]]]", mode);
+            TString expected1, expected2, expected3, expected4;
+            
+            if (precision == 12 && scale == 2) {
+                expected1 = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.49\"];3;[2]]]";
+                expected2 = "[[[\"8.49\"];3;[2]];[[\"12.46\"];4;[1]]]";
+                expected3 = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.49\"];3;[2]];[[\"12.46\"];4;[1]]]";
+                expected4 = "[[[\"8.49\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            } else {
+                expected1 = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]]]";
+                expected2 = "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
+                expected3 = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
+                expected4 = "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            }
+            
+            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec < cast(\"12.46\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"), expected1, mode);
 
-            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec > cast(\"8.16\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"), 
-                "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", mode);
+            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec > cast(\"8.16\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"), expected2, mode);
 
-            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec <= cast(\"12.46\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"),
-                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", mode);
+            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec <= cast(\"12.46\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"), expected3, mode);
 
-            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec >= cast(\"8.492\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"),
-                "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", mode);
+            tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec >= cast(\"8.492\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"), expected4, mode);
         };
 
         check(tester22, 22, 9);
@@ -230,8 +257,13 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
 
         auto check = [mode](const TDecimalTestCase& tester) {
-            tester.CheckQuery(
-                "SELECT * FROM `/Root/Table1` order by dec", "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]", mode);
+            TString expected;
+            if (tester.GetPrecision() == 12 && tester.GetScale() == 2) {
+                expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.49\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            } else {
+                expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
+            }
+            tester.CheckQuery("SELECT * FROM `/Root/Table1` order by dec", expected, mode);
         };
 
         check(tester22);
@@ -257,8 +289,13 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
 
         auto check = [mode](const TDecimalTestCase& tester) {
-            tester.CheckQuery("SELECT dec, count(*) FROM `/Root/Table1` group by dec order by dec",
-                "[[[\"3.14\"];1u];[[\"8.16\"];1u];[[\"8.492\"];2u];[[\"12.46\"];2u]]", mode);
+            TString expected;
+            if (tester.GetPrecision() == 12 && tester.GetScale() == 2) {
+                expected = "[[[\"3.14\"];1u];[[\"8.16\"];1u];[[\"8.49\"];2u];[[\"12.46\"];2u]]";
+            } else {
+                expected = "[[[\"3.14\"];1u];[[\"8.16\"];1u];[[\"8.492\"];2u];[[\"12.46\"];2u]]";
+            }
+            tester.CheckQuery("SELECT dec, count(*) FROM `/Root/Table1` group by dec order by dec", expected, mode);
         };
 
         insert(tester22);

@@ -134,6 +134,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             } else {
                 expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
             }
+
             tester.CheckQuery("SELECT * FROM `/Root/Table1` order by id", expected, mode);
         };
 
@@ -161,6 +162,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             } else {
                 expected = "[[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
             }
+
             tester.CheckQuery(TString::Join("SELECT * FROM `/Root/Table1` WHERE dec != cast(\"3.14\" as decimal(", ToString(precision), ",", ToString(scale), ")) order by id"), expected, mode);
         };
 
@@ -195,6 +197,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             } else {
                 expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
             }
+
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is not NULL order by id", expected, mode);
         };
 
@@ -263,6 +266,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             } else {
                 expected = "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]";
             }
+
             tester.CheckQuery("SELECT * FROM `/Root/Table1` order by dec", expected, mode);
         };
 
@@ -295,6 +299,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             } else {
                 expected = "[[[\"3.14\"];1u];[[\"8.16\"];1u];[[\"8.492\"];2u];[[\"12.46\"];2u]]";
             }
+
             tester.CheckQuery("SELECT dec, count(*) FROM `/Root/Table1` group by dec order by dec", expected, mode);
         };
 
@@ -327,6 +332,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             } else {
                 expectedSum = "[[[\"32.252\"]]]";
             }
+
             tester.CheckQuery("SELECT sum(dec) FROM `/Root/Table1`", expectedSum, mode);
         };
 

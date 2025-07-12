@@ -40,7 +40,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TEndTxnRequestData>(response->ApiKeys, END_TXN, {.MaxVersion=3});
     AddApiKey<TSaslHandshakeRequestData>(response->ApiKeys, SASL_HANDSHAKE, {.MaxVersion=1});
     AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE, {.MaxVersion=2});
-    AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MinVersion=1, .MaxVersion=1});
+    AddApiKey<TListOffsetsRequestData>(response->ApiKeys, DESCRIBE_CONFIGS, {.MaxVersion=4});
     AddApiKey<TListGroupsRequestData>(response->ApiKeys, LIST_GROUPS, {.MinVersion=0, .MaxVersion=4});
     AddApiKey<TDescribeGroupsRequestData>(response->ApiKeys, DESCRIBE_GROUPS, {.MinVersion=0, .MaxVersion=5});
     AddApiKey<TFetchRequestData>(response->ApiKeys, FETCH, {.MaxVersion=3});
@@ -54,6 +54,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TCreateTopicsRequestData>(response->ApiKeys, CREATE_TOPICS, {.MaxVersion=7});
     AddApiKey<TAlterConfigsRequestData>(response->ApiKeys, ALTER_CONFIGS, {.MaxVersion=2});
     AddApiKey<TCreatePartitionsRequestData>(response->ApiKeys, CREATE_PARTITIONS, {.MaxVersion=3});
+    AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MaxVersion=7});
 
     return response;
 }

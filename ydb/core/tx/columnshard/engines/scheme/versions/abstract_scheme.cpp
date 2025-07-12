@@ -153,6 +153,11 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                     if (std::static_pointer_cast<arrow::FixedSizeBinaryType>(incomingColumn->type())->byte_width() == 16) {
                         typesMatch = true;
                     }
+                } else if (features.GetArrowField()->type()->id() == arrow::Type::FIXED_SIZE_BINARY &&
+                           incomingColumn->type()->id() == arrow::Type::DECIMAL128) {
+                    if (std::static_pointer_cast<arrow::FixedSizeBinaryType>(features.GetArrowField()->type())->byte_width() == 16) {
+                        typesMatch = true;
+                    }
                 }
             }
 

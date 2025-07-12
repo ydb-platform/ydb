@@ -13,6 +13,8 @@ SRCS(
     continuation.h
     decorator.cpp
     decorator.h
+    event.cpp
+    event.h
     result.cpp
     result.h
     sleep.cpp

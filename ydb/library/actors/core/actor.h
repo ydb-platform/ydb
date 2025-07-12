@@ -529,6 +529,11 @@ namespace NActors {
          */
         static void Schedule(TActorRunnableItem* runnable) noexcept;
 
+        /**
+         * Execute currently scheduled items
+         */
+        void Execute() noexcept;
+
     private:
         IActor* Actor_;
         TActorRunnableQueue* Prev_;

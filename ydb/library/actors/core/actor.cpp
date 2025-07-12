@@ -55,10 +55,7 @@ namespace NActors {
     }
 
     TActorRunnableQueue::~TActorRunnableQueue() {
-        while (!Queue_.Empty()) {
-            TActorRunnableItem* item = Queue_.PopFront();
-            item->Run(Actor_);
-        }
+        Execute();
         TlsActorRunnableQueue = Prev_;
     }
 
@@ -66,6 +63,13 @@ namespace NActors {
         TActorRunnableQueue* queue = TlsActorRunnableQueue;
         Y_ABORT_UNLESS(queue, "Trying to schedule actor runnable outside an event handler");
         queue->Queue_.PushBack(item);
+    }
+
+    void TActorRunnableQueue::Execute() noexcept {
+        while (!Queue_.Empty()) {
+            TActorRunnableItem* item = Queue_.PopFront();
+            item->Run(Actor_);
+        }
     }
 
     template<i64 Increment>
@@ -315,9 +319,13 @@ namespace NActors {
     }
 
     void IActor::DestroyActorTasks() {
-        while (!ActorTasks.Empty()) {
-            TActorTask* task = ActorTasks.PopFront();
-            task->Destroy();
+        if (!ActorTasks.Empty()) {
+            TActorRunnableQueue queue(this);
+            while (!ActorTasks.Empty()) {
+                TActorTask* task = ActorTasks.PopFront();
+                task->Destroy();
+                queue.Execute();
+            }
         }
     }
 

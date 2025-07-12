@@ -3,19 +3,31 @@ items:
   href: glossary.md
 - name: Connecting to a database
   href: connect.md
-- name: Cluster structure
+- name: Data model
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml
     mode: link
 - name: Cluster topology
   href: topology.md
+- name: AI Database
+  href: ai-database.md
+- name: Vector search
+  href: vector_search.md
+- name: Retrieval-Augmented Generation
+  href: rag.md
+- name: Distributed SQL
+  href: distributed-sql.md
+- name: Universal Database
+  href: universal-database.md
+- name: Converged Database
+  href: converged-database.md
+- name: HTAP
+  href: htap.md
 - name: Transactions
   href: transactions.md
 - name: Secondary indexes
   href: secondary_indexes.md
-- name: Vector search
-  href: vector_search.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed

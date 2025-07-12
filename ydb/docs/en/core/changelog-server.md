@@ -10,7 +10,7 @@ Release date: 2025.
 
 * [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector similarity search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./reference/configuration/index.md). Attention! After enabling the flag, rollback to previous versions of {{ ydb-short-name }} is not possible.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
-* [Implemented] `BATCH UPDATE` and `BATCH DELETE` statements, allowing the application of changes to large row-oriented tables outside of transactional constraints.
+* [Implemented] `BATCH UPDATE` and `BATCH DELETE` statements, allowing the application of changes to large row-oriented tables outside of transactional constraints. This mode is enabled by setting the `enable_batch_updates` flag in the cluster configuration.
 * Added [configuration mechanism V2](./devops/configuration-management/configuration-v2/config-overview) that simplifies the deployment of new {{ ydb-short-name }} clusters and further work with them. [Comparison](./devops/configuration-management/compare-configs) of configuration mechanisms V1 and V2.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
 * [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the `enable_kafka_native_balancing` flag in the cluster configuration.
@@ -25,7 +25,7 @@ Release date: 2025.
 * [Added](https://github.com/ydb-platform/ydb/issues/17734) automatic cleanup of temporary tables and directories during export to S3. This mode is enabled by setting the `enable_export_auto_dropping` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity checks of backups during import, which prevent restoration from corrupted backups and protect against data loss.
 * [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic.md#udf) in queries.
-* Added system views with information about [access right settings](./dev/system-views.md#auth), [history of overloaded partitions](./dev/system-views.md#top-overload-partitions), [history of partitions with broken locks](./dev/system-views.md#top-tli-partitions).
+* Added system views with information about [access right settings](./dev/system-views.md#auth), [history of overloaded partitions](./dev/system-views.md#top-overload-partitions) - enabled by setting the `enable_followers_stats` flag in the cluster configuration, [history of partitions with broken locks](./dev/system-views#top-tli-partitions).
 * Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md) and [ALTER USER](./yql/reference/syntax/alter-user.md) operators:
   * `HASH` — sets a password in encrypted form.
   * `LOGIN` and `NOLOGIN` — unlocks and blocks a user, respectively.

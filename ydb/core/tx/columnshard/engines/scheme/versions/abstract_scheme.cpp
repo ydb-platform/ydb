@@ -16,41 +16,7 @@
 #include <util/string/join.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
-std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::shared_ptr<arrow::RecordBatch> batch) {
-    if (!batch) {
-        return batch;
-    }
 
-    bool needConversion = false;
-    for (i32 i = 0; i < batch->num_columns(); ++i) {
-        if (batch->column(i)->type()->id() == arrow::Type::DECIMAL128) {
-            needConversion = true;
-            break;
-        }
-    }
-
-    if (!needConversion) {
-        return batch;
-    }
-
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    fields.reserve(batch->num_columns());
-    columns.reserve(batch->num_columns());
-    for (i32 i = 0; i < batch->num_columns(); ++i) {
-        auto field = batch->schema()->field(i);
-        auto column = batch->column(i);
-        if (column->type()->id() == arrow::Type::DECIMAL128) {
-            const_cast<arrow::ArrayData*>(column->data().get())->type = arrow::fixed_size_binary(16);
-            field = field->WithType(arrow::fixed_size_binary(16));
-        }
-
-        fields.push_back(std::move(field));
-        columns.push_back(std::move(column));
-    }
-
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), batch->num_rows(), std::move(columns));
-}
 
 namespace NKikimr::NOlap {
 
@@ -148,14 +114,11 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
             bool typesMatch = features.GetArrowField()->type()->Equals(incomingColumn->type());
             if (!typesMatch) {
-                if (features.GetArrowField()->type()->id() == arrow::Type::DECIMAL128 &&
+                if (features.GetArrowField()->type()->id() == arrow::Type::FIXED_SIZE_BINARY &&
                     incomingColumn->type()->id() == arrow::Type::FIXED_SIZE_BINARY) {
-                    if (std::static_pointer_cast<arrow::FixedSizeBinaryType>(incomingColumn->type())->byte_width() == 16) {
-                        typesMatch = true;
-                    }
-                } else if (features.GetArrowField()->type()->id() == arrow::Type::FIXED_SIZE_BINARY &&
-                           incomingColumn->type()->id() == arrow::Type::DECIMAL128) {
-                    if (std::static_pointer_cast<arrow::FixedSizeBinaryType>(features.GetArrowField()->type())->byte_width() == 16) {
+                    auto fieldType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(features.GetArrowField()->type());
+                    auto incomingType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(incomingColumn->type());
+                    if (fieldType->byte_width() == 16 && incomingType->byte_width() == 16) {
                         typesMatch = true;
                     }
                 }
@@ -214,8 +177,6 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
 
     auto result = batchConclusion.DetachResult();
     result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), pkColumns, true);
-
-    result.MutableContainer() = ConvertDecimalToFixedSizeBinaryBatch(result.GetContainer());
 
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKey()));
     return result;

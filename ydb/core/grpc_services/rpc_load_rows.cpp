@@ -1,29 +1,67 @@
-#include <ydb/core/grpc_services/base/base.h>
+#include "audit_dml_operations.h"
+#include "service_table.h"
 
 #include "rpc_common/rpc_common.h"
-#include "service_table.h"
-#include "audit_dml_operations.h"
 
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <yql/essentials/public/udf/udf_types.h>
-#include <yql/essentials/minikql/dom/yson.h>
+#include <util/generic/size_literals.h>
+#include <util/string/vector.h>
 #include <yql/essentials/minikql/dom/json.h>
-#include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
-
+#include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
-
-#include <util/string/vector.h>
-#include <util/generic/size_literals.h>
+#include <yql/essentials/utils/utf8.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
 using namespace Ydb;
+
+namespace {
+
+std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+    if (!batch) {
+        return batch;
+    }
+
+    bool needConversion = false;
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        if (batch->column(i)->type()->id() == arrow::Type::DECIMAL128) {
+            needConversion = true;
+            break;
+        }
+    }
+
+    if (!needConversion) {
+        return batch;
+    }
+
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    fields.reserve(batch->num_columns());
+    columns.reserve(batch->num_columns());
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        auto field = batch->schema()->field(i);
+        auto column = batch->column(i);
+        if (column->type()->id() == arrow::Type::DECIMAL128) {
+            const_cast<arrow::ArrayData*>(column->data().get())->type = arrow::fixed_size_binary(16);
+            field = field->WithType(arrow::fixed_size_binary(16));
+        }
+
+        fields.push_back(std::move(field));
+        columns.push_back(std::move(column));
+    }
+
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), batch->num_rows(), std::move(columns));
+}
+
+}   // namespace
 
 namespace {
 
@@ -76,7 +114,7 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
         case arrow::Type::DECIMAL: {
-            auto arrowDecimal = static_cast<const arrow::DecimalType *>(&type);
+            auto arrowDecimal = static_cast<const arrow::DecimalType*>(&type);
             Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
             decimalType->set_precision(arrowDecimal->precision());
             decimalType->set_scale(arrowDecimal->scale());
@@ -110,28 +148,24 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
 }
 
 bool CheckAccess(const TString& table, const TString& token, const NSchemeCache::TSchemeCacheNavigate* resolveResult, TString& errorMessage) {
-    if (token.empty())
+    if (token.empty()) {
         return true;
+    }
 
     NACLib::TUserToken userToken(token);
     const ui32 access = NACLib::EAccessRights::UpdateRow;
     if (!resolveResult) {
         TStringStream explanation;
-        explanation << "Access denied for " << userToken.GetUserSID()
-                    << " table '" << table
-                    << "' has not been resolved yet";
+        explanation << "Access denied for " << userToken.GetUserSID() << " table '" << table << "' has not been resolved yet";
 
         errorMessage = explanation.Str();
         return false;
     }
     for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
-        if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
-            && entry.SecurityObject != nullptr
-            && !entry.SecurityObject->CheckAccess(access, userToken))
-        {
+        if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok && entry.SecurityObject != nullptr &&
+            !entry.SecurityObject->CheckAccess(access, userToken)) {
             TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
-                        << " with access " << NACLib::AccessRightsToString(access)
+            explanation << "Access denied for " << userToken.GetUserSID() << " with access " << NACLib::AccessRightsToString(access)
                         << " to table '" << table << "'";
 
             errorMessage = explanation.Str();
@@ -141,23 +175,23 @@ bool CheckAccess(const TString& table, const TString& token, const NSchemeCache:
     return true;
 }
 
-}
+}   // namespace
 
-using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
-    Ydb::Table::BulkUpsertResponse>;
+using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
 
 const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
     return TEvBulkUpsertRequest::GetProtoRequest(req);
 }
 
-class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
+class TUploadRowsRPCPublic: public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
+
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
         : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
-                NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
-        , Request(request)
-    {}
+              NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
+        , Request(request) {
+    }
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
@@ -220,8 +254,8 @@ private:
 
         for (i32 pos = 0; pos < rowFields.size(); ++pos) {
             const auto& name = rowFields[pos].Getname();
-            const auto& typeInProto = rowFields[pos].type().has_optional_type() ?
-                        rowFields[pos].type().optional_type().item() : rowFields[pos].type();
+            const auto& typeInProto =
+                rowFields[pos].type().has_optional_type() ? rowFields[pos].type().optional_type().item() : rowFields[pos].type();
 
             result.emplace_back(name, typeInProto);
         }
@@ -282,11 +316,9 @@ private:
         return Batch.get();
     }
 
-    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
-                                                    TString& errorMessage)
-    {
+    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows, TString& errorMessage) {
         NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
-        batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
+        batchBuilder.Reserve(rows.size());   // TODO: ReserveData()
         const auto startStatus = batchBuilder.Start(YdbSchema);
         if (!startStatus.ok()) {
             errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
@@ -308,13 +340,14 @@ private:
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 
-class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
+class TUploadColumnsRPCPublic: public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
+
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
         : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
-        , Request(request)
-    {}
+        , Request(request) {
+    }
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
@@ -425,13 +458,12 @@ private:
         return errorMessage.empty();
     }
 
-    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                                TString& errorMessage) {
+    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch, TString& errorMessage) {
         Y_ABORT_UNLESS(batch);
         TVector<std::pair<TSerializedCellVec, TString>> out;
         out.reserve(batch->num_rows());
 
-        ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first
+        ui32 keySize = KeyColumnPositions.size();   // YdbSchema contains keys first
         TRowWriter writer(out, keySize);
         NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer, IsInfinityInJsonAllowed());
         if (!batchConverter.Process(*batch, errorMessage)) {
@@ -444,13 +476,11 @@ private:
 
     bool ExtractBatch(TString& errorMessage) override {
         switch (GetSourceType()) {
-            case EUploadSource::ProtoValues:
-            {
+            case EUploadSource::ProtoValues: {
                 errorMessage = "Unexpected data format in column upsert";
                 return false;
             }
-            case EUploadSource::ArrowBatch:
-            {
+            case EUploadSource::ArrowBatch: {
                 auto schema = NArrow::DeserializeSchema(GetSourceSchema());
                 if (!schema) {
                     errorMessage = "Bad schema in bulk upsert data";
@@ -463,10 +493,11 @@ private:
                     errorMessage = "Cannot deserialize arrow batch with specified schema";
                     return false;
                 }
+
+                Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
                 break;
             }
-            case EUploadSource::CSV:
-            {
+            case EUploadSource::CSV: {
                 auto& data = GetSourceData();
                 auto& csvSettings = GetCsvSettings();
                 auto reader = NFormats::TArrowCSVScheme::Create(SrcColumns, csvSettings.header(), NotNullColumns);
@@ -484,6 +515,7 @@ private:
                     return false;
                 }
 
+                Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
                 break;
             }
         }
@@ -512,7 +544,7 @@ void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvid
     }
 }
 
-template<>
+template <>
 IActor* TEvBulkUpsertRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     bool diskQuotaExceeded = msg->GetDiskQuotaExceeded();
 
@@ -525,6 +557,5 @@ IActor* TEvBulkUpsertRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCt
     }
 }
 
-
-} // namespace NKikimr
-} // namespace NGRpcService
+}   // namespace NGRpcService
+}   // namespace NKikimr

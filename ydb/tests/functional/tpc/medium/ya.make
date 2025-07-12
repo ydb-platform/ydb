@@ -1,6 +1,8 @@
 PY3TEST()
 ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
 
+FORK_SUBTESTS()
+
 TEST_SRCS(
     test_clean.py
     test_clickbench.py

@@ -1,8 +1,10 @@
 #include "abstract_scheme.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
@@ -10,10 +12,45 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <util/string/join.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+
+std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+    if (!batch) {
+        return batch;
+    }
+
+    bool needConversion = false;
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        if (batch->column(i)->type()->id() == arrow::Type::DECIMAL128) {
+            needConversion = true;
+            break;
+        }
+    }
+
+    if (!needConversion) {
+        return batch;
+    }
+
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    fields.reserve(batch->num_columns());
+    columns.reserve(batch->num_columns());
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        auto field = batch->schema()->field(i);
+        auto column = batch->column(i);
+        if (column->type()->id() == arrow::Type::DECIMAL128) {
+            const_cast<arrow::ArrayData*>(column->data().get())->type = arrow::fixed_size_binary(16);
+            field = field->WithType(arrow::fixed_size_binary(16));
+        }
+
+        fields.push_back(std::move(field));
+        columns.push_back(std::move(column));
+    }
+
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), batch->num_rows(), std::move(columns));
+}
 
 namespace NKikimr::NOlap {
 
@@ -51,6 +88,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             return batch;
         }
     }
+
     const std::shared_ptr<NArrow::TSchemaLite>& resultArrowSchema = GetSchema();
 
     std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>(batch->GetRecordsCount());
@@ -68,12 +106,14 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
                 continue;
             }
         }
+
         if (restoreColumnIds.contains(columnId)) {
             AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
                                                                         GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
+
     return result;
 }
 
@@ -106,50 +146,77 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
         const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
         if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
-            if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
-                return TConclusionStatus::Fail(
-                    "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
-                    + " vs " + incomingColumn->type()->ToString());
+            bool typesMatch = features.GetArrowField()->type()->Equals(incomingColumn->type());
+            if (!typesMatch) {
+                if (features.GetArrowField()->type()->id() == arrow::Type::DECIMAL128 &&
+                    incomingColumn->type()->id() == arrow::Type::FIXED_SIZE_BINARY) {
+                    if (std::static_pointer_cast<arrow::FixedSizeBinaryType>(incomingColumn->type())->byte_width() == 16) {
+                        typesMatch = true;
+                    }
+                } else if (features.GetArrowField()->type()->id() == arrow::Type::FIXED_SIZE_BINARY &&
+                           incomingColumn->type()->id() == arrow::Type::DECIMAL128) {
+                    if (std::static_pointer_cast<arrow::FixedSizeBinaryType>(features.GetArrowField()->type())->byte_width() == 16) {
+                        typesMatch = true;
+                    }
+                }
+            }
+
+            if (!typesMatch) {
+                return TConclusionStatus::Fail("not equal type for column: " + features.GetColumnName() + ": " +
+                                               features.GetArrowField()->type()->ToString() + " vs " + incomingColumn->type()->ToString());
             }
         }
+
         if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
             return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
         }
+
         if (hasNull) {
             switch (mType) {
                 case NEvWrite::EModificationType::Replace:
                 case NEvWrite::EModificationType::Insert:
                 case NEvWrite::EModificationType::Upsert: {
-                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) && !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx))
+                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) &&
+                        !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
                         return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
                     }
+                }
                 case NEvWrite::EModificationType::Delete:
                 case NEvWrite::EModificationType::Update:
                 case NEvWrite::EModificationType::Increment:
                     break;
             }
         }
+
         if (pkFieldIdx) {
             AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
             AFL_VERIFY(!pkColumns[*pkFieldIdx]);
             pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
             ++pkColumnsCount;
         }
+
         return TConclusionStatus::Success();
     };
+
     const auto nameResolver = [&](const std::string& fieldName) -> i32 {
         return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
     };
+
     auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().IgnoreOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
         incomingBatch, dstSchema, pred, nameResolver);
     if (batchConclusion.IsFail()) {
         return batchConclusion;
     }
+
     if (pkColumnsCount < pkColumns.size()) {
         return TConclusionStatus::Fail("not enough pk fields");
     }
+
     auto result = batchConclusion.DetachResult();
     result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), pkColumns, true);
+
+    result.MutableContainer() = ConvertDecimalToFixedSizeBinaryBatch(result.GetContainer());
+
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKey()));
     return result;
 }
@@ -314,8 +381,8 @@ public:
     }
 };
 
-TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
-    const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
+TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr,
+    const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
     AFL_VERIFY(incomingBatch->num_rows());
     auto itIncoming = incomingBatch->schema()->fields().begin();
@@ -361,8 +428,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
                                      NBlobOperations::TGlobal::DefaultStorageId))) {
         return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
     }
-    auto constructor =
-        TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written);
+    auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
+        std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written);
 
     NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(GetIndexInfo().GetReplaceKey()));
     const ui32 deletionsCount = (mType == NEvWrite::EModificationType::Delete) ? incomingBatch->num_rows() : 0;

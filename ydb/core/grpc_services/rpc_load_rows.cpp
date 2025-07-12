@@ -63,10 +63,6 @@ std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::sh
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), batch->num_rows(), std::move(columns));
 }
 
-}
-
-namespace {
-
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
 bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
     switch (type.id()) {

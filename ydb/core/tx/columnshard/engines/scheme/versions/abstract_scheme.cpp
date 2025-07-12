@@ -16,8 +16,6 @@
 #include <util/string/join.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
-
-
 namespace NKikimr::NOlap {
 
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) const {

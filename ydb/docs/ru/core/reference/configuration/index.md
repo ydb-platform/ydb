@@ -709,6 +709,32 @@ resource_broker_config: !inherit
     limit:
       cpu: 4
 ```
+## feature_flags - функциональные флаги {#feature_flags}
+
+Для включения функционального флага нужно добавить его в секцию feature_flags конфигурации кластера. Например, для включения векторного индекса и автопартиционирования топиков в CDC, нужно добавить в конфиг:
+
+```yaml
+feature_flags:
+  enable_vector_index: true
+  enable_topic_autopartitioning_for_cdc: true
+```
+### Функциональные флаги
+
+| Флаг          | Функция |
+|---------------------------| ----------------------------------------------------|
+| `enable_vector_index`                                    | [Векторный индекс](../../dev/vector-indexes.md) для приближённого векторного поиска |
+| `enable_batch_updates`                                   | Поддержка запросов `BATCH UPDATE` и `BATCH DELETE` |
+| `enable_kafka_native_balancing`                          | Клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_autopartitioning_for_cdc`                  | [Автопартиционирования топиков](../../concepts/cdc.md#topic-partitions) в CDC для строковых таблиц |
+| `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
+| `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
+| `enable_view_export`                                     | Поддержка представлений (`VIEW`) в операциях резервного копирования и восстановления |
+| `enable_export_auto_dropping`                            | Автоудаление временных директорий и таблиц при экспорте в S3 |
+| `enable_followers_stats`                                 | Системные представления с информацией об [истории перегруженных партиций](../../dev/system-views#top-overload-partitions) |
+| `enable_strict_acl_check`                                | Не позволяет выдавать права несуществующим пользователям и удалять пользователей, если им выданы права |
+| `enable_strict_user_management`                          | Включает строгие правила администрирования локальных пользователей (т.е. администрировать локальных пользователей может только администратор кластера или базы данных)|
+| `enable_database_admin`                                  | Добавляет роль администратора базы данных |
+
 
 ## Настройка Health Check {#healthcheck-config}
 
@@ -737,6 +763,7 @@ healthcheck_config:
 | `thresholds.nodes_time_difference_orange` | `25000`  | Максимально допустимое расхождение по времени (в µs) между динамическими узлами для уровня `ORANGE` |
 | `thresholds.tablets_restarts_orange`      | `30`     | Количество перезапусков таблеток для генерации предупреждения уровня `ORANGE`  |
 | `timeout`                                 | `20000`  | Максимальное время ответа от healthcheck (в мс)                                |
+
 
 ## Примеры конфигураций кластеров {#examples}
 

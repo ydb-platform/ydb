@@ -15,6 +15,8 @@
 - [вторичный индекс](../../../../concepts/glossary.md#secondary-index).
 - [векторный индекс](../../../../concepts/glossary.md#vector-index).
 
+Экспорт таблиц в S3 с использованием [внешних источников данных](../../../../concepts/datamodel/external_data_source.md) описан в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-to-s3).
+
 {% endnote %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}

@@ -320,7 +320,14 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         auto check = [mode](const TDecimalTestCase& tester) {
             tester.CheckQuery("SELECT min(dec) FROM `/Root/Table1`", "[[[\"3.14\"]]]", mode);
             tester.CheckQuery("SELECT max(dec) FROM `/Root/Table1`", "[[[\"12.46\"]]]", mode);
-            tester.CheckQuery("SELECT sum(dec) FROM `/Root/Table1`", "[[[\"32.252\"]]]", mode);
+            
+            TString expectedSum;
+            if (tester.GetPrecision() == 12 && tester.GetScale() == 2) {
+                expectedSum = "[[[\"32.25\"]]]";
+            } else {
+                expectedSum = "[[[\"32.252\"]]]";
+            }
+            tester.CheckQuery("SELECT sum(dec) FROM `/Root/Table1`", expectedSum, mode);
         };
 
         check(tester22);

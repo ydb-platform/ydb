@@ -230,6 +230,12 @@ const IYsonStructMeta* TYsonStructBase::GetMeta() const
     return Meta_;
 }
 
+void TYsonStructBase::MarkUnrecognized(const std::string& key, const IMapNodePtr& node) {
+    if (!LocalUnrecognized_->FindChild(key)) {
+        LocalUnrecognized_->AddChild(key, node);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TYsonStruct::InitializeRefCounted()

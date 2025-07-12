@@ -14,7 +14,7 @@
  * Interesting ordering is an ordering which is produced by a query or tested in the query
  * At this moment, we process only shuffles, but in future there will be groupings and sortings
  * For details of the algorithms and examples look at the white papers -
- * - "An efficient framework for order optimization" / "A Combined Framework for Grouping and Order Optimization"
+ * - "An efficient framework for order optimization" / "A Combined Framework for Grouping and Order Optimization" by T. Neumann, G. Moerkotte
  */
 
 namespace NYql::NDq {
@@ -60,7 +60,8 @@ struct TOrdering {
         : TOrdering(
             std::move(items),
             std::vector<TItem::EDirection>{},
-            type
+            type,
+            false
         )
     {}
 
@@ -72,7 +73,12 @@ struct TOrdering {
     std::vector<TItem::EDirection> Directions;
 
     EType Type;
-    /* Definition was taken from 'Complex Ordering Requirements' section. Not natural orderings are complex join predicates or grouping. */
+    /*
+     * Definition was taken from 'Complex Ordering Requirements' section. Not natural orderings are complex join predicates or grouping.
+     * There can occure a problem when we have a natural ordering - shuffling (a, b) of the table and we must aggregate by (b, a, c) - non natural ordering
+     * So for this case (b, a, c) suits for us as well and we must reorder (b, a, c) to (a, b, c). In the section from the white papper this is
+     * described more detailed.
+     */
     bool IsNatural = false;
 };
 
@@ -168,6 +174,19 @@ struct TSorting {
     std::vector<TOrdering::TItem::EDirection> Directions;
 };
 
+struct TShuffling {
+    explicit TShuffling(
+        std::vector<TJoinColumn> ordering
+    )
+        : Ordering(std::move(ordering))
+    {}
+
+    TShuffling& SetNatural() { IsNatural = true; return *this; }
+
+    std::vector<TJoinColumn> Ordering;
+    bool IsNatural = false; // look at the IsNatural field at the Ordering struct
+};
+
 /*
  * This class contains internal representation of the columns (mapping [column -> int]), FDs and interesting orderings
  */
@@ -228,22 +247,22 @@ public: // deprecated section, use the section below instead of this
 
 public:
     std::size_t FindSorting(
-        const TSorting& sorting,
+        const TSorting&,
         TTableAliasMap* tableAliases = nullptr
     );
 
     std::size_t AddSorting(
-        const TSorting& sortings,
+        const TSorting&,
         TTableAliasMap* tableAliases = nullptr
     );
 
     std::size_t FindShuffling(
-        const std::vector<TJoinColumn>& interestingOrdering,
+        const TShuffling&,
         TTableAliasMap* tableAliases = nullptr
     );
 
     std::size_t AddShuffling(
-        const std::vector<TJoinColumn>& interestingOrdering,
+        const TShuffling&,
         TTableAliasMap* tableAliases = nullptr
     );
 
@@ -252,6 +271,9 @@ public:
 
     TSorting GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const;
     TString ToString() const;
+
+    // look at the IsNatural field at the Ordering struct
+    void ApplyNaturalOrderings();
 
 public:
     std::vector<TFunctionalDependency> FDs;
@@ -263,25 +285,27 @@ private:
         const std::vector<TOrdering::TItem::EDirection>& directions,
         TOrdering::EType type,
         bool createIfNotExists,
-        TTableAliasMap* tableAliases = nullptr
+        bool isNatural,
+        TTableAliasMap* tableAliases
     );
 
     std::vector<std::size_t> ConvertColumnIntoIndexes(
         const std::vector<TJoinColumn>& ordering,
         bool createIfNotExists,
-        TTableAliasMap* tableAliases = nullptr
+        TTableAliasMap* tableAliases
     );
 
     std::size_t GetIdxByColumn(
         const TJoinColumn& column,
         bool createIfNotExists,
-        TTableAliasMap* tableAliases = nullptr
+        TTableAliasMap* tableAliases
     );
 
     std::size_t AddInterestingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type,
         const std::vector<TOrdering::TItem::EDirection>& directions,
+        bool isNatural,
         TTableAliasMap* tableAliases
     );
 
@@ -364,8 +388,8 @@ public:
         TFDSet AppliedFDs_{};
     };
 
-    TLogicalOrderings CreateState();
-    TLogicalOrderings CreateState(i64 orderingIdx);
+    TLogicalOrderings CreateState() const;
+    TLogicalOrderings CreateState(i64 orderingIdx) const;
 
 public:
     TOrderingsStateMachine() = default;
@@ -377,6 +401,7 @@ public:
         : FDStorage(std::move(fdStorage))
     {
         EraseIf(FDStorage.InterestingOrderings, [machineType](const TOrdering& ordering){ return ordering.Type != machineType; });
+        FDStorage.ApplyNaturalOrderings();
         Build(FDStorage.FDs, FDStorage.InterestingOrderings);
     }
 

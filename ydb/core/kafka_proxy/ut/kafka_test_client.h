@@ -2,6 +2,7 @@
 
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 
 #include <util/system/tempfile.h>

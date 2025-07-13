@@ -56,7 +56,6 @@ namespace {
                 Ctx->Prepare();
                 PQTabletPrepare({.partitions=1}, {}, *Ctx);
                 Ctx->Runtime->SetScheduledLimit(5'000);
-                Ctx->Runtime->DisableBreakOnStopCondition();
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_TRACE);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::PRI_TRACE);
                 TContext::TPtr kafkaContext = std::make_shared<TContext>(NKikimrConfig::TKafkaProxyConfig());

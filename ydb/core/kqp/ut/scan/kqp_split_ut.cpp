@@ -971,6 +971,70 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,3,4");
     }
 
+    Y_UNIT_TEST(StreamLookupJoinDeliveryProblemAfterFirstResult) {
+        TTestSetup s(ETestActorType::StreamLookup, "/Root/Table1");
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Table1` (Key uint64, Key2 uint64, Value uint64, PRIMARY KEY(Key, Key2));
+        )", false);
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            REPLACE INTO `/Root/Table1` (Key, Key2, Value) VALUES
+                (1u, 1u, 1u),
+                (1u, 2u, 2u),
+                (3u, 3u, 3u),
+                (3u, 4u, 4u),
+                (4u, 5u, 5u),
+                (4u, 6u, 6u);
+        )", true);
+
+        auto shards = s.Shards();
+
+        NKikimrTxDataShard::TEvRead evread;
+        evread.SetMaxRowsInResult(3);
+        evread.SetMaxRows(3);
+        SetDefaultReadSettings(evread);
+
+        NKikimrTxDataShard::TEvReadAck evreadack;
+        evreadack.SetMaxRows(3);
+        SetDefaultReadAckSettings(evreadack);
+
+        auto* shim = new TReadActorPipeCacheStub();
+        shim->SetupCapture(1, 1);
+        shim->SetupResultsCapture(1);
+        InterceptStreamLookupActorPipeCache(s.Runtime->Register(shim));
+        s.SendDataQuery(R"(
+            $data = AsList(
+                AsStruct(1u AS Key, 1u AS Value),
+                AsStruct(2u AS Key, 2u AS Value),
+                AsStruct(3u AS Key, 3u AS Value),
+                AsStruct(4u AS Key, 4u AS Value));
+
+            SELECT b.Value
+            FROM AS_TABLE($data) a
+            LEFT JOIN `/Root/Table1` b
+            ON a.Key = b.Key
+            ORDER BY a.Key, b.Value ASC;
+        )");
+
+        shim->ReadsReceived.WaitI();
+        Cerr << "delivery problem -----------------------------------------------------------" << Endl;
+        UNIT_ASSERT_EQUAL(shards.size(), 1);
+        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+
+        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
+        // send delivery problem, read should be restarted (it will be second retry attempt for this read)
+        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+
+        Cerr << "resume evread -----------------------------------------------------------" << Endl;
+        shim->SkipAll();
+        shim->AllowResults();
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,0,3,4,5,6");
+    }
+
     Y_UNIT_TEST(StreamLookupRetryAttemptForFinishedRead) {
         TTestSetup s(ETestActorType::StreamLookup, "/Root/TestIndex");
 

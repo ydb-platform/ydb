@@ -11,10 +11,10 @@ class TLogBackendWithCapture;
 
 class TRunnerTui {
 public:
-    TRunnerTui(TLogBackendWithCapture& logBacked, std::shared_ptr<TDisplayData> data);
+    TRunnerTui(TLogBackendWithCapture& logBacked, std::shared_ptr<TRunDisplayData> data);
     ~TRunnerTui();
 
-    void Update(std::shared_ptr<TDisplayData> data);
+    void Update(std::shared_ptr<TRunDisplayData> data);
 
 private:
     ftxui::Element BuildUpperPart(); // everything except logs
@@ -22,7 +22,7 @@ private:
 
 private:
     TLogBackendWithCapture& LogBackend;
-    std::shared_ptr<TDisplayData> DataToDisplay;
+    std::shared_ptr<TRunDisplayData> DataToDisplay;
     ftxui::ScreenInteractive Screen;
     std::thread TuiThread;
 };

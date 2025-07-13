@@ -67,7 +67,7 @@ private:
 
     void CollectDataToDisplay(Clock::time_point now);
     void CollectStatistics(TAllStatistics& statistics);
-    void CalculateStatusData(Clock::time_point now, TDisplayData& data);
+    void CalculateStatusData(Clock::time_point now, TRunDisplayData& data);
 
     void UpdateDisplayTextMode();
 
@@ -107,7 +107,7 @@ private:
     Clock::time_point MeasurementsStartTs;
     Clock::time_point StopDeadline;
 
-    std::shared_ptr<TDisplayData> DataToDisplay;
+    std::shared_ptr<TRunDisplayData> DataToDisplay;
 
     std::unique_ptr<TRunnerTui> Tui;
 };
@@ -352,7 +352,7 @@ void TPCCRunner::RunSync() {
     StopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunDuration.Seconds());
 
     // reset statistics
-    DataToDisplay = std::make_shared<TDisplayData>(PerThreadTerminalStats.size(), MeasurementsStartTs);
+    DataToDisplay = std::make_shared<TRunDisplayData>(PerThreadTerminalStats.size(), MeasurementsStartTs);
 
     while (!GetGlobalInterruptSource().stop_requested()) {
         if (now >= StopDeadline) {
@@ -484,7 +484,7 @@ void TPCCRunner::UpdateDisplayTextMode() {
 }
 
 void TPCCRunner::CollectDataToDisplay(Clock::time_point now) {
-    auto newDisplayData = std::make_shared<TDisplayData>(PerThreadTerminalStats.size(), now);
+    auto newDisplayData = std::make_shared<TRunDisplayData>(PerThreadTerminalStats.size(), now);
 
     // order makes sence here
     CollectStatistics(newDisplayData->Statistics);
@@ -505,7 +505,7 @@ void TPCCRunner::CollectStatistics(TAllStatistics& statistics) {
     }
 }
 
-void TPCCRunner::CalculateStatusData(Clock::time_point now, TDisplayData& data) {
+void TPCCRunner::CalculateStatusData(Clock::time_point now, TRunDisplayData& data) {
     // calculate time and estimation
     Clock::time_point currentPhaseStartTs;
 

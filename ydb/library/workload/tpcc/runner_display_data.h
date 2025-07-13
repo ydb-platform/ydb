@@ -106,8 +106,8 @@ struct TRunStatusData {
     size_t RunningTransactions = 0;
 };
 
-struct TDisplayData {
-    TDisplayData(size_t threadCount, Clock::time_point ts)
+struct TRunDisplayData {
+    TRunDisplayData(size_t threadCount, Clock::time_point ts)
         : Statistics(threadCount, ts)
     {}
 

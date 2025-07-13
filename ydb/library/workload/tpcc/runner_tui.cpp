@@ -11,7 +11,7 @@ using namespace ftxui;
 
 namespace NYdb::NTPCC {
 
-TRunnerTui::TRunnerTui(TLogBackendWithCapture& logBacked, std::shared_ptr<TDisplayData> data)
+TRunnerTui::TRunnerTui(TLogBackendWithCapture& logBacked, std::shared_ptr<TRunDisplayData> data)
     : LogBackend(logBacked)
     , DataToDisplay(std::move(data))
     , Screen(ScreenInteractive::Fullscreen())
@@ -32,7 +32,7 @@ TRunnerTui::~TRunnerTui() {
     }
 }
 
-void TRunnerTui::Update(std::shared_ptr<TDisplayData> data) {
+void TRunnerTui::Update(std::shared_ptr<TRunDisplayData> data) {
     std::atomic_store(&DataToDisplay, data);
     Screen.PostEvent(Event::Custom);
 }
@@ -41,7 +41,7 @@ Element TRunnerTui::BuildUpperPart() {
     // Get window width to determine which columns to show
     constexpr int MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS = 140;
 
-    std::shared_ptr<TDisplayData> data = std::atomic_load(&DataToDisplay);
+    std::shared_ptr<TRunDisplayData> data = std::atomic_load(&DataToDisplay);
 
     auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
     const int windowWidth = screen.dimx();

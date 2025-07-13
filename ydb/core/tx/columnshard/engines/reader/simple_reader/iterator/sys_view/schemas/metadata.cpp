@@ -8,9 +8,8 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TSchemeShardLocalPathId externalPathId,
     const std::optional<NColumnShard::TInternalPathId> internalPathId)
-    : TBase(tablePath)
-    , PathId(NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId)) {
-    AFL_VERIFY(CheckTablePath(GetTablePath()));
+    : TBase(tablePath, NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId), GetPathType(tablePath))
+{
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,

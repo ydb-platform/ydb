@@ -6,22 +6,22 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 class TAccessor: public NAbstract::TAccessor {
 private:
     using TBase = NAbstract::TAccessor;
-    const NColumnShard::TUnifiedPathId PathId;
 
-    virtual std::optional<NColumnShard::TUnifiedPathId> GetPathId() const override {
-        return PathId;
+    static EPathType GetPathType(const TString& tablePath) {
+        if (tablePath.EndsWith("/.sys/primary_index_stats")) {
+            return EPathType::Table;
+        } else if (tablePath.EndsWith("/.sys/store_primary_index_stats")) {
+            return EPathType::Store;
+        } else {
+            return EPathType::Unsupported;
+        }
     }
-
     virtual std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyOptional(TVersionedPresetSchemas& vSchemas) const override;
 
     virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(
         const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const override;
 
 public:
-    static bool CheckTablePath(const TString& tablePath) {
-        return tablePath.EndsWith("/.sys/primary_index_stats") || tablePath.EndsWith("/.sys/store_primary_index_stats");
-    }
-
     TAccessor(const TString& tableName, const NColumnShard::TSchemeShardLocalPathId externalPathId,
         const std::optional<NColumnShard::TInternalPathId> internalPathId);
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,

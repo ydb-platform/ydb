@@ -7,8 +7,32 @@ class TAccessor: public ITableMetadataAccessor {
 private:
     using TBase = ITableMetadataAccessor;
 
+    const NColumnShard::TUnifiedPathId PathId;
+
+protected:
+    enum class EPathType {
+        Unsupported,
+        Table,
+        Store
+    };
+    const EPathType PathType;
+
+    std::optional<NColumnShard::TInternalPathId> GetTableFilterPathId() const {
+        return PathType == EPathType::Table ? std::optional{ PathId.GetInternalPathId() } : std::nullopt;
+    }
+
 public:
-    using TBase::TBase;
+    TAccessor(const TString& tablePath, const NColumnShard::TUnifiedPathId& pathId, const EPathType pathType)
+        : TBase(tablePath)
+        , PathId(pathId)
+        , PathType(pathType)
+    {
+        AFL_VERIFY(pathType != EPathType::Unsupported);
+    }
+
+    virtual std::optional<NColumnShard::TUnifiedPathId> GetPathId() const override {
+        return PathId;
+    }
 
     virtual TString GetOverridenScanType(const TString& /*defScanType*/) const override {
         return "SIMPLE";

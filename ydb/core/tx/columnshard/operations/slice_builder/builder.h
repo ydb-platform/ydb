@@ -31,7 +31,7 @@ public:
         , TabletId(context.GetTabletId())
         , OriginalBatch(batch)
         , Context(context) {
-        WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlices);
+        WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::SlicesConstruction);
     }
 };
 }   // namespace NKikimr::NOlap

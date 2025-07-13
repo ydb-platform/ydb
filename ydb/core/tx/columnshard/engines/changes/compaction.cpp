@@ -34,7 +34,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
-    self.BackgroundController.StartCompaction(GranuleMeta->GetPathId());
+    self.BackgroundController.StartCompaction(GranuleMeta->GetPathId(), GetTaskIdentifier());
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
 }

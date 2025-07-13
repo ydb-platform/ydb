@@ -84,9 +84,6 @@ namespace NActors {
         , DefSelfID(NodeId, "actorsystem")
         , AppData0(appData)
         , LoggerSettings0(loggerSettings)
-        , StartExecuted(false)
-        , StopExecuted(false)
-        , CleanupExecuted(false)
     {
         ServiceMap.Reset(new TServiceMap());
     }
@@ -94,6 +91,13 @@ namespace NActors {
     TActorSystem::~TActorSystem() {
         Cleanup();
     }
+
+	bool TActorSystem::IsStopped() {
+		if (!TlsActivationContext) {
+			return true;
+		}
+		return TlsActivationContext->ActorSystem()->StopExecuted || !TlsActivationContext->ActorSystem()->StartExecuted;
+	}
 
     template <TActorSystem::TEPSendFunction EPSpecificSend>
     bool TActorSystem::GenericSend(TAutoPtr<IEventHandle> ev) const {

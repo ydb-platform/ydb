@@ -8,12 +8,11 @@
 namespace NKikimr::NEvWrite {
 
 TWriteData::TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema,
-    const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction, const bool writePortions)
+    const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction)
     : WriteMeta(writeMeta)
     , Data(data)
     , PrimaryKeySchema(primaryKeySchema)
-    , BlobsAction(blobsAction)
-    , WritePortions(writePortions) {
+    , BlobsAction(blobsAction) {
     AFL_VERIFY(WriteMeta);
     Y_ABORT_UNLESS(Data);
     Y_ABORT_UNLESS(PrimaryKeySchema);
@@ -21,18 +20,11 @@ TWriteData::TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContai
 }
 
 void TWriteMeta::OnStage(const EWriteStage stage) const {
-    if (stage == CurrentStage) {
-        return;
-    }
-    AFL_VERIFY((ui32)stage > (ui32)CurrentStage)("from", CurrentStage)("to", stage);
-    const TMonotonic nextStageInstant = TMonotonic::Now();
-    Counters->OnStageMove(CurrentStage, stage, nextStageInstant - LastStageInstant);
-    CurrentStage = stage;
-    LastStageInstant = nextStageInstant;
+    StateGuard.SetState(stage);
     if (stage == EWriteStage::Finished) {
-        Counters->OnWriteFinished(nextStageInstant - WriteStartInstant);
+        Counters->OnWriteFinished(TMonotonic::Now() - WriteStartInstant);
     } else if (stage == EWriteStage::Aborted) {
-        Counters->OnWriteAborted(nextStageInstant - WriteStartInstant);
+        Counters->OnWriteAborted(TMonotonic::Now() - WriteStartInstant);
     }
 }
 

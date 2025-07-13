@@ -11,7 +11,6 @@ void TReadStats::PrintToLog() {
         ("index_granules", IndexGranules)
         ("index_portions", IndexPortions)
         ("index_batches", IndexBatches)
-        ("committed_batches", CommittedBatches)
         ("schema_columns", SchemaColumns)
         ("filter_columns", FilterColumns)
         ("additional_columns", AdditionalColumns)

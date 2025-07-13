@@ -40,6 +40,7 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         PortionsCountLimit = jsonValue.GetUInteger();
     }
+
     if (json.Has("portions_size_limit")) {
         const auto& jsonValue = json["portions_size_limit"];
         if (!jsonValue.IsUInteger()) {
@@ -96,8 +97,9 @@ std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> T
     const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& /*portionsInfo*/,
     const TLevelCounters& counters, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors) const {
     return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters,
-        std::make_shared<TLimitsOverloadChecker>(PortionsCountLimit, PortionsSizeLimit), PortionsLiveDuration.value_or(TDuration::Max()),
-        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), selectors, GetDefaultSelectorName());
+        std::make_shared<TLimitsOverloadChecker>(PortionsCountLimit.value_or(1000000), PortionsSizeLimit),
+        PortionsLiveDuration.value_or(TDuration::Max()), ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10),
+        selectors, GetDefaultSelectorName());
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/fq/libs/control_plane_config
     ydb/core/fq/libs/control_plane_proxy
     ydb/core/fq/libs/control_plane_storage
+    ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/events
     ydb/core/fq/libs/gateway
     ydb/core/fq/libs/health

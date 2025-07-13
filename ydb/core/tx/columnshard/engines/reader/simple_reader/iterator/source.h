@@ -192,7 +192,7 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
-    const TReplaceKeyAdapter GetFinish() const {
+    const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
 
@@ -250,6 +250,12 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
+    void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
+        NActors::TActivationContext::AsActorContext().Send(
+            std::static_pointer_cast<TSpecialReadContext>(GetContext())->GetDuplicatesManagerVerified(),
+            new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
+    }
+
     virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
@@ -259,6 +265,9 @@ public:
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
+
+    virtual NArrow::TSimpleRow GetMinPK() const = 0;
+    virtual NArrow::TSimpleRow GetMaxPK() const = 0;
 
     void Abort() {
         DoAbort();
@@ -376,7 +385,7 @@ public:
     }
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
-        return Portion->RestoreBlobRange(rangeLink);
+        return GetStageData().GetPortionAccessor().RestoreBlobRange(rangeLink);
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
@@ -428,6 +437,14 @@ public:
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
         return GetStageData().GetPortionAccessor().GetIndexRawBytes(indexIds, false);
+    }
+
+    virtual NArrow::TSimpleRow GetMinPK() const override {
+        return Portion->GetMeta().IndexKeyStart();
+    }
+
+    virtual NArrow::TSimpleRow GetMaxPK() const override {
+        return Portion->GetMeta().IndexKeyEnd();
     }
 
     const TPortionInfo& GetPortionInfo() const {

@@ -2,12 +2,10 @@ LIBRARY()
 
 SRCS(
     clusters_from_connections.cpp
-    database_resolver.cpp
     error.cpp
     nodes_health_check.cpp
     nodes_manager.cpp
     pending_fetcher.cpp
-    proxy.cpp
     proxy_private.cpp
     rate_limiter.cpp
     rate_limiter_resources.cpp
@@ -50,6 +48,7 @@ PEERDIR(
     ydb/core/fq/libs/result_formatter
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
+    ydb/core/kqp/federated_query
     ydb/core/protos
     ydb/core/util
     ydb/library/mkql_proto

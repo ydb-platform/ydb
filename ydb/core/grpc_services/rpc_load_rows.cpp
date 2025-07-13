@@ -315,9 +315,7 @@ private:
 
     bool ExtractBatch(TString& errorMessage) override {
         Batch = RowsToBatch(AllRows, errorMessage);
-        if (Batch) {
-            Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
-        }
+        Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
         return Batch.get();
     }
 

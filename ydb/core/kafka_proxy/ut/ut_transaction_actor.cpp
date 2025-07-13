@@ -206,7 +206,6 @@ namespace {
                 
                 Ctx->Prepare();
                 Ctx->Runtime->SetScheduledLimit(5'000);
-                Ctx->Runtime->DisableBreakOnStopCondition();
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
                 DummyKqpActor = new TDummyKqpActor();
                 KqpActorId = Ctx->Runtime->Register(DummyKqpActor);

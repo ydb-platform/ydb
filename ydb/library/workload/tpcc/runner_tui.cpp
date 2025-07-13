@@ -53,15 +53,16 @@ Element TRunnerTui::BuildUpperPart() {
     headerSs << "Result preview: " << data->StatusData.Phase;
 
     std::stringstream metricsSs;
-    metricsSs << "Efficiency: " << std::setw(3) << std::fixed << std::setprecision(1) << data->StatusData.Efficiency << "%   "
+    metricsSs << "Efficiency: " << std::setw(3) << std::fixed << std::setprecision(1)
+        << data->StatusData.Efficiency << "%   "
         << "tpmC: " << std::fixed << std::setprecision(0) << data->StatusData.Tpmc;
 
     std::stringstream timingSs;
     timingSs << data->StatusData.ElapsedMinutesTotal << ":"
              << std::setfill('0') << std::setw(2) << data->StatusData.ElapsedSecondsTotal << " elapsed"
              << ", "
-             << data->StatusData.RemainingMinutesTotal << ":" << std::setfill('0') << std::setw(2) << data->StatusData.RemainingSecondsTotal
-             << " remaining";
+             << data->StatusData.RemainingMinutesTotal << ":" << std::setfill('0') << std::setw(2)
+             << data->StatusData.RemainingSecondsTotal << " remaining";
 
     // Calculate progress ratio for gauge
     float progressRatio = static_cast<float>(data->StatusData.ProgressPercentTotal / 100.0);

@@ -47,15 +47,6 @@ Element TRunnerTui::BuildUpperPart() {
     const int windowWidth = screen.dimx();
     const bool showExtendedColumns = windowWidth >= MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS;
 
-    // First update is special: we switch buffers and capture stderr to display live logs
-    static bool firstUpdate = true;
-    if (firstUpdate) {
-        // Switch to alternate screen buffer (like htop)
-        std::cout << "\033[?1049h";
-        std::cout << "\033[2J\033[H"; // Clear screen and move to top
-        firstUpdate = false;
-    }
-
     // Left side of header: runner info, efficiency, phase, progress
 
     std::stringstream headerSs;

@@ -576,6 +576,7 @@ void TPCCRunner::ExitTuiMode() {
 
     Tui.reset();
 
+    // TODO: remove?
     // Switch back to main screen buffer (restore original content)
     std::cout << "\033[?1049l";
     std::cout.flush();

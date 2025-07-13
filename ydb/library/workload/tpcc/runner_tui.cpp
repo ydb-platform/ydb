@@ -218,7 +218,7 @@ Element TRunnerTui::BuildUpperPart() {
 }
 
 Component TRunnerTui::BuildComponent() {
-    // Logs section (last 10 lines, full width)
+    // Logs section
 
     auto scrollableLogs = Scroller(Renderer([&] {
         Elements logElements;

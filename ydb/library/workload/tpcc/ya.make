@@ -7,6 +7,7 @@ SRCS(
     histogram.cpp
     init.cpp
     import.cpp
+    import_tui.cpp
     log_backend.cpp
     runner.cpp
     runner_tui.cpp

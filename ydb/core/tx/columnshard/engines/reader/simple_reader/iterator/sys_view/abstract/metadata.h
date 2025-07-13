@@ -9,7 +9,6 @@ private:
 
     const NColumnShard::TUnifiedPathId PathId;
 
-protected:
     enum class EPathType {
         Unsupported,
         Table,
@@ -17,17 +16,28 @@ protected:
     };
     const EPathType PathType;
 
+    static EPathType GetPathType(const TString& tablePath, const char (&tableSuffix)[], const char (&storeSuffix)[]) {
+        if (tablePath.EndsWith(tableSuffix)) {
+            return EPathType::Table;
+        } else if (tablePath.EndsWith(storeSuffix)) {
+            return EPathType::Store;
+        } else {
+            return EPathType::Unsupported;
+        }
+    }
+
+protected:
     std::optional<NColumnShard::TInternalPathId> GetTableFilterPathId() const {
         return PathType == EPathType::Table ? std::optional{ PathId.GetInternalPathId() } : std::nullopt;
     }
 
 public:
-    TAccessor(const TString& tablePath, const NColumnShard::TUnifiedPathId& pathId, const EPathType pathType)
-        : TBase(tablePath)
+    TAccessor(const TString& path, const NColumnShard::TUnifiedPathId& pathId, const char (&tableSuffix)[], const char (&storeSuffix)[])
+        : TBase(path)
         , PathId(pathId)
-        , PathType(pathType)
+        , PathType(GetPathType(path, tableSuffix, storeSuffix))
     {
-        AFL_VERIFY(pathType != EPathType::Unsupported);
+        AFL_VERIFY(PathType != EPathType::Unsupported)("path", path);
     }
 
     virtual std::optional<NColumnShard::TUnifiedPathId> GetPathId() const override {

@@ -7,15 +7,6 @@ class TAccessor: public NAbstract::TAccessor {
 private:
     using TBase = NAbstract::TAccessor;
 
-    static EPathType GetPathType(const TString& tablePath) {
-        if (tablePath.EndsWith("/.sys/primary_index_stats")) {
-            return EPathType::Table;
-        } else if (tablePath.EndsWith("/.sys/store_primary_index_stats")) {
-            return EPathType::Store;
-        } else {
-            return EPathType::Unsupported;
-        }
-    }
     virtual std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyOptional(TVersionedPresetSchemas& vSchemas) const override;
 
     virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(

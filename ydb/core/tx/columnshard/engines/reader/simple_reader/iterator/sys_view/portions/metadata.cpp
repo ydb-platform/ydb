@@ -8,7 +8,8 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TSchemeShardLocalPathId externalPathId,
     const std::optional<NColumnShard::TInternalPathId> internalPathId)
-    : TBase(tablePath, NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId), GetPathType(tablePath))
+    : TBase(tablePath, NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId), "/.sys/primary_index_portion_stats",
+          "/.sys/store_primary_index_portion_stats")
 {
 }
 

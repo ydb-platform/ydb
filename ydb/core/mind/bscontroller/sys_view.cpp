@@ -406,6 +406,11 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     if (groupInfo->BridgePileId) {
         info->SetBridgePileId(groupInfo->BridgePileId->GetRawId());
     }
+
+    if (groupInfo->BridgeProxyGroupId) {
+        info->SetProxyGroupId(groupInfo->BridgeProxyGroupId->GetRawId());
+    }
+
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo) {
@@ -477,6 +482,21 @@ void TBlobStorageController::UpdateSystemViews() {
         CopyInfo(state.VSlots, update->DeletedVSlots, VSlots, SysViewChangedVSlots);
         CopyInfo(state.Groups, update->DeletedGroups, GroupMap, SysViewChangedGroups);
         CopyInfo(state.StoragePools, update->DeletedStoragePools, StoragePools, SysViewChangedStoragePools);
+
+        /*for (const auto& groupId : SysViewChangedGroups) {
+            if (const auto it = GroupMap.find(groupId); it != GroupMap.end()) {
+                const auto& group = it->second;
+                if (group->BridgeGroupInfo) {
+                    NKikimrBlobStorage::TGroupInfo groupInfoPb;
+                    bool success = groupInfoPb.ParseFromString(*group->BridgeGroupInfo);
+                    Y_DEBUG_ABORT_UNLESS(success);
+                    for (auto bridgeGroupId : groupInfoPb.GetBridgeGroupIds()) {
+                        state.Groups[TGroupId::FromValue(bridgeGroupId)].SetProxyGroupId(groupId.GetRawId());
+                    }
+                }
+            }
+        }*/
+
 
         // process static slots and static groups
         for (const auto& [pdiskId, pdisk] : StaticPDisks) {
@@ -566,9 +586,11 @@ void TBlobStorageController::UpdateSystemViews() {
                         // TODO(alexvru): fill in layout for static group
                     }
 
+                    pb->SetProxyGroupId(group.GetBridgeGroupIds().size());
+
                     for (ui32 bridgeGroupRawId : group.GetBridgeGroupIds()) {
                         auto bridgeGroupId = TGroupId::FromValue(bridgeGroupRawId);
-                        if (SysViewChangedGroups.contains(bridgeGroupId)) {
+                        if (true || SysViewChangedGroups.contains(bridgeGroupId)) {
                             state.Groups[bridgeGroupId].SetProxyGroupId(group.GetGroupID());
                         }
                     }

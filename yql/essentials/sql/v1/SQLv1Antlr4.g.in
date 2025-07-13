@@ -374,9 +374,9 @@ select_unparenthesized_stmt_intersect: select_kind_partial (intersect_op select_
 
 select_kind_parenthesis: select_kind_partial | LPAREN select_kind_partial RPAREN;
 
-union_op: UNION (DISTINCT | ALL)?;
+union_op: (UNION | EXCEPT) (DISTINCT | ALL)?;
 
-intersect_op: (INTERSECT | EXCEPT) (DISTINCT | ALL)?;
+intersect_op: INTERSECT (DISTINCT | ALL)?;
 
 select_kind_partial: select_kind
   (LIMIT expr ((OFFSET | COMMA) expr)?)?

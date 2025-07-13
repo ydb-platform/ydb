@@ -81,12 +81,12 @@ private:
     template <typename TRule>
         requires std::same_as<TRule, TRule_select_stmt> ||
                  std::same_as<TRule, TRule_select_unparenthesized_stmt>
-    TSourcePtr BuildUnion(const TRule& node, TPosition& pos, TBuildExtra& extra);
+    TSourcePtr BuildUnionException(const TRule& node, TPosition& pos, TBuildExtra& extra);
 
     template <typename TRule>
         requires std::same_as<TRule, TRule_select_stmt_intersect> ||
                  std::same_as<TRule, TRule_select_unparenthesized_stmt_intersect>
-    TSourcePtr BuildExceptionIntersection(const TRule& node, TPosition& pos, TSelectKindPlacement placement, TBuildExtra& extra);
+    TSourcePtr BuildIntersection(const TRule& node, TPosition& pos, TSelectKindPlacement placement, TBuildExtra& extra);
 
     template <typename TRule>
         requires std::same_as<TRule, TRule_select_kind_parenthesis> ||

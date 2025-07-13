@@ -7428,16 +7428,16 @@
     ],
     "test_sql2yql.test[select_op-select_op_order_by]": [
         {
-            "checksum": "c29c29e19e0a2dc2ec0b18e5f514d257",
+            "checksum": "5bb387570099b20bc348a61fb9aca5cf",
             "size": 5911,
-            "uri": "https://{canondata_backend}/1600758/b6a6fb350f1fdfbb2cdd5ef84cd0c97f27aa4e1a/resource.tar.gz#test_sql2yql.test_select_op-select_op_order_by_/sql.yql"
+            "uri": "https://{canondata_backend}/1871182/dae39f0cfd95af470ed2892346cc8716e27e027e/resource.tar.gz#test_sql2yql.test_select_op-select_op_order_by_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_op-select_op_precedence]": [
         {
-            "checksum": "1aa020ec98a803bed27d3e9d69bd1cc8",
-            "size": 7832,
-            "uri": "https://{canondata_backend}/1937424/ff4229d081f7de79cc74b919a7e5f6c33b478b7f/resource.tar.gz#test_sql2yql.test_select_op-select_op_precedence_/sql.yql"
+            "checksum": "97a131fbcb318306e7a59d28174a3861",
+            "size": 7840,
+            "uri": "https://{canondata_backend}/1871182/dae39f0cfd95af470ed2892346cc8716e27e027e/resource.tar.gz#test_sql2yql.test_select_op-select_op_precedence_/sql.yql"
         }
     ],
     "test_sql2yql.test[seq_mode-shared_named_expr]": [

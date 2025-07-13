@@ -66,6 +66,8 @@ public:
     bool ConnectionEstablished = false;
     bool CloseConnection = false;
 
+    bool RetryingWriteToSocket = false;
+
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
     std::shared_ptr<Msg> Request;
@@ -619,7 +621,7 @@ protected:
                 break;
             }
 
-            if (!Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx)) {
+            if (RetryingWriteToSocket || !Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx)) {
                 return false;
             }
 
@@ -648,6 +650,7 @@ protected:
             // if we got EAGAIN or EWOULDBLOCK it means that socket is busy and we need to wait for PollerReady event to proceed
             // PollerReady means that poller polled socket ready status
             if (res == -EAGAIN || res == -EWOULDBLOCK) {
+                RetryingWriteToSocket = true;
                 KAFKA_LOG_D("Socket is busy. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size() <<  ". Waiting for PollerReady event");
                 RequestPoller();
                 return false;
@@ -864,10 +867,12 @@ protected:
                 PassAway();
                 return;
             } else if (res > 0 && BufferedWriter.Empty()) { // we successfuly retryed sending the reqsponse
+                RetryingWriteToSocket = false;
                 auto& request = PendingRequestsQueue.front();
                 auto& header = request->Header;
                 OnRequestProcessed(request);
                 KAFKA_LOG_D("Sent reply (after retry): ApiKey=" << header.RequestApiKey << ", Version=" << header.RequestApiVersion << ", Correlation=" << header.CorrelationId);
+                ProcessReplyQueue(ctx);
             }
         }
 

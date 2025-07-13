@@ -709,7 +709,7 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::GetOrC
 }
 
 std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx) {
-    KAFKA_LOG_D("Created transactional actor for producerId=" << producerInstanceId.Id << " and producerEpoch=" << producerInstanceId.Epoch);
+    KAFKA_LOG_D("Created transactional writer for producerId=" << producerInstanceId.Id << " and producerEpoch=" << producerInstanceId.Epoch << "for topic-partition " << topicPartition.TopicPath << ":" << topicPartition.PartitionId);
     auto* partition = topicInfo.PartitionChooser->GetPartition(topicPartition.PartitionId);
     if (!partition) {
         return { NOT_FOUND, TActorId{} };

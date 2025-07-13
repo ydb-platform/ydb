@@ -52,6 +52,10 @@ class MutableMultiMapping(MultiMapping[_V], MutableMapping[str, _V]):
     def extend(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
         """Add everything from arg and kwargs to the mapping."""
 
+    @abc.abstractmethod
+    def merge(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
+        """Merge into the mapping, adding non-existing keys."""
+
     @overload
     def popone(self, key: str) -> _V: ...
     @overload

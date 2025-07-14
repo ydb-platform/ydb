@@ -64,7 +64,7 @@
 `--retries NUM` | Количество повторных попыток выгрузки, которые будет предпринимать сервер.<br/>Значение по умолчанию: `10`.
 `--compression STRING` | Сжимать выгружаемые данные.<br/>При уровне сжатия по умолчанию для алгоритма [Zstandard](https://ru.wikipedia.org/wiki/Zstandard) данные могут быть сжаты в 5-10 раз. Сжатие данных использует ресурс CPU и может повлиять на скорость выполнения других операций с БД.<br/>Допустимые значения:<br/><ul><li>`zstd` — сжатие алгоритмом Zstandard c уровнем сжатия по умолчанию (`3`);</li><li>`zstd-N` — сжатие алгоритмом Zstandard, `N` — уровень сжатия (`1` — `22`).</li></ul>
 `--encryption-algorithm ALGORITHM` | Шифровать выгружаемые данные используя указанный алгоритм. Поддерживаемые значения: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
-`--encryption-key-file PATH` | Путь к файлу, содержащему ключ шифрования (только для зашифрованных выгрузок).
+`--encryption-key-file PATH` | Путь к файлу, содержащему ключ шифрования (только для зашифрованных выгрузок). Данный файл является бинарным и должен содержать точное количество байт, соответствующее длине ключа в выбранном алгоритме шифрования (16 байт для `AES-128-GCM` и `ChaCha20-Poly1305`, 32 байта для `AES-256-GCM`). Ключ также может быть передан через переменную окружения `YDB_ENCRYPTION_KEY`, в шестнадцатеричном сроковом предствалении.
 `--format STRING` | Формат вывода результата.<br/>Допустимые значения:<br/><ul><li>`pretty` — человекочитаемый формат (по умолчанию);</li><li>`proto-json-base64` — [Protocol Buffers](https://ru.wikipedia.org/wiki/Protocol_Buffers) в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul>
 
 ## Выполнение выгрузки {#exec}
@@ -177,17 +177,34 @@
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
 ```
 
-### Выгрузка директории с шифрованием {#example-encryption}
+### Выгрузка с шифрованием {#example-encryption}
 
-Выгрузка директории `dir1` базы данных с шифрованием секретным ключом, содержащимся в файле `~/my_secret_key`, в директорию `export1` бакета `mybucket` с использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`:
+Выгрузка всей базы данных с шифрованием:
+- С использованием алгоритма шифрования `AES-128-GCM`
+- С генерацией случайного ключа утилитой `openssl` в файл `~/my_secret_key`
+- С чтением сгенерированного ключа из файла `~/my_secret_key`
+- В префикс пути `export1` в бакете S3 `mybucket`
+- С использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`
 
 ```bash
+openssl rand -out key.bin 16
 {{ ydb-cli }} -p quickstart export s3 \
-  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket --destination-prefix export1 \
+  --encryption-algorithm AES-128-GCM --encryption-key-file ~/my_secret_key
+```
+Выгрузка директории `dir1` базы данных с шифрованием:
+- С использованием алгоритма шифрования `AES-256-GCM`
+- С генерацией случайного ключа утилитой `openssl` в переменную окружения `YDB_ENCRYPTION_KEY`
+- С чтением сгенерированного ключа из переменной окружения `YDB_ENCRYPTION_KEY`
+- В префикс пути `export1` в бакете S3 `mybucket`
+- С использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`
+
+```bash
+export YDB_ENCRYPTION_KEY=$(openssl rand -hex 32)
+{{ ydb-cli }} -p quickstart export s3 \
   --root-path dir1 \
-  --destination-prefix export1 \
-  --encryption-algorithm AES-128-GCM \
-  --encryption-key-file ~/my_secret_key
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket --destination-prefix export1 \
+  --encryption-algorithm AES-128-GCM 
 ```
 
 ### Получение идентификаторов операций {#example-list-oneline}

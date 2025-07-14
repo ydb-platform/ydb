@@ -1004,7 +1004,7 @@ private:
             if (auto timeout = GetTimeout()) {
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND([replySent] {
-                        replySent.Cancel(TError());
+                        replySent.Cancel(TError(NYT::EErrorCode::Timeout, "Request timed out"));
                     }),
                     ArriveInstant_ + *timeout);
 
@@ -2285,7 +2285,7 @@ bool TServiceBase::TryCancelQueuedReply(TRequestId requestId)
     }
 
     if (queuedReply) {
-        queuedReply.Cancel(TError());
+        queuedReply.Cancel(TError(NYT::EErrorCode::Canceled, "Request canceled"));
         return true;
     } else {
         return false;

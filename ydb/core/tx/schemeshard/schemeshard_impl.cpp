@@ -4688,6 +4688,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
     EnableDataErasure = appData->FeatureFlags.GetEnableDataErasure();
+    EnableMoveColumnTable = appData->FeatureFlags.GetEnableMoveColumnTable();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);

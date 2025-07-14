@@ -16,6 +16,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/core/pg_ext/yql_pg_ext.h>
 #include <yql/essentials/utils/mem_limit.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
@@ -242,6 +243,9 @@ int BuildAST(int argc, char* argv[]) {
         }
     };
 
+    NYql::NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NYql::NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
+
     THashSet<TString> flags;
     bool noDebug = false;
     THolder<NYql::TGatewaysConfig> gatewaysConfig;
@@ -279,6 +283,7 @@ int BuildAST(int argc, char* argv[]) {
         });
     opts.AddLongOption("pg-ext", "Pg extensions config file").Optional().RequiredArgument("FILE")
         .Handler1T<TString>([](const TString& file) {
+
             auto pgExtConfig = ParseProtoConfig<NYql::NProto::TPgExtensions>(file);
             if (!pgExtConfig) {
                 throw yexception() << "Bad format of config file " << file;
@@ -294,6 +299,7 @@ int BuildAST(int argc, char* argv[]) {
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
     TVector<TString> queryFiles(res.GetFreeArgs());
+    NYql::NPg::GetSqlLanguageParser()->Freeze();
 
     THolder<TFixedBufferFileOutput> outFile;
     if (!outFileName.empty()) {

@@ -587,8 +587,9 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     
     if (options.IsBridgeMode) {
         for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {
-            runtime.GetAppData().BridgeConfig->AddPiles()->SetName("r" + ToString(pileId));
+            runtime.GetAppData().BridgeConfig.AddPiles()->SetName("r" + ToString(pileId));
         }
+        runtime.GetAppData().BridgeModeEnabled = true;
     }
 
     NKikimrCms::TCmsConfig cmsConfig;

@@ -137,7 +137,7 @@ TAppData::TAppData(
     , HealthCheckConfig(Impl->HealthCheckConfig)
     , WorkloadManagerConfig(Impl->WorkloadManagerConfig)
     , QueryServiceConfig(Impl->QueryServiceConfig)
-    , BridgeConfig(&Impl->BridgeConfig)
+    , BridgeConfig(Impl->BridgeConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

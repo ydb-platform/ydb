@@ -7,14 +7,14 @@ namespace NKikimr::NStorage {
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActorBootstrapped<TInvokeRequestHandlerActor> {
         TDistributedConfigKeeper* const Self;
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
-        const std::weak_ptr<TScepter> Scepter;
-        const ui64 ScepterCounter;
+        const ui64 InvokeActorQueueGeneration;
         std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>> Event;
         const TActorId Sender;
         const ui64 Cookie;
         const TActorId RequestSessionId;
 
-        bool IsScepterlessOperation = false;
+        bool BeginRegistered = false;
+
         bool CheckSyncersAfterCommit = false;
 
         TActorId ParentId;
@@ -32,13 +32,34 @@ namespace NKikimr::NStorage {
         THashSet<TBridgePileId> SpecificBridgePileIds;
         std::optional<NKikimrBlobStorage::TStorageConfig> SwitchBridgeNewConfig;
 
-        bool WaitingForOtherProposition = false;
+        std::optional<NKikimrBlobStorage::TStorageConfig> MergedConfig;
+
+        std::optional<NKikimrBlobStorage::TStorageConfig> ReplaceConfig;
+
+    public: // Error handling
+        struct TExError : yexception {
+            bool IsCritical = false; // the one what would case Y_ABORT if in debug mode
+            TResult::EStatus Status = TResult::ERROR;
+        };
+
+        struct TExCriticalError : TExError {
+            TExCriticalError() { IsCritical = true; }
+        };
+
+        struct TExRace : TExError {
+            TExRace() { Status = TResult::RACE; }
+        };
+
+        struct TExNoQuorum : TExError {
+            TExNoQuorum() { Status = TResult::NO_QUORUM; }
+        };
 
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, NKikimrBlobStorage::TStorageConfig&& config);
 
         void Bootstrap(TActorId parentId);
-        bool IsScepterExpired() const;
 
         void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
@@ -55,6 +76,7 @@ namespace NKikimr::NStorage {
         // Query execution logic
 
         void ExecuteQuery();
+        void ExecuteInitialRootAction();
         void IssueScatterTask(TEvScatter&& task, TGatherCallback callback);
         void Handle(TEvNodeConfigGather::TPtr ev);
 
@@ -141,12 +163,22 @@ namespace NKikimr::NStorage {
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
 
+        bool PrepareMergeUnsyncedPileConfig(const TQuery::TMergeUnsyncedPileConfig& cmd);
+        void MergeUnsyncedPileConfig();
+
+        void NegotiateUnsyncedConnection(const TQuery::TNegotiateUnsyncedConnection& cmd);
+
+        bool PrepareAdvanceClusterStateGeneration(const TQuery::TAdvanceClusterStateGeneration& cmd);
+        void AdvanceClusterStateGeneration();
+
+        bool GenerateSpecificBridgePileIds();
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields = true);
-        void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool forceGeneration = false,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery
@@ -169,6 +201,14 @@ namespace NKikimr::NStorage {
         void PassAway() override;
 
         STFUNC(StateFunc);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Notifications from distconf
+
+        void OnNoQuorum();
+        void OnError(const TString& errorReason);
+        void OnBeginOperation();
+        void OnConfigProposed(const std::optional<TString>& errorReason);
     };
 
 } // NKikimr::NStorage

@@ -77,6 +77,12 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
+    if (AppData()->BridgeModeEnabled && !BridgeInfo) {
+        // block until bridge information is filled in by distconf after bootstrapping
+        PendingQueryStorageConfigQ.push_back(ev);
+        return;
+    }
+
     Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled, BridgeInfo));
     if (ev->Get()->Subscribe) {
         StorageConfigSubscribers.insert(ev->Sender);
@@ -145,6 +151,13 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
         nullptr, ev->Cookie));
+
+    if (BridgeInfo) {
+        for (auto& ev : std::exchange(PendingQueryStorageConfigQ, {})) {
+            TAutoPtr<IEventHandle> temp(ev.Release());
+            Receive(temp);
+        }
+    }
 }
 
 void TNodeWarden::HandleUnsubscribe(STATEFN_SIG) {

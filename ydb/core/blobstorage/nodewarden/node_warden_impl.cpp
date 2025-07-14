@@ -473,6 +473,7 @@ void TNodeWarden::Bootstrap() {
     auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
     const bool success = DeriveStorageConfig(appConfig, config.get(), &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
+    TDistributedConfigKeeper::GenerateBridgeInitialState(*Cfg, config.get());
     TDistributedConfigKeeper::UpdateFingerprint(config.get());
     StorageConfig = std::move(config);
 

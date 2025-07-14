@@ -45,7 +45,7 @@ private:
             IgnoreToVersion = to;
         }
 
-        std::optional<ui64> ExtractIgnoreSchemaVersionFor(const ui64 from) {
+        std::optional<ui64> ExtractIgnoreSchemaVersionFor() {
             if (!IgnoreToVersion) {
                 return std::nullopt;
             }

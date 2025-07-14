@@ -2401,6 +2401,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(BridgeModeGroups)
     {
         TTestEnvOpts opts(16, 4);
+        opts.NToSelect = 8;
         TCmsTestEnv env(opts.WithBridgeMode());
         TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {

@@ -2,6 +2,6 @@
 from reconfig_state_storage_workload_test import ReconfigStateStorageWorkloadTest
 
 
-class TestReconfigStateStorageBoardWorkload(ReconfigStateStorageWorkloadTest):
-    def test_state_storage_board(self):
+class TestReconfigSchemeBoardWorkload(ReconfigStateStorageWorkloadTest):
+    def test_scheme_board(self):
         self.do_test("SchemeBoard")

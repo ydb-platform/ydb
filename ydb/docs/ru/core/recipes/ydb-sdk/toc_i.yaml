@@ -41,6 +41,8 @@ items:
   href: tx-control.md
 - name: Настройка TTL
   href: ttl.md
+- name: Векторный поиск
+  href: vector-search.md
 - name: Координация
   items:
   - name: Распределённая блокировка

@@ -37,10 +37,6 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "KafkaOffsetFetchActor{DatabasePath=" << DatabasePath << "}: ";
-    }
-
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvCommitedOffsetsResponse, Handle);
@@ -58,6 +54,10 @@ public:
     NYdb::TParamsBuilder BuildFetchAssignmentsParams(const std::vector<std::optional<TString>>& groupIds);
     void ReplyError(const TActorContext& ctx);
     void Die(const TActorContext &ctx);
+
+    TStringBuilder LogPrefix() const {
+        return TStringBuilder() << "TKafkaOffsetFetchActor{GroupId=" << Message->GroupId.value() << ",DatabasePath=" << DatabasePath << "}: ";
+    }
 
 private:
     const TContext::TPtr Context;

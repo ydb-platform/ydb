@@ -31,6 +31,10 @@ public:
     TOffsetFetchResponseData::TPtr GetOffsetFetchResponse();
     void ReplyError(const TActorContext& ctx);
 
+    TStringBuilder LogPrefix() const {
+        return TStringBuilder() << "TKafkaOffsetFetchActor{GroupId=" << Message->GroupId.value() << ",DatabasePath=" << DatabasePath << "}: ";
+    }
+
 private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;

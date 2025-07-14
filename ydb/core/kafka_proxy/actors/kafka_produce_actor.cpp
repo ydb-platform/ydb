@@ -53,7 +53,7 @@ void TKafkaProduceActor::Bootstrap(const NActors::TActorContext& /*ctx*/) {
 }
 
 void TKafkaProduceActor::Handle(TEvKafka::TEvWakeup::TPtr /*request*/, const TActorContext& ctx) {
-    KAFKA_LOG_D("Produce actor: Wakeup");
+    KAFKA_LOG_T("Produce actor: Wakeup");
 
     SendResults(ctx);
     CleanTopics(ctx);
@@ -96,7 +96,7 @@ void TKafkaProduceActor::CleanTopics(const TActorContext& ctx) {
 }
 
 void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
-    KAFKA_LOG_D("Produce actor: CleanWriters");
+    KAFKA_LOG_T("Produce actor: CleanWriters");
     const auto earliestAllowedTs = ctx.Now() - WRITER_EXPIRATION_INTERVAL;
 
     for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
@@ -317,7 +317,8 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         auto w = partitionRequest->AddCmdWrite();
         w->SetSourceId(sourceId);
 
-        w->SetEnableKafkaDeduplication(batch->ProducerId >= 0);
+        bool enableKafkaDeduplication = batch->ProducerId >= 0;
+        w->SetEnableKafkaDeduplication(enableKafkaDeduplication);
         if (batch->ProducerEpoch >= 0) {
             w->SetProducerEpoch(batch->ProducerEpoch);
         } else if (batch->ProducerEpoch == -1) {
@@ -327,11 +328,17 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
             return {EKafkaErrors::INVALID_PRODUCER_EPOCH, nullptr};
         }
 
-        if (batch->BaseSequence >= 0) {
-            // Handle int32 overflow.
-            w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1));
+        // set seqno
+        if (enableKafkaDeduplication) {
+            if (batch->BaseSequence >= 0) {
+                // Handle int32 overflow.
+                w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1));
+            } else {
+                KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << batch->BaseSequence);
+                return {EKafkaErrors::INVALID_RECORD, nullptr};
+            }
         } else {
-            return {EKafkaErrors::INVALID_RECORD, nullptr};
+            w->SetSeqNo(batch->BaseOffset + record.OffsetDelta);
         }
 
         w->SetData(str);
@@ -395,6 +402,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                 if (error == EKafkaErrors::NONE_ERROR) {
                     ruPerRequest = false;
                     Send(writer.second, std::move(ev));
+                    result.ErrorCode = NONE_ERROR;
                 } else {
                     result.ErrorCode = error;
                 }
@@ -412,6 +420,10 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                     default:
                         result.ErrorCode = EKafkaErrors::UNKNOWN_SERVER_ERROR;
                 }
+            }
+
+            if (result.ErrorCode != EKafkaErrors::NONE_ERROR) {
+                KAFKA_LOG_ERROR("Write request failed with error " << result.ErrorCode << " and message " << result.ErrorMessage);
             }
 
             ++position;
@@ -697,7 +709,7 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::GetOrC
 }
 
 std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx) {
-    KAFKA_LOG_D("Created transactional actor for producerId=" << producerInstanceId.Id << " and producerEpoch=" << producerInstanceId.Epoch);
+    KAFKA_LOG_D("Created transactional writer for producerId=" << producerInstanceId.Id << " and producerEpoch=" << producerInstanceId.Epoch << "for topic-partition " << topicPartition.TopicPath << ":" << topicPartition.PartitionId);
     auto* partition = topicInfo.PartitionChooser->GetPartition(topicPartition.PartitionId);
     if (!partition) {
         return { NOT_FOUND, TActorId{} };

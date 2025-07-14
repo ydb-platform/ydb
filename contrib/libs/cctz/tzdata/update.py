@@ -32,21 +32,11 @@ def create_cmakelists(zoneinfo_dir):
 
 
 def get_latest_version():
-    # Temporary here for the purposes of reimport
-    return "2024a"
     index_html = urllib.request.urlopen('http://www.iana.org/time-zones').read()
     version_match = re.search('<a href="[^"]*">tzdata(.*).tar.gz</a>', index_html.decode())
     if not version_match:
         raise Exception('Failed to determine the latest tzdata version')
     return version_match.group(1)
-
-
-def get_current_version():
-    try:
-        with open('VERSION') as f:
-            return f.read()
-    except:
-        return 0
 
 
 def prepare_tzdata(version):
@@ -98,10 +88,9 @@ def prepare_tzdata(version):
 
 
 def main():
-    version_current = get_current_version()
-    version_latest = get_latest_version()
-    print(f'Updating from {version_current} to {version_latest}')
-    prepare_tzdata(version_latest)
+    version = get_latest_version()
+    print(f'Importing tzdata {version}')
+    prepare_tzdata(version)
 
 if __name__ == '__main__':
     

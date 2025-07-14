@@ -104,7 +104,9 @@ public:
         TTopicKeyParser key;
         YQL_ENSURE(key.Parse(*node->Child(2), nullptr, ctx), "Failed to extract topic name.");
         const auto settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
-        YQL_ENSURE(settings.Mode.Cast() == "append", "Only append write mode is supported for writing into topic");
+        Cerr << "RewriteIO " << TString(settings.Mode.Cast()) << Endl;
+        //YQL_ENSURE(settings.Mode.Cast() == "append", "Only append write mode is supported for writing into topic, mode " << TString(settings.Mode.Cast()));
+
 
         const auto cluster = TString(maybePqWrite.Cast().DataSink().Cluster().Value());
         const auto* found = State_->FindTopicMeta(cluster, key.GetTopicPath());
@@ -129,7 +131,8 @@ public:
             .Input<TCoRemoveSystemMembers>()
                 .Input(node->Child(3))
                 .Build()
-            .Mode(settings.Mode.Cast())
+            //.Mode(settings.Mode.Cast())
+            .Mode().Value("append").Build()
             .Settings(settings.Other)
             .Done().Ptr();
     }

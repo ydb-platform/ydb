@@ -28,6 +28,7 @@ public:
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TPqPhysicalOptProposalTransformer::name)
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TPqWriteTopic::Match, HNDL(PqWriteTopic));
+        AddHandler(0, &TPqInsert::Match, HNDL(PqInsert));
 #undef HNDL
 
         SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
@@ -117,6 +118,72 @@ public:
 
         auto dqQueryBuilder = Build<TDqQuery>(ctx, write.Pos());
         dqQueryBuilder.World(write.World());
+        dqQueryBuilder.SinkStages().Add(dqStageWithSink).Build();
+
+        optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
+
+        return dqQueryBuilder.Done();
+    }
+
+    TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx,  IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        YQL_CLOG(INFO, ProviderPq) << "TPqPhysicalOptProposalTransformer::PqInsert " ;
+        auto insert = node.Cast<TPqInsert>();
+
+
+        //auto write = node.Cast<TPqWriteTopic>();
+        if (!TDqCnUnionAll::Match(insert.Input().Raw())) { // => this code is not for RTMR mode.
+            YQL_CLOG(INFO, ProviderPq) << "PqInsert !Match " ;
+            return node;
+        }
+
+        const auto& topicNode = insert.Target();
+        const TString cluster(topicNode.Cluster().Value());
+
+        const TParentsMap* parentsMap = getParents();
+        auto dqUnion = insert.Input().Cast<TDqCnUnionAll>();
+        if (!NDq::IsSingleConsumerConnection(dqUnion, *parentsMap)) {
+            YQL_CLOG(INFO, ProviderPq) << "PqWriteTopic777 !IsSingleConsumerConnection " ;
+            return node;
+        }
+
+        // const auto* topicMeta = State_->FindTopicMeta(topicNode);
+        // if (!topicMeta) {
+        //     ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), TStringBuilder() << "Unknown topic `" << topicNode.Cluster().StringValue() << "`.`"
+        //                         << topicNode.Path().StringValue() << "`"));
+        //     YQL_CLOG(INFO, ProviderPq) << "PqWriteTopic777 !FindTopicMeta " ;
+
+        //     return nullptr;
+        // }
+
+        YQL_CLOG(INFO, ProviderPq) << "Optimize PqWriteTopic `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`";
+
+        auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, insert.Pos());
+        dqPqTopicSinkSettingsBuilder.Topic(topicNode);
+        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx));
+        dqPqTopicSinkSettingsBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + cluster).Build();
+        auto dqPqTopicSinkSettings = dqPqTopicSinkSettingsBuilder.Done();
+
+        auto dqSink = Build<TDqSink>(ctx, insert.Pos())
+            .DataSink(insert.DataSink())
+            .Settings(dqPqTopicSinkSettings)
+            .Index(dqUnion.Output().Index())
+            .Done();
+
+        TDqStage inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
+
+        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, topicNode.Pos());
+        if (inputStage.Outputs()) {
+            outputsBuilder.InitFrom(inputStage.Outputs().Cast());
+        }
+        outputsBuilder.Add(dqSink);
+
+        auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
+            .InitFrom(inputStage)
+            .Outputs(outputsBuilder.Done())
+            .Done();
+
+        auto dqQueryBuilder = Build<TDqQuery>(ctx, insert.Pos());
+        dqQueryBuilder.World(insert.World());
         dqQueryBuilder.SinkStages().Add(dqStageWithSink).Build();
 
         optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());

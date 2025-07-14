@@ -73,6 +73,8 @@ WHERE RunId / 1000 > $run_id_limit
 GROUP BY  RunId, Db, Suite;
 
 SELECT
+    s.Db AS Db,
+    s.Suite AS Suite,
     CAST(s.RunId/1000 AS Timestamp) AS RunTs,
     s.Version AS Version,
     s.Report AS Report,

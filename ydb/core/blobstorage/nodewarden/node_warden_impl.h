@@ -158,6 +158,8 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxNumOfSlowDisksHDD;
         TControlWrapper MaxNumOfSlowDisksSSD;
 
+        TControlWrapper EnableDeepScrubbing;
+
     public:
         struct TGroupRecord;
 
@@ -190,6 +192,7 @@ namespace NKikimr::NStorage {
             , MaxNumOfSlowDisks(DefaultMaxNumOfSlowDisks, 1, 2)
             , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisksHDD, 1, 2)
             , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
+            , EnableDeepScrubbing(false, false, true)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;

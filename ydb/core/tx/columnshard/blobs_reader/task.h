@@ -14,6 +14,11 @@ class TCompositeReadBlobs {
 private:
     THashMap<TString, TActionReadBlobs> BlobsByStorage;
 
+    void TakeDataFrom(TCompositeReadBlobs&& item) {
+        BlobsByStorage = std::move(item.BlobsByStorage);
+        item.BlobsByStorage.clear();
+    }
+
 public:
     class TGuard: TNonCopyable {
     private:
@@ -134,14 +139,12 @@ public:
     }
 
     TCompositeReadBlobs& operator=(TCompositeReadBlobs&& item) noexcept {
-        BlobsByStorage = std::move(item.BlobsByStorage);
-        item.BlobsByStorage.clear();
+        TakeDataFrom(std::move(item));
         return *this;
     }
 
     TCompositeReadBlobs(TCompositeReadBlobs&& item) noexcept {
-        BlobsByStorage = std::move(item.BlobsByStorage);
-        item.BlobsByStorage.clear();
+        TakeDataFrom(std::move(item));
     }
 
     TCompositeReadBlobs(const TCompositeReadBlobs&) = delete;

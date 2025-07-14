@@ -31,7 +31,7 @@ SELECT 2 + 2;
 * вычисляются выражения в `SELECT`;
 * выражениям в `SELECT` назначаются имена заданные алиасами;
 * к полученным таким образом колонкам применяется top-level [DISTINCT](distinct.md);
-* таким же образом вычисляются все подзапросы в операторах [UNION [ALL]](operators.md#union), [INTERSECT [ALL]](operators.md#intersect), [EXCEPT [ALL]](operators.md#except) и выполняется их объединение, пересечение, исключение соответственно; в текущей реализации комбинация `INTERSECT [ALL]`, `EXCEPT [ALL]` и `UNION [ALL]` не поддерживается, также не поддерживается использование более одного оператора `INTERSECT [ALL]` или `EXCEPT [ALL]` в `SELECT` выражении;
+* таким же образом вычисляются все подзапросы в операторах [UNION [ALL]](operators.md#union), [INTERSECT [ALL]](operators.md#intersect), [EXCEPT [ALL]](operators.md#except) и выполняется их объединение, пересечение, исключение соответственно;
 * выполняется сортировка согласно [ORDER BY](order_by.md);
 * к полученному результату применяются [OFFSET и LIMIT](limit_offset.md).
 
@@ -74,59 +74,65 @@ query1 UNION query2 UNION ALL query3
 (query1 UNION query2) UNION ALL query3
 ```
 
-Пересечение только двух `SELECT` (или подзапросов) может быть вычислено с помощью ключевых слов `INTERSECT` и `INTERSECT ALL`.
+Пересечение нескольких `SELECT` (или подзапросов) может быть вычислено с помощью ключевых слов `INTERSECT` и `INTERSECT ALL`.
 
 ```yql
 query1 INTERSECT query2
 ```
 
-Запрос из нескольких операторов `INTERSECT [ALL]` не допускается.
+Пересечение более двух запросов интерпретируется как левоассоциативная операция, то есть
 
 ```yql
-query1 INTERSECT query2 INTERSECT query3 ... -- ошибка
-
-query1 INTERSECT query2 INTERSECT ALL query3 ... -- ошибка
+query1 INTERSECT query2 INTERSECT query3
 ```
 
-Исключение только двух `SELECT` (или подзапросов) может быть вычислено с помощью ключевых слов `EXCEPT` и `EXCEPT ALL`.
+интерпретируется как
+
+```yql
+(query1 INTERSECT query2) INTERSECT query3
+```
+
+Исключение нескольких `SELECT` (или подзапросов) может быть вычислено с помощью ключевых слов `EXCEPT` и `EXCEPT ALL`.
 
 ```yql
 query1 EXCEPT query2
 ```
 
-Запрос из нескольких операторов `EXCEPT [ALL]` не допускается.
+Исключение более двух запросов интерпретируется как левоассоциативная операция, то есть
 
 ```yql
-query1 EXCEPT query2 EXCEPT query3 -- ошибка
-
-query1 EXCEPT query2 EXCEPT ALL query3 -- ошибка
+query1 EXCEPT query2 EXCEPT query3
 ```
 
-Одновременное использование двух разных операторов `UNION`, `INTERSECT` и `EXCEPT` в одном запросе не допускается.
+интерпретируется как
 
 ```yql
-query1 UNION query2 INTERSECT query3 -- ошибка
-
-query1 UNION query2 EXCEPT query3 -- ошибка
-
-query1 INTERSECT query2 EXCEPT query3 -- ошибка
+(query1 EXCEPT query2) EXCEPT query3
 ```
 
-Данное поведение не зависит от наличия или отсутствия `DISTINCT` / `ALL`.
+Допускается одновременное использование разных операторов `UNION`, `INTERSECT` и `EXCEPT` в одном запросе. Тогда операторы `UNION` и `EXCEPT` имеют равный приоритет, который ниже, чем у `INTERSECT`.
+
+Например, запросы
 
 ```yql
-query1 UNION ALL query2 INTERSECT ALL query3 -- ошибка
+query1 UNION query2 INTERSECT query3
 
-query1 UNION ALL query2 EXCEPT ALL query3 -- ошибка
+query1 UNION query2 EXCEPT query3
 
-query1 INTERSECT ALL query2 EXCEPT ALL query3 -- ошибка
+query1 EXCEPT query2 UNION query3
 ```
 
-{% note warning %}
+интерпретируется как
 
-Только `UNION` и `UNION ALL` могут использоваться несколько раз (больше 1). Использование `INTERSECT`, `INTERSECT ALL`, `EXCEPT` и `EXCEPT ALL` несколько раз не допускается.
+```yql
+query1 UNION (query2 INTERSECT query3)
 
-{% endnote %}
+(query1 UNION query2) EXCEPT query3
+
+(query1 EXCEPT query2) UNION query3
+```
+
+соответственно.
 
 При наличии `ORDER BY/LIMIT/DISCARD/INTO RESULT` в объединяемых подзапросах применяются следующие правила:
 

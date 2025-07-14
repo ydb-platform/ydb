@@ -7,14 +7,14 @@ namespace NKikimr::NStorage {
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
     void TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
         GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
         GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
         GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
     }
 
     bool TInvokeRequestHandlerActor::AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
         auto testNewConfig = [](auto newSSInfo, auto oldSSInfo) {
             THashSet<TActorId> replicas;
             for (const auto& ssInfo : { newSSInfo, oldSSInfo }) {
@@ -30,7 +30,7 @@ namespace NKikimr::NStorage {
             }
             return true;
         };
-        auto process = [&](const char *name, auto mutableFunc, auto ssMutableFunc, auto buildFunc) {
+        auto process = [&](const char *name, auto getFunc, auto ssMutableFunc, auto buildFunc) {
             ui32 actorIdOffset = 0;
             auto *newMutableConfig = (currentConfig->*ssMutableFunc)();
             if (newMutableConfig->RingGroupsSize() == 0) {
@@ -38,7 +38,7 @@ namespace NKikimr::NStorage {
             }
             TIntrusivePtr<TStateStorageInfo> newSSInfo;
             TIntrusivePtr<TStateStorageInfo> oldSSInfo;
-            oldSSInfo = (*buildFunc)(*(config.*mutableFunc)());
+            oldSSInfo = (*buildFunc)((config.*getFunc)());
             newSSInfo = (*buildFunc)(*newMutableConfig);
             while (!testNewConfig(newSSInfo, oldSSInfo)) {
                 if (actorIdOffset > 16) {
@@ -53,7 +53,7 @@ namespace NKikimr::NStorage {
             return true;
         };
         #define F(NAME) \
-        if (!process(#NAME, &NKikimrBlobStorage::TStorageConfig::Mutable##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)) { \
+        if (!process(#NAME, &NKikimrBlobStorage::TStorageConfig::Get##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)) { \
             return false; \
         }
         F(StateStorage)
@@ -64,7 +64,7 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
         currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
         currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
         currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
@@ -76,7 +76,6 @@ namespace NKikimr::NStorage {
         }
         auto ev = PrepareResult(TResult::OK, std::nullopt);
         auto* currentConfig = ev->Record.MutableStateStorageConfig();
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         if (cmd.GetRecommended()) {
             GetRecommendedStateStorageConfig(currentConfig);

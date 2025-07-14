@@ -152,6 +152,7 @@ namespace NKikimr::NStorage {
                 Y_ABORT();
         }
 
+        TDistributedConfigKeeper::UpdateBridgeFingerprint(config.MutableClusterState());
         return config;
     }
 
@@ -245,6 +246,7 @@ namespace NKikimr::NStorage {
                 Y_ABORT();
         }
 
+        TDistributedConfigKeeper::UpdateBridgeFingerprint(config.MutableClusterState());
         StartProposition(&config);
     }
 

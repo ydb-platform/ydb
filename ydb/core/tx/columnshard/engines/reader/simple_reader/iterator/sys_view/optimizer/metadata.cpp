@@ -8,17 +8,16 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NOptimizer {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TSchemeShardLocalPathId externalPathId,
     const std::optional<NColumnShard::TInternalPathId> internalPathId)
-    : TBase(tablePath)
-    , PathId(NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId)) {
-    AFL_VERIFY(CheckTablePath(GetTablePath()));
+    : TBase(tablePath, NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId), "/.sys/primary_index_optimizer_stats",
+          "/.sys/store_primary_index_optimizer_stats")
+{
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
     const NReader::TReadDescription& readDescription, const bool /*withUncommitted*/, const bool isPlain) const {
     AFL_VERIFY(!isPlain);
     return std::make_unique<TConstructor>(context.GetPathIdTranslator(), context.GetEngine(), readDescription.GetTabletId(),
-        PathId.GetInternalPathId().GetRawValue() ? PathId.GetInternalPathId() : std::optional<NColumnShard::TInternalPathId>(),
-        readDescription.PKRangesFilter, readDescription.IsReverseSort());
+        GetTableFilterPathId(), readDescription.PKRangesFilter, readDescription.IsReverseSort());
 }
 
 std::shared_ptr<ISnapshotSchema> TAccessor::GetSnapshotSchemaOptional(

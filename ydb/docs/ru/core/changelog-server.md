@@ -9,7 +9,7 @@
 
 #### Функциональность
 
-* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md?version=v25.1) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](https://ydb.tech/docs/ru/recipes/vector-search?version=v25.1), а также примеры работы [на С++ и Python](https://ydb.tech/docs/ru/recipes/ydb-sdk/vector-search?version=v25.1). Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/index.md?version=v25.1). Внимание! После включения флага откат на предыдущие версии {{ ydb-short-name }} невозможен.
+* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md?version=v25.1) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](./recipes/vector-search?version=v25.1), а также примеры работы [на С++ и Python](./recipes/ydb-sdk/vector-search?version=v25.1). Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/index.md?version=v25.1). Внимание! После включения флага откат на предыдущие версии {{ ydb-short-name }} невозможен.
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка [консистентной асинхронной репликации](./concepts/async-replication.md?version=v25.1).
 * Поддержаны запросы [BATCH UPDATE](./yql/reference/syntax/batch-update?version=v25.1) и [BATCH DELETE](./yql/reference/syntax/batch-delete?version=v25.1), позволяющие изменять большие строковые таблицы вне транзакционных ограничений. Включается установкой флага `enable_batch_updates` в конфигурации кластера.
 * Добавлен [механизм конфигурации V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1), упрощающий развёртывание новых кластеров {{ ydb-short-name }} и дальнейшую работу с ними. [Сравнение](./devops/configuration-management/compare-configs?version=v25.1) механизмов конфигурации V1 и V2.
@@ -31,8 +31,8 @@
   * `HASH` — возможность задания пароля в зашифрованном виде;
   * `LOGIN` и `NOLOGIN` — разблокировка и блокировка пользователя.
 * Повышена безопасность учётных записей:
-  * [Добавлена](https://github.com/ydb-platform/ydb/pull/11963) [проверка сложности пароля](./reference/configuration/auth_config?version=v25.1#password-complexity) пользователя;
-  * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) [автоматическая блокировка пользователя](./reference/configuration/auth_config?version=v25.1#account-lockout) при исчерпании лимита попыток ввода пароля;
+  * [Добавлена](https://github.com/ydb-platform/ydb/pull/11963) [проверка сложности пароля](./reference/configuration/?version=v25.1#password-complexity) пользователя;
+  * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) [автоматическая блокировка пользователя](./reference/configuration/?version=v25.1#account-lockout) при исчерпании лимита попыток ввода пароля;
   * [Добавлена](https://github.com/ydb-platform/ydb/pull/12983) возможность самостоятельной смены пароля пользователем.
 * [Реализована](https://github.com/ydb-platform/ydb/issues/9748) возможность переключения функциональных флагов во время работы сервера {{ ydb-short-name }}. Флаги, для которых в [proto-файле](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) не указан параметр `(RequireRestart) = true`, будут применяться без рестарта кластера.
 * Теперь самые старые (а не новые) блокировки [меняются на полношардовые](https://github.com/ydb-platform/ydb/pull/11329) при превышении количества блокировок на шардах.
@@ -69,7 +69,7 @@
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6509) поддержка [свёртки констант](https://ru.wikipedia.org/wiki/%D0%A1%D0%B2%D1%91%D1%80%D1%82%D0%BA%D0%B0_%D0%BA%D0%BE%D0%BD%D1%81%D1%82%D0%B0%D0%BD%D1%82) в оптимизаторе запросов по умолчанию, что повышает производительность запросов за счёт вычисления константных выражений на этапе компиляции.
 * [Добавлен](https://github.com/ydb-platform/ydb/issues/6512) новый протокол гранулярного таймкаста, который позволит сократить время выполнения распределённых транзакций (замедление одного шарда не будет приводить к замедлению всех).
 * [Реализована](https://github.com/ydb-platform/ydb/issues/11561) функциональность сохранения состояния даташардов в памяти при перезапусках, что позволяет сохранить блокировки и повысить шансы на успешное выполнение транзакций. Это сокращает время выполнения длительных транзакций за счёт уменьшения числа повторных попыток.
-* [Реализована](https://github.com/ydb-platform/ydb/pull/15255) конвейерная обработка внутренних транзакций в [Node Broker](./concepts/glossary.md#node-broker?version=v25.1), что ускорило запуск динамических узлов в кластере {{ ydb-short-name }}.
+* [Реализована](https://github.com/ydb-platform/ydb/pull/15255) конвейерная обработка внутренних транзакций в [Node Broker](./concepts/glossary?version=v25.1#node-broker), что ускорило запуск динамических узлов в кластере {{ ydb-short-name }}.
 * [Улучшена](https://github.com/ydb-platform/ydb/pull/15607) устойчивость Node Broker к повышенной нагрузке со стороны узлов кластера.
 * [Включены](https://github.com/ydb-platform/ydb/pull/19440) по умолчанию выгружаемые B-Tree-индексы вместо невыгружаемых SST-индексов, что позволяет сократить потребление памяти при хранении «холодных» данных.
 * [Оптимизировано](https://github.com/ydb-platform/ydb/pull/15264) потребление памяти узлами хранения.

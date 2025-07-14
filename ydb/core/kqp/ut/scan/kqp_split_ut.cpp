@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             }
             if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvQueryResponse::EventType) {
                 auto& record = ev->Get<NKqp::TEvKqp::TEvQueryResponse>()->Record;
-                for (auto& resultSet : record.GetResponse().GetYdbResults()) {
+                for (auto& resultSet : record.GetRef().GetResponse().GetYdbResults()) {
                     for (auto& row : resultSet.rows()) {
                         collectedKeys->push_back(row.items(0).uint64_value());
                     }
@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             FROM AS_TABLE($data) a
             LEFT JOIN `/Root/Table1` b
             ON a.Key = b.Key
-            ORDER BY a.Key, b.Value ASC;
+            ORDER BY b.Value ASC;
         )");
 
         shim->ReadsReceived.WaitI();
@@ -1033,7 +1033,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         shim->AllowResults();
 
         s.AssertSuccess();
-        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,0,3,4,5,6");
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",0,1,2,3,4,5,6");
     }
 
     Y_UNIT_TEST(StreamLookupRetryAttemptForFinishedRead) {

@@ -2858,7 +2858,7 @@ private:
                 auto* w = transaction.MutableWriteId();
                 w->SetNodeId(SelfId().NodeId());
                 w->SetKeyId(*writeId);
-            } else if (Request.TopicOperations.HasKafkaOperations() && Request.TopicOperations.HasWriteOperations()) {
+            } else if (Request.TopicOperations.HasKafkaOperations() && t.hasWrite) {
                 auto* w = transaction.MutableWriteId();
                 w->SetKafkaTransaction(true);
                 w->MutableKafkaProducerInstanceId()->SetId(Request.TopicOperations.GetKafkaProducerInstanceId().Id);

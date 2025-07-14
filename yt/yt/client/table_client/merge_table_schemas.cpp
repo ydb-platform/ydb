@@ -26,7 +26,7 @@ TColumnSchema MakeOptionalSchema(const TColumnSchema& columnSchema)
     auto optionalType = New<TOptionalLogicalType>(columnSchema.LogicalType());
     auto resultSchema = TColumnSchema(
         columnSchema.Name(),
-        optionalType,
+        std::move(optionalType),
         columnSchema.SortOrder());
     resultSchema.SetStableName(columnSchema.StableName());
     return resultSchema;
@@ -113,7 +113,7 @@ TTableSchemaPtr MergeTableSchemas(
         // If the deleted columns completely match, then the table can be teleported.
         return {
             New<TTableSchema>(
-                resultColumns,
+                std::move(resultColumns),
                 firstSchema->IsStrict() && secondSchema->IsStrict(),
                 firstSchema->IsUniqueKeys() && secondSchema->IsUniqueKeys(),
                 ETableSchemaModification::None,
@@ -122,7 +122,7 @@ TTableSchemaPtr MergeTableSchemas(
     } else {
         return {
             New<TTableSchema>(
-                resultColumns,
+                std::move(resultColumns),
                 firstSchema->IsStrict() && secondSchema->IsStrict(),
                 firstSchema->IsUniqueKeys() && secondSchema->IsUniqueKeys())
         };

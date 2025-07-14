@@ -29,10 +29,10 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 81e2e1bd273033f7a382ceaf46d6ae84
+KEEP     COPYRIGHT_SERVICE_LABEL 646afa108cd24fdeffe95d41166efb64
 BELONGS ya.make
     License text:
-        // Copyright (C) 2016-2020 Martin Moene.
+        // Copyright (C) 2016-2025 Martin Moene.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00

@@ -12,6 +12,7 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
@@ -574,6 +575,11 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected) {
     }
 }
 
+size_t GetBenchmarkTableWidth() {
+    auto terminalWidth = GetTerminalWidth();
+    return terminalWidth ? *terminalWidth : 120;
+}
+
 void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resultSetIndex) {
     const auto& queryResult = RawResults.at(resultSetIndex);
     auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
@@ -661,7 +667,7 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resu
     if (!diffs.empty()) {
         TVector<TString> tableColums {"Line"};
         tableColums.insert(tableColums.end(), columns.cbegin(), columns.cend());
-        TPrettyTable table(tableColums);
+        TPrettyTable table(tableColums, TPrettyTableConfig().MaxWidth(GetBenchmarkTableWidth()));
         for (const auto& diffLine: diffs) {
             auto& row = table.AddRow();
             for (ui32 i = 0; i < diffLine.size(); ++i) {

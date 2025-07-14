@@ -224,16 +224,25 @@ namespace NSQLComplete {
 
         TMaybe<TLocalSyntaxContext::TFunction> FunctionMatch(
             const TCursorTokenContext& context, const TC3Candidates& candidates) const {
-            if (!AnyOf(candidates.Rules, RuleAdapted(IsLikelyFunctionStack))) {
+            const bool isAnyFunction = AnyOf(candidates.Rules, RuleAdapted(IsLikelyFunctionStack));
+            const bool isTableFunction = AnyOf(candidates.Rules, RuleAdapted(IsLikelyTableFunctionStack));
+            if (!isAnyFunction && !isTableFunction) {
                 return Nothing();
             }
 
             TLocalSyntaxContext::TFunction function;
+
             if (TMaybe<TRichParsedToken> begin;
                 (begin = context.MatchCursorPrefix({"ID_PLAIN", "NAMESPACE"})) ||
                 (begin = context.MatchCursorPrefix({"ID_PLAIN", "NAMESPACE", ""}))) {
                 function.Namespace = begin->Base->Content;
             }
+
+            function.ReturnType = ENodeKind::Any;
+            if (isTableFunction) {
+                function.ReturnType = ENodeKind::Table;
+            }
+
             return function;
         }
 
@@ -267,7 +276,7 @@ namespace NSQLComplete {
                 object.Kinds.emplace(EObjectKind::Table);
             }
 
-            if (object.Kinds.empty()) {
+            if (object.Kinds.empty() && !AnyOf(candidates.Rules, RuleAdapted(IsLikelyTableArgStack))) {
                 return Nothing();
             }
 
@@ -360,7 +369,8 @@ namespace NSQLComplete {
 
         TEditRange EditRange(const TRichParsedToken& token, const TCursor& cursor) const {
             size_t begin = token.Position;
-            if (token.Base->Name == "NOT_EQUALS2") {
+            if (token.Base->Name == "NOT_EQUALS2" ||
+                token.Base->Name == "ID_QUOTED") {
                 begin += 1;
             }
 

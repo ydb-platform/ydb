@@ -73,10 +73,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                         "ReadColumns": [
-                                                                            "q1",
-                                                                            "q2"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "q1 (-\u221e, +\u221e)",
                                                                             "q2 (-\u221e, +\u221e)"
                                                                         ],
@@ -134,10 +130,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                         "ReadColumns": [
-                                                                            "q1",
-                                                                            "q2"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "q1 (-\u221e, +\u221e)",
                                                                             "q2 (-\u221e, +\u221e)"
                                                                         ],

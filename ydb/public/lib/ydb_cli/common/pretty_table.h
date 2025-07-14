@@ -62,6 +62,12 @@ public:
             return *this;
         }
 
+        template <typename T>
+        TRow& WriteToLastColumn(const T& data) {
+            Y_ABORT_UNLESS(!Columns.empty());
+            return Column(Columns.size() - 1, data);
+        }
+
         inline TRow& FreeText(const TString& text) {
             Text = text;
             return *this;

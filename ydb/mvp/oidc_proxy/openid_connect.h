@@ -9,7 +9,7 @@
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
-#include <ydb/public/api/client/nc_private/iam/profile_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/profile_service.grpc.pb.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 

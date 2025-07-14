@@ -214,12 +214,9 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join4.test_plan/nt2",
                                                         "ReadColumns": [
+                                                            "id (-\u221e, +\u221e)",
                                                             "b1",
-                                                            "id",
                                                             "nt1_id"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "id (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",

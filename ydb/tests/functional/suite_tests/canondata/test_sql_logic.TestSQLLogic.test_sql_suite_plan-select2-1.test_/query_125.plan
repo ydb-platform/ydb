@@ -245,9 +245,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/sqllogictest_select2-1.test_plan/t1",
                                                         "ReadColumns": [
-                                                            "c"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "a (-\u221e, +\u221e)",
                                                             "b (-\u221e, +\u221e)",
                                                             "c (-\u221e, +\u221e)",

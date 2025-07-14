@@ -39,7 +39,7 @@ class MultidictImplementation:
     @cached_property
     def tag(self) -> str:
         """Return a text representation of the pure-python attribute."""
-        return "pure-python" if self.is_pure_python else "c-extension"
+        return "py" if self.is_pure_python else "c"
 
     @cached_property
     def imported_module(self) -> ModuleType:
@@ -49,7 +49,7 @@ class MultidictImplementation:
 
     def __str__(self) -> str:
         """Render the implementation facade instance as a string."""
-        return f"{self.tag}-module"
+        return self.tag
 
 
 @pytest.fixture(
@@ -79,7 +79,7 @@ def multidict_module(
 @pytest.fixture(
     scope="session",
     params=("MultiDict", "CIMultiDict"),
-    ids=("case-sensitive", "case-insensitive"),
+    ids=("cs", "ci"),
 )
 def any_multidict_class_name(request: pytest.FixtureRequest) -> str:
     """Return a class name of a mutable multidict implementation."""

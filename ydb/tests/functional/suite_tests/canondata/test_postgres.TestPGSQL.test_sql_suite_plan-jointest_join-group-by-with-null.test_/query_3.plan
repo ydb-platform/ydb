@@ -202,9 +202,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
                                                         "ReadColumns": [
-                                                            "q2"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "q1 (-\u221e, +\u221e)",
                                                             "q2 (-\u221e, +\u221e)"
                                                         ],

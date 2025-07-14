@@ -55,7 +55,7 @@ BELONGS ya.make
 KEEP     BSL-1.0              73a2516db620f6413502ee77bdb4af88
 BELONGS ya.make
     License text:
-        *expected lite* is distributed under the [Boost Software License](https://github.com/martinmoene/XXXX-lite/blob/master/LICENSE.txt).
+        *expected lite* is distributed under the [Boost Software License](LICENSE.txt).
     Scancode info:
         Original SPDX id: BSL-1.0
         Score           : 100.00

@@ -351,14 +351,14 @@ namespace NKikimr::NYaml {
             }
             if (typesCount == 1) {
                 TString currentDiskType = hasRot ? "ROT" : (hasSsd ? "SSD" : "NVME");
-                if (diskType.empty()) { 
+                if (diskType.empty()) {
                     diskType = currentDiskType;
                 } else if (diskType != currentDiskType) {
                     return TString();
                 }
             }
         }
-        return diskType; 
+        return diskType;
     }
 
     void PrepareActorSystemConfig(NKikimrConfig::TAppConfig& config) {
@@ -639,6 +639,20 @@ namespace NKikimr::NYaml {
                     }
                     if (drive.HasSlotSizeInUnits()) {
                         drive.MutablePDiskConfig()->SetSlotSizeInUnits(drive.GetSlotSizeInUnits());
+                    }
+                }
+
+                if (hostConfig.HasInferPDiskSlotCountFromUnitSize()) {
+                    auto unitSizeByType = hostConfig.GetInferPDiskSlotCountFromUnitSize();
+                    for(auto& drive : *hostConfig.MutableDrive()) {
+                        if (drive.HasInferPDiskSlotCountFromUnitSize()) {
+                            continue;
+                        }
+                        if (drive.GetType() == "ROT" && unitSizeByType.HasRot()) {
+                            drive.SetInferPDiskSlotCountFromUnitSize(unitSizeByType.GetRot());
+                        } else if (auto& type = drive.GetType(); (type == "SSD" || type == "NVME") && unitSizeByType.HasSsd()) {
+                            drive.SetInferPDiskSlotCountFromUnitSize(unitSizeByType.GetSsd());
+                        }
                     }
                 }
             }

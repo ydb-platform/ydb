@@ -14,7 +14,7 @@ namespace {
 using NYql::TChunkedBuffer;
 
 TChunkedBuffer MakeChunkedBufferAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
-    MKQLArrowUntrack(owner->data(), owner->capacity());
+    MKQLArrowUntrack(owner->data());
     return TChunkedBuffer(TStringBuf{data, size}, owner);
 }
 
@@ -374,7 +374,7 @@ private:
             trimmedOffsetBufferData[i] = offsetData[i] - offsetData[0];
         }
 
-        MKQLArrowUntrack(data.buffers[1]->data(), data.buffers[1]->capacity());
+        MKQLArrowUntrack(data.buffers[1]->data());
         dst.Append(MakeChunkedBufferAndUntrack(std::move(trimmedOffsetBuffer), reinterpret_cast<const char*>(trimmedOffsetBufferData), offsetsSize));
 
         const char* mainData = reinterpret_cast<const char*>(data.buffers[2]->data() + offsetData[0]);

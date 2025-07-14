@@ -83,7 +83,7 @@ enum class ETransactionType {
     StockLevel = 4
 };
 
-constexpr const size_t TUI_LOG_LINES = 10;
+constexpr const size_t TUI_LOG_LINES = 1000;
 
 // lower limit, real number is higher
 constexpr const size_t WAREHOUSES_PER_CPU_CORE = 1500;

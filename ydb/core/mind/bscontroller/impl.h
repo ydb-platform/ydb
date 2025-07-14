@@ -344,6 +344,7 @@ public:
         bool HasExpectedSlotCount = false;
         ui32 NumActiveSlots = 0; // sum of owners weights allocated on this PDisk
         ui32 SlotSizeInUnits = 0;
+        ui64 InferPDiskSlotCountFromUnitSize = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
 
         bool Operational = false; // set to true when both containing node is connected and Operational is reported in Metrics
@@ -382,7 +383,8 @@ public:
                     Table::LastSeenPath,
                     Table::DecommitStatus,
                     Table::ShredComplete,
-                    Table::MaintenanceStatus
+                    Table::MaintenanceStatus,
+                    Table::InferPDiskSlotCountFromUnitSize
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -399,7 +401,8 @@ public:
                     &TPDiskInfo::LastSeenPath,
                     &TPDiskInfo::DecommitStatus,
                     &TPDiskInfo::ShredComplete,
-                    &TPDiskInfo::MaintenanceStatus
+                    &TPDiskInfo::MaintenanceStatus,
+                    &TPDiskInfo::InferPDiskSlotCountFromUnitSize
                 );
             callback(&adapter);
         }
@@ -423,7 +426,8 @@ public:
                    const TString& lastSeenPath,
                    ui32 staticSlotUsage,
                    bool shredComplete,
-                   NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus)
+                   NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus,
+                   ui64 inferPDiskSlotCountFromUnitSize)
             : HostId(hostId)
             , Path(path)
             , Kind(kind)
@@ -434,6 +438,7 @@ public:
             , PDiskConfig(std::move(pdiskConfig))
             , ShredComplete(shredComplete)
             , BoxId(boxId)
+            , InferPDiskSlotCountFromUnitSize(inferPDiskSlotCountFromUnitSize)
             , Status(status)
             , StatusTimestamp(statusTimestamp)
             , DecommitStatus(decommitStatus)
@@ -994,6 +999,7 @@ public:
             Table::ReadCentric::Type ReadCentric;
             Table::Kind::Type Kind;
             TMaybe<Table::PDiskConfig::Type> PDiskConfig;
+            Table::InferPDiskSlotCountFromUnitSize::Type InferPDiskSlotCountFromUnitSize;
 
             template<typename T>
             static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1002,13 +1008,15 @@ public:
                         Table::SharedWithOs,
                         Table::ReadCentric,
                         Table::Kind,
-                        Table::PDiskConfig
+                        Table::PDiskConfig,
+                        Table::InferPDiskSlotCountFromUnitSize
                     > adapter(
                         &TDriveInfo::Type,
                         &TDriveInfo::SharedWithOs,
                         &TDriveInfo::ReadCentric,
                         &TDriveInfo::Kind,
-                        &TDriveInfo::PDiskConfig
+                        &TDriveInfo::PDiskConfig,
+                        &TDriveInfo::InferPDiskSlotCountFromUnitSize
                     );
                 callback(&adapter);
             }
@@ -2430,6 +2438,7 @@ public:
         const Schema::PDisk::Guid::Type Guid;
         Schema::PDisk::PDiskConfig::Type PDiskConfig;
         ui32 ExpectedSlotCount = 0;
+        ui64 InferPDiskSlotCountFromUnitSize = 0;
 
         // runtime info
         ui32 StaticSlotUsage = 0;
@@ -2442,6 +2451,7 @@ public:
             , Path(pdisk.GetPath())
             , Category(pdisk.GetPDiskCategory())
             , Guid(pdisk.GetPDiskGuid())
+            , InferPDiskSlotCountFromUnitSize(pdisk.GetInferPDiskSlotCountFromUnitSize())
         {
             if (pdisk.HasPDiskConfig()) {
                 const auto& cfg = pdisk.GetPDiskConfig();

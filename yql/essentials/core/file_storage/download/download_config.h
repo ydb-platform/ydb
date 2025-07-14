@@ -2,8 +2,6 @@
 
 #include <util/generic/strbuf.h>
 
-#include <vector>
-
 namespace google::protobuf {
     class Message;
 }

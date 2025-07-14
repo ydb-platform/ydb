@@ -46,6 +46,8 @@ public:
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, Static> KqpPushOlapProcess;
 
+    NCommon::TConfSetting<bool, Static> KqpForceImmediateEffectsExecution;
+
     /* Compile time */
     NCommon::TConfSetting<ui64, Static> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<TString, Static> _DefaultCluster;
@@ -57,6 +59,7 @@ public:
     NCommon::TConfSetting<ui64, Static> EnableSpillingNodes;
     NCommon::TConfSetting<TString, Static> OverridePlanner;
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;

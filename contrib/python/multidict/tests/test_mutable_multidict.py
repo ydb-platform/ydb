@@ -34,8 +34,7 @@ class TestMutableMultiDict:
         d = case_sensitive_multidict_class([("key", "one"), ("key", "two")])
 
         expected = (
-            f"<{case_sensitive_multidict_class.__name__}"
-            "('key': 'one', 'key': 'two')>"
+            f"<{case_sensitive_multidict_class.__name__}('key': 'one', 'key': 'two')>"
         )
         assert str(d) == expected
 
@@ -172,6 +171,21 @@ class TestMutableMultiDict:
         d = case_sensitive_multidict_class()
         d.add("key", "val1")
         d.add("key", "val2")
+
+        assert ("key", "val2") == d.popitem()
+        assert len(d) == 1
+        assert [("key", "val1")] == list(d.items())
+
+    def test_popitem2(
+        self,
+        case_sensitive_multidict_class: type[CIMultiDict[str]],
+    ) -> None:
+        d = case_sensitive_multidict_class()
+        d.add("key", "val1")
+        d.add("key", "val2")
+        d.add("key2", "val3")
+
+        del d["key2"]  # make dummy at the end
 
         assert ("key", "val2") == d.popitem()
         assert [("key", "val1")] == list(d.items())
@@ -365,6 +379,56 @@ class TestMutableMultiDict:
         with pytest.raises(TypeError):
             d.update("foo", "bar")  # type: ignore[arg-type, call-arg]
 
+    def test_repr_with_dummy(
+        self, case_sensitive_multidict_class: type[MultiDict[int]]
+    ) -> None:
+        d = case_sensitive_multidict_class({"a": 1, "b": 2, "c": 3})
+        cls = d.__class__.__name__
+        del d["b"]  # make a dummy entry
+        assert repr(d) == f"<{cls}('a': 1, 'c': 3)>"
+
+    def test_items_repr_with_dummy(
+        self, case_sensitive_multidict_class: type[MultiDict[int]]
+    ) -> None:
+        d = case_sensitive_multidict_class({"a": 1, "b": 2, "c": 3})
+        del d["b"]  # make a dummy entry
+        cls = d.items().__class__.__name__
+        assert repr(d.items()) == f"<{cls}('a': 1, 'c': 3)>"
+
+    def test_keys_repr_with_dummy(
+        self, case_sensitive_multidict_class: type[MultiDict[int]]
+    ) -> None:
+        d = case_sensitive_multidict_class({"a": 1, "b": 2, "c": 3})
+        del d["b"]  # make a dummy entry
+        cls = d.keys().__class__.__name__
+        assert repr(d.keys()) == f"<{cls}('a', 'c')>"
+
+    def test_values_repr_with_dummy(
+        self, case_sensitive_multidict_class: type[MultiDict[int]]
+    ) -> None:
+        d = case_sensitive_multidict_class({"a": 1, "b": 2, "c": 3})
+        del d["b"]  # make a dummy entry
+        cls = d.values().__class__.__name__
+        assert repr(d.values()) == f"<{cls}(1, 3)>"
+
+    def test_huge_md(
+        self,
+        case_sensitive_multidict_class: type[MultiDict[int]],
+    ) -> None:
+        size = 1 << 16
+        d = case_sensitive_multidict_class((str(i), i) for i in range(size))
+        assert d[str(size // 2)] == size // 2
+
+    def test_create_from_proxy(
+        self,
+        case_sensitive_multidict_class: type[MultiDict[int]],
+        case_sensitive_multidict_proxy_class: type[MultiDictProxy[int]],
+    ) -> None:
+        d = case_sensitive_multidict_class({"a": 1, "b": 2, "c": 3})
+        p = case_sensitive_multidict_proxy_class(d)
+        d2 = case_sensitive_multidict_class(p)
+        assert d2 == d
+
 
 class TestCIMutableMultiDict:
     def test_getall(
@@ -429,8 +493,7 @@ class TestCIMutableMultiDict:
         d = case_insensitive_multidict_class([("KEY", "one"), ("KEY", "two")])
 
         expected = (
-            f"<{case_insensitive_multidict_class.__name__}"
-            "('KEY': 'one', 'KEY': 'two')>"
+            f"<{case_insensitive_multidict_class.__name__}('KEY': 'one', 'KEY': 'two')>"
         )
         assert str(d) == expected
 
@@ -730,3 +793,23 @@ class TestCIMutableMultiDict:
 
         k, v = d.popitem()
         assert type(k) is case_insensitive_str_class
+
+    def test_issue_1195(
+        self, case_insensitive_multidict_class: type[CIMultiDict[bytes]]
+    ) -> None:
+        md = case_insensitive_multidict_class(
+            {
+                "User-Agent": b"Bacon/1.0",
+                "Cookie": b"valued-visitor=yes;foo=bar",
+                "X-Bar": b"Foo",
+                "X-Foo": b"Bar",
+                "Referer": b"https://httpie.org/",
+            }
+        )
+
+        md2 = md.copy()
+
+        md.popone("User-Agent")
+        assert md.keys() == md2.keys() - {"User-Agent"}
+        md.update([("User-Agent", b"Bacon/1.0")])
+        assert md.keys() == md2.keys()

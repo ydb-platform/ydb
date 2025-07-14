@@ -911,7 +911,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(SelectOrderByExpressionAsc) {
         NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) % cast(i.subkey as uint32) asc");
-        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"%MayWarn\""));
@@ -1862,16 +1862,26 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         settings.LangVer = 202503;
 
         NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input INTERSECT SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:70: Error: Multiple usage of INTERSECT and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Intersect"]);
 
         res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input INTERSECT ALL SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:80: Error: Multiple usage of INTERSECT and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Intersect"]);
 
         res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input UNION SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:70: Error: Simultaneous usage of UNION, INTERSECT, and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Intersect"), 0}, {TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Intersect"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
     // EXCEPT
@@ -1936,16 +1946,26 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         settings.LangVer = 202503;
 
         NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input EXCEPT SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:67: Error: Multiple usage of INTERSECT and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Except"]);
 
         res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input EXCEPT ALL SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:74: Error: Multiple usage of INTERSECT and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Except"]);
 
         res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input UNION SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:67: Error: Simultaneous usage of UNION, INTERSECT, and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Except"), 0}, {TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Except"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
 

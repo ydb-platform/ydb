@@ -24,6 +24,7 @@
    * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).
 {% endif %}
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
+* `BARRIERS_INTERVAL` — [barrier](../../../../concepts/cdc.md#barriers) emission interval. The value type is `Interval`. Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
 * `TOPIC_MIN_ACTIVE_PARTITIONS`: [The number of topic partitions](../../../../concepts/cdc.md#topic-partitions). By default, the number of topic partitions is equal to the number of table partitions.
 * `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc.md#initial-scan). Disabled by default.
@@ -57,6 +58,17 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
     VIRTUAL_TIMESTAMPS = TRUE
+);
+```
+
+The example of creating a changefeed with virtual timestamps and barriers every 10 seconds:
+
+```yql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    VIRTUAL_TIMESTAMPS = TRUE,
+    BARRIERS_INTERVAL = Interval('PT10S')
 );
 ```
 

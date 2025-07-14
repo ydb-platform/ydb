@@ -44,7 +44,6 @@ static const TString invalidStoreSchema = R"(
     }
 )";
 
-static const TString defaultTableName = "ColumnTable";
 static const TString defaultTableSchema = R"(
     Name: "ColumnTable"
     ColumnShardCount: 1

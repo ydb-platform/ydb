@@ -30,10 +30,40 @@ public:
 
 class TVersionedIndex {
 private:
+
+    class TSchemaInfoByVersion {
+    private:
+        YDB_READONLY_DEF(ISnapshotSchema::TPtr, Schema);
+        YDB_READONLY_DEF(std::optional<ui32>, IgnoreToVersion);
+
+    public:
+        TSchemaInfoByVersion(const ISnapshotSchema::TPtr& schema)
+            : Schema(schema) {
+        }
+        void AddIgnoreSchemaVersionTo(const ui64 to) {
+            AFL_VERIFY(!IgnoreToVersion);
+            IgnoreToVersion = to;
+        }
+
+        std::optional<ui64> ExtractIgnoreSchemaVersionFor(const ui64 from) {
+            if (!IgnoreToVersion) {
+                return std::nullopt;
+            }
+            auto result = IgnoreToVersion;
+            IgnoreToVersion.reset();
+            return result;
+        }
+
+        const ISnapshotSchema* operator->() const {
+            return Schema.get();
+        }
+
+    };
+
     THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
     std::shared_ptr<arrow::Schema> PrimaryKey;
-    std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
+    std::map<ui64, TSchemaInfoByVersion> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
     ISnapshotSchema::TPtr SchemeForActualization;
@@ -43,21 +73,22 @@ private:
     TVersionedIndex& operator=(const TVersionedIndex&) = delete;
 
 public:
+    TVersionedIndex() = default;
+
     void AddIgnoreSchemaVersionTo(const ui64 from, const ui64 to) {
-        AFL_VERIFY(IgnoreSchemaVersionTo.emplace(from, to).second);
+        auto it = SnapshotByVersion.find(from);
+        AFL_VERIFY(it != SnapshotByVersion.end());
+        it->second.AddIgnoreSchemaVersionTo(to);
     }
 
     std::optional<ui64> ExtractIgnoreSchemaVersionFor(const ui64 from) {
-        auto it = IgnoreSchemaVersionTo.find(from);
-        if (it == IgnoreSchemaVersionTo.end()) {
+        auto it = SnapshotByVersion.find(from);
+        if (it == SnapshotByVersion.end()) {
             return std::nullopt;
         }
-        const ui64 result = it->second;
-        IgnoreSchemaVersionTo.erase(it);
-        return result;
+        return it->second.ExtractIgnoreSchemaVersionFor();
     }
 
-    TVersionedIndex() = default;
     std::shared_ptr<const TVersionedIndex> DeepCopy() {
         return std::shared_ptr<const TVersionedIndex>(new TVersionedIndex(*this));
     }
@@ -71,7 +102,7 @@ public:
         SnapshotByVersion.erase(it);
     }
 
-    const std::map<ui64, ISnapshotSchema::TPtr>& GetSnapshotByVersions() const {
+    const std::map<ui64, TSchemaInfoByVersion>& GetSnapshotByVersions() const {
         return SnapshotByVersion;
     }
 

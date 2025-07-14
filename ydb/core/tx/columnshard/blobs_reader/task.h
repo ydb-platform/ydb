@@ -127,6 +127,8 @@ public:
         return result;
     }
 
+    TCompositeReadBlobs() = default;
+
     ~TCompositeReadBlobs() {
         AFL_VERIFY(IsEmpty());
     }

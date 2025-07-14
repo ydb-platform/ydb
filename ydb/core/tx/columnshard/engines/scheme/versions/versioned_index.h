@@ -30,7 +30,6 @@ public:
 
 class TVersionedIndex {
 private:
-
     class TSchemaInfoByVersion {
     private:
         YDB_READONLY_DEF(ISnapshotSchema::TPtr, Schema);
@@ -57,7 +56,6 @@ private:
         const ISnapshotSchema* operator->() const {
             return Schema.get();
         }
-
     };
 
     THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;

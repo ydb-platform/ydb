@@ -12,6 +12,8 @@
 
 namespace NKafka {
 
+TActorId MakeKafkaDiscoveryCacheID();
+
 class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
 public:
     TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message,

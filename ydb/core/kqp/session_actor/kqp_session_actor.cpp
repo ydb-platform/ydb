@@ -532,12 +532,25 @@ public:
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
-        const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
-        for (const auto& topic : operations.GetTopics()) {
-            auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
+        if (QueryState->HasTopicOperations()) {
+            const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
+            for (const auto& topic : operations.GetTopics()) {
+                auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
 
-            for (const auto& partition : topic.partitions()) {
-                if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, partition.partition_id())) {
+                for (const auto& partition : topic.partitions()) {
+                    if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, partition.partition_id())) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if (QueryState->HasKafkaApiOperations()) {
+            const NKikimrKqp::TKafkaApiOperationsRequest& operations = QueryState->GetKafkaApiOperationsFromRequest();
+            for (const auto& topicAndPartition : operations.GetPartitionsInTxn()) {
+                auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topicAndPartition.GetTopicPath()));
+
+                if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, topicAndPartition.GetPartitionId())) {
                     return false;
                 }
             }
@@ -551,7 +564,7 @@ public:
             return;
         }
 
-        QueryState->AddOffsetsToTransaction();
+        QueryState->FillTopicOperations();
 
         if (!AreAllTheTopicsAndPartitionsKnown()) {
             auto navigate = QueryState->BuildSchemeCacheNavigate();
@@ -565,7 +578,7 @@ public:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
             Become(&TKqpSessionActor::ExecuteState);
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
@@ -2153,7 +2166,7 @@ public:
         }
 
         if (replyTopicOperations) {
-            if (HasTopicWriteId()) {
+            if (HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
                 auto* w = response->MutableTopicOperations();
                 auto* writeId = w->MutableWriteId();
                 writeId->SetNodeId(SelfId().NodeId());
@@ -2936,7 +2949,7 @@ private:
 
         QueryState->TxCtx->TopicOperations.CacheSchemeCacheNavigate(response->ResultSet);
 
-        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
         }
@@ -2961,7 +2974,11 @@ private:
         return QueryState->TxCtx->TopicOperations.HasWriteOperations();
     }
 
-    bool HasTopicWriteId() const {
+    bool HasKafkaApiWriteOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasKafkaOperations() && QueryState->TxCtx->TopicOperations.HasWriteOperations();
+    }
+
+    bool HasTopicApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteId();
     }
 

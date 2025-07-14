@@ -3,8 +3,10 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/base/events.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include "kafka_messages.h"
+#include "kafka_producer_instance_id.h"
 #include <ydb/library/aclib/aclib.h>
 #include "actors/actors.h"
 
@@ -225,6 +227,17 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     TVector<TPartitionOffsetsInfo> Partitions;
 };
 
+struct PartitionConsumerOffset {
+    ui64 PartitionIndex;
+    ui64 Offset;
+    std::optional<TString> Metadata = std::nullopt;
+
+    PartitionConsumerOffset(ui64 partitionIndex, ui64 offset, std::optional<TString> metadata = std::nullopt) :
+                                                PartitionIndex(partitionIndex),
+                                                Offset(offset),
+                                                Metadata(metadata) {}
+};
+
 struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse>
                                   , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
@@ -233,7 +246,8 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
 
     TString TopicName;
     EKafkaErrors Status;
-    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
+
+    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, PartitionConsumerOffset>>> PartitionIdToOffsets;
 };
 
 struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse>
@@ -285,7 +299,7 @@ struct TEvTopicDescribeResponse : public NActors::TEventLocal<TEvTopicDescribeRe
     EKafkaErrors Status;
     TString Message;
     Ydb::Topic::DescribeTopicResult Response;
-
+    TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
 };
 
 struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest, EvAddOffsetsToTxnRequest> {
@@ -329,27 +343,23 @@ struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> 
     TActorId ConnectionId;
     TString DatabasePath;
 };
-struct TProducerInstanceId {
-    i64 Id;
-    i32 Epoch;
 
-    auto operator<=>(TProducerInstanceId const&) const = default;
-};
-
-/* 
+/*
 Event sent from TIintProducerActor to TKafkaTransactionRouter to notify that producer id will be obtained by client
  */
 struct TEvSaveTxnProducerRequest : public NActors::TEventLocal<TEvSaveTxnProducerRequest, EvSaveTxnProducerRequest> {
-    TEvSaveTxnProducerRequest(const TString& transactionalId, const TProducerInstanceId& producerState) :
+    TEvSaveTxnProducerRequest(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, ui64 txnTimeoutMs) :
         TransactionalId(transactionalId),
-        ProducerState(producerState)
+        ProducerInstanceId(producerInstanceId),
+        TxnTimeoutMs(txnTimeoutMs)
     {}
 
     const TString TransactionalId;
-    const TProducerInstanceId ProducerState;
+    const TProducerInstanceId ProducerInstanceId;
+    const ui64 TxnTimeoutMs;
 };
 
-/* 
+/*
 Event sent from TKafkaTransactionRouter to TIintProducerActor to notify that new transactional id was succesfully saved
 
 OK if this transactional producer was not found or older version was found

@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -33,7 +34,8 @@ class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor>
     enum ETopicStatus {
         OK,
         NOT_FOUND,
-        UNAUTHORIZED
+        UNAUTHORIZED,
+        PRODUCER_FENCED
     };
 
 public:
@@ -126,8 +128,7 @@ private:
     void ProcessInitializationRequests(const TActorContext& ctx);
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
-
-    std::pair<ETopicStatus, TActorId> PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx);
+    std::pair<ETopicStatus, TActorId> PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx);
 
     TString LogPrefix();
     void LogEvent(IEventHandle& ev);
@@ -188,9 +189,17 @@ private:
     struct TWriterInfo {
         TActorId ActorId;
         TInstant LastAccessed;
+        // identifies the transactional producer (if transactional)
+        TProducerInstanceId ProducerInstanceId;
     };
     // TopicPath -> PartitionId -> TPartitionWriter
-    std::unordered_map<TString, std::unordered_map<ui32, TWriterInfo>> Writers;
+    std::unordered_map<TString, std::unordered_map<ui32, TWriterInfo>> NonTransactionalWriters;
+    std::unordered_map<TTopicPartition, TWriterInfo, TTopicPartitionHashFn> TransactionalWriters;
+
+    void CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TActorContext& ctx);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
 };
 
 }

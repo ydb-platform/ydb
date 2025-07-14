@@ -27,6 +27,7 @@ namespace NKikimr::NPQ {
 
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
+static const ui64 MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER = std::numeric_limits<i32>::max() / 2;
 static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
@@ -248,6 +249,54 @@ void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ct
     HandlePendingRequests(ctx);
 }
 
+ui64 CalculateReplyOffset(bool already, bool kafkaDeduplication, ui64 maxOffset, ui64 offset, ui64 maxSeqNo, ui64 seqNo) {
+    if (!already) {
+        // If it's not a duplicate message, return its offset.
+        return offset;
+    }
+
+    if (!kafkaDeduplication) {
+        // If it's a duplicate message, return the maxOffset, if we're not dealing with Kafka protocol.
+        return maxOffset;
+    }
+
+    // At this point we're working with Kafka protocol deduplication.
+    // SeqNos in Kafka are of int32 type and may overflow, i.e. the next seqno after int32max is 0.
+
+    // Try to return offset of the message, given the maxOffset, maxSeqNo and seqNo.
+    // The basic formula is (maxOffset - (maxSeqNo - seqNo)), but we need to handle various overflows.
+
+    if (maxSeqNo < seqNo) {
+        maxSeqNo += 1ul << 31;
+    }
+
+    auto diff = maxSeqNo - seqNo;
+
+    if (maxOffset < diff) {
+        return 0;
+    }
+
+    return maxOffset - diff;
+}
+
+// IsDuplicate is only needed for Kafka protocol deduplication.
+// baseSequence field in Kafka protocol has type int32 and the numbers loop back from the maximum possible value back to 0.
+// I.e. the next seqno after int32max is 0.
+// To decide if we got a duplicate seqno or an out of order seqno,
+// we are comparing the difference between maxSeqNo and seqNo with MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER.
+// The value of MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER is half of the int32 range.
+bool IsDuplicate(ui64 maxSeqNo, ui64 seqNo) {
+    if (maxSeqNo < seqNo) {
+        maxSeqNo += 1ul << 31;
+    }
+    return maxSeqNo - seqNo < MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER;
+}
+
+// InSequence is only needed for Kafka protocol deduplication.
+bool InSequence(ui64 maxSeqNo, ui64 seqNo) {
+    return (maxSeqNo + 1 == seqNo) || (maxSeqNo == std::numeric_limits<i32>::max() && seqNo == 0);
+}
+
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
     const auto now = ctx.Now();
@@ -265,6 +314,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             const ui64& seqNo = writeResponse.Msg.SeqNo;
             const ui16& partNo = writeResponse.Msg.PartNo;
             const ui16& totalParts = writeResponse.Msg.TotalParts;
+            const TMaybe<i16>& producerEpoch = writeResponse.Msg.ProducerEpoch;
             const TMaybe<ui64>& wrOffset = writeResponse.Offset;
 
             bool already = false;
@@ -278,9 +328,13 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
                 maxSeqNo = std::max(it->second.SeqNo, writeResponse.InitialSeqNo.value_or(0));
                 maxOffset = it->second.Offset;
-                if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
-                    already = true;
-                }
+                already = maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication ||
+                    (
+                        writeResponse.Msg.EnableKafkaDeduplication &&
+                        writeResponse.Msg.ProducerEpoch.Defined() &&
+                        writeResponse.Msg.ProducerEpoch == it->second.ProducerEpoch &&
+                        IsDuplicate(maxSeqNo, seqNo)
+                    );
             } else if (writeResponse.InitialSeqNo) {
                 maxSeqNo = writeResponse.InitialSeqNo.value();
                 if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
@@ -299,20 +353,23 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
                     Y_ABORT_UNLESS(!writeResponse.Msg.HeartbeatVersion);
                     TabletCounters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
-                    SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp);
+                    SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp, producerEpoch);
                 } else if (const auto& hbVersion = writeResponse.Msg.HeartbeatVersion) {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(
-                        seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}
-                    ));
+                        seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}, producerEpoch));
                 } else {
-                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(seqNo, offset, CurrentTimestamp));
+                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(
+                        seqNo, offset, CurrentTimestamp, producerEpoch));
                 }
 
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_OK].Increment(1);
             }
+
+            ui64 replyOffset = CalculateReplyOffset(already, writeResponse.Msg.EnableKafkaDeduplication, maxOffset, offset, maxSeqNo, seqNo);
+
             ReplyWrite(
                 ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
-                already ? maxOffset : offset, CurrentTimestamp, already, maxSeqNo,
+                replyOffset, CurrentTimestamp, already, maxSeqNo,
                 PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime, response.Span
             );
 
@@ -326,8 +383,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (PartitionWriteQuotaWaitCounter && !writeResponse.Internal) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
-            if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
+            if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion) {
                 ++offset;
+            }
         } else if (response.IsOwnership()) {
             const auto& r = response.GetOwnership();
             const TString& ownerCookie = r.OwnerCookie;
@@ -1162,7 +1220,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 poffset = p.Offset ? *p.Offset : curOffset;
+    ui64 poffset = p.Offset.GetOrElse(curOffset);
 
     PQ_LOG_T("Topic '" << TopicName() << "' partition " << Partition
             << " process write for '" << EscapeC(p.Msg.SourceId) << "'"
@@ -1170,11 +1228,62 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " SeqNo=" << p.Msg.SeqNo
             << " LocalSeqNo=" << sourceId.SeqNo()
             << " InitialSeqNo=" << p.InitialSeqNo
+            << " EnableKafkaDeduplication=" << p.Msg.EnableKafkaDeduplication
+            << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
 
-    if (!p.Msg.DisableDeduplication
-        && ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo)
-        || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))) {
+    if (p.Msg.EnableKafkaDeduplication &&
+        sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined() &&
+        p.Msg.ProducerEpoch.Defined()
+    ) {
+        auto WriteError = [this, &ctx, &p](NPersQueue::NErrorCode::EErrorCode errorCode, TStringBuilder message) {
+            CancelOneWriteOnWrite(ctx, message, p, errorCode);
+        };
+
+        auto lastEpoch = *sourceId.ProducerEpoch().value();
+        auto messageEpoch = *p.Msg.ProducerEpoch;
+        auto lastSeqNo = *sourceId.SeqNo();
+        auto messageSeqNo = p.Msg.SeqNo;
+
+        if (lastEpoch > messageEpoch) {
+            // INVALID_PRODUCER_EPOCH
+            WriteError(
+                NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH,
+                TStringBuilder() << "Epoch of producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                 << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " is " << messageEpoch
+                                 << ", which is smaller than the last seen epoch " << lastEpoch);
+            return false;
+        } else if (lastEpoch < messageEpoch) {
+            if (messageSeqNo != 0) {
+                // OUT_OF_ORDER_SEQUENCE_NUMBER
+                WriteError(
+                    NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                    TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                     << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": "
+                                     << "expected 0, got " << messageSeqNo);
+                return false;
+            }
+        } else if (InSequence(lastSeqNo, messageSeqNo)) {
+            // Continue processing the message.
+        } else if (IsDuplicate(lastSeqNo, messageSeqNo)) {
+            // "DUPLICATE_SEQUENCE_NUMBER". Kafka sends successful answer in response
+            // to requests that exactly match some of the last 5 batches (that may contain multiple records each).
+
+            return true;
+        } else {
+            // OUT_OF_ORDER_SEQUENCE_NUMBER
+            WriteError(
+                NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                    << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": " << messageSeqNo << " (incoming seq. number), "
+                                    << lastSeqNo << " (current end sequence number)");
+            return false;
+        }
+    }
+
+    if (!p.Msg.DisableDeduplication &&
+        ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
+    ) {
         if (poffset >= curOffset) {
             PQ_LOG_D("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)
@@ -1386,7 +1495,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 << " NewHead: " << NewHead
         );
 
-        sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp);
+        sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp, p.Msg.ProducerEpoch);
 
         ++curOffset;
         PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);

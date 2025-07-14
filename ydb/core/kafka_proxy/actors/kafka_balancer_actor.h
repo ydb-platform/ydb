@@ -3,7 +3,7 @@
 #include "actors.h"
 #include "../kafka_consumer_groups_metadata_initializers.h"
 #include "../kafka_consumer_members_metadata_initializers.h"
-#include "../kqp_balance_transaction.h"
+#include "../kqp_helper.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
@@ -143,7 +143,7 @@ public:
         InstanceId = JoinGroupRequestData->GroupInstanceId.value_or("");
         MemberId = JoinGroupRequestData->MemberId.value_or("");
 
-        KAFKA_LOG_ERROR(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
+        KAFKA_LOG_D(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
 
         if (JoinGroupRequestData->SessionTimeoutMs) {
             SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;

@@ -56,6 +56,7 @@ void TKafkaDescribeTopicActor::SendResult(const EKafkaErrors status, const TStri
     if (status == EKafkaErrors::NONE_ERROR) {
         const auto* protoResponse = dynamic_cast<const Ydb::Topic::DescribeTopicResult*>(&result);
         response->Response = *protoResponse;
+        response->PQGroupInfo = PQGroupInfo;
     }
     TBase::Send(Requester, response.Release());
     TBase::Send(TBase::SelfId(), new TEvents::TEvPoison());
@@ -90,6 +91,7 @@ void TKafkaDescribeTopicActor::HandleCacheNavigateResponse(NKikimr::TEvTxProxySc
             TBase::Reply(status, ActorContext());
             return;
         }
+        PQGroupInfo = response.PQGroupInfo;
 
     } else {
         Ydb::Scheme::Entry *selfEntry = result.mutable_self();
@@ -155,6 +157,7 @@ void AddConfigEntry(
     configEntry.Name = name;
     configEntry.Value = value;
     configEntry.ConfigType = (ui32)type;
+    configEntry.ConfigSource = EConfigSource::DEFAULT_CONFIG;
     descrResult.Configs.emplace_back(std::move(configEntry));
 }
 
@@ -183,7 +186,7 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     AddConfigEntry(singleConfig, "remote.storage.enable", "false", EKafkaConfigType::BOOLEAN);
     AddConfigEntry(singleConfig, "segment.jitter.ms", "0", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "local.retention.ms", "-2", EKafkaConfigType::LONG);
-    AddConfigEntry(singleConfig, "cleanup.policy", "delete", EKafkaConfigType::LIST);
+    //AddConfigEntry(singleConfig, "cleanup.policy", "delete", EKafkaConfigType::LIST);
     AddConfigEntry(singleConfig, "flush.ms", "9223372036854775807", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "follower.replication.throttled.replicas", "", EKafkaConfigType::LIST);
     AddConfigEntry(singleConfig, "compression.lz4.level", "9", EKafkaConfigType::INT);
@@ -224,6 +227,12 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     } else {
         AddConfigEntry(singleConfig, "retention.bytes", "-1", EKafkaConfigType::LONG);
     }
+    if (ev->PQGroupInfo && ev->PQGroupInfo->Description.GetPQTabletConfig().GetEnableCompactification()) {
+        AddConfigEntry(singleConfig, "cleanup.policy", "compact", EKafkaConfigType::LIST);
+    } else {
+        AddConfigEntry(singleConfig, "cleanup.policy", "delete", EKafkaConfigType::LIST);
+    }
+
     response->Results.emplace_back(std::move(singleConfig));
 }
 

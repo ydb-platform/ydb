@@ -167,6 +167,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         return response;
     }
 
+    bool IsKafkaTransactionWriter() {
+        return Opts.KafkaTransactionalId.has_value();
+    }
+
     void BecomeZombie(EErrorCode errorCode, const TString& error) {
         ErrorCode = errorCode;
 
@@ -346,7 +350,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
     }
 
     void SetNeedSupportivePartition(NKikimrClient::TPersQueuePartitionRequest& request, bool value) {
-        if (HasWriteId()) {
+        if (HasWriteId() || IsKafkaTransactionWriter()) {
             request.SetNeedSupportivePartition(value);
         }
     }
@@ -373,7 +377,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             hFunc(TEvPersQueue::TEvResponse, HandleOwnership);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandlePartitionIdSaved);
-            SFunc(TEvents::TEvWakeup, SavePartitionId);
+            SFunc(TEvents::TEvWakeup, SavePartitionIdToKqpTxn);
         default:
             return StateBase(ev);
         }
@@ -402,14 +406,15 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             SupportivePartitionId = reply.GetSupportivePartition();
         }
 
-        if (HasWriteId()) {
-            SavePartitionId(ActorContext());
+        // we do not save partition id to KQP in Kafka transaction, because we do not have KQP transaction during write request in Kafka API
+        if (HasWriteId() && !IsKafkaTransactionWriter()) {
+            SavePartitionIdToKqpTxn(ActorContext());
         } else {
             GetMaxSeqNo();
         }
     }
 
-    void SavePartitionId(const TActorContext& ctx) {
+    void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
         Y_ABORT_UNLESS(HasWriteId());
         Y_ABORT_UNLESS(HasSupportivePartitionId());
 
@@ -927,6 +932,9 @@ public:
         if (Opts.Database && Opts.SessionId && Opts.TxId) {
             GetWriteId(ctx);
         } else {
+            if (Opts.KafkaTransactionalId) {
+                WriteId = NPQ::TWriteId{Opts.KafkaProducerInstanceId.value()};
+            }
             GetOwnership();
         }
     }
@@ -945,6 +953,11 @@ public:
             hFunc(TEvPartitionWriter::TEvWriteRequest, Reject);
             sFunc(TEvents::TEvPoison, PassAway);
         }
+    }
+
+    // used for tests to validate correct opts
+    const TPartitionWriterOpts GetOpts() {
+        return Opts;
     }
 
 private:

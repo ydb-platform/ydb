@@ -1,4 +1,6 @@
 
+* Limited width of tables in benchmark reports.
+
 ## 2.23.0 ##
 
 * Added `ydb workload vector select` to benchmark RPS and recall of vector index.

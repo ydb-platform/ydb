@@ -9,7 +9,7 @@ if __name__ == "__main__":
         description="state storage reconfiguration stability workload", formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--grpc_endpoint", default="localhost:2135", help="An endpoint to be used")
-    parser.add_argument("--http_endpoint", default="http://localhost:2135", help="An endpoint to be used")
+    parser.add_argument("--http_endpoint", default="http://localhost:8765", help="An endpoint to be used")
     parser.add_argument("--database", default="/Root", help="A database to connect")
     parser.add_argument("--path", default="olap_workload", help="A path prefix for tables")
     parser.add_argument("--config_name", default="StateStorage", help="Can be StateStorage / StateStorageBoard / SchemeBoard")

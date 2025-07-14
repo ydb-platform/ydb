@@ -4,6 +4,7 @@ import glob
 import hashlib
 import io
 import os
+import pathlib
 import re
 import shutil
 import string
@@ -15,45 +16,19 @@ import urllib.request
 
 
 def create_cmakelists(zoneinfo_dir):
-    tz_to_hash = {}
-    hash_to_content = {}
-    total_size = 0
-    for dirpath, _, filenames in os.walk(zoneinfo_dir):
-        for fn in filenames:
-            tz_file_name = os.path.join(dirpath, fn)
-            with open(tz_file_name, 'rb') as f:
-                tz_content = f.read()
-            if not tz_content.startswith(b'TZif'):
-                continue
-            tz_hash = hashlib.md5(tz_content).hexdigest()
-            tz_name = tz_file_name.replace(zoneinfo_dir, '').lstrip('/')
-            tz_to_hash[tz_name] = tz_hash
-            hash_to_content[tz_hash] = tz_content
-            total_size += len(tz_content)
-    print('Total data size in bytes:', total_size)
-
-    generated_dir = 'generated'
-    if not os.path.isdir(generated_dir):
-        os.mkdir(generated_dir)
-    for tz_hash, tz_content in hash_to_content.items():
-        with open(os.path.join(generated_dir, tz_hash), 'wb') as f:
-            f.write(tz_content)
-
-    yamake_template =  (
-        'RESOURCE(\n'
-        '{}\n'
-        ')'
-    )
-    resources = '\n'.join('    generated/{} /cctz/tzdata/{}'.format(tz_hash, tz_name) for tz_name, tz_hash in sorted(tz_to_hash.items()))
-
-    all_hashes = set(tz_to_hash.values())
-    hash_pattern = os.path.join('generated', '[{}]'.format(string.hexdigits) * 32)
-    for fn in glob.glob(hash_pattern):
-        cmd = 'add' if os.path.basename(fn) in all_hashes else 'rm'
-        subprocess.check_call(['arc', cmd, fn])
-
-    with open('ya.make.resources', 'w') as f:
-        print(yamake_template.format(resources), file=f)
+    zoneinfo_dir = pathlib.Path(zoneinfo_dir)
+    with open("ya.make.resources", "wt") as f:
+        all_files = []
+        for dir, _, files in zoneinfo_dir.walk():
+            all_files += [
+                (dir / file).relative_to(".")
+                for file in files 
+            ]
+        f.write("RESOURCE(\n")
+        for file in sorted(all_files):
+            rel_path = file.relative_to(zoneinfo_dir)
+            f.write(f"    {str(file): <40} /cctz/tzdata/{rel_path}\n")
+        f.write(")")
 
 
 def get_latest_version():
@@ -110,12 +85,14 @@ def prepare_tzdata(version):
 
         # keep posixrules for now
         shutil.copyfile(
-            "generated/58543f30ac34b6510b552b9b3e82b772",
+            "generated/posixrules",
             f"{temp_dir}/usr/share/zoneinfo/posixrules",
         )
 
         print('Preparing ya.make.resources')
-        create_cmakelists(f"{temp_dir}/usr/share/zoneinfo")
+        shutil.rmtree("generated", ignore_errors=True)
+        os.rename(f"{temp_dir}/usr/share/zoneinfo", "generated")
+        create_cmakelists("generated")
     finally:
         shutil.rmtree(temp_dir)
 

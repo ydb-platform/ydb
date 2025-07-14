@@ -519,7 +519,9 @@ private:
 
             for (const auto& [colName, colType] : YdbSchema) {
                 if (HasInternalConversion.contains(colName)) {
-                    continue;
+                    if (colType.GetTypeId() != NScheme::NTypeIds::Decimal) {
+                        continue;
+                    }
                 }
                 if (NArrow::TArrowToYdbConverter::NeedDataConversion(colType)) {
                     ColumnsToConvert[colName] = colType;

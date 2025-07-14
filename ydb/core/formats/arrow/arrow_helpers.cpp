@@ -37,8 +37,9 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& 
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>(const NScheme::TTypeInfo& typeInfo) {
-    return arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
+    return std::make_shared<arrow::FixedSizeBinaryType>(16);
 }
 
 template <>

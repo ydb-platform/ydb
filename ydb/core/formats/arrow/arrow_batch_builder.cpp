@@ -35,15 +35,26 @@ arrow::Status AppendCell(arrow::StringBuilder& builder, const TCell& cell) {
     return builder.Append(cell.Data(), cell.Size());
 }
 
-arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
+// arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
+//     if (cell.IsNull()) {
+//         return builder.AppendNull();
+//     }
+
+//     /// @warning There's no conversion for special YQL Decimal valies here,
+//     /// so we could convert them to Arrow and back but cannot calculate anything on them.
+//     /// We need separate Arrow.Decimal, YQL.Decimal, CH.Decimal and YDB.Decimal in future.
+//     return builder.Append(cell.Data());
+// }
+
+arrow::Status AppendCell(arrow::FixedSizeBinaryBuilder& builder, const TCell& cell) {
+    std::cout << "[DEBUG] AppendCell<FixedSizeBinaryBuilder>: is_null=" << cell.IsNull() << " size=" << cell.Size() << std::endl;
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
-
-    /// @warning There's no conversion for special YQL Decimal valies here,
-    /// so we could convert them to Arrow and back but cannot calculate anything on them.
-    /// We need separate Arrow.Decimal, YQL.Decimal, CH.Decimal and YDB.Decimal in future.
-    return builder.Append(cell.Data());
+    if (cell.Size() != 16) {
+        return arrow::Status::Invalid("Decimal cell must be 16 bytes, got ", cell.Size());
+    }
+    return builder.Append(reinterpret_cast<const uint8_t*>(cell.Data()));
 }
 
 template <typename TDataType>

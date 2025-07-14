@@ -136,6 +136,8 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSet::Ty
         }
         case Ydb::ResultSet::ARROW:{
             NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
+            batchBuilder.Reserve(Rows.RowCount());
+
             YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
 
             TRowBuilder rowBuilder(arrowSchema.size());

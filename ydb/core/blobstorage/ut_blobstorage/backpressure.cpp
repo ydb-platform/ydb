@@ -1,6 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
 #define Ctest Cnull
 

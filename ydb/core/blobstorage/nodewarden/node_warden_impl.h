@@ -252,6 +252,8 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
 
+        TControlWrapper EnableDeepScrubbing;
+
     public:
         struct TGroupRecord;
 

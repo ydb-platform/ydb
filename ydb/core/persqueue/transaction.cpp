@@ -77,10 +77,10 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     }
     if (tx.HasWaitRSAcksTraceId()) {
         NWilson::TTraceId traceId(tx.GetWaitRSAcksTraceId());
-        WaitRSSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
-                                    std::move(traceId),
-                                    "Topic.Transaction.WaitRSAcks",
-                                    NWilson::EFlags::AUTO_END);
+        WaitRSAcksSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                        std::move(traceId),
+                                        "Topic.Transaction.WaitRSAcks",
+                                        NWilson::EFlags::AUTO_END);
     }
 }
 
@@ -477,6 +477,118 @@ const TVector<NKikimrTx::TEvReadSet>& TDistributedTransaction::GetBindedMsgs(ui6
     static TVector<NKikimrTx::TEvReadSet> empty;
 
     return empty;
+}
+
+void TDistributedTransaction::SetExecuteSpan(NWilson::TSpan&& span)
+{
+    ExecuteSpan = std::move(span);
+}
+
+NWilson::TSpan TDistributedTransaction::CreatePlanStepSpan(ui64 tabletId, ui64 step)
+{
+    auto span = CreateSpan("Topic.Transaction.Plan", tabletId);
+    span.Attribute("PlanStep", static_cast<i64>(step));
+    return span;
+}
+
+void TDistributedTransaction::BeginWaitRSSpan(ui64 tabletId)
+{
+    if (!WaitRSSpan) {
+        WaitRSSpan = CreateSpan("Topic.Transaction.WaitRS", tabletId);
+    }
+}
+
+void TDistributedTransaction::SetLastTabletSentByRS(ui64 tabletId)
+{
+    if (WaitRSSpan) {
+        WaitRSSpan.Attribute("LastTabletId", static_cast<i64>(tabletId));
+    }
+}
+
+void TDistributedTransaction::EndWaitRSSpan()
+{
+    if (WaitRSSpan) {
+        WaitRSSpan.End();
+        WaitRSSpan = {};
+    }
+}
+
+void TDistributedTransaction::BeginCalcPredicateSpan(ui64 tabletId)
+{
+    CalcPredicateSpan = CreateSpan("Topic.Transaction.CalcPredicate", tabletId);
+}
+
+void TDistributedTransaction::EndCalcPredicateSpan()
+{
+    if (CalcPredicateSpan) {
+        CalcPredicateSpan.End();
+        CalcPredicateSpan = {};
+    }
+}
+
+void TDistributedTransaction::BeginWaitRSAcksSpan(ui64 tabletId)
+{
+    WaitRSAcksSpan = CreateSpan("Topic.Transaction.WaitRSAcks", tabletId);
+}
+
+void TDistributedTransaction::EndWaitRSAcksSpan()
+{
+    if (WaitRSAcksSpan) {
+        WaitRSAcksSpan.End();
+        WaitRSAcksSpan = {};
+    }
+}
+
+void TDistributedTransaction::BeginCommitSpan(ui64 tabletId)
+{
+    CommitSpan = CreateSpan("Topic.Transaction.Commit", tabletId);
+}
+
+void TDistributedTransaction::EndCommitSpan()
+{
+    if (CommitSpan) {
+        CommitSpan.End();
+        CommitSpan = {};
+    }
+}
+
+void TDistributedTransaction::BeginPersistSpan(ui64 tabletId, EState state, const NWilson::TTraceId& traceId)
+{
+    PersistSpan = CreateSpan("Topic.Transaction.Persist", tabletId);
+    PersistSpan.Attribute("State", NKikimrPQ::TTransaction_EState_Name(state));
+    PersistSpan.Link(traceId);
+}
+
+void TDistributedTransaction::EndPersistSpan()
+{
+    if (PersistSpan) {
+        PersistSpan.End();
+        PersistSpan = {};
+    }
+}
+
+void TDistributedTransaction::BeginDeleteSpan(ui64 tabletId, const NWilson::TTraceId& traceId)
+{
+    DeleteSpan = CreateSpan("Topic.Transaction.Delete", tabletId);
+    DeleteSpan.Link(traceId);
+}
+
+void TDistributedTransaction::EndDeleteSpan()
+{
+    if (DeleteSpan) {
+        DeleteSpan.End();
+        DeleteSpan = {};
+    }
+}
+
+NWilson::TSpan TDistributedTransaction::CreateSpan(const char* name, ui64 tabletId)
+{
+    auto span = ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                        name,
+                                        NWilson::EFlags::AUTO_END);
+    span.Attribute("TxId", static_cast<i64>(TxId));
+    span.Attribute("TabletId", static_cast<i64>(tabletId));
+    return span;
 }
 
 }

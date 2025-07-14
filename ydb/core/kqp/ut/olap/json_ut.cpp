@@ -618,6 +618,10 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         EXPECTED: [[1u;["{\"a.b.c\":\"a1\"}"]]]
         IDX_ND_SKIP_APPROVE: 0, 4, 1
         ------
+        READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "a1" AND JSON_VALUE(Col2, "$.\"a\"") = "a4" ORDER BY Col1;
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b4" AND JSON_VALUE(Col2, "$.\"a\"") = "a4" ORDER BY Col1;
+        ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=a_index)
         ------

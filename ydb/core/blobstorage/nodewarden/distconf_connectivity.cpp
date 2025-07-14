@@ -128,6 +128,7 @@ namespace NKikimr::NStorage {
                 }
 
                 std::optional<TString> error;
+                THashMap<TString, TString> paramsToSend;
 
                 if (BridgeInfo) {
                     auto& params = ev->Get()->Params;
@@ -169,11 +170,11 @@ namespace NKikimr::NStorage {
                 STLOG(PRI_DEBUG, BS_NODE, NWDCC02, "handle TEvCheckIncomingConnection", (PeerNodeId, ev->Get()->PeerNodeId),
                     (Error, error));
 
-                if (error) {
-                    Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::move(*error)), 0, ev->Cookie);
-                } else {
-                    Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(CreateParams()), 0, ev->Cookie);
+                if (!error) {
+                    paramsToSend = CreateParams();
                 }
+                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::move(error),
+                    std::move(paramsToSend)), 0, ev->Cookie);
             }
 
             THashMap<TString, TString> CreateParams() {
@@ -212,6 +213,24 @@ namespace NKikimr::NStorage {
                     return "can't establish connection to node belonging to disconnected pile -- local disconnected";
                 }
 
+                if (!config.HasClusterStateHistory()) {
+                    return "peer storage config doesn't contain ClusterStateHistory";
+                }
+
+                if (auto error = CheckHistoryCompatibility(StorageConfig->GetClusterStateHistory(),
+                        config.GetClusterStateHistory())) {
+                    // histories are incompatible, connection won't ever be possible
+                    return error;
+                }
+
+                // check if we have to propose new config in order to restore connectivity between piles
+
+                return std::nullopt;
+            }
+
+            std::optional<TString> CheckHistoryCompatibility(const NKikimrBridge::TClusterStateHistory& my,
+                    const NKikimrBridge::TClusterStateHistory& peer) {
+                (void)my, (void)peer;
                 return std::nullopt;
             }
 

@@ -32,6 +32,8 @@ namespace NKikimr::NStorage {
         THashSet<TBridgePileId> SpecificBridgePileIds;
         std::optional<NKikimrBlobStorage::TStorageConfig> SwitchBridgeNewConfig;
 
+        bool WaitingForOtherProposition = false;
+
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
 
@@ -140,7 +142,7 @@ namespace NKikimr::NStorage {
 
         void AdvanceGeneration();
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields = true);
-        bool CheckConfigUpdate(const NKikimrBlobStorage::TStorageConfig& proposed);
+        void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery

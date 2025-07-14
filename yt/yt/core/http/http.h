@@ -178,7 +178,7 @@ class THeaders
     : public virtual TRefCounted
 {
 public:
-    using THeaderNames = THashSet<std::string, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
+    using THeaderNames = THashSet<std::string, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualComparer>;
 
     void Add(std::string header, std::string value);
     void Set(std::string header, std::string value);
@@ -208,7 +208,7 @@ private:
         TCompactVector<std::string, 1> Values;
     };
 
-    THashMap<std::string, TEntry, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> NameToEntry_;
+    THashMap<std::string, TEntry, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualComparer> NameToEntry_;
 };
 
 DEFINE_REFCOUNTED_TYPE(THeaders)

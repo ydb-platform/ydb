@@ -63,8 +63,8 @@ The exports made using the alternate syntax will not contain a list of objects a
 | `--description STRING` | Operation text description saved to the history of operations. |
 | `--retries NUM` | Number of export retries to be made by the server.<br/>Defaults to `10`. |
 | `--compression STRING` | Compress exported data.<br/>If the default compression level is used for the [Zstandard](https://en.wikipedia.org/wiki/Zstandard) algorithm, data can be compressed by 5-10 times. Compressing data uses the CPU and may affect the speed of performing other DB operations.<br/>Possible values:<br/><ul><li>`zstd`: Compression using the Zstandard algorithm with the default compression level (`3`).</li><li>`zstd-N`: Compression using the Zstandard algorithm, where `N` stands for the compression level (`1` — `22`).</li></ul> |
-| `--encryption-algorithm ALGORITHM` | Encrypt exported data using the specified algorythm. Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`. |
-| `--encryption-key-file PATH` | File path containing the encryption key (only for encrypted exports). The file is binary and must contain exactly number of bytes matching the key length for the chosen encryption algorythm (16 bytes for `AES-128-GCM` and `ChaCha20-Poly1305`, 32 bytes for `AES-256-GCM`). The key can also be provided using the `YDB_ENCRYPTION_KEY` environment variable, in hexadecimal string prepresentation. |
+| `--encryption-algorithm ALGORITHM` | Encrypt exported data using the specified algorithm. Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`. |
+| `--encryption-key-file PATH` | File path containing the encryption key (only for encrypted exports). The file is binary and must contain exactly the number of bytes matching the key length for the chosen encryption algorithm (16 bytes for `AES-128-GCM`, 32 bytes for `AES-256-GCM` and `ChaCha20-Poly1305`). The key can also be provided using the `YDB_ENCRYPTION_KEY` environment variable, in hexadecimal string representation. |
 | `--format STRING` | Result format.<br/>Possible values:<br/><ul><li>`pretty`: Human-readable format (default).</li><li>`proto-json-base64`: [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li></ul> |
 
 ## Running the export command {#exec}
@@ -180,21 +180,21 @@ Or using the alternate syntax:
 ### Exporting with encryption {#example-encryption}
 
 Exporting the whole database with encryption:
-- Using the `AES-128-GCM` encryption algorythm
+- Using the `AES-128-GCM` encryption algorithm
 - Generating the random key using the `openssl` utility to the file `~/my_secret_key`
-- Reading the generated key from file `~/my_secret_key`
+- Reading the generated key from the file `~/my_secret_key`
 - To the `export1` path prefix in the `mybucket` S3 bucket
 - Using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file
 
 ```bash
-openssl rand -out key.bin 16
+openssl rand -out ~/my_secret_key 16
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket --destination-prefix export1 \
   --encryption-algorithm AES-128-GCM --encryption-key-file ~/my_secret_key
 ```
 
 Exporting the subdirectory `dir1` of a database with encryption:
-- Using the `AES-256-GCM` encryption algorythm
+- Using the `AES-256-GCM` encryption algorithm
 - Generating the random key using the `openssl` utility to the environment variable `YDB_ENCRYPTION_KEY`
 - Reading the key from the environment variable `YDB_ENCRYPTION_KEY`
 - To the `export1` path prefix in the `mybucket` S3 bucket
@@ -205,7 +205,7 @@ export YDB_ENCRYPTION_KEY=$(openssl rand -hex 32)
 {{ ydb-cli }} -p quickstart export s3 \
   --root-path dir1 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket --destination-prefix export1 \
-  --encryption-algorithm AES-128-GCM 
+  --encryption-algorithm AES-256-GCM
 ```
 
 ### Getting operation IDs {#example-list-oneline}

@@ -34,7 +34,7 @@ SELECT ...
 
 Vector index supports a distance or similarity function [from the Knn extension](../../udf/list/knn#functions-distance), specified during its construction.
 
-Vector index isn't automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer) and must be specified explicitly using the expression `VIEW IndexName'.
+A vector index isn't automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer) and must be specified explicitly using the `VIEW IndexName` expression.
 
 {% endnote %}
 
@@ -44,10 +44,10 @@ Indexed vector search is based on an approximate algorithm (ANN, Approximate Nea
 
 Completeness of the indexed vector search is controlled by the following parameter: `PRAGMA ydb.KMeansTreeSearchTopSize`.
 
-This parameter controls the maximum number of scanned clusters nearest to the requested search vector, at every level of the search tree.
+This parameter controls the maximum number of scanned clusters nearest to the requested search vector at every level of the search tree.
 The parameter should be set explicitly for every search query.
 
-The default value is 1. This means that only 1 nearest cluster is scanned at every level of the search tree by default. Such value maximizes search performance and results in good search quality for vectors near to the center of some cluster, but it may be insufficient for vectors located approximately equally near to multiple clusters. So, to increase the search quality for such vectors (at the expense of slightly reduced search performance), you should raise the value of PRAGMA, for example:
+The default value is 1. This means that only one nearest cluster is scanned at every level of the search tree by default. This parameter value maximizes search performance and results in good search quality for vectors near to the center of a cluster. But this value may be insufficient for vectors that are about equally close to multiple clusters. So, to increase the search quality for such vectors (at the expense of slightly reduced search performance), you should increase the PRAGMA value, for example:
 
 ```yql
 PRAGMA ydb.KMeansTreeSearchTopSize="10";

@@ -91,12 +91,41 @@ common:
     to: /devops/manual/federated-queries/index.md
 
   # Redirects for Deployment Options
-  - from: /devops/(ansible|kubernetes|manual)/(.*)$
-    to: /devops/deployment-options/$1/$2
+
+  - from: /devops/ansible/initial-deployment.md
+    to: /devops/deployment-options/ansible/initial-deployment.md
+  - from: /devops/ansible/preparing-vms-with-terraform.md
+    to: /devops/deployment-options/ansible/preparing-vms-with-terraform.md
+  - from: /devops/ansible/restart.md
+    to: /devops/deployment-options/ansible/restart.md
+  - from: /devops/ansible/update-config.md
+    to: /devops/deployment-options/ansible/update-config.md
+  - from: /devops/ansible/update-executable.md
+    to: /devops/deployment-options/ansible/update-executable.md
+  - from: /devops/ansible/index.md
+    to: /devops/deployment-options/ansible/index.md
+  - from: /devops/ansible/observability/index.md
+    to: /devops/deployment-options/ansible/observability/index.md
+  - from: /devops/ansible/observability/logging.md
+    to: /devops/deployment-options/ansible/observability/logging.md
+
+  - from: /devops/kubernetes/index.md
+    to: /devops/deployment-options/kubernetes/index.md
+  - from: /devops/kubernetes/initial-deployment.md
+    to: /devops/deployment-options/kubernetes/initial-deployment.md
+
+  - from: /devops/manual/decommissioning.md
+    to: /devops/deployment-options/manual/decommissioning.md
+  - from: /devops/manual/index.md
+    to: /devops/deployment-options/manual/index.md
+  - from: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment.md
 
   # Redirects for Observability
-  - from: /devops/manual/(monitoring|logging)\.md$
-    to: /devops/observability/$1.md
+  - from: /devops/manual/monitoring.md
+    to: /devops/observability/monitoring.md
+  - from: /devops/manual/logging.md
+    to: /devops/observability/logging.md
   - from: /devops/manual/system-views.md
     to: /devops/observability/system-views.md
 
@@ -450,7 +479,3 @@ en:
     to: /devops/deployment-options/manual/change-actorsystem-configs.md
   - from: /maintenance/manual/cms.md
     to: /devops/deployment-options/manual/cms.md
-
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1

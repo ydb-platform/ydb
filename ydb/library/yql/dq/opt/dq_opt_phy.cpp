@@ -2296,6 +2296,29 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
+TExprBase DqBuildStageForDqPureExpr(TExprBase node, TExprContext& ctx) {
+     auto newArg = Build<TCoToFlow>(ctx, node.Pos())
+         .Input(node)
+         .Done();
+
+     auto stage = Build<TDqStage>(ctx, node.Pos())
+         .Inputs()
+             .Build()
+         .Program()
+             .Args({})
+             .Body(newArg)
+             .Build()
+         .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+         .Done();
+
+    return Build<TDqCnParallelUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+        .Build()
+        .Done();
+ }
+
 /*
  * Move (Extend ...) into a separate stage.
  *
@@ -2333,10 +2356,15 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
             inputArgs.push_back(programArg);
             extendArgs.push_back(programArg);
         } else if (IsDqCompletePureExpr(arg)) {
-            // arg is deemed to be a pure expression so leave it inside (Extend ...)
-            extendArgs.push_back(Build<TCoToFlow>(ctx, arg.Pos())
-                .Input(arg)
-                .Done());
+            TCoArgument newArg = Build<TCoArgument>(ctx, node.Pos())
+                .Name("arg")
+                .Done();
+ 
+             inputArgs.push_back(newArg);
+             extendArgs.push_back(newArg);
+
+             auto newConnection = DqBuildStageForDqPureExpr(arg, ctx);
+             inputConns.push_back(newConnection);
         } else {
             return node;
         }

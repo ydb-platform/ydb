@@ -494,7 +494,7 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
     std::vector<ui64> versions;
     ui32 predVersion = 0;
     auto& index = MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-    for (auto&& i : index.GetVersionedIndex().GetSnapshotByVersions()) {
+    for (auto&& i : index.GetVersionedIndex().GetSchemaByVersion()) {
         versions.emplace_back(i.first);
         TSchemaAddress addr(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot());
         if (addrPred) {

@@ -379,6 +379,7 @@ public:
             // Prevent alerting.
             SuppressMissingRequestInfoCheck();
 
+            TCurrentTraceContextGuard guard(TraceContext_);
             if (CanceledList_.IsFired()) {
                 if (TimedOutLatch_) {
                     Reply(TError(NYT::EErrorCode::Timeout, "Request timed out"));
@@ -431,6 +432,7 @@ public:
     void CheckAndRun(const TErrorOr<TLiteHandler>& handlerOrError)
     {
         if (!handlerOrError.IsOK()) {
+            TCurrentTraceContextGuard guard(TraceContext_);
             Reply(TError(handlerOrError));
             return;
         }

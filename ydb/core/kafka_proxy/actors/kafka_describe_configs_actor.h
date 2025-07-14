@@ -88,6 +88,7 @@ protected:
 private:
     const TActorId Requester;
     const std::shared_ptr<TString> SerializedToken;
+    TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
 };
 
 

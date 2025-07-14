@@ -13,4 +13,5 @@ namespace NKafka {
     
     static const i64 NO_PRODUCER_ID = -1;
     static const i16 NO_PRODUCER_EPOCH = -1;
+    static const TString CLEANUP_POLICY = "cleanup.policy";
 }

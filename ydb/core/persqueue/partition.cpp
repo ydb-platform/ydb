@@ -428,8 +428,11 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     if (StartOffset == EndOffset || DataKeysBody.size() <= 1) {
         return false;
     }
-
+    if (Config.GetEnableCompactification()) {
+        return false;
+    }
     const auto& partConfig = Config.GetPartitionConfig();
+
     const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
 
     const bool hasStorageLimit = partConfig.HasStorageLimitBytes();

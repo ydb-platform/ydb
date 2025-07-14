@@ -1892,12 +1892,14 @@ ui64 AsyncAlterDropReplicationConfig(
 ui64 AsyncCreateContinuousBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& tableName)
+        const TString& tableName,
+        const TString& streamName)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateContinuousBackup, workingDir);
 
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateContinuousBackup();
     desc.SetTableName(tableName);
+    desc.MutableContinuousBackupDescription()->SetStreamName(streamName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
@@ -1906,7 +1908,8 @@ ui64 AsyncAlterTakeIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
         const TString& srcTableName,
-        const TString& dstTableName)
+        const TString& dstTableName,
+        const TString& dstStreamName)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup, workingDir);
 
@@ -1914,6 +1917,7 @@ ui64 AsyncAlterTakeIncrementalBackup(
     desc.SetTableName(srcTableName);
     auto& incBackup = *desc.MutableTakeIncrementalBackup();
     incBackup.SetDstPath(dstTableName);
+    incBackup.SetDstStreamPath(dstStreamName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }

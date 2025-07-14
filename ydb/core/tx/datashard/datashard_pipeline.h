@@ -172,6 +172,7 @@ public:
     bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); }
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }
+    bool HasRotateCdcStream() const { return SchemaTx && SchemaTx->IsRotateCdcStream(); }
     bool HasCreateIncrementalRestoreSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalRestoreSrc(); }
     bool HasCreateIncrementalBackupSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalBackupSrc(); }
 

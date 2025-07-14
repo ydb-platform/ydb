@@ -199,6 +199,7 @@ SRCS(
     schemeshard__operation_part.h
     schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_rmdir.cpp
+    schemeshard__operation_rotate_cdc_stream.cpp
     schemeshard__operation_side_effects.cpp
     schemeshard__operation_side_effects.h
     schemeshard__operation_split_merge.cpp
@@ -323,7 +324,6 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard
-    ydb/core/tx/schemeshard/backup
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/generated
     ydb/core/tx/schemeshard/olap

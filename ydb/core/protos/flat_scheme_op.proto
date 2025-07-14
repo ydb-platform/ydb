@@ -1073,7 +1073,21 @@ message TDropCdcStream {
     optional string StreamName = 2;
 }
 
+message TRotateCdcStream {
+    optional string TableName = 1;
+    optional string OldStreamName = 2;
+
+    optional TCdcStreamDescription NewStreamDescription = 3;
+    optional uint64 NewStreamRetentionPeriodSeconds = 4 [default = 86400]; // 1d by default
+    optional uint32 NewStreamTopicPartitions = 5;
+
+    // Topic autopartitioning settings
+    optional bool NewStreamTopicAutoPartitioning = 6 [default = false]; // we always can split and merge of topic partitions
+    optional uint32 NewStreamMaxPartitionCount = 7;
+}
+
 message TContinuousBackupDescription {
+    optional string StreamName = 1;
 }
 
 message TCreateContinuousBackup {
@@ -1089,6 +1103,7 @@ message TAlterContinuousBackup {
 
     message TTakeIncrementalBackup {
         optional string DstPath = 1;
+        optional string DstStreamPath = 2;
     }
 
     oneof Action {
@@ -1748,6 +1763,7 @@ message TModifyScheme {
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
     optional TDropCdcStream DropCdcStream = 47;
+    optional TRotateCdcStream RotateCdcStream = 83;
     optional TMove MoveTable = 48;
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;

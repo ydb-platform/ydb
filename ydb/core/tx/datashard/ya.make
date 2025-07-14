@@ -197,6 +197,7 @@ SRCS(
     remove_locks.cpp
     remove_schema_snapshots.cpp
     restore_unit.cpp
+    rotate_cdc_stream_unit.cpp
     scan_common.cpp
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp

@@ -3616,6 +3616,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             txState.TargetPathTargetState = proto.GetTxCopyTableExtraData().GetTargetPathTargetState();
                         }
                     }
+                } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
+                        Y_ABORT_UNLESS(deserializeRes);
+                        txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                    }
                 }
 
                 Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);

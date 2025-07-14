@@ -4,7 +4,6 @@
 #include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/schemeshard/backup/constants.h>
 
 namespace NKikimr::NSchemeShard {
 

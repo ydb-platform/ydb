@@ -325,6 +325,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
             return *modifyScheme.MutableDropCdcStream()->MutableTableName();
 
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStream:
+            return *modifyScheme.MutableRotateCdcStream()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl:
+            Y_ABORT("no implementation for ESchemeOpRotateCdcStreamImpl");
+
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable:
+            return *modifyScheme.MutableRotateCdcStream()->MutableTableName();
+
         case NKikimrSchemeOp::ESchemeOpMoveTable:
             Y_ABORT("no implementation for ESchemeOpMoveTable");
 
@@ -715,6 +724,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:
         case NKikimrSchemeOp::ESchemeOpDropCdcStream:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume:
@@ -1028,6 +1038,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:

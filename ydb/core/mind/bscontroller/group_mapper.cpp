@@ -55,7 +55,11 @@ namespace NKikimr::NBsController {
                     // single-unit vdisk occupies double-unit pdisk slot (storage waste)
                     penalty += 20;
                 }
-                return double(NumSlots) / MaxSlots + penalty;
+                if (!MaxSlots) {
+                    return NumSlots + penalty;
+                } else {
+                    return double(NumSlots) / MaxSlots + penalty;
+                }
             }
         };
 

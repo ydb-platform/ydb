@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     }
 
     ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory,
-            ui64 inferPDiskSlotCountFromUnitSize = 0) {
+            const NKikimrBlobStorage::TPDiskConfig* pdiskConfig = nullptr, ui64 inferPDiskSlotCountFromUnitSize = 0) {
         VERBOSE_COUT(" Creating pdisk");
 
         ui32 nodeId = runtime.GetNodeId(nodeIdx);
@@ -278,7 +278,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         pdisk->SetPDiskGuid(guid);
         pdisk->SetPDiskCategory(pDiskCategory);
         pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
-        if (inferPDiskSlotCountFromUnitSize) {
+        if (pdiskConfig) {
+            pdisk->MutablePDiskConfig()->CopyFrom(*pdiskConfig);
+        }
+        if (inferPDiskSlotCountFromUnitSize != 0) {
             pdisk->SetInferPDiskSlotCountFromUnitSize(inferPDiskSlotCountFromUnitSize);
         }
 
@@ -1005,19 +1008,42 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TTestBasicRuntime runtime(1, false);
         auto nodeId = runtime.GetNodeId(0);
         TString pdiskPath = "SectorMap:TestInferPDiskSlotCountComplexSetup";
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32_GB));
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(30_GB));
         Setup(runtime, pdiskPath, sectorMap);
 
         TActorId edge = runtime.AllocateEdgeActor();
         runtime.SetDispatchTimeout(TDuration::Seconds(10));
         runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), edge);
 
-        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
-        ui32 pdiskId = CreatePDisk(runtime, 0, pdiskPath, 0, 1001, 0, 1_GB);
+        ui32 pdiskId = CreatePDisk(runtime, 0, pdiskPath, 0, 1001, 0, nullptr, 1_GB);
         std::optional<NKikimrWhiteboard::TPDiskStateInfo> pdiskInfo = GrabEvPDiskStateUpdate(runtime, edge, pdiskId);
         UNIT_ASSERT_C(pdiskInfo, "No appropriate TEvPDiskStateUpdate received");
-        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo->GetExpectedSlotCount(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo->GetExpectedSlotCount(), 15);
         UNIT_ASSERT_VALUES_EQUAL(pdiskInfo->GetSlotSizeInUnits(), 2u);
+
+    }
+
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountExplicitConfig) {
+        TTempDir tempDir;
+
+        TTestBasicRuntime runtime(1, false);
+        auto nodeId = runtime.GetNodeId(0);
+        TString pdiskPath = "SectorMap:TestInferPDiskSlotCountExplicitConfig";
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(30_GB));
+        Setup(runtime, pdiskPath, sectorMap);
+
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        pdiskConfig.SetExpectedSlotCount(13);
+        ui32 pdiskId = CreatePDisk(runtime, 0, pdiskPath, 0, 1001, 0, &pdiskConfig, 512_MB);
+
+        TActorId edge = runtime.AllocateEdgeActor();
+        runtime.SetDispatchTimeout(TDuration::Seconds(10));
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), edge);
+
+        std::optional<NKikimrWhiteboard::TPDiskStateInfo> pdiskInfo = GrabEvPDiskStateUpdate(runtime, edge, pdiskId);
+        UNIT_ASSERT_C(pdiskInfo, "No appropriate TEvPDiskStateUpdate received");
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo->GetExpectedSlotCount(), 13);
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo->GetSlotSizeInUnits(), 0u);
     }
 }
 

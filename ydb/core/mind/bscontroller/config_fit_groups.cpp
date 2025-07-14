@@ -678,14 +678,28 @@ namespace NKikimr {
                     }
                 }
 
+                ui32 maxSlots = 0;
+                ui32 slotSizeInUnits = 0;
+                if (info.Metrics.HasSlotCount()) {
+                    maxSlots = info.Metrics.GetSlotCount();
+                    slotSizeInUnits = info.Metrics.GetSlotSizeInUnits();
+                } else if (info.InferPDiskSlotCountFromUnitSize != 0) {
+                    // inferred values are unknown yet
+                    maxSlots = 0;
+                    slotSizeInUnits = 0;
+                } else {
+                    maxSlots = info.ExpectedSlotCount;
+                    slotSizeInUnits = info.SlotSizeInUnits;
+                }
+
                 // register PDisk in the mapper
                 return Mapper->RegisterPDisk({
                     .PDiskId = id,
                     .Location = State.HostRecords->GetLocation(id.NodeId),
                     .Usable = usable,
                     .NumSlots = numSlots,
-                    .MaxSlots = info.ExpectedSlotCount,
-                    .SlotSizeInUnits = info.SlotSizeInUnits,
+                    .MaxSlots = maxSlots,
+                    .SlotSizeInUnits = slotSizeInUnits,
                     .Groups = std::move(groups),
                     .SpaceAvailable = availableSpace,
                     .Operational = info.Operational,

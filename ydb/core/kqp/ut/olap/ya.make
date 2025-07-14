@@ -30,6 +30,7 @@ SRCS(
     statistics_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp
+    uuid_ut.cpp
     write_ut.cpp
 )
 

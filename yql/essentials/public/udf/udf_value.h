@@ -7,6 +7,7 @@
 #include "udf_version.h"
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/uuid/yql_uuid.h>
 
 #include <util/system/yassert.h> // FAIL, VERIFY_DEBUG
 #include <util/generic/utility.h> // Min, Max
@@ -808,7 +809,7 @@ public:
     inline bool IsEmbedded() const { return EMarkers::Embedded == Raw.GetMarkers(); }
 
     // Data accessors
-    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NDecimal::TInt128>>>
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, NYql::NUuid::TUuid>>>
     inline T Get() const;
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline T GetOrDefault(T ifEmpty) const;
@@ -817,6 +818,9 @@ public:
     inline explicit TUnboxedValuePod(NYql::NDecimal::TUint128 value);
     inline NYql::NDecimal::TInt128 GetInt128() const;
     inline NYql::NDecimal::TUint128 GetUint128() const;
+
+    inline explicit TUnboxedValuePod(NYql::NUuid::TUuid value);
+    inline NYql::NUuid::TUuid GetUuid() const;
 
     inline const void* GetRawPtr() const;
     inline void* GetRawPtr();

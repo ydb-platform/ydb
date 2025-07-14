@@ -71,6 +71,9 @@ template <typename TFunc>
         case NScheme::NTypeIds::Interval64:
             return callback(TTypeWrapper<arrow::Int64Type>());
 
+        case NScheme::NTypeIds::Uuid:
+            return callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
+
         case NScheme::NTypeIds::PairUi64Ui64:
         case NScheme::NTypeIds::ActorId:
         case NScheme::NTypeIds::StepOrderId:

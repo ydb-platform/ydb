@@ -46,6 +46,14 @@ arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
     return builder.Append(cell.Data());
 }
 
+arrow::Status AppendCell(arrow::FixedSizeBinaryBuilder& builder, const TCell& cell) {
+    if (cell.IsNull()) {
+        return builder.AppendNull();
+    }
+    Y_ABORT_UNLESS(cell.Size() == static_cast<ui32>(builder.byte_width()));
+    return builder.Append(cell.Data());
+}
+
 template <typename TDataType>
 arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum) {
     using TBuilderType = typename arrow::TypeTraits<TDataType>::BuilderType;

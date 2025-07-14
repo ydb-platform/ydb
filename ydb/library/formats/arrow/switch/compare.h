@@ -39,6 +39,7 @@ public:
             case arrow::Type::BINARY:
                 return CompareView<arrow::BinaryArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::FIXED_SIZE_BINARY:
+                return CompareView<arrow::FixedSizeBinaryArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DATE32:
             case arrow::Type::DATE64:
                 break;

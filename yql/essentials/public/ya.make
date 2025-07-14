@@ -8,5 +8,6 @@ RECURSE(
     sql_format
     types
     udf
+    uuid
 )
 

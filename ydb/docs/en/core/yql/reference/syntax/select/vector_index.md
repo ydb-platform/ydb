@@ -32,7 +32,7 @@ SELECT ...
 
 {% note info %}
 
-Vector index supports a distance or similarity function [from the Knn extension](../../udf/list/knn#functions-distance), specified during its construction.
+A vector index supports a distance or similarity function [from the Knn extension](../../udf/list/knn#functions-distance) specified during its construction.
 
 A vector index isn't automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer) and must be specified explicitly using the `VIEW IndexName` expression.
 

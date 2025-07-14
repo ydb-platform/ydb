@@ -81,7 +81,7 @@ struct Schema : NIceDb::Schema {
         struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
         struct NeedAlter         : Column<111, NScheme::NTypeIds::Bool>   {}; // did the BlobDepotConfig change?
         struct Metrics           : Column<114, NScheme::NTypeIds::String> {}; // for virtual groups only
-        struct BridgeGroupInfo   : Column<121, NScheme::NTypeIds::String> {}; // bridged group protobuf
+        struct BridgeGroupInfo   : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TGroupInfo; }; // bridged group protobuf
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,

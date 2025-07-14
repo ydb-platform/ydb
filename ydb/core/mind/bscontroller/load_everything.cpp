@@ -222,6 +222,9 @@ public:
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
                                                    groups.GetValueOrDefault<T::GroupSizeInUnits>(),
+                                                   groups.HaveValue<T::BridgePileId>()
+                                                       ? std::make_optional(groups.GetValue<T::BridgePileId>())
+                                                       : std::nullopt,
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
@@ -237,8 +240,6 @@ public:
                     group.NAME = groups.GetValue<T::NAME>(); \
                 }
 
-                OPTIONAL(BridgeGroupInfo)
-
                 OPTIONAL(VirtualGroupName)
                 OPTIONAL(VirtualGroupState)
                 OPTIONAL(HiveId)
@@ -250,6 +251,10 @@ public:
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
                     Y_DEBUG_ABORT_UNLESS(success);
+                }
+
+                if (groups.HaveValue<T::BridgeGroupInfo>()) {
+                    group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
                 }
 
 #undef OPTIONAL
@@ -519,6 +524,19 @@ public:
         }
 
         THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+
+        // fill in correct relations between bridged groups
+        for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
+            if (proxyGroup->BridgeGroupInfo) {
+                for (size_t i = 0; i < proxyGroup->BridgeGroupInfo->BridgeGroupIdsSize(); ++i) {
+                    auto *group = Self->FindGroup(TGroupId::FromValue(proxyGroup->BridgeGroupInfo->GetBridgeGroupIds(i)));
+                    Y_ABORT_UNLESS(group);
+                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromValue(i));
+                    Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
+                    group->BridgeProxyGroupId = proxyGroupId;
+                }
+            }
+        }
 
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {

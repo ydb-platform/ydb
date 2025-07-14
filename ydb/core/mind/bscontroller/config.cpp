@@ -712,6 +712,9 @@ namespace NKikimr::NBsController {
             }
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 SysViewChangedGroups.insert(overlay->first);
+                if (overlay->second && overlay->second->BridgeProxyGroupId) {
+                    SysViewChangedGroups.insert(*overlay->second->BridgeProxyGroupId);
+                }
             }
             for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
                 SysViewChangedStoragePools.insert(cur ? cur->first : prev->first);
@@ -1109,10 +1112,7 @@ namespace NKikimr::NBsController {
             pb->SetExpectedStatus(status.ExpectedStatus);
 
             if (group.BridgeGroupInfo) {
-                NKikimrBlobStorage::TGroupInfo groupInfoPb;
-                bool success = groupInfoPb.ParseFromString(*group.BridgeGroupInfo);
-                Y_DEBUG_ABORT_UNLESS(success);
-                pb->SetIsProxyGroup(groupInfoPb.BridgeGroupIdsSize() != 0);
+                pb->SetIsProxyGroup(group.BridgeGroupInfo->BridgeGroupIdsSize() != 0);
             }
             
             if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE || group.VirtualGroupState) {
@@ -1241,8 +1241,7 @@ namespace NKikimr::NBsController {
             group->SetGroupSizeInUnits(groupInfo.GroupSizeInUnits);
 
             if (groupInfo.BridgeGroupInfo) {
-                const bool success = group->MergeFromString(*groupInfo.BridgeGroupInfo);
-                Y_DEBUG_ABORT_UNLESS(success);
+                group->MergeFrom(*groupInfo.BridgeGroupInfo);
             }
         }
 

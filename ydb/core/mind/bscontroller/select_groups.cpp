@@ -56,7 +56,7 @@ public:
                         reportedGroup->SetStoragePoolName(Self->StoragePools.at(group->StoragePoolId).Name);
                         reportedGroup->SetPhysicalGroup(group->IsPhysicalGroup());
                         reportedGroup->SetDecommitted(group->IsDecommitted());
-                        group->FillInGroupParameters(reportedGroup);
+                        group->FillInGroupParameters(reportedGroup, Self);
                     }
                 }
             }
@@ -117,7 +117,7 @@ void TBlobStorageController::ProcessSelectGroupsQueueItem(TList<TSelectGroupsQue
             };
 
             if (TGroupInfo *group = FindGroup(TGroupId::FromProto(&g, &NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::GetGroupID)); group && !hasResources()) {
-                group->FillInGroupParameters(&g);
+                group->FillInGroupParameters(&g, this);
                 if (!hasResources()) {
                     // any of PDisks will do
                     for (const TVSlotInfo *vslot : group->VDisksInGroup) {

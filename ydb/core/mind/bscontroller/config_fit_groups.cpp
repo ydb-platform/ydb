@@ -108,6 +108,7 @@ namespace NKikimr {
                         false, /* down */
                         false, /* seenOperational */
                         0, /* groupSizeInUnits */
+                        std::nullopt, /* bridgePileId */
                         StoragePoolId, /* storagePoolId */
                         0, /* numFailRealms */
                         0, /* numFailDomainsPerFailRealm */
@@ -120,22 +121,19 @@ namespace NKikimr {
                     auto& index = State.IndexGroupSpeciesToGroup.Unshare();
                     index[species].push_back(mainGroupId);
 
-                    NKikimrBlobStorage::TGroupInfo mainGroup;
+                    NKikimrBlobStorage::TGroupInfo& mainGroup = groupInfo->BridgeGroupInfo.emplace();
                     const auto& bridgeInfo = State.BridgeInfo;
                     Y_ABORT_UNLESS(bridgeInfo);
                     bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
-                        const TGroupId groupId = CreateGroup(bridgePileId);
+                        const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
                         groupId.CopyToProto(&mainGroup, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
                     });
-
-                    const bool success = mainGroup.SerializeToString(&groupInfo->BridgeGroupInfo.ConstructInPlace());
-                    Y_DEBUG_ABORT_UNLESS(success);
                 } else {
-                    CreateGroup(std::nullopt); // regular single group
+                    CreateGroup(std::nullopt, std::nullopt); // regular single group
                 }
             }
 
-            TGroupId CreateGroup(std::optional<TBridgePileId> bridgePileId) {
+            TGroupId CreateGroup(std::optional<TBridgePileId> bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
                 ////////////////////////////////////////////////////////////////////////////////////////////
                 // ALLOCATE GROUP ID FOR THE NEW GROUP
                 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,12 +185,10 @@ namespace NKikimr {
                 TGroupInfo *groupInfo = State.Groups.ConstructInplaceNewEntry(groupId, groupId, 1,
                     0, Geometry.GetErasure(), desiredPDiskCategory.GetOrElse(0), StoragePool.VDiskKind,
                     StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey,
-                    groupKeyNonce, MainKeyVersion, false, false, groupSizeInUnits, StoragePoolId, Geometry.GetNumFailRealms(),
-                    Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
+                    groupKeyNonce, MainKeyVersion, false, false, groupSizeInUnits, bridgePileId, StoragePoolId,
+                    Geometry.GetNumFailRealms(), Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
 
-                if (bridgePileId) {
-                    groupInfo->BridgePileId = *bridgePileId;
-                }
+                groupInfo->BridgeProxyGroupId = bridgeProxyGroupId;
 
                 // bind group to storage pool
                 State.StoragePoolGroups.Unshare().emplace(StoragePoolId, groupId);
@@ -215,10 +211,6 @@ namespace NKikimr {
                 if (!groupInfo) {
                     throw TExFitGroupError() << "GroupId# " << groupId << " not found";
                 }
-
-                std::optional<TBridgePileId> bridgePileId = groupInfo->BridgePileId
-                    ? std::make_optional(*groupInfo->BridgePileId)
-                    : std::nullopt;
 
                 TGroupMapper::TGroupDefinition group;
                 TGroupMapper::TGroupConstraintsDefinition softConstraints, hardConstraints;
@@ -376,7 +368,7 @@ namespace NKikimr {
                             STLOG(PRI_INFO, BS_CONTROLLER, BSCFG01, "Attempt to sanitize group layout", (GroupId, groupId));
                             // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
                             auto result = AllocateOrSanitizeGroup(groupId, group, {}, std::move(forbid), groupSizeInUnits, requiredSpace,
-                                AllowUnusableDisks, bridgePileId, &TGroupGeometryInfo::SanitizeGroup);
+                                AllowUnusableDisks, groupInfo->BridgePileId, &TGroupGeometryInfo::SanitizeGroup);
 
                             if (replacedSlots.empty()) {
                                 // update information about replaced disks
@@ -398,10 +390,10 @@ namespace NKikimr {
                             try {
                                 TGroupMapper::MergeTargetDiskConstraints(hardConstraints, softConstraints);
                                 AllocateOrSanitizeGroup(groupId, group, softConstraints, replacedDisks, std::move(forbid), groupSizeInUnits, requiredSpace,
-                                    AllowUnusableDisks, bridgePileId, &TGroupGeometryInfo::AllocateGroup);
+                                    AllowUnusableDisks, groupInfo->BridgePileId, &TGroupGeometryInfo::AllocateGroup);
                             } catch (const TExFitGroupError& ex) {
                                 AllocateOrSanitizeGroup(groupId, group, hardConstraints, replacedDisks, std::move(forbid), groupSizeInUnits, requiredSpace,
-                                    AllowUnusableDisks, bridgePileId, &TGroupGeometryInfo::AllocateGroup);
+                                    AllowUnusableDisks, groupInfo->BridgePileId, &TGroupGeometryInfo::AllocateGroup);
                             }
                         }
                         if (!IgnoreVSlotQuotaCheck) {
@@ -797,7 +789,9 @@ namespace NKikimr {
 
                     enumerateGroups([&](TGroupId groupId) {
                         fitter.CheckExistingGroup(groupId);
-                        ++numActualGroups;
+                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->BridgePileId) {
+                            ++numActualGroups;
+                        }
                     });
                     if (createNewGroups) {
                         if (numActualGroups < storagePool.NumGroups) {

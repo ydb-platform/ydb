@@ -543,7 +543,7 @@ void TBlobStorageController::UpdateSystemViews() {
                     }
                     CalculateGroupUsageStats(pb, disks, (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies());
 
-                    if (auto groupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr)) {
+                    if (auto groupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr); groupInfo && !groupInfo->IsBridged()) {
                         NLayoutChecker::TGroupLayout layout(groupInfo->GetTopology());
                         NLayoutChecker::TDomainMapper mapper;
                         TGroupGeometryInfo geom(groupInfo->Type, SelfManagementEnabled
@@ -558,6 +558,8 @@ void TBlobStorageController::UpdateSystemViews() {
                         }
 
                         pb->SetLayoutCorrect(layout.IsCorrect());
+                    } else if (groupInfo) {
+                        // TODO(alexvru): fill in layout for static group
                     }
                 }
             }

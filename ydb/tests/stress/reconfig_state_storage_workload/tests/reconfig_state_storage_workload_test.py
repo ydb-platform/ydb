@@ -33,7 +33,6 @@ class ReconfigStateStorageWorkloadTest(object):
         ))
         cls.cluster.start()
 
-
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()

@@ -19,6 +19,8 @@ class IOutputStream;
 
 namespace NInterconnect::NRdma {
 
+constexpr ui32 MAX_WR_CNT = 1024;
+
 class TRdmaCtx;
 class TCqCommon;
 class TCqActor;
@@ -58,9 +60,19 @@ public:
     }
 private:
     virtual void NotifyErr() noexcept = 0;
-
-    static TPtr MakeSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe) noexcept; 
 };
+
+class ICqMockControl {
+public:
+    virtual ~ICqMockControl() = default;
+    virtual void SetBusy(bool busy) noexcept = 0;
+    virtual void SetError() noexcept = 0;
+};
+
+ICqMockControl* TryGetCqMockControl(ICq* cq);
+
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe) noexcept;
+ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe) noexcept;
 
 class TQueuePair: public NNonCopyable::TMoveOnly {
 public:

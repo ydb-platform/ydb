@@ -156,7 +156,12 @@ namespace NActors {
             void ApplyCatchBuffer();
             void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
             void DropFront(TRope *from, size_t numBytes);
-            void ScheduleRdmaReadRequests(const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel);
+
+            struct TRdmaReadReqOk {};
+            using ScheduleRdmaReadRequestsResult = std::variant<TRdmaReadReqOk, NInterconnect::NRdma::ICq::TBusy, NInterconnect::NRdma::ICq::TErr>;
+            ScheduleRdmaReadRequestsResult ScheduleRdmaReadRequests(
+                const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp,
+                NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel);
         };
 
         std::array<TPerChannelContext, 16> ChannelArray;

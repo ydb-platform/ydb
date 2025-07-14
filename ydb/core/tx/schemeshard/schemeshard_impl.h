@@ -348,6 +348,7 @@ public:
     bool EnableVectorIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableDataErasure = false;
+    bool EnableMoveColumnTable = false;
 
     TShardDeleter ShardDeleter;
 

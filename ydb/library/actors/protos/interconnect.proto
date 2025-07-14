@@ -124,6 +124,12 @@ message THandshakeReply {
     optional THandshakeSuccess Success = 1;
     optional string ErrorExplaination = 2;
     optional bool CookieCheckResult = 3;
+
+    message TKeyValuePair {
+        optional string Key = 1;
+        optional bytes Value = 2;
+    }
+    repeated TKeyValuePair Params = 4;
 }
 
 message TEvLoadMessage {

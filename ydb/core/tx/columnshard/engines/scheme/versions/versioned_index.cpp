@@ -21,10 +21,10 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     if (needActualization) {
         if (!SchemeVersionForActualization || *SchemeVersionForActualization < newVersion) {
             SchemeVersionForActualization = newVersion;
-            SchemeForActualization = itVersion.first->second;
+            SchemeForActualization = itVersion.first->second.GetSchema();
         }
     }
-    auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
+    auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second.GetSchema());
     Y_ABORT_UNLESS(itSnap.second);
     LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
     return &itVersion.first->second->GetIndexInfo();

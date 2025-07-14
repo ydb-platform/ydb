@@ -99,7 +99,7 @@ public:
         SnapshotByVersion.erase(it);
     }
 
-    const std::map<ui64, TSchemaInfoByVersion>& GetSnapshotByVersions() const {
+    const std::map<ui64, TSchemaInfoByVersion>& GetSchemaByVersion() const {
         return SnapshotByVersion;
     }
 

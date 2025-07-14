@@ -936,12 +936,14 @@ namespace {
     }
 
     TString GetDbPath(const TFsPath& fsPath, const TFsPath& fsBackupRoot, const TString& dbRestoreRoot) {
-        auto relative = fsPath.RelativeTo(fsBackupRoot);
-        TPathSplitUnix split(relative.PathSplit());
+        auto relativeFsPath = fsPath.RelativeTo(fsBackupRoot);
+        const auto& split = relativeFsPath.PathSplit();
         if (split.empty()) {
             return dbRestoreRoot;
         }
-        return Join('/', dbRestoreRoot, split.Reconstruct());
+        TPathSplitUnix canonicalSplit;
+        canonicalSplit.AppendMany(split.begin(), split.end());
+        return Join('/', dbRestoreRoot, canonicalSplit.Reconstruct());
     }
 
     TRestoreResult ListBackupEntries(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, TVector<TFsBackupEntry>& backupEntries) {

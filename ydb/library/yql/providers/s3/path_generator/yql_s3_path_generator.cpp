@@ -29,7 +29,7 @@ TInstant Strptime(const TString& input, const TString& format) {
             return TInstant::Seconds(seconds);
         }
     }
-    ythrow yexception() << "Can't parse date " << input << " in format " << format;
+    throw yexception() << "Can't parse date " << input << " in format " << format;
 }
 
 TString Strftime(const char* format, TInstant time) {
@@ -42,7 +42,7 @@ TString Strftime(const char* format, TInstant time) {
     if (r != 0) {
         return TString(buf.Data(), r);
     }
-    ythrow yexception() << "Can't format date " << time << " in format " << format;
+    throw yexception() << "Can't format date " << time << " in format " << format;
 }
 
 
@@ -84,19 +84,19 @@ i64 GetIntOrThrow(const NSc::TValue& json, const TString& error) {
         }
     }
 
-    ythrow yexception() << error;
+    throw yexception() << error;
 }
 
 TString GetStringOrThrow(const NSc::TValue& json, const TString& error) {
     if (json.IsString() || json.IsIntNumber() || json.IsNumber()) {
         return json.ForceString();
     }
-    ythrow yexception() << error;
+    throw yexception() << error;
 }
 
 i64 GetBoolOrThrow(const NSc::TValue& json, const TString& error) {
     if (json.IsNull()) {
-        ythrow yexception() << error;
+        throw yexception() << error;
     }
     return json.IsTrue();
 }
@@ -108,7 +108,7 @@ IPathGenerator::EIntervalUnit ToIntervalUnit(const TString& unit) {
             return name.first;
         }
     }
-    ythrow yexception() << "Invalid projection scheme: unit " << unit << " must be one of " << GetEnumAllNames<IPathGenerator::EIntervalUnit>();
+    throw yexception() << "Invalid projection scheme: unit " << unit << " must be one of " << GetEnumAllNames<IPathGenerator::EIntervalUnit>();
 }
 
 TMap<IPathGenerator::EType, TString> ToLowerType() {
@@ -126,13 +126,13 @@ IPathGenerator::EType ToType(const TString& type) {
             return name.first;
         }
     }
-    ythrow yexception() << "Invalid projection scheme: type " << type << " must be one of " << to_lower(GetEnumAllNames<IPathGenerator::EType>());
+    throw yexception() << "Invalid projection scheme: type " << type << " must be one of " << to_lower(GetEnumAllNames<IPathGenerator::EType>());
 }
 
 std::string fmtInteger(int32_t width, i64 value)
 {
     if (width > 64) {
-         ythrow yexception() << "Digits cannot exceed 64, but received " << width;
+        throw yexception() << "Digits cannot exceed 64, but received " << width;
     }
     if (width == 0) {
         return std::to_string(value);
@@ -188,7 +188,7 @@ TDuration FromUnit(int64_t interval, IPathGenerator::EIntervalUnit unit) {
     case IPathGenerator::EIntervalUnit::MONTHS: // external special handling
     case IPathGenerator::EIntervalUnit::YEARS:
     default:
-        ythrow yexception() << "Only the " << GetEnumAllNames<IPathGenerator::EIntervalUnit>() << " units are supported but got " << unit;
+        throw yexception() << "Only the " << GetEnumAllNames<IPathGenerator::EIntervalUnit>() << " units are supported but got " << unit;
     }
 }
 
@@ -219,12 +219,12 @@ TInstant AddUnit(TInstant current, int64_t interval, IPathGenerator::EIntervalUn
 
     const TDuration delta = FromUnit(abs(interval), unit);
     if (delta.GetValue() > std::numeric_limits<i64>::max()) {
-        ythrow yexception() << "Interval is overflowed";
+        throw yexception() << "Interval is overflowed";
     }
 
     const i64 deltaValue = (interval > 0 ? 1LL : -1LL) * delta.GetValue();
     if (IsOverflow(current.GetValue(), deltaValue)) {
-        ythrow yexception() << "Timestamp is overflowed";
+        throw yexception() << "Timestamp is overflowed";
     }
 
     return interval > 0 ? current + delta : current - delta;
@@ -283,23 +283,23 @@ public:
     TString Format(const TStringBuf& columnName, const TStringBuf& dataValue) const override {
         auto it = ColumnConfig.find(columnName);
         if (it == ColumnConfig.end()) {
-            ythrow yexception() << columnName << " column not found in config";
+            throw yexception() << columnName << " column not found in config";
         }
         const auto& config = it->second;
         switch (config.Type) {
         case IPathGenerator::EType::UNDEFINED: {
-            ythrow yexception() << columnName << " column has undefined type";
+            throw yexception() << columnName << " column has undefined type";
         }
         case IPathGenerator::EType::ENUM: {
             if (Find(config.Values, dataValue) == config.Values.end()) {
-                ythrow yexception() << dataValue << " data not found as enum item";
+                throw yexception() << dataValue << " data not found as enum item";
             }
             return TString{dataValue};
         }
         case IPathGenerator::EType::INTEGER: {
             i64 value = 0;
             if (!TryFromString(dataValue.Data(), dataValue.size(), value)) {
-                ythrow yexception() << dataValue << " data is not a int64";
+                throw yexception() << dataValue << " data is not a int64";
             }
             return fmtInteger(config.Digits, value);
         }
@@ -314,23 +314,23 @@ public:
     TString Parse(const TStringBuf& columnName, const TStringBuf& pathValue) const override {
         auto it = ColumnConfig.find(columnName);
         if (it == ColumnConfig.end()) {
-            ythrow yexception() << columnName << " column not found in config";
+            throw yexception() << columnName << " column not found in config";
         }
         const auto& config = it->second;
         switch (config.Type) {
         case IPathGenerator::EType::UNDEFINED: {
-            ythrow yexception() << columnName << " column has undefined type";
+            throw yexception() << columnName << " column has undefined type";
         }
         case IPathGenerator::EType::ENUM: {
             if (Find(config.Values, pathValue) == config.Values.end()) {
-                ythrow yexception() << pathValue << " value not found as enum item";
+                throw yexception() << pathValue << " value not found as enum item";
             }
             return TString{pathValue};
         }
         case IPathGenerator::EType::INTEGER: {
             int64_t value = 0;
             if (!TryFromString(pathValue.Data(), pathValue.size(), value)) {
-                ythrow yexception() << pathValue << " value is not a int64";
+                throw yexception() << pathValue << " value is not a int64";
             }
             return std::to_string(value);
         }
@@ -354,7 +354,7 @@ private:
     // Parse
     void ParsePartitioningRules(const TString& config, const std::vector<TString>& partitionedBy) {
         if (partitionedBy.empty()) {
-            ythrow yexception() << "Partition by must always be specified";
+            throw yexception() << "Partition by must always be specified with projection";
         }
 
         if (!config) {
@@ -368,14 +368,14 @@ private:
 
         NSc::TValue json = NSc::TValue::FromJsonThrow(config, NSc::TJsonOpts::JO_PARSER_DISALLOW_DUPLICATE_KEYS | NSc::TJsonOpts::JO_SORT_KEYS);
         if (!json.IsDict()) {
-            ythrow yexception() << "Invalid projection scheme: top-level element must be a dictionary";
+            throw yexception() << "Invalid projection scheme: top-level element must be a dictionary";
         }
 
         TMap<TString, TMap<TString, NSc::TValue>> projection;
-        for (const auto& p: json.GetDict()) {
+        for (const auto& p : json.GetDict()) {
             const auto path = GetPath(p.first);
             if (path.empty()) {
-                ythrow yexception() << "Invalid key: key should start with storage or projection, but got an empty value";
+                throw yexception() << "Invalid key: key should start with storage or projection, but got an empty value";
             }
             const TString& kind = path.front();
             if (kind == "projection") {
@@ -383,23 +383,23 @@ private:
             } else if (kind == "storage") {
                 AddStorage(p.first, p.second, path);
             } else {
-                ythrow yexception() << "Invalid key: key should start with storage or projection, but got " << p.first;
+                throw yexception() << "Invalid key: key should start with storage or projection, but got " << p.first;
             }
         }
         DoParseProjection(projection);
         DoValidateTemplate(partitionedBy);
-        for (const auto& config: Config.Rules) {
+        for (const auto& config : Config.Rules) {
             ColumnConfig[config.Name] = config;
         }
     }
 
     void AddProjection(const TStringBuf& key, const NSc::TValue& json, const TVector<TString>& path, TMap<TString, TMap<TString, NSc::TValue>>& projection) {
         if (path.size() != 3 && path.size() != 2) {
-            ythrow yexception() << "The key must be three-component or two-component, but received " << key;
+            throw yexception() << "The key for 'projection' must be three-component or two-component, but received " << key;
         }
 
         if (path.size() == 2 && path[1] != "enabled") {
-            ythrow yexception() << "Unknown key " << key;
+            throw yexception() << "Unknown key " << key;
         }
 
         if (path.size() == 2) {
@@ -412,11 +412,11 @@ private:
 
     void AddStorage(const TStringBuf& key, const NSc::TValue& json, const TVector<TString>& path) {
         if (path.size() != 3) {
-            ythrow yexception() << "The key must be three-component, but received " << key;
+            throw yexception() << "The key for 'storage' must be three-component, but received " << key;
         }
 
         if (path[1] != "location" || path[2] != "template") {
-            ythrow yexception() << "The key must be storage.location.template, but received " << key;
+            throw yexception() << "The key for 'storage' must be storage.location.template, but received " << key;
         }
 
         TString locationTemplate = GetStringOrThrow(json, "The storage.location.template must be a string");
@@ -425,13 +425,12 @@ private:
         Config.LocationTemplate = TStringBuilder() << locationTemplate << '/';
     }
 
-
     void DoParseEnumType(const TString& columnName, const TString& type, const TMap<TString, NSc::TValue>& projection) {
         if (!projection.contains("values")) {
-            ythrow yexception() << "Invalid projection scheme: values are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: values are required field for " << columnName << " " << type;
         }
         if (!projection.contains("type")) {
-            ythrow yexception() << "Invalid projection scheme: type are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: type is a required field for " << columnName << " " << type;
         }
         for (const auto& p: projection) {
             if (p.first == "type") {
@@ -444,37 +443,37 @@ private:
                 }
                 Config.Rules.push_back(IPathGenerator::TColumnPartitioningConfig{.Type=ToType(type), .Name=columnName, .Values=std::move(values)});
             } else {
-                ythrow yexception() << "Invalid projection scheme: enum element must include only type or values (as string) but got " << p.first;
+                throw yexception() << "Invalid projection scheme: enum element must include only type or values (as string) but got " << p.first;
             }
         }
     }
 
     void DoParseIntegerType(const TString& columnName, const TString& type, const TMap<TString, NSc::TValue>& projection) {
         if (!projection.contains("type")) {
-            ythrow yexception() << "Invalid projection scheme: type are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: type are required field for " << columnName << " " << type;
         }
         if (!projection.contains("min")) {
-            ythrow yexception() << "Invalid projection scheme: min are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: min are required field for " << columnName << " " << type;
         }
         if (!projection.contains("max")) {
-            ythrow yexception() << "Invalid projection scheme: max are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: max are required field for " << columnName << " " << type;
         }
         IPathGenerator::TColumnPartitioningConfig columnConfig;
         columnConfig.Name = columnName;
         columnConfig.Type = ToType(type);
-        for (const auto& p: projection) {
+        for (const auto& p : projection) {
             if (p.first == "type") {
                 // already processed
             } else if (p.first == "min") {
-                columnConfig.Min = GetIntOrThrow(p.second, "The min must be a number");
+                columnConfig.Min = GetIntOrThrow(p.second, "The min must be a number for " + type + " field");
             } else if (p.first == "max") {
-                columnConfig.Max = GetIntOrThrow(p.second, "The max must be a number");
+                columnConfig.Max = GetIntOrThrow(p.second, "The max must be a number for " + type + " field");
             } else if (p.first == "interval") {
                 columnConfig.Interval = GetIntOrThrow(p.second, "The interval must be a number");
             } else if (p.first == "digits") {
                 columnConfig.Digits = GetIntOrThrow(p.second, "The digits must be a number");
             } else {
-                ythrow yexception() << "Invalid projection scheme: integer element must include only type, min, max, interval, digits but got " << p.first;
+                throw yexception() << "Invalid projection scheme: integer element must include only type, min, max, interval, digits but got " << p.first;
             }
         }
         Config.Rules.push_back(columnConfig);
@@ -482,16 +481,16 @@ private:
 
     void DoParseDateType(const TString& columnName, const TString& type, const TMap<TString, NSc::TValue>& projection) {
         if (!projection.contains("type")) {
-            ythrow yexception() << "Invalid projection scheme: type are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: type are required field for " << columnName << " " << type;
         }
         if (!projection.contains("min")) {
-            ythrow yexception() << "Invalid projection scheme: min are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: min are required field for " << columnName << " " << type;
         }
         if (!projection.contains("max")) {
-            ythrow yexception() << "Invalid projection scheme: max are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: max are required field for " << columnName << " " << type;
         }
         if (!projection.contains("format")) {
-            ythrow yexception() << "Invalid projection scheme: format are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: format are required field for " << columnName << " " << type;
         }
         IPathGenerator::TColumnPartitioningConfig columnConfig;
         columnConfig.Name = columnName;
@@ -500,9 +499,9 @@ private:
             if (p.first == "type") {
                 // already processed
             } else if (p.first == "min") {
-                columnConfig.From = GetStringOrThrow(p.second, "The min must be a string");
+                columnConfig.From = GetStringOrThrow(p.second, "The min must be a string for " + type + " field");
             } else if (p.first == "max") {
-                columnConfig.To = GetStringOrThrow(p.second, "The max must be a string");
+                columnConfig.To = GetStringOrThrow(p.second, "The max must be a string for " + type + " field");
             } else if (p.first == "format") {
                 columnConfig.Format = GetStringOrThrow(p.second, "The format must be a string");
             } else if (p.first == "interval") {
@@ -510,7 +509,7 @@ private:
             } else if (p.first == "unit") {
                 columnConfig.IntervalUnit = ToIntervalUnit(GetStringOrThrow(p.second, "The unit must be a string"));
             } else {
-                ythrow yexception() << "Invalid projection scheme: date element must include only type, min, max, format, interval, unit but got " << p.first;
+                throw yexception() << "Invalid projection scheme: date element must include only type, min, max, format, interval, unit but got " << p.first;
             }
         }
         Config.Rules.push_back(columnConfig);
@@ -519,7 +518,7 @@ private:
     void DoParseColumn(const TString& columnName, const TMap<TString, NSc::TValue>& projection) {
         auto it = projection.find("type");
         if (it == projection.end()) {
-            ythrow yexception() << "Invalid projection scheme: type element must exist for the column" << columnName;
+            throw yexception() << "Invalid projection scheme: type element must exist for the column " << columnName;
         }
 
         const TString type = GetStringOrThrow(it->second, "The type must be a string for column " + columnName);
@@ -530,12 +529,12 @@ private:
         } else if (type == "date") {
             DoParseDateType(columnName, type, projection);
         } else {
-            ythrow yexception() << "Invalid projection scheme: type element should be one of enum, date, integer but got " << type;
+            throw yexception() << "Invalid projection scheme: type element should be one of enum, date, integer but got " << type;
         }
     }
 
     void DoParseProjection(TMap<TString, TMap<TString, NSc::TValue>> projection) {
-        for (const auto& p: projection) {
+        for (const auto& p : projection) {
             DoParseColumn(p.first, p.second);
         }
     }
@@ -550,27 +549,27 @@ private:
         }
 
         TSet<TString> partitionedByColumns;
-        for (const auto& columnName: partitionedBy) {
+        for (const auto& columnName : partitionedBy) {
             partitionedByColumns.insert(columnName);
             if (!vars.contains(columnName)) {
-                ythrow yexception() << "Template " << Config.LocationTemplate << " must include ${" << columnName << "}";
+                throw yexception() << "Template " << Config.LocationTemplate << " must include ${" << columnName << "} from partitioned_by columns set";
             }
         }
 
         TSet<TString> rulesColumns;
-        for (const auto& rule: Config.Rules) {
+        for (const auto& rule : Config.Rules) {
             rulesColumns.insert(rule.Name);
             if (!vars.contains(rule.Name)) {
-                ythrow yexception() << "Template " << Config.LocationTemplate << " must include ${" << rule.Name << "}";
+                throw yexception() << "Template " << Config.LocationTemplate << " must include ${" << rule.Name << "} from projection columns set";
             }
         }
 
-        for (const auto& var: vars) {
+        for (const auto& var : vars) {
             if (!partitionedByColumns.contains(var)) {
-                ythrow yexception() << "Partitioned by column named " << var << " does not exist for template " << Config.LocationTemplate;
+                throw yexception() << "Partitioned by column named " << var << " does not exist for template " << Config.LocationTemplate;
             }
             if (!rulesColumns.contains(var)) {
-                ythrow yexception() << "Projection column named " << var << " does not exist for template " << Config.LocationTemplate;
+                throw yexception() << "Projection column named " << var << " does not exist for template " << Config.LocationTemplate;
             }
         }
     }
@@ -592,7 +591,7 @@ private:
         }
 
         if (Rules.empty()) {
-            ythrow yexception() << "The projection contains an empty set of paths";
+            throw yexception() << "The projection contains an empty set of paths";
         }
     }
 
@@ -631,12 +630,12 @@ private:
                     size_t p = 0) {
         if (rules.size() == p) {
             if (result.size() == pathsLimit) {
-                ythrow yexception() << "The limit on the number of paths has been reached: " << result.size() << " of " << pathsLimit;
+                throw yexception() << "The limit on the number of paths has been reached: " << result.size() << " of " << pathsLimit;
             }
 
             auto pib = result.emplace(locationTemplate, columnsWithValue);
             if (!pib.second) {
-                ythrow yexception() << "Location path " << locationTemplate << " is composed by different projection value sets " << FormatColumnValues(pib.first->second) << " and " << FormatColumnValues(columnsWithValue);
+                throw yexception() << "Location path " << locationTemplate << " is composed by different projection value sets " << FormatColumnValues(pib.first->second) << " and " << FormatColumnValues(columnsWithValue);
             }
             return;
         }
@@ -653,7 +652,7 @@ private:
             DoGenerateDate(rules, locationTemplate, columnsWithValue, result, pathsLimit, now, p);
             break;
         default:
-            ythrow yexception() << "Only the enum, integer, date types are supported but got " << to_lower(ToString(rule.Type));
+            throw yexception() << "Only the enum, integer, date types are supported but got " << to_lower(ToString(rule.Type));
         }
     }
 
@@ -731,21 +730,21 @@ private:
         if (std::numeric_limits<int32_t>::min() <= value && value <= std::numeric_limits<int32_t>::max()) {
             return;
         }
-        ythrow yexception() << "The value " << value << " is not representable as an int32 type for column " << column;
+        throw yexception() << "The value " << value << " is not representable as an int32 type for column " << column;
     }
 
     static void CheckCastUint32(int64_t value, const TString& column) {
         if (value >= 0 && value <= std::numeric_limits<uint32_t>::max()) {
             return;
         }
-        ythrow yexception() << "The value " << value << " is not representable as an uint32 type for column " << column;
+        throw yexception() << "The value " << value << " is not representable as an uint32 type for column " << column;
     }
 
     static void CheckCastUint64(int64_t value, const TString& column) {
         if (value >= 0) {
             return;
         }
-        ythrow yexception() << "The value " << value << " is not representable as an uint64 type for column " << column;
+        throw yexception() << "The value " << value << " is not representable as an uint64 type for column " << column;
     }
 };
 

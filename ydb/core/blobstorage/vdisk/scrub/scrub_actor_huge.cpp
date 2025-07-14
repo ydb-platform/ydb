@@ -39,10 +39,14 @@ namespace NKikimr {
                     true /*allowGarbageCollection*/);
                 const TLogoBlobID& id = key.LogoBlobID();
                 if (status.KeepData) {
-                    const NMatrix::TVectorType needed = merger->GetPartsToRestore();
-                    UpdateUnreadableParts(id, needed, merger->GetCorruptedPart());
-                    if (!needed.Empty()) {
-                        Checkpoints |= TEvScrubNotify::HUGE_BLOB_SCRUBBED;
+                    if (ScrubCtx->EnableDeepScrubbing) {
+                        CheckIntegrity(id, true);
+                    } else {
+                        const NMatrix::TVectorType needed = merger->GetPartsToRestore();
+                        UpdateUnreadableParts(id, needed, merger->GetCorruptedPart());
+                        if (!needed.Empty()) {
+                            Checkpoints |= TEvScrubNotify::HUGE_BLOB_SCRUBBED;
+                        }
                     }
                 } else {
                     DropGarbageBlob(id);

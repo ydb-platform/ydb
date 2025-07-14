@@ -54,6 +54,7 @@ struct TEnvironmentSetup {
         const float VDiskPredictedDelayMultiplier = 1;
         const bool UseActorSystemTimeInBSQueue = true;
         const ui32 MaxNumOfSlowDisks = 2;
+        const bool EnableDeepScrubbing = false;
     };
 
     const TSettings Settings;
@@ -373,6 +374,7 @@ struct TEnvironmentSetup {
 //            NKikimrServices::BS_VDISK_PATCH,
 //            NKikimrServices::BS_VDISK_PUT,
 //            NKikimrServices::BS_VDISK_OTHER,
+            NKikimrServices::BS_VDISK_SCRUB,
 //            NKikimrServices::BS_PROXY,
 //            NKikimrServices::BS_PROXY_RANGE,
 //            NKikimrServices::BS_PROXY_GET,
@@ -467,6 +469,8 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+
+                ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
                 
 #undef ADD_ICB_CONTROL
 

@@ -1867,7 +1867,8 @@ namespace NKikimr {
                 Db->GetVDiskIncarnationGuid(),
                 Db->LsnMngr,
                 Db->LoggerID,
-                Db->LogCutterID);
+                Db->LogCutterID,
+                Config->EnableDeepScrubbing);
             ScrubId = ctx.Register(CreateScrubActor(std::move(scrubCtx), std::move(scrubEntrypoint), scrubEntrypointLsn));
             ActiveActors.Insert(ScrubId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }

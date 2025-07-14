@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <util/system/info.h>
 
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
+
 #define SINGLE_THREAD 1
 
 enum class EState {

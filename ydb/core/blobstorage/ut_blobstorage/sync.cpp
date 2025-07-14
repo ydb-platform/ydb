@@ -1,4 +1,4 @@
-#include <ydb/core/blobstorage/ut_blobstorage/ut_helpers.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <util/random/random.h>

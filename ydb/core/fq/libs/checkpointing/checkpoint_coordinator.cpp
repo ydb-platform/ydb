@@ -88,17 +88,8 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         return;
     }
 
-    CC_LOG_D("AllActors count: " << AllActors.size() << ", ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
-
-    if (ActorsToTrigger.empty()) {
-        CC_LOG_D("No ingress tasks, coordinator was disabled");
-        StartAllTasks();
-        return;
-    }
-
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());
-
-    CC_LOG_D("Send TEvRegisterCoordinatorRequest, AllActorsSet " << AllActorsSet.size() << " ActorsToTrigger " << ActorsToTrigger.size() << " ActorsToNotify " << ActorsToNotify.size());
+    CC_LOG_D("Send TEvRegisterCoordinatorRequest");
     Send(StorageProxy, new TEvCheckpointStorage::TEvRegisterCoordinatorRequest(CoordinatorId), IEventHandle::FlagTrackDelivery);
 }
 
@@ -323,12 +314,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
         }
 
         ScheduleNextCheckpoint();
-        if (NeedSendRunToCA) {
-            CC_LOG_I("[" << checkpoint << "] State restored, send TEvRun to " << AllActors.size() << " actors");
-            for (const auto& [actor, transport] : AllActors) {
-                transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
-            }
-        }
+        StartAllTasks();
     }
 }
 
@@ -429,7 +415,7 @@ void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId,
 }
 
 void TCheckpointCoordinator::StartAllTasks() {
-    if (!GraphIsRunning) {
+    if (!GraphIsRunning && NeedSendRunToCA) {
         CC_LOG_I("Send TEvRun to all actors");
         for (const auto& [actor, transport] : AllActors) {
             transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
@@ -604,16 +590,14 @@ void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeConnected::
 }
 
 void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    CC_LOG_D("Handle undelivered");
-
-    if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
-        actorIt->second->EventsQueue.HandleUndelivered(ev);
-    }
-
     TStringBuilder message;
     message << "Undelivered Event " << ev->Get()->SourceType
         << " from " << SelfId() << " (Self) to " << ev->Sender
         << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
+    CC_LOG_D(message);
+    if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
+        actorIt->second->EventsQueue.HandleUndelivered(ev);
+    }
     OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, {});
 }
 

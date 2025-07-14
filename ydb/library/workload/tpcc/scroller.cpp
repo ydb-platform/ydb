@@ -5,7 +5,6 @@
 #include <algorithm>                           // for max, min
 #include <ftxui/component/component_base.hpp>  // for Component, ComponentBase
 #include <ftxui/component/event.hpp>  // for Event, Event::ArrowDown, Event::ArrowUp, Event::End, Event::Home, Event::PageDown, Event::PageUp
-#include <ftxui/dom/elements.hpp>
 
 #include <memory>   // for shared_ptr, allocator, __shared_ptr_access
 #include <utility>  // for move

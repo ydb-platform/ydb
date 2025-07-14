@@ -12,6 +12,7 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
@@ -648,21 +649,19 @@ private:
     TPromise<void> Promise;
 };
 
-const NKikimrMiniKQL::TParams* ValidateParameter(const TString& name, const TTypeAnnotationNode& type,
-    const TPosition& pos, TQueryData& parameters, TExprContext& ctx)
+const TTypedUnboxedValue* ValidateParameter(const TString& name, const TTypeAnnotationNode& type,
+    const TPositionHandle& posHandle, TQueryData& parameters, TExprContext& ctx)
 {
-    auto parameter = parameters.GetParameterMiniKqlValue(name);
+    auto parameter = parameters.GetParameterUnboxedValuePtr(name);
+    auto pos = ctx.GetPosition(posHandle);
     if (!parameter) {
         if (type.GetKind() == ETypeAnnotationKind::Optional) {
             NKikimrMiniKQL::TParams param;
-            if (!ExportTypeToKikimrProto(type, *param.MutableType(), ctx)) {
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_REQUEST,
-                    TStringBuilder() << "Failed to export parameter type: " << name));
-                return nullptr;
-            }
-
-            parameters.AddMkqlParam(name, param.GetType(), param.GetValue());
-            return parameters.GetParameterMiniKqlValue(name);
+            auto typeBuilder = NKikimr::NMiniKQL::TTypeBuilder(parameters.TypeEnv());
+            NKikimr::NMiniKQL::TType* result = NYql::NCommon::BuildType(posHandle, type, typeBuilder);
+            auto guard = parameters.TypeEnv().BindAllocator();
+            parameters.AddUVParam(name, result, NYql::NUdf::TUnboxedValuePod());
+            return parameters.GetParameterUnboxedValuePtr(name);
         }
 
         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_REQUEST,
@@ -677,7 +676,7 @@ const NKikimrMiniKQL::TParams* ValidateParameter(const TString& name, const TTyp
                 << "Failed to parse parameter type: " << name));
         });
 
-        actualType = ParseTypeFromKikimrProto(parameter->GetType(), ctx);
+        actualType = ConvertMiniKQLType(pos, parameter->first, ctx);
         if (!actualType) {
             return nullptr;
         }
@@ -728,7 +727,7 @@ public:
                         return ret;
                     }
 
-                    auto parameterValue = ValidateParameter(TString(name), *expectedType, ctx.GetPosition(parameter.Pos()),
+                    auto parameterValue = ValidateParameter(TString(name), *expectedType, parameter.Pos(),
                         *(queryCtx->QueryData), ctx);
                     if (!parameterValue) {
                         return nullptr;
@@ -747,8 +746,7 @@ public:
                                 TStringBuilder() << "Failed to parse parameter value: " << name));
                         });
 
-                        valueExpr = ParseKikimrProtoValue(parameterValue->GetType(), parameterValue->GetValue(),
-                            parameter.Pos(), ctx);
+                        valueExpr = NYql::NCommon::ValueToExprLiteral(expectedType, parameterValue->second, ctx, parameter.Pos());
                     }
 
                     if (!valueExpr) {
@@ -772,43 +770,6 @@ private:
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
 };
 
-class TValidatePreparedTransformer {
-public:
-    TValidatePreparedTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx)
-        : QueryCtx(queryCtx) {}
-
-    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        YQL_ENSURE(!QueryCtx->PrepareOnly);
-        YQL_ENSURE(QueryCtx->PreparedQuery);
-        YQL_ENSURE(input->Type() == TExprNode::World);
-        output = input;
-
-        for (const auto& paramDesc : QueryCtx->PreparedQuery->GetParameters()) {
-            TIssueScopeGuard issueScope(ctx.IssueManager, [input, &paramDesc, &ctx]() {
-                return MakeIntrusive<TIssue>(YqlIssue(ctx.GetPosition(input->Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-                    << "Failed to parse parameter type: " << paramDesc.GetName()));
-            });
-
-            auto expectedType = ParseTypeFromKikimrProto(paramDesc.GetType(), ctx);
-            if (!expectedType) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (!ValidateParameter(paramDesc.GetName(), *expectedType, TPosition(), *(QueryCtx->QueryData), ctx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    static TAutoPtr<IGraphTransformer> Sync(TIntrusivePtr<TKikimrQueryContext> queryCtx) {
-        return CreateFunctorTransformer(TValidatePreparedTransformer(queryCtx));
-    }
-
-private:
-    TIntrusivePtr<TKikimrQueryContext> QueryCtx;
-};
 
 template <typename TResult>
 TResult SyncProcess(TIntrusivePtr<IKikimrAsyncResult<TResult>> asyncResult) {

@@ -3,7 +3,6 @@
 #include "defs.h"
 #include "cluster_info.h"
 
-#include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
 
 #include <util/generic/hash.h>

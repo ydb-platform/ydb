@@ -3292,9 +3292,9 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
             partitionId = it->second;
         }
     } else {
-        TPartitionId partitionId(operation.GetPartitionId(),
-                             writeId,
-                             operation.GetSupportivePartition());
+        partitionId = TPartitionId(operation.GetPartitionId(),
+                                    writeId,
+                                    operation.GetSupportivePartition());
     }
     PQ_LOG_TX_D("PartitionId " << partitionId << " for WriteId " << writeId);
     return Partitions.contains(partitionId);

@@ -542,6 +542,14 @@ public:
                 }
             }
         }
+        const NKikimrKqp::TKafkaApiOperationsRequest& kafkaOperations = QueryState->GetKafkaApiOperationsFromRequest();
+        for (const auto& topicPartition : kafkaOperations.GetPartitionsInTxn()) {
+            auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topicPartition.GetTopicPath()));
+
+            if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, topicPartition.GetPartitionId())) {
+                return false;
+            }
+        }
         return true;
     }
 

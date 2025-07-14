@@ -269,7 +269,6 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
 {
     Y_ENSURE(Topic_.Empty() || Topic_ == rhs.Topic_);
     Y_ENSURE(Partition_.Empty() || Partition_ == rhs.Partition_);
-    Y_ENSURE(TabletId_.Empty() || TabletId_ == rhs.TabletId_);
 
     if (Topic_.Empty()) {
         Topic_ = rhs.Topic_;

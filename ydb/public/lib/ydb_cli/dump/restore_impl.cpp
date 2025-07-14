@@ -936,7 +936,14 @@ namespace {
     }
 
     TString GetDbPath(const TFsPath& fsPath, const TFsPath& fsBackupRoot, const TString& dbRestoreRoot) {
-        return JoinFsPaths(dbRestoreRoot, fsPath.RelativeTo(fsBackupRoot));
+        auto relativeFsPath = fsPath.RelativeTo(fsBackupRoot);
+        const auto& split = relativeFsPath.PathSplit();
+        if (split.empty()) {
+            return dbRestoreRoot;
+        }
+        TPathSplitUnix canonicalSplit;
+        canonicalSplit.AppendMany(split.begin(), split.end());
+        return Join('/', dbRestoreRoot, canonicalSplit.Reconstruct());
     }
 
     TRestoreResult ListBackupEntries(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, TVector<TFsBackupEntry>& backupEntries) {
@@ -990,7 +997,8 @@ namespace {
         for (const auto& [fsPath, dbPath, type] : in) {
             NJson::TJsonMap entry;
             entry["type"] = TStringBuilder() << type;
-            entry["path"] = fsPath.GetPath();
+            entry["dbPath"] = dbPath;
+            entry["fsPath"] = fsPath.GetPath();
             out.AppendValue(entry);
         }
         return out;
@@ -1060,7 +1068,10 @@ TRestoreResult TRestoreClient::RestoreFolder(
         if (type == ESchemeEntryType::Directory && oldEntries.contains(dbPath)) {
             continue;
         }
-        Y_ENSURE(dbPath.StartsWith(dbRestoreRoot), "dbPath must be built by appending a relative path to dbRestoreRoot");
+        Y_ENSURE(dbPath.StartsWith(dbRestoreRoot),
+            "Implementation error, dbPath: " << dbPath.Quote()
+                << " must be built by appending a relative path to dbRestoreRoot: " << dbRestoreRoot.Quote()
+        );
         if (auto result = Restore(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings, oldEntries.contains(dbPath), true); !result.IsSuccess()) {
             return result;
         }

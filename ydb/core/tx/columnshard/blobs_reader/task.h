@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
-class TCompositeReadBlobs: public TNonCopyable {
+class TCompositeReadBlobs {
 private:
     THashMap<TString, TActionReadBlobs> BlobsByStorage;
 
@@ -130,6 +130,14 @@ public:
     ~TCompositeReadBlobs() {
         AFL_VERIFY(IsEmpty());
     }
+
+    TCompositeReadBlobs& operator=(TCompositeReadBlobs&& item) noexcept {
+        BlobsByStorage = std::move(item.BlobsByStorage);
+        item.BlobsByStorage.clear();
+    }
+
+    TCompositeReadBlobs(const TCompositeReadBlobs&) = delete;
+    TCompositeReadBlobs& operator=(const TCompositeReadBlobs&) = delete;
 };
 
 class ITask: public NColumnShard::TMonitoringObjectsCounter<ITask> {

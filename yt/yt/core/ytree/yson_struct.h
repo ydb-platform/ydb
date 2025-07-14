@@ -133,9 +133,6 @@ public:
 
     const IYsonStructMeta* GetMeta() const;
 
-protected:
-    void MarkUnrecognized(const std::string& key, const IMapNodePtr& node);
-
 private:
     template <class TValue>
     friend class TYsonStructParameter;

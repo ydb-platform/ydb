@@ -134,6 +134,7 @@ public:
     TCompositeReadBlobs& operator=(TCompositeReadBlobs&& item) noexcept {
         BlobsByStorage = std::move(item.BlobsByStorage);
         item.BlobsByStorage.clear();
+        return *this;
     }
 
     TCompositeReadBlobs(const TCompositeReadBlobs&) = delete;

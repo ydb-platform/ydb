@@ -59,7 +59,7 @@ public:
         AFL_VERIFY(!!Blobs);
         auto result = std::move(*Blobs);
         Blobs.reset();
-        return result;
+        return std::move(result);
     }
 
     void ResetBlobs() {

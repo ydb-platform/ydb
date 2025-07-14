@@ -1500,9 +1500,16 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         TVector<TCoAtom> atomVector;
         atomVector.reserve(exprList.Size());
         for (std::size_t i = 0; i < exprList.Size(); ++i) {
-            TString rel  = TString(exprList.Item(i).Ptr()->Child(0)->Content());
-            TString attr = TString(exprList.Item(i).Ptr()->Child(1)->Content());
+            TString rel, attr;
+            auto exprItem = exprList.Item(i).Ptr();
+            if (exprItem->ChildrenSize() == 1) {
+                attr = TString(exprItem->Child(0)->Content());
+            } else if (exprItem->ChildrenSize() == 2) {
+                rel  = TString(exprItem->Child(0)->Content());
+                attr = TString(exprItem->Child(1)->Content());
+            }
 
+            Cout << i << " " << joinKeys.size() << Endl;
             TString column;
             if (contains(attr)) {
                 column = std::move(attr);

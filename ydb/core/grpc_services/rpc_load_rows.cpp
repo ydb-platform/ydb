@@ -18,6 +18,7 @@
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
+#include <algorithm>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -32,13 +33,8 @@ std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::sh
         return batch;
     }
 
-    bool needConversion = false;
-    for (i32 i = 0; i < batch->num_columns(); ++i) {
-        if (batch->column(i)->type()->id() == arrow::Type::DECIMAL128) {
-            needConversion = true;
-            break;
-        }
-    }
+    bool needConversion = std::any_of(batch->columns().begin(), batch->columns().end(),
+        [](const auto& column) { return column->type()->id() == arrow::Type::DECIMAL128; });
 
     if (!needConversion) {
         return batch;

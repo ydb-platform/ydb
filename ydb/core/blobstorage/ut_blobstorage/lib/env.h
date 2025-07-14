@@ -55,6 +55,7 @@ struct TEnvironmentSetup {
         const bool UseActorSystemTimeInBSQueue = true;
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
+        const bool EnableDeepScrubbing = false;
     };
 
     const TSettings Settings;
@@ -323,6 +324,7 @@ struct TEnvironmentSetup {
 //            NKikimrServices::BS_VDISK_PATCH,
 //            NKikimrServices::BS_VDISK_PUT,
 //            NKikimrServices::BS_VDISK_OTHER,
+            NKikimrServices::BS_VDISK_SCRUB,
 //            NKikimrServices::BS_PROXY,
 //            NKikimrServices::BS_PROXY_RANGE,
 //            NKikimrServices::BS_PROXY_GET,
@@ -423,7 +425,9 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("VDiskControls.MaxChunksToDefragInflight", 10, 1, 50, 10);
                 ADD_ICB_CONTROL("VDiskControls.DefaultHugeGarbagePerMille", 300, 0, 1000, 300);
                 ADD_ICB_CONTROL("VDiskControls.GarbageThresholdToRunFullCompactionPerMille", 0, 0, 300, 0);
-                
+
+                ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
+
 #undef ADD_ICB_CONTROL
 
                 {

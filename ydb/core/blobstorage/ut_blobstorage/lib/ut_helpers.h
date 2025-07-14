@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-TString MakeData(ui32 dataSize);
+TString MakeData(ui32 dataSize, ui32 step = 1);
 
 template<typename Int1 = ui32, typename Int2 = ui32>
 inline Int1 GenerateRandom(Int1 min, Int2 max) {
@@ -254,6 +254,187 @@ protected:
     ui32 BlobsWritten = 0;
     std::string Data;
     ui32 DataSize;
+};
+
+
+struct TTestCtxBase {
+public:
+    TTestCtxBase(TEnvironmentSetup::TSettings settings)
+        : NodeCount(settings.NodeCount)
+        , Erasure(settings.Erasure)
+        , Env(new TEnvironmentSetup(std::move(settings)))
+    {}
+
+    virtual ~TTestCtxBase() = default;
+
+    void CreateOneGroup() {
+        Env->CreateBoxAndPool(1, 1);
+        Env->Sim(TDuration::Minutes(1));
+
+        FetchBaseConfig();
+
+        UNIT_ASSERT_VALUES_EQUAL(BaseConfig.GroupSize(), 1);
+        const auto& group = BaseConfig.GetGroup(0);
+        GroupId = group.GetGroupId();
+    }
+
+    void AllocateEdgeActor(bool findNodeWithoutVDisks = false) {
+        ui32 chosenNodeId = 0;
+        if (!findNodeWithoutVDisks) {
+            chosenNodeId = NodeCount;
+        } else {
+            std::set<ui32> nodesWithoutVDisks;
+            for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+                nodesWithoutVDisks.insert(nodeId);
+            }
+    
+            for (const auto& vslot : BaseConfig.GetVSlot()) {
+                nodesWithoutVDisks.erase(vslot.GetVSlotId().GetNodeId());
+            }
+
+            if (!nodesWithoutVDisks.empty()) {
+                chosenNodeId = *nodesWithoutVDisks.begin();
+            }
+        }
+
+        Y_VERIFY_S(chosenNodeId != 0, "No available nodes to allocate");
+        Edge = Env->Runtime->AllocateEdgeActor(NodeCount);
+    }
+
+    void FetchBaseConfig() {
+        BaseConfig = Env->FetchBaseConfig();
+    }
+
+    TAutoPtr<TEventHandle<TEvBlobStorage::TEvStatusResult>> GetGroupStatus(ui32 groupId) {
+        Env->Runtime->WrapInActorContext(Edge, [&] {
+            SendToBSProxy(Edge, groupId, new TEvBlobStorage::TEvStatus(TInstant::Max()));
+        });
+        return Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(Edge, false, TInstant::Max());
+    }
+
+    virtual void Initialize() {
+        CreateOneGroup();
+        AllocateEdgeActor();
+        GetGroupStatus(GroupId);
+    }
+
+public:
+    struct TDataProfile {
+    public:
+        enum class ECookieStrategy {
+            SimpleIncrement = 0,
+            WithSamePlacement,
+        };
+
+        enum class EContentType {
+            Zeros = 0,
+            RepetitivePattern,
+        };
+
+    public:
+        ui32 GroupId;
+        std::optional<ui64> TotalSize;
+        std::optional<ui32> TotalBlobs;
+        ui64 BlobSize;
+        ui32 BatchSize = 1;
+        EContentType ContentType = EContentType::Zeros;
+
+        TDuration DelayBetweenBatches = TDuration::Zero();
+
+        // must be specified when using ECookieStrategy::WithSamePlacement
+        std::optional<TBlobStorageGroupType> Erasure = std::nullopt;
+
+        ui64 TabletId = 123218421;
+        ui32 Channel = 1;
+        ui32 Generation = 1;
+        ui32 Step = 1;
+        ECookieStrategy CookieStrategy = ECookieStrategy::SimpleIncrement;
+
+    public:
+        ui64 NextCookie(ui64 prevCookie) const {
+            switch (CookieStrategy) {
+                case TDataProfile::ECookieStrategy::SimpleIncrement:
+                    return ++prevCookie;
+                case TDataProfile::ECookieStrategy::WithSamePlacement: {
+                    ui64 originalHash = TLogoBlobID(TabletId, Generation, Step, Channel, BlobSize, prevCookie).Hash();
+                    while (prevCookie < TLogoBlobID::MaxCookie) {
+                        TLogoBlobID next(TabletId, Generation, Step, Channel, BlobSize, ++prevCookie);
+                        if (next.Hash() % Erasure->BlobSubgroupSize() == originalHash % Erasure->BlobSubgroupSize()) {
+                            return prevCookie;
+                        }
+                    }
+                }
+                default:
+                    Y_FAIL();
+            }
+        }
+    };
+
+    std::vector<TLogoBlobID> WriteCompressedData(TDataProfile profile) {
+        Y_VERIFY(profile.TotalSize || profile.TotalBlobs);
+        std::vector<TLogoBlobID> blobs;
+
+        static ui64 cookie = 0;
+        std::vector<TLogoBlobID> batch;
+
+        ui32 blobsToWrite;
+
+        if (profile.TotalBlobs) {
+            blobsToWrite = *profile.TotalBlobs;
+        } else {
+            blobsToWrite = (*profile.TotalSize / profile.BlobSize) + !!(*profile.TotalSize % profile.BlobSize);
+        }
+
+        for (ui64 i = 0; i < blobsToWrite; ++i) {
+            cookie = profile.NextCookie(cookie);
+            batch.emplace_back(profile.TabletId, profile.Generation, profile.Step, profile.Channel,
+                    profile.BlobSize, cookie);
+
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                TString data;
+
+                switch (profile.ContentType) {
+                    case TDataProfile::EContentType::Zeros:
+                        data = TString(profile.BlobSize, '\0');
+                        break;
+                    case TDataProfile::EContentType::RepetitivePattern:
+                        data = MakeData(profile.BlobSize);
+                        break;
+                    default:
+                        Y_FAIL();
+                }
+
+                SendToBSProxy(Edge, profile.GroupId, new TEvBlobStorage::TEvPut(batch.back(), data, TInstant::Max()),
+                        NKikimrBlobStorage::TabletLog);
+            });
+
+
+            if (batch.size() == profile.BatchSize || i == blobsToWrite - 1) {
+                for (ui32 i = 0; i < batch.size(); ++i) {
+                    auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(
+                            Edge, false, TInstant::Max());
+                    UNIT_ASSERT(res->Get()->Status == NKikimrProto::OK);
+                }
+
+                if (profile.DelayBetweenBatches != TDuration::Zero()) {
+                    Env->Sim(profile.DelayBetweenBatches);
+                }
+
+                blobs.insert(blobs.end(), batch.begin(), batch.end());
+                batch.clear();
+            }
+        }
+        return blobs;
+    }
+
+public:
+    ui32 NodeCount;
+    TBlobStorageGroupType Erasure;
+    std::shared_ptr<TEnvironmentSetup> Env;
+
+    NKikimrBlobStorage::TBaseConfig BaseConfig;
+    ui32 GroupId;
+    TActorId Edge;
 };
 
 } // namespace NKikimr

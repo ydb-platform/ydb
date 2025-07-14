@@ -45,14 +45,18 @@ namespace NKikimr {
             const TLogoBlobID& id = iter.GetCurKey().LogoBlobID();
 
             if (status.KeepData) {
-                merger.Begin(id);
-                iter.PutToMerger(&merger);
-                const NMatrix::TVectorType needed = merger.GetPartsToRestore();
-                UpdateUnreadableParts(id, needed, merger.GetCorruptedPart());
-                if (!needed.Empty()) {
-                    Checkpoints |= TEvScrubNotify::HUGE_BLOB_SCRUBBED;
+                if (ScrubCtx->EnableDeepScrubbing) {
+                    CheckIntegrity(id, true);
+                } else {
+                    merger.Begin(id);
+                    iter.PutToMerger(&merger);
+                    const NMatrix::TVectorType needed = merger.GetPartsToRestore();
+                    UpdateUnreadableParts(id, needed, merger.GetCorruptedPart());
+                    if (!needed.Empty()) {
+                        Checkpoints |= TEvScrubNotify::HUGE_BLOB_SCRUBBED;
+                    }
+                    merger.Clear();
                 }
-                merger.Clear();
             } else {
                 DropGarbageBlob(id);
             }

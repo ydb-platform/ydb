@@ -61,11 +61,12 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         ui64 txId = 10;
         int writeId = 10;
         std::vector<ui64> writeIds;
-        const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
+        const bool ok =
+            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTabe.Schema), testTabe.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        PlanSchemaTx(runtime, sender, { planStep, txId });
     }
 
     Y_UNIT_TEST_DUO(WithData, Reboot) {
@@ -81,21 +82,22 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         ui64 txId = 10;
         int writeId = 10;
         std::vector<ui64> writeIds;
-        const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
+        const bool ok =
+            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTabe.Schema), testTabe.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
         PlanCommit(runtime, sender, planStep, txId);
 
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        PlanSchemaTx(runtime, sender, { planStep, txId });
 
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
 
         UNIT_ASSERT_EQUAL(1, NOlap::TSchemaCachesManager::GetCachedOwnersCount());
-        
+
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
             auto rb = reader.ReadAll();
@@ -108,7 +110,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
         }
-
     }
 
     Y_UNIT_TEST(RenameAbsentTable_Negative) {

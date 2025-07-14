@@ -234,8 +234,7 @@ public:   //IPathIdTranslator
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<TPortionIndexStats>& portionsStats,
-        const ui64 tabletId);
+        const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
 
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
         const TString& tablePath, const TSchemeShardLocalPathId externalPathId);
@@ -254,7 +253,8 @@ public:
 
         TSchemaAddress(const ui32 presetId, const NOlap::TSnapshot& snapshot)
             : PresetId(presetId)
-            , Snapshot(snapshot) {
+            , Snapshot(snapshot)
+        {
         }
 
         explicit operator size_t() const {
@@ -288,7 +288,8 @@ public:
 
         TSchemasChain(const std::set<TSchemaAddress>& toRemove, const TSchemaAddress& finish)
             : ToRemove(toRemove)
-            , Finish(finish) {
+            , Finish(finish)
+        {
             AFL_VERIFY(toRemove.size());
             AFL_VERIFY(*ToRemove.rbegin() < Finish);
         }

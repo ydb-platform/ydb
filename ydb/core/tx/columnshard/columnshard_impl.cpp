@@ -92,7 +92,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this) {
+    , SysLocks(this)
+{
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
     SpaceWatcher = new TSpaceWatcher(this);
 }
@@ -108,11 +109,11 @@ void TColumnShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActor
 
 void TColumnShard::TryRegisterMediatorTimeCast() {
     if (MediatorTimeCastRegistered) {
-        return; // already registered
+        return;   // already registered
     }
 
     if (!ProcessingParams) {
-        return; // cannot register without processing params
+        return;   // cannot register without processing params
     }
 
     Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvRegisterTablet(TabletID(), *ProcessingParams));
@@ -287,8 +288,8 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
         internalPathId && TablesManager.HasTable(*internalPathId, true)) {
-        LOG_S_DEBUG(
-            "EnsureTable for existed pathId: " << TUnifiedPathId::BuildNoCheck(internalPathId, schemeShardLocalPathId) << " at tablet " << TabletID());
+        LOG_S_DEBUG("EnsureTable for existed pathId: " << TUnifiedPathId::BuildNoCheck(internalPathId, schemeShardLocalPathId) << " at tablet "
+                                                       << TabletID());
         return;
     }
     const auto internalPathId = TablesManager.CreateInternalPathId(schemeShardLocalPathId);
@@ -415,8 +416,8 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
     const auto& storeSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
     AFL_VERIFY(TablesManager.GetTabletPathId());
     const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathId()->SchemeShardLocalPathId;
-    AFL_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId)
-    ("tablet_path_id", tabletSchemeShardLocalPathId)("store_path_id", storeSchemeShardLocalPathId);
+    AFL_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId)("tablet_path_id", tabletSchemeShardLocalPathId)(
+        "store_path_id", storeSchemeShardLocalPathId);
 
     for (ui32 id : proto.GetDroppedSchemaPresets()) {
         if (!TablesManager.HasPreset(id)) {

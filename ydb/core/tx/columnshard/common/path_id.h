@@ -120,10 +120,6 @@ public:
     bool IsValid() const {
         return InternalPathId.IsValid() && SchemeShardLocalPathId.IsValid();
     }
- 
-    explicit operator bool() const {
-        return IsValid();
-    }
 
     static TUnifiedPathId BuildValid(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId);
     static TUnifiedPathId BuildNoCheck(

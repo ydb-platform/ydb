@@ -14,7 +14,7 @@ Release date: July 14, 2025.
 * Added [configuration mechanism V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1) that simplifies the deployment of new {{ ydb-short-name }} clusters and further work with them. [Comparison](./devops/configuration-management/compare-configs?version=v25.1) of configuration mechanisms V1 and V2.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md?version=v25.1#numeric).
 * [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the `enable_kafka_native_balancing` flag in the cluster configuration.
-* Added support for [auto-partitioning topics](./concepts/cdc.md#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the cluster configuration.
+* Added support for [auto-partitioning topics](./concepts/cdc.md?version=v25.1#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md?version=v25.1#topic-settings) using the `ALTER TOPIC` statement.
 * [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md?version=v25.1#debezium-json-record-structure) for CDC.
 * [Added](https://github.com/ydb-platform/ydb/pull/19507) the ability to create changefeed streams to index tables.
@@ -24,14 +24,14 @@ Release date: July 14, 2025.
   * [Support for views](https://github.com/ydb-platform/ydb/issues/12724) (enabled with the `enable_view_export` flag).
 * [Added](https://github.com/ydb-platform/ydb/issues/17734) automatic cleanup of temporary tables and directories during export to S3. This mode is enabled by setting the `enable_export_auto_dropping` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity checks of backups during import, which prevent restoration from corrupted backups and protect against data loss.
-* [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic.md?version=v25.1#udf) in queries.
+* [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic?version=v25.1#udf) in queries.
 * Added system views with information about [access right settings](./dev/system-views.md?version=v25.1#auth), [history of overloaded partitions](./dev/system-views.md?version=v25.1#top-overload-partitions) - enabled by setting the `enable_followers_stats` flag in the cluster configuration, [history of partitions with broken locks](./dev/system-views?version=v25.1#top-tli-partitions).
 * Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md?version=v25.1) and [ALTER USER](./yql/reference/syntax/alter-user.md?version=v25.1) operators:
   * `HASH` — sets a password in encrypted form.
   * `LOGIN` and `NOLOGIN` — unlocks and blocks a user, respectively.
 * Enhanced account security:
-  * [Added](https://github.com/ydb-platform/ydb/pull/11963) user [password complexity](./reference/configuration/auth_config?version=v25.1#password-complexity) verification.
-  * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) [automatic user lockout](./reference/configuration/auth_config?version=v25.1#account-lockout) after a specified number of failed attempts to enter the correct password.
+  * [Added](https://github.com/ydb-platform/ydb/pull/11963) user [password complexity](./reference/configuration/?version=v25.1#password-complexity) verification.
+  * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) [automatic user lockout](./reference/configuration/?version=v25.1#account-lockout) after a specified number of failed attempts to enter the correct password.
   * [Added](https://github.com/ydb-platform/ydb/pull/12983) the ability for users to change their own passwords.
 * [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to flags that do not specify `(RequireRestart) = true` in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) are applied without a cluster restart.
 * [Changed](https://github.com/ydb-platform/ydb/pull/11329) lock behavior when shard locks exceed the limit. Once the limit is exceeded, the oldest locks (rather than the newest) are converted into full-shard locks.

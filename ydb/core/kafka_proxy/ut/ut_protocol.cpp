@@ -2489,7 +2489,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TKafkaWritable writable(buf);
         writable << version;
         subscribtion.Write(writable, version);
-        protocol.Metadata = TKafkaRawBytes(buf.GetBuffer().data(), buf.GetBuffer().size());
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
 
         joinReq1.Protocols.push_back(protocol);
 
@@ -2791,7 +2791,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TKafkaWritable writable(buf);
         writable << version;
         subscribtion.Write(writable, version);
-        protocol.Metadata = TKafkaRawBytes(buf.GetBuffer().data(), buf.GetBuffer().size());
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
 
         joinReq.Protocols.push_back(protocol);
 
@@ -3152,7 +3152,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto transactionalId = TStringBuilder() << "my-tx-producer-" << TGUID::Create().AsUuidString();
 
         auto resp = kafkaClient.InitProducerId(transactionalId, testServer.KikimrServer->GetRuntime()->GetAppData().KafkaProxyConfig.GetTransactionTimeoutMs() + 1);
-
         UNIT_ASSERT_VALUES_EQUAL(resp->ErrorCode, EKafkaErrors::INVALID_TRANSACTION_TIMEOUT);
     }
 
@@ -3271,7 +3270,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
 
         kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
-
         // move time forward after transaction timeout
         Sleep(TDuration::MilliSeconds(txnTimeoutMs));
 

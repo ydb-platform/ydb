@@ -1,3 +1,4 @@
+* Fixed `ydb tools restore` not being able to restore local backups on Windows.
 
 ## 2.23.0 ##
 

@@ -21,7 +21,8 @@ namespace NKikimr {
             StateNoComp = 0,        // default initial state
             StateCompPolicyAtWork,  // compaction policy is working
             StateCompInProgress,    // level compaction
-            StateWaitCommit         // wait for commit to disk
+            StateWaitCommit,        // wait for commit to disk
+            StateWaitPreCompact,    // wait for huge blob precompaction
         };
 
         static const char *LevelCompStateToStr(ELevelCompState s);

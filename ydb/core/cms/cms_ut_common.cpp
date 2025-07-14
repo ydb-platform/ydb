@@ -654,13 +654,11 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
             options.PileCount - 1,
             TStateStorageInfo::TRingGroup{.State = SYNCHRONIZED, .NToSelect = options.NToSelect}
         );
-        Y_ABORT_UNLESS(GetNodeCount() >= 16);
-        auto setuper = CreateCustomStateStorageSetupper(ringGroups, 
-            {
-                {0, {1, 3, 5, 7, 9, 11, 13, 15}},
-                {1, {0, 2, 4, 6, 8, 10, 12, 14}}
-            }
-        );
+        THashMap<ui32, TVector<ui32>> ringGroupIdToNodeIds;
+        for (ui32 i = 1; i <= GetNodeCount(); ++i) {
+            ringGroupIdToNodeIds[i % options.PileCount].push_back(i - 1);
+        }
+        auto setuper = CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
 
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             setuper(*this, nodeIndex);

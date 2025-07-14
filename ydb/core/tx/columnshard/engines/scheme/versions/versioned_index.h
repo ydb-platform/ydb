@@ -67,7 +67,6 @@ private:
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
     ISnapshotSchema::TPtr SchemeForActualization;
-    THashMap<ui64, ui64> IgnoreSchemaVersionTo;
 
     TVersionedIndex(const TVersionedIndex& base) = default;
     TVersionedIndex& operator=(const TVersionedIndex&) = delete;
@@ -153,13 +152,13 @@ public:
 
     ISnapshotSchema::TPtr GetSchemaOptional(const ui64 version) const {
         auto it = SnapshotByVersion.lower_bound(version);
-        return it == SnapshotByVersion.end() ? nullptr : it->second;
+        return it == SnapshotByVersion.end() ? nullptr : it->second.GetSchema();
     }
 
     ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
         auto it = SnapshotByVersion.lower_bound(version);
         AFL_VERIFY(it != SnapshotByVersion.end())("problem", "no schema for version")("version", version);
-        return it->second;
+        return it->second.GetSchema();
     }
 
     ISnapshotSchema::TPtr GetSchemaVerified(const TSnapshot& version) const {
@@ -180,12 +179,12 @@ public:
         if (upperBound == SnapshotByVersion.begin()) {
             return nullptr;
         }
-        return std::prev(upperBound)->second;
+        return std::prev(upperBound)->second.GetSchema();
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {
         Y_ABORT_UNLESS(!SnapshotByVersion.empty());
-        return SnapshotByVersion.rbegin()->second;
+        return SnapshotByVersion.rbegin()->second.GetSchema();
     }
 
     bool IsEmpty() const {

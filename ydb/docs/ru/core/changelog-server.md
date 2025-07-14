@@ -2,16 +2,16 @@
 
 ## Версия 25.1 {#25-1}
 
-### Релиз кандидат 25.1.2.7 {#25-1-2-7}
+### Релиз кандидат 25.1.2.7 {#25-1-2-7-rc}
 
-Дата выхода: 2025.
+Дата выхода: 14 июля 2025.
 
 
 #### Функциональность
 
-* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска. Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/index.md). Внимание! После включения флага откат на предыдущие версии {{ ydb-short-name }} невозможен.
+* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](https://ydb.tech/docs/ru/recipes/vector-search/), а также примеры работы [на С++ и Python](https://ydb.tech/docs/ru/recipes/ydb-sdk/vector-search). Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/index.md). Внимание! После включения флага откат на предыдущие версии {{ ydb-short-name }} невозможен.
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка [консистентной асинхронной репликации](./concepts/async-replication.md).
-* Поддержаны запросы `BATCH UPDATE` и `BATCH DELETE`, позволяющие изменять большие строковые таблицы вне транзакционных ограничений. Включается установкой флага `enable_batch_updates` в конфигурации кластера.
+* Поддержаны запросы [BATCH UPDATE](.yql/reference/syntax/batch-update.md) и [BATCH DELETE](./yql/reference/syntax/batch-delete.md), позволяющие изменять большие строковые таблицы вне транзакционных ограничений. Включается установкой флага `enable_batch_updates` в конфигурации кластера.
 * Добавлен [механизм конфигурации V2](./devops/configuration-management/configuration-v2/config-overview), упрощающий развёртывание новых кластеров {{ ydb-short-name }} и дальнейшую работу с ними. [Сравнение](./devops/configuration-management/compare-configs) механизмов конфигурации V1 и V2.
 * Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric).
 * Реализована клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (как у самой Kafka). Раньше балансировка происходила на сервере. Включается установкой флага `enable_kafka_native_balancing` в конфигурации кластера.

@@ -1038,6 +1038,10 @@ message TNodeWardenServiceSet {
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
         optional bool ReadOnly = 14;
         optional bool Stop = 15;
+
+        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset)
+        // from drive size and this value
+        optional uint64 InferPDiskSlotCountFromUnitSize = 16;
     }
 
     message TVDisk {

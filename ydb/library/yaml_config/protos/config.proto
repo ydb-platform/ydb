@@ -74,6 +74,12 @@ message TExtendedHostConfigDrive {
     optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6 [(NMarkers.CopyTo) = "THostConfigDrive"];
     optional uint64 ExpectedSlotCount = 7;
     optional uint32 SlotSizeInUnits = 8;
+    optional uint64 InferPDiskSlotCountFromUnitSize = 9 [(NMarkers.CopyTo) = "THostConfigDrive"];
+}
+
+message TInferPDiskSlotCountFromUnitSize {
+    optional uint64 Rot = 1;
+    optional uint64 Ssd = 2; // Implies both ssd and nvme
 }
 
 message THosts {
@@ -140,6 +146,8 @@ message TExtendedDefineHostConfig {
     repeated string Rot = 5 [(NMarkers.CopyTo) = "TDefineHostConfig"];
     repeated string Ssd = 6 [(NMarkers.CopyTo) = "TDefineHostConfig"];
     repeated string Nvme = 7 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+
+    optional TInferPDiskSlotCountFromUnitSize InferPDiskSlotCountFromUnitSize = 8;
 
     optional uint64 ItemConfigGeneration = 100 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 }

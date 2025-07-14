@@ -40,12 +40,19 @@ namespace NNodeBroker {
 struct TDynamicConfig;
 using TDynamicConfigPtr = TIntrusivePtr<TDynamicConfig>;
 
+class TDynamicNameserver;
+class TListNodesCache;
+
 class TCacheMiss {
 public:
-    TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TMonotonic deadline);
+    TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest,
+               TMonotonic deadline, ui32 syncCookie);
     virtual ~TCacheMiss() = default;
     virtual void OnSuccess(const TActorContext &);
     virtual void OnError(const TString &error, const TActorContext &);
+
+    virtual void ConvertToActor(TDynamicNameserver* owner, TIntrusivePtr<TListNodesCache> listNodesCache,
+                                const TActorContext &ctx) = 0;
 
     struct THeapIndexByDeadline {
         size_t& operator()(TCacheMiss& cacheMiss) const;
@@ -59,6 +66,7 @@ public:
     const ui32 NodeId;
     const TMonotonic Deadline;
     bool NeedScheduleDeadline;
+    const ui32 SyncCookie;
 
 protected:
     TDynamicConfigPtr Config;
@@ -109,12 +117,14 @@ struct TDynamicConfig : public TThrRefBase {
     };
 
     THashMap<ui32, TDynamicNodeInfo> DynamicNodes;
-    THashMap<ui32, TDynamicNodeInfo> ExpiredNodes;
+    THashSet<ui32> ExpiredNodes;
     TEpochInfo Epoch;
     TActorId NodeBrokerPipe;
 
     using TPendingCacheMissesQueue = TIntrusiveHeap<TCacheMiss, TCacheMiss::THeapIndexByDeadline, TCacheMiss::TCompareByDeadline>;
     TPendingCacheMissesQueue PendingCacheMisses;
+    // Used to know who owns CacheMiss memory - ActorSystem or DynamicNameservice
+    std::unordered_map<TCacheMiss*, THolder<TCacheMiss>> CacheMissHolders;
 };
 
 class TListNodesCache : public TSimpleRefCount<TListNodesCache> {
@@ -134,6 +144,12 @@ template<typename TCacheMiss>
 class TActorCacheMiss;
 class TCacheMissGet;
 class TCacheMissResolve;
+
+enum class EProtocolState {
+    Connecting,
+    UseEpochProtocol,
+    UseDeltaProtocol,
+};
 
 class TDynamicNameserver : public TActorBootstrapped<TDynamicNameserver> {
 public:
@@ -198,6 +214,8 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvNodeBroker::TEvNodesInfo, Handle);
+            HFunc(TEvNodeBroker::TEvUpdateNodes, Handle);
+            HFunc(TEvNodeBroker::TEvSyncNodesResponse, Handle)
             HFunc(TEvPrivate::TEvUpdateEpoch, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvents::TEvUnsubscribe, Handle);
@@ -205,7 +223,7 @@ public:
 
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
 
             hFunc(TEvNodeWardenStorageConfig, Handle);
         }
@@ -225,6 +243,7 @@ private:
                             const TActorContext &ctx);
     void ResolveStaticNode(ui32 nodeId, TActorId sender, TMonotonic deadline, const TActorContext &ctx);
     void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TMonotonic deadline, const TActorContext &ctx);
+    void SendNodesList(TActorId recipient, const TActorContext &ctx);
     void SendNodesList(const TActorContext &ctx);
     void PendingRequestAnswered(ui32 domain, const TActorContext &ctx);
     void UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
@@ -233,6 +252,8 @@ private:
     void OnPipeDestroyed(ui32 domain,
                          const TActorContext &ctx);
 
+    void UpdateCounters();
+
     void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvListNodes::TPtr &ev, const TActorContext &ctx);
@@ -240,18 +261,21 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSyncNodesResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TActorContext &ctx);
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
     void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr ev);
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev, const TActorContext &ctx);
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev);
     void HandleWakeup(const TActorContext &ctx);
 
     void ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSetup> newStaticConfig);
     void RegisterNewCacheMiss(TCacheMiss* cacheMiss, TDynamicConfigPtr config);
+    void SendSyncRequest(TActorId pipe, const TActorContext &ctx);
 
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;
@@ -266,7 +290,18 @@ private:
     THashMap<ui32, ui64> EpochUpdates;
     ui32 ResolvePoolId;
     THashSet<TActorId> StaticNodeChangeSubscribers;
-    bool SubscribedToConsole = false;
+    bool SubscribedToConsoleNSConfig = false;
+
+    bool EnableDeltaProtocol = false;
+    EProtocolState ProtocolState = EProtocolState::Connecting;
+    bool SyncInProgress = false;
+    ui64 SyncCookie = 0;
+    ui64 SeqNo = 0;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr StaticNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveDynamicNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ExpiredDynamicNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EpochVersionCounter;
 };
 
 } // NNodeBroker

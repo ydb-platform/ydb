@@ -58,15 +58,15 @@ public:
             return Error(TStatus::WRONG_REQUEST, "Node ID is banned", ctx);
 
         auto &node = it->second;
-        if (!node.IsFixed()) {
-            Self->Dirty.DbUpdateNodeLease(node, txc);
+        if (node.Expire < Self->Dirty.Epoch.NextEnd) {
             Self->Dirty.ExtendLease(node);
-            Response->Record.SetExpire(Self->Dirty.Epoch.NextEnd.GetValue());
+            Self->Dirty.DbAddNode(node, txc);
+            Self->Dirty.UpdateEpochVersion();
+            Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
             Update = true;
-        } else {
-            Response->Record.SetExpire(TInstant::Max().GetValue());
         }
 
+        Response->Record.SetExpire(node.Expire.GetValue());
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
         Self->Dirty.Epoch.Serialize(*Response->Record.MutableEpoch());
 
@@ -82,8 +82,16 @@ public:
                     "TTxExtendLease reply with: " << Response->ToString());
         ctx.Send(Event->Sender, Response.Release());
 
-        if (Update)
-            Self->Committed.ExtendLease(Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId()));
+        if (Update) {
+            auto& node = Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId());
+            Self->Committed.ExtendLease(node);
+            Self->Committed.UpdateEpochVersion();
+            Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
+            Self->ScheduleProcessSubscribersQueue(ctx);
+        }
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

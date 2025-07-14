@@ -20,8 +20,8 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateEpoch Execute");
 
         Self->Dirty.ComputeNextEpochDiff(Diff);
-        Self->Dirty.DbApplyStateDiff(Diff, txc);
         Self->Dirty.ApplyStateDiff(Diff);
+        Self->Dirty.DbApplyStateDiff(Diff, txc);
 
         return true;
     }
@@ -33,7 +33,11 @@ public:
         Self->Committed.ApplyStateDiff(Diff);
         Self->ScheduleEpochUpdate(ctx);
         Self->PrepareEpochCache();
+        Self->PrepareUpdateNodesLog();
         Self->ProcessDelayedListNodesRequests();
+        Self->ScheduleProcessSubscribersQueue(ctx);
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

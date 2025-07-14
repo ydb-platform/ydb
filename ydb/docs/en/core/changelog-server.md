@@ -2,15 +2,15 @@
 
 ## Version 25.1 {#25-1}
 
-### Release candidate 25.1.2.7 {#25-1-2-7}
+### Release candidate 25.1.2.7 {#25-1-2-7-rc}
 
-Release date: 2025.
+Release date: July 14, 2025.
 
 #### Functionality
 
 * [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md) for approximate vector similarity search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./reference/configuration/index.md). Attention! After enabling the flag, rollback to previous versions of {{ ydb-short-name }} is not possible.
-* [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
-* [Implemented] `BATCH UPDATE` and `BATCH DELETE` statements, allowing the application of changes to large row-oriented tables outside of transactional constraints. This mode is enabled by setting the `enable_batch_updates` flag in the cluster configuration.
+* [Added](https://github.com/ydb-platform/ydb/issues/11454) support for [consistent asynchronous replication](./concepts/async-replication.md).
+* Implemented [BATCH UPDATE](.yql/reference/syntax/batch-update.md) and [BATCH DELETE](./yql/reference/syntax/batch-delete.md) statements, allowing the application of changes to large row-oriented tables outside of transactional constraints. This mode is enabled by setting the `enable_batch_updates` flag in the cluster configuration.
 * Added [configuration mechanism V2](./devops/configuration-management/configuration-v2/config-overview) that simplifies the deployment of new {{ ydb-short-name }} clusters and further work with them. [Comparison](./devops/configuration-management/compare-configs) of configuration mechanisms V1 and V2.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
 * [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the `enable_kafka_native_balancing` flag in the cluster configuration.

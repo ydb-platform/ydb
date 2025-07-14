@@ -23,12 +23,31 @@ from ydb.tests.tools.nemesis.library.tablet import KillNodeBrokerNemesis
 from ydb.tests.tools.nemesis.library.tablet import KillBlocktoreVolume
 from ydb.tests.tools.nemesis.library.tablet import KillBlocktorePartition
 from ydb.tests.tools.nemesis.library.disk import data_storage_nemesis_list
+from ydb.tests.tools.nemesis.library.datacenter import datacenter_nemesis_list
+from ydb.tests.tools.nemesis.library.bridge_pile import bridge_pile_nemesis_list
 
 
 def is_first_cluster_node(cluster):
     if len(cluster.hostnames) > 0:
         return cluster.hostnames[0] == socket.gethostname().strip()
     return False
+
+def is_bridge_cluster(cluster):
+    yaml_config = cluster.yaml_config
+    if yaml_config is not None and yaml_config.get('config', {}).get('bridge_config') is not None:
+        return True
+    return False
+
+def validate_datacenters(cluster):
+     dc_to_nodes = collections.defaultdict(list)
+     for node in cluster.nodes.values():
+         if node.datacenter is not None:
+             dc_to_nodes[node.datacenter].append(node)
+
+     data_centers = list(dc_to_nodes.keys())
+     if len(data_centers) < 2:
+         return False
+     return True
 
 
 def basic_kikimr_nemesis_list(
@@ -92,6 +111,11 @@ def basic_kikimr_nemesis_list(
         return nemesis_list
     nemesis_list.extend(light_nemesis_list)
     nemesis_list.extend(harmful_nemesis_list)
+
+    if is_bridge_cluster(cluster):
+        nemesis_list.extend(bridge_pile_nemesis_list(cluster))
+    elif validate_datacenters(cluster):
+        nemesis_list.extend(datacenter_nemesis_list(cluster))
     return nemesis_list
 
 

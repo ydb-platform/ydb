@@ -5,10 +5,13 @@ PY3_LIBRARY()
 PY_SRCS(
     __init__.py
     base.py
+    bridge_pile.py
     catalog.py
+    datacenter.py
     disk.py
     node.py
     tablet.py
+    state.py
     monitor.py
 )
 

@@ -80,7 +80,10 @@ def prepare_tzdata(version):
 
     EXCLUDE = [
         "iso3166.tab",
+        "leapseconds",
+        "tzdata.zi",
         "zone.tab",
+        "zone1970.tab",
         "zonenow.tab",
     ]
 

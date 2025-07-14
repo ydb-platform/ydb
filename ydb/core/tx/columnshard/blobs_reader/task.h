@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
-class TCompositeReadBlobs {
+class TCompositeReadBlobs: public TNonCopyable {
 private:
     THashMap<TString, TActionReadBlobs> BlobsByStorage;
 
@@ -125,6 +125,10 @@ public:
             result += i.second.GetTotalBlobsSize();
         }
         return result;
+    }
+
+    ~TCompositeReadBlobs() {
+        AFL_VERIFY(IsEmpty());
     }
 };
 

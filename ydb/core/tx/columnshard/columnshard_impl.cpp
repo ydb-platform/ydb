@@ -288,7 +288,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
         internalPathId && TablesManager.HasTable(*internalPathId, true)) {
         LOG_S_DEBUG(
-            "EnsureTable for existed pathId: " << TUnifiedPathId(*internalPathId, schemeShardLocalPathId) << " at tablet " << TabletID());
+            "EnsureTable for existed pathId: " << TUnifiedPathId::BuildNoCheck(internalPathId, schemeShardLocalPathId) << " at tablet " << TabletID());
         return;
     }
     const auto internalPathId = TablesManager.CreateInternalPathId(schemeShardLocalPathId);

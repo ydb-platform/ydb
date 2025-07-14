@@ -52,7 +52,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const TString table = request.GetTablePath();
     const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
-    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(request.GetLocalPathId());
+    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     NConveyorComposite::TCPULimitsConfig cpuLimits;
     cpuLimits.DeserializeFromProto(request).Validate();
     if (scanGen > 1) {

@@ -108,7 +108,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     }
 
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
-    if (schema.GetDiff()) {
+    if (schema.GetDiff() && !schema.HasSchema()) {
         AFL_VERIFY(!vIndex.IsEmpty());
         const auto& lastIndexInfo = vIndex.GetLastSchema()->GetIndexInfo();
         AFL_VERIFY(presetId == lastIndexInfo.GetPresetId());

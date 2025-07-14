@@ -83,7 +83,8 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
 
 void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tabletSchemeShardLocalPathId, const TTabletStorageInfo* info) {
     AFL_VERIFY(!TabletPathId.has_value());
-    const auto& tabletInternalPathId = CreateInternalPathId(tabletSchemeShardLocalPathId);
+    AFL_VERIFY(info);
+    const auto& tabletInternalPathId = GetOrCreateInternalPathId(tabletSchemeShardLocalPathId);
     TabletPathId.emplace(TUnifiedPathId::BuildValid(tabletInternalPathId, tabletSchemeShardLocalPathId));
     AFL_VERIFY(!SchemaObjectsCache);
     SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletInternalPathId, info->TenantPathId);
@@ -289,7 +290,7 @@ bool TTablesManager::HasTable(
     return true;
 }
 
-TInternalPathId TTablesManager::CreateInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) {
+TInternalPathId TTablesManager::GetOrCreateInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) {
     if (const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId)) {
         return *internalPathId;
     }
@@ -488,7 +489,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     }
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
-    AFL_VERIFY(SchemeShardLocalToInternal.erase(itTable->second.GetPathId().SchemeShardLocalPathId));
+    AFL_VERIFY(SchemeShardLocalToInternal.erase(itTable->second.GetPathId().GetSchemeShardLocalPathId()));
     Tables.erase(itTable);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "TryFinalizeDropPathOnComplete")("path_id", pathId)("size", Tables.size());
     return true;

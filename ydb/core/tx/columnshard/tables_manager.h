@@ -417,7 +417,7 @@ public:
 
     const TTableInfo& GetTable(const TInternalPathId pathId) const;
     ui64 GetMemoryUsage() const;
-    TInternalPathId CreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
+    TInternalPathId GetOrCreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
     THashMap<TSchemeShardLocalPathId, TInternalPathId> ResolveInternalPathIds(
         const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const;
     bool HasTable(const TInternalPathId pathId, const bool withDeleted = false,

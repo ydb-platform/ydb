@@ -117,13 +117,18 @@ private:
         CacheByTableOwner.clear();
     }
 
+    size_t GetCachedOwnersCountImpl() {
+        TGuard lock(Mutex);
+        return CacheByTableOwner.size();
+    }
+
 public:
     static std::shared_ptr<TSchemaObjectsCache> GetCache(const NColumnShard::TInternalPathId ownerPathId, const TPathId& tenantPathId) {
         return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
     }
 
     static size_t GetCachedOwnersCount() {
-        return Singleton<TSchemaCachesManager>()->CacheByTableOwner.size();
+        return Singleton<TSchemaCachesManager>()->GetCachedOwnersCountImpl();
     }
 
     static void DropCaches() {

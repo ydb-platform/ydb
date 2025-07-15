@@ -19,6 +19,8 @@ jobs:
         include:
           - prestable_branch: prestable-25-2
             stable_branch: stable-25-1
+          - prestable_branch: prestable-25-3
+            stable_branch: main
 
     steps:
       - name: Verify prestable branch

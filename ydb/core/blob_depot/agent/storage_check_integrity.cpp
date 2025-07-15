@@ -5,7 +5,7 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvCheckIntegrity>(
-            std::unique_ptr<IEventHandle> ev, TMonotonic received) {
+            std::unique_ptr<IEventHandle> ev) {
 
         class TCheckIntegrityQuery : public TBlobStorageQuery<TEvBlobStorage::TEvCheckIntegrity> {
         public:
@@ -87,7 +87,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TCheckIntegrityQuery(*this, std::move(ev), received);
+        return new TCheckIntegrityQuery(*this, std::move(ev));
     }
 
 } // NKikimr::NBlobDepot

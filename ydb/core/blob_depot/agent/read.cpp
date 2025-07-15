@@ -260,17 +260,16 @@ namespace NKikimr::NBlobDepot {
         auto checkContext = std::make_shared<TCheckContext>(std::move(arg));
 
         for (const auto& value : checkContext->ReadArg.Value.Chain) {
-            if (value.Blob) {
-                const auto& [blobId, groupId] = *value.Blob;
-                auto event = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
-                    blobId, TInstant::Max(), checkContext->ReadArg.GetHandleClass);
+            const ui32 groupId = value.GroupId;
+            const auto& blobId = value.BlobId;
+            auto event = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
+                blobId, TInstant::Max(), checkContext->ReadArg.GetHandleClass);
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA63, "issuing TEvCheckIntegrity", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                    (Key, Agent.PrettyKey(checkContext->ReadArg.Key)), (GroupId, groupId), (Msg, *event));
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA63, "issuing TEvCheckIntegrity", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+                (Key, Agent.PrettyKey(checkContext->ReadArg.Key)), (GroupId, groupId), (Msg, *event));
 
-                Agent.SendToProxy(groupId, std::move(event), this, checkContext);
-                ++checkContext->NumPartsPending;
-            }
+            Agent.SendToProxy(groupId, std::move(event), this, checkContext);
+            ++checkContext->NumPartsPending;
         }
     }
 

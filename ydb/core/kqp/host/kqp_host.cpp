@@ -718,11 +718,17 @@ public:
                     if (queryCtx->PrepareOnly) {
                         auto& paramDesc = *queryCtx->PreparingQuery->AddParameters();
                         paramDesc.SetName(TString(name));
-                        if (!ExportTypeToKikimrProto(*expectedType, *paramDesc.MutableType(), ctx)) {
+
+                        auto typeBuilder = NKikimr::NMiniKQL::TTypeBuilder(queryCtx->QueryData->TypeEnv());
+                        NKikimr::NMiniKQL::TType* result = NYql::NCommon::BuildType(parameter.Pos(), *expectedType, typeBuilder);
+
+                        if (!result) {
                             ctx.AddError(TIssue(ctx.GetPosition(parameter.Pos()), TStringBuilder()
                                 << "Failed to export parameter type: " << name));
                             return nullptr;
                         }
+
+                        ExportTypeToProto(result, *paramDesc.MutableType());
 
                         return ret;
                     }

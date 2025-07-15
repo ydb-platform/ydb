@@ -10,7 +10,6 @@
 * 18352:Added database audit logs in console's tablet.[#18352](https://github.com/ydb-platform/ydb/pull/18352) ([flown4qqqq](https://github.com/flown4qqqq))
 * 18298:Limited the creation of ReassignerActor to only one active instance to prevent [SelfHeal](https://ydb.tech/docs/ru/maintenance/manual/selfheal) from overloading BSC. [#18298](https://github.com/ydb-platform/ydb/pull/18298) ([Sergey Belyakov](https://github.com/serbel324))
 * 18294:Changed version format from Year.Major.Minor.Hotfix to Year.Major.Minor.Patch.Hotfix [#18294](https://github.com/ydb-platform/ydb/pull/18294) ([Sergey Belyakov](https://github.com/serbel324))
-* 19563:cherry-pick 34cd625, b8c84f9, afb5748, c7a3ca4, 6b6e4dc, b2829f5, 2c78e37, 6b267a7, 0859ef2, 519ccaf, f82809e, 3fdf248, e46659b, c55a900, a72aaab and 06674e6. Furthermore, temporarily tweak `DeclareSignature` for `Datetime::Format`, `Datetime::Parse` and several typeaware UDFs for the incremental upgrade. [#19563](https://github.com/ydb-platform/ydb/pull/19563) ([Igor Munkin](https://github.com/igormunkin))
 
 ### Bug fixes
 
@@ -20,12 +19,13 @@
 * 18296:Fixed replication continuing to consume disk space when storage was low, which caused VDisks to become read-only. [#18296](https://github.com/ydb-platform/ydb/pull/18296) ([Sergey Belyakov](https://github.com/serbel324))
 * 18938:In the table description columns are returned in the same order as they were specified in CREATE TABLE. [#18938](https://github.com/ydb-platform/ydb/pull/18938) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 18794:[Fixed](https://github.com/db-platform/adb/pull/18794) a rare [bug](https://github.com/ydb-platform/ydb/issues/18615) with PQ tablet restarts. [#18794](https://github.com/ydb-platform/ydb/pull/18794) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 20276:Do not fold SafeCast for JsonDocument because it could produce unexpected result
-Fix for KIKIMR-23489 [#20276](https://github.com/ydb-platform/ydb/pull/20276) ([Denis Khalikov](https://github.com/denis0x0D))
 * 20242:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20242](https://github.com/ydb-platform/ydb/pull/20242) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20155:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20155](https://github.com/ydb-platform/ydb/pull/20155) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20083:Поправил коммит оффсетов сообщений топика при чтении. До фикса пользователь получал ошибку "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown\n"
 Сломали начиная с 25-1-2 [#20083](https://github.com/ydb-platform/ydb/pull/20083) ([Nikolay Shestakov](https://github.com/nshestakov))
+
+### YDB UI
+
 * 20053:Fixing crash in /viewer/storage handler, closes https://github.com/ydb-platform/ydb/issues/17813
 Keep precision of double values on serialization, closes https://github.com/ydb-platform/ydb-embedded-ui/issues/2164
 Fix long errors on vdisk evict when no pdisks are available
@@ -40,11 +40,6 @@ Fix storage nodes, some other minor fixes, closes https://github.com/ydb-platfor
 Minimize returned data to avoid large responses, closes https://github.com/ydb-platform/ydb/issues/19810
 Don't report fake limit as total node memory
 Make nodes less critical (to make cluster less critical), closes https://github.com/ydb-platform/ydb/issues/19676 [#20053](https://github.com/ydb-platform/ydb/pull/20053) ([Alexey Efimov](https://github.com/adameat))
-* 20024:Changes from #20020
-
-There was a T1 transaction in the EXECUTED queue. She is waiting for the signal to continue working. The T2 transaction was queued and its state was saved to disk. Transaction T1 was running at that moment. As a result, the T2 transaction continued to run when its state had not yet been saved to disk. She sent TEvReadSetAck to her "colleagues" and they deleted the T2 transaction. If the tablet restarts at this moment, the T2 transaction will be in the PLANNED state and will never receive a TEvReadSet from "colleagues".
-
-Before continuing to execute a transaction, you need to make sure that its state is saved to disk. Added a check. [#20024](https://github.com/ydb-platform/ydb/pull/20024) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 
 ### Performance
 
@@ -52,9 +47,4 @@ Before continuing to execute a transaction, you need to make sure that its state
 * 17578:Added naive bulk And to Roaring UDF. [#17578](https://github.com/ydb-platform/ydb/pull/17578) ([jsjant](https://github.com/jsjant)
 * 20197:Adds early termination optimization for `GraceJoin`: if one side is empty and the join kind guarantees an empty result, the other side is no longer read.
 ... [#20197](https://github.com/ydb-platform/ydb/pull/20197) ([Filitov Mikhail](https://github.com/lll-phill-lll))
-* 19841:Changes from #19807
-
-Changed the retry policy settings. Added a cache of SchemeNavigate responses. Users will receive faster confirmation that the server has written the message.
-
-Added logging of requests to KQP. [#19841](https://github.com/ydb-platform/ydb/pull/19841) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 

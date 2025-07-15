@@ -2,7 +2,7 @@
 
 #include "log_backend.h"
 #include "runner.h"
-#include "scroller.h"
+#include "logs_scroller.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>
@@ -218,24 +218,10 @@ Element TRunnerTui::BuildUpperPart() {
 }
 
 Component TRunnerTui::BuildComponent() {
-    // Logs section
-
-    auto scrollableLogs = Scroller(Renderer([&] {
-        Elements logElements;
-
-        LogBackend.GetLogLines([&](ELogPriority, const std::string& line) {
-            logElements.push_back(paragraph(line));
-        });
-
-        auto logsContent = vbox(logElements) | flex;
-        return logsContent;
-    }), "Logs");
-
     // Main layout
-
     return Container::Vertical({
         Renderer([=]{ return BuildUpperPart(); }),
-        scrollableLogs,
+        LogsScroller(LogBackend),
     });
 }
 

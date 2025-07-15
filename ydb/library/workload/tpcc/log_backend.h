@@ -1,5 +1,7 @@
 #pragma once
 
+#include "log.h"
+
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/logger/log.h>
 
@@ -24,7 +26,7 @@ public:
 
     // Get current log lines to display in TUI
     // Assumes single consumer, multiple producers
-    void GetLogLines(const std::function<void(ELogPriority, const std::string&)>& processor);
+    void GetLogLines(const TLogProcessor& processor);
 
     // TLogBackend interface (threadsafe)
 

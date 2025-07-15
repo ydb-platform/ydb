@@ -35,7 +35,7 @@ void TLogBackendWithCapture::StopCapture() {
     TruncatedCount = 0;
 }
 
-void TLogBackendWithCapture::GetLogLines(const std::function<void(ELogPriority, const std::string&)>& processor) {
+void TLogBackendWithCapture::GetLogLines(const TLogProcessor& processor) {
     ProcessNewLines();
 
     if (TruncatedCount > 0) {

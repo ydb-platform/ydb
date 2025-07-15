@@ -5,6 +5,8 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
+using TLogProcessor = std::function<void(ELogPriority, const std::string&)>;
+
 inline const char* PriorityToString(ELogPriority priority) {
     switch (priority) {
         case TLOG_EMERG:     return "EMERG";

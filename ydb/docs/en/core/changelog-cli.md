@@ -2,7 +2,7 @@
 
 ## Version 2.23.0 {#2-23-0}
 
-Released on July 4, 2025. To update to version **2.23.0**, select the [Downloads](downloads/ydb-cli.md) section.
+Released on July 16, 2025. To update to version **2.23.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -14,10 +14,15 @@ Released on July 4, 2025. To update to version **2.23.0**, select the [Downloads
 
 * Enhanced processing of special values (`null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr`, and `cerr`) for the `--output` option in the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
 * The `{{ ydb-cli }} workload` [commands](./reference/ydb-cli/commands/workload/index.md) now work with absolute paths for database scheme objects.
-* Improvements in the `{{ ydb-cli }}` interactive mode:
+* Improvements in the `{{ ydb-cli }}` [interactive mode](./reference/ydb-cli/interactive-cli.md):
+  * Added server connection check and hotkeys description.
   * Improved inline hints.
   * Added table column names completion.
   * Added schema caching.
+
+### Bug fixes
+
+* Fixed an issue where the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md) was not working on Windows.
 
 ## Version 2.22.1 {#2-22-1}
 

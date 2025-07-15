@@ -33,6 +33,13 @@ private:
     inline static TAtomicCounter MemoryScopeIdCounter = 0;
 
 public:
+    void Abort() {
+        if (Blobs) {
+            Blobs->Clear();
+            Blobs.reset();
+        }
+    }
+
     ui64 GetMemoryProcessId() const {
         return MemoryProcessGuard->GetProcessId();
     }

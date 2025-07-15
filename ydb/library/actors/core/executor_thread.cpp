@@ -556,6 +556,7 @@ namespace NActors {
             NHPTimer::STime passedTime = Max<i64>(hpnow - activationStart, 0);
             ExecutionStats.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
         }
+        ExecutionStats.CopySafeTicks();
     }
 
     void TExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) {

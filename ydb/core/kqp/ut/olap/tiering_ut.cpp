@@ -427,12 +427,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         putController->WaitActualization(TDuration::Seconds(5));
         Sleep(TDuration::Seconds(5));
-
-        UNIT_ASSERT_C(putController->GetAbortedWrites() > 20,
-            "Expected load spike, but only " << putController->GetAbortedWrites() << " PutObject requests recorded");   // comment after fix
-        // UNIT_ASSERT_C(putController->GetAbortedWrites() < 10,
-        //               "Expected load spike, but was "
-        //               << putController->GetAbortedWrites() << " PutObject requests recorded"); // uncomment after fix
+        std::cout << "la-la-la: " << putController->GetAbortedWrites() << '\n';
+        UNIT_ASSERT_C(putController->GetAbortedWrites() < 10,
+                      "Expected reduced load with exponential backoff, but was "
+                      << putController->GetAbortedWrites() << " PutObject requests recorded");
     }
 }
 

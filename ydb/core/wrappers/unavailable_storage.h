@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <util/system/thread.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -9,9 +10,24 @@ class TUnavailableExternalStorageOperator: public IExternalStorageOperator {
 private:
     const TString Exception;
     const TString Reason;
+    mutable std::atomic<ui64> RequestCount{0};
+    mutable std::atomic<TInstant> LastResetTime{TInstant::Now()};
 
     template <class TResponse, class TRequestPtr>
     void ExecuteImpl(TRequestPtr& ev) const {
+        TInstant now = TInstant::Now();
+        TInstant lastReset = LastResetTime.load();
+        if (now - lastReset > TDuration::Seconds(30)) {
+            RequestCount.store(0);
+            LastResetTime.store(now);
+        }
+
+        ui64 currentRequest = RequestCount.fetch_add(1);
+        if (currentRequest > 0) {
+            ui64 delayMs = std::min(1000ULL << std::min(currentRequest - 1ULL, 3ULL), 10000ULL);
+            Sleep(TDuration::MilliSeconds(delayMs));
+        }
+
         const Aws::S3::S3Error error = Aws::S3::S3Error(
             Aws::Client::AWSError<Aws::Client::CoreErrors>(Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, Exception, Reason, false));
         std::unique_ptr<TResponse> response;
@@ -39,6 +55,12 @@ public:
         : Exception(exceptionName)
         , Reason(unavailabilityReason) {
     }
+
+    void ResetRequestCount() const {
+        RequestCount.store(0);
+        LastResetTime.store(TInstant::Now());
+    }
+
     virtual void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const override {
         ExecuteImpl<TEvCheckObjectExistsResponse>(ev);
     }

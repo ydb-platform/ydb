@@ -42,8 +42,13 @@ void ResolveAndParseYamlConfig(
     TString* resolvedJsonConfig)
 {
     TStringStream resolvedJsonConfigStream;
+    bool hasMetadata = false;
     if (mainYamlConfig) {
         auto tree = NFyaml::TDocument::Parse(mainYamlConfig);
+
+        if (tree.Root().Map().Has("metadata")) {
+            hasMetadata = true;
+        }
 
         if (databaseYamlConfig) {
             auto d = NFyaml::TDocument::Parse(*databaseYamlConfig);
@@ -79,6 +84,10 @@ void ResolveAndParseYamlConfig(
 
     NJson::TJsonValue json;
     Y_ABORT_UNLESS(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
+
+    if (hasMetadata) {
+        appConfig.SetYamlConfigEnabled(true);
+    }
 
     NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, true);
 }

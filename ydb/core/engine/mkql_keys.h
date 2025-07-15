@@ -52,8 +52,46 @@ TCell MakeCell(const NUdf::TUnboxedValuePod& value) {
     return TCell(reinterpret_cast<const char*>(&v), sizeof(v));
 }
 
+struct TStringProviderBackend {
+    mutable TMemoryPool MemoryPool;
+
+    TStringProviderBackend()
+        : MemoryPool(256)
+    {}
+
+    class TMutableStringData {
+        friend struct TStringProviderBackend;
+
+    private:
+        char* Data_;
+        size_t Size_ = 0;
+
+        explicit TMutableStringData(char* data, size_t size)
+            : Data_(data)
+            , Size_(size)
+        {}
+
+    public:
+        char *Data() const noexcept {
+            return Data_;
+        }
+
+        size_t Size() const noexcept {
+            return Size_;
+        }
+    };
+
+    TMutableStringData NewString(ui32 size) const {
+        return TMutableStringData(reinterpret_cast<char*>(MemoryPool.Allocate(size)), size);
+    }
+};
+
 TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
     const TTypeEnvironment& env, bool copy = true,
+    i32 typmod = -1, TMaybe<TString>* error = {});
+
+TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TStringProviderBackend& env, bool copy = true,
     i32 typmod = -1, TMaybe<TString>* error = {});
 
 void FillKeyTupleValue(const NUdf::TUnboxedValue& row, const TVector<ui32>& rowIndices,

@@ -20,7 +20,7 @@ public:
 
     ~TKqpProtoBuilder();
 
-    Ydb::ResultSet BuildYdbResultSet(TVector<NYql::NDq::TDqSerializedBatch>&& data,
+    void BuildYdbResultSet(Ydb::ResultSet& resultSet, TVector<NYql::NDq::TDqSerializedBatch>&& data,
         NKikimr::NMiniKQL::TType* srcRowType, const TVector<ui32>* columnOrder = nullptr);
 
 private:

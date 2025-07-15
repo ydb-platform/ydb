@@ -6,4 +6,6 @@ namespace NSQLTranslationV1 {
 
 NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi);
 
+bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
+    TVector<TString>& statements, NYql::TIssues& issues);
 }

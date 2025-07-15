@@ -651,7 +651,7 @@ bool TLockLocker::ForceShardLock(const TPathId& tableId) const {
     auto it = Tables.find(tableId);
     if (it != Tables.end()) {
         if (it->second->RangeCount() > LockLimit()) {
-            return true;
+            return Locks.size() > LockLimit();
         }
     }
     return false;
@@ -659,8 +659,9 @@ bool TLockLocker::ForceShardLock(const TPathId& tableId) const {
 
 bool TLockLocker::ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const {
     for (auto& table : readTables) {
-        if (table.RangeCount() > LockLimit())
-            return true;
+        if (table.RangeCount() > LockLimit()) {
+            return Locks.size() > LockLimit();
+        }
     }
     return false;
 }

@@ -508,6 +508,21 @@ public:
         CompileQuery();
     }
 
+    bool AreAllTheTopicsAndPartitionsKnown() const {
+        const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperations();
+        for (const auto& topic : operations.GetTopics()) {
+            auto path = CanonizePath(NPersQueue::GetFullTopicPath(TlsActivationContext->AsActorContext(),
+                                                                  QueryState->GetDatabase(), topic.path()));
+
+            for (const auto& partition : topic.partitions()) {
+                if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, partition.partition_id())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     void AddOffsetsToTransaction() {
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
@@ -516,10 +531,25 @@ public:
 
         QueryState->AddOffsetsToTransaction();
 
-        auto navigate = QueryState->BuildSchemeCacheNavigate();
+        if (!AreAllTheTopicsAndPartitionsKnown()) {
+            auto navigate = QueryState->BuildSchemeCacheNavigate();
+            Become(&TKqpSessionActor::ExecuteState);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+            return;
+        }
 
-        Become(&TKqpSessionActor::ExecuteState);
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+        TString message;
+        if (!QueryState->TryMergeTopicOffsets(QueryState->TopicOperations, message)) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
+        }
+
+        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+            Become(&TKqpSessionActor::ExecuteState);
+            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
+            return;
+        }
+
+        ReplySuccess();
     }
 
     void CompileQuery() {
@@ -2486,11 +2516,14 @@ private:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
+        QueryState->TxCtx->TopicOperations.CacheSchemeCacheNavigate(response->ResultSet);
+
         if (HasTopicWriteOperations() && !HasTopicWriteId()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
-        } else {
-            ReplySuccess();
+            return;
         }
+
+        ReplySuccess();
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
@@ -2500,7 +2533,9 @@ private:
 
         YQL_ENSURE(QueryState);
         YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_TOPIC);
+
         SetTopicWriteId(NLongTxService::TLockHandle(ev->Get()->TxId, TActivationContext::ActorSystem()));
+
         ReplySuccess();
     }
 

@@ -14,11 +14,11 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     contrib/libs/double-conversion
     library/cpp/string_utils/quote
     ydb/core/kqp/ut/common
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/core/ydb_convert
     ydb/library/yql/sql/pg

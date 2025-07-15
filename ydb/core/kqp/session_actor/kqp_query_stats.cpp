@@ -26,7 +26,7 @@ ui64 TKqpQueryStats::GetWorkerCpuTimeUs() const {
     return WorkerCpuTimeUs;
 }
 
-constexpr size_t QUERY_TEXT_LIMIT = 4096;
+constexpr size_t QUERY_TEXT_LIMIT = 10240;
 
 template <typename T>
 void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,

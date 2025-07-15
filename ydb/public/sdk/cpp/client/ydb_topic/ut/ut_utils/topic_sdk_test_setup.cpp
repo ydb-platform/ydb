@@ -22,16 +22,17 @@ TTopicSdkTestSetup::TTopicSdkTestSetup(const TString& testCaseName, const NKikim
     }
 }
 
-void TTopicSdkTestSetup::CreateTopicWithAutoscale(const TString& path, const TString& consumer, size_t partitionCount, size_t maxPartitionCount) {
+void TTopicSdkTestSetup::CreateTopicWithAutoscale(const std::string& path, const std::string& consumer, size_t partitionCount, size_t maxPartitionCount) {
     CreateTopic(path, consumer, partitionCount, maxPartitionCount);
 }
 
-void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount)
+void TTopicSdkTestSetup::CreateTopic(const std::string& path, const std::string& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount, const TDuration retention, bool important)
 {
     TTopicClient client(MakeDriver());
 
     TCreateTopicSettings topics;
     topics
+        .RetentionPeriod(retention)
         .BeginConfigurePartitioningSettings()
         .MinActivePartitions(partitionCount)
         .MaxActivePartitions(maxPartitionCount.value_or(partitionCount));
@@ -43,13 +44,14 @@ void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consume
             .Strategy(EAutoPartitioningStrategy::ScaleUp);
     }
 
-    TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
+    TConsumerSettings<TCreateTopicSettings> consumers(topics, TString{consumer});
+    consumers.Important(important);
     topics.AppendConsumers(consumers);
 
-    auto status = client.CreateTopic(path, topics).GetValueSync();
+    auto status = client.CreateTopic(TString{path}, topics).GetValueSync();
     UNIT_ASSERT(status.IsSuccess());
 
-    Server.WaitInit(path);
+    Server.WaitInit(TString{path});
 }
 
 TTopicDescription TTopicSdkTestSetup::DescribeTopic(const TString& path)

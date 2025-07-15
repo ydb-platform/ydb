@@ -208,12 +208,15 @@ public:
     virtual ~TKqpLookupRows() {}
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
+        NMiniKQL::TStringProviderBackend backend;
         std::vector<TCell> keyCells(LookupKeyColumns.size());
         for (size_t colId = 0; colId < LookupKeyColumns.size(); ++colId) {
             const auto* lookupKeyColumn = LookupKeyColumns[colId];
             YQL_ENSURE(lookupKeyColumn->KeyOrder < static_cast<i64>(keyCells.size()));
+            // when making a cell we don't really need to make a copy of data, because
+            // TOwnedCellVec will make its' own copy.
             keyCells[lookupKeyColumn->KeyOrder] = MakeCell(lookupKeyColumn->PType,
-                inputRow.GetElement(colId), TypeEnv, /* copy */ true);
+                inputRow.GetElement(colId), backend, /* copy */ false);
         }
 
         if (keyCells.size() < KeyColumns.size()) {
@@ -493,13 +496,16 @@ public:
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
         auto joinKey = inputRow.GetElement(0);
         std::vector<TCell> joinKeyCells(LookupKeyColumns.size());
+        NMiniKQL::TStringProviderBackend backend;
 
         if (joinKey.HasValue()) {
             for (size_t colId = 0; colId < LookupKeyColumns.size(); ++colId) {
                 const auto* joinKeyColumn = LookupKeyColumns[colId];
                 YQL_ENSURE(joinKeyColumn->KeyOrder < static_cast<i64>(joinKeyCells.size()));
+                // when making a cell we don't really need to make a copy of data, because
+                // TOwnedCellVec will make its' own copy.
                 joinKeyCells[joinKeyColumn->KeyOrder] = MakeCell(joinKeyColumn->PType,
-                    joinKey.GetElement(colId), TypeEnv, true);
+                    joinKey.GetElement(colId), backend,  /* copy */ false);
             }
         }
 
@@ -926,7 +932,11 @@ private:
         return range.From.subspan(0, LookupKeyColumns.size());
     }
 
-    NMiniKQL::TStructType* GetLeftRowType() const {
+    NMiniKQL::TStructType* GetLeftRowType() {
+        if (LeftRowType) {
+            // KIKIMR-23296: avoid allocating separate type structure for each lookup
+            return LeftRowType;
+        }
         YQL_ENSURE(InputDesc.HasTransform());
 
         auto outputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{InputDesc.GetTransform().GetOutputType()}, TypeEnv);
@@ -941,7 +951,8 @@ private:
         const auto outputLeftRowType = outputTupleType->GetElementType(0);
         YQL_ENSURE(outputLeftRowType->GetKind() == NMiniKQL::TType::EKind::Struct);
 
-        return AS_TYPE(NMiniKQL::TStructType, outputLeftRowType);
+        LeftRowType = AS_TYPE(NMiniKQL::TStructType, outputLeftRowType);
+        return LeftRowType;
     }
 
     NUdf::TUnboxedValue TryBuildResultRow(TLeftRowInfo& leftRowInfo, TConstArrayRef<TCell> rightRow,
@@ -1008,6 +1019,7 @@ private:
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
     ui64 CurrentResultSeqNo = 0;
+    NMiniKQL::TStructType* LeftRowType = nullptr;
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,

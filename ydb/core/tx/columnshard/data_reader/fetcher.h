@@ -89,7 +89,7 @@ public:
     }
 
     ~TPortionsDataFetcher() {
-        if (Callback->IsAborted()) {
+        if (NActors::TActorSystem::IsStopped() || Callback->IsAborted()) {
             CurrentContext.Abort();
         }
         AFL_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created

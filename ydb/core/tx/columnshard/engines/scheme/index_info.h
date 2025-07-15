@@ -91,7 +91,6 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     TPresetId PresetId;
-    std::shared_ptr<TAtomic> IgnoreToVersion = std::make_shared<TAtomic>(0);
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
@@ -187,19 +186,6 @@ public:
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
-    }
-
-    void SetIgnoreToVersion(const ui64 version) const {
-        AFL_VERIFY(AtomicCas(&*IgnoreToVersion, version, 0) || (ui64)AtomicGet(*IgnoreToVersion) == version)("already", AtomicGet(*IgnoreToVersion))(
-                                                               "version", version);
-    }
-
-    std::optional<ui64> GetIgnoreToVersion() const {
-        if (const ui64 val = AtomicGet(*IgnoreToVersion)) {
-            return val;
-        } else {
-            return std::nullopt;
-        }
     }
 
     ui64 GetPresetId() const {

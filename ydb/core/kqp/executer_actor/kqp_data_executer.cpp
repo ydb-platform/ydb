@@ -2711,9 +2711,6 @@ private:
     }
 
     void ExecuteTasks() {
-
-        LOG_D("ExecuteTasks");
-
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;

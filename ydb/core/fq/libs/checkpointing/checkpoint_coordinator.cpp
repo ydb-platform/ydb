@@ -80,6 +80,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         }
         AllActorsSet.insert(actorId);
     }
+
     CC_LOG_D("AllActors count: " << AllActors.size() << ", ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
 
     if (ActorsToTrigger.empty()) {
@@ -89,6 +90,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
     }
 
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());
+
     CC_LOG_D("Send TEvRegisterCoordinatorRequest");
     Send(StorageProxy, new TEvCheckpointStorage::TEvRegisterCoordinatorRequest(CoordinatorId), IEventHandle::FlagTrackDelivery);
 }
@@ -411,6 +413,7 @@ void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId,
     for (const auto& [toTrigger, transport] : ActorsToTrigger) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, type));
     }
+
     StartAllTasks();
 }
 

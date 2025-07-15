@@ -137,7 +137,6 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     }
     TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
     TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
-
 };
 
 class TKikimrRunner {

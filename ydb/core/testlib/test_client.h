@@ -286,7 +286,6 @@ namespace Tests {
         }
         TServerSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; }
 
-
         template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,

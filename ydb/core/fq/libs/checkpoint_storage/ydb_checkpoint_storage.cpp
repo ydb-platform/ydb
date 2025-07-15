@@ -755,11 +755,9 @@ TFuture<TIssues> TCheckpointStorage::Init()
 
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)
 {
-    Cerr << "RegisterGraphCoordinator 0" << Endl;
     auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator,
          execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
-            Cerr << "RegisterGraphCoordinator 1" << Endl;
             auto context = MakeIntrusive<TGenerationContext>(
                 session,
                 true,

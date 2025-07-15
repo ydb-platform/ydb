@@ -1621,7 +1621,7 @@ public:
                 dqGraphParams,
                 stateLoadMode,
                 streamingDisposition).Release());
-                LOG_D("Created new CheckpointCoordinatorId: " << CheckpointCoordinatorId);
+                LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << ")");
         }
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
@@ -1633,7 +1633,7 @@ public:
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, {},
             txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId,
-        CheckpointCoordinatorId);
+            CheckpointCoordinatorId);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1643,8 +1643,6 @@ public:
             YQL_ENSURE(!ExecuterId);
         }
         ExecuterId = exId;
-
-
     }
 
     void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request)

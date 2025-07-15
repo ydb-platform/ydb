@@ -269,7 +269,6 @@ public:
         } else {
              Task_ = task.GetTask();
              Arena = const_cast<TIntrusivePtr<NActors::TProtoArenaHolder>&>(task.GetArena());
-            //Y_ABORT("not allowed to copy dq settings for arena allocated messages.");
         }
     }
 

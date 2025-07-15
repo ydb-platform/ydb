@@ -9,6 +9,7 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
+
 using namespace NActors;
 
 namespace NKikimr::NKqp {
@@ -125,9 +126,6 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     if (LimitCPU(UserRequestContext)) {
         TasksGraph.GetMeta().SinglePartitionOptAllowed = false;
     }
-
-    LOG_E("TKqpPlanner::TKqpPlanner ");
-
 }
 
 // ResourcesSnapshot, ResourceEstimations
@@ -154,7 +152,6 @@ void TKqpPlanner::LogMemoryStatistics(const TLogFunc& logFunc) {
 
 bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& target) {
     YQL_ENSURE(requestId < Requests.size());
-    LOG_E("SendStartKqpTasksRequest: ");
 
     auto& requestData = Requests[requestId];
 
@@ -203,9 +200,6 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
 
 std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeRequest(const TRequestData& requestData) {
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
-
-     LOG_E("SerializeRequest: ");
-
     auto& request = result->Record;
     request.SetTxId(TxId);
     const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
@@ -288,8 +282,6 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 }
 
 void TKqpPlanner::Submit() {
-    LOG_E("TKqpPlanner::Submit");
-
     for (size_t reqId = 0; reqId < Requests.size(); ++reqId) {
         ui64 nodeId = Requests[reqId].NodeId;
         auto target = MakeKqpNodeServiceID(nodeId);

@@ -270,9 +270,11 @@ def main():
         print(f"Warning: Failed to upload test results to YDB: {e}")
         print("This is not a critical error, continuing with CI process...")
         return 0
+    
+    return 0
 
        
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

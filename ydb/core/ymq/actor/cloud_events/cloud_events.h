@@ -3,6 +3,7 @@
 #include <ydb/core/ymq/actor/cloud_events/proto/ymq.pb.h>
 
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/ymq/base/events_writer_iface.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -35,7 +36,7 @@ namespace NCloudEvents {
         ui64 OriginalId;
         TString Id;
         TString Type;
-        ui64 CreatedAt;
+        ui64 CreatedAt_ms;
         TString CloudId;
         TString FolderId;
         TString ResourceId;
@@ -75,9 +76,9 @@ namespace NCloudEvents {
 
     class TAuditSender {
         template<typename TProtoEvent>
-        static void SendProto(const TProtoEvent& ev);
+        static void SendProto(const TProtoEvent& ev, IEventsWriterWrapper::TPtr);
     public:
-        static void Send(const TEventInfo& evInfo);
+        static void Send(const TEventInfo& evInfo, IEventsWriterWrapper::TPtr);
     };
 
     class TProcessor : public NActors::TActorBootstrapped<TProcessor> {
@@ -94,6 +95,7 @@ namespace NCloudEvents {
         const TString SelectQuery;
         const TString DeleteQuery;
 
+        IEventsWriterWrapper::TPtr EventsWriter;
 
         TString GetFullTablePath() const;
         TString GetInitSelectQuery() const;
@@ -114,8 +116,11 @@ namespace NCloudEvents {
         TProcessor(
             const TString& root,
             const TString& database,
-            const TDuration& retryTimeout
+            const TDuration& retryTimeout,
+            IEventsWriterWrapper::TPtr eventsWriter
         );
+        
+        ~TProcessor();
 
         void Bootstrap();
 

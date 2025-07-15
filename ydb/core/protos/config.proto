@@ -1058,6 +1058,7 @@ message TSqsConfig {
         optional bool EnableCloudEvents = 1 [default = false];
         optional bool TenantMode = 2 [default = false];
         optional uint64 RetryTimeoutSeconds = 3;
+        optional string UnifiedAgentUri = 4;
     }
 
     optional TYcSearchEventsConfig YcSearchEventsConfig = 66;

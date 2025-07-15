@@ -38,7 +38,10 @@ namespace NCloudEvents {
     void TFiller<TProtoEvent>::FillEventMetadata() {
         Ev.mutable_event_metadata()->set_event_id(EventInfo.Id);
         Ev.mutable_event_metadata()->set_event_type(TString("yandex.cloud.events.ymq.") + EventInfo.Type);
-        Ev.mutable_event_metadata()->mutable_created_at()->set_seconds(EventInfo.CreatedAt);
+        auto seconds = EventInfo.CreatedAt_ms / 1'000;
+        auto nanos = EventInfo.CreatedAt_ms % 1'000 * 1'000'000;
+        Ev.mutable_event_metadata()->mutable_created_at()->set_seconds(seconds);
+        Ev.mutable_event_metadata()->mutable_created_at()->set_nanos(nanos);
         Ev.mutable_event_metadata()->set_cloud_id(EventInfo.CloudId);
         Ev.mutable_event_metadata()->set_folder_id(EventInfo.FolderId);
     }
@@ -88,35 +91,19 @@ namespace NCloudEvents {
     }
 
     template<typename TProtoEvent>
-    void TAuditSender::SendProto(const TProtoEvent& ev) {
-        Y_UNUSED(ev);
-        // TString jsonEv;
-        // google::protobuf::util::JsonPrintOptions printOpts;
-        // printOpts.preserve_proto_field_names = true;
-        // google::protobuf::util::MessageToJsonString(ev, &output, printOpts);
-
-        // NUnifiedAgent::TClientMessage message;
-        // message.Payload = TStringBuilder() << output;
-        // Session->Send(std::move(message));
-
-
-        // auto clientParameters = NUnifiedAgent::TClientParameters(Config.GetUAConfig().GetUri());
-        // SdkLogger = std::make_unique<TLog>(MakeHolder<TActorLogBackend>(ctx.ActorSystem(), NKikimrServices::EServiceKikimr::YDB_SDK));
-        // clientParameters.SetLog(*SdkLogger);
-
-        // const auto& sharedKey = Config.GetUAConfig().GetSharedSecretKey();
-        // if (!sharedKey.empty()) {
-        //     clientParameters.SetSharedSecretKey(sharedKey);
-        // }
-        // auto clientPtr = NUnifiedAgent::MakeClient(clientParameters);
-        // auto sessionParameters = NUnifiedAgent::TSessionParameters()
-        //     .SetCounters(AuditServiceSensors->UACounters);
-        // Session = clientPtr->CreateSession(sessionParameters);
+    void TAuditSender::SendProto(const TProtoEvent& ev, IEventsWriterWrapper::TPtr writer) {
+        if (writer) {
+            TString jsonEv;
+            google::protobuf::util::JsonPrintOptions printOpts;
+            printOpts.preserve_proto_field_names = true;
+            google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
+            writer->Write(jsonEv);
+        }
     }
 
-    template void TAuditSender::SendProto<TCreateQueueEvent>(const TCreateQueueEvent&);
-    template void TAuditSender::SendProto<TUpdateQueueEvent>(const TUpdateQueueEvent&);
-    template void TAuditSender::SendProto<TDeleteQueueEvent>(const TDeleteQueueEvent&);
+    template void TAuditSender::SendProto<TCreateQueueEvent>(const TCreateQueueEvent&, IEventsWriterWrapper::TPtr);
+    template void TAuditSender::SendProto<TUpdateQueueEvent>(const TUpdateQueueEvent&, IEventsWriterWrapper::TPtr);
+    template void TAuditSender::SendProto<TDeleteQueueEvent>(const TDeleteQueueEvent&, IEventsWriterWrapper::TPtr);
 
 // ===============================================================
 
@@ -133,7 +120,7 @@ namespace NCloudEvents {
         return RandomNumber<ui64>();
     }
 
-    void TAuditSender::Send(const TEventInfo& evInfo) {
+    void TAuditSender::Send(const TEventInfo& evInfo, IEventsWriterWrapper::TPtr writer) {
         static constexpr TStringBuf componentName = "ymq";
         static const     TString emptyValue = "{none}";
 
@@ -148,7 +135,7 @@ namespace NCloudEvents {
             AUDIT_PART("masked_token", (!evInfo.MaskedToken.empty() ? evInfo.MaskedToken : emptyValue))
             AUDIT_PART("auth_type", (!evInfo.AuthType.empty() ? evInfo.AuthType : emptyValue))
             AUDIT_PART("permission", evInfo.Permission)
-            AUDIT_PART("created_at", ::ToString(evInfo.CreatedAt))
+            AUDIT_PART("created_at", ::ToString(evInfo.CreatedAt_ms))
             AUDIT_PART("cloud_id", (!evInfo.CloudId.empty() ? evInfo.CloudId : emptyValue))
             AUDIT_PART("folder_id", (!evInfo.FolderId.empty() ? evInfo.FolderId : emptyValue))
             AUDIT_PART("resource_id", (!evInfo.ResourceId.empty() ? evInfo.ResourceId : emptyValue))
@@ -162,17 +149,17 @@ namespace NCloudEvents {
             TCreateQueueEvent ev;
             TFiller<TCreateQueueEvent> filler(evInfo, ev);
             filler.Fill();
-            TAuditSender::SendProto<TCreateQueueEvent>(ev);
+            TAuditSender::SendProto<TCreateQueueEvent>(ev, writer);
         } else if (evInfo.Type == "UpdateMessageQueue") {
             TUpdateQueueEvent ev;
             TFiller<TUpdateQueueEvent> filler(evInfo, ev);
             filler.Fill();
-            TAuditSender::SendProto<TUpdateQueueEvent>(ev);
+            TAuditSender::SendProto<TUpdateQueueEvent>(ev, writer);
         } else if (evInfo.Type == "DeleteMessageQueue") {
             TDeleteQueueEvent ev;
             TFiller<TDeleteQueueEvent> filler(evInfo, ev);
             filler.Fill();
-            TAuditSender::SendProto<TDeleteQueueEvent>(ev);
+            TAuditSender::SendProto<TDeleteQueueEvent>(ev, writer);
         } else {
             Y_UNREACHABLE();
         }
@@ -220,14 +207,23 @@ namespace NCloudEvents {
     (
         const TString& root,
         const TString& database,
-        const TDuration& retryTimeout
+        const TDuration& retryTimeout,
+        IEventsWriterWrapper::TPtr eventsWriter
     )
         : Root(root)
         , Database(database)
         , RetryTimeout(retryTimeout)
         , SelectQuery(GetInitSelectQuery())
         , DeleteQuery(GetInitDeleteQuery())
+        , EventsWriter(eventsWriter)
     {
+    }
+
+    TProcessor::~TProcessor()
+    {
+        if (EventsWriter) {
+            EventsWriter->Close();
+        }
     }
 
     void TProcessor::RunQuery(TString query, std::unique_ptr<NYdb::TParams> params) {
@@ -277,7 +273,7 @@ namespace NCloudEvents {
             param.AddListItem()
                 .BeginStruct()
                 .AddMember("CreatedAt")
-                    .Uint64(cloudEv.CreatedAt)
+                    .Uint64(cloudEv.CreatedAt_ms)
                 .AddMember("Id")
                     .Uint64(cloudEv.OriginalId)
                 .EndStruct();
@@ -326,14 +322,14 @@ namespace NCloudEvents {
         Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(response.GetYdbResults(0));
 
-        auto convertId = [](ui64 id, const TString& type, ui64 createdAt) -> TString {
-            return TStringBuilder() << id << "$" << type << "$" << createdAt;
+        auto convertId = [](ui64 id, const TString& type, ui64 CreatedAt_ms) -> TString {
+            return TStringBuilder() << id << "$" << type << "$" << CreatedAt_ms;
         };
 
         while (parser.TryNextRow()) {
             auto& cloudEvent = result.emplace_back();
 
-            cloudEvent.CreatedAt = *parser.ColumnParser(0).GetOptionalUint64();
+            cloudEvent.CreatedAt_ms = *parser.ColumnParser(0).GetOptionalUint64();
             cloudEvent.OriginalId = *parser.ColumnParser(1).GetOptionalUint64();
             cloudEvent.QueueName = *parser.ColumnParser(2).GetOptionalUtf8();
             cloudEvent.Type = *parser.ColumnParser(3).GetOptionalUtf8();
@@ -346,7 +342,7 @@ namespace NCloudEvents {
                 cloudEvent.Permission = "ymq.queues.delete";
             }
 
-            cloudEvent.IdempotencyId = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
+            cloudEvent.IdempotencyId = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt_ms);
             cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, TInstant::Now().MilliSeconds());
 
             cloudEvent.CloudId = *parser.ColumnParser(4).GetOptionalUtf8();
@@ -393,7 +389,7 @@ namespace NCloudEvents {
 
         if (!Events.empty()) {
             for (const auto& cloudEvent : Events) {
-                TAuditSender::Send(cloudEvent);
+                TAuditSender::Send(cloudEvent, EventsWriter);
             }
 
             MakeDeleteResponse();

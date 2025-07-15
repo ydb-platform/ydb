@@ -300,9 +300,14 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         TIntervalSet<i32> fullInterval(0, state.Id.BlobSize());
         Y_ABORT_UNLESS(fullInterval == state.Whole.Here(), "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
 
+        IRcBufAllocator* allocator = GetDefaultRcBufAllocator();
+        if (TlsActivationContext) {
+            allocator = TlsActivationContext->ActorSystem()->GetRcBufAllocator();
+        }
+
         TStackVec<TRope, TypicalPartsInBlob> partData(info.Type.TotalPartCount());
         ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type,
-            state.Whole.Data.Read(0, state.Id.BlobSize()), partData);
+            state.Whole.Data.Read(0, state.Id.BlobSize()), partData, nullptr, allocator);
 
         for (ui32 partIdx = 0; partIdx < info.Type.TotalPartCount(); ++partIdx) {
             auto& part = state.Parts[partIdx];

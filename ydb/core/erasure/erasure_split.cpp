@@ -23,7 +23,7 @@ namespace NKikimr {
         }
     };
 
-    void ErasureSplitBlock42Prepare(const TRope& whole, std::span<TRope> parts) {
+    void ErasureSplitBlock42Prepare(const TRope& whole, std::span<TRope> parts, IRcBufAllocator* allocator) {
         const ui32 blockSize = 32;
         const ui32 fullBlockSize = 4 * blockSize;
         const ui32 partSize = ((whole.size() + fullBlockSize - 1) & ~(fullBlockSize - 1)) / 4;
@@ -45,7 +45,10 @@ namespace NKikimr {
                 r = {iter, nextIter};
                 Y_DEBUG_ABORT_UNLESS(r.size() == partLen);
                 if (const ui32 padding = partSize - r.size()) {
-                    TRcBuf buffer(MakeIntrusive<TZeroBuffer>());
+                    //TRcBuf buffer(MakeIntrusive<TZeroBuffer>());
+                    //TODO: Support zero chunk allocation
+                    TRcBuf buffer = allocator->AllocRcBuf(padding, 0, 0);
+                    memset(buffer.GetContiguousSpanMut().data(), 0, padding);
                     r.Insert(r.End(), TRcBuf(TRcBuf::Piece, buffer.data(), padding, buffer));
                 }
             }
@@ -53,11 +56,11 @@ namespace NKikimr {
         }
 
         if (!parts[4]) {
-            parts[4] = TRcBuf::Uninitialized(partSize);
+            parts[4] = allocator->AllocRcBuf(partSize, 0, 0);
         }
 
         if (!parts[5]) {
-            parts[5] = TRcBuf::Uninitialized(partSize);
+            parts[5] =  allocator->AllocRcBuf(partSize, 0, 0);
         }
     }
 
@@ -160,11 +163,11 @@ namespace NKikimr {
     }
 
     bool ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, const TRope& whole, std::span<TRope> parts,
-            TErasureSplitContext *context) {
+            TErasureSplitContext *context, IRcBufAllocator* allocator) {
         Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
 
         if (erasure.GetErasure() == TErasureType::Erasure4Plus2Block && crcMode == TErasureType::CrcModeNone) {
-            ErasureSplitBlock42Prepare(whole, parts);
+            ErasureSplitBlock42Prepare(whole, parts, allocator);
             if (context) {
                 Y_ABORT_UNLESS(context->MaxSizeAtOnce % 32 == 0);
                 context->Offset += ErasureSplitBlock42(parts, context->Offset, context->MaxSizeAtOnce);

@@ -2,8 +2,11 @@
 
 namespace NKikimr {
 
-TActorSystemStub::TActorSystemStub() {
+TActorSystemStub::TActorSystemStub(TRcBufAllocator alloc) {
     THolder<NActors::TActorSystemSetup> setup(new NActors::TActorSystemSetup);
+    if (alloc) {
+        setup->RcBufAllocator = alloc;
+    }
     System.Reset(new NActors::TActorSystem(setup));
     Mailbox.Reset(new NActors::TMailbox());
     ExecutorThread.Reset(new NActors::TExecutorThread(0, System.Get(), nullptr, "thread"));

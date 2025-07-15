@@ -8,6 +8,7 @@ PEERDIR(
 )
 
 SRCS(
+    generate_vim.cpp
     yql_highlight.cpp
 )
 

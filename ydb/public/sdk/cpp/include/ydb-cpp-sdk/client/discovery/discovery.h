@@ -33,6 +33,7 @@ struct TNodeLocation {
     std::optional<uint32_t> BodyNum;
     std::optional<uint32_t> Body;
 
+    std::optional<std::string> BridgePileName;
     std::optional<std::string> DataCenter;
     std::optional<std::string> Module;
     std::optional<std::string> Rack;
@@ -48,7 +49,6 @@ struct TNodeRegistrationSettings : public TSimpleRequestSettings<TNodeRegistrati
     FLUENT_SETTING(std::string, DomainPath);
     FLUENT_SETTING_DEFAULT(bool, FixedNodeId, false);
     FLUENT_SETTING(std::string, Path);
-    FLUENT_SETTING(std::string, BridgePileName);
 };
 
 struct TEndpointInfo {
@@ -97,7 +97,6 @@ struct TNodeInfo {
     std::string Address;
     TNodeLocation Location;
     uint64_t Expire;
-    std::optional<uint32_t> BridgePileId;
 };
 
 class TNodeRegistrationResult : public TStatus {

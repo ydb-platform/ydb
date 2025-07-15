@@ -785,7 +785,7 @@ class KikimrConfigGenerator(object):
                 "host_config_id": host_config_id,
             }
             if self.bridge_config:
-                host_dict["bridge_pile_name"] = self.bridge_config.get("piles", [])[node_id % len(self.bridge_config.get("piles", []))].get("name")
+                host_dict["location"] = {"bridge_pile_name": self.bridge_config.get("piles", [])[node_id % len(self.bridge_config.get("piles", []))].get("name")}
             elif self.static_erasure == Erasure.MIRROR_3_DC:
                 host_dict["location"] = {"data_center": "zone-%d" % (node_id % 3)}
             hosts.append(host_dict)

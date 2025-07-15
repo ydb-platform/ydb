@@ -165,8 +165,6 @@ message TStaticNameserviceConfig {
         repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
-
-        optional string BridgePileName = 9; // realm name for bridged installations (starting from 0)
     }
 
     repeated TNode Node = 1;

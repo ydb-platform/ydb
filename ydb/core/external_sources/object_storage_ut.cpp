@@ -89,6 +89,26 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Location '*' contains wildcards");
         }
     }
+
+    Y_UNIT_TEST(FailedPartitionedByValidation) {
+        const auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+        NKikimrExternalSources::TSchema schema;
+        {
+            NKikimrExternalSources::TGeneral general;
+            general.mutable_attributes()->insert({"partitioned_by", "{\"year\": \"2025\"}"});
+            UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "partitioned_by must be an array of column names");
+        }
+        {
+            NKikimrExternalSources::TGeneral general;
+            general.mutable_attributes()->insert({"partitioned_by", "[{\"year\": \"2025\"}]"});
+            UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "partitioned_by must be an array of strings");
+        }
+        {
+            NKikimrExternalSources::TGeneral general;
+            general.mutable_attributes()->insert({"partitioned_by", "[{"});
+            UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Failed to parse partitioned_by:");
+        }
+    }
 }
 
 } // NKikimr

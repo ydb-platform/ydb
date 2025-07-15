@@ -31,13 +31,13 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger
     ADD_REQUEST(ExecuteYql, ExecuteYqlRequest, ExecuteYqlResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestOperationCall<ExecuteYqlRequest, ExecuteYqlResponse>
-                (ctx, &DoExecuteYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Ru), nullptr, TAuditMode::Auditable}));
+                (ctx, &DoExecuteYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Ru), nullptr, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit}));
     })
 
     ADD_REQUEST(StreamExecuteYql, ExecuteYqlRequest, ExecuteYqlPartialResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestNoOperationCall<ExecuteYqlRequest, ExecuteYqlPartialResponse>
-                (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Auditable}));
+                (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit}));
     })
 
     ADD_REQUEST(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, {

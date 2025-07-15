@@ -47,7 +47,7 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         new TGrpcRequestNoOperationCall<IN, OUT> \
                             (ctx, &CB, TRequestAuxSettings { \
                                 .RlMode = RLSWITCH(TRateLimiterMode::Rps), \
-                                __VA_OPT__(.AuditMode = TAuditMode::__VA_ARGS__,) \
+                                __VA_OPT__(.AuditModeFlags = __VA_ARGS__,) \
                                 .RequestType = NJaegerTracing::ERequestType::QUERY_##REQUEST_TYPE, \
                             })); \
                 }, &Ydb::Query::V1::QueryService::AsyncService::Request ## NAME, \
@@ -56,8 +56,8 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }  \
     }
 
-    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, EXECUTEQUERY, Auditable);
-    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, EXECUTESCRIPT, Auditable);
+    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, EXECUTEQUERY, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
+    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, EXECUTESCRIPT, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
     ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults, FETCHSCRIPTRESULTS);
     ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession, CREATESESSION);
     ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession, DELETESESSION);

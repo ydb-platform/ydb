@@ -56,7 +56,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                             new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>      \
                                 (ctx, &CB, TRequestAuxSettings {                                                      \
                                     .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                 \
-                                    __VA_OPT__(.AuditMode = TAuditMode::__VA_ARGS__,)                                 \
+                                    __VA_OPT__(.AuditModeFlags = __VA_ARGS__,)                                        \
                                     .RequestType = NJaegerTracing::ERequestType::TABLE_##REQUEST_TYPE,                \
                                 }));                                                                                  \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                  \
@@ -80,7 +80,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 }));                                                                                                    \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                                    \
                     #NAME, logger, getCounterBlock("table", #NAME),                                                                     \
-                    (USE_LIMITER ? getLimiter("TableService", #NAME, UNLIMITED_INFLIGHT) : nullptr))->Run();                         \
+                    (USE_LIMITER ? getLimiter("TableService", #NAME, UNLIMITED_INFLIGHT) : nullptr))->Run();                            \
         ++proxyCounter;                                                                                                                 \
     }                                                                                                                                   \
     }
@@ -99,16 +99,16 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_REQUEST_LIMIT(RenameTables, DoRenameTablesRequest, Rps, RENAMETABLES)
     ADD_REQUEST_LIMIT(ExplainDataQuery, DoExplainDataQueryRequest, Rps, EXPLAINDATAQUERY)
     ADD_REQUEST_LIMIT(ExecuteSchemeQuery, DoExecuteSchemeQueryRequest, Rps, EXECUTESCHEMEQUERY)
-    ADD_REQUEST_LIMIT(BeginTransaction, DoBeginTransactionRequest, Rps, BEGINTRANSACTION, Auditable)
+    ADD_REQUEST_LIMIT(BeginTransaction, DoBeginTransactionRequest, Rps, BEGINTRANSACTION, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit)
     ADD_REQUEST_LIMIT(DescribeTableOptions, DoDescribeTableOptionsRequest, Rps, DESCRIBETABLEOPTIONS)
 
     ADD_REQUEST_LIMIT(DeleteSession, DoDeleteSessionRequest, Off, DELETESESSION)
-    ADD_REQUEST_LIMIT(CommitTransaction, DoCommitTransactionRequest, Off, COMMITTRANSACTION, Auditable)
-    ADD_REQUEST_LIMIT(RollbackTransaction, DoRollbackTransactionRequest, Off, ROLLBACKTRANSACTION, Auditable)
+    ADD_REQUEST_LIMIT(CommitTransaction, DoCommitTransactionRequest, Off, COMMITTRANSACTION, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit)
+    ADD_REQUEST_LIMIT(RollbackTransaction, DoRollbackTransactionRequest, Off, ROLLBACKTRANSACTION, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit)
 
-    ADD_REQUEST_LIMIT(PrepareDataQuery, DoPrepareDataQueryRequest, Ru, PREPAREDATAQUERY, Auditable)
-    ADD_REQUEST_LIMIT(ExecuteDataQuery, DoExecuteDataQueryRequest, Ru, EXECUTEDATAQUERY, Auditable)
-    ADD_REQUEST_LIMIT(BulkUpsert, DoBulkUpsertRequest, Ru, BULKUPSERT, Auditable)
+    ADD_REQUEST_LIMIT(PrepareDataQuery, DoPrepareDataQueryRequest, Ru, PREPAREDATAQUERY, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit)
+    ADD_REQUEST_LIMIT(ExecuteDataQuery, DoExecuteDataQueryRequest, Ru, EXECUTEDATAQUERY, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit)
+    ADD_REQUEST_LIMIT(BulkUpsert, DoBulkUpsertRequest, Ru, BULKUPSERT, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit)
 
     ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress, STREAMEXECUTESCANQUERY, false)
     ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress, STREAMREADTABLE, false)

@@ -37,7 +37,7 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                             new TGrpcRequestNoOperationCall<Ydb::Tablet::NAME##Request, Ydb::Tablet::NAME##Response>    \
                                 (ctx, &CB, TRequestAuxSettings {                                                        \
                                     .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                   \
-                                    __VA_OPT__(.AuditMode = TAuditMode::__VA_ARGS__,)                                   \
+                                    __VA_OPT__(.AuditModeFlags = __VA_ARGS__,)                                          \
                                 }));                                                                                    \
                     }, &Ydb::Tablet::V1::TabletService::AsyncService::Request ## NAME,                                  \
                     #NAME, logger, getCounterBlock("tablet", #NAME))->Run();                                            \
@@ -45,8 +45,8 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     }                                                                                                                   \
 } while(0)
 
-    ADD_REQUEST_LIMIT(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, Rps, Auditable);
-    ADD_REQUEST_LIMIT(ChangeTabletSchema, DoChangeTabletSchemaRequest, Rps, Auditable);
+    ADD_REQUEST_LIMIT(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, Rps, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
+    ADD_REQUEST_LIMIT(ChangeTabletSchema, DoChangeTabletSchemaRequest, Rps, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
     ADD_REQUEST_LIMIT(RestartTablet, DoRestartTabletRequest, Rps);
 
 #undef ADD_REQUEST_LIMIT

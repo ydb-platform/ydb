@@ -91,29 +91,29 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         })
 
     ADD_REQUEST(DropTopic, PersQueueService, DropTopicRequest, DropTopicResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDropTopicRequest(ctx, &DoPQDropTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDropTopicRequest(ctx, &DoPQDropTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditModeFlags::Default}));
     })
 
     ADD_REQUEST(CreateTopic, PersQueueService, CreateTopicRequest, CreateTopicResponse, {
         auto clusterCfg = ClustersCfgProvider->GetCfg();
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQCreateTopicRequest(ctx, std::bind(DoPQCreateTopicRequest, _1, _2, clusterCfg), TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQCreateTopicRequest(ctx, std::bind(DoPQCreateTopicRequest, _1, _2, clusterCfg), TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditModeFlags::Default}));
     })
 
     ADD_REQUEST(AlterTopic, PersQueueService, AlterTopicRequest, AlterTopicResponse, {
         auto clusterCfg = ClustersCfgProvider->GetCfg();
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQAlterTopicRequest(ctx, std::bind(DoPQAlterTopicRequest, _1, _2, clusterCfg), TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQAlterTopicRequest(ctx, std::bind(DoPQAlterTopicRequest, _1, _2, clusterCfg), TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditModeFlags::Default}));
     })
 
     ADD_REQUEST(DescribeTopic, PersQueueService, DescribeTopicRequest, DescribeTopicResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDescribeTopicRequest(ctx, &DoPQDescribeTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDescribeTopicRequest(ctx, &DoPQDescribeTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditModeFlags::Default}));
     })
 
     ADD_REQUEST(AddReadRule, PersQueueService, AddReadRuleRequest, AddReadRuleResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQAddReadRuleRequest(ctx, &DoPQAddReadRuleRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQAddReadRuleRequest(ctx, &DoPQAddReadRuleRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditModeFlags::Default}));
     })
 
     ADD_REQUEST(RemoveReadRule, PersQueueService, RemoveReadRuleRequest, RemoveReadRuleResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQRemoveReadRuleRequest(ctx, &DoPQRemoveReadRuleRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQRemoveReadRuleRequest(ctx, &DoPQRemoveReadRuleRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditModeFlags::Default}));
     })
 
 #undef ADD_REQUEST

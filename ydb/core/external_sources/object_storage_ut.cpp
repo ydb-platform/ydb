@@ -95,17 +95,17 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
         NKikimrExternalSources::TSchema schema;
         {
             NKikimrExternalSources::TGeneral general;
-            general.mutable_attributes()->emplace("partitioned_by", "{\"year\": \"2025\"}");
+            general.mutable_attributes()->insert({"partitioned_by", "{\"year\": \"2025\"}"});
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "partitioned_by must be an array of column names");
         }
         {
             NKikimrExternalSources::TGeneral general;
-            general.mutable_attributes()->emplace("partitioned_by", "[{\"year\": \"2025\"}]");
+            general.mutable_attributes()->insert({"partitioned_by", "[{\"year\": \"2025\"}]"});
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "partitioned_by must be an array of strings");
         }
         {
             NKikimrExternalSources::TGeneral general;
-            general.mutable_attributes()->emplace("partitioned_by", "[{");
+            general.mutable_attributes()->insert({"partitioned_by", "[{"});
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Failed to parse partitioned_by:");
         }
     }

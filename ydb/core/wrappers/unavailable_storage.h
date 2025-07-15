@@ -2,7 +2,6 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/wrappers/abstract.h>
-#include <util/system/thread.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 

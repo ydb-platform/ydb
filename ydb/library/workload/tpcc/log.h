@@ -5,12 +5,27 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
+inline const char* PriorityToString(ELogPriority priority) {
+    switch (priority) {
+        case TLOG_EMERG:     return "EMERG";
+        case TLOG_ALERT:     return "ALERT";
+        case TLOG_CRIT:      return "CRIT";
+        case TLOG_ERR:       return "ERROR";
+        case TLOG_WARNING:   return "WARN";
+        case TLOG_NOTICE:    return "NOTICE";
+        case TLOG_INFO:      return "INFO";
+        case TLOG_DEBUG:     return "DEBUG";
+        case TLOG_RESOURCES: return "TRACE";
+        default:             return "UNKNOWN";
+    }
+}
+
 #define LOG_IMPL(log, level, message) \
     if (log->FiltrationLevel() >= level) { \
         char buf[DATE_8601_LEN];           \
         log->Write(level, TStringBuilder() \
             << TStringBuf(buf, FormatDate8601(buf, sizeof(buf), TInstant::Now().Seconds())) \
-            << ": " << message << Endl); \
+            << " " << PriorityToString(level) << ": " << message << Endl); \
     } \
     Y_SEMICOLON_GUARD
 

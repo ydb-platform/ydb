@@ -35,20 +35,20 @@ void TLogBackendWithCapture::StopCapture() {
     TruncatedCount = 0;
 }
 
-void TLogBackendWithCapture::GetLogLines(const std::function<void(const std::string&)>& processor) {
+void TLogBackendWithCapture::GetLogLines(const std::function<void(ELogPriority, const std::string&)>& processor) {
     ProcessNewLines();
 
     if (TruncatedCount > 0) {
-        processor("... logs truncated: " + std::to_string(TruncatedCount) + " lines");
+        processor(TLOG_INFO, "... logs truncated: " + std::to_string(TruncatedCount) + " lines");
     }
 
-    for (const auto& line: LogLines) {
-        processor(line);
+    for (const auto& [priority, line]: LogLines) {
+        processor(priority, line);
     }
 }
 
 void TLogBackendWithCapture::ProcessNewLines() {
-    std::vector<std::string> newLines;
+    std::vector<std::pair<ELogPriority, std::string>> newLines;
     newLines.reserve(MaxLines * 2);
     {
         TGuard guard(CapturingMutex);
@@ -87,7 +87,7 @@ void TLogBackendWithCapture::WriteData(const TLogRecord& record) {
     {
         TGuard guard(CapturingMutex);
         if (IsCapturing) {
-            CapturedLines.emplace_back(record.Data, record.Len);
+            CapturedLines.emplace_back(record.Priority, std::string(record.Data, record.Len));
             return;
         }
     }

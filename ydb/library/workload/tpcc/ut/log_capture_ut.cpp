@@ -31,6 +31,11 @@ TLogRecord CreateLogRecord(const std::string& message) {
     return TLogRecord(TLOG_INFO, message.c_str(), message.size());
 }
 
+// Helper to create log records with specific priority
+TLogRecord CreateLogRecord(ELogPriority priority, const std::string& message) {
+    return TLogRecord(priority, message.c_str(), message.size());
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
@@ -45,7 +50,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         TLogBackendWithCapture backend("console", TLOG_INFO, 5);
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -67,7 +72,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         backend.WriteData(record);
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -91,7 +96,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         backend.WriteData(record);
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -110,7 +115,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
 
         // Verify we have logs
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
         UNIT_ASSERT_VALUES_EQUAL(capturedLines.size(), 1);
@@ -118,7 +123,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         // Stop and verify logs are cleared
         backend.StopCapture();
         capturedLines.clear();
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
         UNIT_ASSERT(capturedLines.empty());
@@ -140,7 +145,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         }
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -168,7 +173,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         }
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -194,7 +199,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         backend.WriteData(record);
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -230,7 +235,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         backend.WriteData(record);
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -251,7 +256,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         backend.WriteData(record);
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -275,7 +280,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         }
 
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -302,7 +307,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
 
         // Get logs to process them
         std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
         UNIT_ASSERT_VALUES_EQUAL(capturedLines.size(), 2);
@@ -318,7 +323,7 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         }
 
         capturedLines.clear();
-        backend.GetLogLines([&](const std::string& line) {
+        backend.GetLogLines([&](ELogPriority, const std::string& line) {
             capturedLines.push_back(line);
         });
 
@@ -328,5 +333,119 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
         UNIT_ASSERT_VALUES_EQUAL(capturedLines[1], "Additional 3");
         UNIT_ASSERT_VALUES_EQUAL(capturedLines[2], "Additional 4");
         UNIT_ASSERT_VALUES_EQUAL(capturedLines[3], "Additional 5");
+    }
+
+    Y_UNIT_TEST(ShouldStoreAndRetrieveCorrectPriorities) {
+        TLogBackendWithCapture backend("console", TLOG_INFO, 10);
+
+        backend.StartCapture();
+
+        // Store messages to keep them alive during the test
+        std::vector<std::string> messages = {
+            "Emergency message",
+            "Alert message",
+            "Critical message",
+            "Error message",
+            "Warning message",
+            "Notice message",
+            "Info message",
+            "Debug message",
+            "Resources message"
+        };
+
+        std::vector<ELogPriority> priorities = {
+            TLOG_EMERG,
+            TLOG_ALERT,
+            TLOG_CRIT,
+            TLOG_ERR,
+            TLOG_WARNING,
+            TLOG_NOTICE,
+            TLOG_INFO,
+            TLOG_DEBUG,
+            TLOG_RESOURCES
+        };
+
+        // Add logs with different priorities
+        for (size_t i = 0; i < messages.size(); ++i) {
+            auto record = CreateLogRecord(priorities[i], messages[i]);
+            backend.WriteData(record);
+        }
+
+        std::vector<std::pair<ELogPriority, std::string>> capturedLogs;
+        backend.GetLogLines([&](ELogPriority priority, const std::string& line) {
+            capturedLogs.emplace_back(priority, line);
+        });
+
+        // Should have all 9 logs with correct priorities
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs.size(), 9);
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[0].first, TLOG_EMERG);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[0].second, "Emergency message");
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[1].first, TLOG_ALERT);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[1].second, "Alert message");
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[2].first, TLOG_CRIT);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[2].second, "Critical message");
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[3].first, TLOG_ERR);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[3].second, "Error message");
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[4].first, TLOG_WARNING);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[4].second, "Warning message");
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[5].first, TLOG_NOTICE);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[5].second, "Notice message");
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[6].first, TLOG_INFO);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[6].second, "Info message");
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[7].first, TLOG_DEBUG);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[7].second, "Debug message");
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[8].first, TLOG_RESOURCES);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLogs[8].second, "Resources message");
+
+        backend.StopCapture();
+    }
+
+    Y_UNIT_TEST(ShouldIncludePriorityInLogFormat) {
+        TLogBackendWithCapture backend("console", TLOG_INFO, 10);
+
+        backend.StartCapture();
+
+        // Store messages to keep them alive during the test
+        std::vector<std::string> messages = {
+            "Test error message",
+            "Test warning message",
+            "Test info message"
+        };
+
+        std::vector<ELogPriority> priorities = {
+            TLOG_ERR,
+            TLOG_WARNING,
+            TLOG_INFO
+        };
+
+        // Add logs with different priorities
+        for (size_t i = 0; i < messages.size(); ++i) {
+            auto record = CreateLogRecord(priorities[i], messages[i]);
+            backend.WriteData(record);
+        }
+
+        std::vector<std::string> capturedLines;
+        backend.GetLogLines([&](ELogPriority priority, const std::string& line) {
+            capturedLines.push_back(line);
+        });
+
+        // Should have all 3 logs
+        UNIT_ASSERT_VALUES_EQUAL(capturedLines.size(), 3);
+
+        // Check that each line contains the expected priority string
+        UNIT_ASSERT(capturedLines[0].find("ERROR:") != std::string::npos);
+        UNIT_ASSERT(capturedLines[1].find("WARN:") != std::string::npos);
+        UNIT_ASSERT(capturedLines[2].find("INFO:") != std::string::npos);
+
+        backend.StopCapture();
     }
 }

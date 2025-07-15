@@ -223,7 +223,7 @@ Component TRunnerTui::BuildComponent() {
     auto scrollableLogs = Scroller(Renderer([&] {
         Elements logElements;
 
-        LogBackend.GetLogLines([&](const std::string& line) {
+        LogBackend.GetLogLines([&](ELogPriority, const std::string& line) {
             logElements.push_back(paragraph(line));
         });
 

@@ -8,6 +8,7 @@
 #include <functional>
 #include <deque>
 #include <string>
+#include <utility>
 
 namespace NYdb::NTPCC {
 
@@ -23,7 +24,7 @@ public:
 
     // Get current log lines to display in TUI
     // Assumes single consumer, multiple producers
-    void GetLogLines(const std::function<void(const std::string&)>& processor);
+    void GetLogLines(const std::function<void(ELogPriority, const std::string&)>& processor);
 
     // TLogBackend interface (threadsafe)
 
@@ -44,12 +45,12 @@ private:
     THolder<TLogBackend> RealBackend;
     const size_t MaxLines;
 
-    std::deque<std::string> LogLines;
+    std::deque<std::pair<ELogPriority, std::string>> LogLines;
     size_t TruncatedCount = 0;
 
     TMutex CapturingMutex;
     bool IsCapturing = false;
-    std::vector<std::string> CapturedLines;
+    std::vector<std::pair<ELogPriority, std::string>> CapturedLines;
 };
 
 } // namespace NYdb::NTPCC

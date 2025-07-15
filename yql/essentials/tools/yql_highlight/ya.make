@@ -13,5 +13,8 @@ SRCS(
 
 END()
 
-ENDIF()
+RECURSE(
+    artifact
+)
 
+ENDIF()

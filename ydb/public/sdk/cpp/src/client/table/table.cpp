@@ -102,7 +102,7 @@ std::optional<bool> TStorageSettings::GetStoreExternalBlobs() const {
     }
 }
 
-std::optional<ui32> TStorageSettings::GetExternalDataChannelsCount() const {
+std::optional<std::uint32_t> TStorageSettings::GetExternalDataChannelsCount() const {
     if (GetProto().has_external_data_channels_count()) {
         return GetProto().external_data_channels_count();
     } else {

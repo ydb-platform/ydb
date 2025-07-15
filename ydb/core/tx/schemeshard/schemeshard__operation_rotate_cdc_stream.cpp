@@ -122,7 +122,8 @@ public:
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetRotateCdcStream();
         const auto& oldStreamName = op.GetOldStreamName();
-        const auto& newStreamDesc = op.GetNewStreamDescription();
+        const auto& newStreamOp = op.GetNewStream();
+        const auto& newStreamDesc = newStreamOp.GetStreamDescription();
         const auto& newStreamName = newStreamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
@@ -132,6 +133,11 @@ public:
             << ", newStream# " << workingDir << "/" << newStreamName);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+
+        if (op.GetTableName() != newStreamOp.GetTableName()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "New stream should be created on the same table");
+            return result;
+        }
 
         const auto oldStreamPath = TPath::Resolve(workingDir, context.SS).Dive(oldStreamName);
         {
@@ -347,7 +353,7 @@ public:
             return result;
         }
 
-        if (!AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && op.GetNewStreamTopicAutoPartitioning()) {
+        if (!AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && newStreamOp.GetTopicAutoPartitioning()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Topic autopartitioning for CDC is disabled");
             return result;
         }
@@ -512,7 +518,7 @@ public:
         const auto& op = Transaction.GetRotateCdcStream();
         const auto& tableName = op.GetTableName();
         const auto& oldStreamName = op.GetOldStreamName();
-        const auto& newStreamName = op.GetNewStreamDescription().GetName();
+        const auto& newStreamName = op.GetNewStream().GetStreamDescription().GetName();
 
         LOG_N("TRotateCdcStreamAtTable Propose"
             << ": opId# " << OperationId
@@ -520,6 +526,11 @@ public:
             << ", newStream# " << workingDir << "/" << tableName << "/" << newStreamName);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+
+        if (op.GetTableName() != op.GetNewStream().GetTableName()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "New stream should be created on the same table");
+            return result;
+        }
 
         const auto workingDirPath = TPath::Resolve(workingDir, context.SS);
         {
@@ -718,9 +729,13 @@ TVector<ISubOperation::TPtr> CreateRotateCdcStream(TOperationId opId, const TTxT
     const auto& op = tx.GetRotateCdcStream();
     const auto& tableName = op.GetTableName();
     const auto& oldStreamName = op.GetOldStreamName();
-    const auto& newStreamName = op.GetNewStreamDescription().GetName();
+    const auto& newStreamName = op.GetNewStream().GetStreamDescription().GetName();
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+
+    if (op.GetTableName() != op.GetNewStream().GetTableName()) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "New stream should be created on the same table")};
+    }
 
     const auto tablePath = workingDirPath.Child(tableName);
     {

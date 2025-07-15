@@ -155,14 +155,6 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         NKikimrSchemeOp::TRotateCdcStream rotateCdcStreamOp;
         rotateCdcStreamOp.SetTableName(tableName);
         rotateCdcStreamOp.SetOldStreamName(*lastStreamName);
-        auto& newStreamDescription = *rotateCdcStreamOp.MutableNewStreamDescription();
-        newStreamDescription.SetName(newStreamName);
-        newStreamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
-        newStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-
-        NCdc::DoRotateStream(result, rotateCdcStreamOp, opId, workingDirPath, tablePath);
-        DoCreateIncrBackupTable(opId, backupTablePath, schema, result);
-        DoAlterPqPart(opId, backupTablePath, topicPath, topic, result);
 
         NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
         createCdcStreamOp.SetTableName(tableName);
@@ -170,6 +162,12 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         streamDescription.SetName(newStreamName);
         streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
         streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+        rotateCdcStreamOp.MutableNewStream()->CopyFrom(createCdcStreamOp);
+
+        NCdc::DoRotateStream(result, rotateCdcStreamOp, opId, workingDirPath, tablePath);
+        DoCreateIncrBackupTable(opId, backupTablePath, schema, result);
+        DoAlterPqPart(opId, backupTablePath, topicPath, topic, result);
 
         TVector<TString> boundaries;
         const auto& partitions = table->GetPartitions();

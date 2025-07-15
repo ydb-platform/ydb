@@ -507,11 +507,11 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetOldStreamName()}));
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetNewStreamDescription().GetName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetNewStream().GetStreamDescription().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetOldStreamName()}));
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetNewStreamDescription().GetName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetNewStream().GetStreamDescription().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName()}));

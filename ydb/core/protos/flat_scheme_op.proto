@@ -1076,14 +1076,7 @@ message TDropCdcStream {
 message TRotateCdcStream {
     optional string TableName = 1;
     optional string OldStreamName = 2;
-
-    optional TCdcStreamDescription NewStreamDescription = 3;
-    optional uint64 NewStreamRetentionPeriodSeconds = 4 [default = 86400]; // 1d by default
-    optional uint32 NewStreamTopicPartitions = 5;
-
-    // Topic autopartitioning settings
-    optional bool NewStreamTopicAutoPartitioning = 6 [default = false]; // we always can split and merge of topic partitions
-    optional uint32 NewStreamMaxPartitionCount = 7;
+    optional TCreateCdcStream NewStream = 3;
 }
 
 message TContinuousBackupDescription {

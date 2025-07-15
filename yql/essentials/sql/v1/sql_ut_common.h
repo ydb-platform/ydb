@@ -8884,3 +8884,37 @@ Y_UNIT_TEST_SUITE(Crashes) {
         UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
     }
 }
+
+Y_UNIT_TEST_SUITE(Aggregation) {
+
+    Y_UNIT_TEST(DeduplicationDistinctSources) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT Percentile(a.x, 0.50), Percentile(b.x, 0.75)
+            FROM plato.Input1 AS a
+            JOIN plato.Input1 AS b ON a.x == b.x;
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+        TWordCountHive count = {{TString("percentile_traits_factory"), 0}};
+        VerifyProgram(res, count);
+
+        UNIT_ASSERT_VALUES_EQUAL(2, count["percentile_traits_factory"]);
+    }
+
+    Y_UNIT_TEST(DeduplicationSameSource) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT Percentile(a.x, 0.50), Percentile(a.x, 0.75)
+            FROM plato.Input1 AS a
+            JOIN plato.Input1 AS b ON a.x == b.x;
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+        TWordCountHive count = {{TString("percentile_traits_factory"), 0}};
+        VerifyProgram(res, count);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, count["percentile_traits_factory"]);
+    }
+
+}

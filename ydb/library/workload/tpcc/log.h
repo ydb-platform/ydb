@@ -6,11 +6,9 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
-namespace NWorkload {
-namespace NTpcc {
+namespace NYdb::NTPCC {
+
 using TLogProcessor = std::function<void(ELogPriority, const std::string&)>;
-} // namespace NTpcc
-} // namespace NWorkload
 
 inline const char* PriorityToString(ELogPriority priority) {
     switch (priority) {
@@ -60,6 +58,8 @@ inline size_t GetOffsetToLogMessage(ELogPriority priority) {
     return GetLenOfFormatDate8601Part() + GetLogColor(priority).size() + strlen(PriorityToString(priority))
         + NColorizer::StdErr().Default().size() + 1; // 1 is extra space after dt we add below
 }
+
+} // namespace NYdb::NTPCC
 
 #define LOG_IMPL(log, level, message) \
     if (log->FiltrationLevel() >= level) { \

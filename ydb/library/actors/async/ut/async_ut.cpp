@@ -600,6 +600,50 @@ namespace NAsyncTest {
             DoTestStdAwaiter<false>(EPassAway::BeforeSuspend, EAction::None, ELastAction::ShutdownThenResume);
         }
 
-    } // Y_UNIT_TEST_SUITE(AsyncCoreTest)
+        Y_UNIT_TEST(StdAwaiterNoResumeOnShutdown) {
+            TVector<TString> sequence;
+            std::coroutine_handle<> resume1, resume2;
+
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                Y_DEFER {
+                    if (resume2) {
+                        sequence.push_back("calling resume");
+                        resume2.resume();
+                    }
+                };
+
+                co_await TSuspendStdAwaiterWithoutCancel{ &resume1 };
+
+                sequence.push_back("resumed");
+            });
+
+            actor.RunAsync([&]() -> async<void> {
+                sequence.push_back("second started");
+                Y_DEFER { sequence.push_back("second finished"); };
+
+                co_await TSuspendStdAwaiterWithoutCancel{ &resume2 };
+
+                sequence.push_back("second resumed");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "second started");
+
+            // Call to resume required to avoid a memory leak
+            Y_DEFER { resume1.resume(); };
+
+            runtime.CleanupNode();
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "calling resume", "finished", "second finished");
+        }
+
+    } // Y_UNIT_TEST_SUITE(Async)
 
 }

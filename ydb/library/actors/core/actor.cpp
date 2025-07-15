@@ -324,7 +324,6 @@ namespace NActors {
             while (!ActorTasks.Empty()) {
                 TActorTask* task = ActorTasks.PopFront();
                 task->Destroy();
-                queue.Execute();
             }
         }
     }

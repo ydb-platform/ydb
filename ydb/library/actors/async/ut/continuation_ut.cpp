@@ -222,6 +222,51 @@ namespace NAsyncTest {
             UNIT_ASSERT(!continuation);
         }
 
+        Y_UNIT_TEST(NoResumeOnShutdown) {
+            TVector<TString> sequence;
+            TAsyncContinuation<void> continuation;
+            std::coroutine_handle<> resume;
+
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                Y_DEFER {
+                    if (continuation) {
+                        sequence.push_back("calling Resume");
+                        continuation.Resume();
+                    }
+                };
+
+                co_await TSuspendAwaiterWithoutCancel{ &resume };
+
+                sequence.push_back("resumed");
+            });
+
+            actor.RunAsync([&]() -> async<void> {
+                sequence.push_back("second started");
+                Y_DEFER { sequence.push_back("second finished"); };
+
+                co_await WithAsyncContinuation<void>([&](auto c) {
+                    sequence.push_back("second suspended");
+                    continuation = std::move(c);
+                });
+
+                sequence.push_back("second resumed");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "second started", "second suspended");
+
+            runtime.CleanupNode();
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "calling Resume", "finished", "second finished");
+        }
+
     } // Y_UNIT_TEST_SUITE(Continuation)
 
 } // namespace NAsyncTest

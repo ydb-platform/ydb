@@ -256,6 +256,61 @@ namespace NAsyncTest {
                 "finished");
         }
 
+        Y_UNIT_TEST(NoResumeOnShutdown) {
+            TVector<TString> sequence;
+            TAsyncEvent event;
+            int quota = 1;
+            std::coroutine_handle<> resume;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto acquireQuota = [&]() -> async<void> {
+                if (quota > 0) {
+                    quota--;
+                    co_return;
+                }
+                co_await event.Wait();
+            };
+
+            auto releaseQuota = [&]() {
+                if (event.HasAwaiters()) {
+                    event.NotifyOne();
+                } else {
+                    quota++;
+                }
+            };
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                co_await acquireQuota();
+                Y_DEFER { releaseQuota(); };
+
+                sequence.push_back("suspending");
+                co_await TSuspendAwaiterWithoutCancel{ &resume };
+
+                sequence.push_back("resumed");
+            });
+
+            actor.RunAsync([&]() -> async<void> {
+                sequence.push_back("second started");
+                Y_DEFER { sequence.push_back("second finished"); };
+
+                co_await acquireQuota();
+                Y_DEFER { releaseQuota(); };
+
+                sequence.push_back("second resumed");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "suspending", "second started");
+
+            runtime.CleanupNode();
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "finished", "second finished");
+        }
+
     } // Y_UNIT_TEST_SUITE(Event)
 
 } // namespace NAsyncTest

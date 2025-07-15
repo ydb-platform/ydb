@@ -427,7 +427,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         putController->WaitActualization(TDuration::Seconds(5));
         Sleep(TDuration::Seconds(5));
-        std::cout << "la-la-la: " << putController->GetAbortedWrites() << '\n';
         UNIT_ASSERT_C(putController->GetAbortedWrites() < 10,
                       "Expected reduced load with exponential backoff, but was "
                       << putController->GetAbortedWrites() << " PutObject requests recorded");

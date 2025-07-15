@@ -23,7 +23,7 @@ private:
 
         ui64 currentRequest = RequestCount.fetch_add(1);
         if (currentRequest > 0) {
-            ui64 delayMs = std::min(1000ULL << std::min(currentRequest - 1ULL, 3ULL), 10000ULL);
+            ui64 delayMs = std::min(100ULL << std::min(currentRequest - 1ULL, 4ULL), 2000ULL);
             Sleep(TDuration::MilliSeconds(delayMs));
         }
 

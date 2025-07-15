@@ -28,6 +28,7 @@ struct TGRpcClientConfig {
     std::unordered_map<std::string, int> IntChannelParams;
     std::string LoadBalancingPolicy = { };
     std::string SslTargetNameOverride = { };
+    bool UseXds = false;
 
     TGRpcClientConfig() = default;
     TGRpcClientConfig(const TGRpcClientConfig&) = default;
@@ -47,6 +48,7 @@ struct TGRpcClientConfig {
                          .pem_private_key = NYdb::TStringType{clientPrivateKey},
                          .pem_cert_chain = NYdb::TStringType{clientCert}}
         , CompressionAlgoritm(compressionAlgorithm)
+        , UseXds((Locator.starts_with("xds:///")))
     {}
 };
 
@@ -78,11 +80,16 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     if (!config.SslTargetNameOverride.empty()) {
         args.SetSslTargetNameOverride(NYdb::TStringType{config.SslTargetNameOverride});
     }
+    std::shared_ptr<grpc::ChannelCredentials> channelCredentials = nullptr;
     if (config.EnableSsl || !config.SslCredentials.pem_root_certs.empty()) {
-        return grpc::CreateCustomChannel(grpc::string(config.Locator), grpc::SslCredentials(config.SslCredentials), args);
+        channelCredentials = grpc::SslCredentials(config.SslCredentials);
     } else {
-        return grpc::CreateCustomChannel(grpc::string(config.Locator), grpc::InsecureChannelCredentials(), args);
+        channelCredentials = grpc::InsecureChannelCredentials();
     }
+    if (config.UseXds) {
+        channelCredentials = grpc::XdsCredentials(channelCredentials);
+    }
+    return grpc::CreateCustomChannel(grpc::string(config.Locator), channelCredentials, args);
 }
 
 }

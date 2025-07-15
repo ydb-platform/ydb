@@ -220,6 +220,7 @@ public:
     const TParamProtobufMap& GetParamsProtobuf();
 
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv();
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory();
 
     TTxAllocatorState::TPtr GetAllocState() { return AllocState; }
     NKikimr::NMiniKQL::TType* GetParameterType(const TString& name);

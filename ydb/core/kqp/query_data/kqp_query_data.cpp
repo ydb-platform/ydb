@@ -363,6 +363,11 @@ const NKikimr::NMiniKQL::TTypeEnvironment& TQueryData::TypeEnv() {
     return AllocState->TypeEnv;
 }
 
+
+const NKikimr::NMiniKQL::THolderFactory& TQueryData::HolderFactory() {
+    return AllocState->HolderFactory;
+}
+
 bool TQueryData::MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyParamBinding& paramBinding) {
     switch (paramBinding.GetTypeCase()) {
         case NKqpProto::TKqpPhyParamBinding::kExternalBinding: {

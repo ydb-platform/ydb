@@ -3,6 +3,7 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <util/string/join.h>
 
 #include <sstream>
 
@@ -40,6 +41,26 @@ TString TOptimizerStatistics::ToString() const {
     std::stringstream ss;
     ss << *this;
     return ss.str();
+}
+
+TString TShufflingOrderingsByJoinLabels::ToString() const
+{
+        if (ShufflingOrderingsByJoinLabels_.empty()) {
+            return "TShufflingOrderingsByJoinLabels{empty}";
+        }
+
+        TStringBuilder result;
+        result << "TShufflingOrderingsByJoinLabels{" << ShufflingOrderingsByJoinLabels_.size() << " entries: ";
+
+        for (size_t i = 0; i < ShufflingOrderingsByJoinLabels_.size(); ++i) {
+            if (i > 0) result << "; ";
+
+            const auto& [joinLabels, shufflings] = ShufflingOrderingsByJoinLabels_[i];
+            result << "{" << JoinSeq(", ", joinLabels) << ":" << shufflings.GetState() << "}";
+        }
+
+        result << "}";
+        return result;
 }
 
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
@@ -103,6 +124,10 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
 
     if (s.SortingOrderingIdx >= 0) {
         os << ", SortingOrderingIdx: " << s.SortingOrderingIdx;
+    }
+
+    if (s.ShufflingOrderingIdx >= 0) {
+        os << ", ShufflingOrderingIdx: " << s.ShufflingOrderingIdx;
     }
 
     os << ", Sel: " << s.Selectivity;

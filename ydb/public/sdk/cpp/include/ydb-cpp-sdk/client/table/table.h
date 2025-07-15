@@ -634,6 +634,7 @@ public:
     std::optional<std::string> GetTabletCommitLog1() const;
     std::optional<std::string> GetExternal() const;
     std::optional<bool> GetStoreExternalBlobs() const;
+    std::optional<ui32> GetExternalDataChannelsCount() const;
 
 private:
     class TImpl;

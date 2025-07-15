@@ -781,7 +781,8 @@ namespace {
         const auto commitLog1 = settings.GetTabletCommitLog1();
         const auto external = settings.GetExternal();
         const auto storeExternalBlobs = settings.GetStoreExternalBlobs();
-        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value()) {
+        const auto externalDataChannelsCount = settings.GetExternalDataChannelsCount();
+        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value() && !externalDataChannelsCount.has_value()) {
             return;
         }
         Cout << Endl << "Storage settings: " << Endl;
@@ -797,6 +798,9 @@ namespace {
         if (storeExternalBlobs) {
             Cout << "Store large values in \"external blobs\": "
                 << (storeExternalBlobs.value() ? "true" : "false") << Endl;
+        }
+        if (externalDataChannelsCount) {
+            Cout << "External data channels: " << externalDataChannelsCount.value() << Endl;
         }
     }
 

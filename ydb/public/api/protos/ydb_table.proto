@@ -539,6 +539,8 @@ message StorageSettings {
     // * Table cannot be copied or backed up when this is enabled
     // * This feature cannot be disabled once enabled for a table
     Ydb.FeatureFlag.Status store_external_blobs = 5;
+
+    optional uint32 external_data_channels_count = 6;
 }
 
 message ColumnFamily {

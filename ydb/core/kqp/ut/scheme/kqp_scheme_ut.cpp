@@ -2374,7 +2374,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-   //     UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetTableDescription().GetStorageSettings().GetExternalDataChannelsCount().value(), 7, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetTableDescription().GetStorageSettings().GetExternalDataChannelsCount().value(), 7, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateAndAlterTableComplex) {

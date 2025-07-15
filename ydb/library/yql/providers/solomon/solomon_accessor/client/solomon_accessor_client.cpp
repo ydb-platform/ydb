@@ -530,7 +530,6 @@ private:
         }
         *request.mutable_from_time() = NProtoInterop::CastToProto(from);
         *request.mutable_to_time() = NProtoInterop::CastToProto(to);
-        *request.mutable_force_replica() = DefaultReplica;
 
         if (Settings.GetDownsampling().GetDisabled()) {
             request.mutable_downsampling()->set_disabled(true);

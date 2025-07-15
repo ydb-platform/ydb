@@ -572,14 +572,8 @@ void TPCCRunner::CalculateStatusData(Clock::time_point now, TRunDisplayData& dat
 }
 
 void TPCCRunner::ExitTuiMode() {
-    LogBackend->StopCapture();
-
     Tui.reset();
-
-    // TODO: remove?
-    // Switch back to main screen buffer (restore original content)
-    std::cout << "\033[?1049l";
-    std::cout.flush();
+    LogBackend->StopCaptureAndFlush(Cerr);
 }
 
 void TPCCRunner::PrintTransactionStatisticsPretty(IOutputStream& os) {

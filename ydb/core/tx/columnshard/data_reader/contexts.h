@@ -33,6 +33,13 @@ private:
     inline static TAtomicCounter MemoryScopeIdCounter = 0;
 
 public:
+    void Abort() {
+        if (Blobs) {
+            Blobs->Clear();
+            Blobs.reset();
+        }
+    }
+
     ui64 GetMemoryProcessId() const {
         return MemoryProcessGuard->GetProcessId();
     }
@@ -59,7 +66,7 @@ public:
         AFL_VERIFY(!!Blobs);
         auto result = std::move(*Blobs);
         Blobs.reset();
-        return result;
+        return std::move(result);
     }
 
     void ResetBlobs() {

@@ -95,6 +95,8 @@ public:
     TSID GetUserSID() const;
     using NACLibProto::TUserToken::GetSanitizedToken;
     using NACLibProto::TUserToken::SetSanitizedToken;
+    using NACLibProto::TUserToken::GetSubjectType;
+    using NACLibProto::TUserToken::SetSubjectType;
     TVector<TSID> GetGroupSIDs() const;
     TString GetOriginalUserToken() const;
     TString SerializeAsString() const;

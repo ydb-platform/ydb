@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/colorizer/colors.h>
 #include <library/cpp/logger/log.h>
 
 #include <util/datetime/base.h>
@@ -22,12 +23,47 @@ inline const char* PriorityToString(ELogPriority priority) {
     }
 }
 
+inline TStringBuf GetLogColor(ELogPriority priority) {
+    switch (priority) {
+        case TLOG_EMERG:
+            [[fallthrough]];
+        case TLOG_ALERT:
+            [[fallthrough]];
+        case TLOG_CRIT:
+            [[fallthrough]];
+        case TLOG_ERR:
+            return NColorizer::StdErr().RedColor();
+        case TLOG_WARNING:
+            return NColorizer::StdErr().YellowColor();
+        case TLOG_NOTICE:
+            [[fallthrough]];
+        case TLOG_INFO:
+            [[fallthrough]];
+        case TLOG_DEBUG:
+            [[fallthrough]];
+        case TLOG_RESOURCES:
+            [[fallthrough]];
+        default:
+            return NColorizer::StdErr().Default();
+    }
+}
+
+inline size_t GetLenOfFormatDate8601Part() {
+    return 20;
+}
+
+inline size_t GetOffsetToLogMessage(ELogPriority priority) {
+    return GetLenOfFormatDate8601Part() + GetLogColor(priority).size() + strlen(PriorityToString(priority))
+        + NColorizer::StdErr().Default().size() + 1; // 1 is extra space after dt we add below
+}
+
 #define LOG_IMPL(log, level, message) \
     if (log->FiltrationLevel() >= level) { \
         char buf[DATE_8601_LEN];           \
         log->Write(level, TStringBuilder() \
             << TStringBuf(buf, FormatDate8601(buf, sizeof(buf), TInstant::Now().Seconds())) \
-            << " " << PriorityToString(level) << ": " << message << Endl); \
+            << " " << GetLogColor(level) << PriorityToString(level) << NColorizer::StdErr().Default() \
+            << ": " << message << Endl); \
     } \
     Y_SEMICOLON_GUARD
 

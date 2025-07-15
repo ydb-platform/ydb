@@ -384,10 +384,6 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
     }
     firstTime = false;
 
-    static int i = 1;
-    LOG_I("Update display " << i++);
-    LOG_E("Some error!");
-
     CollectDataToDisplay(now);
 
     switch (Config.DisplayMode) {

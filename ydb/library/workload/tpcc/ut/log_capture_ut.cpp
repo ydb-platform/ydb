@@ -433,18 +433,18 @@ Y_UNIT_TEST_SUITE(TLogBackendWithCaptureTest) {
             backend.WriteData(record);
         }
 
-        std::vector<std::string> capturedLines;
-        backend.GetLogLines([&](ELogPriority priority, const std::string& line) {
-            capturedLines.push_back(line);
+        std::vector<ELogPriority> capturedLines;
+        backend.GetLogLines([&](ELogPriority priority, const std::string&) {
+            capturedLines.push_back(priority);
         });
 
         // Should have all 3 logs
         UNIT_ASSERT_VALUES_EQUAL(capturedLines.size(), 3);
 
         // Check that each line contains the expected priority string
-        UNIT_ASSERT(capturedLines[0].find("ERROR:") != std::string::npos);
-        UNIT_ASSERT(capturedLines[1].find("WARN:") != std::string::npos);
-        UNIT_ASSERT(capturedLines[2].find("INFO:") != std::string::npos);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLines[0], TLOG_ERR);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLines[1], TLOG_WARNING);
+        UNIT_ASSERT_VALUES_EQUAL(capturedLines[2], TLOG_INFO);
 
         backend.StopCapture();
     }

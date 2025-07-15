@@ -19,6 +19,21 @@ void TLogBackendWithCapture::StartCapture() {
     IsCapturing = true;
 }
 
+void TLogBackendWithCapture::StopCapture() {
+    TGuard guard(CapturingMutex);
+
+    if (!IsCapturing) {
+        return;
+    }
+
+    IsCapturing = false;
+
+    ProcessNewLines(true);
+    CapturedLines.clear();
+    LogLines.clear();
+    TruncatedCount = 0;
+}
+
 void TLogBackendWithCapture::StopCaptureAndFlush(IOutputStream& os) {
     TGuard guard(CapturingMutex);
 

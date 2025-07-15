@@ -22,6 +22,7 @@ public:
     virtual ~TLogBackendWithCapture() = default;
 
     void StartCapture();
+    void StopCapture();
     void StopCaptureAndFlush(IOutputStream& os);
 
     // Get current log lines to display in TUI

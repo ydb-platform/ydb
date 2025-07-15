@@ -45,8 +45,12 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             return std::nullopt;
         }
     }
-    while (posFinish != posStart + 1) {
-        AFL_VERIFY(posFinish > posStart + 1)("finish", posFinish)("start", posStart);
+    while ((posFinish != posStart - 1 && position.ReverseSort) || (posFinish != posStart + 1 && !position.ReverseSort)) {
+        if (position.ReverseSort) {
+            AFL_VERIFY(posFinish < posStart - 1)("finish", posFinish)("start", posStart);
+        } else {
+            AFL_VERIFY(posFinish > posStart + 1)("finish", posFinish)("start", posStart);
+        }
         AFL_VERIFY(guard.InitSortingPosition(0.5 * (posStart + posFinish)));
         const auto comparision = position.Compare(forFound);
         if (cond(comparision)) {
@@ -55,7 +59,11 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             posStart = position.Position;
         }
     }
-    AFL_VERIFY(posFinish == posStart + 1)("finish", posFinish)("start", posStart);
+    if (position.ReverseSort) {
+        AFL_VERIFY(posFinish == posStart - 1)("finish", posFinish)("start", posStart);
+    } else {
+        AFL_VERIFY(posFinish == posStart + 1)("finish", posFinish)("start", posStart);
+    }
     AFL_VERIFY(guard.InitSortingPosition(posFinish));
     const auto comparision = position.Compare(forFound);
     AFL_VERIFY(cond(comparision));
@@ -100,11 +108,11 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
     std::optional<TSortableBatchPosition::TFoundPosition> pos;
     std::optional<ui64> overrideFound;
     if (ReverseSort) {
-        pos = FindBound(*this, 0, posStart, forFound, true);
-        if (!pos) {
+        pos = FindBound(*this, posStart, 0, forFound, false);
+        if (pos) {
+            overrideFound = pos->GetPosition();
+        } else {
             overrideFound = posStart;
-        } else if (pos->GetPosition()) {
-            overrideFound = pos->GetPosition() - 1;
         }
     } else {
         pos = FindBound(*this, posStart, RecordsCount - 1, forFound, false);

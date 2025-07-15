@@ -396,6 +396,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
     Result->WaitTime = WaitTime;
+    Result->RawBytes = ScanCountersPool.GetRawBytes();
 
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
 

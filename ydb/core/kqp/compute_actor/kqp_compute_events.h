@@ -56,6 +56,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
     TDuration CpuTime;
     TDuration WaitTime;
+    ui64 RawBytes;
     ui32 PageFaults = 0; // number of page faults occurred when filling in this message
     bool RequestedBytesLimitReached = false;
     bool Finished = false;

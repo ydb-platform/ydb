@@ -8,7 +8,7 @@
 #include <ydb/core/tx/datashard/change_record_body_serializer.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/incr_restore_helpers.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard.h> // Add for TEvIncrementalRestoreResponse
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -47,7 +47,6 @@ public:
             TUserTable::TCPtr table,
             const TPathId& targetPathId,
             ui64 txId,
-            ui64 schemeShardTabletId,
             NStreamScan::TLimits limits)
         : IActorCallback(static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork), NKikimrServices::TActivity::INCREMENTAL_RESTORE_SCAN_ACTOR)
         , Parent(parent)
@@ -55,7 +54,6 @@ public:
         , TxId(txId)
         , SourcePathId(sourcePathId)
         , TargetPathId(targetPathId)
-        , SchemeShardTabletId(schemeShardTabletId)
         , ValueTags(InitValueTags(table))
         , Limits(limits)
         , Columns(table->Columns)
@@ -98,6 +96,9 @@ public:
 
     void Start(TEvIncrementalRestoreScan::TEvServe::TPtr& ev) {
         LOG_D("Handle TEvIncrementalRestoreScan::TEvServe " << ev->Get()->ToString());
+
+        // Store/update the actorId on each command receipt (handles SchemeShard restarts)
+        OperatorActorId = ev->Sender;
 
         Driver->Touch(EScan::Feed);
     }
@@ -200,34 +201,29 @@ public:
             LOG_W("IncrementalRestoreScan finished with error status: " << status);
         }
 
+        // Send completion notification to DataShard
         Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
 
-        if (SchemeShardTabletId != 0) {
-            LOG_D("Sending completion notification to SchemeShard " << SchemeShardTabletId 
+        // Send completion notification to SchemeShard
+        if (OperatorActorId) {
+            LOG_D("Sending completion notification to operator actor " << OperatorActorId 
                 << " for txId " << TxId << " sourcePathId " << SourcePathId);
             
             auto response = MakeHolder<TEvDataShard::TEvIncrementalRestoreResponse>(
-                TxId,
-                SourcePathId.LocalPathId,
-                0,
-                0,
+                TxId,                                                              // txId
+                SourcePathId.LocalPathId,                                         // tableId
+                0,                                                                // operationId (will be filled by DataShard)
+                0,                                                                // incrementalIdx (will be filled by DataShard)
                 success ? NKikimrTxDataShard::TEvIncrementalRestoreResponse::SUCCESS 
                         : NKikimrTxDataShard::TEvIncrementalRestoreResponse::ERROR,
-                success ? "" : "Scan completed with error status"
+                success ? "" : "Scan completed with error status"                 // errorMessage
             );
             
-            try {
-                const auto& ctx = TlsActivationContext->AsActorContext();
-                NTabletPipe::TClientConfig clientConfig;
-                auto pipe = NTabletPipe::CreateClient(SelfId(), SchemeShardTabletId, clientConfig);
-                auto pipeActor = ctx.Register(pipe);
-                NTabletPipe::SendData(ctx, pipeActor, response.Release());
-                LOG_D("Successfully sent completion notification to SchemeShard");
-            } catch (const std::exception& e) {
-                LOG_W("Failed to send completion notification to SchemeShard: " << e.what());
-            }
+            // Send directly to the stored operator actor (handles SchemeShard restarts)
+            Send(OperatorActorId, response.Release());
+            LOG_D("Successfully sent completion notification to operator actor");
         } else {
-            LOG_W("SchemeShardTabletId is 0, cannot send completion notification");
+            LOG_W("OperatorActorId is not set, cannot send completion notification");
         }
 
         PassAway();
@@ -296,7 +292,6 @@ private:
     const ui64 TxId;
     const TPathId SourcePathId;
     const TPathId TargetPathId;
-    const ui64 SchemeShardTabletId;
     const TVector<TTag> ValueTags;
     const TMaybe<TSerializedCellVec> LastKey;
     const TLimits Limits;
@@ -307,6 +302,7 @@ private:
     ui64 Order = 0;
     TActorId ChangeSender;
     TMap<ui64, TChangeRecord::TPtr> PendingRecords;
+    TActorId OperatorActorId; // Store the actorId of the operation initiator for restart handling
 
     TMap<ui32, TUserTable::TUserColumn> Columns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -320,7 +316,6 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
         TUserTable::TCPtr table,
         const TPathId& targetPathId,
         ui64 txId,
-        ui64 schemeShardTabletId,
         NStreamScan::TLimits limits)
 {
     return MakeHolder<TIncrementalRestoreScan>(
@@ -330,7 +325,6 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
         table,
         targetPathId,
         txId,
-        schemeShardTabletId,
         limits);
 }
 

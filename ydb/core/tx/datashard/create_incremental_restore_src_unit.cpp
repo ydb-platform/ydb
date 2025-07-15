@@ -83,7 +83,6 @@ protected:
                 DataShard.GetUserTables().at(tableId),
                 dstTablePathId,
                 txId,
-                DataShard.GetCurrentSchemeShardId(), // Pass SchemeShard TabletID
                 {});
     }
 

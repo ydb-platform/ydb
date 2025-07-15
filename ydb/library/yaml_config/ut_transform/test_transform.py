@@ -52,7 +52,9 @@ class TestYamlConfigTransformations(object):
         return yatest.common.canonical_file(str(result_path), diff_tool=json_diff_bin(), local=True, universal_lines=True)
 
     def cleanup_errors(self, errors):
-        return re.sub(r'address -> 0x[a-zA-Z0-9]+', 'address -> REDACTED', errors)
+        errors = re.sub(r'address -> 0x[a-zA-Z0-9]+', 'address -> REDACTED', errors)
+        errors = re.sub(r'uncaught exception 0x[a-fA-F0-9]+', 'uncaught exception REDACTED', errors)
+        return errors
 
     def execute_test(self, data, binary, args=[]):
         results = {}
@@ -75,3 +77,7 @@ class TestYamlConfigTransformations(object):
     @pytest.mark.parametrize('binary', [('dump', dump_bin()), ('dump_ds_init', dump_ds_init_bin())], ids=lambda binary: binary[0])
     def test_simplified(self, binary):
         return self.execute_test("ydb/library/yaml_config/ut_transform/simplified_configs", binary[1])
+
+    @pytest.mark.parametrize('binary', [('dump', dump_bin()), ('dump_ds_init', dump_ds_init_bin())], ids=lambda binary: binary[0])
+    def test_domains_config(self, binary):
+        return self.execute_test("ydb/library/yaml_config/ut_transform/domains_configs", binary[1])

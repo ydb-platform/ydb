@@ -573,21 +573,28 @@ namespace NKikimr::NStorage {
 
         // issue scatter task to collect configs and then bootstrap cluster with specified cluster UUID
         auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID)](TEvGather *res) -> std::optional<TString> {
-            Y_ABORT_UNLESS(res->HasCollectConfigs());
+            // we have collected all the necessary configs, return to RELAX'ed state
+            const auto prev = std::exchange(Self->RootState, ERootState::RELAX);
+            Y_ABORT_UNLESS(prev == ERootState::IN_PROGRESS);
+
+            if (!res->HasCollectConfigs()) {
+                return "incorrect response to CollectConfigs";
+            }
+
             Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
-            if (Self->CurrentProposition) {
-                FinishWithError(TResult::RACE, "config proposition request in flight");
-            } else if (Self->StorageConfig->GetGeneration()) {
+            Y_ABORT_UNLESS(!Self->CurrentProposition); // nobody couldn't possibly start proposing anything while we were busy
+
+            if (Self->StorageConfig->GetGeneration()) {
                 FinishWithError(TResult::RACE, "storage config generation regenerated while collecting configs");
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID, SelfId(), true);
                     r.ErrorReason) {
-                const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
-                Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
                 return r.ErrorReason;
             } else if (!Self->CurrentProposition) { // no new proposition has been made
-                const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
-                Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
                 Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+            } else {
+                // a new proposition has just been initiated, so we're a bit busy
+                const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
+                Y_ABORT_UNLESS(prevState == ERootState::RELAX);
             }
             return std::nullopt;
         };

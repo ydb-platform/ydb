@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
-
 import collections
 import time
 import asyncio
+import abc
+import socket
 from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 from ydb.tests.tools.nemesis.library import base
-from ydb.tests.tools.nemesis.library.state import NemesisState
-
-datacenter_state = NemesisState()
 
 class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
-    def __init__(self, cluster, schedule=(300, 900), duration=120):
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(AbstractDataCenterNemesis, self).__init__(schedule=schedule)
         base.AbstractMonitoredNemesis.__init__(self, scope='datacenter')
 
@@ -22,167 +20,90 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
 
         self._interval_schedule = Schedule.from_tuple_or_int(duration)
 
-    def prepare_state(self):
-        try:
-            self._dc_to_nodes, self._data_centers = self._validate_datacenters()
-            if self._dc_to_nodes is None:
-                self.logger.error("Not enough datacenters to run nemesis")
-                raise
-            self._dc_cycle_iterator = self._create_dc_cycle()
-        except Exception as e:
-            self.logger.error("Failed to prepare datacenter nemesis: %s", e)
-            raise
-
     def next_schedule(self):
-        # If this nemesis instance is active and has a duration set, schedule more frequently 
-        # to check for duration expiry
         if self._current_dc is not None:
-            # Check if duration has expired and we need to extract
-            if datacenter_state.is_duration_expired(self):
-                return 1  # Schedule immediately to extract fault
-            
-            # Verify that this instance is still the active nemesis
-            if not datacenter_state.is_active(self):
-                self.logger.warning("SCHEDULE: %s (instance %s) lost lock, scheduling immediate extraction", self.__class__.__name__, id(self))
-                return 1  # Schedule immediately to extract fault
-            
-            # Otherwise use the interval schedule for ongoing checks
             return next(self._interval_schedule)
         return super(AbstractDataCenterNemesis, self).next_schedule()
-
-    def inject_fault(self):
-        """Inject fault with global coordination to ensure mutual exclusion."""
-        self.logger.info("=== INJECT_FAULT CALLED for %s (instance %s) ===", self.__class__.__name__, id(self))
-        self.logger.info("Current local state: dc=%s, nodes=%s", self._current_dc, len(self._current_nodes) if self._current_nodes else 0)
-        
-        # Log current global state for debugging
-        debug_state = datacenter_state.debug_state()
-        self.logger.info("Current global state: %s", debug_state)
-        
-        # First check: if this instance is active but duration expired, extract fault
-        if self._current_dc is not None:
-            self.logger.info("Nemesis has active dc=%s, checking extraction conditions...", self._current_dc)
-            
-            is_duration_expired = datacenter_state.is_duration_expired(self)
-            self.logger.info("Duration expired check: %s", is_duration_expired)
-            if is_duration_expired:
-                self.logger.info("Duration expired for active %s (instance %s), extracting fault", self.__class__.__name__, id(self))
-                self.extract_fault()
-                return
-                
-            is_active = datacenter_state.is_active(self)
-            self.logger.info("Global state check: is_active=%s", is_active)
-            if not is_active:
-                self.logger.warning("Instance %s (instance %s) lost lock, extracting fault", self.__class__.__name__, id(self))
-                self.extract_fault()
-                return
-
-            # Still active and not expired - this is a duplicate injection attempt
-            self.logger.warning("DUPLICATE INJECTION BLOCKED: %s (instance %s) already has active fault (dc %s)", self.__class__.__name__, id(self), self._current_dc)
-            return
-        
-        self.logger.info("No active dc, attempting to acquire new lock...")
-        can_start, active_info = datacenter_state.try_acquire_lock(self)
-        if not can_start:
-            self.logger.info("Failed to acquire lock for %s (instance %s), active nemesis: %s", self.__class__.__name__, id(self), active_info)
-            return
-        
-        try:
-            self.logger.info("Acquired lock for %s, starting fault injection", self.__class__.__name__)
-            self.logger.info("NEMESIS CONTEXT: dc=%s, nodes=%s, duration=%d", self._current_dc, len(self._current_nodes) if self._current_nodes else 0, self._duration)
-            self._do_inject_fault()
-        except Exception as e:
-            self.logger.error("Failed to inject fault in %s: %s", self.__class__.__name__, e)
-            datacenter_state.end_execution(self)
-
-    def _do_inject_fault(self):
-        """Actual inject fault implementation - sets up state and calls subclass implementation."""
-        if self._current_dc is None:
-            if not self._data_centers:
-                self.logger.error("No datacenters available for fault injection")
-                datacenter_state.end_execution(self)
-                return
-            
-            self._current_dc = next(self._dc_cycle_iterator)  # Get randomly selected dc
-            self._current_nodes = self._dc_to_nodes.get(self._current_dc, [])
-            self.logger.info("Selected dc %s with %d nodes for %s", self._current_dc, len(self._current_nodes), self.__class__.__name__)
-
-            if not self._current_nodes:
-                self.logger.error("No nodes found for dc %s", self._current_dc)
-                datacenter_state.end_execution(self)
-                return
-
-        self.logger.info("=== STEP 1: INJECTING SPECIFIC FAULT ===")
-        self.logger.info("Injecting specific fault for %s on dc %s", self.__class__.__name__, self._current_dc)
-
-        try:
-            self._inject_specific_fault()
-            self.logger.info("=== STEP 1 COMPLETED: SPECIFIC FAULT INJECTED ===")
-        except Exception as e:
-            self.logger.error("Failed to inject specific fault for %s: %s", self.__class__.__name__, e)
-            datacenter_state.end_execution(self)
-            return
-
-        datacenter_state.start_duration(self, self._duration)
-
-    def _inject_specific_fault(self):
-        """Subclass-specific fault injection - to be overridden by subclasses."""
-        pass
-
-    def extract_fault(self):
-        self.logger.info("=== EXTRACTION REQUEST for %s (instance %s) ===", self.__class__.__name__, id(self))
-        self.logger.info("Current state: dc=%s, nodes=%s", self._current_dc, len(self._current_nodes) if self._current_nodes else 0)
-        
-        try:
-            self.logger.info("Extracting fault for %s", self.__class__.__name__)
-            self._do_extract_fault()
-            self.logger.info("=== EXTRACTION COMPLETED SUCCESSFULLY for %s ===", self.__class__.__name__)
-        except Exception as e:
-            self.logger.error("Exception during extraction for %s: %s", self.__class__.__name__, e)
-        finally:
-            # Always end execution in global state to prevent lock issues
-            datacenter_state.end_execution(self)  # Called while state is still available
-            self._current_dc = None           # Clear local state after global cleanup
-            self._current_nodes = None
-
-    def _do_extract_fault(self):
-        if self._current_dc is None:
-            self.logger.info("DataCenterNemesis is not in progress, nothing to extract")
-            raise
-
-        self.logger.info("=== EXTRACTION CONTEXT: dc=%s, nodes=%d ===", self._current_dc, len(self._current_nodes) if self._current_nodes else 0)
-        self.logger.info("=== STEP 1: EXTRACTING SPECIFIC FAULT ===")
-        try:
-            self._extract_specific_fault()
-            self.logger.info("=== STEP 1 COMPLETED: SPECIFIC FAULT EXTRACTED ===")
-        except Exception as e:
-            self.logger.error("Failed to extract specific fault: %s", e)
-            raise
-        
-        self._current_dc = None
-        self._current_nodes = None
-
-    def _validate_datacenters(self, min_datacenters=2):
-        dc_to_nodes = collections.defaultdict(list)
-        for node in self._cluster.nodes.values():
-            self.logger.info("Node %s has datacenter %s", node.host, node.datacenter)
-            if node.datacenter is not None:
-                dc_to_nodes[node.datacenter].append(node)
-
-        data_centers = list(dc_to_nodes.keys())
-        if len(data_centers) < min_datacenters:
-            return None, None
-        return dc_to_nodes, data_centers
 
     def _create_dc_cycle(self):
         while True:
             for dc in self._data_centers:
                 yield dc
 
+    def _validate_datacenters(self, cluster):
+         dc_to_nodes = collections.defaultdict(list)
+         for node in cluster.nodes.values():
+             if node.datacenter is not None:
+                 dc_to_nodes[node.datacenter].append(node)
+
+         data_centers = list(dc_to_nodes.keys())
+         return dc_to_nodes, data_centers
+
+    def prepare_state(self):
+        self._dc_to_nodes, self._data_centers = self._validate_datacenters(self._cluster)
+        if len(self._data_centers) < 2:
+            self.logger.error("No datacenters found in cluster or only one datacenter found")
+            raise Exception("No datacenters found in cluster or only one datacenter found")
+        
+        self._dc_cycle_iterator = self._create_dc_cycle()
+
+    def inject_fault(self):
+        if self.extract_fault():
+            return
+
+        self.start_inject_fault()
+        self._current_dc = next(self._dc_cycle_iterator)
+        self._current_nodes = self._dc_to_nodes.get(self._current_dc, [])
+        self.logger.info("Selected dc %s with %d nodes for %s", self._current_dc, len(self._current_nodes), self.__class__.__name__)
+
+        self.logger.info("=== INJECTING SPECIFIC FAULT ===")
+        self.logger.info("Injecting specific fault for %s on dc %s", self.__class__.__name__, self._current_dc)
+        try:
+            self._inject_specific_fault()
+            self.logger.info("=== SPECIFIC FAULT INJECTED ===")
+        except Exception as e:
+            self.logger.error("Failed to inject specific fault for %s: %s", self.__class__.__name__, e)
+            return
+        self.logger.info("=== WAITING FOR %d SECONDS ===", self._duration)
+        time.sleep(self._duration)
+        self.logger.info("=== EXTRACTING SPECIFIC FAULT ===")
+        try:
+            self._extract_specific_fault()
+            self.logger.info("=== SPECIFIC FAULT EXTRACTED ===")
+        except Exception as e:
+            self.logger.error("Failed to extract specific fault for %s: %s", self.__class__.__name__, e)
+            return
+        
+        self.on_success_inject_fault()
+
+    @abc.abstractmethod
+    def _inject_specific_fault(self):
+        pass
+
+    def extract_fault(self):
+        if self._current_dc is not None:
+            try:
+                self._extract_specific_fault()
+            except Exception as e:
+                self.logger.error("Exception during extraction for %s: %s", self.__class__.__name__, e)
+            finally:
+                self._current_dc = None
+                self._current_nodes = None
+            
+            self.on_success_extract_fault()
+            return True
+            
+        return False
+    
+    @abc.abstractmethod
+    def _extract_specific_fault(self):
+        pass
+
 
 class DataCenterStopNodesNemesis(AbstractDataCenterNemesis):
-    def __init__(self, cluster, schedule=(300, 900), duration=120):
-        super(DataCenterStopNodesNemesis, self).__init__(cluster, schedule=schedule, duration=duration)
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
+        super(DataCenterStopNodesNemesis, self).__init__(
+            cluster, schedule=schedule, duration=duration)
     
     def _inject_specific_fault(self):
         async def _async_stop_nodes():
@@ -241,7 +162,7 @@ class DataCenterStopNodesNemesis(AbstractDataCenterNemesis):
 
 
 class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
-    def __init__(self, cluster, schedule=(300, 900), duration=120):
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(DataCenterRouteUnreachableNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 
@@ -313,7 +234,7 @@ class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
 
 
 class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
-    def __init__(self, cluster, schedule=(300, 900), duration=120):
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(DataCenterIptablesBlockPortsNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 

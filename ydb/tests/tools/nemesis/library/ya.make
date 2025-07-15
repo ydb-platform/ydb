@@ -11,7 +11,6 @@ PY_SRCS(
     disk.py
     node.py
     tablet.py
-    state.py
     monitor.py
 )
 

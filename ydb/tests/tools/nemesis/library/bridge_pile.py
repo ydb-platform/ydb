@@ -5,26 +5,23 @@ import collections
 import logging
 import random
 import time
+import abc
 import threading
 import socket
 from ydb.tests.library.clients.kikimr_bridge_client import bridge_client_factory
 from ydb.tests.tools.nemesis.library.base import AbstractMonitoredNemesis
-from ydb.tests.tools.nemesis.library.state import NemesisState
 from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 
 
-# Global coordination instance shared by all bridge pile nemesis
-bridge_pile_state = NemesisState()
-
 class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
     """
-    Bridge-aware nemesis that performs master datacenter switching scenarios.
+    Bridge-aware nemesis that performs master bridge pile switching scenarios.
     This implements the specific scenario requested for switching off master.
     """
 
-    def __init__(self, cluster, schedule=(300, 900), duration=120):
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(AbstractBridgePileNemesis, self).__init__(schedule)
-        AbstractMonitoredNemesis.__init__(self, 'datacenter')
+        AbstractMonitoredNemesis.__init__(self, 'bridge_pile')
 
         self._cluster = cluster
         self._duration = duration
@@ -33,129 +30,106 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         self._current_nodes = None
 
         self._interval_schedule = Schedule.from_tuple_or_int(duration)
-        
-    def prepare_state(self):
-        self.logger.info("Preparing BridgePile state...")
-        try:
-            # validate and get bridge piles
-            self._bridge_pile_to_nodes, self._bridge_piles = self._validate_bridge_piles()
-            # create bridge clients
-            self._bridge_clients = self._create_bridge_clients()
-            # create bridge pile cycle with random selection
-            self._bridge_pile_cycle = self._create_bridge_pile_cycle()
-            self.logger.info("BridgePile state prepared")
-        except Exception as e:
-            self.logger.error("Failed to prepare BridgePile state: %s", e)
-            raise
 
     def next_schedule(self):
-        # If this nemesis instance is active and has a duration set, schedule more frequently 
-        # to check for duration expiry
         if self._current_pile_id is not None:
-            # Check if duration has expired and we need to extract
-            if bridge_pile_state.is_duration_expired(self):
-                return 1  # Schedule immediately to extract fault
-            
-            # Verify that this instance is still the active nemesis
-            if not bridge_pile_state.is_active(self):
-                self.logger.warning("SCHEDULE: %s (instance %s) lost lock, scheduling immediate extraction", self.__class__.__name__, id(self))
-                return 1  # Schedule immediately to extract fault
-            
-            # Otherwise use the interval schedule for ongoing checks
+            return next(self._interval_schedule)
+        return super(AbstractBridgePileNemesis, self).next_schedule()
+
+    def _validate_bridge_piles(self, cluster):
+        bridge_pile_to_nodes = collections.defaultdict(list)
+        for node in cluster.nodes.values():
+            if node.bridge_pile_id is not None:
+                bridge_pile_to_nodes[node.bridge_pile_id].append(node)
+
+        bridge_piles = list(bridge_pile_to_nodes.keys())
+        return bridge_pile_to_nodes, bridge_piles
+
+    def _create_bridge_pile_cycle(self):
+        while True:
+            selected_pile = random.choice(self._bridge_piles)
+            self.logger.info("Randomly selected pile %d from available piles %s", selected_pile, self._bridge_piles)
+            yield selected_pile
+
+    def _create_bridge_clients(self):
+        bridge_clients = {}
+        for pile in self._bridge_piles:
+            node = self._bridge_pile_to_nodes[pile][0]
+            bridge_clients[pile] = bridge_client_factory(
+                node.host, node.port, cluster=self._cluster, retry_count=3, timeout=5
+            )
+            bridge_clients[pile].set_auth_token('root@builtin')
+        return bridge_clients
+
+    def prepare_state(self):
+        self._bridge_pile_to_nodes, self._bridge_piles = self._validate_bridge_piles(self._cluster)
+        if len(self._bridge_piles) < 2:
+            self.logger.error("No bridge piles found in cluster or only one bridge pile found")
+            raise Exception("No bridge piles found in cluster or only one bridge pile found")
+        
+        self._bridge_pile_cycle = self._create_bridge_pile_cycle()
+        self._bridge_clients = self._create_bridge_clients()
+
+    def next_schedule(self):
+        if self._current_pile_id is not None:
             return next(self._interval_schedule)
         return super(AbstractBridgePileNemesis, self).next_schedule()
 
     def inject_fault(self):
-        """Inject fault with global coordination to ensure mutual exclusion."""
-        self.logger.info("=== INJECT_FAULT CALLED for %s (instance %s) ===", self.__class__.__name__, id(self))
-        self.logger.info("Current local state: pile_id=%s, nodes=%s", self._current_pile_id, len(self._current_nodes) if self._current_nodes else 0)
-        
-        # Log current global state for debugging
-        debug_state = bridge_pile_state.debug_state()
-        self.logger.info("Current global state: %s", debug_state)
-        
-        # First check: if this instance is active but duration expired, extract fault
-        if self._current_pile_id is not None:
-            self.logger.info("Nemesis has active pile_id=%s, checking extraction conditions...", self._current_pile_id)
-            
-            is_duration_expired = bridge_pile_state.is_duration_expired(self)
-            self.logger.info("Duration expired check: %s", is_duration_expired)
-            if is_duration_expired:
-                self.logger.info("Duration expired for active %s (instance %s), extracting fault", self.__class__.__name__, id(self))
-                self.extract_fault()
-                return
-                
-            is_active = bridge_pile_state.is_active(self)
-            self.logger.info("Global state check: is_active=%s", is_active)
-            if not is_active:
-                self.logger.warning("Instance %s (instance %s) lost lock, extracting fault", self.__class__.__name__, id(self))
-                self.extract_fault()
-                return
-
-            # Still active and not expired - this is a duplicate injection attempt
-            self.logger.warning("DUPLICATE INJECTION BLOCKED: %s (instance %s) already has active fault (pile %s)", self.__class__.__name__, id(self), self._current_pile_id)
+        if self.extract_fault():
             return
-        
-        self.logger.info("No active pile_id, attempting to acquire new lock...")
-        can_start, active_info = bridge_pile_state.try_acquire_lock(self)
-        if not can_start:
-            self.logger.info("Failed to acquire lock for %s (instance %s), active nemesis: %s", self.__class__.__name__, id(self), active_info)
-            return
-        
-        try:
-            self.logger.info("Acquired lock for %s, starting fault injection", self.__class__.__name__)
-            self.logger.info("NEMESIS CONTEXT: pile_id=%s, nodes=%s, duration=%d", self._current_pile_id, len(self._current_nodes) if self._current_nodes else 0, self._duration)
-            self._do_inject_fault()
-        except Exception as e:
-            self.logger.error("Failed to inject fault in %s: %s", self.__class__.__name__, e)
-            bridge_pile_state.end_execution(self)
 
-    def _do_inject_fault(self):
-        """Actual inject fault implementation - sets up state and calls subclass implementation."""
-        if self._current_pile_id is None:
-            # Use random bridge pile cycle for selection
-            if not self._bridge_piles:
-                self.logger.error("No bridge piles available for fault injection")
-                bridge_pile_state.end_execution(self)
-                return
-            
-            self._current_pile_id = next(self._bridge_pile_cycle)  # Get randomly selected pile
-            self._current_nodes = self._bridge_pile_to_nodes.get(self._current_pile_id, [])
-            self.logger.info("Selected pile %d with %d nodes for %s", self._current_pile_id, len(self._current_nodes), self.__class__.__name__)
-            
-            if not self._current_nodes:
-                self.logger.error("No nodes found for pile %d", self._current_pile_id)
-                bridge_pile_state.end_execution(self)
-                return
+        self.start_inject_fault()
+        self._current_pile_id = next(self._bridge_pile_cycle)
+        self._current_nodes = self._bridge_pile_to_nodes.get(self._current_pile_id, [])
+        self.logger.info("Selected pile %s with %d nodes for %s", self._current_pile_id, len(self._current_nodes), self.__class__.__name__)
 
-        self.logger.info("=== STEP 1: INJECTING SPECIFIC FAULT ===")
-        self.logger.info("Injecting specific fault for %s on pile %d", self.__class__.__name__, self._current_pile_id)
-
+        self.logger.info("=== INJECTING SPECIFIC FAULT ===")
+        self.logger.info("Injecting specific fault for %s on pile %s", self.__class__.__name__, self._current_pile_id)
         try:
             self._inject_specific_fault()
-            self.logger.info("=== STEP 1 COMPLETED: SPECIFIC FAULT INJECTED ===")
+            self.logger.info("=== SPECIFIC FAULT INJECTED ===")
         except Exception as e:
             self.logger.error("Failed to inject specific fault for %s: %s", self.__class__.__name__, e)
-            bridge_pile_state.end_execution(self)
-            return
+            self.extract_fault()
+            raise
         
-        self.logger.info("=== STEP 2: MANAGING BRIDGE STATE ===")
+        self.logger.info("=== MANAGING BRIDGE STATE ===")
         try:
             self._manage_bridge_state()
         except Exception as e:
             self.logger.error("Failed to manage bridge state for %s: %s", self.__class__.__name__, e)
-            bridge_pile_state.end_execution(self)
+            self.extract_fault()
             raise
 
-        bridge_pile_state.start_duration(self, self._duration)
+        self.logger.info("=== WAITING FOR %d SECONDS ===", self._duration)
+        time.sleep(self._duration)
 
+        self.logger.info("=== EXTRACTING SPECIFIC FAULT ===")
+        try:
+            self._extract_specific_fault()
+            self.logger.info("=== SPECIFIC FAULT EXTRACTED ===")
+        except Exception as e:
+            self.logger.error("Failed to extract specific fault for %s: %s", self.__class__.__name__, e)
+            return
+
+        self.logger.info("=== RESTORING BRIDGE STATE ===")
+        try:
+            self._restore_bridge_state()
+            self.logger.info("=== BRIDGE STATE RESTORED ===")
+        except Exception as e:
+            self.logger.error("Failed to restore bridge state: %s", e)
+            return
+        
+        self.on_success_inject_fault()
+
+    @abc.abstractmethod
     def _inject_specific_fault(self):
         """Subclass-specific fault injection - to be overridden by subclasses."""
         pass
     
     def _manage_bridge_state(self):
         """Handle bridge state changes common to all bridge pile nemesis."""
-        self.logger.info("=== BRIDGE STATE MANAGEMENT START ===")
         self.logger.info("Current pile being affected: %d", self._current_pile_id)
         
         another_pile_id = None
@@ -169,7 +143,6 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             raise
         
         self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].get_cluster_state_result())
-
         is_current_primary = self._bridge_clients[another_pile_id].is_primary_pile(self._current_pile_id)
         if is_current_primary:
             self.logger.info("OPERATION: failover_scenario (%d -> %d)", self._current_pile_id, another_pile_id)
@@ -179,60 +152,38 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             result = self._bridge_clients[another_pile_id].switchover_scenario(self._current_pile_id)
 
         if not result:
-            self.logger.error("=== BRIDGE STATE MANAGEMENT FAILED ===")
-            return
+            raise Exception("Failed to manage bridge state")
         
-        self.logger.info("=== BRIDGE STATE MANAGEMENT SUCCESS ===")
-        self.on_success_inject_fault()
+        self.logger.info("Bridge state managed successfully")
+
 
     def extract_fault(self):
-        self.logger.info("=== EXTRACTION REQUEST for %s (instance %s) ===", self.__class__.__name__, id(self))
-        self.logger.info("Current state: pile_id=%s, nodes=%s", self._current_pile_id, len(self._current_nodes) if self._current_nodes else 0)
-        
-        try:
-            self.logger.info("Extracting fault for %s", self.__class__.__name__)
-            self._do_extract_fault()
-            self.logger.info("=== EXTRACTION COMPLETED SUCCESSFULLY for %s ===", self.__class__.__name__)
-        except Exception as e:
-            self.logger.error("Exception during extraction for %s: %s", self.__class__.__name__, e)
-        finally:
-            # Always end execution in global state to prevent lock issues
-            bridge_pile_state.end_execution(self)  # Called while state is still available
-            self._current_pile_id = None           # Clear local state after global cleanup
+        if self._current_pile_id is not None:
+            try:
+                self._extract_specific_fault()
+            except Exception as e:
+                self.logger.error("Exception during extraction for %s: %s", self.__class__.__name__, e)
+
+            try:
+                self._restore_bridge_state()
+            except Exception as e:
+                self.logger.error("Failed to restore bridge state: %s", e)
+            
+            self._current_pile_id = None
             self._current_nodes = None
+            
+            self.on_success_extract_fault()
+            return True
+            
+        return False
 
-    def _do_extract_fault(self):
-        """Actual extract fault implementation - calls subclass implementation and restores bridge state."""
-        if self._current_pile_id is None:
-            self.logger.info("BridgePileNemesis is not in progress, nothing to extract")
-            raise
-
-        self.logger.info("=== EXTRACTION CONTEXT: pile_id=%d, nodes=%d ===", self._current_pile_id, len(self._current_nodes) if self._current_nodes else 0)
-        self.logger.info("=== STEP 1: EXTRACTING SPECIFIC FAULT ===")
-        try:
-            self._extract_specific_fault()
-            self.logger.info("=== STEP 1 COMPLETED: SPECIFIC FAULT EXTRACTED ===")
-        except Exception as e:
-            self.logger.error("Failed to extract specific fault: %s", e)
-            raise
-        
-        self.logger.info("=== STEP 2: RESTORING BRIDGE STATE ===")
-        try:
-            self._restore_bridge_state()
-            self.logger.info("=== STEP 2 COMPLETED: BRIDGE STATE RESTORED ===")
-        except Exception as e:
-            self.logger.error("Failed to restore bridge state: %s", e)
-        
-        self._current_pile_id = None
-        self._current_nodes = None
-
+    @abc.abstractmethod
     def _extract_specific_fault(self):
         """Subclass-specific fault extraction - to be overridden by subclasses."""
         pass
     
     def _restore_bridge_state(self):
         """Handle bridge state restoration common to all bridge pile nemesis."""
-        self.logger.info("=== BRIDGE STATE RESTORATION START ===")
         self.logger.info("Restoring state for pile: %d", self._current_pile_id)
 
         another_pile_id = None
@@ -249,41 +200,12 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         self.logger.info("OPERATION: restore_scenario for pile %d", self._current_pile_id)
         result = self._bridge_clients[another_pile_id].restore_scenario(self._current_pile_id, another_pile_id)
         if not result:
-            self.logger.error("Failed to restore pile %d", self._current_pile_id)
-            raise
+            raise Exception("Failed to restore pile %d", self._current_pile_id)
 
-        self.logger.info("=== BRIDGE STATE RESTORATION SUCCESS ===")
-        self.on_success_extract_fault()
-
-    def _create_bridge_clients(self):
-        bridge_clients = {}
-        for pile in self._bridge_piles:
-            node = self._bridge_pile_to_nodes[pile][0]
-            bridge_clients[pile] = bridge_client_factory(
-                node.host, node.port, cluster=self._cluster, retry_count=3, timeout=5
-            )
-            bridge_clients[pile].set_auth_token('root@builtin')
-        return bridge_clients
-
-    def _validate_bridge_piles(self):
-        bridge_pile_to_nodes = collections.defaultdict(list)
-        for node in self._cluster.nodes.values():
-            if node.bridge_pile_id is not None:
-                bridge_pile_to_nodes[node.bridge_pile_id].append(node)
-
-        bridge_piles = list(bridge_pile_to_nodes.keys())
-        return bridge_pile_to_nodes, bridge_piles
-
-    def _create_bridge_pile_cycle(self):
-        """Create a generator that randomly selects bridge piles."""
-        while True:
-            # Randomly select a pile from available bridge piles
-            selected_pile = random.choice(self._bridge_piles)
-            self.logger.debug("Randomly selected pile %d from available piles %s", selected_pile, self._bridge_piles)
-            yield selected_pile
+        self.logger.info("Bridge state restored successfully")
 
 class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
-    def __init__(self, cluster, schedule=(300, 900), duration=120):
+    def __init__(self, cluster, schedule=(0, 60), duration=60):
         super(BridgePileStopNodesNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 
@@ -358,7 +280,7 @@ class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
 
 
 class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
-    def __init__(self, cluster, schedule=(300, 900), duration=120):
+    def __init__(self, cluster, schedule=(0, 60), duration=60):
         super(BridgePileIptablesBlockPortsNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 
@@ -434,7 +356,7 @@ class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
 
 
 class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
-    def __init__(self, cluster, schedule=(300, 900), duration=120):
+    def __init__(self, cluster, schedule=(0, 60), duration=60):
         super(BridgePileRouteUnreachableNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 
@@ -544,5 +466,5 @@ def bridge_pile_nemesis_list(cluster):
     return [
         BridgePileStopNodesNemesis(cluster),
         BridgePileRouteUnreachableNemesis(cluster),
-        BridgePileIptablesBlockPortsNemesis(cluster)
+        BridgePileIptablesBlockPortsNemesis(cluster),
     ]

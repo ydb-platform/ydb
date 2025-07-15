@@ -32,26 +32,15 @@ ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScript
 ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterEqual
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterNulls
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestJoinByDecimal
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestJoinById
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestOrderByDecimal
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestSimpleQueries
-ydb/core/kqp/ut/olap unittest.[*/*] chunk
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/scan KqpSplit.StreamLookupJoinDeliveryProblemAfterFirstResult
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
-ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal
-ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal35
-ydb/core/kqp/ut/scheme KqpOlapTypes.DecimalCsv
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce

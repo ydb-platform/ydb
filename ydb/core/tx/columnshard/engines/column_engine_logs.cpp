@@ -108,7 +108,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     }
 
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
-    if (schema.GetDiff()) {
+    if (schema.GetDiff() && !vIndex.IsEmpty()) {
         AFL_VERIFY(!vIndex.IsEmpty());
         const auto& lastIndexInfo = vIndex.GetLastSchema()->GetIndexInfo();
         AFL_VERIFY(presetId == lastIndexInfo.GetPresetId());
@@ -116,7 +116,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
         diffView.DeserializeFromProto(*schema.GetDiff()).Validate();
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(diffView, lastIndexInfo, StoragesManager, SchemaObjectsCache);
         if (diffView.IsCorrectToIgnorePreviouse(lastIndexInfo)) {
-            lastIndexInfo.SetIgnoreToVersion(indexInfoOptional->GetVersion());
+            MutableVersionedIndex().AddIgnoreSchemaVersionTo(lastIndexInfo.GetVersion(), indexInfoOptional->GetVersion());
             AFL_VERIFY(indexInfoOptional->GetVersion() != lastIndexInfo.GetVersion());
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_will_be_ignored")("last_version", lastIndexInfo.GetVersion())(
                 "to_version", indexInfoOptional->GetVersion())("diff", schema.GetDiff()->DebugString());
@@ -125,7 +125,8 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
                 "to_version", indexInfoOptional->GetVersion())("diff", schema.GetDiff()->DebugString());
         }
     } else {
-//        AFL_VERIFY(vIndex.IsEmpty());
+        AFL_VERIFY(schema.GetSchema())("has_diff", !!schema.GetDiff())("is_empty", vIndex.IsEmpty());
+        //        AFL_VERIFY(vIndex.IsEmpty());
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(presetId, schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }
     AFL_VERIFY(indexInfoOptional);

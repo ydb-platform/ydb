@@ -1365,10 +1365,14 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             }
 
             if (commonType) {
-                if (!IsSameAnnotation(*keyType1, *commonType))
-                    remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), TString("_yql_dq_key_left_") += ToString(i), TNodeFlags::Default), i, commonType);
-                if (!IsSameAnnotation(*keyType2, *commonType))
-                    remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), TString("_yql_dq_key_right_") += ToString(i), TNodeFlags::Default), i, commonType);
+                if (!IsSameAnnotation(*keyType1, *commonType)) {
+                    TString rename = (TString("_yql_dq_key_left_") + ToString(i));
+                    remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
+                }
+                if (!IsSameAnnotation(*keyType2, *commonType)) {
+                    TString rename = TString("_yql_dq_key_right_") + ToString(i);
+                    remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
+                }
             } else
                 badKey = true;
         }
@@ -1473,29 +1477,58 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     std::transform(rightJoinKeys.cbegin(), rightJoinKeys.cend(), std::back_inserter(rightKeys), [&](const std::string_view& name) { return rightNames[name]; });
 
     const auto buildShuffle = [&ctx, &join](const TDqOutput& input, const TVector<TCoAtom>& keys) {
-    return Build<TDqCnHashShuffle>(ctx, join.Pos())
-            .Output(input)
-            .KeyColumns()
-                .Add(keys)
-                .Build()
-            .UseSpilling().Build(true)
-            .Done().Ptr();
+        return Build<TDqCnHashShuffle>(ctx, join.Pos())
+                .Output(input)
+                .KeyColumns()
+                    .Add(keys)
+                    .Build()
+                .UseSpilling().Build(true)
+                .Done().Ptr();
     };
-
 
     auto buildShuffleKeys = [&ctx, &join](const TExprList& exprList, const TVector<TCoAtom>& joinKeys) -> TVector<TCoAtom> {
         Y_ENSURE(exprList.Size() <= joinKeys.size());
 
+        auto contains = [&joinKeys](const TString& column){
+            return std::find_if(
+                joinKeys.begin(),
+                joinKeys.end(),
+                [&column](const TCoAtom& atom){ return atom.StringValue() == column; }
+            ) != joinKeys.end();
+        };
+
         TVector<TCoAtom> atomVector;
         atomVector.reserve(exprList.Size());
         for (std::size_t i = 0; i < exprList.Size(); ++i) {
+            TString rel, attr;
+            auto exprItem = exprList.Item(i).Ptr();
+            if (exprItem->ChildrenSize() == 1) {
+                attr = TString(exprItem->Child(0)->Content());
+            } else if (exprItem->ChildrenSize() == 2) {
+                rel  = TString(exprItem->Child(0)->Content());
+                attr = TString(exprItem->Child(1)->Content());
+            }
+
+            Cout << i << " " << joinKeys.size() << Endl;
+            TString column;
+            if (contains(attr)) {
+                column = std::move(attr);
+            } else if (contains(rel + "." + attr)){
+                column = rel + "." + attr;
+            } else if (auto maybeRemap = joinKeys[i].StringValue(); maybeRemap.Contains("_yql_dq_key")) {
+                column = maybeRemap;
+            } else {
+                Y_ENSURE(false, TStringBuilder{} << "There's no such column for shuffling: " <<  "." << attr);
+            }
+
             auto atom =
                 Build<TCoAtom>(ctx, join.Pos())
-                    .Value(joinKeys[i].StringValue())
+                    .Value(std::move(column))
                 .Done();
 
             atomVector.push_back(std::move(atom));
         }
+
         return atomVector;
     };
 

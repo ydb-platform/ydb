@@ -1180,24 +1180,22 @@ TExprBase DqPushCombineToStageDependsOnOtherStage(TExprBase node, TExprContext& 
         !IsDqDependsOnOtherStage(combine.FinishHandlerLambda(), dqUnion.Output().Stage())) {
 
         // Collect all connections for `UpdateHnadler` and `InitHandler` lambda, we want to replace them.
-        TExprNode::TListType connections{dqUnion.Ptr()};
+        THashSet<TExprNode::TPtr> uniqueConnections;
         auto connectionPredicate = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TDqConnection>(node); };
         const auto connectionsInitHandler = FindNodes(combine.InitHandlerLambda().Ptr(), connectionPredicate);
         const auto connectionsUpdateHandler = FindNodes(combine.UpdateHandlerLambda().Ptr(), connectionPredicate);
 
-        if (connectionsInitHandler.empty() || (connectionsInitHandler.size() != connectionsUpdateHandler.size())) {
+        if (connectionsInitHandler.empty()) {
             return node;
         }
 
-        // Check that all collected connections are the same.
-        for (ui32 i = 0; i < connectionsInitHandler.size(); ++i) {
-            if ((connectionsInitHandler[i].Get() != connectionsUpdateHandler[i].Get()) || (connectionsInitHandler[i].Get() == dqUnion.Raw()) ||
-                (connectionsUpdateHandler[i].Get() == dqUnion.Raw())) {
-                return node;
-            }
-        }
+        uniqueConnections.insert(connectionsInitHandler.begin(), connectionsInitHandler.end());
+        uniqueConnections.insert(connectionsUpdateHandler.begin(), connectionsUpdateHandler.end());
 
-        connections.insert(connections.end(), connectionsInitHandler.begin(), connectionsInitHandler.end());
+        TExprNode::TListType connections{dqUnion.Ptr()};
+        for (const auto &connection : uniqueConnections) {
+            connections.push_back(connection);
+        }
 
         // Arguments for DqStage.
         TVector<TCoArgument> inputArgs;

@@ -1,3 +1,4 @@
+* Fixed `ydb tools restore` not being able to restore local backups on Windows.
 
 * Limited width of tables in benchmark reports.
 

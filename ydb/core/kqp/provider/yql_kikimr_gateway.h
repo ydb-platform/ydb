@@ -1091,6 +1091,7 @@ public:
     };
 
     struct TExecuteLiteralResult : public TGenericResult {
+        TString BinaryResult;
         NKikimrMiniKQL::TResult Result;
     };
 

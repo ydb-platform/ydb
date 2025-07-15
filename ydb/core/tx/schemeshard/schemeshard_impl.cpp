@@ -4924,7 +4924,6 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableDataErasure = appData->FeatureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = appData->FeatureFlags.GetEnableExternalSourceSchemaInference();
-    EnableMoveColumnTable = appData->FeatureFlags.GetEnableMoveColumnTable();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);

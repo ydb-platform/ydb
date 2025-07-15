@@ -3410,6 +3410,9 @@ template class TValueBuilderBase<TParamValueBuilder>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TValueBuilder::TValueBuilder()
+    : TValueBuilderBase() {}
+
 TValueBuilder::TValueBuilder(google::protobuf::Arena* arena)
     : TValueBuilderBase(arena) {}
 

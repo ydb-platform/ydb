@@ -39,14 +39,8 @@
                                   ]
                               },
                               {
-                                "op_name":"HashShuffle",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"store_returns"
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"store_returns"
                               }
                             ]
                         }
@@ -71,14 +65,8 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"web_sales"
-                                          }
-                                        ]
+                                      "op_name":"TableFullScan",
+                                      "table":"web_sales"
                                     },
                                     {
                                       "op_name":"HashShuffle",
@@ -121,14 +109,8 @@
                           "args":
                             [
                               {
-                                "op_name":"HashShuffle",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"catalog_sales"
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"catalog_sales"
                               },
                               {
                                 "op_name":"HashShuffle",

@@ -111,6 +111,103 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
     }
 }
 
+void TBlobStorageController::TGroupInfo::FillInGroupParameters(
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+        TBlobStorageController *self) const {
+    if (GroupMetrics) {
+        params->MergeFrom(GroupMetrics->GetGroupParameters());
+    } else if (BridgeGroupInfo) {
+        for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
+            if (TGroupInfo *groupInfo = self->FindGroup(TGroupId::FromValue(groupId))) {
+                if (self->BridgeInfo && groupInfo->BridgePileId &&
+                        self->BridgeInfo->GetPile(*groupInfo->BridgePileId)->State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                    continue; // ignore groups from disconnected piles
+                }
+                groupInfo->FillInGroupParameters(params, self);
+            } else {
+                Y_DEBUG_ABORT();
+            }
+        }
+    } else {
+        FillInResources(params->MutableAssuredResources(), true);
+        FillInResources(params->MutableCurrentResources(), false);
+        FillInVDiskResources(params);
+    }
+}
+
+void TBlobStorageController::TGroupInfo::FillInResources(
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const {
+    // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
+    std::optional<ui64> size;
+    std::optional<double> iops;
+    std::optional<ui64> readThroughput;
+    std::optional<ui64> writeThroughput;
+    std::optional<double> occupancy;
+    for (const TVSlotInfo *vslot : VDisksInGroup) {
+        const TPDiskInfo *pdisk = vslot->PDisk;
+        const auto& metrics = pdisk->Metrics;
+        const ui32 shareFactor = countMaxSlots ? pdisk->ExpectedSlotCount : pdisk->NumActiveSlots;
+        ui64 vdiskSlotSize = 0;
+        if (metrics.HasEnforcedDynamicSlotSize()) {
+            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize();
+        } else if (metrics.GetTotalSize()) {
+            vdiskSlotSize = metrics.GetTotalSize() / shareFactor;
+        }
+        if (vdiskSlotSize) {
+            size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
+        }
+        if (metrics.HasMaxIOPS()) {
+            iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
+        }
+        if (metrics.HasMaxReadThroughput()) {
+            readThroughput = Min(readThroughput.value_or(Max<ui64>()), metrics.GetMaxReadThroughput() / shareFactor);
+        }
+        if (metrics.HasMaxWriteThroughput()) {
+            writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor);
+        }
+        if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
+            occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());
+        }
+    }
+
+    // and recalculate it to the total size of the group according to the erasure
+    TBlobStorageGroupType type(ErasureSpecies);
+    const double factor = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
+    if (size) {
+        pb->SetSpace(Min<ui64>(pb->HasSpace() ? pb->GetSpace() : Max<ui64>(), *size * factor));
+    }
+    if (iops) {
+        pb->SetIOPS(Min<double>(pb->HasIOPS() ? pb->GetIOPS() : Max<double>(), *iops * VDisksInGroup.size() / type.TotalPartCount()));
+    }
+    if (readThroughput) {
+        pb->SetReadThroughput(Min<ui64>(pb->HasReadThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *readThroughput * factor));
+    }
+    if (writeThroughput) {
+        pb->SetWriteThroughput(Min<ui64>(pb->HasWriteThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *writeThroughput * factor));
+    }
+    if (occupancy) {
+        pb->SetOccupancy(Max<double>(pb->HasOccupancy() ? pb->GetOccupancy() : Min<double>(), *occupancy));
+    }
+}
+
+void TBlobStorageController::TGroupInfo::FillInVDiskResources(
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const {
+    TBlobStorageGroupType type(ErasureSpecies);
+    const double f = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
+    for (const TVSlotInfo *vslot : VDisksInGroup) {
+        const auto& m = vslot->Metrics;
+        if (m.HasAvailableSize()) {
+            pb->SetAvailableSize(Min<ui64>(pb->HasAvailableSize() ? pb->GetAvailableSize() : Max<ui64>(), f * m.GetAvailableSize()));
+        }
+        if (m.HasAllocatedSize()) {
+            pb->SetAllocatedSize(Max<ui64>(pb->HasAllocatedSize() ? pb->GetAllocatedSize() : 0, f * m.GetAllocatedSize()));
+        }
+        if (m.HasSpaceColor()) {
+            pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetSpaceColor()) : m.GetSpaceColor());
+        }
+    }
+}
+
 NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
         const TBlobStorageGroupInfo::TGroupVDisks& failed) {
     auto& checker = *topology->QuorumChecker;
@@ -189,7 +286,9 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 StaticVDiskMap.emplace(TVDiskID(vdiskId.GroupID, 0, vdiskId), vslotId);
                 ++StaticPDisks.at(pdiskId).StaticSlotUsage;
                 SysViewChangedVSlots.insert(vslotId);
-                SysViewChangedGroups.insert(vdiskId.GroupID);
+            }
+            for (const auto& group : ss.GetGroups()) {
+                SysViewChangedGroups.insert(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID));
             }
         } else {
             Y_FAIL("no storage configuration provided");

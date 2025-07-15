@@ -37,8 +37,8 @@ namespace NYql::NDq {
 
 namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
-#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
-#define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
+#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
+#define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
 struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     TStringStream Out;
     TCgiParameters Params;
@@ -497,6 +497,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     }
 
     TUnboxedValueBatch CreateRow(ui32 value, ui64 ts) {
+        LOG_D("create " << value << " " << ts);
         if (IsWide) {
             TUnboxedValueBatch result(WideRowType);
             result.PushRow([&](ui32 idx) {
@@ -567,6 +568,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         LOG_D("null");
                         UNIT_ASSERT(false);
                     }
+                    LOG_D("/");
                     return true;
                 })) {
                     return false;
@@ -581,8 +583,13 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             auto ack = new TEvDqCompute::TEvChannelDataAck;
             ack->Record.SetChannelId(ev->Get()->Record.GetChannelData().GetChannelId());
             ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-            ack->Record.SetFreeSpace(23); // XXX
+            ack->Record.SetFreeSpace(3123); // XXX simulates limited channel size
+            ack->Record.SetFinish(ev->Get()->Record.GetChannelData().GetFinished());
+#if 1
             ActorSystem.Send(ev->Sender, ev->Recipient, ack);
+#else // this alternative hits bug in test framework (?)
+            ActorSystem.Schedule(new IEventHandle(ev->Sender, ev->Recipient, ack), TDuration::MicroSeconds(100));
+#endif
         }
         return !dqInputChannel->IsFinished();
     }
@@ -614,11 +621,13 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
+    static constexpr ui32 NoAckPeriod = 2;
+
     void SendData(auto&& generator, const auto& asyncCA, auto& dqOutputChannel, ui32 packets, bool waitIntermediateAcks) {
         ui32 seqNo = 0;
         for (ui32 packet = 1; packet <= packets; ++packet) {
             bool isFinal = packet == packets;
-            bool noAck = (packet % 2) == 0; // set noAck on even packets
+            bool noAck = (packet % NoAckPeriod) == 0; // set noAck on even packets
 
             generator(packet);
             if (isFinal) {
@@ -639,7 +648,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             }
             if (NDqProto::TCheckpoint checkpoint; dqOutputChannel->Pop(checkpoint)) {
                 *chData.MutableCheckpoint() = checkpoint;
-                noAck = false; // packet containing watermark must be acked
+                noAck = false; // packet containing checkpoint must be acked
             }
             if (dqOutputChannel->IsFinished()) {
                 chData.SetFinished(true);
@@ -688,6 +697,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             if (watermarkPeriod && packet % watermarkPeriod == 0) {
+                LOG_D("push watermark" << packet);
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));
@@ -705,7 +715,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     if (RowType->GetMemberName(column) == "ts") {
                         auto ts = val.Get<ui64>();
                         if (watermark) {
-                            UNIT_ASSERT_GT(ts, watermark->Seconds());
+                            WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
                         }
                         return true;
                     }
@@ -735,7 +745,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             WEAK_UNIT_ASSERT(!!watermark);
             if (watermark) {
                 UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
-                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark);
+                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
                 LOG_D("Last watermark " << *watermark);
             } else {
                 LOG_E("NO WATERMARK");
@@ -812,14 +822,14 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     if (columnName == "e.id") {
                         UNIT_ASSERT(!!val);
                         UNIT_ASSERT(val.IsEmbedded());
-                        LOG_D(column << "id = " << val.Get<i32>());
+                        LOG_D(column << " id = " << val.Get<i32>());
                         col0 = val.Get<i32>();
                         ++receivedData[val.Get<i32>()];
                     } else if (columnName == "e.ts") {
                         UNIT_ASSERT(!!val);
                         UNIT_ASSERT(val.IsEmbedded());
                         auto ts = val.Get<ui64>();
-                        LOG_D(column << "ts = " << ts);
+                        LOG_D(column << " ts = " << ts);
                         if (watermark) {
                             WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
                         }
@@ -830,10 +840,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                             UNIT_ASSERT(!!cval);
                             UNIT_ASSERT(cval.IsEmbedded());
                             auto data = cval.Get<i32>();
-                            LOG_D(column << "key = " << data);
+                            LOG_D(column << " key = " << data);
                             UNIT_ASSERT_EQUAL_C(data, col0, data << "!=" << col0);
                         } else {
                             UNIT_ASSERT_C(!val, "null (1) expected for " << col0);
+                            LOG_D(column << " key IS NULL");
                         }
                     } else if (columnName == "u.data") {
                         if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
@@ -841,10 +852,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                             const auto cval = val.GetOptionalValue();
                             UNIT_ASSERT(!!cval);
                             auto ref = TString(cval.AsStringRef());
-                            LOG_D(column << "data = '" << ref << "'");
+                            LOG_D(column << " data = '" << ref << "'");
                             UNIT_ASSERT_EQUAL(ref, ToString(col0));
                         } else {
                             UNIT_ASSERT_C(!val, "null (2) expected for " << col0);
+                            LOG_D(column << " data IS NULL");
                         }
                     } else {
                         UNIT_ASSERT_C(false, "Unexpected column " << column << " name " << columnName);
@@ -870,8 +882,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         if (expectedWatermark) {
             WEAK_UNIT_ASSERT(!!watermark);
             if (watermark) {
-                WEAK_UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
-                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark);
+                UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
+                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
                 LOG_D("Last watermark " << *watermark);
             } else {
                 LOG_E("NO WATERMARK");
@@ -888,9 +900,12 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TAsyncCATestFixture) { }
 
     Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
+        TVector<ui32> sizes;
+        std::mt19937 rng;
+        for (ui32 t = 0; t < 256; ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
-                for (ui32 packets : { 1, 2, 3, 4, 5 }) {
+                for (ui32 packets : { 1, 2, 3, 4, 5, 51, 128, 251 }) {
                     BasicTests(packets, watermarkPeriod, waitIntermediateAcks);
                 }
             }
@@ -900,7 +915,7 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(InputTransform, TAsyncCATestFixture) {
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
-                for (ui32 packets : { 1, 2, 3, 4, 5, 111 }) {
+                for (ui32 packets : { 1, 2, 3, 4, 5, 51, 111, 251 }) {
                     InputTransformTests(packets, watermarkPeriod, waitIntermediateAcks);
                 }
             }

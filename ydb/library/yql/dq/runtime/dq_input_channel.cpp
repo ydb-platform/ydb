@@ -33,6 +33,10 @@ public:
         return PopStats;
     }
 
+    TString LogPrefix() const {
+        return TStringBuilder() << "SrcStageId: " << PushStats.SrcStageId << " ChannelId: " << PushStats.ChannelId << ". ";
+    }
+
 private:
     void Push(TDqSerializedBatch&&) override {
         Y_ABORT("Not implemented");
@@ -107,9 +111,19 @@ public:
         return (DataForDeserialize.empty() || Impl.IsPaused()) && Impl.Empty();
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         DeserializeAllData();
-        Impl.Pause();
+        Impl.PauseByCheckpoint();
+    }
+
+    void AddWatermark(TInstant watermark) override {
+        DeserializeAllData();
+        Impl.AddWatermark(watermark);
+    }
+
+    void PauseByWatermark(TInstant watermark) override {
+        DeserializeAllData();
+        Impl.PauseByWatermark(watermark);
     }
 
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
@@ -147,12 +161,20 @@ public:
         return Impl.GetInputType();
     }
 
-    void Resume() override {
-        Impl.Resume();
+    void ResumeByCheckpoint() override {
+        Impl.ResumeByCheckpoint();
     }
 
-    bool IsPaused() const override {
-        return Impl.IsPaused();
+    bool IsPausedByCheckpoint() const override {
+        return Impl.IsPausedByCheckpoint();
+    }
+
+    void ResumeByWatermark(TInstant watermark) override {
+        Impl.ResumeByWatermark(watermark);
+    }
+
+    bool IsPausedByWatermark() const override {
+        return Impl.IsPausedByWatermark();
     }
 
     void Finish() override {

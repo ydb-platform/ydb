@@ -119,17 +119,19 @@ struct TEvOutputChannelDataRequest
 struct TEvInputChannelData
     : NActors::TEventLocal<TEvInputChannelData, TTaskRunnerEvents::EvInputChannelData>
 {
-    TEvInputChannelData(ui32 channelId, std::optional<TDqSerializedBatch>&& data, bool finish, bool pauseAfterPush)
+    TEvInputChannelData(ui32 channelId, std::optional<TDqSerializedBatch>&& data, bool finish, bool pauseAfterPush, const TMaybe<TInstant>& watermarkAfterPush = {})
         : ChannelId(channelId)
         , Data(std::move(data))
         , Finish(finish)
         , PauseAfterPush(pauseAfterPush)
+        , WatermarkAfterPush(watermarkAfterPush)
     { }
 
     const ui32 ChannelId;
     std::optional<TDqSerializedBatch> Data; //not const, because we want to efficiently move data out of this event on a reciever side
     const bool Finish;
     const bool PauseAfterPush;
+    const TMaybe<TInstant> WatermarkAfterPush;
 };
 
 //Sent by TaskRunnerActor to ComputeActor to ackonowledge input data received in TEvInputChannelData
@@ -223,7 +225,7 @@ struct TEvTaskRunFinished
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
         THolder<TMiniKqlProgramState>&& programState = nullptr,
-        bool watermarkInjectedToOutputs = false,
+        TMaybe<TInstant> watermarkInjectedToOutputs = Nothing(),
         bool checkpointRequestedFromTaskRunner = false,
         TDuration computeTime = TDuration::Zero())
         : RunStatus(runStatus)
@@ -246,7 +248,7 @@ struct TEvTaskRunFinished
     TDqMemoryQuota::TProfileStats ProfileStats;
     ui64 MkqlMemoryLimit = 0;
     THolder<TMiniKqlProgramState> ProgramState;
-    bool WatermarkInjectedToOutputs = false;
+    TMaybe<TInstant> WatermarkInjectedToOutputs = Nothing();
     bool CheckpointRequestedFromTaskRunner = false;
     TDuration ComputeTime;
 };
@@ -296,16 +298,6 @@ struct TEvOutputChannelData
     bool Changed;
 };
 
-struct TWatermarkRequest {
-    TWatermarkRequest() = default;
-
-    explicit TWatermarkRequest(TInstant watermark)
-        : Watermark(watermark) {
-    }
-
-    TInstant Watermark;
-};
-
 // Holds info required to inject barriers to outputs
 struct TCheckpointRequest {
     explicit TCheckpointRequest(const NDqProto::TCheckpoint& checkpoint)
@@ -321,7 +313,7 @@ struct TEvContinueRun
     TEvContinueRun() = default;
 
     explicit TEvContinueRun(
-        TMaybe<TWatermarkRequest>&& watermarkRequest,
+        TMaybe<TInstant>&& watermarkRequest,
         TMaybe<TCheckpointRequest>&& checkpointRequest,
         bool checkpointOnly
     )
@@ -340,7 +332,7 @@ struct TEvContinueRun
     bool AskFreeSpace = true;
     const TVector<ui32> InputChannels;
     ui64 MemLimit;
-    TMaybe<TWatermarkRequest> WatermarkRequest = Nothing();
+    TMaybe<TInstant> WatermarkRequest = Nothing();
     TMaybe<TCheckpointRequest> CheckpointRequest = Nothing();
     bool CheckpointOnly = false;
 };

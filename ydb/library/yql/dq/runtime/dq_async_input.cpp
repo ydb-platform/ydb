@@ -60,6 +60,10 @@ public:
     bool IsPending() const override {
         return Pending;
     }
+
+    TString LogPrefix() const {
+        return TStringBuilder() << "InputIndex: " << PushStats.InputIndex << ". ";
+    }
 };
 
 IDqAsyncInputBuffer::TPtr CreateDqAsyncInputBuffer(

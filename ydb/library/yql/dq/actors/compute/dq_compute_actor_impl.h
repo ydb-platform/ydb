@@ -839,7 +839,7 @@ protected:
         ui32 SrcStageId;
         IDqInputChannel::TPtr Channel;
         bool HasPeer = false;
-        std::queue<TInstant> PendingWatermarks;
+        std::deque<TInstant> PendingWatermarks;
         const NDqProto::EWatermarksMode WatermarksMode;
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
         const NDqProto::ECheckpointingMode CheckpointingMode;
@@ -866,7 +866,10 @@ protected:
         void Pause(TInstant watermark) {
             YQL_ENSURE(WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
 
-            PendingWatermarks.emplace(watermark);
+            PendingWatermarks.emplace_back(watermark);
+            if (Channel) {
+                Channel->AddWatermark(watermark);
+            }
         }
 
         void Pause(const NDqProto::TCheckpoint& checkpoint) {
@@ -874,7 +877,7 @@ protected:
             YQL_ENSURE(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             PendingCheckpoint = checkpoint;
             if (Channel) {  // async actor doesn't hold channels, so channel is paused in task runner actor
-                Channel->Pause();
+                Channel->PauseByCheckpoint();
             }
         }
 
@@ -884,14 +887,17 @@ protected:
                     CA_LOG_W("Input channel " << ChannelId <<
                         " watermarks were collapsed. See YQ-1441. Dropped watermark: " << PendingWatermarks.front());
                 }
-                PendingWatermarks.pop();
+                PendingWatermarks.pop_front();
+            }
+            if (Channel) {
+                Channel->ResumeByWatermark(watermark);
             }
         }
 
         void ResumeByCheckpoint() {
             PendingCheckpoint.reset();
             if (Channel) {  // async actor doesn't hold channels, so channel is resumed in task runner actor
-                Channel->Resume();
+                Channel->ResumeByCheckpoint();
             }
         }
 
@@ -1692,12 +1698,6 @@ private:
         for (const auto& [id, channel] : InputChannelsMap) {
             if (channel.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
                 WatermarksTracker.RegisterInputChannel(id);
-            }
-        }
-
-        for (const auto& [id, channel] : OutputChannelsMap) {
-            if (channel.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
-                WatermarksTracker.RegisterOutputChannel(id);
             }
         }
     }

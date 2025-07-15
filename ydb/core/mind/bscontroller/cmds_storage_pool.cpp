@@ -169,6 +169,8 @@ namespace NKikimr::NBsController {
                     GroupContentChanged.insert(it->second);
                 }
             }
+            // retain some fields
+            storagePool.BridgeMode = cur.BridgeMode;
             cur = std::move(storagePool); // update existing storage pool
         } else {
             // enable bridge mode by default for new pools (when bridge mode is enabled cluster-wide)

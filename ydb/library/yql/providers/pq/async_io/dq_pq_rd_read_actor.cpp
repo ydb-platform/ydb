@@ -64,6 +64,8 @@
     LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SRC_LOG(prio, s) \
     LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define IS_SRC_LOG_ENABLED(prio) \
+    IS_CTX_LOG_PRIORITY_ENABLED(*NActors::TlsActivationContext, NActors::NLog:: Y_CAT(PRI_, prio), NKikimrServices::KQP_COMPUTE, 0ull)
 
 namespace NYql::NDq {
 
@@ -580,7 +582,7 @@ void TDqPqRdReadActor::InitChild() {
     StartingMessageTimestamp = Parent->StartingMessageTimestamp;
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-    if (IS_CTX_LOG_PRIORITY_ENABLED(*NActors::TlsActivationContext, NActors::NLog::PRI_TRACE, NKikimrServices::KQP_COMPUTE, 0ull)) {
+    if (IS_SRC_LOG_ENABLED(TRACE)) {
         Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     }
 }
@@ -1113,6 +1115,9 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 }
 
 void TDqPqRdReadActor::PrintInternalState() {
+    if (!IS_SRC_LOG_ENABLED(DEBUG)) {
+        return;
+    }
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
     for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {

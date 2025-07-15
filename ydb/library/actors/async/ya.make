@@ -19,7 +19,6 @@ SRCS(
     result.h
     sleep.cpp
     sleep.h
-    symmetric_proxy.h
     task_group.cpp
     task_group.h
     timeout.cpp

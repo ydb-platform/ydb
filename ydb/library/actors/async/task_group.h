@@ -1,7 +1,7 @@
 #pragma once
 #include "async.h"
 #include "decorator.h"
-#include "symmetric_proxy.h"
+#include "callback_coroutine.h"
 #include <tuple>
 
 namespace NActors {
@@ -96,18 +96,15 @@ namespace NActors {
             virtual TTaskGroupResult<T> ExtractResult() = 0;
 
             virtual void Start() noexcept = 0;
-            virtual void Cancel() noexcept = 0;
+            virtual bool Cancel() noexcept = 0;
         };
 
         template<class T, class TCallback, class... TArgs>
         class TTaskGroupTaskImpl
             : public TTaskGroupTask<T>
-            , private TAwaitCancelSource
             , private TActorRunnableItem::TImpl<TTaskGroupTaskImpl<T, TCallback>>
-            , private TSymmetricTransferCallback<TTaskGroupTaskImpl<T, TCallback>>
         {
             friend TActorRunnableItem::TImpl<TTaskGroupTaskImpl<T, TCallback>>;
-            friend TSymmetricTransferCallback<TTaskGroupTaskImpl<T, TCallback>>;
 
         public:
             TTaskGroupTaskImpl(TTaskGroupSink<T>& sink, size_t index, TCallback&& callback, TArgs&&... args)
@@ -143,21 +140,21 @@ namespace NActors {
                 TActorRunnableQueue::Schedule(this);
             }
 
-            void Cancel() noexcept override {
+            bool Cancel() noexcept override {
                 if (State == EState::Starting) {
-                    TAwaitCancelSource::SetCancellation(this->GetCoroutineHandle());
-                    return;
+                    State = EState::StartCancelled;
+                    return true;
                 }
                 Y_ABORT_UNLESS(State == EState::Running, "Unexpected state when Cancel() is called");
                 State = EState::InCancel;
                 // Note: we use the same coroutine handle for cancellation!
                 // Task is cancelled when the group is also cancelled, and result will be ignored anyway
-                if (auto next = TAwaitCancelSource::Cancel(this->GetCoroutineHandle())) {
+                if (auto next = ResumeProxy->Cancel(ResumeProxy.GetHandle())) {
                     Pending = next;
                     Y_ABORT_UNLESS(State == EState::InCancel || State == EState::InCancelFinish);
                     State = (State == EState::InCancel) ? EState::Scheduled : EState::ScheduledFinish;
                     TActorRunnableQueue::Schedule(this);
-                    return;
+                    return false;
                 }
                 Y_ABORT_UNLESS(State == EState::InCancel || State == EState::InCancelFinish);
                 if (State == EState::InCancel) {
@@ -166,13 +163,42 @@ namespace NActors {
                     State = EState::ScheduledFinish;
                     TActorRunnableQueue::Schedule(this);
                 }
+                return false;
             }
+
+        private:
+            class TResumeCallback : private TAwaitCancelSource {
+                friend TTaskGroupTaskImpl;
+                friend TCallbackCoroutine<TResumeCallback>;
+
+            public:
+                IActor& GetActor() noexcept {
+                    return Self->Sink.GetActor();
+                }
+
+                TAwaitCancelSource& GetAwaitCancelSource() noexcept {
+                    return *this;
+                }
+
+            private:
+                std::coroutine_handle<> operator()() noexcept {
+                    return Self->OnResumeCallback();
+                }
+
+            private:
+                TTaskGroupTaskImpl* Self;
+            };
 
         private:
             void DoRun(IActor*) noexcept {
                 switch (State) {
                     case EState::Starting:
                         OnStarting();
+                        break;
+                    case EState::StartCancelled:
+                        // Task was cancelled before it could start
+                        // We don't even run the callback in this case
+                        Finish().resume();
                         break;
                     case EState::Scheduled:
                     case EState::ScheduledFinish:
@@ -184,14 +210,11 @@ namespace NActors {
             }
 
             void OnStarting() noexcept {
-                if (GetCancellation()) {
-                    // Task was cancelled before it could start
-                    // We don't even run the callback in this case
-                    Finish().resume();
-                    return;
-                }
                 // Callback might throw an exception and we need to handle it
                 try {
+                    // Callback allocation failure will be handled just like any callback exception
+                    ResumeProxy = MakeCallbackCoroutine<TResumeCallback>();
+                    ResumeProxy->Self = this;
                     // Callback outlives the resulting coroutine
                     Coroutine.UnsafeMoveFrom(std::apply(std::move(Callback), std::move(CallbackArgs)));
                 } catch (...) {
@@ -204,7 +227,7 @@ namespace NActors {
                     return;
                 }
                 State = EState::Running;
-                Coroutine.GetHandle().promise().SetContinuation(Sink.GetActor(), *this, this->GetCoroutineHandle());
+                Coroutine.GetHandle().promise().SetContinuation(ResumeProxy.GetHandle());
                 Coroutine.GetHandle().resume();
             }
 
@@ -219,7 +242,7 @@ namespace NActors {
             }
 
         private:
-            [[nodiscard]] std::coroutine_handle<> OnCoroutineHandleResume() noexcept {
+            [[nodiscard]] std::coroutine_handle<> OnResumeCallback() noexcept {
                 switch (State) {
                     case EState::Running:
                         return Finish();
@@ -243,6 +266,7 @@ namespace NActors {
         private:
             enum class EState {
                 Starting,
+                StartCancelled,
                 Running,
                 InCancel,
                 InCancelFinish,
@@ -257,6 +281,7 @@ namespace NActors {
             [[no_unique_address]] std::decay_t<TCallback> Callback;
             [[no_unique_address]] std::tuple<std::decay_t<TArgs>...> CallbackArgs;
             std::exception_ptr CallbackException;
+            TCallbackCoroutine<TResumeCallback> ResumeProxy;
             async<T> Coroutine = async<T>::UnsafeEmpty();
             std::coroutine_handle<> Pending;
             EState State = EState::Starting;
@@ -314,7 +339,10 @@ namespace NActors {
                 while (!Running.Empty()) {
                     auto* task = Running.PopFront();
                     Cancelled.PushBack(task);
-                    task->Cancel();
+                    if (task->Cancel()) {
+                        --RunningCount;
+                        delete task;
+                    }
                 }
                 // Destroy all ready tasks while we wait for cancellations
                 while (!Ready.Empty()) {
@@ -325,6 +353,7 @@ namespace NActors {
                 Cancellation = h;
                 if (Cancelled.Empty()) {
                     // All tasks have finished
+                    Y_DEBUG_ABORT_UNLESS(RunningCount == 0);
                     return Cancellation;
                 } else {
                     return std::noop_coroutine();
@@ -336,6 +365,7 @@ namespace NActors {
                 if (Cancellation) {
                     delete task;
                     if (Cancelled.Empty()) {
+                        Y_DEBUG_ABORT_UNLESS(RunningCount == 0);
                         return Cancellation;
                     }
                     return std::noop_coroutine();

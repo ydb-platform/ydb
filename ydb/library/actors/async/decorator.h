@@ -1,6 +1,6 @@
 #pragma once
 #include "async.h"
-#include "symmetric_proxy.h"
+#include "callback_coroutine.h"
 
 namespace NActors::NDetail {
 

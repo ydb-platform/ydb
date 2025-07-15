@@ -416,7 +416,13 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
  * Compute statistics for grace join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
  */
-void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints) {
+void InferStatisticsForGraceJoin(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    const IProviderContext& ctx,
+    TOptimizerHints hints,
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+) {
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TCoGraceJoinCore>();
 
@@ -481,9 +487,11 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
 
-    auto maybeShufflingOrdering = typeCtx->ShufflingOrderingsByJoinLabels.GetShufflingOrderigsByJoinLabels(unionOfLabels);
-    if (maybeShufflingOrdering) {
-        resStats->LogicalOrderings = *maybeShufflingOrdering;
+    if (shufflingOrderingsByJoinLabels) {
+        auto maybeShufflingOrdering = shufflingOrderingsByJoinLabels->GetShufflingOrderigsByJoinLabels(unionOfLabels);
+        if (maybeShufflingOrdering) {
+            resStats->LogicalOrderings = *maybeShufflingOrdering;
+        }
     }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for GraceJoin with labels: " << "[" << JoinSeq(", ", unionOfLabels) << "]" << ", stats: " << resStats->ToString();

@@ -383,7 +383,6 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
-    TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
     TLangVersion LangVer = MinLangVersion;

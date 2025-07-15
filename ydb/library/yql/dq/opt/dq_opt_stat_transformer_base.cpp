@@ -13,11 +13,13 @@ using namespace NNodes;
 TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
     TTypeAnnotationContext* typeCtx,
     const IProviderContext& ctx,
-    const TOptimizerHints& hints
+    const TOptimizerHints& hints,
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 )
     : TypeCtx(typeCtx)
     , Pctx(ctx)
     , Hints(hints)
+    , ShufflingOrderingsByJoinLabels(shufflingOrderingsByJoinLabels)
 { }
 
 void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
@@ -113,7 +115,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
         InferStatisticsForMapJoin(input, TypeCtx, Pctx, Hints);
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
-        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints);
+        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints, ShufflingOrderingsByJoinLabels);
     }
     else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
         InferStatisticsForDqJoinBase(input, TypeCtx, Pctx, Hints);

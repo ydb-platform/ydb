@@ -125,7 +125,8 @@ TExprBase BuildTree(
     TTypeAnnotationContext& typeCtx,
     TExprContext& ctx,
     const TCoEquiJoin& equiJoin,
-    std::shared_ptr<TJoinOptimizerNode>& reorderResult
+    std::shared_ptr<TJoinOptimizerNode>& reorderResult,
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 ) {
 
     // Create dummy left and right arg that will be overwritten
@@ -140,7 +141,7 @@ TExprBase BuildTree(
     } else {
         std::shared_ptr<TJoinOptimizerNode> join =
             std::static_pointer_cast<TJoinOptimizerNode>(reorderResult->LeftArg);
-        leftArg = BuildTree(typeCtx, ctx ,equiJoin,join);
+        leftArg = BuildTree(typeCtx, ctx ,equiJoin, join, shufflingOrderingsByJoinLabels);
     }
     // Build right argument of the join
     if (reorderResult->RightArg->Kind == RelNodeType) {
@@ -150,7 +151,7 @@ TExprBase BuildTree(
     } else {
         std::shared_ptr<TJoinOptimizerNode> join =
             std::static_pointer_cast<TJoinOptimizerNode>(reorderResult->RightArg);
-        rightArg = BuildTree(typeCtx, ctx, equiJoin,join);
+        rightArg = BuildTree(typeCtx, ctx, equiJoin, join, shufflingOrderingsByJoinLabels);
     }
 
     TVector<TExprBase> leftJoinColumns;
@@ -236,10 +237,12 @@ TExprBase BuildTree(
     addShuffle(reorderResult->LeftArg, EShuffleSide::ELeft);
     addShuffle(reorderResult->RightArg, EShuffleSide::ERight);
 
-    typeCtx.ShufflingOrderingsByJoinLabels.Add(
-        reorderResult->Labels(),
-        reorderResult->Stats.LogicalOrderings
-    );
+    if (shufflingOrderingsByJoinLabels) {
+        shufflingOrderingsByJoinLabels->Add(
+            reorderResult->Labels(),
+            reorderResult->Stats.LogicalOrderings
+        );
+    }
 
     // Build the final output
     return Build<TCoEquiJoinTuple>(ctx,equiJoin.Pos())
@@ -264,13 +267,15 @@ TExprBase BuildTree(
 TExprBase RearrangeEquiJoinTree(
     TTypeAnnotationContext& typeCtx,
     TExprContext& ctx, const TCoEquiJoin& equiJoin,
-    std::shared_ptr<TJoinOptimizerNode> reorderResult) {
+    std::shared_ptr<TJoinOptimizerNode> reorderResult,
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+) {
     TVector<TExprBase> joinArgs;
     for (size_t i = 0; i < equiJoin.ArgCount() - 2; i++){
         joinArgs.push_back(equiJoin.Arg(i));
     }
 
-    joinArgs.push_back(BuildTree(typeCtx, ctx, equiJoin, reorderResult));
+    joinArgs.push_back(BuildTree(typeCtx, ctx, equiJoin, reorderResult, shufflingOrderingsByJoinLabels));
 
     joinArgs.push_back(equiJoin.Arg(equiJoin.ArgCount() - 1));
 
@@ -587,10 +592,22 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
     const TOptimizerHints& hints,
-    bool enableShuffleElimination
+    bool enableShuffleElimination,
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 ) {
     int dummyEquiJoinCounter = 0;
-    return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter, hints, enableShuffleElimination);
+    return DqOptimizeEquiJoinWithCosts(
+        node,
+        ctx,
+        typesCtx,
+        optLevel,
+        opt,
+        providerCollect,
+        dummyEquiJoinCounter,
+        hints,
+        enableShuffleElimination,
+        shufflingOrderingsByJoinLabels
+    );
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(
@@ -602,7 +619,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     const TProviderCollectFunction& providerCollect,
     int& equiJoinCounter,
     const TOptimizerHints& hints,
-    bool /* enableShuffleElimination */
+    bool /* enableShuffleElimination */,
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 ) {
     if (optLevel <= 1) {
         return node;
@@ -683,10 +701,12 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
 
     // rewrite the join tree and record the output statistics
-    TExprBase res = RearrangeEquiJoinTree(typesCtx, ctx, equiJoin, joinTree);
+    TExprBase res = RearrangeEquiJoinTree(typesCtx, ctx, equiJoin, joinTree, shufflingOrderingsByJoinLabels);
     joinTree->Stats.CBOFired = true;
     typesCtx.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
-    YQL_CLOG(TRACE, CoreDq) << typesCtx.ShufflingOrderingsByJoinLabels.ToString();
+    if (shufflingOrderingsByJoinLabels) {
+        YQL_CLOG(TRACE, CoreDq) << shufflingOrderingsByJoinLabels->ToString();
+    }
     return res;
 
 }

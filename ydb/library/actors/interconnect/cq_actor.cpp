@@ -11,6 +11,8 @@ using namespace NActors;
 
 namespace NInterconnect::NRdma {
 
+using TCqFactory = std::function<ICq::TPtr(const TRdmaCtx*)>;
+
 class TCqActor: public TInterconnectLoggingBase,
                 public TActorBootstrapped<TCqActor> {
     class TAsyncEventDesctiptor : public TSharedDescriptor {
@@ -28,9 +30,9 @@ class TCqActor: public TInterconnectLoggingBase,
         const TRdmaCtx* Ctx;
     };
 public:
-    TCqActor(int maxCqe)
+    TCqActor(TCqFactory cqFactory)
         : TInterconnectLoggingBase("TCqActor")
-        , MaxCqe(maxCqe)
+        , CqFactory(std::move(cqFactory))
     {}
     static constexpr IActor::EActivityType ActorActivityType() {
         return IActor::EActivityType::INTERCONNECT_RDMA_CQ;
@@ -88,7 +90,7 @@ public:
 
     void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
         auto rdmaCtx = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get())->GetContext();
-        auto cqPtr = ICq::MakeSimpleCq(rdmaCtx, TlsActivationContext->AsActorContext().ActorSystem(), MaxCqe);
+        auto cqPtr = CqFactory(rdmaCtx);
         auto it = CqMap.find(rdmaCtx);
         Y_ABORT_UNLESS(it != CqMap.end());
         Y_ABORT_UNLESS(it->second.index() == 1);
@@ -201,7 +203,7 @@ private:
         ibv_ack_async_event(&async_event);
         return true;
     }
-    const int MaxCqe;
+
     struct TCtxData {
         ICq::TPtr Cq;
         NActors::TPollerToken::TPtr AsyncEventToken;
@@ -214,10 +216,19 @@ private:
         std::vector<TEvGetCqHandle::TPtr> Waiters;
     };
     std::map<const TRdmaCtx*, std::variant<TCtxData, TWaitPollerReg>> CqMap;
+    TCqFactory CqFactory;
 };
 
 NActors::IActor* CreateCqActor(int max_cqe) {
-    return new TCqActor(max_cqe);
+    return new TCqActor([max_cqe](const TRdmaCtx* ctx) {
+        return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), max_cqe);
+    });
+}
+
+NActors::IActor* CreateCqMockActor(int max_cqe) {
+    return new TCqActor([max_cqe](const TRdmaCtx* ctx) {
+        return CreateSimpleCqMock(ctx, TlsActivationContext->AsActorContext().ActorSystem(), max_cqe);
+    });
 }
 
 NActors::TActorId MakeCqActorId() {

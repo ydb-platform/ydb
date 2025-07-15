@@ -222,10 +222,23 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
         {}
 
         void Bootstrap() {
-            Send(Recipient, Event);
-            PassAway();
+            Send(Recipient, Event, IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+            Become(&TSendActor::StateResolve);
         }
 
+        void HandleUndelivered() {
+            Undelivered = true;
+        }
+
+        STATEFN(StateResolve) {
+            switch (ev->GetTypeRewrite()) {
+                cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
+                cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, HandleUndelivered);
+            }
+        }
+
+    public:
+        bool Undelivered = false;
     private:
         TActorId Recipient;
         IEventBase* Event;
@@ -386,6 +399,99 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
             Sleep(TDuration::MilliSeconds(1000));
         }
         UNIT_ASSERT_VALUES_EQUAL(events.Checks.size(), 0);
+    }
+
+    struct TCqGetter: public TActorBootstrapped<TCqGetter> {
+        TCqGetter(TRdmaCtx* ctx, TActorId cqActorId)
+            : CqActorId(cqActorId)
+            , Ctx(ctx)
+        {}
+
+        void Bootstrap() {
+            Send(CqActorId, std::make_unique<TEvGetCqHandle>(Ctx));
+            Become(&TCqGetter::StateFunc);
+        }
+        STRICT_STFUNC(StateFunc,
+            hFunc(TEvGetCqHandle, Handle);
+        )
+
+        void Handle(TEvGetCqHandle::TPtr& ev) {
+            auto cqHandle = ev->Get();
+            UNIT_ASSERT(cqHandle->CqPtr);
+            CqPtr = cqHandle->CqPtr;
+        }
+
+        TActorId CqActorId;
+        TRdmaCtx* Ctx;
+        ICq::TPtr CqPtr;
+    };
+
+    void TestFaultyCq(std::function<void(NInterconnect::NRdma::ICqMockControl*)> failCq) {
+        TTestICCluster cluster(2);
+
+        NInterconnect::TAddress address("::1", 7777);
+        auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
+        auto* cqGetter = new TCqGetter(ctx, NInterconnect::NRdma::MakeCqActorId());
+        cluster.RegisterActor(cqGetter, 1);
+        Sleep(TDuration::MilliSeconds(1000));
+        auto cqPtr = cqGetter->CqPtr;
+        UNIT_ASSERT(cqPtr);
+        auto* cqControl = TryGetCqMockControl(cqPtr.get());
+        UNIT_ASSERT(cqControl);
+        
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+
+        auto sendEv = [&]() -> std::pair<ui32, bool> {
+            auto* ev = MakeTestEvent(123, memPool.get());
+
+            auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+                Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
+            });
+            const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+            Sleep(TDuration::MilliSeconds(1000));
+
+            auto senderPtr = new TSendActor(receiver, ev);
+            cluster.RegisterActor(senderPtr, 2);
+
+            Sleep(TDuration::MilliSeconds(1000));
+            return {recieverPtr->ReceivedEvents, senderPtr->Undelivered};
+        };
+
+        {   // via rdma
+            auto [receivedEvents, undelivered] = sendEv();
+            UNIT_ASSERT_VALUES_EQUAL(receivedEvents, 1);
+            UNIT_ASSERT(!undelivered);
+        }
+        failCq(cqControl);
+        cqControl->SetBusy(true);
+        {   // session terminated, event undelivered
+            auto [receivedEvents, undelivered] = sendEv();
+            UNIT_ASSERT_VALUES_EQUAL(receivedEvents, 0);
+            UNIT_ASSERT(undelivered);
+        }
+        {   // via xdc
+            auto [receivedEvents, undelivered] = sendEv();
+            UNIT_ASSERT_VALUES_EQUAL(receivedEvents, 1);
+            UNIT_ASSERT(!undelivered);
+        }
+    }
+
+    Y_UNIT_TEST(BusyCq) {
+        TestFaultyCq([](NInterconnect::NRdma::ICqMockControl* cqControl) {
+            cqControl->SetBusy(true);
+        });
+    }
+
+    Y_UNIT_TEST(ErrCq) {
+        TestFaultyCq([](NInterconnect::NRdma::ICqMockControl* cqControl) {
+            cqControl->SetError();
+        });
     }
 
 }

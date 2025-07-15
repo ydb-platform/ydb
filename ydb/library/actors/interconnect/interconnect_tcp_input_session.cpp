@@ -61,18 +61,20 @@ namespace NActors {
         }
     }
 
-    static void SendRdmaReadRequest(NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq,
+    static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
+        NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq,
         const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
         std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel
     ) {
+        using namespace NInterconnect::NRdma;
+
         Y_DEBUG_ABORT_UNLESS(memReg.GetSize() >= offset + cred.GetSize());
-        auto reply = [notify, channel](NActors::TActorSystem* as, NInterconnect::NRdma::TEvRdmaIoDone* ioDone) {
-            NInterconnect::NRdma::TEvRdmaReadDone* rdmaReadDone = new NInterconnect::NRdma::TEvRdmaReadDone(
-                    std::unique_ptr<NInterconnect::NRdma::TEvRdmaIoDone>(ioDone), channel);
+        auto reply = [notify, channel](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+            TEvRdmaReadDone* rdmaReadDone = new TEvRdmaReadDone(std::unique_ptr<TEvRdmaIoDone>(ioDone), channel);
                 as->Send(new IEventHandle(notify, TActorId(), rdmaReadDone));
         };
 
-        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply](NActors::TActorSystem* as, NInterconnect::NRdma::TEvRdmaIoDone* ioDone) {
+        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
             if (!ioDone->IsSuccess()) {
                 reply(as, ioDone);
                 return;
@@ -87,24 +89,36 @@ namespace NActors {
             }
         };
         auto allocResult = cq->AllocWr(cb);
-        auto* wr = (allocResult.index() == 0) ? std::get<0>(allocResult) : nullptr;
-        Y_ABORT_UNLESS(wr);
+        if (auto *busy = std::get_if<NInterconnect::NRdma::ICq::TBusy>(&allocResult)) {
+            return *busy;
+        } else if (auto *err = std::get_if<NInterconnect::NRdma::ICq::TErr>(&allocResult)) {
+            return *err;
+        }
+        auto* wr = std::get<ICq::IWr*>(allocResult);
 
         void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
         qp.SendRdmaReadWr(wr->GetId(),
             addr, memReg.GetLKey(qp.GetCtx()->GetDeviceIndex()),
             reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
         );
+
+        return TReceiveContext::TPerChannelContext::TRdmaReadReqOk{};
     }
 
-    void TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel) {
+    TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(
+        const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp,
+        NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel
+    ) {
         auto& pendingEvent = PendingEvents.back();
 
         ui32 curOffset = 0;
         for (const auto& cred : creds.GetCreds()) {
             auto curMemReg = pendingEvent.RdmaBuffers.front();
 
-            SendRdmaReadRequest(qp, cq, cred, curMemReg, curOffset, pendingEvent.RdmaSizeLeft, notify, channel);
+            auto err = SendRdmaReadRequest(qp, cq, cred, curMemReg, curOffset, pendingEvent.RdmaSizeLeft, notify, channel);
+            if (!std::holds_alternative<TRdmaReadReqOk>(err)) {
+                return err;
+            }
 
             curOffset += cred.GetSize();
 
@@ -113,6 +127,7 @@ namespace NActors {
                 curOffset = 0;
             }
         }
+        return TRdmaReadReqOk{};
     }
 
     void TReceiveContext::TPerChannelContext::DropFront(TRope *from, size_t numBytes) {
@@ -680,7 +695,7 @@ namespace NActors {
 
                 case NActors::EXdcCommand::RDMA_READ: {
                     if (!RdmaQp || !RdmaCq) {
-                        LOG_CRIT_IC_SESSION("ICIS16", "unexpected XDC RDMA_READ command without RDMA QP");
+                        LOG_CRIT_IC_SESSION("ICIS22", "unexpected XDC RDMA_READ command without RDMA QP");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
                     const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
@@ -692,7 +707,14 @@ namespace NActors {
                     NActorsInterconnect::TRdmaCreds creds;
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
-                    context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel);
+                    auto err = context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel);
+                    if (std::holds_alternative<NInterconnect::NRdma::ICq::TBusy>(err)) {
+                        LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
+                        throw TExDestroySession{TDisconnectReason::RdmaError()};
+                    } else if (std::holds_alternative<NInterconnect::NRdma::ICq::TErr>(err)) {
+                        LOG_CRIT_IC_SESSION("ICIS21", "RDMA_READ error: can not allocate cq work request: error");
+                        throw TExDestroySession{TDisconnectReason::RdmaError()};
+                    }
                     for (const auto& cred : creds.GetCreds()) {
                         RdmaBytesReadScheduled += cred.GetSize();
                         RdmaWrReadScheduled++;

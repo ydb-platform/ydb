@@ -110,9 +110,9 @@ private:
     TCb Cb;
 };
 
-class TSimpleCq : public TCqCommon {
+class TSimpleCqBase : public TCqCommon {
 public:
-    TSimpleCq(NActors::TActorSystem* as, size_t sz) noexcept
+    TSimpleCqBase(NActors::TActorSystem* as, size_t sz) noexcept
         : TCqCommon(as)
         , Err(false)
     {
@@ -128,27 +128,10 @@ public:
         }
     }
 
-    ~TSimpleCq() {
+    ~TSimpleCqBase() {
         Cont.store(false, std::memory_order_relaxed);
         if (Thread)
              Thread->join();
-    }
-
-    TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept override  {
-        if (Err.load(std::memory_order_relaxed)) {
-            return TErr();
-        }
-        TWr* wr = nullptr;
-        Queue.Dequeue(&wr);
-        if (wr) {
-            wr->AttachCb(std::move(cb));
-            if (Err.load(std::memory_order_relaxed)) {
-                return TErr();
-            }
-            return static_cast<IWr*>(wr);
-        } else {
-            return  TBusy();
-        }
     }
 
     void ReturnWr(IWr* wr) noexcept override {
@@ -200,14 +183,15 @@ public:
     int Start() noexcept {
         Cont.store(true, std::memory_order_relaxed);
         try {
-            Thread.emplace(&TSimpleCq::Loop, this);
+            Thread.emplace(&TSimpleCqBase::Loop, this);
         } catch (std::exception& ex) {
             Cerr << "Unable to launch cq poller thread" << Endl;
             return 1;
         }
         return 0;
     }
-private:
+
+protected:
     std::optional<std::thread> Thread;
     std::atomic<bool> Cont;
 
@@ -220,8 +204,74 @@ private:
     std::atomic<bool> Err;
 };
 
-ICq::TPtr ICq::MakeSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int max_cqe) noexcept {
-    auto p = std::make_shared<TSimpleCq>(as, 16);
+class TSimpleCq: public TSimpleCqBase {
+public:
+    using TSimpleCqBase::TSimpleCqBase;
+
+    TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept override  {
+        if (Err.load(std::memory_order_relaxed)) {
+            return TErr();
+        }
+        TWr* wr = nullptr;
+        Queue.Dequeue(&wr);
+        if (wr) {
+            wr->AttachCb(std::move(cb));
+            if (Err.load(std::memory_order_relaxed)) {
+                return TErr();
+            }
+            return static_cast<IWr*>(wr);
+        } else {
+            return  TBusy();
+        }
+    }
+};
+
+class TSimpleCqMock: public TSimpleCqBase, public ICqMockControl {
+public:
+    using TSimpleCqBase::TSimpleCqBase;
+
+    TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept override  {
+        if (Err.load(std::memory_order_relaxed)) {
+            return TErr();
+        }
+        if (IsBusy.load(std::memory_order_relaxed)) {
+            return TBusy();
+        }
+        TWr* wr = nullptr;
+        Queue.Dequeue(&wr);
+        if (wr) {
+            wr->AttachCb(std::move(cb));
+            if (Err.load(std::memory_order_relaxed)) {
+                return TErr();
+            }
+            return static_cast<IWr*>(wr);
+        } else {
+            return  TBusy();
+        }
+    }
+
+    void SetBusy(bool busy) noexcept override {
+        IsBusy.store(busy, std::memory_order_relaxed);
+    }
+
+    void SetError() noexcept override {
+        Err.store(true, std::memory_order_relaxed);
+    }
+
+private:
+    std::atomic<bool> IsBusy = false;
+};
+
+ICqMockControl* TryGetCqMockControl(ICq* cq) {
+    if (auto* mock = dynamic_cast<TSimpleCqMock*>(cq)) {
+        return mock;
+    }
+    return nullptr;
+}
+
+template<class TCq>
+static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int max_cqe) noexcept {
+    auto p = std::make_shared<TCq>(as, MAX_WR_CNT);
     int err = p->Init(ctx, max_cqe);
     if (err) {
         return nullptr;
@@ -233,6 +283,15 @@ ICq::TPtr ICq::MakeSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int 
 
     return p;
 }
+
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int max_cqe) noexcept {
+    return CreateCq<TSimpleCq>(ctx, as, max_cqe);
+}
+
+ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int max_cqe) noexcept {
+    return CreateCq<TSimpleCqMock>(ctx, as, max_cqe);
+}
+
 
 TQueuePair::~TQueuePair() {
     if (Qp) {

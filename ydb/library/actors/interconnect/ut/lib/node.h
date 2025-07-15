@@ -70,7 +70,7 @@ public:
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
             TMailboxType::ReadAsFilled, 0));
-        setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(), TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1),
+        setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(), TActorSetupCmd(NInterconnect::NRdma::CreateCqMockActor(-1),
         TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

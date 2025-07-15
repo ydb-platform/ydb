@@ -69,7 +69,7 @@ std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo="::1") {
         rdma->ActorSystem = std::move(actorSystem);
         rdma->Ctx = ctx;
     }
-    rdma->CqActorId = rdma->ActorSystem->Register(CreateCqActor(1));
+    rdma->CqActorId = rdma->ActorSystem->Register(CreateCqMockActor(1));
     rdma->CqPtr = GetCqHandle(rdma->ActorSystem.get(), rdma->Ctx, rdma->CqActorId);
 
     {

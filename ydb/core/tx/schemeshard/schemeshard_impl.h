@@ -349,7 +349,6 @@ public:
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableDataErasure = false;
     bool EnableExternalSourceSchemaInference = false;
-    bool EnableMoveColumnTable = false;
 
     TShardDeleter ShardDeleter;
 

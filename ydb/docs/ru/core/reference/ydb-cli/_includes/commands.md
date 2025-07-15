@@ -25,7 +25,7 @@
 | [admin cluster dump](../export-import/tools-dump.md#cluster) | Выгрузка метаданных кластера в файловую систему |
 | [admin cluster restore](../export-import/tools-restore.md#cluster) | Восстановление метаданных кластера из файловой системы |
 | [admin database dump](../export-import/tools-dump.md#database) | Выгрузка метаданных и данных базы данных в файловую систему |
-| [admin database restore](../export-import/tools-restore.md#database) | Восстановление метаданных и данных базы данных из файловой системы |
+| [admin database restore](../export-import/tools-restore.md#db) | Восстановление метаданных и данных базы данных из файловой системы |
 [config info](../commands/config-info.md) | Просмотр [параметров соединения](../connect.md)
 [config profile activate](../profile/activate.md) | Активация [профиля](../profile/index.md)
 [config profile create](../profile/create.md) | Создание [профиля](../profile/index.md)

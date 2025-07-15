@@ -6,7 +6,7 @@
 - [Выгрузка метаданных кластера в файловую систему с помощью `admin cluster dump`](../tools-dump.md#cluster)
 - [Загрузка метаданных кластера из файловой системы с помощью `admin cluster restore`](../tools-restore.md#cluster)
 - [Выгрузка данных и метаданных базы данных в файловую систему с помощью `admin database dump`](../tools-dump.md#database)
-- [Загрузка данных и метаданных базы данных из файловой системы с помощью `admin database restore`](../tools-restore.md#database)
+- [Загрузка данных и метаданных базы данных из файловой системы с помощью `admin database restore`](../tools-restore.md#db)
 - [Выгрузка отдельных объектов схемы данных в файловую систему с помощью `tools dump`](../tools-dump.md#schema-objects)
 - [Загрузка отдельных объектов схемы данных из файловой системы с помощью `tools restore`](../tools-restore.md#schema-objects)
 - [Соединение и аутентификация при работе с S3-совместимым объектным хранилищем](../auth-s3.md)

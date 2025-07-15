@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/ymq/actor/cloud_events/proto/ymq.pb.h>
+
 #include <ydb/core/kqp/common/kqp.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -13,12 +15,19 @@
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
+    using TCreateQueueEvent = yandex::cloud::events::ymq::CreateQueue;
+    using TUpdateQueueEvent = yandex::cloud::events::ymq::UpdateQueue;
+    using TDeleteQueueEvent = yandex::cloud::events::ymq::DeleteQueue;
+    using EStatus = yandex::cloud::events::EventStatus;
+
     class TEventIdGenerator {
     public:
         static ui64 Generate();
     };
 
     struct TEventInfo {
+        static constexpr TStringBuf ResourceType = "message-queue";
+
         TString UserSID;
         TString MaskedToken;
         TString AuthType;
@@ -43,7 +52,30 @@ namespace NCloudEvents {
         TString Permission;
     };
 
+    template<typename TProtoEvent>
+    class TFiller {
+    protected:
+        const TEventInfo& EventInfo;    // Be careful with reference
+        TProtoEvent& Ev;                // Be careful with reference
+
+        void FillAuthentication();
+        void FillAuthorization();
+        void FillEventMetadata();
+        void FillRequestMetadata();
+        void FillStatus();
+        void FillDetails();
+    public:
+        void Fill();
+
+        TFiller(const TEventInfo& eventInfo, TProtoEvent& ev)
+        : EventInfo(eventInfo)
+        , Ev(ev)
+        {}
+    };
+
     class TAuditSender {
+        template<typename TProtoEvent>
+        static void SendProto(const TProtoEvent& ev);
     public:
         static void Send(const TEventInfo& evInfo);
     };

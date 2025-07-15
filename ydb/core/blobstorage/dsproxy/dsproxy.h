@@ -159,6 +159,7 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
         XX(Status)
         XX(Patch)
         XX(Assimilate)
+        XX(CheckIntegrity)
 #undef XX
 
         default:
@@ -552,6 +553,7 @@ public:
             XX(Status)
             XX(Patch)
             XX(Assimilate)
+            XX(CheckIntegrity)
             default:
                 Y_ABORT();
 #undef XX

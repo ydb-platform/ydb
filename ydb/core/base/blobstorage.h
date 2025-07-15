@@ -489,6 +489,7 @@ struct TEvBlobStorage {
         EvAssimilate,
 
         EvGetQueuesInfo,     // for debugging purposes
+        EvGetBlock,
         EvCheckIntegrity,
 
         //
@@ -506,6 +507,7 @@ struct TEvBlobStorage {
         EvAssimilateResult,
 
         EvQueuesInfo,  // for debugging purposes
+        EvGetBlockResult,
         EvCheckIntegrityResult,
 
         // proxy <-> vdisk interface

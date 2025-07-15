@@ -956,9 +956,9 @@ private:
         VisitExpr(query, [queryCtx, &result] (const TExprNode::TPtr& exprNode) {
             if (auto parameter = TMaybeNode<TCoParameter>(exprNode)) {
                 TString name(parameter.Cast().Name().Value());
-                auto paramValue = queryCtx->QueryData->GetParameterMiniKqlValue(name);
+                auto paramValue = queryCtx->QueryData->GetParameterTypedValue(name);
                 YQL_ENSURE(paramValue);
-                result->AddMkqlParam(name, paramValue->GetType(), paramValue->GetValue());
+                result->AddTypedValueParam(name, *paramValue);
             }
 
             return true;
@@ -1384,40 +1384,6 @@ private:
     }
 
 private:
-    static bool ParseParameters(NKikimrMiniKQL::TParams&& parameters, TQueryData& map,
-        TExprContext& ctx)
-    {
-        if (!parameters.HasType()) {
-            return true;
-        }
-
-        if (parameters.GetType().GetKind() != NKikimrMiniKQL::Struct) {
-            ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_BAD_REQUEST,
-                "Expected struct as query parameters type"));
-            return false;
-        }
-
-        auto& structType = *parameters.MutableType()->MutableStruct();
-        for (ui32 i = 0; i < structType.MemberSize(); ++i) {
-            auto memberName = structType.GetMember(i).GetName();
-
-            if (parameters.GetValue().StructSize() <= i) {
-                ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_BAD_REQUEST,
-                    TStringBuilder() << "Missing value for parameter: " << memberName));
-                return false;
-            }
-
-            auto success = map.AddMkqlParam(
-                memberName, structType.GetMember(i).GetType(), parameters.GetValue().GetStruct(i));
-            if (!success) {
-                ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_BAD_REQUEST,
-                    TStringBuilder() << "Duplicate parameter: " << memberName));
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     IAsyncQueryResultPtr ExecuteSchemeQueryInternal(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings, TExprContext& ctx) {
         SetupYqlTransformer(EKikimrQueryType::Ddl);

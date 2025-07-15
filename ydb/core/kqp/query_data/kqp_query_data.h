@@ -217,8 +217,6 @@ public:
     TQueryData(TTxAllocatorState::TPtr allocatorState);
     ~TQueryData();
 
-    const TParamMap& GetParams();
-
     const TParamProtobufMap& GetParamsProtobuf();
 
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv();
@@ -250,7 +248,6 @@ public:
     void CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx);
 
     void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params);
-    void ParseParameters(const NKikimrMiniKQL::TParams& parameters);
 
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
@@ -260,7 +257,6 @@ public:
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);
     TTypedUnboxedValue* GetParameterUnboxedValuePtr(const TString& name);
-    const NKikimrMiniKQL::TParams* GetParameterMiniKqlValue(const TString& name);
     const Ydb::TypedValue* GetParameterTypedValue(const TString& name);
 
     NYql::NDqProto::TData SerializeParamValue(const TString& name);

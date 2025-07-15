@@ -69,8 +69,6 @@ bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     const TGroupStatus prev = Status;
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
-    // TODO(alexvru): bridge group status
-
     if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
             VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty()) {
         Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
@@ -262,6 +260,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
+    auto prevStaticGroups = std::exchange(StaticGroups, {});
     StaticVDiskMap.clear();
 
     const TMonotonic mono = TActivationContext::Monotonic();
@@ -288,7 +287,9 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 SysViewChangedVSlots.insert(vslotId);
             }
             for (const auto& group : ss.GetGroups()) {
-                SysViewChangedGroups.insert(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID));
+                const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                StaticGroups.try_emplace(groupId, group, prevStaticGroups);
+                SysViewChangedGroups.insert(groupId);
             }
         } else {
             Y_FAIL("no storage configuration provided");
@@ -1018,6 +1019,97 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
     }
 
     Y_ABORT();
+}
+
+void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBlobStorageController *controller) {
+    if (!Info || Info->IsBridged()) {
+        return;
+    }
+
+    const auto *topology = &Info->GetTopology();
+
+    TBlobStorageGroupInfo::TGroupVDisks failed(topology);
+    TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(topology);
+
+    for (const auto& vdisk : Info->GetVDisks()) {
+        const TVDiskIdShort& vdiskId = vdisk.VDiskIdShort;
+        const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(
+            Info->GetDynamicInfo().ServiceIdForOrderNumber[vdisk.OrderNumber]);
+        const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
+
+        if (const auto it = controller->StaticVSlots.find(vslotId); it != controller->StaticVSlots.end()) {
+            if (mono <= it->second.ReadySince) { // VDisk can't be treated as READY one
+                failed |= {topology, vdiskId};
+            } else if (const TPDiskInfo *pdisk = controller->FindPDisk(vslotId.ComprisingPDiskId()); !pdisk || !pdisk->HasGoodExpectedStatus()) {
+                failedByPDisk |= {topology, vdiskId};
+            }
+        } else {
+            failed |= {topology, vdiskId};
+        }
+    }
+
+    Status = {
+        .OperatingStatus = DeriveStatus(topology, failed),
+        .ExpectedStatus = DeriveStatus(topology, failed | failedByPDisk),
+    };
+}
+
+void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageController *controller) {
+    LayoutCorrect = true;
+    if (!Info || Info->IsBridged()) {
+        return;
+    }
+
+    NLayoutChecker::TGroupLayout layout(Info->GetTopology());
+    NLayoutChecker::TDomainMapper mapper;
+    TGroupGeometryInfo geom(Info->Type, controller->SelfManagementEnabled
+        ? controller->StorageConfig->GetSelfManagementConfig().GetGeometry()
+        : NKikimrBlobStorage::TGroupGeometry());
+
+    for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
+        const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i);
+    }
+
+    LayoutCorrect = layout.IsCorrect();
+}
+
+TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TStaticGroupInfo::GetStatus(
+        const TStaticGroupFinder& finder) const {
+    if (Info && Info->IsBridged()) {
+        std::optional<TGroupInfo::TGroupStatus> res;
+        for (TGroupId groupId : Info->GetBridgeGroupIds()) {
+            if (TStaticGroupInfo *g = finder(groupId)) {
+                if (const auto& s = g->GetStatus(finder); res) {
+                    res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
+                } else {
+                    res.emplace(s);
+                }
+            } else {
+                Y_DEBUG_ABORT();
+            }
+        }
+        return res.value_or(TGroupInfo::TGroupStatus());
+    } else {
+        return Status;
+    }
+}
+
+bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGroupFinder& finder) const {
+    if (Info && Info->IsBridged()) {
+        for (TGroupId groupId : Info->GetBridgeGroupIds()) {
+            if (TStaticGroupInfo *g = finder(groupId)) {
+                if (!g->IsLayoutCorrect(finder)) {
+                    return false;
+                }
+            } else {
+                Y_DEBUG_ABORT();
+            }
+        }
+        return true;
+    } else {
+        return LayoutCorrect;
+    }
 }
 
 } // NBsController

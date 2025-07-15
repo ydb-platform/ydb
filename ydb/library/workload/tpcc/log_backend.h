@@ -19,10 +19,10 @@ namespace NYdb::NTPCC {
 class TLogBackendWithCapture : public TLogBackend {
 public:
     explicit TLogBackendWithCapture(const TString& type, ELogPriority priority, size_t maxLines);
-    virtual ~TLogBackendWithCapture();
+    virtual ~TLogBackendWithCapture() = default;
 
     void StartCapture();
-    void StopCapture();
+    void StopCaptureAndFlush(IOutputStream& os);
 
     // Get current log lines to display in TUI
     // Assumes single consumer, multiple producers
@@ -41,7 +41,7 @@ public:
     }
 
 private:
-    void ProcessNewLines();
+    void ProcessNewLines(bool logTaken);
 
 private:
     THolder<TLogBackend> RealBackend;

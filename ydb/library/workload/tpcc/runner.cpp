@@ -384,6 +384,10 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
     }
     firstTime = false;
 
+    static int i = 1;
+    LOG_I("Update display " << i++);
+    LOG_E("Some error!");
+
     CollectDataToDisplay(now);
 
     switch (Config.DisplayMode) {
@@ -572,14 +576,8 @@ void TPCCRunner::CalculateStatusData(Clock::time_point now, TRunDisplayData& dat
 }
 
 void TPCCRunner::ExitTuiMode() {
-    LogBackend->StopCapture();
-
     Tui.reset();
-
-    // TODO: remove?
-    // Switch back to main screen buffer (restore original content)
-    std::cout << "\033[?1049l";
-    std::cout.flush();
+    LogBackend->StopCaptureAndFlush(Cerr);
 }
 
 void TPCCRunner::PrintTransactionStatisticsPretty(IOutputStream& os) {

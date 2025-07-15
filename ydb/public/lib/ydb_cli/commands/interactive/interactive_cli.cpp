@@ -140,6 +140,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     try {
         cliVersion = StripString(NResource::Find(TStringBuf(VersionResourceName)));
     } catch (const std::exception& e) {
+        cliVersion.clear();
     }
 
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);

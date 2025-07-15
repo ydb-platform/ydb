@@ -125,96 +125,155 @@ public:
 
         const TTypeAnnotationNode* listItemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
       //  if (!isSingleRowPerFileFormat) {
-            return ctx.MakeType<TOptionalExprType>(listItemType);
+            return listItemType;//ctx.MakeType<TOptionalExprType>(listItemType);
       //  }
 
       //  return listItemType;
     }
 
-    TStatus HandleInsert(const TExprNode::TPtr& input, TExprContext& ctx) {
+     TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
         YQL_CLOG(INFO, ProviderPq) << "TPqDataSinkTypeAnnotationTransformer::HandleInsert " ;
 
 
-        if (!EnsureArgsCount(*input, 4U, ctx)) {
-            return TStatus::Error;
-        }
+    //     if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {
+    //         return TStatus::Error;
+    //     }
 
-        // if (!EnsureSpecificDataSink(*input->Child(TS3Insert::idx_DataSink), S3ProviderName, ctx)) {
-        //     return TStatus::Error;
-        // }
+    //   const TTypeAnnotationNode* listItemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
 
-        // auto source = input->Child(TS3Insert::idx_Input);
-        // if (!EnsureListType(*source, ctx)) {
-        //     return TStatus::Error;
-        // }
+    //  TVector<const TItemExprType*> blockRowTypeItems;
 
-        // const TTypeAnnotationNode* sourceType = source->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        // if (!EnsureStructType(source->Pos(), *sourceType, ctx)) {
-        //     return TStatus::Error;
-        // }
+    // blockRowTypeItems.push_back(listItemType);
+    // const TTypeAnnotationNode* structNode = ctx.MakeType<TStructExprType>(blockRowTypeItems);
 
-        // const auto structType = sourceType->Cast<TStructExprType>();
-        // auto target = input->Child(TS3Insert::idx_Target);
-        // if (!TS3Target::Match(target)) {
-        //     ctx.AddError(TIssue(ctx.GetPosition(target->Pos()), "Expected S3 target."));
-        //     return TStatus::Error;
-        // }
-
-        // TExprNode::TListType keys;
-        // TS3Target tgt(target);
-        // if (auto settings = tgt.Settings()) {
-        //     if (auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
-        //         const TTypeAnnotationNode* targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        //         if (!IsSameAnnotation(*targetType, *sourceType)) {
-        //             ctx.AddError(TIssue(ctx.GetPosition(source->Pos()),
-        //                                 TStringBuilder() << "Type mismatch between schema type: " << *targetType
-        //                                                  << " and actual data type: " << *sourceType << ", diff is: "
-        //                                                  << GetTypeDiff(*targetType, *sourceType)));
-        //             return TStatus::Error;
-        //         }
-        //     }
-        //     auto partBy = GetSetting(settings.Cast().Ref(), "partitionedby"sv);
-        //     keys = GetPartitionKeys(partBy);
-        // }
-
-        // const auto format = tgt.Format();
-        // const TTypeAnnotationNode* baseTargeType = nullptr;
-
-        // if (TString error; !UseBlocksSink(format, keys, structType, State_->Configuration, error)) {
-        //     if (error) {
-        //         ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), error));
-        //         return TStatus::Error;
-        //     }
-        //     baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
-        // } else {
-        //     baseTargeType = AnnotateTargetBlocks(structType, ctx);
-        // }
-
-        // if (!baseTargeType) {
-        //     return TStatus::Error;
-        // }
-
-        // auto t = ctx.MakeType<TTupleExprType>(
-        //             TTypeAnnotationNode::TListType{
-        //                 ctx.MakeType<TListExprType>(
-        //                     baseTargeType
-        //                 )
-        //             });
-
-        // input->SetTypeAnn(t);
+        TVector<const TItemExprType*> items;
+        auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+        items.push_back(ctx.MakeType<TItemExprType>("key", stringType));
+        auto itemType = ctx.MakeType<TStructExprType>(items);
 
 
-        auto baseTargeType = AnnotateTargetBase(ctx);
+
+               // auto baseTargeType = AnnotateTargetBase(ctx);
         auto t = ctx.MakeType<TTupleExprType>(
                     TTypeAnnotationNode::TListType{
                         ctx.MakeType<TListExprType>(
-                            baseTargeType
+                            itemType
                         )
                     });
 
-        input->SetTypeAnn(t);
+                    
+        input.Ptr()->SetTypeAnn(t);
+
+
+        const auto write = input.Cast<TPqInsert>();
+        const auto& writeInput = write.Input().Ref();
+        if (!EnsureStructTypeWithSingleStringMember(writeInput.GetTypeAnn(), writeInput.Pos(), ctx)) {
+            return TStatus::Error;
+        }
+
+     //   input.Ptr()->SetTypeAnn(write.World().Ref().GetTypeAnn());
+
         return TStatus::Ok;
     }
+
+
+
+    // TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
+    //     YQL_CLOG(INFO, ProviderPq) << "TPqDataSinkTypeAnnotationTransformer::HandleInsert " ;
+
+
+    //     const auto write = input.Cast<TPqInsert>();
+    //     const auto& writeInput = write.Input().Ref();
+    //     if (!EnsureStructTypeWithSingleStringMember(writeInput.GetTypeAnn(), writeInput.Pos(), ctx)) {
+    //         return TStatus::Error;
+    //     }
+
+    //     input.Ptr()->SetTypeAnn(write.World().Ref().GetTypeAnn());
+
+
+
+    //     if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {
+    //         return TStatus::Error;
+    //     }
+
+    //     // if (!EnsureSpecificDataSink(*input->Child(TS3Insert::idx_DataSink), S3ProviderName, ctx)) {
+    //     //     return TStatus::Error;
+    //     // }
+
+    //     // auto source = input->Child(TS3Insert::idx_Input);
+    //     // if (!EnsureListType(*source, ctx)) {
+    //     //     return TStatus::Error;
+    //     // }
+
+    //     // const TTypeAnnotationNode* sourceType = source->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+    //     // if (!EnsureStructType(source->Pos(), *sourceType, ctx)) {
+    //     //     return TStatus::Error;
+    //     // }
+
+    //     // const auto structType = sourceType->Cast<TStructExprType>();
+    //     // auto target = input->Child(TS3Insert::idx_Target);
+    //     // if (!TS3Target::Match(target)) {
+    //     //     ctx.AddError(TIssue(ctx.GetPosition(target->Pos()), "Expected S3 target."));
+    //     //     return TStatus::Error;
+    //     // }
+
+    //     // TExprNode::TListType keys;
+    //     // TS3Target tgt(target);
+    //     // if (auto settings = tgt.Settings()) {
+    //     //     if (auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
+    //     //         const TTypeAnnotationNode* targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    //     //         if (!IsSameAnnotation(*targetType, *sourceType)) {
+    //     //             ctx.AddError(TIssue(ctx.GetPosition(source->Pos()),
+    //     //                                 TStringBuilder() << "Type mismatch between schema type: " << *targetType
+    //     //                                                  << " and actual data type: " << *sourceType << ", diff is: "
+    //     //                                                  << GetTypeDiff(*targetType, *sourceType)));
+    //     //             return TStatus::Error;
+    //     //         }
+    //     //     }
+    //     //     auto partBy = GetSetting(settings.Cast().Ref(), "partitionedby"sv);
+    //     //     keys = GetPartitionKeys(partBy);
+    //     // }
+
+    //     // const auto format = tgt.Format();
+    //     // const TTypeAnnotationNode* baseTargeType = nullptr;
+
+    //     // if (TString error; !UseBlocksSink(format, keys, structType, State_->Configuration, error)) {
+    //     //     if (error) {
+    //     //         ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), error));
+    //     //         return TStatus::Error;
+    //     //     }
+    //     //     baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
+    //     // } else {
+    //     //     baseTargeType = AnnotateTargetBlocks(structType, ctx);
+    //     // }
+
+    //     // if (!baseTargeType) {
+    //     //     return TStatus::Error;
+    //     // }
+
+    //     // auto t = ctx.MakeType<TTupleExprType>(
+    //     //             TTypeAnnotationNode::TListType{
+    //     //                 ctx.MakeType<TListExprType>(
+    //     //                     baseTargeType
+    //     //                 )
+    //     //             });
+
+    //     // input->SetTypeAnn(t);
+
+    //   //  input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+
+
+    //     // auto baseTargeType = AnnotateTargetBase(ctx);
+    //     // auto t = ctx.MakeType<TTupleExprType>(
+    //     //             TTypeAnnotationNode::TListType{
+    //     //                 ctx.MakeType<TListExprType>(
+    //     //                     baseTargeType
+    //     //                 )
+    //     //             });
+
+    //     // input->SetTypeAnn(t);
+    //     return TStatus::Ok;
+    // }
 
 private:
     TPqState::TPtr State_;

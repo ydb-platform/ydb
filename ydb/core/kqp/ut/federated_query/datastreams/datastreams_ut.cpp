@@ -304,7 +304,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory());
 
         TString sourceName = "sourceName";
-        TString topicName = "topicName";
+        TString inputTopicName = "inputTopicName";
+        TString outputTopicName = "outputTopicName";
         TString tableName = "tableName";
 
         NYdb::NTopic::TTopicClientSettings opts;
@@ -314,7 +315,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         NYdb::NTopic::TTopicClient topicClient(driver, opts);
 
         auto topicSettings = NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(1, 1);
-        auto status = topicClient.CreateTopic(topicName, topicSettings).GetValueSync();
+        auto status = topicClient.CreateTopic(outputTopicName, topicSettings).GetValueSync();
+        
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+        status = topicClient.CreateTopic(inputTopicName, topicSettings).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
         auto query = TStringBuilder() << R"(
@@ -330,55 +336,66 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         auto db = kikimr->GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-       // auto settings = TExecuteScriptSettings().StatsMode(EStatsMode::Basic);
 
         const TString sql = fmt::format(R"(
-                $input = SELECT key FROM `{source}`.`{topic}`
+                $input = SELECT key FROM `{source}`.`{input_topic}`
                     WITH (
                         FORMAT="json_each_row",
                         SCHEMA=(
-                            key String NOT NULL,
+                            key String NOT NULL
                         ));
-                INSERT INTO `{source}`.`{topic}`
-                    SELECT (key || key) ?? "" As key FROM $input;
-            )", "source"_a=sourceName, "topic"_a=topicName);
-            
+                INSERT INTO `{source}`.`{output_topic}`
+                    SELECT * FROM $input;
+            )", "source"_a=sourceName, "input_topic"_a=inputTopicName, "output_topic"_a=outputTopicName);
+
         auto queryClient = kikimr->GetQueryClient();
-        auto resultFuture = queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
-        resultFuture.Wait();
-        UNIT_ASSERT_C(resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
-        // auto result = resultFuture.GetValueSync().GetResultSetParser(0);
-        // UNIT_ASSERT_VALUES_EQUAL(result.RowsCount(), 1);
-        // UNIT_ASSERT(result.TryNextRow());
-        // UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser("key").GetUtf8(), "1");
-        // UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser("value").GetUtf8(), "trololo");
-        // UNIT_ASSERT(!result.TryNextRow());
+        auto settings = TExecuteScriptSettings().StatsMode(EStatsMode::Basic);
+        auto scriptExecutionOperation = queryClient.ExecuteScript(sql, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+      
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-        // auto queryClient = kikimr->GetQueryClient();
-        // auto scriptExecutionOperation = queryClient.ExecuteScript(sql, settings).ExtractValueSync();
-        // UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        
-        // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        auto writeSettings = NYdb::NTopic::TWriteSessionSettings().Path(inputTopicName);
+        auto topicSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
+        topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key1"})"));
+        topicSession->Close();
 
-        // auto writeSettings = NYdb::NTopic::TWriteSessionSettings().Path(topicName);
-        // auto topicSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
-        // topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key1", "value": "value1"})"));
-        // topicSession->Close();
+        NYdb::NTopic::TReadSessionSettings readSettings;
+        readSettings
+            .WithoutConsumer()
+            .AppendTopics(
+                NTopic::TTopicReadSettings(outputTopicName).ReadFromTimestamp(TInstant::Now() - TDuration::Seconds(146))
+                    .AppendPartitionIds(0));
 
-        // NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
-        // UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
-        // TFetchScriptResultsResult results = queryClient.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
-        // UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+        readSettings.EventHandlers_.StartPartitionSessionHandler(
+            [](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+                event.Confirm(0);
+            }
+        );
 
-        // TResultSetParser resultSet(results.ExtractResultSet());
-        // UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
-        // UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
-        // UNIT_ASSERT(resultSet.TryNextRow());
-        // UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "key1");
-        // UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetString(), "value1");
+        auto readSession = topicClient.CreateReadSession(readSettings);
+        std::vector<std::string> received;
+        while (true) {
+            auto event = readSession->GetEvent(/*block = */true);
+            Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+             if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    Cerr << "Got new read session event: data" <<  Endl;
+
+                     for (const auto& message : dataEvent->GetMessages()) {
+                        std::cerr << "Data message: \"" << message.GetData() << "\"" << std::endl;
+                        received.push_back(message.GetData());
+                    }
+                    break;
+             }
+        }
+        UNIT_ASSERT_EQUAL(received.size(), 1);
+        UNIT_ASSERT_EQUAL(received[0], "key1");
+
+        NYdb::NOperation::TOperationClient client(kikimr->GetDriver());
+        status = client.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
 }
 

@@ -125,7 +125,7 @@ public:
         return dqQueryBuilder.Done();
     }
 
-    TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx,  IOptimizationContext& optCtx, const TGetParents& getParents) const {
+    TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx,  IOptimizationContext& /*optCtx*/, const TGetParents& getParents) const {
         YQL_CLOG(INFO, ProviderPq) << "TPqPhysicalOptProposalTransformer::PqInsert " ;
         auto insert = node.Cast<TPqInsert>();
 
@@ -181,14 +181,14 @@ public:
             .InitFrom(inputStage)
             .Outputs(outputsBuilder.Done())
             .Done();
+        return dqStageWithSink;
+        // auto dqQueryBuilder = Build<TDqQuery>(ctx, insert.Pos());
+        // dqQueryBuilder.World(insert.World());
+        // dqQueryBuilder.SinkStages().Add(dqStageWithSink).Build();
 
-        auto dqQueryBuilder = Build<TDqQuery>(ctx, insert.Pos());
-        dqQueryBuilder.World(insert.World());
-        dqQueryBuilder.SinkStages().Add(dqStageWithSink).Build();
+        // optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
 
-        optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
-
-        return dqQueryBuilder.Done();
+        // return dqQueryBuilder.Done();
     }
 
 private:

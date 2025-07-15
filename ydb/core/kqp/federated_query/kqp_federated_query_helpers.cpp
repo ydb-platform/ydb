@@ -305,20 +305,19 @@ namespace NKikimr::NKqp {
         }
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
         auto driver = federatedQuerySetup->Driver;
-        
         NYdb::TCommonClientSettings opts;
         opts
             .DiscoveryEndpoint(endpoint)
             .Database(database)
             .SslCredentials(NYdb::TSslCredentials(useTls))
             .CredentialsProviderFactory(credentialsProviderFactory);
-        auto schemeClient = NYdb::NScheme::TSchemeClient(*driver, opts);
-        return schemeClient.DescribePath(path)
-            .Apply([actorSystem = NActors::TActivationContext::ActorSystem()](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+        auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
+        return schemeClient->DescribePath(path)
+            .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), path=path, sc = schemeClient](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 if (!describePathResult.IsSuccess()) {
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribePath failed, " << describePathResult.GetIssues().ToString());
-                    return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing()); 
+                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribePath failed, path " << path << ", " << describePathResult.GetIssues().ToString());
+                    return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing());
                 }
                 NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
                 return NThreading::MakeFuture<TGetSchemeEntryResult>(entry.Type);

@@ -386,6 +386,8 @@ enum EServiceKikimr {
     METADATA_MANAGER = 1502;
     METADATA_SECRET = 1503;
 
+    GENERAL_CACHE = 1504;
+
     // Tiering
     TX_TIERING = 1600;
 
@@ -1087,5 +1089,6 @@ message TActivity {
         DATA_ERASURE = 658;
         TENANT_DATA_ERASURE = 659;
         BS_SYNC_BROKER = 660;
+        RECOMPUTE_KMEANS_SCAN_ACTOR = 663;
     };
 };

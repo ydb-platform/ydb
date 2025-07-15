@@ -18,6 +18,8 @@ items:
     path: primary-key/toc_p.yaml
 - name: Вторичные индексы
   href: secondary-indexes.md
+- name: Векторные индексы
+  href: vector-indexes.md
 - name: Оптимизация планов запросов
   href: query-plans-optimization.md
 - name: Пакетная загрузка

@@ -54,6 +54,7 @@ namespace NKikimrConfig {
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
+    class TKafkaProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
@@ -222,6 +223,7 @@ struct TAppData {
     NKikimrStream::TStreamingConfig& StreamingConfig;
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
+    NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;
@@ -316,6 +318,10 @@ inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     TAppData* const x = actorSystem->AppData<TAppData>();
     Y_DEBUG_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
     return x;
+}
+
+inline bool HasAppData(NActors::TActorSystem* actorSystem) {
+    return actorSystem && AppData(actorSystem);
 }
 
 inline bool HasAppData() {

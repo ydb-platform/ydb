@@ -21,8 +21,12 @@ class TDriverMock
 public:
     std::optional<NTable::EScan> LastScan;
 
-    void Touch(NTable::EScan scan) noexcept {
+    void Touch(NTable::EScan scan) noexcept override {
         LastScan = scan;
+    }
+
+    ui64 GetTotalCpuTimeUs() const override {
+        return 0;
     }
 };
 

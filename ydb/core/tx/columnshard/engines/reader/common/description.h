@@ -13,6 +13,11 @@ enum class ERequestSorting {
     DESC /* "descending" */,
 };
 
+enum class EDeduplicationPolicy {
+    ALLOW_DUPLICATES = 0,
+    PREVENT_DUPLICATES,
+};
+
 // Describes read/scan request
 struct TReadDescription {
 private:
@@ -27,7 +32,7 @@ public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
-    TInternalPathId PathId;
+    NColumnShard::TUnifiedPathId PathId;
     TString TableName;
     bool ReadNothing = false;
     // Less[OrEqual], Greater[OrEqual] or both
@@ -35,6 +40,7 @@ public:
     // operations with potentially different columns. We have to remove columns to support -Inf (Null) and +Inf.
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
+    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
 
     // List of columns
     std::vector<ui32> ColumnIds;

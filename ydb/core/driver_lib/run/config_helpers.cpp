@@ -92,8 +92,14 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             if (poolConfig.HasMaxLocalQueueSize()) {
                 basic.MaxLocalQueueSize = poolConfig.GetMaxLocalQueueSize();
             }
+            for (const auto& pool : poolConfig.GetAdjacentPools()) {
+                basic.AdjacentPools.push_back(pool);
+            }
+            if (poolConfig.HasForcedForeignSlots()) {
+                basic.ForcedForeignSlotCount = poolConfig.GetForcedForeignSlots();
+            }
             cpuManager.Basic.emplace_back(std::move(basic));
-            
+
             break;
         }
 

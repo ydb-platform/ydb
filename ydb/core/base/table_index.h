@@ -14,6 +14,8 @@
 
 namespace NKikimrTxDataShard {
     class TEvReshuffleKMeansRequest;
+    class TEvRecomputeKMeansRequest;
+    class TEvRecomputeKMeansResponse;
     class TEvSampleKResponse;
 }
 
@@ -51,6 +53,8 @@ void EnsureNoPostingParentFlag(TClusterId parent);
 TClusterId SetPostingParentFlag(TClusterId parent);
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
 
 }

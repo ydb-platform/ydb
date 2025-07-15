@@ -1355,6 +1355,8 @@ struct Schema : NIceDb::Schema {
 
         struct /*Upload*/ RowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
         struct /*Upload*/ BytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
+        using UploadRowsBilled = RowsBilled;
+        using UploadBytesBilled = BytesBilled;
 
         struct BuildKind : Column<30, NScheme::NTypeIds::Uint32> {};
 
@@ -1377,6 +1379,9 @@ struct Schema : NIceDb::Schema {
         struct StartTime : Column<41, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<42, NScheme::NTypeIds::Uint64> {};
         struct UserSID : Column<43, NScheme::NTypeIds::Utf8> {};
+
+        struct CpuTimeUsBilled : Column<44, NScheme::NTypeIds::Uint64> {};
+        struct CpuTimeUsProcessed : Column<45, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1422,7 +1427,9 @@ struct Schema : NIceDb::Schema {
             ReadBytesProcessed,
             StartTime,
             EndTime,
-            UserSID
+            UserSID,
+            CpuTimeUsBilled,
+            CpuTimeUsProcessed
         >;
     };
 
@@ -1492,9 +1499,13 @@ struct Schema : NIceDb::Schema {
 
         struct /*Upload*/ RowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
         struct /*Upload*/ BytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+        using UploadRowsProcessed = RowsProcessed;
+        using UploadBytesProcessed = BytesProcessed;
 
         struct ReadRowsProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<12, NScheme::NTypeIds::Uint64> {};
+
+        struct CpuTimeUsProcessed : Column<13, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
@@ -1509,7 +1520,8 @@ struct Schema : NIceDb::Schema {
             RowsProcessed,
             BytesProcessed,
             ReadRowsProcessed,
-            ReadBytesProcessed
+            ReadBytesProcessed,
+            CpuTimeUsProcessed
         >;
     };
 
@@ -1936,10 +1948,11 @@ struct Schema : NIceDb::Schema {
         struct ParentBegin : Column<5, ClusterIdTypeId> {};
         struct Child : Column<6, ClusterIdTypeId> {};
         struct ChildBegin : Column<7, ClusterIdTypeId> {};
-        struct TableSize : Column<8, NScheme::NTypeIds::Uint64> {};
         // TableSize required for prefixed kmeans tree
         // But can be filled and used for other kmeans tree for "auto" settings choice
+        struct TableSize : Column<8, NScheme::NTypeIds::Uint64> {};
         // Also for "auto" settings will needs to save K
+        struct Round : Column<9, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1950,7 +1963,8 @@ struct Schema : NIceDb::Schema {
             ParentBegin,
             Child,
             ChildBegin,
-            TableSize
+            TableSize,
+            Round
         >;
     };
 
@@ -2016,6 +2030,28 @@ struct Schema : NIceDb::Schema {
             OwnerShardIdx,
             LocalShardIdx,
             Status
+        >;
+    };
+
+    struct KMeansTreeClusters : Table<121> {
+        // Index build ID
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        // Child cluster number (0..K-1)
+        struct Row : Column<2, NScheme::NTypeIds::Uint32> {};
+        // Current new cluster size (number of rows)
+        struct Size : Column<3, NScheme::NTypeIds::Uint64> {};
+        // Current aggregated child cluster centroid
+        struct Data : Column<4, NScheme::NTypeIds::String> {};
+        // Old cluster size (number of rows)
+        struct OldSize : Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Id, Row>;
+        using TColumns = TableColumns<
+            Id,
+            Row,
+            Size,
+            Data,
+            OldSize
         >;
     };
 
@@ -2135,7 +2171,8 @@ struct Schema : NIceDb::Schema {
         DataErasureGenerations,
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
-        WaitingDataErasureShards
+        WaitingDataErasureShards,
+        KMeansTreeClusters
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

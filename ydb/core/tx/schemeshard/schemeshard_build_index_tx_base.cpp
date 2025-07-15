@@ -56,11 +56,6 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplySchedule(const TActorContext& ct
     }
 }
 
-ui64 TSchemeShard::TIndexBuilder::TTxBase::RequestUnits(const TBillingStats& stats) {
-    return TRUCalculator::ReadTable(stats.GetReadBytes())
-         + TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
-}
-
 void TSchemeShard::TIndexBuilder::TTxBase::RoundPeriod(TInstant& start, TInstant& end) {
     if (start.Hours() == end.Hours()) {
         return; // that is OK
@@ -101,8 +96,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         auto& processed = buildInfo.Processed;
         auto& billed = buildInfo.Billed;
 
-        TBillingStats toBill = processed - billed;
-        if (!toBill) {
+        auto toBill = processed - billed;
+        if (TMeteringStatsHelper::IsZero(toBill)) {
             continue;
         }
 
@@ -123,7 +118,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         }
 
         if (!cloud_id || !folder_id || !database_id) {
-            LOG_N("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
+            LOG_I("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
                   << ", build index operation: " << buildId
                   << ", domain: " << domain.PathString()
                   << ", domainId: " << buildInfo.DomainPathId
@@ -133,7 +128,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         }
 
         if (!Self->IsServerlessDomain(domain)) {
-            LOG_N("ApplyBill: unable to make a bill, domain is not a serverless db"
+            LOG_I("ApplyBill: unable to make a bill, domain is not a serverless db"
                   << ", build index operation: " << buildId
                   << ", domain: " << domain.PathString()
                   << ", domainId: " << buildInfo.DomainPathId
@@ -157,7 +152,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         billed += toBill;
         Self->PersistBuildIndexBilled(db, buildInfo);
 
-        ui64 requestUnits = RequestUnits(toBill);
+        TString requestUnitsExplain;
+        ui64 requestUnits = TRUCalculator::Calculate(toBill, requestUnitsExplain);
 
         const TString billRecord = TBillRecord()
             .Id(id)
@@ -168,9 +164,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
             .ToString();
 
-        LOG_D("ApplyBill: made a bill"
-              << ", buildInfo: " << buildInfo
-              << ", record: '" << billRecord << "'");
+        LOG_N("ApplyBill: make a bill, id#" << buildId
+            << ", billRecord: " << billRecord
+            << ", toBill: " << toBill
+            << ", explain: " << requestUnitsExplain
+            << ", buildInfo: " << buildInfo);
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
         // send message at Complete stage

@@ -18,39 +18,23 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpOlapAggregations.BlockGenericWithDistinct
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesColumnActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
+ydb/core/kqp/ut/batch_operations [*/*] chunk chunk
+ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
+ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
+ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
-ydb/core/kqp/ut/join KqpJoinOrder.CanonizedJoinOrderLookupBug
-ydb/core/kqp/ut/join KqpJoinOrder.FiveWayJoinStatsOverride-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCDS16-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCDS34-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCDS61-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCDS87-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCDS94-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCDS95-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCH10-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCH11-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCH21-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCH3-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCH5-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCH8-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TestJoinOrderHintsComplex-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.ShuffleEliminationManyKeysJoinPredicate
-ydb/core/kqp/ut/join KqpJoinOrder.ShuffleEliminationOneJoin
-ydb/core/kqp/ut/join KqpJoinOrder.ShuffleEliminationReuseShuffleTwoJoins
-ydb/core/kqp/ut/join KqpJoinOrder.TPCHRandomJoinViewJustWorks+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/scan KqpSplit.UndeliveryOnFinishedRead
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
@@ -64,8 +48,10 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltpNoSink
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/persqueue/ut [*/*] chunk chunk
@@ -133,14 +119,6 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
 ydb/tests/functional/tpc/large sole chunk chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[10]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[11]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[12]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
-ydb/tests/functional/tpc/medium test_tpch.py.TestTpchS1.test_tpch[13]
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

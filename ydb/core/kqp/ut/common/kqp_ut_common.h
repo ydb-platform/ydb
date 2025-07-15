@@ -277,28 +277,6 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
     }
 }
 
-inline constexpr TStringBuf IndexSubtypeSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "USING vector_kmeans_tree";
-    }
-}
-
-inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)";
-    }
-}
-
 TString ReformatYson(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});

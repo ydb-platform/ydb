@@ -19,6 +19,7 @@ private:
 
 protected:
     virtual TConclusionStatus DoStart() override {
+        SpecialReadContext->RegisterActors();
         return Scanner->Start();
     }
 
@@ -69,6 +70,7 @@ public:
         if (SpecialReadContext->IsActive()) {
             Abort("unexpected on destructor");
         }
+        SpecialReadContext->UnregisterActors();
     }
 };
 

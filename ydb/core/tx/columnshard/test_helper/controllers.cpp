@@ -1,7 +1,6 @@
 #include "columnshard_ut_common.h"
 #include "controllers.h"
 
-#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 
 namespace NKikimr::NOlap {

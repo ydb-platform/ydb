@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__data_erasure_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_cdc_stream_common.h"
@@ -670,11 +671,17 @@ public:
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);
         datashardInfo.BindedChannels = channelsBinding;
         auto newPartition = NTableState::ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS);
+        TVector<TShardIdx> newShardsIdx;
+        newShardsIdx.reserve(newPartition.size());
         for (const auto& part: newPartition) {
             context.MemChanges.GrabNewShard(context.SS, part.ShardIdx);
             context.DbChanges.PersistShard(part.ShardIdx);
+            newShardsIdx.push_back(part.ShardIdx);
         }
         context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition));
+        if (context.SS->EnableDataErasure && context.SS->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToDataErasure(std::move(newShardsIdx)));
+        }
         for (const auto& shard : tableInfo->GetPartitions()) {
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
             if (storePerShardConfig) {

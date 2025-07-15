@@ -307,7 +307,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 The following system views contain information about users, access groups, user membership in groups, as well as information about access rights granted to groups or directly to users.
 
-### Auth users
+### Auth users {#users}
 
 The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
 

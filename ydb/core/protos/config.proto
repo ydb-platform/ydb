@@ -88,6 +88,10 @@ message TActorSystemConfig {
         optional bool HasSharedThread = 18;
         optional uint32 MaxLocalQueueSize = 20;
         optional uint32 MinLocalQueueSize = 21;
+
+        // Tiny YDB
+        repeated uint32 AdjacentPools = 22;
+        optional uint32 ForcedForeignSlots = 23;
     }
 
     message TScheduler {
@@ -633,6 +637,29 @@ message TConveyorConfig {
     optional double WorkersCountDouble = 5;
 }
 
+message TCompositeConveyorConfig {
+    message TCategory {
+        optional string Name = 1;
+        optional uint64 QueueSizeLimit = 2;
+    }
+
+    message TWorkerPoolCategoryLink {
+        optional string Category = 1;
+        optional double Weight = 2;
+    }
+
+    message TWorkersPool {
+        optional double WorkersCount = 1;
+        optional double DefaultFractionOfThreadsCount = 2;
+        repeated TWorkerPoolCategoryLink Links = 3;
+        optional string Name = 4;
+    }
+
+    optional bool Enabled = 1 [default = true];
+    repeated TWorkersPool WorkerPools = 2;
+    repeated TCategory Categories = 3;
+}
+
 message TPrioritiesQueueConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 Limit = 2 [default = 32];
@@ -1095,7 +1122,7 @@ message TQueryServiceConfig {
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
-    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];   
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
 }
 
 // Config describes immediate controls and allows
@@ -1893,6 +1920,8 @@ message TColumnShardConfig {
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
+    optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
+    optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2213,6 +2242,7 @@ message TKafkaProxyConfig {
     optional TProxy Proxy = 7;
     optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
+    optional uint32 TransactionTimeoutMs = 12 [default = 300000]; // 5 minutes (same as in kafka)
 }
 
 message TAwsCompatibilityConfig {
@@ -2231,6 +2261,12 @@ message TShutdownConfig {
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
+}
+
+message TGeneralCacheConfig {
+    optional uint64 MemoryLimit = 1;
+    optional uint64 DirectInflightSourceLimit = 2;
+    optional uint64 DirectInflightGlobalLimit = 3;
 }
 
 message TAppConfig {
@@ -2310,7 +2346,7 @@ message TAppConfig {
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
-    optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional TGroupedMemoryLimiterConfig ScanGroupedMemoryLimiterConfig = 82;
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
     optional TShutdownConfig ShutdownConfig = 84;
     optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
@@ -2318,6 +2354,7 @@ message TAppConfig {
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
     optional TDataErasureConfig DataErasureConfig = 88;
     optional THealthCheckConfig HealthCheckConfig = 89;
+    optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -2329,6 +2366,8 @@ message TAppConfig {
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
     optional string StartupConfigYaml = 107;
     optional string StartupStorageYaml = 108;
+    optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
+    optional TGeneralCacheConfig PortionsMetadataCache = 110;
 }
 
 message TYdbVersion {

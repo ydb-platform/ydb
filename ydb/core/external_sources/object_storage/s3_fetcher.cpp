@@ -1,6 +1,7 @@
 #include "s3_fetcher.h"
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage {
 
@@ -70,7 +71,7 @@ public:
         );
 
         Gateway_->Download(
-            Url_ + request->Path, std::move(headers), request->Start, length,
+            NYql::NS3Util::UrlEscapeRet(Url_ + request->Path), std::move(headers), request->Start, length,
             [actorSystem, selfId = SelfId(), request = std::move(request)](NYql::IHTTPGateway::TResult&& result) mutable {
                 actorSystem->Send(selfId, new TEvS3DownloadResponse(std::move(request), std::move(result)));
             }, {}, RetryPolicy_);

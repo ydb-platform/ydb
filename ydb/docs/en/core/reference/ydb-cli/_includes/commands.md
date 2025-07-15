@@ -24,7 +24,7 @@ Any command can be run from the command line with the `--help` option to get hel
 --- | ---
 | [admin cluster dump](../export-import/tools-dump.md#cluster) | Dumping cluster' metadata to the file system |
 | [admin cluster restore](../export-import/tools-restore.md#cluster) | Restoring cluster' metadata from the file system |
-| [admin database dump](../export-import/tools-dump.md#database) | Dumping database' data and metadata to the file system |
+| [admin database dump](../export-import/tools-dump.md#db) | Dumping database' data and metadata to the file system |
 | [admin database restore](../export-import/tools-restore.md#db) | Restoring database' data and metadata from the file system |
 | [config info](../commands/config-info.md) | Displaying [connection parameters](../connect.md) |
 | [config profile activate](../profile/activate.md) | Activating a [profile](../profile/index.md) |

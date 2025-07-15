@@ -76,9 +76,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         Cerr << "Park startPad" << Endl;
         startPad.Park();
 
-        ui64 CpuUs = -1;
-        ui64 ElapsedUs = -1;
-        ui64 SafeElapsedUs= -1;
+        ui64 CpuUs = 0;
+        ui64 ElapsedUs = 0;
+        ui64 SafeElapsedUs= 0;
         for (ui32 i = 0; i < 10; ++i) {
             NanoSleep(1'000'000);
             TVector<TExecutorThreadStats> executorThreadStats;

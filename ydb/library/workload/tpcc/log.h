@@ -6,7 +6,11 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
+namespace NWorkload {
+namespace NTpcc {
 using TLogProcessor = std::function<void(ELogPriority, const std::string&)>;
+} // namespace NTpcc
+} // namespace NWorkload
 
 inline const char* PriorityToString(ELogPriority priority) {
     switch (priority) {

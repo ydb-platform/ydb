@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
@@ -678,13 +679,14 @@ void CompareYson(const TString& expected, const TString& actual, const TString& 
 
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message) {
     TStringStream ysonStream;
-    NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
-    NYql::IDataProvider::TFillSettings fillSettings;
-    bool truncated;
-    KikimrResultToYson(ysonStream, writer, actual, {}, fillSettings, truncated);
-    UNIT_ASSERT(!truncated);
-
-    CompareYson(expected, ysonStream.Str(), message);
+    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators());
+    NMiniKQL::TTypeEnvironment env(alloc);
+    NMiniKQL::TMemoryUsageInfo memInfo("TRpcExecuteTabletMiniKQL");
+    NMiniKQL::THolderFactory factory(alloc.Ref(), memInfo, functionRegistry.Get());
+    auto [ptype, uv] = NMiniKQL::ImportValueFromProto(actual.GetType(), actual.GetValue(), env, factory);
+    auto producedResult = NYql::NCommon::WriteYsonValue(uv, ptype);
+    CompareYson(expected, producedResult, message);
 }
 
 bool HasIssue(const NYql::TIssues& issues, ui32 code,

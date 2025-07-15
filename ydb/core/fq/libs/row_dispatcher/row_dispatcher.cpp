@@ -532,7 +532,9 @@ void TRowDispatcher::Bootstrap() {
 
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
-    Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+    if (IS_CTX_LOG_PRIORITY_ENABLED(*NActors::TlsActivationContext, NActors::NLog::PRI_TRACE, NKikimrServices::FQ_ROW_DISPATCHER, 0ull)) {
+        Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+    }
     Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
 
     if (Monitoring) {
@@ -673,7 +675,9 @@ void TRowDispatcher::UpdateMetrics() {
     for (const auto& key : toDelete) {
          AggrStats.LastQueryStats.erase(key);
     }
-    PrintStateToLog();
+    if (IS_CTX_LOG_PRIORITY_ENABLED(*NActors::TlsActivationContext, NActors::NLog::PRI_TRACE, NKikimrServices::FQ_ROW_DISPATCHER, 0ull)) {
+        PrintStateToLog();
+    }
 }
 
 TString TRowDispatcher::GetInternalState() {

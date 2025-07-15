@@ -580,7 +580,9 @@ void TDqPqRdReadActor::InitChild() {
     StartingMessageTimestamp = Parent->StartingMessageTimestamp;
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    if (IS_CTX_LOG_PRIORITY_ENABLED(*NActors::TlsActivationContext, NActors::NLog::PRI_TRACE, NKikimrServices::KQP_COMPUTE, 0ull)) {
+        Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    }
 }
 
 void TDqPqRdReadActor::ProcessGlobalState() {
@@ -1114,7 +1116,7 @@ void TDqPqRdReadActor::PrintInternalState() {
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
     for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
-        SRC_LOG_I(buf.SubString(offset, PrintStateToLogSplitSize));
+        SRC_LOG_D(buf.SubString(offset, PrintStateToLogSplitSize));
     }
 }
 

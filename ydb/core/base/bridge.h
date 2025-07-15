@@ -10,6 +10,7 @@ namespace NKikimr {
 
     struct TBridgeInfo {
         struct TPile {
+            TString Name;
             TBridgePileId BridgePileId; // essentially an index into TBridgeInfo::Piles array
             std::vector<ui32> StaticNodeIds; // a sorted set of static node ids belonging to this very pile
             NKikimrBridge::TClusterState::EPileState State = {}; // state of this pile

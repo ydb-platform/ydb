@@ -699,13 +699,22 @@ namespace NKikimr::NBsController {
                 node.SetType(NKikimrBlobStorage::NT_UNKNOWN);
             }
             node.SetPhysicalLocation(s.Str());
-            record.Location.Serialize(node.MutableLocation(), false); // this field has been introduced recently, so it doesn't have compatibility format
+            auto location = node.MutableLocation();
+            record.Location.Serialize(location, false); // this field has been introduced recently, so it doesn't have compatibility format
             const auto& nodes = Nodes.Get();
             if (const auto it = nodes.find(record.NodeId); it != nodes.end()) {
                 node.SetLastConnectTimestamp(it->second.LastConnectTimestamp.GetValue());
                 node.SetLastDisconnectTimestamp(it->second.LastDisconnectTimestamp.GetValue());
                 node.SetLastSeenTimestamp(it->second.LastConnectTimestamp <= it->second.LastDisconnectTimestamp ?
                     it->second.LastDisconnectTimestamp.GetValue() : now.GetValue());
+            }
+            if (Self.BridgeInfo) {
+                const auto it = Self.BridgeInfo->StaticNodeIdToPile.find(record.NodeId);
+                if (it != Self.BridgeInfo->StaticNodeIdToPile.end()) {
+                    ui32 pileId = it->second->BridgePileId.GetRawId();
+                    location->SetPileNum(pileId);
+                    location->SetPile(Self.BridgeInfo->Piles[pileId].Name);
+                }
             }
             auto *key = node.MutableHostKey();
             key->SetFqdn(std::get<0>(hostId));

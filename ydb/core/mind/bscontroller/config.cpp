@@ -919,17 +919,27 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box) {
+        void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box,
+                const TBlobStorageController &self) {
             pb->SetBoxId(id);
             pb->SetName(box.Name);
             pb->SetItemConfigGeneration(box.Generation.GetOrElse(1));
             for (const auto &userId : box.UserIds) {
                 pb->AddUserId(std::get<1>(userId));
             }
+            auto &bridgeInfo = self.BridgeInfo;
             for (const auto &kv : box.Hosts) {
                 auto *host = pb->AddHost();
                 host->SetHostConfigId(kv.second.HostConfigId);
                 host->SetEnforcedNodeId(kv.second.EnforcedNodeId.GetOrElse(0));
+                if (bridgeInfo) {
+                    if (const TMaybe<TNodeId> nodeId = self.HostRecords->ResolveNodeId(std::make_tuple(kv.first.Fqdn, kv.first.IcPort))) {
+                        const auto it = bridgeInfo->StaticNodeIdToPile.find(*nodeId);
+                        if (it != bridgeInfo->StaticNodeIdToPile.end()) {
+                            host->SetBridgePileId(it->second->BridgePileId.GetRawId());
+                        }
+                    }
+                }
                 auto *key = host->MutableKey();
                 key->SetFqdn(kv.first.Fqdn);
                 key->SetIcPort(kv.first.IcPort);
@@ -1111,7 +1121,7 @@ namespace NKikimr::NBsController {
                 Y_DEBUG_ABORT_UNLESS(success);
                 pb->SetIsProxyGroup(groupInfoPb.BridgeGroupIdsSize() != 0);
             }
-            
+
             if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE || group.VirtualGroupState) {
                 auto *vgi = pb->MutableVirtualGroupInfo();
                 if (group.VirtualGroupState) {

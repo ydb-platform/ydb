@@ -439,7 +439,7 @@ namespace NKikimr::NStorage {
 
                 // copy cluster state generation
                 pb->SetClusterStateGeneration(clusterState.GetGeneration());
-                
+
                 auto &history = config->GetClusterStateHistory();
                 if (history.UnsyncedEntriesSize() > 0) {
                     auto &entry = history.GetUnsyncedEntries(0);
@@ -527,6 +527,8 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
                 auto& pile = bridgeInfo->Piles[pileId];
                 pile.StaticNodeIds.push_back(node.GetNodeId());
+                Y_ABORT_UNLESS(pileId < cfg->BridgeConfig->PilesSize());
+                pile.Name = cfg->BridgeConfig->GetPiles(pileId).GetName();
                 bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
                 if (nodeId == selfNodeId) {
                     bridgeInfo->SelfNodePile = &pile;

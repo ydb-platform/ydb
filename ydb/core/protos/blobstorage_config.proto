@@ -75,6 +75,7 @@ message THost {
     THostKey Key = 1; // unique host key defining its location
     uint64 HostConfigId = 2; // reference to typical host configuration table
     uint32 EnforcedNodeId = 3; // if non-zero, then enforce specific NodeId for this FQDN to prevent resolving
+    optional uint32 BridgePileId = 4;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

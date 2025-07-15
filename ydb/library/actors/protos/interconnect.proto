@@ -21,12 +21,14 @@ extend google.protobuf.FieldOptions {
 
 message TNodeLocation {
     // compatibility section -- will be removed in future versions
+    optional uint32 PileNum = 5 [deprecated=true];
     optional uint32 DataCenterNum = 1 [deprecated=true];
     optional uint32 RoomNum = 2 [deprecated=true];
     optional uint32 RackNum = 3 [deprecated=true];
     optional uint32 BodyNum = 4 [deprecated=true];
     optional uint32 Body = 100500 [deprecated=true]; // for compatibility with WalleLocation
 
+    optional string Pile = 6 [(PrintName) = "P"];
     optional string DataCenter = 10 [(PrintName) = "DC"];
     optional string Module = 20 [(PrintName) = "M"];
     optional string Rack = 30 [(PrintName) = "R"];

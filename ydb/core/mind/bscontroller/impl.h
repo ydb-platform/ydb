@@ -2477,7 +2477,7 @@ public:
     using TVSlotFinder = std::function<void(TVSlotId, const std::function<void(const TVSlotInfo&)>&)>;
 
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
-    static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
+    static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box, const TBlobStorageController &self);
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);

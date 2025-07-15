@@ -421,6 +421,12 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
         for (auto& host : *defineBox->MutableHost()) {
             const ui32 nodeId = host.GetEnforcedNodeId();
             host.ClearEnforcedNodeId();
+            if (BridgeInfo) {
+                const auto it = BridgeInfo->StaticNodeIdToPile.find(nodeId);
+                if (it != BridgeInfo->StaticNodeIdToPile.end()) {
+                    host.SetBridgePileId(it->second->BridgePileId.GetRawId());
+                }
+            }
             auto *key = host.MutableKey();
             const auto& resolved = HostRecords->GetHostId(nodeId);
             Y_ABORT_UNLESS(resolved);

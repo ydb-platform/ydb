@@ -61,7 +61,7 @@ namespace NKikimr::NBsController {
             if (it == boxes.end()) {
                 throw TExError() << "BoxId# " << id << " not found";
             }
-            Serialize(status.AddBox(), it->first, it->second);
+            Serialize(status.AddBox(), it->first, it->second, Self);
         }
     }
 
@@ -257,7 +257,7 @@ namespace NKikimr::NBsController {
                     return *pdiskId;
                 }
             }
-            
+
             throw TExPDiskNotFound(targetFqdn, targetDiskPath);
         }
         throw TExError() << "Either TargetPDiskId or PDiskLocation must be specified";

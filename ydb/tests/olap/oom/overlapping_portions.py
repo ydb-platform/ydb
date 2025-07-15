@@ -73,7 +73,7 @@ class TestOverlappingPortions(object):
     def write_and_check(self, table_path, count):
         ts_start = int(datetime.datetime.now().timestamp() * 1000000)
         for value in range(count):
-            self.write_data(table_path, ts_start, 100, value)
+            self.write_data(table_path, ts_start, 10, value)
 
         self.ydb_client.query(
             f"""

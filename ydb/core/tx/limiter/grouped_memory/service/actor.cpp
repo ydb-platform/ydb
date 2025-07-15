@@ -5,7 +5,7 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 void TMemoryLimiterActor::Bootstrap() {
     for (ui64 i = 0; i < Config.GetCountBuckets(); i++) {
         LoadQueue.Add(i);
-        Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Signals, std::make_shared<TStageFeatures>(*DefaultStage)));
+        Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Signals, DefaultStage));
     }
 
     Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(ConsumerKind));

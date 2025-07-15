@@ -27,6 +27,7 @@
 #include <util/generic/queue.h>
 #include <util/stream/file.h>
 #include <util/string/vector.h>
+#include <util/system/env.h>
 
 #include <util/string/join.h>
 
@@ -2083,6 +2084,11 @@ protected:
                                                          NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
     }
 
+    void SetXdsBootstrapConfig() const {
+        static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
+        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, TString(Config.GetXdsBootstrap().AsJSON()));
+    }
+
     void FillAccessServiceSettings(NGrpcActorClient::TGrpcClientSettings& settings) {
         settings.Endpoint = Config.GetAccessServiceEndpoint();
         if (Config.GetUseAccessServiceTLS()) {
@@ -2090,6 +2096,10 @@ protected:
         }
         settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
         settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
+
+        if (settings.Endpoint.StartsWith("xds://")) {
+            SetXdsBootstrapConfig();
+        }
     }
 
     void InitAuthProvider() {

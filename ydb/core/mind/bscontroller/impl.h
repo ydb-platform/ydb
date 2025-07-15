@@ -855,6 +855,41 @@ public:
             return DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE;
         }
 
+        using TGroupFinder = std::function<const TGroupInfo*(TGroupId)>;
+
+        bool IsLayoutCorrect(const TGroupFinder& finder) const {
+            if (BridgeGroupInfo) {
+                for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
+                    const TGroupInfo *group = finder(TGroupId::FromValue(groupId));
+                    if (!group || !group->IsLayoutCorrect(finder)) {
+                        return false;
+                    }
+                }
+                return true;
+            } else {
+                return LayoutCorrect;
+            }
+        }
+
+        TGroupStatus GetStatus(const TGroupFinder& finder) const {
+            if (BridgeGroupInfo) {
+                std::optional<TGroupStatus> res;
+                for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
+                    const TGroupInfo *group = finder(TGroupId::FromValue(groupId));
+                    if (group) {
+                        if (const TGroupStatus& s = group->GetStatus(finder); res) {
+                            res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
+                        } else {
+                            res.emplace(s);
+                        }
+                    }
+                }
+                return res.value_or(TGroupStatus());
+            } else {
+                return Status;
+            }
+        }
+
         void OnCommit();
     };
 
@@ -2333,6 +2368,36 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // STATIC GROUP OVERSEEING
 
+    struct TStaticGroupInfo {
+        TIntrusivePtr<TBlobStorageGroupInfo> Info;
+        TGroupInfo::TGroupStatus Status;
+        bool LayoutCorrect = true;
+
+        TStaticGroupInfo(const NKikimrBlobStorage::TGroupInfo& group, std::map<TGroupId, TStaticGroupInfo>& prev) {
+            TStringStream err;
+            Info = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
+            Y_VERIFY_DEBUG_S(Info, "failed to parse static group, error# " << err.Str());
+            if (!Info) {
+                return;
+            }
+            if (const auto it = prev.find(Info->GroupID); it != prev.end()) {
+                TStaticGroupInfo& item = it->second;
+                Status = item.Status;
+                LayoutCorrect = item.LayoutCorrect;
+            }
+        }
+
+        using TStaticGroupFinder = std::function<TStaticGroupInfo*(TGroupId)>;
+
+        void UpdateStatus(TMonotonic mono, TBlobStorageController *controller);
+        void UpdateLayoutCorrect(TBlobStorageController *controller);
+
+        TGroupInfo::TGroupStatus GetStatus(const TStaticGroupFinder& finder) const;
+        bool IsLayoutCorrect(const TStaticGroupFinder& finder) const;
+    };
+
+    std::map<TGroupId, TStaticGroupInfo> StaticGroups;
+
     struct TStaticVSlotInfo {
         const TVDiskID VDiskId;
         const NKikimrBlobStorage::TVDiskKind::EVDiskKind VDiskKind;
@@ -2430,7 +2495,8 @@ public:
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotInfo& vslot);
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot, const TVSlotFinder& finder);
-    static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group);
+    static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
+        const TGroupInfo::TGroupFinder& finder);
     static void SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk, const TVSlotInfo& vslot,
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,

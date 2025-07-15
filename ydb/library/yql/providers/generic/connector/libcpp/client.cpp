@@ -1,5 +1,7 @@
 #include <util/stream/file.h>
 #include <yql/essentials/utils/log/log.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
 #include "client.h"
 
@@ -174,7 +176,7 @@ namespace NYql::NConnector {
             case SINGLE:
                 return std::make_unique<TSingleConnectionFactory<NApi::Connector>>(
                     client, grpcConfig, keepAlive);
-            
+
             case NEW_FOR_EACH_REQUEST:
             default:
                 return std::make_unique<TNewOnEachRequestConnectionFactory<NApi::Connector>>(
@@ -202,7 +204,7 @@ namespace NYql::NConnector {
         ::NMonitoring::TDynamicCounterPtr Counters;
         ::NMonitoring::TDynamicCounters::TCounterPtr GrpcChannelCount;
     };
-    
+
     */
 
     template <class TResponse>
@@ -221,7 +223,7 @@ namespace NYql::NConnector {
         std::shared_ptr<TStreamer<TResponse>> Streamer_;
     };
 
-    TListSplitsStreamIteratorDrainer::TPtr MakeListSplitsStreamIteratorDrainer(IListSplitsStreamIterator::TPtr&& iterator) {
+    TListSplitsStreamIteratorDrainer::TPtr MakeListSplitsStreamIteratorDrainer(IStreamIterator<NApi::TListSplitsResponse>::TPtr&& iterator) {
         return std::make_shared<TListSplitsStreamIteratorDrainer>(std::move(iterator));
     }
 
@@ -243,7 +245,7 @@ namespace NYql::NConnector {
             auto kind = request.Getdata_source_instance().Getkind();
             auto promise = NThreading::NewPromise<TResult<NApi::TDescribeTableResponse>>();
 
-            if (!request.has_data_source_instance() 
+            if (!request.has_data_source_instance()
                 || !request.data_source_instance().has_kind()) {
                 auto msg =  TStringBuilder() << "DescribeTable request is invalid: either data source or kind is missing";
                 auto status = NYdbGrpc::TGrpcStatus(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,msg));
@@ -254,7 +256,7 @@ namespace NYql::NConnector {
             }
 
             auto context = CreateClientContext();
-            
+
             auto callback = [context, promise](NYdbGrpc::TGrpcStatus&& status, NApi::TDescribeTableResponse&& resp) mutable {
                 promise.SetValue({std::move(status), std::move(resp)});
             };
@@ -273,8 +275,8 @@ namespace NYql::NConnector {
         virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration timeout = {}) override {
             auto selects = request.Getselects();
 
-            if (selects.empty() 
-                || !selects.at(0).has_data_source_instance() 
+            if (selects.empty()
+                || !selects.at(0).has_data_source_instance()
                 || !selects.at(0).data_source_instance().has_kind()) {
                 auto msg =  TStringBuilder() << "ListSplits request is invalid: either selects is empty or data source or kind is missing";
 
@@ -289,7 +291,7 @@ namespace NYql::NConnector {
                 kind, request, &NApi::Connector::Stub::AsyncListSplits, timeout);
         }
 
-        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration timeout = {}) override {
+        TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration timeout = {}) override {
             auto splits = request.Getsplits();
 
             if (splits.empty()
@@ -341,7 +343,7 @@ namespace NYql::NConnector {
 
             for (auto c : config.GetConnectors()) {
                 auto cfg = ConnectorConfigToGrpcConfig(c, count++);
-                std::shared_ptr<IConnectionFactory<NApi::Connector>> f 
+                std::shared_ptr<IConnectionFactory<NApi::Connector>> f
                     = CreateFactoryForConnector(c.GetFactory(), GrpcClient_, cfg, keepAlive);
 
                 for (auto k : c.GetForKinds()) {
@@ -357,7 +359,7 @@ namespace NYql::NConnector {
         std::shared_ptr<NYdbGrpc::TServiceConnection<NApi::Connector>> GetConnection(NYql::EGenericDataSourceKind kind) const {
             auto itr = FactoryForKind_.find(kind);
 
-            return FactoryForKind_.end() == itr ? 
+            return FactoryForKind_.end() == itr ?
                 DefaultFactory_->Create() : itr->second->Create();
         }
 
@@ -370,9 +372,9 @@ namespace NYql::NConnector {
             return promise.GetFuture();
         }
 
-        /// 
+        ///
         /// @brief Make async request to a connector with a streaming response in a Future.
-        /// 
+        ///
         /// @tparam TRequest        Type of a request, e.g.: "NApi::TListSplitsRequest"
         /// @tparam TResponse       Type of a data in a Response Stream, e.g.: "NApi::TListSplitsResponse"
         /// @tparam TRpcCallback    Definition of a callback on the "NApi::Connector::Stub" that takes "TRequest" as an input arg and
@@ -399,8 +401,8 @@ namespace NYql::NConnector {
                 if (!streamProcessor) {
                     promise.SetValue({std::move(status), nullptr});
                     return;
-                } 
-                
+                }
+
                 auto processor = std::make_shared<TStreamer<TResponse>>(std::move(streamProcessor));
                 auto iterator = std::make_shared<TStreamIteratorImpl<TResponse>>(processor);
                 promise.SetValue({std::move(status), std::move(iterator)});
@@ -418,11 +420,11 @@ namespace NYql::NConnector {
         }
 
         NYdbGrpc::TGRpcClientConfig ConnectorConfigToGrpcConfig(const TGenericConnectorConfig& config, size_t order) const {
-            auto cfg = NYdbGrpc::TGRpcClientConfig(); 
+            auto cfg = NYdbGrpc::TGRpcClientConfig();
 
             // Connector's name. If order equals to zero, it means that the config belongs "TGenericGatewayConfig.Connector"
             // (default connector); otherwise, it is from "TGenericGatewayConfig.ConnectorS"
-            auto name = TStringBuilder() 
+            auto name = TStringBuilder()
                 << "Connector[" << (order == 0 ? TString("default") : TStringBuilder() << (order - 1)) << "]";
 
             Y_ENSURE(config.GetEndpoint().host(), TStringBuilder() << "Empty host in " << name << ": " << config.DebugString());

@@ -1095,7 +1095,8 @@ namespace NKikimr::NBsController {
             pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
         }
 
-        void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group) {
+        void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
+                const TGroupInfo::TGroupFinder& finder) {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
@@ -1107,7 +1108,7 @@ namespace NKikimr::NBsController {
             pb->SetSeenOperational(group.SeenOperational);
             pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
 
-            const auto& status = group.Status;
+            const auto& status = group.GetStatus(finder);
             pb->SetOperatingStatus(status.OperatingStatus);
             pb->SetExpectedStatus(status.ExpectedStatus);
 

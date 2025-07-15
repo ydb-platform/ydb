@@ -13,6 +13,7 @@ message TClusterState {
     uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)
     uint32 PromotedPile = 3; // realm we are going to promote (must also be SYNCHRONIZED), or primary one
     uint64 Generation = 4; // cluster state generation (which must be increasing strictly by one)
+    bytes Fingerprint = 5; // hash for state validation (must be the same for all nodes with the same Generation)
 }
 
 message TClusterStateHistory {

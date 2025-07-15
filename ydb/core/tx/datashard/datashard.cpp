@@ -1811,6 +1811,22 @@ TUserTable::TPtr TDataShard::AlterTableDropCdcStream(
     return tableInfo;
 }
 
+TUserTable::TPtr TDataShard::AlterTableRotateCdcStream(
+    const TActorContext& ctx, TTransactionContext& txc,
+    const TPathId& pathId, ui64 tableSchemaVersion,
+    const TPathId& oldStreamPathId,
+    const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc)
+{
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    tableInfo->SwitchCdcStreamState(oldStreamPathId, NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled);
+    tableInfo->AddCdcStream(newStreamDesc);
+
+    NIceDb::TNiceDb db(txc.DB);
+    PersistUserTable(db, pathId.LocalPathId, *tableInfo);
+
+    return tableInfo;
+}
+
 void TDataShard::AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersion, ui64 step, ui64 txId,
     TTransactionContext& txc, const TActorContext& ctx)
 {

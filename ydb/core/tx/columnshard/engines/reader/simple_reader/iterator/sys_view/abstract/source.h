@@ -46,12 +46,14 @@ private:
 
     virtual bool DoStartFetchingColumns(const std::shared_ptr<NReader::NCommon::IDataSource>& /*sourcePtr*/,
         const NReader::NCommon::TFetchingScriptCursor& /*step*/, const NReader::NCommon::TColumnsSetIds& /*columns*/) override {
+        ISnapshotSchema
         return false;
     }
 
     virtual void DoAssembleAccessor(
-        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) override {
+        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
         const ui32 recordsCount = GetRecordsCount();
+        AFL_VERIFY(!subColumnName);
         if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
             columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
             context.GetResources()->AddVerified(columnId,
@@ -65,7 +67,7 @@ private:
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
-        const NArrow::NSSA::TProcessorContext& /*context*/, const NArrow::NSSA::IDataSource::TDataAddress& /*addr*/) override {
+        const NArrow::NSSA::TProcessorContext& /*context*/, const NArrow::NSSA::IDataSource::TDataAddress& addr) override {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
 

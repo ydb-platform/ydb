@@ -194,6 +194,48 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
+    if (columnId == 16) {
+        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        const auto& records = GetStageData().GetPortionAccessor().GetRecordsVerified();
+        for (auto it = records.begin(); it != records.end();) {
+            auto accessor = OriginalData->ExtractAccessorOptional(it->GetEntityId());
+            if (!accessor) {
+                ++it;
+            } else {
+                const auto pred = [&builder](const std::shared_ptr<IChunkedArray>& chunk) {
+                    AFL_VERIFY(chunk->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
+                    const TSubColumnsPartialArray* arr = static_cast<const TSubColumnsPartialArray*>(chunk.get());
+                    const TString data = arr->GetHeader().DebugJson().GetStringRobust();
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+                };
+
+                AFL_VERIFY(it->GetChunkIdx() == 0);
+                const ui32 entityId = it->GetEntityId();
+                if (accessor->GetType() == IChunkedArray::EType::CompositeChunkedArray) {
+                    const TCompositeChunkedArray* composite = static_cast<const TCompositeChunkedArray*>(accessor.get());
+                    for (auto&& i : composite->GetChunks()) {
+                        AFL_VERIFY(it != records.end());
+                        AFL_VERIFY(it->GetChunkIdx() < composite->GetChunks()->size());
+                        AFL_VERIFY(it->GetEntityId() == entityId);
+                        addChunkInfo(i);
+                        ++it;
+                    }
+                    const std::shared_ptr<IChunkedArray>& arr = composite->GetChunks()[it->GetChunkIdx()];
+
+                } else {
+                    AFL_VERIFY(it->GetChunkIdx() == 0);
+                    addChunkInfo(accessor);
+                    ++it;
+                }
+                AFL_VERIFY(it == records.end() || it->GetEntityId() != entityId)("it", it->GetEntityId())("from", entityId);
+            }
+        }
+        for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
+            Y_UNUSED(i);
+            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+        }
+        return NArrow::FinishBuilder(std::move(builder));
+    }
     AFL_VERIFY(false)("column_id", columnId);
     return nullptr;
 }

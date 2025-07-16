@@ -285,6 +285,16 @@ public:
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
         ("type", loader->GetAccessorConstructor()->GetType());
     }
+
+    TSubColumnsFetchLogic(const ui32 columnId, const std::shared_ptr<ISnapshotSchema>& sourceSchema,
+        const std::shared_ptr<IStoragesManager>& storages, const ui32 recordsCount, const std::vector<TString>& subColumns)
+        : TBase(columnId, storages)
+        , ChunkExternalInfo(sourceSchema->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(recordsCount))
+        , SubColumns(subColumns) {
+        const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
+        AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
+        ("type", loader->GetAccessorConstructor()->GetType());
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

@@ -1,5 +1,9 @@
 #include "generate_vim.h"
 
+#include "generate.h"
+
+#include <yql/essentials/utils/yql_panic.h>
+
 #include <contrib/libs/re2/re2/re2.h>
 
 #include <util/string/builder.h>
@@ -10,13 +14,6 @@ namespace NSQLHighlight {
 
     namespace {
 
-        bool IsPlain(EUnitKind kind) {
-            return (kind != EUnitKind::Comment) &&
-                   (kind != EUnitKind::StringLiteral) &&
-                   (kind != EUnitKind::QuotedIdentifier) &&
-                   (kind != EUnitKind::BindParamterIdentifier);
-        }
-
         TString ToVim(TString regex) {
             static RE2 LikelyUnquotedLParen(R"((^|[^\\])(\())");
             static RE2 LikelyNonGreedyMatch(R"re((^|[^\\])(\*\?))re");
@@ -24,7 +21,7 @@ namespace NSQLHighlight {
             // We can leave some capturing groups in case `\\\\(`,
             // but it is okay as the goal is to meet the Vim limit.
 
-            Y_ENSURE(!regex.Contains(R"(\\*?)"), regex);
+            YQL_ENSURE(!regex.Contains(R"(\\*?)"), "" << regex);
 
             RE2::GlobalReplace(&regex, LikelyUnquotedLParen, R"(\1%()");
             RE2::GlobalReplace(&regex, LikelyNonGreedyMatch, R"re(\1{-})re");
@@ -125,10 +122,6 @@ namespace NSQLHighlight {
                 case EUnitKind::Error:
                     return {};
             }
-        }
-
-        bool IsIgnored(EUnitKind kind) {
-            return ToVimGroups(kind).empty();
         }
 
     } // namespace

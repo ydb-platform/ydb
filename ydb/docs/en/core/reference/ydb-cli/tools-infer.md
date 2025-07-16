@@ -30,7 +30,9 @@ Option Name | Description
 
 {% note info %}
 
-If none of the options `--columns`, `--gen-columns`, or `--header` are explicitly specified, the following algorithm is used. The first row of the file is taken, and its values are checked for the following conditions:
+If none of the `--columns`, `--gen-columns`, or `--header` options are explicitly specified, the following algorithm is used:
+
+The values of the first row in the file are checked for the following conditions:
 
 * The values meet the [requirements for column names](../../yql/reference/syntax/create_table/index.md#column-naming-rules).
 * The types of the values in the first row are different from the data types in the other rows of the file.
@@ -57,8 +59,7 @@ The first column is always chosen as the primary key. You may need to change the
 
 ### Column names in the first row, no options specified {#example-default}
 
-In this example, no options are specified.
-Values `key` and `value` in the first row match the table column name requirements and do not match the data types in the other rows (`Int64` and `Text`).
+The `key` and `value` values in the first row match the table column name requirements and do not match the data types in the other rows (`Int64` and `Text`).
 So the command uses the first row of the file as column names.
 
 ```bash
@@ -92,7 +93,7 @@ The `WITH` block lists some useful table options. Uncomment the ones you need an
 
 ### Column names in the first row, using `--header` option {#example-header}
 
-In this example, the values `key` and `value` in the first row match the data types (`Text`) in the other rows.  
+In this example, the `key` and `value` values in the first row match the data types (`Text`) in the other rows.
 In this case, without the `--header` option, the command would not use the first row of the file as column names but would generate column names automatically.
 To use the first row as column names in this situation, use the `--header` option explicitly.
 

@@ -11,6 +11,34 @@
 
 namespace NKafka {
 
+ECleanupPolicy ConvertCleanupPolicy(const std::optional<TString>& policy) {
+    if (!policy) {
+        return ECleanupPolicy::UNKNOWN;
+    }
+    if (policy.value() == "delete") {
+        return ECleanupPolicy::DELETE;
+    } else if (policy.value() == "compact") {
+        return ECleanupPolicy::COMPACT;
+    }
+    return ECleanupPolicy::UNKNOWN;
+}
+
+std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateCleanupPolicy(
+        std::optional<ECleanupPolicy> policy, const std::optional<TString>& origValue
+) {
+    if (policy && policy.value() == ECleanupPolicy::UNKNOWN) {
+        auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+        result->Status = EKafkaErrors::INVALID_REQUEST;
+        result->Message = TStringBuilder()
+            << "Topic-level config '"
+            << CLEANUP_POLICY
+            << "' has invalid/unsupported value: "
+            << origValue.value_or("");
+        return result;
+    }
+    return std::nullopt;
+}
+
 class TCreateTopicActor : public NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx> {
     using TBase = NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx>;
 public:
@@ -22,7 +50,8 @@ public:
             TString databaseName,
             ui32 partitionsNumber,
             std::optional<ui64> retentionMs,
-            std::optional<ui64> retentionBytes)
+            std::optional<ui64> retentionBytes,
+            std::optional<ECleanupPolicy> cleanupPolicy)
         : TBase(new TKafkaTopicRequestCtx(
             userToken,
             topicPath,
@@ -36,6 +65,7 @@ public:
         , PartionsNumber(partitionsNumber)
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
+        , CleanupPolicy(cleanupPolicy)
     {
         KAFKA_LOG_D(LogMessage(databaseName));
     };
@@ -62,6 +92,9 @@ public:
 
         auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
         pqDescr->SetPartitionPerTablet(1);
+        if (CleanupPolicy.value_or(ECleanupPolicy::UNKNOWN) == ECleanupPolicy::COMPACT) {
+            pqDescr->MutablePQTabletConfig()->SetEnableCompactification(true);
+        }
 
         Ydb::Topic::CreateTopicRequest topicRequest;
         topicRequest.mutable_partitioning_settings()->set_min_active_partitions(PartionsNumber);
@@ -110,6 +143,7 @@ private:
     const ui32 PartionsNumber;
     std::optional<ui64> RetentionMs;
     std::optional<ui64> RetentionBytes;
+    std::optional<ECleanupPolicy> CleanupPolicy;
 
     TStringBuilder LogMessage(TString& databaseName) {
         TStringBuilder stringBuilder = TStringBuilder()
@@ -121,6 +155,9 @@ private:
         }
         if (RetentionBytes.has_value()) {
             stringBuilder << ". RetentionBytes: " << RetentionBytes.value();
+        }
+        if (CleanupPolicy.has_value() && CleanupPolicy.value() == ECleanupPolicy::COMPACT) {
+            stringBuilder << ". CleaunpPolicy: compact";
         }
         return stringBuilder;
     }
@@ -163,6 +200,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         std::optional<TString> retentionMs;
         std::optional<TString> retentionBytes;
+        std::optional<ECleanupPolicy> cleanupPolicy;
 
         std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
 
@@ -175,6 +213,9 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
                 retentionMs = config.Value;
             } else if (config.Name.value() == RETENTION_BYTES_CONFIG_NAME) {
                 retentionBytes = config.Value;
+            } else if (config.Name.value() == CLEANUP_POLICY) {
+                cleanupPolicy = ConvertCleanupPolicy(config.Value);
+                unsupportedConfigResponse = ValidateCleanupPolicy(cleanupPolicy, config.Value);
             }
         }
 
@@ -202,7 +243,8 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             Context->DatabasePath,
             topic.NumPartitions,
             convertedRetentions.Ms,
-            convertedRetentions.Bytes
+            convertedRetentions.Bytes,
+            cleanupPolicy
         ));
 
         InflyTopics++;

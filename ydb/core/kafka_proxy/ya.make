@@ -9,6 +9,8 @@ SRCS(
     actors/kafka_sasl_handshake_actor.cpp
     actors/kafka_metrics_actor.cpp
     actors/kafka_list_offsets_actor.cpp
+    actors/kafka_list_groups_actor.cpp
+    actors/kafka_describe_groups_actor.cpp
     actors/kafka_topic_offsets_actor.cpp
     actors/kafka_fetch_actor.cpp
     actors/kafka_find_coordinator_actor.cpp
@@ -21,6 +23,10 @@ SRCS(
     actors/kafka_describe_configs_actor.cpp
     actors/kafka_balance_actor_sql.cpp
     actors/kafka_balancer_actor.cpp
+    actors/txn_actor_response_builder.cpp
+    actors/kafka_transaction_actor_sql.cpp
+    actors/kafka_transaction_actor.cpp
+    actors/kafka_state_name_to_int.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_constants.h
@@ -36,14 +42,19 @@ SRCS(
     kafka_records.cpp
     kafka_consumer_protocol.cpp
     kafka_metrics.cpp
-    kqp_balance_transaction.cpp
+    kqp_helper.cpp
+    kqp_helper.h
     kafka_consumer_groups_metadata_initializers.cpp
     kafka_consumer_members_metadata_initializers.cpp
+    kafka_transactional_producers_initializers.cpp
+    kafka_transactions_coordinator.cpp
+    kafka_producer_instance_id.h
 )
 
 GENERATE_ENUM_SERIALIZATION(kafka.h)
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/client/params
     ydb/library/actors/core
     ydb/library/actors/protos
     ydb/core/base

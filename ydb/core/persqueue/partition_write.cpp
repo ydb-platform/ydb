@@ -25,7 +25,6 @@
 
 namespace NKikimr::NPQ {
 
-static const ui64 MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER = std::numeric_limits<i32>::max() / 2;
 static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
@@ -277,24 +276,6 @@ ui64 CalculateReplyOffset(bool already, bool kafkaDeduplication, ui64 maxOffset,
     return maxOffset - diff;
 }
 
-// IsDuplicate is only needed for Kafka protocol deduplication.
-// baseSequence field in Kafka protocol has type int32 and the numbers loop back from the maximum possible value back to 0.
-// I.e. the next seqno after int32max is 0.
-// To decide if we got a duplicate seqno or an out of order seqno,
-// we are comparing the difference between maxSeqNo and seqNo with MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER.
-// The value of MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER is half of the int32 range.
-bool IsDuplicate(ui64 maxSeqNo, ui64 seqNo) {
-    if (maxSeqNo < seqNo) {
-        maxSeqNo += 1ul << 31;
-    }
-    return maxSeqNo - seqNo < MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER;
-}
-
-// InSequence is only needed for Kafka protocol deduplication.
-bool InSequence(ui64 maxSeqNo, ui64 seqNo) {
-    return (maxSeqNo + 1 == seqNo) || (maxSeqNo == std::numeric_limits<i32>::max() && seqNo == 0);
-}
-
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
     const auto now = ctx.Now();
@@ -331,7 +312,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                         writeResponse.Msg.EnableKafkaDeduplication &&
                         writeResponse.Msg.ProducerEpoch.Defined() &&
                         writeResponse.Msg.ProducerEpoch == it->second.ProducerEpoch &&
-                        IsDuplicate(maxSeqNo, seqNo)
+                        NKafka::IsDuplicate(maxSeqNo, seqNo)
                     );
             } else if (writeResponse.InitialSeqNo) {
                 maxSeqNo = writeResponse.InitialSeqNo.value();
@@ -531,10 +512,10 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     for (auto& [sourceId, info] : TxSourceIdForPostPersist) {
         auto it = SourceIdStorage.GetInMemorySourceIds().find(sourceId);
         if (it.IsEnd()) {
-            SourceIdStorage.RegisterSourceId(sourceId, info.SeqNo, info.Offset, now);
+            SourceIdStorage.RegisterSourceId(sourceId, info.SeqNo, info.Offset, now, info.ProducerEpoch);
         } else {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
-            SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now));
+            SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now, info.ProducerEpoch));
         }
         SourceIdCounter.Use(sourceId, now);
     }
@@ -1053,7 +1034,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     auto inflightMaxSeqNo = TxInflightMaxSeqNoPerSourceId.find(p.Msg.SourceId);
 
     if (!inflightMaxSeqNo.IsEnd()) {
-        if (p.Msg.SeqNo <= inflightMaxSeqNo->second) {
+        if (SeqnoViolation(inflightMaxSeqNo->second.ProducerEpoch, inflightMaxSeqNo->second.SeqNo, p.Msg.ProducerEpoch, p.Msg.SeqNo)) {
             return EProcessResult::Blocked;
         }
     }
@@ -1208,39 +1189,33 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         auto lastSeqNo = *sourceId.SeqNo();
         auto messageSeqNo = p.Msg.SeqNo;
 
-        if (lastEpoch > messageEpoch) {
-            // INVALID_PRODUCER_EPOCH
-            WriteError(
-                NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH,
-                TStringBuilder() << "Epoch of producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
-                                 << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " is " << messageEpoch
-                                 << ", which is smaller than the last seen epoch " << lastEpoch);
-            return false;
-        } else if (lastEpoch < messageEpoch) {
-            if (messageSeqNo != 0) {
-                // OUT_OF_ORDER_SEQUENCE_NUMBER
+        if (auto res = NKafka::CheckDeduplication(lastEpoch, lastSeqNo, messageEpoch, messageSeqNo); res != NKafka::ECheckDeduplicationResult::OK) {
+            switch (res) {
+            case NKafka::ECheckDeduplicationResult::INVALID_PRODUCER_EPOCH: {
                 WriteError(
-                    NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
-                    TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
-                                     << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": "
-                                     << "expected 0, got " << messageSeqNo);
+                    NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH,
+                    TStringBuilder() << "Epoch of producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                        << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " is " << messageEpoch
+                                        << ", which is smaller than the last seen epoch " << lastEpoch);
                 return false;
             }
-        } else if (InSequence(lastSeqNo, messageSeqNo)) {
-            // Continue processing the message.
-        } else if (IsDuplicate(lastSeqNo, messageSeqNo)) {
-            // "DUPLICATE_SEQUENCE_NUMBER". Kafka sends successful answer in response
-            // to requests that exactly match some of the last 5 batches (that may contain multiple records each).
-
-            return true;
-        } else {
-            // OUT_OF_ORDER_SEQUENCE_NUMBER
-            WriteError(
-                NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
-                TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
-                                    << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": " << messageSeqNo << " (incoming seq. number), "
-                                    << lastSeqNo << " (current end sequence number)");
-            return false;
+            case NKafka::ECheckDeduplicationResult::OUT_OF_ORDER_SEQUENCE_NUMBER: {
+                auto message = TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                     << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": ";
+                if (lastEpoch < messageEpoch) {
+                    message << "for new producer epoch expected seqNo 0, got " << messageSeqNo;
+                } else {
+                    message << messageSeqNo << " (incoming seq. number), " << lastSeqNo << " (current end sequence number)";
+                }
+                WriteError(NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER, std::move(message));
+                return false;
+            }
+            case NKafka::ECheckDeduplicationResult::DUPLICATE_SEQUENCE_NUMBER:
+                return true;
+            case NKafka::ECheckDeduplicationResult::OK:
+                // Continue processing the message.
+                break;
+            }
         }
     }
 

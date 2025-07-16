@@ -7187,6 +7187,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         throw yexception() << "Unknown failure kind: " << failureKind;
     };
 
+    map["Unessential"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+        YQL_ENSURE(node->Child(TCoUnessential::idx_AssumeAs)->IsComplete(), "AssumeAs argument of Unessential is expected to be complete expression");
+        return node;
+    };
+
     // will be applied to any callable after all above
     map[""] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_ENSURE(node->IsCallable());

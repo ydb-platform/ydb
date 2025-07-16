@@ -24,6 +24,7 @@ SRCS(
     vdisk_lsn.h
     vdisk_sync_common.h
     vdisk_priorities.h
+    vdisk_priorities.cpp
     utility.h
 )
 

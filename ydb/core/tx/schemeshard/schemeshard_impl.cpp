@@ -3560,11 +3560,26 @@ void TSchemeShard::PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId
 }
 
 void TSchemeShard::PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs) {
-    for (auto& shardIdx : shardsIdxs) {
-        if (shardIdx.GetOwnerId() == TabletID()) {
+    auto persistShardsToDelete = [&db, this] (const TShardIdx& shardIdx) {
+        if (shardIdx.GetOwnerId() == this->TabletID()) {
             db.Table<Schema::ShardsToDelete>().Key(shardIdx.GetLocalId()).Update();
         } else {
             db.Table<Schema::MigratedShardsToDelete>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update();
+        }
+    };
+
+    if (EnableDataErasure) {
+        for (auto& shardIdx : shardsIdxs) {
+            if (DataErasureManager->CanDeleteShard(shardIdx)) {
+                persistShardsToDelete(shardIdx);
+            } else {
+                DataErasureManager->MarkShardForDelete(shardIdx);
+                db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::NeedDelete>(true);
+            }
+        }
+    } else {
+        for (auto& shardIdx : shardsIdxs) {
+            persistShardsToDelete(shardIdx);
         }
     }
 }
@@ -4484,10 +4499,21 @@ TTabletId TSchemeShard::ResolveHive(TShardIdx shardIdx, const TActorContext& ctx
 
 void TSchemeShard::DoShardsDeletion(const THashSet<TShardIdx>& shardIdxs, const TActorContext& ctx) {
     TMap<TTabletId, THashSet<TShardIdx>> shardsPerHive;
-    for (TShardIdx shardIdx : shardIdxs) {
-        TTabletId hiveToRequest = ResolveHive(shardIdx, ctx);
-
+    auto addShardsPerHive = [&shardsPerHive, &ctx, this] (const TShardIdx& shardIdx) {
+        TTabletId hiveToRequest = this->ResolveHive(shardIdx, ctx);
         shardsPerHive[hiveToRequest].emplace(shardIdx);
+    };
+
+    if (EnableDataErasure) {
+        for (TShardIdx shardIdx : shardIdxs) {
+            if (DataErasureManager->CanDeleteShard(shardIdx)) {
+                addShardsPerHive(shardIdx);
+            }
+        }
+    } else {
+        for (TShardIdx shardIdx : shardIdxs) {
+            addShardsPerHive(shardIdx);
+        }
     }
 
     for (const auto& item: shardsPerHive) {

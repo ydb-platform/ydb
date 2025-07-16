@@ -330,9 +330,10 @@ void TRootDataErasureManager::OnDone(const TPathId& pathId, NIceDb::TNiceDb& db)
     }
 }
 
-void TRootDataErasureManager::OnDone(const TTabletId&, NIceDb::TNiceDb&) {
+bool TRootDataErasureManager::OnDone(const TTabletId&, NIceDb::TNiceDb&) {
     auto ctx = SchemeShard->ActorContext();
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[RootDataErasureManager] [OnDone] Cannot execute in root schemeshard: " << SchemeShard->TabletID());
+    return false;
 }
 
 void TRootDataErasureManager::ScheduleRequestToBSC() {
@@ -486,6 +487,15 @@ void TRootDataErasureManager::SyncBscGeneration(NIceDb::TNiceDb& db, ui64 curren
     SetGeneration(currentBscGeneration + 1);
     db.Table<Schema::DataErasureGenerations>().Key(GetGeneration()).Update<Schema::DataErasureGenerations::Status,
                                                                            Schema::DataErasureGenerations::StartTime>(GetStatus(), StartTime.MicroSeconds());
+}
+
+bool TRootDataErasureManager::CanDeleteShard(const TShardIdx&) {
+    return true;
+}
+
+void TRootDataErasureManager::MarkShardForDelete(const TShardIdx&) {
+    auto ctx = SchemeShard->ActorContext();
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[RootDataErasureManager] [MarkShardForDelete] Cannot execute in root schemeshard: " << SchemeShard->TabletID());
 }
 
 void TRootDataErasureManager::UpdateMetrics() {

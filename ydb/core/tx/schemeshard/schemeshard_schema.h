@@ -2080,12 +2080,14 @@ struct Schema : NIceDb::Schema {
         struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
         struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct NeedDelete : Column<4, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
 
         using TKey = TableKey<OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
             OwnerShardIdx,
             LocalShardIdx,
-            Status
+            Status,
+            NeedDelete
         >;
     };
 

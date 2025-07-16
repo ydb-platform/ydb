@@ -9,7 +9,9 @@ on:
         type: boolean
         required: false
         default: true
-
+  push:
+    tags:
+      - '[0-9]**'
 jobs:
   determine_branches:
     runs-on: ubuntu-latest
@@ -18,7 +20,7 @@ jobs:
     steps:
       - id: set-branches
         run: |
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.use_default_branches }}" == "true" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" || ("${{ inputs.use_default_branches }}" == "true"  && "${{ github.ref_type }}" != "tag") ]]; then
             echo "branches=['main', 'stable-25-1', 'stable-24-4', 'stable-25-1-1', 'stable-25-1-analytics']" >> $GITHUB_OUTPUT
           else
             echo "branches=['${{ github.ref_name }}']" >> $GITHUB_OUTPUT

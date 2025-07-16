@@ -6,6 +6,7 @@ namespace NActors {
     class IExecutorPool;
     class ISharedPool;
     struct TSelfPingInfo;
+    struct THarmonizerIterationState;
 
     template <typename T>
     struct TWaitingStats;

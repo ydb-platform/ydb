@@ -241,13 +241,14 @@ namespace NKikimr::NBsController {
             struct TUndoLog {
                 struct TItem {
                     ui32 Index;
+                    ui32 LastUsedNodeId;
                     TPDiskInfo *PDisk;
                 };
 
                 std::vector<TItem> Items;
 
-                void Log(ui32 index, TPDiskInfo *pdisk) {
-                    Items.push_back({index, pdisk});
+                void Log(ui32 index, TPDiskInfo *pdisk, ui32 lastUsedNodeId) {
+                    Items.push_back({index, lastUsedNodeId, pdisk});
                 }
 
                 size_t GetPosition() const {
@@ -256,7 +257,8 @@ namespace NKikimr::NBsController {
             };
 
             void AddDiskViaUndoLog(TUndoLog& undo, TGroup& group, ui32 index, TPDiskInfo *pdisk) {
-                undo.Log(index, pdisk);
+                undo.Log(index, pdisk, Self.LastUsedNodeId);
+                Self.LastUsedNodeId = pdisk->PDiskId.NodeId; // update last used node id
                 group[index] = pdisk;
                 AddUsedDisk(*pdisk);
                 GroupLayout.AddDisk(pdisk->Position, index);
@@ -266,6 +268,7 @@ namespace NKikimr::NBsController {
             void Revert(TUndoLog& undo, TGroup& group, size_t until) {
                 for (; undo.Items.size() > until; undo.Items.pop_back()) {
                     const auto& item = undo.Items.back();
+                    Self.LastUsedNodeId = item.LastUsedNodeId; // restore last used node id
                     group[item.Index] = nullptr;
                     RemoveUsedDisk(*item.PDisk);
                     GroupLayout.RemoveDisk(item.PDisk->Position, item.Index);
@@ -273,16 +276,42 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            bool BetterByRoundRobin(const TPDiskInfo& pretender, const TPDiskInfo& king) const {
+                auto pretenderNodeId = pretender.PDiskId.NodeId;
+                auto kingNodeId = king.PDiskId.NodeId;
+                auto lastUsedNodeId = Self.LastUsedNodeId;
+
+                if (pretenderNodeId == kingNodeId) {
+                    return false;
+                }
+
+                if (Self.LastUsedNodeId == Self.MaxNodeId) {
+                    return pretenderNodeId < kingNodeId;
+                }
+
+                if (kingNodeId > lastUsedNodeId) {
+                    // king is on the next node, no need to look at pretender
+                    return false;
+                }
+
+                return pretenderNodeId > lastUsedNodeId;
+            }
+
             bool DiskIsBetter(const TPDiskInfo& pretender, const TPDiskInfo& king) const {
                 if (pretender.FreeSlots() != king.FreeSlots()) {
                     return pretender.FreeSlots() > king.FreeSlots();
-                } else if (GivesLocalityBoost(pretender, king) || BetterQuotaMatch(pretender, king)) {
-                    return true;
+                }
+                if (Self.DoRoundRobin) {
+                    return BetterByRoundRobin(pretender, king);
                 } else {
-                    if (pretender.NumDomainMatchingDisks != king.NumDomainMatchingDisks) {
-                        return pretender.NumDomainMatchingDisks > king.NumDomainMatchingDisks;
+                    if (GivesLocalityBoost(pretender, king) || BetterQuotaMatch(pretender, king)) {
+                        return true;
+                    } else {
+                        if (pretender.NumDomainMatchingDisks != king.NumDomainMatchingDisks) {
+                            return pretender.NumDomainMatchingDisks > king.NumDomainMatchingDisks;
+                        }
+                        return pretender.PDiskId < king.PDiskId;
                     }
-                    return pretender.PDiskId < king.PDiskId;
                 }
             }
 
@@ -864,11 +893,19 @@ namespace NKikimr::NBsController {
         TPDisks PDisks;
         TPDiskByPosition PDiskByPosition;
         bool Dirty = false;
+        bool DoRoundRobin;
+        ui32 MaxNodeId;
 
     public:
-        TImpl(TGroupGeometryInfo geom, bool randomize)
+        ui32 LastUsedNodeId;
+
+    public:
+        TImpl(TGroupGeometryInfo geom, bool randomize, bool doRoundRobin, ui32 maxNodeId, ui32 lastUsedNodeId)
             : Geom(std::move(geom))
             , Randomize(randomize)
+            , DoRoundRobin(doRoundRobin)
+            , MaxNodeId(maxNodeId)
+            , LastUsedNodeId(lastUsedNodeId)
         {}
 
         bool RegisterPDisk(const TPDiskRecord& pdisk) {
@@ -1002,15 +1039,20 @@ namespace NKikimr::NBsController {
             std::sort(scores.begin(), scores.end());
             scores.erase(std::unique(scores.begin(), scores.end()), scores.end());
 
+            ui32 resultLastUsedNodeId = LastUsedNodeId;
+
             // bisect scores to find optimal working one
             std::optional<TGroup> result;
             ui32 begin = 0, end = scores.size();
             while (begin < end) {
                 const ui32 mid = begin + (end - begin) / 2;
                 TAllocator::TUndoLog undo;
+                ui32 lastUsedNodeId = LastUsedNodeId;
                 if (allocator.FillInGroup(scores[mid], undo, group, groupSizeInUnits, groupConstraints)) {
                     result = group;
+                    resultLastUsedNodeId = LastUsedNodeId;
                     allocator.Revert(undo, group, 0);
+                    LastUsedNodeId = lastUsedNodeId;
                     end = mid;
                 } else {
                     begin = mid + 1;
@@ -1018,6 +1060,8 @@ namespace NKikimr::NBsController {
             }
 
             if (result) {
+                LastUsedNodeId = resultLastUsedNodeId;
+
                 for (const auto& [vdiskId, pdiskId] : replacedDisks) {
                     const auto it = PDisks.find(pdiskId);
                     Y_ABORT_UNLESS(it != PDisks.end());
@@ -1147,8 +1191,8 @@ namespace NKikimr::NBsController {
         }
     };
 
-    TGroupMapper::TGroupMapper(TGroupGeometryInfo geom, bool randomize)
-        : Impl(new TImpl(std::move(geom), randomize))
+    TGroupMapper::TGroupMapper(TGroupGeometryInfo geom, bool randomize, bool doRoundRobin, ui32 maxNodeId, ui32 lastUsedNodeId)
+        : Impl(new TImpl(std::move(geom), randomize, doRoundRobin, maxNodeId, lastUsedNodeId))
     {}
 
     TGroupMapper::~TGroupMapper() = default;
@@ -1192,5 +1236,9 @@ namespace NKikimr::NBsController {
             std::optional<TBridgePileId> bridgePileId, TString& error) {
         return Impl->TargetMisplacedVDisk(groupId.GetRawId(), group, vdisk, std::move(forbid), groupSizeInUnits, requiredSpace,
             requireOperational, bridgePileId, error);
+    }
+
+    ui32 TGroupMapper::LastUsedNodeId() const {
+        return Impl->LastUsedNodeId;
     }
 } // NKikimr::NBsController

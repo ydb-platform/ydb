@@ -4,6 +4,7 @@
 #include "blobstorage_vdiskid.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/bridge.h>
+#include <ydb/core/blobstorage/base/blobstorage_host_record.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
@@ -225,7 +226,7 @@ namespace NKikimr {
     {
         bool SelfHeal = false;
         bool GroupLayoutSanitizer = false;
-
+        std::optional<NBsController::THostRecordMap> EnforceHostRecords;
         TEvControllerConfigRequest() = default;
     };
 

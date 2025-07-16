@@ -28,4 +28,9 @@ std::string GetFormattedSize(size_t size) {
     return ss.str();
 }
 
+std::stop_source GetGlobalInterruptSource() {
+    static std::stop_source StopByInterrupt;
+    return StopByInterrupt;
+}
+
 } // namespace NYdb::NTPCC

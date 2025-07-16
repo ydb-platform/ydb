@@ -3,6 +3,7 @@
 #include "log_backend.h"
 #include "runner.h"
 #include "logs_scroller.h"
+#include "util.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>

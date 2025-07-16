@@ -9,6 +9,7 @@
 #include <util/random/random.h>
 
 #include <string>
+#include <stop_token>
 
 namespace NYdb::NTPCC {
 
@@ -66,6 +67,8 @@ inline bool ShouldExit(const TStatus& status) {
            status.GetStatus() == EStatus::SCHEME_ERROR ||
            status.GetStatus() == EStatus::UNAUTHORIZED;
 }
+
+std::stop_source GetGlobalInterruptSource();
 
 inline void RequestStop() {
     GetGlobalInterruptSource().request_stop();

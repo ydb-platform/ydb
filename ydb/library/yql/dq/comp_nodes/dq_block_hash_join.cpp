@@ -2276,7 +2276,7 @@ private:
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 9, "Expected 9 args");
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 7 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsStream(), "Expected WideStream as a resulting stream");
@@ -2321,21 +2321,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
     const THashSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
 
-    const auto leftKeyDropsLiteral = callable.GetInput(4);
-    const auto leftKeyDropsTuple = AS_VALUE(TTupleLiteral, leftKeyDropsLiteral);
-    THashSet<ui32> leftKeyDrops;
-    leftKeyDrops.reserve(leftKeyDropsTuple->GetValuesCount());
-    for (ui32 i = 0; i < leftKeyDropsTuple->GetValuesCount(); i++) {
-        const auto item = AS_VALUE(TDataLiteral, leftKeyDropsTuple->GetValue(i));
-        leftKeyDrops.emplace(item->AsValue().Get<ui32>());
-    }
-
-    for (const auto& drop : leftKeyDrops) {
-        MKQL_ENSURE(leftKeySet.contains(drop),
-                    "Only key columns has to be specified in drop column set");
-    }
-
-    const auto rightKeyColumnsLiteral = callable.GetInput(5);
+    const auto rightKeyColumnsLiteral = callable.GetInput(4);
     const auto rightKeyColumnsTuple = AS_VALUE(TTupleLiteral, rightKeyColumnsLiteral);
     TVector<ui32> rightKeyColumns;
     rightKeyColumns.reserve(rightKeyColumnsTuple->GetValuesCount());
@@ -2345,43 +2331,40 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
     const THashSet<ui32> rightKeySet(rightKeyColumns.cbegin(), rightKeyColumns.cend());
 
-    const auto rightKeyDropsLiteral = callable.GetInput(6);
-    const auto rightKeyDropsTuple = AS_VALUE(TTupleLiteral, rightKeyDropsLiteral);
-    THashSet<ui32> rightKeyDrops;
-    rightKeyDrops.reserve(rightKeyDropsTuple->GetValuesCount());
-    for (ui32 i = 0; i < rightKeyDropsTuple->GetValuesCount(); i++) {
-        const auto item = AS_VALUE(TDataLiteral, rightKeyDropsTuple->GetValue(i));
-        rightKeyDrops.emplace(item->AsValue().Get<ui32>());
-    }
+    THashMap<ui32, ui32> rightRenames;
+    THashMap<ui32, ui32> leftRenames;
 
-    for (const auto& drop : rightKeyDrops) {
-        MKQL_ENSURE(rightKeySet.contains(drop),
-                    "Only key columns has to be specified in drop column set");
-    }
+    // Process leftRenames (argument 5) - same as in mkql_grace_join.cpp
+    // const auto leftRenamesLiteral = callable.GetInput(5);
+    // const auto leftRenamesTuple = AS_VALUE(TTupleLiteral, leftRenamesLiteral);
+    // for (ui32 i = 0; i + 1 < leftRenamesTuple->GetValuesCount(); i += 2) {
+    //     const auto fromItem = AS_VALUE(TDataLiteral, leftRenamesTuple->GetValue(i));
+    //     const auto toItem = AS_VALUE(TDataLiteral, leftRenamesTuple->GetValue(i + 1));
+    //     leftRenames[fromItem->AsValue().Get<ui32>()] = toItem->AsValue().Get<ui32>();
+    // }
+
+    // // Process rightRenames (argument 6) - same as in mkql_grace_join.cpp
+    // const auto rightRenamesLiteral = callable.GetInput(6);
+    // const auto rightRenamesTuple = AS_VALUE(TTupleLiteral, rightRenamesLiteral);
+    // for (ui32 i = 0; i + 1 < rightRenamesTuple->GetValuesCount(); i += 2) {
+    //     const auto fromItem = AS_VALUE(TDataLiteral, rightRenamesTuple->GetValue(i));
+    //     const auto toItem = AS_VALUE(TDataLiteral, rightRenamesTuple->GetValue(i + 1));
+    //     rightRenames[fromItem->AsValue().Get<ui32>()] = toItem->AsValue().Get<ui32>();
+    // }
 
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key columns mismatch");
 
-    [[maybe_unused]] const auto rightAnyNode = callable.GetInput(7);
-
-    const auto untypedPolicyNode = callable.GetInput(8);
-    const auto untypedPolicy = AS_VALUE(TDataLiteral, untypedPolicyNode)->AsValue().Get<ui64>();
-    const auto policy = static_cast<IBlockGraceJoinPolicy*>(reinterpret_cast<void*>(untypedPolicy));
-
     // XXX: Mind the last wide item, containing block length.
+    // Build output mapping using renames instead of keydrops
     TVector<ui32> leftIOMap;
     for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {
-        if (leftKeyDrops.contains(i)) {
-            continue;
-        }
         leftIOMap.push_back(i);
     }
 
-    // XXX: Mind the last wide item, containing block length.
+    // XXX: Mind the last wide item, containing block length.  
+    // Build output mapping using renames instead of keydrops
     TVector<ui32> rightIOMap;
     for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {
-        if (rightKeyDrops.contains(i)) {
-            continue;
-        }
         rightIOMap.push_back(i);
     }
 
@@ -2399,7 +2382,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         std::move(rightIOMap),
         leftStream,
         rightStream,
-        policy ? policy : &globalDefaultPolicy
+        &globalDefaultPolicy
     );
 }
 

@@ -619,6 +619,7 @@ namespace NKikimr::NStorage {
                 fFunc(TEvBlobStorage::TEvStatus::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvAssimilate::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvBunchOfEvents::EventType, HandleForwarded);
+                fFunc(TEvBlobStorage::TEvCheckIntegrity::EventType, HandleForwarded);
                 fFunc(TEvRequestProxySessionsState::EventType, HandleForwarded);
 
                 cFunc(TEvPrivate::EvGroupPendingQueueTick, HandleGroupPendingQueueTick);

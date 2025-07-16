@@ -159,6 +159,7 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
         XX(Status)
         XX(Patch)
         XX(Assimilate)
+        XX(CheckIntegrity)
 #undef XX
 
         default:
@@ -552,6 +553,7 @@ public:
             XX(Status)
             XX(Patch)
             XX(Assimilate)
+            XX(CheckIntegrity)
             default:
                 Y_ABORT();
 #undef XX
@@ -766,6 +768,16 @@ struct TBlobStorageGroupRestoreGetParameters {
     };
 };
 IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params, NWilson::TTraceId traceId);
+
+struct TBlobStorageGroupCheckIntegrityParameters {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvCheckIntegrity>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvCheckIntegrity>::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_CHECKINTEGRITY,
+        .Name = "DSProxy.CheckIntegrity",
+        .Activity = NKikimrServices::TActivity::BS_PROXY_CHECKINTEGRITY_ACTOR,
+    };
+};
+IActor* CreateBlobStorageGroupCheckIntegrityRequest(TBlobStorageGroupCheckIntegrityParameters params, NWilson::TTraceId traceId);
 
 struct TBlobStorageGroupDiscoverParameters {
     TBlobStorageGroupRequestActor<TEvBlobStorage::TEvDiscover>::TCommonParameters Common;

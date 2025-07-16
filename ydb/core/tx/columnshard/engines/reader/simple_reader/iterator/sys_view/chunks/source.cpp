@@ -1,5 +1,6 @@
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
@@ -39,8 +40,7 @@ public:
 
 }   // namespace
 
-bool TSourceData::DoStartFetchingAccessor(
-    const std::shared_ptr<IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
+bool TSourceData::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
     AFL_VERIFY(!GetStageData().HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
@@ -199,28 +199,32 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         const auto& records = GetStageData().GetPortionAccessor().GetRecordsVerified();
         for (auto it = records.begin(); it != records.end();) {
             auto accessor = OriginalData->ExtractAccessorOptional(it->GetEntityId());
+            const ui32 entityId = it->GetEntityId();
             if (!accessor) {
-                ++it;
+                while (it != records.end() && it->GetEntityId() == entityId) {
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+                    ++it;
+                }
             } else {
-                const auto pred = [&builder](const std::shared_ptr<IChunkedArray>& chunk) {
-                    AFL_VERIFY(chunk->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
-                    const TSubColumnsPartialArray* arr = static_cast<const TSubColumnsPartialArray*>(chunk.get());
+                const auto addChunkInfo = [&builder](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
+                    AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
+                    const NArrow::NAccessor::TSubColumnsPartialArray* arr =
+                        static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get());
                     const TString data = arr->GetHeader().DebugJson().GetStringRobust();
                     NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
                 };
 
                 AFL_VERIFY(it->GetChunkIdx() == 0);
-                const ui32 entityId = it->GetEntityId();
-                if (accessor->GetType() == IChunkedArray::EType::CompositeChunkedArray) {
-                    const TCompositeChunkedArray* composite = static_cast<const TCompositeChunkedArray*>(accessor.get());
+                if (accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
+                    const NArrow::NAccessor::TCompositeChunkedArray* composite =
+                        static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(accessor.get());
                     for (auto&& i : composite->GetChunks()) {
                         AFL_VERIFY(it != records.end());
-                        AFL_VERIFY(it->GetChunkIdx() < composite->GetChunks()->size());
+                        AFL_VERIFY(it->GetChunkIdx() < composite->GetChunks().size());
                         AFL_VERIFY(it->GetEntityId() == entityId);
                         addChunkInfo(i);
                         ++it;
                     }
-                    const std::shared_ptr<IChunkedArray>& arr = composite->GetChunks()[it->GetChunkIdx()];
 
                 } else {
                     AFL_VERIFY(it->GetChunkIdx() == 0);
@@ -238,6 +242,69 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     }
     AFL_VERIFY(false)("column_id", columnId);
     return nullptr;
+}
+
+TConclusion<bool> TSourceData::DoStartFetchImpl(
+    const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
+    AFL_VERIFY(fetchersExt.size());
+    if (!OriginalData) {
+        OriginalData = std::make_shared<NArrow::NAccessor::TAccessorsCollection>();
+    }
+
+    TReadActionsCollection readActions;
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    NCommon::TFetchingResultContext contextFetch(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+    for (auto&& i : fetchersExt) {
+        i->Start(readActions, contextFetch);
+    }
+    if (readActions.IsEmpty()) {
+        for (auto&& i : fetchersExt) {
+            NBlobOperations::NRead::TCompositeReadBlobs blobs;
+            i->OnDataReceived(readActions, blobs);
+            MutableStageData().AddFetcher(i);
+            AFL_VERIFY(readActions.IsEmpty());
+        }
+        return false;
+    }
+    THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
+    for (auto&& i : fetchersExt) {
+        AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
+    }
+    NActors::TActivationContext::AsActorContext().Register(
+        new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
+            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
+    return true;
+}
+
+TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetchData(
+    const NArrow::NSSA::TProcessorContext& context, const NArrow::NSSA::IDataSource::TDataAddress& addr) {
+    if (addr.GetColumnId() == 16) {
+        auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+
+        for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
+            if (Schema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
+                NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+                return std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,
+                    GetContext()->GetCommonContext()->GetStoragesManager(),
+                    GetStageData().GetPortionAccessor().GetPortionInfo().GetRecordsCount(), std::vector<TString>());
+            }
+        }
+    }
+    return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
+}
+
+void TSourceData::DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+    if (columnId == 16) {
+        AFL_VERIFY(OriginalData);
+        auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+        for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
+            NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+            if (auto fetcher = MutableStageData().ExtractFetcherOptional(i.GetEntityId())) {
+                fetcher->OnDataCollected(fetchContext);
+            }
+        }
+    }
+    TBase::DoAssembleAccessor(context, columnId, subColumnName);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks

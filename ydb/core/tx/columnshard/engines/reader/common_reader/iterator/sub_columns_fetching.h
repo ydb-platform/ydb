@@ -235,9 +235,9 @@ private:
         TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         reading->SetIsBackgroundProcess(false);
-        auto filterPtr = source->GetStageData().GetAppliedFilter();
+        auto filterPtr = context.GetAppliedFilter();
         const NArrow::TColumnFilter& cFilter = filterPtr ? *filterPtr : NArrow::TColumnFilter::BuildAllowFilter();
-        auto itFilter = cFilter.GetBegin(false, source->GetRecordsCount());
+        auto itFilter = cFilter.GetBegin(false, context.GetRecordsCount());
         bool itFinished = false;
 
         auto accessor = context.GetAccessors().GetAccessorOptional(GetEntityId());
@@ -270,7 +270,7 @@ private:
             itFinished = !itFilter.Next(meta.GetRecordsCount());
         }
         AFL_VERIFY(NeedToAddResource || (resChunkIdx == chunks.size()));
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", source->GetRecordsCount());
+        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", context.GetRecordsCount());
         for (auto&& i : blobsAction.GetReadingActions()) {
             nextRead.Add(i);
         }

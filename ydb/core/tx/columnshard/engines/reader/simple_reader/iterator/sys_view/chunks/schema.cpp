@@ -57,6 +57,7 @@ TIndexInfo TSchemaAdapter::GetIndexInfo(
         pred("Activity", NScheme::NTypeIds::Uint8);
         pred("TierName", NScheme::NTypeIds::Utf8);
         pred("EntityType", NScheme::NTypeIds::Utf8);
+        pred("ChunkDetails", NScheme::NTypeIds::Utf8);
         proto.AddKeyColumnNames("PathId");
         proto.AddKeyColumnNames("TabletId");
         proto.AddKeyColumnNames("PortionId");

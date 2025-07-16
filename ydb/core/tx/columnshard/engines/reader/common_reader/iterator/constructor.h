@@ -17,6 +17,8 @@ private:
     NArrow::NAccessor::TAccessorsCollection& Accessors;
     NIndexes::TIndexesCollection& Indexes;
     std::shared_ptr<IDataSource> Source;
+    std::optional<std::shared_ptr<TColumnFilter>> AppliedFilter;
+    std::optional<ui32> RecordsCount;
 
 public:
     NArrow::NAccessor::TAccessorsCollection& GetAccessors() {
@@ -28,12 +30,20 @@ public:
     const std::shared_ptr<IDataSource>& GetSource() const {
         return Source;
     }
-    TFetchingResultContext(
-        NArrow::NAccessor::TAccessorsCollection& accessors, NIndexes::TIndexesCollection& indexes, const std::shared_ptr<IDataSource>& source)
+    ui32 GetRecordsCount() const {
+        return Source->GetStageData().GetPortionAccessor().GetPortionInfo().GetRecordsCount();
+    }
+
+    const std::shared_ptr<TColumnFilter>& GetAppliedFilter() const {
+        return AppliedFilter.value_or(Source->GetStageData().GetAppliedFilter());
+    }
+
+    TFetchingResultContext(NArrow::NAccessor::TAccessorsCollection& accessors, NIndexes::TIndexesCollection& indexes,
+        const std::shared_ptr<IDataSource>& source, const std::optional<std::shared_ptr<TColumnFilter>>& appliedFilter = std::nullopt)
         : Accessors(accessors)
         , Indexes(indexes)
         , Source(source)
-    {
+        , AppliedFilter(appliedFilter) {
     }
 };
 

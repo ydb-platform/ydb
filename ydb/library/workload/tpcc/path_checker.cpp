@@ -1,6 +1,7 @@
 #include "path_checker.h"
 
 #include "constants.h"
+#include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
@@ -12,23 +13,6 @@
 namespace NYdb::NTPCC {
 
 namespace {
-
-void ExitIfError(const TStatus& status, const TString& what) {
-    if (status.GetStatus() == EStatus::SUCCESS) {
-        return;
-    }
-
-    TStringStream ss;
-    ss << what << ": " << ToString(status.GetStatus());
-    const auto& issues = status.GetIssues();
-    if (issues) {
-        ss << ", issues: ";
-        issues.PrintTo(ss, true);
-    }
-
-    Cerr << ss.Str() << Endl;
-    std::exit(1);
-}
 
 THashSet<std::string> ListPath(TDriver& driver, const TString& path) {
     NScheme::TSchemeClient schemeClient(driver);

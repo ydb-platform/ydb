@@ -75,6 +75,9 @@ struct TRunConfig {
 
     std::chrono::duration<long long> DisplayUpdateInterval;
 
+    // used by check command only
+    bool JustImported = false;
+
     static constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
     static constexpr auto DisplayUpdateTextInterval = std::chrono::seconds(5);
     static constexpr auto DisplayUpdateTuiInterval = std::chrono::seconds(1);

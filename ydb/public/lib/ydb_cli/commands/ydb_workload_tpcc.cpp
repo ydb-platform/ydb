@@ -1,5 +1,6 @@
 #include "ydb_workload_tpcc.h"
 
+#include <ydb/library/workload/tpcc/check.h>
 #include <ydb/library/workload/tpcc/clean.h>
 #include <ydb/library/workload/tpcc/import.h>
 #include <ydb/library/workload/tpcc/init.h>
@@ -79,7 +80,7 @@ void TCommandTPCCInit::Config(TConfig& config) {
 
 int TCommandTPCCInit::Run(TConfig& connectionConfig) {
     RunConfig->SetFullPath(connectionConfig);
-    NTPCC::InitSync(connectionConfig, *RunConfig);
+    NTPCC::CheckSync(connectionConfig, *RunConfig);
     return 0;
 }
 
@@ -247,6 +248,52 @@ int TCommandTPCCRun::Run(TConfig& connectionConfig) {
     return 0;
 }
 
+//-----------------------------------------------------------------------------
+
+class TCommandTPCCCheck
+    : public TYdbCommand
+{
+public:
+    TCommandTPCCCheck(std::shared_ptr<NTPCC::TRunConfig> runConfig);
+    ~TCommandTPCCCheck() = default;
+
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    std::shared_ptr<NTPCC::TRunConfig> RunConfig;
+};
+
+TCommandTPCCCheck::TCommandTPCCCheck(std::shared_ptr<NTPCC::TRunConfig> runConfig)
+    : TYdbCommand("check", {}, "Check TPC-C data consistency")
+    , RunConfig(std::move(runConfig))
+{
+}
+
+void TCommandTPCCCheck::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption(
+        'w', "warehouses", TStringBuilder() << "Number of warehouses")
+            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+
+    config.Opts->AddLongOption(
+        "just-imported", TStringBuilder() << "Data has been just imported, no runs done")
+            .Optional().StoreTrue(&RunConfig->JustImported);
+
+    config.Opts->AddLongOption(
+        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
+            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
+                return FromString<ELogPriority>(v);
+            }).DefaultValue(RunConfig->LogPriority).Hidden();
+}
+
+int TCommandTPCCCheck::Run(TConfig& connectionConfig) {
+    RunConfig->SetFullPath(connectionConfig);
+    NTPCC::CheckSync(connectionConfig, *RunConfig);
+    return 0;
+}
+
 } // anonymous
 
 //-----------------------------------------------------------------------------
@@ -259,6 +306,7 @@ TCommandTPCC::TCommandTPCC()
     AddCommand(std::make_unique<TCommandTPCCClean>(RunConfig));
     AddCommand(std::make_unique<TCommandTPCCInit>(RunConfig));
     AddCommand(std::make_unique<TCommandTPCCImport>(RunConfig));
+    AddCommand(std::make_unique<TCommandTPCCCheck>(RunConfig));
 }
 
 void TCommandTPCC::Config(TConfig& config) {

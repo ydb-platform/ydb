@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    check.cpp
     clean.cpp
     common_queries.cpp
     data_splitter.cpp

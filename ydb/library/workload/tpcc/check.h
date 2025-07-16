@@ -6,6 +6,6 @@
 
 namespace NYdb::NTPCC {
 
-void ImportSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);
+void CheckSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);
 
 } // namespace NYdb::NTPCC

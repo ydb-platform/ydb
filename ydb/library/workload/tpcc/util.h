@@ -78,7 +78,7 @@ void ExitIfError(const TStatus& status, const TString& what);
 
 //-----------------------------------------------------------------------------
 
-std::stop_source GetGlobalInterruptSource();
+std::stop_source& GetGlobalInterruptSource();
 
 inline void RequestStop() {
     GetGlobalInterruptSource().request_stop();

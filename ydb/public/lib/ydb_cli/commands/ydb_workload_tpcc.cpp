@@ -80,7 +80,7 @@ void TCommandTPCCInit::Config(TConfig& config) {
 
 int TCommandTPCCInit::Run(TConfig& connectionConfig) {
     RunConfig->SetFullPath(connectionConfig);
-    NTPCC::CheckSync(connectionConfig, *RunConfig);
+    NTPCC::InitSync(connectionConfig, *RunConfig);
     return 0;
 }
 

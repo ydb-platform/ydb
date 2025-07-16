@@ -46,7 +46,7 @@ void BaseCheckWarehouseTable(TQueryClient& client, const TString& path, int expe
         size_t rowCount = parser.ColumnParser("count").GetUint64();
         if (rowCount == 0) {
             Cerr << "Zero warehouses in " << fullPath << ": " << Endl;
-            std::exit(0);
+            std::exit(1);
         }
 
         int minWh = *parser.ColumnParser("min").GetOptionalInt32();
@@ -56,7 +56,7 @@ void BaseCheckWarehouseTable(TQueryClient& client, const TString& path, int expe
                  << " warehouses: minWh=" << minWh
                  << ", maxWh=" << maxWh
                  << ", whCount=" << rowCount;
-            std::exit(0);
+            std::exit(1);
         }
     } catch (std::exception& e) {
         Cerr << "Failed to count/min/max warehouses in " << fullPath << ": " << e.what() << Endl;

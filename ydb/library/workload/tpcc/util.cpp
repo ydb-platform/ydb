@@ -45,7 +45,7 @@ void ExitIfError(const TStatus& status, const TString& what) {
     std::exit(1);
 }
 
-std::stop_source GetGlobalInterruptSource() {
+std::stop_source& GetGlobalInterruptSource() {
     static std::stop_source StopByInterrupt;
     return StopByInterrupt;
 }

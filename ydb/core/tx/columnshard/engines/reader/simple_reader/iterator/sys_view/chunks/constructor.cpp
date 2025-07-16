@@ -9,7 +9,7 @@ std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::share
         SourceId, SourceIdx, PathId, TabletId, Portion, std::move(Start), std::move(Finish), context, std::move(Schema));
 }
 
-std::shared_ptr<NKikimr::NOlap::NReader::NCommon::IDataSource> TConstructor::DoExtractNext(
+std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNext(
     const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     AFL_VERIFY(Constructors.size());
     Constructors.front().SetIndex(CurrentSourceIdx);

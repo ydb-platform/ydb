@@ -113,6 +113,30 @@ public:
         }
     };
 
+    class TReversablePortionAddressComparator {
+    private:
+        const bool Reverse = false;
+
+    public:
+        TReversablePortionAddressComparator(const bool reverse)
+            : Reverse(reverse) {
+        }
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            if (!Reverse) {
+                return left->GetAddress() < right->GetAddress();
+            } else {
+                return right->GetAddress() < left->GetAddress();
+            }
+        }
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
+            if (!Reverse) {
+                return left->GetAddress() < right->GetAddress();
+            } else {
+                return right->GetAddress() < left->GetAddress();
+            }
+        }
+    };
+
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);

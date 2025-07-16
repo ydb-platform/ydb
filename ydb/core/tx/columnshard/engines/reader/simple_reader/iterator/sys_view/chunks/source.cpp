@@ -61,28 +61,28 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == 2) {
         return NArrow::TStatusValidator::GetValid(
             arrow::MakeArrayFromScalar(arrow::StringScalar(::ToString(GetPortion()->GetProduced())), recordsCount));
-    }
+        }
     if (columnId == 3) {
         return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetTabletId()), recordsCount));
     }
     if (columnId == 4) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRecordsCount());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRecordsCount());
+            }
         for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetRecordsCount());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetRecordsCount());
+            }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == 5) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRawBytes());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRawBytes());
+            }
         for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetRawBytes());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetRawBytes());
+            }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == 6) {
@@ -91,10 +91,10 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == 7) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
+            }
         for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -162,7 +162,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == 13) {
-        if (Portion->IsRemovedFor(GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())) {
+        if (Portion->HasRemoveSnapshot()) {
             return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(0), recordsCount));
         } else {
             return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(1), recordsCount));
@@ -279,9 +279,11 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& context, const NArrow::NSSA::IDataSource::TDataAddress& addr) {
     if (addr.GetColumnId() == 16) {
-        auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-
+        THashSet<ui32> entityIds;
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
+            if (!entityIds.emplace(i.GetEntityId()).second) {
+                continue;
+            }
             if (Schema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
                 NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                 return std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,

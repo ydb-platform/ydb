@@ -20,6 +20,16 @@ private:
         return GetStageData().GetPortionAccessor().GetPortionInfo().GetColumnStorageId(columnId, Schema->GetIndexInfo());
     }
 
+    virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
+        AFL_VERIFY(Accessors.size());
+        return 0;
+    }
+
+    virtual ui64 GetColumnBlobBytes(const std::set<ui32>& /*columnsIds*/) const override {
+        AFL_VERIFY(Accessors.size());
+        return 0;
+    }
+
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
         return GetStageData().GetPortionAccessor().RestoreBlobRange(rangeLink);
     }

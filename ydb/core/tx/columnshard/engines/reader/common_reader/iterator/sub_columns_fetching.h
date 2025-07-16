@@ -282,8 +282,8 @@ public:
         , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount()))
         , SubColumns(subColumns) {
         const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
-        AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
-        ("type", loader->GetAccessorConstructor()->GetType());
+        AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)(
+            "type", loader->GetAccessorConstructor()->GetType());
     }
 
     TSubColumnsFetchLogic(const ui32 columnId, const std::shared_ptr<ISnapshotSchema>& sourceSchema,

@@ -30,6 +30,7 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataS
             return true;
         }
     }
+    AFL_VERIFY(filter.IsTotalAllowFilter());
     source->MutableStageData().AddFilter(filter);
     return true;
 }

@@ -26,7 +26,27 @@ struct TTetsEnv {
         Env.Runtime->SetLogPriority(NKikimrServices::BS_LOAD_TEST, NLog::PRI_DEBUG);
     }
 
-    TString RunSingleLoadTest(const TString& command) {
+    TString RunSingleLoadTest(const TString& command, bool checkRdmaMemory = false) {
+        if (checkRdmaMemory) {
+            Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVPut::EventType) {
+                    auto* res = ev->Get<TEvBlobStorage::TEvVPut>();
+                    UNIT_ASSERT(res);
+                    auto payload = res->GetPayload();
+                    for (auto& rope : payload) {
+                        for (auto it = rope.Begin(); it != rope.End(); ++it) {
+                            const TRcBuf& chunk = it.GetChunk();
+                            auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
+                            UNIT_ASSERT_C(!memReg.Empty(), "unable to extract mem region from chunk");
+                            UNIT_ASSERT_C(memReg.GetLKey(0) != 0, "invalid lkey");
+                            UNIT_ASSERT_C(memReg.GetRKey(0) != 0, "invalid rkey");
+                        }
+                    }
+                }
+                return true;
+            };
+        }
+
         const auto sender = Env.Runtime->AllocateEdgeActor(VDiskActorId.NodeId(), __FILE__, __LINE__);
         auto stream = TStringInput(command);
 
@@ -104,7 +124,7 @@ Y_UNIT_TEST_SUITE(GroupWriteTest) {
             })"
         );
 
-        const auto html = env.RunSingleLoadTest(conf);
+        const auto html = env.RunSingleLoadTest(conf, true);
         UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 300U);
         UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
         UNIT_ASSERT(GetOutputValue(html, "TotalBytesWritten").front() >= 300000000U);

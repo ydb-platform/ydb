@@ -89,7 +89,7 @@ namespace NActors {
     };
 
     using TRcBufAllocator = std::function<TRcBuf(size_t size, size_t headRoom, size_t tailRoom)>;
-    class TRdmaAllocatorWithFallback {
+    class TRdmaAllocatorWithFallback : public IRcBufAllocator {
     public:
         TRdmaAllocatorWithFallback(TRcBufAllocator cb) noexcept;
         TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept;

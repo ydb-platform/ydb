@@ -320,7 +320,7 @@ namespace NPDisk {
     namespace {
 
         void AddReplicas(TStateStorageInfo::TRingGroup& group, const TVector<TActorId>& replicas) {
-            group.NToSelect = group.NToSelect ?: replicas.size();
+            group.NToSelect = group.NToSelect ? group.NToSelect : replicas.size();
             group.Rings.resize(replicas.size());
             for (size_t i = 0; i < replicas.size(); ++i) {
                 // one replica per ring

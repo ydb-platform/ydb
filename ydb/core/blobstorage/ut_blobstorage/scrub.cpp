@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
 
             WriteCompressedData({
                 .GroupId = GroupId,
-                .TotalBlobs = 100,
+                .TotalSize = blobSize * 100,
                 .BlobSize = blobSize,
             });
 

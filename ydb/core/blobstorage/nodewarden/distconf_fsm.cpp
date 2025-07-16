@@ -50,6 +50,10 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
+        if (StateStorageSelfHealActor) {
+            Send(new IEventHandle(TEvents::TSystem::Poison, 0, StateStorageSelfHealActor.value(), SelfId(), nullptr, 0));
+            StateStorageSelfHealActor.reset();
+        }
         DisconnectFromConsole();
     }
 

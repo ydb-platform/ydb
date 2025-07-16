@@ -28,7 +28,4 @@
 * 18077:The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives. Added a re-calculation of the values. [#18077](https://github.com/ydb-platform/ydb/pull/18077) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19057:Fixed "Failed to set up listener on port 9092 errno# 98 (Address already in use)" [#19057](https://github.com/ydb-platform/ydb/pull/19057) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 19115:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19083) in stream lookup join [#19115](https://github.com/ydb-platform/ydb/pull/19115) ([Vitalii Gridnev](https://github.com/gridnevvvit))
-* 20396:Fixed reporting of gRPC metrics of serverless databases. [#20396](https://github.com/ydb-platform/ydb/pull/20396) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 20389:[Ticket](https://github.com/ydb-platform/ydb/issues/20152)
-[PR to main](https://github.com/ydb-platform/ydb/pull/20166) [#20389](https://github.com/ydb-platform/ydb/pull/20389) ([Evgenik2](https://github.com/Evgenik2))
 

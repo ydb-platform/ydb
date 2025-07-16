@@ -194,6 +194,10 @@ namespace NKikimr {
         // is this the first key?
         bool IsFirstKey = true;
 
+        // max inflight request to pdisk
+        ui32 MaxInFlightWrites;
+        ui32 MaxInFlightReads;
+
     public:
         struct TStatistics {
             THullCtxPtr HullCtx;
@@ -296,6 +300,9 @@ namespace NKikimr {
                 ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
                 WritesInFlight = &LevelIndex->HullCompWritesInFlight;
             }
+
+            MaxInFlightWrites = GetMaxInFlightWrites();
+            MaxInFlightReads = GetMaxInFlightReads();
         }
 
         void Prepare(THandoffMapPtr hmp, TGcMapIterator gcmpIt) {
@@ -308,6 +315,8 @@ namespace NKikimr {
         // when there is more work to do, return false; MUST NOT return true unless all pending requests are finished
         bool MainCycle(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             for (;;) {
+                MaxInFlightWrites = GetMaxInFlightWrites();
+                MaxInFlightReads = GetMaxInFlightReads();
                 switch (State) {
                     case EState::Invalid:
                         Y_ABORT("unexpected state");
@@ -401,7 +410,7 @@ namespace NKikimr {
 
                     case EState::FlushingSST:
                         // do not continue processing if there are too many writes in flight
-                        if (InFlightWrites >= GetMaxInFlightWrites()) {
+                        if (InFlightWrites >= MaxInFlightWrites) {
                             return false;
                         }
                         // try to flush SST
@@ -663,7 +672,7 @@ namespace NKikimr {
         bool FlushSST(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             // try to flush some more data; if the flush fails, it means that we have reached in flight write limit and
             // there is nothing to do here now, so we return
-            const bool flushDone = WriterPtr->FlushNext(FirstLsn, LastLsn, GetMaxInFlightWrites() - InFlightWrites);
+            const bool flushDone = WriterPtr->FlushNext(FirstLsn, LastLsn, MaxInFlightWrites - InFlightWrites);
             ProcessPendingMessages(msgsForYard);
             if (!flushDone) {
                 return false;
@@ -687,7 +696,7 @@ namespace NKikimr {
 
             // send new messages until we reach in flight limit
             std::unique_ptr<NPDisk::TEvChunkWrite> msg;
-            while (InFlightWrites < GetMaxInFlightWrites() && (msg = WriterPtr->GetPendingMessage())) {
+            while (InFlightWrites < MaxInFlightWrites && (msg = WriterPtr->GetPendingMessage())) {
                 HullCtx->VCtx->CountCompactionCost(*msg);
                 Statistics.Update(msg.get());
                 msgsForYard.push_back(std::move(msg));
@@ -696,7 +705,7 @@ namespace NKikimr {
             }
 
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
-            while (InFlightReads < GetMaxInFlightReads() && (readMsg = ReadBatcher.GetPendingMessage(
+            while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
                 HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());

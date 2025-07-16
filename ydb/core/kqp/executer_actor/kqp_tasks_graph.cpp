@@ -678,6 +678,18 @@ TString TShardKeyRanges::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, c
     return sb;
 }
 
+bool TShardKeyRanges::HasRanges() const {
+    if (IsFullRange()) {
+        return true;
+    }
+    for (const auto& range : Ranges) {
+        if (std::holds_alternative<TSerializedTableRange>(range)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const {
     if (IsFullRange()) {
         auto& protoRange = *proto->MutableFullRange();
@@ -720,12 +732,12 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskM
     }
 }
 
-void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto) const {
+void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto, bool allowPoints) const {
     if (IsFullRange()) {
         auto& protoRange = *proto->MutableRanges()->AddKeyRanges();
         FullRange->Serialize(protoRange);
     } else {
-        bool usePoints = true;
+        bool usePoints = allowPoints;
         for (auto& range : Ranges) {
             if (std::holds_alternative<TSerializedTableRange>(range)) {
                 usePoints = false;

@@ -42,6 +42,7 @@ namespace NKikimr {
         EnsureMonitoring(true);
         LWTRACK(DSProxyGetHandle, ev->Get()->Orbit);
         EnableWilsonTracing(ev, Mon->GetSamplePPM);
+
         if (ev->Get()->IsIndexOnly) {
             Mon->EventIndexRestoreGet->Inc();
             PushRequest(CreateBlobStorageGroupIndexRestoreGetRequest(
@@ -228,6 +229,29 @@ namespace NKikimr {
                 ev->Get()->Deadline
             );
         }
+    }
+
+    void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvCheckIntegrity::TPtr &ev) {
+        EnsureMonitoring(true);
+
+        Mon->EventCheckIntegrity->Inc();
+        PushRequest(CreateBlobStorageGroupCheckIntegrityRequest(
+            TBlobStorageGroupCheckIntegrityParameters{
+                .Common = {
+                    .GroupInfo = Info,
+                    .GroupQueues = Sessions->GroupQueues,
+                    .Mon = Mon,
+                    .Source = ev->Sender,
+                    .Cookie = ev->Cookie,
+                    .Now = TActivationContext::Now(),
+                    .StoragePoolCounters = StoragePoolCounters,
+                    .RestartCounter = ev->Get()->RestartCounter,
+                    .Event = ev->Get(),
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                }
+            }, std::move(ev->TraceId)),
+            ev->Get()->Deadline
+        );
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvBlock::TPtr &ev) {

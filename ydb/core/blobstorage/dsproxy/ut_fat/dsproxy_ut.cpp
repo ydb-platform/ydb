@@ -221,6 +221,7 @@ protected:
             , MessageCollectGarbageResult
             , MessageStatusResult
             , MessageBlockResult
+            , MessageCheckIntegrityResult
             , MessageStartProfilerResult
             , MessageStopProfilerResult
             , MessageVStatusResult
@@ -503,6 +504,14 @@ protected:
         ActTestFSM(ctx);
     }
 
+    void HandleCheckIntegrityResult(TEvBlobStorage::TEvCheckIntegrityResult::TPtr &ev, const TActorContext &ctx) {
+        LastResponse.Message = TResponseData::MessageCheckIntegrityResult;
+        TEvBlobStorage::TEvCheckIntegrityResult *msg = ev->Get();
+        VERBOSE_COUT("HandleCheckIntegrityResult: " << StatusToString(msg->Status));
+        LastResponse.Status = msg->Status;
+        ActTestFSM(ctx);
+    }
+
     void HandleVGetResult(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         LastResponse.Message = TResponseData::MessageVGetResult;
         const NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
@@ -643,6 +652,7 @@ public:
             HFunc(TEvBlobStorage::TEvDiscoverResult, HandleDiscoverResult);
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, HandleCollectGarbageResult);
             HFunc(TEvBlobStorage::TEvBlockResult, HandleBlockResult);
+            HFunc(TEvBlobStorage::TEvCheckIntegrityResult, HandleCheckIntegrityResult);
             HFunc(TEvProfiler::TEvStartResult, HandleStartProfilerResult);
             HFunc(TEvProfiler::TEvStopResult, HandleStopProfilerResult);
             HFunc(TEvProxyQueueState, HandleProxyQueueState);

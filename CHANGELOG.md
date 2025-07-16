@@ -30,6 +30,9 @@
 * 18794:[Fixed](https://github.com/db-platform/adb/pull/18794) a rare [bug](https://github.com/ydb-platform/ydb/issues/18615) with PQ tablet restarts. [#18794](https://github.com/ydb-platform/ydb/pull/18794) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19522:Add setting to configure drain timeout before node shutdown. #19323 [#19522](https://github.com/ydb-platform/ydb/pull/19522) ([Aleksei Kobzev](https://github.com/kobzonega))
 * 19917:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19917](https://github.com/ydb-platform/ydb/pull/19917) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20242:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20242](https://github.com/ydb-platform/ydb/pull/20242) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20155:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20155](https://github.com/ydb-platform/ydb/pull/20155) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 20083:Поправил коммит оффсетов сообщений топика при чтении. До фикса пользователь получал ошибку "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown\n". Сломали начиная с 25-1-2 [#20083](https://github.com/ydb-platform/ydb/pull/20083) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### YDB UI
 * Added [diagnostics](https://github.com/ydb-platform/ydb-embedded-ui/issues/2017) and [statistics](https://github.com/ydb-platform/ydb-embedded-ui/issues/15884) for long running queries.
@@ -46,6 +49,19 @@
 * Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/16895) with long time loading databases page on certain databases due to timeout on graph rendering.
 * Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17103) with no tablets shown for table index on tablets tab.
 * Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17226) with Optional<Struct> columns are always shown as NULLs.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/17813) crash in /viewer/storage handler.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) keep precision of double values on serialization.
+* Fixed long errors on vdisk evict when no pdisks are available.
+* Improved vdisk evict swagger and parameters handling.
+* Fixed handling of metadata cache requests.
+* Improved annotations.
+* Fixes list of nodes and databases in broken environment, closes https://github.com/ydb-platform/ydb/issues/16477
+* Support form-urlencoded in base class.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) storage nodes, some other minor fixes.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19810) - minimized returned data to avoid large responses.
+* Don't report fake limit as total node memory.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) – make nodes less critical (to make cluster less critical). [#20053](https://github.com/ydb-platform/ydb/pull/20053) ([Alexey Efimov](https://github.com/adameat))
+
 
 ### Performance
 
@@ -54,3 +70,5 @@
 * 19447:Enhancements to shared threads in the actor system. We stabilized dynamic resizing of thread count in pools. Implemented instant thread pool upscaling to utilize up to 4 cores under sudden bursts of load (this improvement is particularly noticeable in the IC pool) [#19447](https://github.com/ydb-platform/ydb/pull/19447) ([kruall](https://github.com/kruall))
 * 19445:Improved the actor system structures for intensive multithreaded workloads. [#19445](https://github.com/ydb-platform/ydb/pull/19445) ([kruall](https://github.com/kruall))
 * 19910:Enhanced pool scaling when using shared threads and available CPU resources. [#19910](https://github.com/ydb-platform/ydb/pull/19910) ([kruall](https://github.com/kruall))
+* 20197:Added early termination optimization for `GraceJoin`: if one side is empty and the join kind guarantees an empty result, the other side is no longer read. [#20197](https://github.com/ydb-platform/ydb/pull/20197) ([Filitov Mikhail](https://github.com/lll-phill-lll))
+

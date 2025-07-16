@@ -687,7 +687,8 @@ def main():
         "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
     ]
     
-    table_path = "github_data/all_issues_table_2"
+    table_path = "github_data/issues"
+
     full_table_path = f"{DATABASE_PATH}/{table_path}"
     batch_size = 100
     

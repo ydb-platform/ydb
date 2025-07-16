@@ -140,6 +140,8 @@ namespace NKikimr {
         NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
+        NMonGroup::TFreshDataSpaceGroup FreshDataSpaceGroup;
+        NMonGroup::TUserBlobSpaceGroup UserBlobSpaceGroup;
 
         THullCtx(
                 TVDiskContextPtr vctx,
@@ -188,4 +190,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

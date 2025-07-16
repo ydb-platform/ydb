@@ -246,18 +246,20 @@ class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable
 public:
     TSolomonAccessorClient(
         const TString& defaultReplica,
+        ui64 maxApiInflight,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : DefaultReplica(defaultReplica)
+        , MaxApiInflight(maxApiInflight)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
 
-        HttpConfig.SetMaxInFlightCount(HttpMaxInflight);
+        HttpConfig.SetMaxInFlightCount(MaxApiInflight);
         HttpGateway = IHTTPGateway::Make(&HttpConfig);
 
         GrpcConfig.Locator = GetGrpcSolomonEndpoint();
         GrpcConfig.EnableSsl = Settings.GetUseSsl();
-        GrpcConfig.MaxInFlight = GrpcMaxInflight;
+        GrpcConfig.MaxInFlight = MaxApiInflight;
         GrpcClient = std::make_shared<NYdbGrpc::TGRpcClientLow>();
         GrpcConnection = GrpcClient->CreateGRpcServiceConnection<DataService>(GrpcConfig);
     }
@@ -591,8 +593,7 @@ private:
 private:
     const TString DefaultReplica;
     const ui64 ListSizeLimit = 1ull << 20;
-    const ui64 HttpMaxInflight = 50;
-    const ui64 GrpcMaxInflight = 50;
+    const ui64 MaxApiInflight;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
@@ -616,7 +617,12 @@ ISolomonAccessorClient::Make(
         defaultReplica = it->second;
     }
 
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, std::move(source), credentialsProvider);
+    ui64 maxApiInflight;
+    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
+        maxApiInflight = FromString<ui64>(it->second);
+    }
+
+    return std::make_shared<TSolomonAccessorClient>(defaultReplica, maxApiInflight, std::move(source), credentialsProvider);
 }
 
 } // namespace NYql::NSo

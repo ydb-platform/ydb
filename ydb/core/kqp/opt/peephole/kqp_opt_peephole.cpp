@@ -1,3 +1,4 @@
+
 #include "kqp_opt_peephole.h"
 #include "kqp_opt_peephole_rules.h"
 
@@ -88,8 +89,8 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
 
 class TKqpPeepholeTransformer : public TOptimizeTransformerBase {
 public:
-    TKqpPeepholeTransformer(TTypeAnnotationContext& typesCtx, TSet<TString> disabledOpts)
-        : TOptimizeTransformerBase(&typesCtx, NYql::NLog::EComponent::ProviderKqp, disabledOpts)
+    TKqpPeepholeTransformer(TTypeAnnotationContext& typesCtx, TSet<TString> disabledOpts, TKikimrConfiguration::TPtr config)
+        : TOptimizeTransformerBase(&typesCtx, NYql::NLog::EComponent::ProviderKqp, disabledOpts), Config(config)
     {
 #define HNDL(name) "KqpPeephole-"#name, Hndl(&TKqpPeepholeTransformer::name)
         AddHandler(0, &TDqReplicate::Match, HNDL(RewriteReplicate));
@@ -98,7 +99,6 @@ public:
         AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
-        AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
@@ -154,17 +154,14 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteBlockHashJoin(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteBlockHashJoin(node, ctx);
-        DumpAppliedRule("RewriteBlockHashJoin", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
     TMaybeNode<TExprBase> RewriteKqpWriteConstraint(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteWriteConstraint(node, ctx);
         DumpAppliedRule("RewriteKqpWriteConstraint", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
+
+private:
+    TKikimrConfiguration::TPtr Config;
 };
 
 struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
@@ -183,7 +180,7 @@ struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
-        pipeline->Add(new TKqpPeepholeTransformer(*pipeline->GetTypeAnnotationContext(), DisabledOpts), "KqpPeephole");
+        pipeline->Add(new TKqpPeepholeTransformer(*pipeline->GetTypeAnnotationContext(), DisabledOpts, Config), "KqpPeephole");
     }
 
 private:
@@ -651,3 +648,4 @@ TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(
 }
 
 } // namespace NKikimr::NKqp::NOpt
+

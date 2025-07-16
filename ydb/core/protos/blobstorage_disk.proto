@@ -80,7 +80,7 @@ message TPDiskMetrics {
     optional uint64 NonRealTimeMs = 6; // ms per second of non-realtime, [0..1000]
     optional uint64 SlowDeviceMs = 7; // ms per second of slow device, [0..1000]
     optional uint32 MaxIOPS = 8; // number of IOPS this device can carry out
-    
+
     // maximum expected slot size; if set, then it is guaranteed that EnforcedDynamicSlotSize bytes of space are
     // available for every slot over this PDisk; if not set, then no space enforcement assumed
     optional uint64 EnforcedDynamicSlotSize = 9;
@@ -88,4 +88,6 @@ message TPDiskMetrics {
     optional TPDiskState.E State = 10;
 
     optional uint64 UpdateTimestamp = 11; // TInstant::GetValue()
+    optional uint64 SlotCount = 12;
+    optional uint32 SlotSizeInUnits = 13;
 }

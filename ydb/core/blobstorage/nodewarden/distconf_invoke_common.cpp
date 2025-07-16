@@ -165,6 +165,9 @@ namespace NKikimr::NStorage {
             case TQuery::kGetStateStorageConfig:
                 return GetStateStorageConfig(record.GetGetStateStorageConfig());
 
+            case TQuery::kSelfHealStateStorage:
+                return SelfHealStateStorage(record.GetSelfHealStateStorage());
+
             case TQuery::kNotifyBridgeSyncFinished:
                 return NotifyBridgeSyncFinished(record.GetNotifyBridgeSyncFinished());
         }

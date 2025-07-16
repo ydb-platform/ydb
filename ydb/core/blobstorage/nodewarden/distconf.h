@@ -258,6 +258,8 @@ namespace NKikimr::NStorage {
         using TScatterTasks = THashMap<ui64, TScatterTask>;
         TScatterTasks ScatterTasks;
 
+        std::optional<TActorId> StateStorageSelfHealActor;
+
         // root node operation
         enum class ERootState {
             INITIAL,

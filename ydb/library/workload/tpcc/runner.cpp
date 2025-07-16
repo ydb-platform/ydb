@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "log.h"
 #include "log_backend.h"
+#include "path_checker.h"
 #include "runner_display_data.h"
 #include "runner_tui.h"
 #include "task_queue.h"
@@ -134,6 +135,8 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::cerr << "Specified zero warehouses" << std::endl;
         std::exit(1);
     }
+
+    CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 

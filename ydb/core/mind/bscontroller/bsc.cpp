@@ -69,8 +69,6 @@ bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     const TGroupStatus prev = Status;
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
-    // TODO(alexvru): bridge group status
-
     if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
             VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty()) {
         Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
@@ -108,6 +106,103 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
         }
 
         LayoutCorrect = layout.IsCorrect();
+    }
+}
+
+void TBlobStorageController::TGroupInfo::FillInGroupParameters(
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+        TBlobStorageController *self) const {
+    if (GroupMetrics) {
+        params->MergeFrom(GroupMetrics->GetGroupParameters());
+    } else if (BridgeGroupInfo) {
+        for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
+            if (TGroupInfo *groupInfo = self->FindGroup(TGroupId::FromValue(groupId))) {
+                if (self->BridgeInfo && groupInfo->BridgePileId &&
+                        self->BridgeInfo->GetPile(*groupInfo->BridgePileId)->State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                    continue; // ignore groups from disconnected piles
+                }
+                groupInfo->FillInGroupParameters(params, self);
+            } else {
+                Y_DEBUG_ABORT();
+            }
+        }
+    } else {
+        FillInResources(params->MutableAssuredResources(), true);
+        FillInResources(params->MutableCurrentResources(), false);
+        FillInVDiskResources(params);
+    }
+}
+
+void TBlobStorageController::TGroupInfo::FillInResources(
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const {
+    // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
+    std::optional<ui64> size;
+    std::optional<double> iops;
+    std::optional<ui64> readThroughput;
+    std::optional<ui64> writeThroughput;
+    std::optional<double> occupancy;
+    for (const TVSlotInfo *vslot : VDisksInGroup) {
+        const TPDiskInfo *pdisk = vslot->PDisk;
+        const auto& metrics = pdisk->Metrics;
+        const ui32 shareFactor = countMaxSlots ? pdisk->ExpectedSlotCount : pdisk->NumActiveSlots;
+        ui64 vdiskSlotSize = 0;
+        if (metrics.HasEnforcedDynamicSlotSize()) {
+            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize();
+        } else if (metrics.GetTotalSize()) {
+            vdiskSlotSize = metrics.GetTotalSize() / shareFactor;
+        }
+        if (vdiskSlotSize) {
+            size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
+        }
+        if (metrics.HasMaxIOPS()) {
+            iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
+        }
+        if (metrics.HasMaxReadThroughput()) {
+            readThroughput = Min(readThroughput.value_or(Max<ui64>()), metrics.GetMaxReadThroughput() / shareFactor);
+        }
+        if (metrics.HasMaxWriteThroughput()) {
+            writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor);
+        }
+        if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
+            occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());
+        }
+    }
+
+    // and recalculate it to the total size of the group according to the erasure
+    TBlobStorageGroupType type(ErasureSpecies);
+    const double factor = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
+    if (size) {
+        pb->SetSpace(Min<ui64>(pb->HasSpace() ? pb->GetSpace() : Max<ui64>(), *size * factor));
+    }
+    if (iops) {
+        pb->SetIOPS(Min<double>(pb->HasIOPS() ? pb->GetIOPS() : Max<double>(), *iops * VDisksInGroup.size() / type.TotalPartCount()));
+    }
+    if (readThroughput) {
+        pb->SetReadThroughput(Min<ui64>(pb->HasReadThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *readThroughput * factor));
+    }
+    if (writeThroughput) {
+        pb->SetWriteThroughput(Min<ui64>(pb->HasWriteThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *writeThroughput * factor));
+    }
+    if (occupancy) {
+        pb->SetOccupancy(Max<double>(pb->HasOccupancy() ? pb->GetOccupancy() : Min<double>(), *occupancy));
+    }
+}
+
+void TBlobStorageController::TGroupInfo::FillInVDiskResources(
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const {
+    TBlobStorageGroupType type(ErasureSpecies);
+    const double f = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
+    for (const TVSlotInfo *vslot : VDisksInGroup) {
+        const auto& m = vslot->Metrics;
+        if (m.HasAvailableSize()) {
+            pb->SetAvailableSize(Min<ui64>(pb->HasAvailableSize() ? pb->GetAvailableSize() : Max<ui64>(), f * m.GetAvailableSize()));
+        }
+        if (m.HasAllocatedSize()) {
+            pb->SetAllocatedSize(Max<ui64>(pb->HasAllocatedSize() ? pb->GetAllocatedSize() : 0, f * m.GetAllocatedSize()));
+        }
+        if (m.HasSpaceColor()) {
+            pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetSpaceColor()) : m.GetSpaceColor());
+        }
     }
 }
 
@@ -165,6 +260,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
+    auto prevStaticGroups = std::exchange(StaticGroups, {});
     StaticVDiskMap.clear();
 
     const TMonotonic mono = TActivationContext::Monotonic();
@@ -189,7 +285,11 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 StaticVDiskMap.emplace(TVDiskID(vdiskId.GroupID, 0, vdiskId), vslotId);
                 ++StaticPDisks.at(pdiskId).StaticSlotUsage;
                 SysViewChangedVSlots.insert(vslotId);
-                SysViewChangedGroups.insert(vdiskId.GroupID);
+            }
+            for (const auto& group : ss.GetGroups()) {
+                const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                StaticGroups.try_emplace(groupId, group, prevStaticGroups);
+                SysViewChangedGroups.insert(groupId);
             }
         } else {
             Y_FAIL("no storage configuration provided");
@@ -919,6 +1019,97 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
     }
 
     Y_ABORT();
+}
+
+void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBlobStorageController *controller) {
+    if (!Info || Info->IsBridged()) {
+        return;
+    }
+
+    const auto *topology = &Info->GetTopology();
+
+    TBlobStorageGroupInfo::TGroupVDisks failed(topology);
+    TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(topology);
+
+    for (const auto& vdisk : Info->GetVDisks()) {
+        const TVDiskIdShort& vdiskId = vdisk.VDiskIdShort;
+        const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(
+            Info->GetDynamicInfo().ServiceIdForOrderNumber[vdisk.OrderNumber]);
+        const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
+
+        if (const auto it = controller->StaticVSlots.find(vslotId); it != controller->StaticVSlots.end()) {
+            if (mono <= it->second.ReadySince) { // VDisk can't be treated as READY one
+                failed |= {topology, vdiskId};
+            } else if (const TPDiskInfo *pdisk = controller->FindPDisk(vslotId.ComprisingPDiskId()); !pdisk || !pdisk->HasGoodExpectedStatus()) {
+                failedByPDisk |= {topology, vdiskId};
+            }
+        } else {
+            failed |= {topology, vdiskId};
+        }
+    }
+
+    Status = {
+        .OperatingStatus = DeriveStatus(topology, failed),
+        .ExpectedStatus = DeriveStatus(topology, failed | failedByPDisk),
+    };
+}
+
+void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageController *controller) {
+    LayoutCorrect = true;
+    if (!Info || Info->IsBridged()) {
+        return;
+    }
+
+    NLayoutChecker::TGroupLayout layout(Info->GetTopology());
+    NLayoutChecker::TDomainMapper mapper;
+    TGroupGeometryInfo geom(Info->Type, controller->SelfManagementEnabled
+        ? controller->StorageConfig->GetSelfManagementConfig().GetGeometry()
+        : NKikimrBlobStorage::TGroupGeometry());
+
+    for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
+        const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i);
+    }
+
+    LayoutCorrect = layout.IsCorrect();
+}
+
+TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TStaticGroupInfo::GetStatus(
+        const TStaticGroupFinder& finder) const {
+    if (Info && Info->IsBridged()) {
+        std::optional<TGroupInfo::TGroupStatus> res;
+        for (TGroupId groupId : Info->GetBridgeGroupIds()) {
+            if (TStaticGroupInfo *g = finder(groupId)) {
+                if (const auto& s = g->GetStatus(finder); res) {
+                    res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
+                } else {
+                    res.emplace(s);
+                }
+            } else {
+                Y_DEBUG_ABORT();
+            }
+        }
+        return res.value_or(TGroupInfo::TGroupStatus());
+    } else {
+        return Status;
+    }
+}
+
+bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGroupFinder& finder) const {
+    if (Info && Info->IsBridged()) {
+        for (TGroupId groupId : Info->GetBridgeGroupIds()) {
+            if (TStaticGroupInfo *g = finder(groupId)) {
+                if (!g->IsLayoutCorrect(finder)) {
+                    return false;
+                }
+            } else {
+                Y_DEBUG_ABORT();
+            }
+        }
+        return true;
+    } else {
+        return LayoutCorrect;
+    }
 }
 
 } // NBsController

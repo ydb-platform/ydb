@@ -128,16 +128,30 @@ class Key(object):
 def nemesis_logic(arguments):
     logging.config.dictConfig(setup_logging_config(arguments.log_file))
     ssh_username = os.getenv('NEMESIS_USER', 'robot-nemesis')
-    nemesis = catalog.nemesis_factory(
-        ExternalKiKiMRCluster(
-            arguments.ydb_cluster_template,
-            kikimr_configure_binary_path=None,
-            kikimr_path=arguments.ydb_binary_path,
+    yaml_config = arguments.yaml_config
+    if yaml_config is not None:
+        nemesis = catalog.nemesis_factory(
+            ExternalKiKiMRCluster(
+                cluster_template=arguments.ydb_cluster_template,
+                kikimr_configure_binary_path=None,
+                kikimr_path=arguments.ydb_binary_path,
+                ssh_username=ssh_username,
+                yaml_config=yaml_config,
+            ),
             ssh_username=ssh_username,
-        ),
-        ssh_username=ssh_username,
-        enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,
-    )
+            enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,
+        )
+    else:
+        nemesis = catalog.nemesis_factory(
+            ExternalKiKiMRCluster(
+                cluster_template=arguments.ydb_cluster_template,
+                kikimr_configure_binary_path=None,
+                kikimr_path=arguments.ydb_binary_path,
+                ssh_username=ssh_username,
+            ),
+            ssh_username=ssh_username,
+            enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,
+        )
     nemesis.start()
     monitor.setup_page(arguments.mon_host, arguments.mon_port)
     nemesis.stop()
@@ -145,8 +159,9 @@ def nemesis_logic(arguments):
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--ydb-cluster-template', required=True, help='Path to the Yandex DB cluster template')
-    parser.add_argument('--ydb-binary-path', required=True, help='Path to the Yandex DB binary')
+    parser.add_argument('--ydb-cluster-template', required=True, help='Path to the YDB cluster template')
+    parser.add_argument('--ydb-binary-path', required=True, help='Path to the YDB binary')
+    parser.add_argument('--yaml-config', required=False, default=None, help='Path to the YDB configuration v2')
     parser.add_argument('--private-key-file', default='')
     parser.add_argument('--log-file', default=None)
     parser.add_argument('--mon-port', default=8666, type=lambda x: int(x))

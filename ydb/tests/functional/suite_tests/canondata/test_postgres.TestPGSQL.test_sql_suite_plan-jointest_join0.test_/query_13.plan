@@ -96,9 +96,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/int4_tbl",
                                                                         "ReadColumns": [
-                                                                            "f1"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "f1 (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
@@ -128,9 +125,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
-                                                                                            "unique2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "unique1 (-\u221e, +\u221e)",
                                                                                             "unique2 (-\u221e, +\u221e)"
                                                                                         ],

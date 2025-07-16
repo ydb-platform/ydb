@@ -11754,6 +11754,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // TODO: validate no stream created
 
         if (WithIncremental) {
+            // Pass time to prevent stream names clashing
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
             TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", R"(
                 Name: ".backups/collections/MyCollection1"
             )");

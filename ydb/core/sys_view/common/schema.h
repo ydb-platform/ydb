@@ -36,10 +36,12 @@ constexpr TStringBuf TabletsName = "hive_tablets";
 constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
+constexpr TStringBuf StorePrimaryIndexSchemaStatsName = "store_primary_index_schema_stats";
 constexpr TStringBuf StorePrimaryIndexPortionStatsName = "store_primary_index_portion_stats";
 constexpr TStringBuf StorePrimaryIndexGranuleStatsName = "store_primary_index_granule_stats";
 constexpr TStringBuf StorePrimaryIndexOptimizerStatsName = "store_primary_index_optimizer_stats";
 constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
+constexpr TStringBuf TablePrimaryIndexSchemaStatsName = "primary_index_schema_stats";
 constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
 constexpr TStringBuf TablePrimaryIndexGranuleStatsName = "primary_index_granule_stats";
 constexpr TStringBuf TablePrimaryIndexOptimizerStatsName = "primary_index_optimizer_stats";
@@ -804,6 +806,26 @@ struct Schema : NIceDb::Schema {
             IndexSize,
             FollowerId>;
     };
+
+    struct PrimaryIndexSchemaStats : Table<24> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PresetId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SchemaVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct SchemaSnapshotPlanStep : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct SchemaSnapshotTxId : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct SchemaDetails : Column<6, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<TabletId, PresetId, SchemaVersion>;
+        using TColumns = TableColumns<
+            TabletId,
+            PresetId,
+            SchemaVersion,
+            SchemaSnapshotPlanStep,
+            SchemaSnapshotTxId,
+            SchemaDetails
+        >;
+    };
+
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);

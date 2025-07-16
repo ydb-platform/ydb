@@ -7,32 +7,12 @@ namespace NKikimr::NOlap::NReader::NSimple {
 TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
-    ui32 sourceIdx = 0;
-    std::deque<TSourceConstructor> sources;
-    const auto& portions = GetReadMetadata()->SelectInfo->Portions;
-    ui64 compactedPortionsBytes = 0;
-    ui64 insertedPortionsBytes = 0;
-    ui64 committedPortionsBytes = 0;
-    for (auto&& i : portions) {
-        if (i->GetPortionType() == EPortionType::Compacted) {
-            compactedPortionsBytes += i->GetTotalBlobBytes();
-        } else if (i->GetProduced() == NPortion::EProduced::INSERTED) {
-            insertedPortionsBytes += i->GetTotalBlobBytes();
-        } else {
-            committedPortionsBytes += i->GetTotalBlobBytes();
-        }
-
-        sources.emplace_back(TSourceConstructor(sourceIdx++, i, context));
-    }
-    Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
-
+    auto constructor = SpecialReadContext->GetReadMetadata()->ExtractSelectInfo();
+    constructor->FillReadStats(GetReadMetadata()->ReadStats);
+    Scanner =
+        std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
     auto& stats = GetReadMetadata()->ReadStats;
-    stats->IndexPortions = GetReadMetadata()->SelectInfo->Portions.size();
-    stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
-    stats->InsertedPortionsBytes = insertedPortionsBytes;
-    stats->CompactedPortionsBytes = compactedPortionsBytes;
-    stats->CommittedPortionsBytes = committedPortionsBytes;
 }
 
 std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {

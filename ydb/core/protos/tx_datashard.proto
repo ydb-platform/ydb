@@ -437,6 +437,13 @@ message TDropCdcStreamNotice {
     optional TSnapshot DropSnapshot = 4;
 }
 
+message TRotateCdcStreamNotice {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 TableSchemaVersion = 2;
+    optional NKikimrProto.TPathID OldStreamPathId = 3;
+    optional NKikimrSchemeOp.TCdcStreamDescription NewStreamDescription = 4;
+}
+
 message TAsyncIndexInfo {
 }
 
@@ -498,6 +505,7 @@ message TFlatSchemeTransaction {
     optional TCreateCdcStreamNotice CreateCdcStreamNotice = 18;
     optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19;
     optional TDropCdcStreamNotice DropCdcStreamNotice = 20;
+    optional TRotateCdcStreamNotice RotateCdcStreamNotice = 24;
     optional TMoveIndex MoveIndex = 21;
 
     optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
@@ -2227,6 +2235,12 @@ message TTxVolatileDetails {
     // When true marks an arbiter for other participants
     // Arbiters hold outgoing readsets until the transaction is decided
     optional bool IsArbiter = 9;
+
+    // When true readset expectations are disabled
+    // This is used when converting non-volatile distributed transactions to
+    // optimistic volatile execution for compatibility with shards which don't
+    // support readset flags.
+    optional bool DisableExpectations = 10;
 }
 
 // Sent by datashard when some overload reason stopped being relevant

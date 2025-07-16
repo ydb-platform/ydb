@@ -21,41 +21,35 @@ enum class EFetchingStage : ui32 {
     Error
 };
 
-class TFetcherMemoryProcessInfo {
-private:
-    static inline TAtomicCounter Counter = 0;
-    ui64 MemoryProcessId = Counter.Inc();
-
-public:
-    ui64 GetMemoryProcessId() const {
-        return MemoryProcessId;
-    }
-};
-
 class TCurrentContext: TMoveOnly {
 private:
     std::optional<std::vector<TPortionDataAccessor>> Accessors;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
-    std::shared_ptr<NGroupedMemoryManager::TScopeGuard> MemoryProcessScopeGuard;
-    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryProcessGroupGuard;
-    TFetcherMemoryProcessInfo MemoryProcessInfo;
+    std::shared_ptr<NGroupedMemoryManager::TScopeGuard> MemoryScopeGuard;
+    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryGroupGuard;
     std::optional<NBlobOperations::NRead::TCompositeReadBlobs> Blobs;
     std::optional<std::vector<NArrow::TGeneralContainer>> AssembledData;
+    inline static TAtomicCounter MemoryScopeIdCounter = 0;
 
 public:
+    void Abort() {
+        if (Blobs) {
+            Blobs->Clear();
+            Blobs.reset();
+        }
+    }
+
     ui64 GetMemoryProcessId() const {
-        return MemoryProcessInfo.GetMemoryProcessId();
+        return MemoryProcessGuard->GetProcessId();
     }
 
     ui64 GetMemoryScopeId() const {
-        AFL_VERIFY(!!MemoryProcessScopeGuard);
-        return MemoryProcessScopeGuard->GetScopeId();
+        return MemoryScopeGuard->GetScopeId();
     }
 
     ui64 GetMemoryGroupId() const {
-        AFL_VERIFY(!!MemoryProcessGroupGuard);
-        return MemoryProcessGroupGuard->GetGroupId();
+        return MemoryGroupGuard->GetGroupId();
     }
 
     void SetBlobs(NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
@@ -72,7 +66,7 @@ public:
         AFL_VERIFY(!!Blobs);
         auto result = std::move(*Blobs);
         Blobs.reset();
-        return result;
+        return std::move(result);
     }
 
     void ResetBlobs() {
@@ -91,15 +85,12 @@ public:
         return result;
     }
 
-    TCurrentContext(const TFetcherMemoryProcessInfo& memoryProcessInfo)
-        : MemoryProcessInfo(memoryProcessInfo)
+    TCurrentContext(const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard)
+        : MemoryProcessGuard(memoryProcessGuard)
     {
-        static std::shared_ptr<NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
-
-        MemoryProcessGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard(GetMemoryProcessId(), { stageFeatures });
-        MemoryProcessScopeGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildScopeGuard(GetMemoryProcessId(), 1);
-        MemoryProcessGroupGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildGroupGuard(GetMemoryProcessId(), 1);
+        AFL_VERIFY(MemoryProcessGuard);
+        MemoryScopeGuard = MemoryProcessGuard->BuildScopeGuard(MemoryScopeIdCounter.Inc());
+        MemoryGroupGuard = MemoryScopeGuard->BuildGroupGuard();
     }
 
     void SetPortionAccessors(std::vector<TPortionDataAccessor>&& acc) {
@@ -261,12 +252,12 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY(NBlobOperations::EConsumer, Consumer, NBlobOperations::EConsumer::UNDEFINED);
     YDB_READONLY_DEF(TString, ExternalTaskId);
-    YDB_READONLY_DEF(TFetcherMemoryProcessInfo, MemoryProcessInfo);
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>, MemoryProcessGuard);
 
 public:
-    TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<TVersionedIndex>& versions,
+    TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
-        const std::optional<TFetcherMemoryProcessInfo>& memoryProcessInfo = std::nullopt);
+        const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard);
 };
 
 }   // namespace NKikimr::NOlap::NDataFetcher

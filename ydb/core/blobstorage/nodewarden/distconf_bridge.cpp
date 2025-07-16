@@ -199,4 +199,34 @@ namespace NKikimr::NStorage {
         }
     }
 
+    bool TDistributedConfigKeeper::UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config) {
+        bool changes = false;
+        if (config->HasClusterStateHistory()) {
+            Y_DEBUG_ABORT_UNLESS(config->HasClusterState());
+            const auto& clusterState = config->GetClusterState();
+
+            auto *entries = config->MutableClusterStateHistory()->MutableUnsyncedEntries();
+            for (int i = 0; i < entries->size(); ++i) {
+                auto *piles = entries->Mutable(i)->MutableUnsyncedPiles();
+                for (int j = 0; j < piles->size(); ++j) {
+                    auto pileId = piles->at(j);
+                    if (pileId < clusterState.PerPileStateSize() &&
+                            clusterState.GetPerPileState(pileId) != NKikimrBridge::TClusterState::DISCONNECTED) {
+                        // we assume this pile is not disconnected and thus being the part of the storage config quorum,
+                        // so it has this configuration persisted
+                        piles->SwapElements(j--, piles->size() - 1);
+                        piles->RemoveLast();
+                        changes = true;
+                    }
+                }
+                if (piles->empty() && i != entries->size() - 1) {
+                    // drop fully synced entry (but keeping the last one)
+                    entries->DeleteSubrange(i--, 1);
+                    changes = true;
+                }
+            }
+        }
+        return changes;
+    }
+
 } // NKikimr::NStorage

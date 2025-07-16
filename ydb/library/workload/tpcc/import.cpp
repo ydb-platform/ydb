@@ -2,6 +2,7 @@
 
 #include "constants.h"
 #include "data_splitter.h"
+#include "import_tui.h"
 #include "log.h"
 #include "log_backend.h"
 #include "util.h"
@@ -68,14 +69,14 @@ int GetBackoffWaitMs(int retryCount) {
 //-----------------------------------------------------------------------------
 
 // Generates a random string of length (strLen-1) to match Benchbase's TPCCUtil.randomStr behavior
-TString RandomStringBenchbase(int strLen, char baseChar = 'a') {
+TString RandomStringBenchbase(TReallyFastRng32& fastRng, int strLen, char baseChar = 'a') {
     if (strLen > 1) {
         int actualLength = strLen - 1;
         TString result;
         result.reserve(actualLength);
 
         for (int i = 0; i < actualLength; ++i) {
-            result += static_cast<char>(baseChar + RandomNumber(0, 25));
+            result += static_cast<char>(baseChar + RandomNumber(fastRng, 0, 25));
         }
         return result;
     } else {
@@ -84,24 +85,24 @@ TString RandomStringBenchbase(int strLen, char baseChar = 'a') {
 }
 
 // Generates a random string with [a-z] characters
-TString RandomAlphaString(int minLength, int maxLength) {
-    int length = RandomNumber(minLength, maxLength);
-    return RandomStringBenchbase(length, 'a');
+TString RandomAlphaString(TReallyFastRng32& fastRng, int minLength, int maxLength) {
+    int length = RandomNumber(fastRng, minLength, maxLength);
+    return RandomStringBenchbase(fastRng, length, 'a');
 }
 
 // Generates a random string with [A-Z] characters
-TString RandomUpperAlphaString(int minLength, int maxLength) {
-    int length = RandomNumber(minLength, maxLength);
-    return RandomStringBenchbase(length, 'A');
+TString RandomUpperAlphaString(TReallyFastRng32& fastRng, int minLength, int maxLength) {
+    int length = RandomNumber(fastRng, minLength, maxLength);
+    return RandomStringBenchbase(fastRng, length, 'A');
 }
 
 // Generates a random string with [09] characters
-TString RandomNumericString(int length) {
+TString RandomNumericString(TReallyFastRng32& fastRng, int length) {
     TString result;
     result.reserve(length);
 
     for (int i = 0; i < length; ++i) {
-        result += static_cast<char>('0' + RandomNumber(0, 9));
+        result += static_cast<char>('0' + RandomNumber(fastRng, 0, 9));
     }
     return result;
 }
@@ -126,6 +127,7 @@ NTable::TBulkUpsertResult LoadItems(
     NTable::TTableClient& client,
     const TString& tableFullPath,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading " << ITEM_COUNT << " items...");
@@ -135,25 +137,25 @@ NTable::TBulkUpsertResult LoadItems(
 
     for (int i = 1; i <= ITEM_COUNT; ++i) {
         TString data;
-        int randPct = RandomNumber(1, 100);
-        int len = RandomNumber(26, 50);
+        int randPct = RandomNumber(fastRng, 1, 100);
+        int len = RandomNumber(fastRng, 26, 50);
         if (randPct > 10) {
             // 90% of time i_data isa random string of length [26 .. 50]
-            data = RandomStringBenchbase(len);
+            data = RandomStringBenchbase(fastRng, len);
         } else {
             // 10% of time i_data has "ORIGINAL" crammed somewhere in
             // middle
-            int startORIGINAL = RandomNumber(2, len - 8);
-            data = RandomStringBenchbase(startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(len - startORIGINAL - 8);
+            int startORIGINAL = RandomNumber(fastRng, 2, len - 8);
+            data = RandomStringBenchbase(fastRng, startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(fastRng, len - startORIGINAL - 8);
         }
 
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("I_ID").Int32(i)
-            .AddMember("I_NAME").Utf8(RandomAlphaString(14, 24))
-            .AddMember("I_PRICE").Double(RandomNumber(100, 10000) / 100.0)
+            .AddMember("I_NAME").Utf8(RandomAlphaString(fastRng, 14, 24))
+            .AddMember("I_PRICE").Double(RandomNumber(fastRng, 100, 10000) / 100.0)
             .AddMember("I_DATA").Utf8(data)
-            .AddMember("I_IM_ID").Int32(RandomNumber(1, 10000))
+            .AddMember("I_IM_ID").Int32(RandomNumber(fastRng, 1, 10000))
             .EndStruct();
     }
 
@@ -174,6 +176,7 @@ NTable::TBulkUpsertResult LoadWarehouses(
     int startId,
     int lastId,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading warehouses " << startId << " to " << lastId);
@@ -186,12 +189,12 @@ NTable::TBulkUpsertResult LoadWarehouses(
             .BeginStruct()
             .AddMember("W_ID").Int32(warehouseId)
             .AddMember("W_YTD").Double(300000.00)
-            .AddMember("W_TAX").Double(RandomNumber(0, 2000) / 10000.0)
-            .AddMember("W_NAME").Utf8(RandomAlphaString(6, 10))
-            .AddMember("W_STREET_1").Utf8(RandomAlphaString(10, 20))
-            .AddMember("W_STREET_2").Utf8(RandomAlphaString(10, 20))
-            .AddMember("W_CITY").Utf8(RandomAlphaString(10, 20))
-            .AddMember("W_STATE").Utf8(RandomUpperAlphaString(3, 3))
+            .AddMember("W_TAX").Double(RandomNumber(fastRng, 0, 2000) / 10000.0)
+            .AddMember("W_NAME").Utf8(RandomAlphaString(fastRng, 6, 10))
+            .AddMember("W_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("W_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("W_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("W_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
             .AddMember("W_ZIP").Utf8("123456789")
             .EndStruct();
     }
@@ -214,6 +217,7 @@ NTable::TBulkUpsertResult LoadStock(
     int itemId,
     int itemsToLoad,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading stock for warehouse " << wh << " items " << itemId << " to " << (itemId + itemsToLoad - 1));
@@ -226,37 +230,37 @@ NTable::TBulkUpsertResult LoadStock(
 
         // s_data - match Benchbase inline logic exactly
         TString data;
-        int randPct = RandomNumber(1, 100);
-        int len = RandomNumber(26, 50);
+        int randPct = RandomNumber(fastRng, 1, 100);
+        int len = RandomNumber(fastRng, 26, 50);
         if (randPct > 10) {
             // 90% of time i_data isa random string of length [26 ..
             // 50]
-            data = RandomStringBenchbase(len);
+            data = RandomStringBenchbase(fastRng, len);
         } else {
             // 10% of time i_data has "ORIGINAL" crammed somewhere
             // in middle
-            int startORIGINAL = RandomNumber(2, len - 8);
-            data = RandomStringBenchbase(startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(len - startORIGINAL - 8);
+            int startORIGINAL = RandomNumber(fastRng, 2, len - 8);
+            data = RandomStringBenchbase(fastRng, startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(fastRng, len - startORIGINAL - 8);
         }
 
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("S_W_ID").Int32(wh)
             .AddMember("S_I_ID").Int32(currentItemId)
-            .AddMember("S_QUANTITY").Int32(RandomNumber(10, 100))
+            .AddMember("S_QUANTITY").Int32(RandomNumber(fastRng, 10, 100))
             .AddMember("S_ORDER_CNT").Int32(0)
             .AddMember("S_REMOTE_CNT").Int32(0)
             .AddMember("S_DATA").Utf8(data)
-            .AddMember("S_DIST_01").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_02").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_03").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_04").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_05").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_06").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_07").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_08").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_09").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_10").Utf8(RandomStringBenchbase(24))
+            .AddMember("S_DIST_01").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_02").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_03").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_04").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_05").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_06").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_07").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_08").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_09").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_10").Utf8(RandomStringBenchbase(fastRng, 24))
             .EndStruct();
     }
 
@@ -277,6 +281,7 @@ NTable::TBulkUpsertResult LoadDistricts(
     int startId,
     int lastId,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading districts for warehouses " << startId << " to " << lastId);
@@ -286,20 +291,20 @@ NTable::TBulkUpsertResult LoadDistricts(
 
     for (int warehouseId = startId; warehouseId <= lastId; ++warehouseId) {
         for (int districtId = DISTRICT_LOW_ID; districtId <= DISTRICT_HIGH_ID; ++districtId) {
-            valueBuilder.AddListItem()
-                .BeginStruct()
-                .AddMember("D_W_ID").Int32(warehouseId)
-                .AddMember("D_ID").Int32(districtId)
-                .AddMember("D_YTD").Double(30000.00)
-                .AddMember("D_TAX").Double(RandomNumber(0, 2000) / 10000.0)
-                .AddMember("D_NEXT_O_ID").Int32(CUSTOMERS_PER_DISTRICT + 1)
-                .AddMember("D_NAME").Utf8(RandomAlphaString(6, 10))
-                .AddMember("D_STREET_1").Utf8(RandomAlphaString(10, 20))
-                .AddMember("D_STREET_2").Utf8(RandomAlphaString(10, 20))
-                .AddMember("D_CITY").Utf8(RandomAlphaString(10, 20))
-                .AddMember("D_STATE").Utf8(RandomUpperAlphaString(3, 3))
-                .AddMember("D_ZIP").Utf8("123456789")
-                .EndStruct();
+                    valueBuilder.AddListItem()
+            .BeginStruct()
+            .AddMember("D_W_ID").Int32(warehouseId)
+            .AddMember("D_ID").Int32(districtId)
+            .AddMember("D_YTD").Double(30000.00)
+            .AddMember("D_TAX").Double(RandomNumber(fastRng, 0, 2000) / 10000.0)
+            .AddMember("D_NEXT_O_ID").Int32(CUSTOMERS_PER_DISTRICT + 1)
+            .AddMember("D_NAME").Utf8(RandomAlphaString(fastRng, 6, 10))
+            .AddMember("D_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("D_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("D_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("D_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
+            .AddMember("D_ZIP").Utf8("123456789")
+            .EndStruct();
         }
     }
 
@@ -320,6 +325,7 @@ NTable::TBulkUpsertResult LoadCustomers(
     int wh,
     int district,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading customers for warehouse " << wh << " district " << district);
@@ -335,31 +341,31 @@ NTable::TBulkUpsertResult LoadCustomers(
             last = GetNonUniformRandomLastNameForLoad();
         }
 
-        TString credit = RandomNumber(1, 100) <= 10 ? "BC" : "GC";
+        TString credit = RandomNumber(fastRng, 1, 100) <= 10 ? "BC" : "GC";
 
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("C_W_ID").Int32(wh)
             .AddMember("C_D_ID").Int32(district)
             .AddMember("C_ID").Int32(customerId)
-            .AddMember("C_DISCOUNT").Double(RandomNumber(1, 5000) / 10000.0)
+            .AddMember("C_DISCOUNT").Double(RandomNumber(fastRng, 1, 5000) / 10000.0)
             .AddMember("C_CREDIT").Utf8(credit)
             .AddMember("C_LAST").Utf8(last)
-            .AddMember("C_FIRST").Utf8(RandomAlphaString(8, 16))
+            .AddMember("C_FIRST").Utf8(RandomAlphaString(fastRng, 8, 16))
             .AddMember("C_CREDIT_LIM").Double(50000.00)
             .AddMember("C_BALANCE").Double(-10.00)
             .AddMember("C_YTD_PAYMENT").Double(10.00)
             .AddMember("C_PAYMENT_CNT").Int32(1)
             .AddMember("C_DELIVERY_CNT").Int32(0)
-            .AddMember("C_STREET_1").Utf8(RandomAlphaString(10, 20))
-            .AddMember("C_STREET_2").Utf8(RandomAlphaString(10, 20))
-            .AddMember("C_CITY").Utf8(RandomAlphaString(10, 20))
-            .AddMember("C_STATE").Utf8(RandomUpperAlphaString(3, 3))
-            .AddMember("C_ZIP").Utf8(RandomNumericString(4) + "11111")
-            .AddMember("C_PHONE").Utf8(RandomNumericString(16))
+            .AddMember("C_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("C_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("C_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("C_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
+            .AddMember("C_ZIP").Utf8(RandomNumericString(fastRng, 4) + "11111")
+            .AddMember("C_PHONE").Utf8(RandomNumericString(fastRng, 16))
             .AddMember("C_SINCE").Timestamp(TInstant::Now())
             .AddMember("C_MIDDLE").Utf8("OE")
-            .AddMember("C_DATA").Utf8(RandomAlphaString(300, 500))
+            .AddMember("C_DATA").Utf8(RandomAlphaString(fastRng, 300, 500))
             .EndStruct();
     }
 
@@ -380,6 +386,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
     int wh,
     int district,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading customer history for warehouse " << wh << " district " << district);
@@ -406,7 +413,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
             .AddMember("H_W_ID").Int32(wh)
             .AddMember("H_DATE").Timestamp(date)
             .AddMember("H_AMOUNT").Double(10.00)
-            .AddMember("H_DATA").Utf8(RandomAlphaString(10, 24))
+            .AddMember("H_DATA").Utf8(RandomAlphaString(fastRng, 10, 24))
             .AddMember("H_C_NANO_TS").Int64(nanoTs)
             .EndStruct();
     }
@@ -428,6 +435,7 @@ NTable::TBulkUpsertResult LoadOpenOrders(
     int wh,
     int district,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading open orders for warehouse " << wh << " district " << district);
@@ -445,7 +453,7 @@ NTable::TBulkUpsertResult LoadOpenOrders(
 
     for (int orderId = 1; orderId <= CUSTOMERS_PER_DISTRICT; ++orderId) {
         int customerId = customerIds[orderId - 1]; // Use shuffled customer ID
-        int carrierId = (orderId < FIRST_UNPROCESSED_O_ID) ? RandomNumber(1, 10) : 0;
+        int carrierId = (orderId < FIRST_UNPROCESSED_O_ID) ? RandomNumber(fastRng, 1, 10) : 0;
         int olCnt = GetRandomCount(wh, orderId, district); // Deterministic count
 
         valueBuilder.AddListItem()
@@ -515,6 +523,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
     int wh,
     int district,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading order lines for warehouse " << wh << " district " << district);
@@ -527,7 +536,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
 
         // Order Line data
         for (int lineNumber = 1; lineNumber <= olCnt; ++lineNumber) {
-            int itemId = RandomNumber(1, ITEM_COUNT);
+            int itemId = RandomNumber(fastRng, 1, ITEM_COUNT);
 
             // Set OL_DELIVERY_D and OL_AMOUNT based on itemId condition (like Benchbase!)
             TInstant deliveryDate;
@@ -538,7 +547,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
             } else {
                 deliveryDate = TInstant::Zero(); // epoch timestamp
                 // random within [0.01 .. 9,999.99]
-                amount = RandomNumber(1, 999999) / 100.0;
+                amount = RandomNumber(fastRng, 1, 999999) / 100.0;
             }
 
             valueBuilder.AddListItem()
@@ -552,7 +561,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
                 .AddMember("OL_AMOUNT").Double(amount)
                 .AddMember("OL_SUPPLY_W_ID").Int32(wh)
                 .AddMember("OL_QUANTITY").Double(5.0)
-                .AddMember("OL_DIST_INFO").Utf8(RandomStringBenchbase(24))
+                .AddMember("OL_DIST_INFO").Utf8(RandomStringBenchbase(fastRng, 24))
                 .EndStruct();
         }
     }
@@ -569,7 +578,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
 //-----------------------------------------------------------------------------
 
 template<typename LoadFunc>
-void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log) {
+void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::protobuf::Arena& arena, TLog* Log) {
     for (int retryCount = 0; retryCount < MAX_RETRIES; ++retryCount) {
         if (GetGlobalInterruptSource().stop_requested()) {
             break;
@@ -579,6 +588,8 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log
         if (result.IsSuccess()) {
             return;
         }
+
+        arena.Reset();
 
         const auto status = result.GetStatus();
         bool shouldFail = status == EStatus::NOT_FOUND || status == EStatus::UNDETERMINED
@@ -610,6 +621,7 @@ void LoadSmallTables(
     const TString& path,
     int warehouseCount,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     NTable::TTableClient tableClient(driver);
@@ -619,59 +631,15 @@ void LoadSmallTables(
     TString districtTablePath = path + "/" + TABLE_DISTRICT;
 
     ExecuteWithRetry("LoadItems", [&]() {
-        return LoadItems(tableClient, itemTablePath, arena, Log);
-    }, Log);
+        return LoadItems(tableClient, itemTablePath, arena, fastRng, Log);
+    }, arena, Log);
     ExecuteWithRetry("LoadWarehouses", [&]() {
-        return LoadWarehouses(tableClient, warehouseTablePath, 1, warehouseCount, arena, Log);
-    }, Log);
+        return LoadWarehouses(tableClient, warehouseTablePath, 1, warehouseCount, arena, fastRng, Log);
+    }, arena, Log);
     ExecuteWithRetry("LoadDistricts", [&]() {
-        return LoadDistricts(tableClient, districtTablePath, 1, warehouseCount, arena, Log);
-    }, Log);
+        return LoadDistricts(tableClient, districtTablePath, 1, warehouseCount, arena, fastRng, Log);
+    }, arena, Log);
 }
-
-//-----------------------------------------------------------------------------
-
-struct TIndexBuildState {
-    TOperation::TOperationId Id;
-    TString Table;
-    TString Name;
-    double Progress = 0.0;
-
-    TIndexBuildState(TOperation::TOperationId id, const TString& table, const TString& name)
-        : Id(id), Table(table), Name(name) {}
-};
-
-struct TLoadState {
-    enum ELoadState {
-        ELOAD_INDEXED_TABLES = 0,
-        ELOAD_TABLES_BUILD_INDICES,
-        EWAIT_INDICES,
-        ESUCCESS
-    };
-
-    explicit TLoadState(std::stop_token stopToken)
-        : State(ELOAD_INDEXED_TABLES)
-        , StopToken(stopToken)
-    {
-    }
-
-    ELoadState State;
-
-    // shared with loader threads
-
-    std::stop_token StopToken;
-
-    std::atomic<size_t> DataSizeLoaded{0};
-
-    std::atomic<size_t> IndexedRangesLoaded{0};
-    std::atomic<size_t> RangesLoaded{0};
-
-    // single threaded
-
-    std::vector<TIndexBuildState> IndexBuildStates;
-    size_t CurrentIndex = 0;
-    size_t ApproximateDataSize = 0;
-};
 
 //-----------------------------------------------------------------------------
 
@@ -680,8 +648,9 @@ void LoadRange(
     const TString& path,
     int whStart,
     int whEnd,
-    TLoadState& state,
+    TImportState& state,
     google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     NTable::TTableClient tableClient(driver);
@@ -712,11 +681,11 @@ void LoadRange(
 
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadCustomers", [&]() {
-                return LoadCustomers(tableClient, customerTablePath, wh, district, arena, Log);
-            }, Log);
+                return LoadCustomers(tableClient, customerTablePath, wh, district, arena, fastRng, Log);
+            }, arena, Log);
             ExecuteWithRetry("LoadOpenOrders", [&]() {
-                return LoadOpenOrders(tableClient, oorderTablePath, wh, district, arena, Log);
-            }, Log);
+                return LoadOpenOrders(tableClient, oorderTablePath, wh, district, arena, fastRng, Log);
+            }, arena, Log);
         }
         state.DataSizeLoaded.fetch_add(indexedPerWh, std::memory_order_relaxed);
     }
@@ -735,20 +704,20 @@ void LoadRange(
             int startItemId = batch * itemBatchSize + 1;
             int itemsToLoad = itemBatchSize;
             ExecuteWithRetry("LoadStock", [&]() {
-                return LoadStock(tableClient, stockTablePath, wh, startItemId, itemsToLoad, arena, Log);
-            }, Log);
+                return LoadStock(tableClient, stockTablePath, wh, startItemId, itemsToLoad, arena, fastRng, Log);
+            }, arena, Log);
         }
 
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadOrderLines", [&]() {
-                return LoadOrderLines(tableClient, orderLineTablePath, wh, district, arena, Log);
-            }, Log);
+                return LoadOrderLines(tableClient, orderLineTablePath, wh, district, arena, fastRng, Log);
+            }, arena, Log);
             ExecuteWithRetry("LoadCustomerHistory", [&]() {
-                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, Log);
-            }, Log);
+                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, fastRng, Log);
+            }, arena, Log);
             ExecuteWithRetry("LoadNewOrders", [&]() {
                 return LoadNewOrders(tableClient, newOrderTablePath, wh, district, arena, Log);
-            }, Log);
+            }, arena, Log);
         }
 
         state.DataSizeLoaded.fetch_add(perWhDatasize, std::memory_order_relaxed);
@@ -811,7 +780,7 @@ TIndexBuildState CreateOpenOrderIndex(NTable::TTableClient& client, const TStrin
     return TIndexBuildState(id, TABLE_OORDER, INDEX_ORDER);
 }
 
-void CreateIndices(TDriver& driver, const TString& path, TLoadState& loadState, TLog* Log) {
+void CreateIndices(TDriver& driver, const TString& path, TImportState& loadState, TLog* Log) {
     NTable::TTableClient client(driver);
 
     loadState.IndexBuildStates = {
@@ -852,19 +821,6 @@ void InterruptHandler(int) {
 
 class TPCCLoader {
 public:
-    struct TCalculatedStatusData {
-        size_t CurrentDataSizeLoaded = 0;
-        double PercentLoaded = 0.0;
-        double InstantSpeedMiBs = 0.0;
-        double AvgSpeedMiBs = 0.0;
-        int ElapsedMinutes = 0;
-        int ElapsedSeconds = 0;
-        int EstimatedTimeLeftMinutes = 0;
-        int EstimatedTimeLeftSeconds = 0;
-        bool IsWaitingForIndices = false;
-        bool IsLoadingTablesAndBuildingIndices = false;
-    };
-
     TPCCLoader(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
         : ConnectionConfig(connectionConfig)
         , Config(runConfig)
@@ -885,12 +841,6 @@ public:
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
-        // we want to switch buffers and draw UI ASAP to properly display logs
-        // produced after this point and before the first screen update
-        if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
-            UpdateDisplayIfNeeded(Clock::now());
-        }
-
         // TODO: detect number of threads
         if (Config.LoadThreadCount == 0) {
             LOG_W("Automatic calculation of loading threads is not implemented, falling back to the default");
@@ -900,6 +850,14 @@ public:
         // TODO: detect number of threads
         size_t threadCount = std::min(Config.WarehouseCount, Config.LoadThreadCount);
         threadCount = std::max(threadCount, size_t(1));
+
+        // we want to switch buffers and draw UI ASAP to properly display logs
+        // produced after this point and before the first screen update
+        if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
+            LogBackend->StartCapture();
+            TImportDisplayData dataToDisplay(LoadState);
+            Tui = std::make_unique<TImportTui>(Config, *LogBackend, dataToDisplay);
+        }
 
         // TODO: calculate optimal number of drivers (but per thread looks good)
         size_t driverCount = threadCount;
@@ -931,13 +889,14 @@ public:
 
             threads.emplace_back([threadId, &drivers, driverCount, this, whStart, whEnd]() {
                 google::protobuf::Arena arena;
+                TReallyFastRng32 fastRng(threadId * TInstant::Now().Seconds());
                 auto& driver = drivers[threadId % driverCount];
                 if (threadId == 0) {
-                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, arena, Log.get());
+                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, arena, fastRng, Log.get());
                 } else {
                     std::this_thread::sleep_for(std::chrono::milliseconds(threadId));
                 }
-                LoadRange(driver, Config.Path, whStart, whEnd, LoadState, arena, Log.get());
+                LoadRange(driver, Config.Path, whStart, whEnd, LoadState, arena, fastRng, Log.get());
             });
         }
 
@@ -950,7 +909,7 @@ public:
                 break;
             }
 
-            if (LoadState.State == TLoadState::ESUCCESS) {
+            if (LoadState.State == TImportState::ESUCCESS) {
                 break;
             }
 
@@ -958,7 +917,7 @@ public:
             UpdateDisplayIfNeeded(now);
 
             switch (LoadState.State) {
-            case TLoadState::ELOAD_INDEXED_TABLES: {
+            case TImportState::ELOAD_INDEXED_TABLES: {
                 // Check if all indexed ranges are loaded and start index creation
                 size_t indexedRangesLoaded = LoadState.IndexedRangesLoaded.load(std::memory_order_relaxed);
                 if (indexedRangesLoaded >= threadCount) {
@@ -974,21 +933,21 @@ public:
                     }
 
                     LOG_I("Indexed tables loaded, indices are being built in background. Continuing with remaining tables");
-                    LoadState.State = TLoadState::ELOAD_TABLES_BUILD_INDICES;
+                    LoadState.State = TImportState::ELOAD_TABLES_BUILD_INDICES;
                     lastIndexProgressCheck = now;
                 }
                 break;
             }
-            case TLoadState::ELOAD_TABLES_BUILD_INDICES: {
+            case TImportState::ELOAD_TABLES_BUILD_INDICES: {
                 // Check if all ranges are loaded (work is complete)
                 size_t rangesLoaded = LoadState.RangesLoaded.load(std::memory_order_relaxed);
                 if (rangesLoaded >= threadCount) {
                     LOG_I("All tables loaded successfully. Waiting for indices to be ready");
-                    LoadState.State = TLoadState::EWAIT_INDICES;
+                    LoadState.State = TImportState::EWAIT_INDICES;
                 }
                 [[fallthrough]];
             }
-            case TLoadState::EWAIT_INDICES: {
+            case TImportState::EWAIT_INDICES: {
                 auto timeSinceLastCheck = now - lastIndexProgressCheck;
                 if (timeSinceLastCheck < INDEX_PROGRESS_CHECK_INTERVAL) {
                     break;
@@ -1002,7 +961,7 @@ public:
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
                         RequestStop();
-                        return;
+                        break;
                     }
                     indexState.Progress = *progress;
                     if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {
@@ -1010,14 +969,14 @@ public:
                     }
                 }
 
-                if (LoadState.State == TLoadState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
+                if (LoadState.State == TImportState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
                     LOG_I("Indices created successfully");
-                    LoadState.State = TLoadState::ESUCCESS;
+                    LoadState.State = TImportState::ESUCCESS;
                     continue;
                 }
                 break;
             }
-            case TLoadState::ESUCCESS:
+            case TImportState::ESUCCESS:
                 break;
             }
 
@@ -1044,7 +1003,7 @@ public:
         auto endTs = TInstant::Now();
         auto duration = endTs - startTs;
 
-        if (LoadState.State == TLoadState::ESUCCESS) {
+        if (LoadState.State == TImportState::ESUCCESS) {
             // Calculate average upload speed
             size_t totalDataLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
             auto totalElapsedSeconds = duration.Seconds();
@@ -1081,43 +1040,50 @@ private:
         }
 
         // Calculate all status data
-        TCalculatedStatusData data;
-        data.IsWaitingForIndices = !LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::EWAIT_INDICES;
-        data.IsLoadingTablesAndBuildingIndices = LoadState.State == TLoadState::ELOAD_TABLES_BUILD_INDICES;
+        TImportDisplayData displayData(LoadState);
 
-        if (!data.IsWaitingForIndices) {
-            data.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+        displayData.StatusData.IsWaitingForIndices =
+            !LoadState.IndexBuildStates.empty() && LoadState.State == TImportState::EWAIT_INDICES;
 
-            data.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
-                (static_cast<double>(data.CurrentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
+            displayData.StatusData.IsLoadingTablesAndBuildingIndices =
+                LoadState.State == TImportState::ELOAD_TABLES_BUILD_INDICES;
+
+        if (!displayData.StatusData.IsWaitingForIndices) {
+            displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+
+            displayData.StatusData.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
+                (static_cast<double>(
+                    displayData.StatusData.CurrentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
 
             auto deltaSeconds = std::chrono::duration<double>(delta).count();
-            data.InstantSpeedMiBs = deltaSeconds > 0 ?
-                static_cast<double>(data.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
+            displayData.StatusData.InstantSpeedMiBs = deltaSeconds > 0 ?
+                static_cast<double>(
+                    displayData.StatusData.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
 
             auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
-            data.AvgSpeedMiBs = totalElapsed > 0 ?
-                static_cast<double>(data.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
+            displayData.StatusData.AvgSpeedMiBs = totalElapsed > 0 ?
+                static_cast<double>(displayData.StatusData.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
 
-            data.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
-            data.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
+            displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
+            displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
 
-            if (data.AvgSpeedMiBs > 0 && data.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
-                double remainingBytes = LoadState.ApproximateDataSize - data.CurrentDataSizeLoaded;
-                double remainingSeconds = remainingBytes / (1024 * 1024) / data.AvgSpeedMiBs;
-                data.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
-                data.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
+            if (displayData.StatusData.AvgSpeedMiBs > 0
+                    && displayData.StatusData.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
+                double remainingBytes = LoadState.ApproximateDataSize - displayData.StatusData.CurrentDataSizeLoaded;
+                double remainingSeconds = remainingBytes / (1024 * 1024) / displayData.StatusData.AvgSpeedMiBs;
+                displayData.StatusData.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+                displayData.StatusData.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
             }
 
-            PreviousDataSizeLoaded = data.CurrentDataSizeLoaded;
+            PreviousDataSizeLoaded = displayData.StatusData.CurrentDataSizeLoaded;
         }
 
         switch (Config.DisplayMode) {
         case TRunConfig::EDisplayMode::Text:
-            UpdateDisplayTextMode(data);
+            UpdateDisplayTextMode(displayData.StatusData);
             break;
         case TRunConfig::EDisplayMode::Tui:
-            UpdateDisplayTuiMode(data);
+            Tui->Update(displayData);
             break;
         default:
             ;
@@ -1126,7 +1092,7 @@ private:
         LastDisplayUpdate = now;
     }
 
-    void UpdateDisplayTextMode(const TCalculatedStatusData& data) {
+    void UpdateDisplayTextMode(const TImportStatusData& data) {
         if (!data.IsWaitingForIndices) {
             std::stringstream ss;
             ss << std::fixed << std::setprecision(1) << "Progress: " << data.PercentLoaded << "% "
@@ -1162,137 +1128,9 @@ private:
         }
     }
 
-    void UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
-        using namespace ftxui;
-
-        // fist update is very special: we switch buffers and capture logs to display live logs
-        static bool firstUpdate = true;
-        if (firstUpdate) {
-            LogBackend->StartCapture();
-
-            // Switch to alternate screen buffer (like htop)
-            std::cout << "\033[?1049h";
-            std::cout << "\033[2J\033[H"; // Clear screen and move to top
-            firstUpdate = false;
-        }
-
-        // our header with main information
-
-        std::stringstream headerSs;
-        headerSs << "TPC-C Import: " << Config.WarehouseCount << " warehouses, "
-                 << Config.LoadThreadCount << " threads   Estimated size: "
-                 << GetFormattedSize(LoadState.ApproximateDataSize);
-
-        std::stringstream progressSs;
-        progressSs << std::fixed << std::setprecision(1) << data.PercentLoaded << "% ("
-                   << GetFormattedSize(data.CurrentDataSizeLoaded) << ")";
-
-        std::stringstream speedSs;
-        speedSs << std::fixed << std::setprecision(1)
-                << "Speed: " << data.InstantSpeedMiBs << " MiB/s   "
-                << "Avg: " << data.AvgSpeedMiBs << " MiB/s   "
-                << "Elapsed: " << data.ElapsedMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << "   "
-                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
-
-        // Calculate progress ratio for gauge
-        float progressRatio = static_cast<float>(data.PercentLoaded / 100.0);
-
-        // Left side: Import details
-        auto importDetails = vbox({
-            text(headerSs.str()),
-            hbox({
-                text("Progress: "),
-                gauge(progressRatio) | flex,
-                text("  " + progressSs.str())
-            }),
-            text(speedSs.str())
-        });
-
-        auto topRow = window(text("TPC-C data upload"), hbox({
-            importDetails
-        }));
-
-        // Index progress section (always shown)
-
-        Elements indexElements;
-        TString indexText;
-        if (LoadState.IndexBuildStates.empty()) {
-            indexText = "Index Creation Didn't Start";
-        } else {
-            indexText = "Index Creation";
-        }
-
-        if (LoadState.IndexBuildStates.empty()) {
-            // Index building not started yet, need to leave enough space
-            for (size_t i = 0; i < INDEX_COUNT; ++i) {
-                float indexRatio = static_cast<float>(0.0);
-
-                std::stringstream indexSs;
-                indexSs << std::fixed << std::setprecision(1) << 0.0 << "%";
-
-                indexElements.push_back(
-                    hbox({
-                        text("  [ index " + std::to_string(i + 1) + " ] "),
-                        gauge(indexRatio) | flex,
-                        text(" " + indexSs.str())
-                    })
-                );
-            }
-        } else {
-            // Show progress for each index
-            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                const auto& indexState = LoadState.IndexBuildStates[i];
-                float indexRatio = static_cast<float>(indexState.Progress / 100.0);
-
-                std::stringstream indexSs;
-                indexSs << std::fixed << std::setprecision(1) << indexState.Progress << "%";
-
-                indexElements.push_back(
-                    hbox({
-                        text("  [ index " + std::to_string(i + 1) + " ] "),
-                        gauge(indexRatio) | flex,
-                        text(" " + indexSs.str())
-                    })
-                );
-            }
-        }
-
-        auto indicesRow = window(text(indexText), vbox(indexElements));
-
-        // Create scrollable logs panel
-
-        Elements logElements;
-        LogBackend->GetLogLines([&](const std::string& line) {
-            logElements.push_back(paragraph(line));
-        });
-
-        auto logsContent = vbox(logElements);
-        auto logsPanel = window(text(" Logs "), logsContent | vscroll_indicator | frame | flex);
-
-        // Main layout - fill the entire screen
-
-        auto layout = vbox({
-            topRow,
-            indicesRow,
-            logsPanel | flex
-        });
-
-        // Render full screen
-
-        std::cout << "\033[H"; // Move cursor to top
-        auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
-        Render(screen, layout);
-        std::cout << screen.ToString();
-    }
-
     void ExitTuiMode() {
-        LogBackend->StopCapture();
-
-        // Switch back to main screen buffer (restore original content)
-        std::cout << "\033[?1049l";
-        std::cout.flush();
+        Tui.reset();
+        LogBackend->StopCaptureAndFlush(Cerr);
     }
 
 private:
@@ -1306,7 +1144,9 @@ private:
     Clock::time_point LastDisplayUpdate;
     size_t PreviousDataSizeLoaded;
     Clock::time_point StartTime;
-    TLoadState LoadState;
+    TImportState LoadState;
+
+    std::unique_ptr<TImportTui> Tui;
 };
 
 } // anonymous namespace

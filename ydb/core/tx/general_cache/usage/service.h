@@ -31,12 +31,6 @@ public:
         context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvAskData(consumer, std::move(addresses), std::move(callback)));
     }
 
-    static void UpdateMaxCacheSize(const ui64 maxCacheSize) {
-        AFL_VERIFY(NActors::TlsActivationContext);
-        auto& context = NActors::TActorContext::AsActorContext();
-        context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvUpdateMaxCacheSize(maxCacheSize));
-    }
-
     static void ModifyObjects(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove) {
         AFL_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();

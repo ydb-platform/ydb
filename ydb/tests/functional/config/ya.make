@@ -31,6 +31,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/requests
     ydb/tests/library
     ydb/tests/library/clients
 )

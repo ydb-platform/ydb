@@ -2843,6 +2843,10 @@ template<typename TDerived>
 TValueBuilderBase<TDerived>::~TValueBuilderBase() = default;
 
 template<typename TDerived>
+TValueBuilderBase<TDerived>::TValueBuilderBase()
+    : Impl_(new TValueBuilderImpl()) {}
+
+template<typename TDerived>
 TValueBuilderBase<TDerived>::TValueBuilderBase(google::protobuf::Arena* arena)
     : Impl_(new TValueBuilderImpl(arena)) {}
 
@@ -3405,6 +3409,9 @@ template class TValueBuilderBase<TValueBuilder>;
 template class TValueBuilderBase<TParamValueBuilder>;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TValueBuilder::TValueBuilder()
+    : TValueBuilderBase() {}
 
 TValueBuilder::TValueBuilder(google::protobuf::Arena* arena)
     : TValueBuilderBase(arena) {}

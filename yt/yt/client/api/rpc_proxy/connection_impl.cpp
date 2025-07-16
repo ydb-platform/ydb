@@ -358,13 +358,15 @@ void TConnection::ClearMetadataCaches()
 void TConnection::Terminate()
 {
     YT_LOG_DEBUG("Terminating connection");
-    Terminated_ = true;
+    if (Terminated_.exchange(true)) {
+        return;
+    }
     ChannelPool_->Terminate(TError("Connection terminated"));
 }
 
 bool TConnection::IsTerminated() const
 {
-    return Terminated_;
+    return Terminated_.load();
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()

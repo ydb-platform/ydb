@@ -15,8 +15,8 @@ class TestYdbLogWorkload(StressFixture):
         return [
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
             '--verbose',
-            '--endpoint', 'grpc://localhost:%d' % self.cluster.nodes[1].grpc_port,
-            '--database=/Root',
+            '--endpoint', self.endpoint,
+            '--database={}'.format(self.database),
             'workload', 'log'
         ] + subcmds + [
             '--path', path

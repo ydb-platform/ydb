@@ -16,7 +16,7 @@ namespace Ydb::Replication {
     class DescribeTransferResult_Stats;
 }
 
-namespace NYdb::inline Dev {
+namespace NYdb::inline Dev::NDraft {
     class TProtoAccessor;
 }
 
@@ -170,7 +170,7 @@ private:
 };
 
 class TDescribeReplicationResult: public NScheme::TDescribePathResult {
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::NDraft::TProtoAccessor;
     const Ydb::Replication::DescribeReplicationResult& GetProto() const;
 
 public:
@@ -233,7 +233,7 @@ private:
 };
 
 class TDescribeTransferResult: public NScheme::TDescribePathResult {
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::NDraft::TProtoAccessor;
     const Ydb::Replication::DescribeTransferResult& GetProto() const;
 
 public:

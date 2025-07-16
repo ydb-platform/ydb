@@ -21,8 +21,8 @@ class TestYdbWorkload(StressFixture):
     def test(self, store_type):
         cmd = [
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
-            "--endpoint", f'grpc://localhost:{self.cluster.nodes[1].grpc_port}',
-            "--database", "/Root",
+            "--endpoint", self.endpoint,
+            "--database", self.database,
             "--duration", "60",
             "--mode", store_type
         ]

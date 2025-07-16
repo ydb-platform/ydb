@@ -3,14 +3,11 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 std::shared_ptr<IDataSource> TScanWithLimitCollection::DoExtractNext() {
-    AFL_VERIFY(HeapSources.size());
-    std::pop_heap(HeapSources.begin(), HeapSources.end());
-    auto result = NextSource ? NextSource : HeapSources.back().Construct(SourceIdxCurrent++, Context);
+    auto result = NextSource ? NextSource : static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
     AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNext")("source_id", result->GetSourceId());
-    HeapSources.pop_back();
-    if (HeapSources.size()) {
-        NextSource = HeapSources.front().Construct(SourceIdxCurrent++, Context);
+    if (!SourcesConstructor->IsFinished()) {
+        NextSource = static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
     } else {
         NextSource = nullptr;
     }
@@ -27,28 +24,10 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<IDataSou
 }
 
 TScanWithLimitCollection::TScanWithLimitCollection(
-    const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources, const std::shared_ptr<IScanCursor>& cursor)
+    const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : TBase(context)
-    , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
-    HeapSources = std::move(sources);
-    std::make_heap(HeapSources.begin(), HeapSources.end());
-    if (cursor && cursor->IsInitialized()) {
-        while (HeapSources.size()) {
-            bool usage = false;
-            if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(HeapSources.front(), usage)) {
-                std::pop_heap(HeapSources.begin(), HeapSources.end());
-                HeapSources.pop_back();
-                continue;
-            }
-            if (usage) {
-                HeapSources.front().SetIsStartedByCursor();
-            } else {
-                std::pop_heap(HeapSources.begin(), HeapSources.end());
-                HeapSources.pop_back();
-            }
-            break;
-        }
-    }
+    , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())
+    , SourcesConstructor(std::move(sourcesConstructor)) {
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

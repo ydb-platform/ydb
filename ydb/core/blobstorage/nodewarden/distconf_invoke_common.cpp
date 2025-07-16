@@ -120,8 +120,8 @@ namespace NKikimr::NStorage {
                 if (Self->StorageConfig) {
                     response->MutableConfig()->CopyFrom(*Self->StorageConfig);
                 }
-                if (Self->CurrentProposedStorageConfig) {
-                    response->MutableCurrentProposedStorageConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
+                if (Self->CurrentProposition) {
+                    response->MutableCurrentProposedStorageConfig()->CopyFrom(Self->CurrentProposition->StorageConfig);
                 }
                 return Finish(Sender, SelfId(), ev.release(), 0, Cookie);
             }
@@ -203,38 +203,25 @@ namespace NKikimr::NStorage {
         if (!RunCommonChecks()) {
             return;
         }
-
-        auto *config = request->MutableConfig();
-
-        if (auto error = ValidateConfig(*Self->StorageConfig)) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "UpdateConfig current config validation failed: " << *error);
-        } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "UpdateConfig config validation failed: " << *error);
-        }
-
-        StartProposition(config);
+        StartProposition(request->MutableConfig());
     }
 
     void TInvokeRequestHandlerActor::AdvanceGeneration() {
         if (RunCommonChecks()) {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-            config.SetGeneration(config.GetGeneration() + 1);
             StartProposition(&config);
         }
     }
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields) {
+        if (Self->CurrentProposition) {
+            return FinishWithError(TResult::ERROR, "Config proposition request is already in flight");
+        }
+
         if (updateFields) {
             if (auto error = UpdateClusterState(config)) {
                 return FinishWithError(TResult::ERROR, *error);
             }
-            config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
-            config->MutablePrevConfig()->ClearPrevConfig();
-            UpdateFingerprint(config);
-        }
-
-        if (!CheckConfigUpdate(*config)) {
-            return;
         }
 
         if (const auto& record = Event->Get()->Record; record.HasReplaceStorageConfig()) {
@@ -275,43 +262,31 @@ namespace NKikimr::NStorage {
             );
         }
 
-        Self->CurrentProposedStorageConfig.emplace(std::move(*config));
-
-        auto done = [&](TEvGather *res) -> std::optional<TString> {
-            Y_ABORT_UNLESS(res->HasProposeStorageConfig());
-            std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;
-
-            const ERootState prevState = std::exchange(Self->RootState, Self->Scepter
-                ? ERootState::RELAX
-                : ERootState::INITIAL);
-            Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
-
-            if (auto error = Self->ProcessProposeStorageConfig(res->MutableProposeStorageConfig(), SpecificBridgePileIds)) {
-                return error;
-            }
-            if (CheckSyncersAfterCommit) {
-                InvokeOtherActor(*Self, &TDistributedConfigKeeper::IssueQuerySyncers);
-            }
-            Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
-            return std::nullopt;
-        };
-
-        TEvScatter task;
-        auto *propose = task.MutableProposeStorageConfig();
-        propose->MutableConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
-        IssueScatterTask(std::move(task), done);
+        auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, &*Self->StorageConfig,
+            std::move(SpecificBridgePileIds), SelfId(), CheckSyncersAfterCommit);
+        if (error) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
+                (Error, *error), (ProposedConfig, *config));
+            return FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed: " << *error);
+        }
 
         Self->RootState = ERootState::IN_PROGRESS; // forbid any concurrent activity
     }
 
-    bool TInvokeRequestHandlerActor::CheckConfigUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) {
-        if (auto error = ValidateConfigUpdate(*Self->StorageConfig, proposed)) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
-                (Error, *error), (ProposedConfig, proposed));
-            FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed: " << *error);
-            return false;
+    void TInvokeRequestHandlerActor::Handle(TEvPrivate::TEvConfigProposed::TPtr ev) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC64, "TEvConfigProposed", (SelfId, SelfId()), (ErrorReason, ev->Get()->ErrorReason),
+            (WaitingForOtherProposition, WaitingForOtherProposition), (RootState, Self->RootState));
+
+        if (std::exchange(WaitingForOtherProposition, false)) {
+            // try to restart query
+            return Bootstrap(ParentId);
         }
-        return true;
+
+        if (ev->Get()->ErrorReason) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "Config proposition failed: " << *ev->Get()->ErrorReason);
+        } else {
+            Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -320,14 +295,15 @@ namespace NKikimr::NStorage {
     bool TInvokeRequestHandlerActor::RunCommonChecks() {
         if (!Self->StorageConfig) {
             FinishWithError(TResult::ERROR, "no agreed StorageConfig");
-        } else if (Self->CurrentProposedStorageConfig) {
-            FinishWithError(TResult::RACE, "config proposition request in flight");
         } else if (Self->RootState != (IsScepterlessOperation ? ERootState::INITIAL : ERootState::RELAX)) {
             FinishWithError(TResult::RACE, "something going on with default FSM");
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
         } else if (IsScepterExpired()) {
             FinishWithError(TResult::RACE, "scepter lost during query execution");
+        } else if (Self->CurrentProposition) {
+            Self->CurrentProposition->ActorIds.push_back(SelfId());
+            WaitingForOtherProposition = true;
         } else {
             return true;
         }
@@ -384,6 +360,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
             hFunc(TEvBlobStorage::TEvControllerDistconfResponse, Handle);
+            hFunc(TEvPrivate::TEvConfigProposed, Handle);
         )
     }
 

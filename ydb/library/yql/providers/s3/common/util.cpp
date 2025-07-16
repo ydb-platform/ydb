@@ -218,9 +218,13 @@ bool ValidateS3WriteSchema(TPositionHandle pos, std::string_view format, const T
             return false;
         }
 
-        const TDataExprType* rowType;
-        bool isOptional;
-        return EnsureDataOrOptionalOfData(pos, schemaStructRowType->GetItems().front()->GetItemType(), isOptional, rowType, ctx);
+        const auto* rowType = schemaStructRowType->GetItems().front()->GetItemType();
+        if (rowType->GetKind() != ETypeAnnotationKind::Data) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Only a column with a primitive type is allowed for the raw format (you have field with type " << *rowType << ")"));
+            return false;
+        }
+
+        return true;
     }
 
     if (format == "json_list"sv) {

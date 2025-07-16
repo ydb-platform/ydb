@@ -52,7 +52,7 @@ public:
 
 class TPortionsDataFetcher: TNonCopyable {
 private:
-    const TRequestInput Input;
+    TRequestInput Input;
     const std::shared_ptr<IFetchCallback> Callback;
     std::shared_ptr<TClassCounters> ClassCounters;
     NCounters::TStateSignalsOperator<EFetchingStage>::TGuard Guard;
@@ -80,7 +80,7 @@ public:
         , ClassCounters(Singleton<TCounters>()->GetClassCounters(Callback->GetClassName()))
         , Guard(ClassCounters->GetGuard(EFetchingStage::Created))
         , Script(script)
-        , CurrentContext(input.GetMemoryProcessInfo())
+        , CurrentContext(Input.GetMemoryProcessGuard())
         , Environment(environment)
         , ConveyorCategory(conveyorCategory)
     {
@@ -89,6 +89,9 @@ public:
     }
 
     ~TPortionsDataFetcher() {
+        if (NActors::TActorSystem::IsStopped() || Callback->IsAborted()) {
+            CurrentContext.Abort();
+        }
         AFL_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
             || Callback->IsAborted())("stage", Guard.GetStage())("class_name", Callback->GetClassName());
     }

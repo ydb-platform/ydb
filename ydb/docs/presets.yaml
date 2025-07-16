@@ -24,6 +24,7 @@ default:
   feature_view: true
   feature_async_replication: true
   feature_transfer: true
+  feature_batch_operations: true
   ydb: YDB
   ydb-name: YDB
   ydb-full-name: YDB

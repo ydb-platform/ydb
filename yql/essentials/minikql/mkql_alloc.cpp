@@ -2,6 +2,8 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
+#include <arrow/memory_pool.h>
+
 #include <util/system/align.h>
 #include <util/generic/scope.h>
 
@@ -320,7 +322,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
         return reinterpret_cast<void*>(ZeroSizeObject);
     }
 
-    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+    if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
         if (size <= ArrowSizeForArena) {
             return MKQLArrowAllocateOnArena(size);
         }
@@ -334,11 +336,15 @@ void* MKQLArrowAllocateImpl(ui64 size) {
     }
 
     void* ptr;
-    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
-        ptr = malloc(fullSize);
-        if (!ptr) {
+    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+        auto pool = arrow::default_memory_pool();
+        Y_ENSURE(pool);
+        uint8_t* res;
+        if (!pool->Allocate(fullSize, &res).ok()) {
             throw TMemoryLimitExceededException();
         }
+        Y_ENSURE(res);
+        ptr = res;
     } else {
         ptr = GetAlignedPage(fullSize);
     }
@@ -385,7 +391,7 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
         return;
     }
 
-    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+    if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
         if (size <= ArrowSizeForArena) {
             return MKQLArrowFreeOnArena(mem);
         }
@@ -405,8 +411,10 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
 
     Y_ENSURE(size == header->Size);
 
-    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
-        free(header);
+    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+        auto pool = arrow::default_memory_pool();
+        Y_ABORT_UNLESS(pool);
+        pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));
         return;
     }
 
@@ -434,21 +442,25 @@ void MKQLArrowFree(const void* mem, ui64 size) {
     return MKQLArrowFreeImpl(mem, sizeWithRedzones);
 }
 
-void MKQLArrowUntrack(const void* mem, ui64 size) {
+void MKQLArrowUntrack(const void* mem) {
+    // NOTE: we expect the `mem` size to be non-zero, unless it's an explicitly allocated zero size object.
     if (Y_UNLIKELY(mem == reinterpret_cast<const void*>(ZeroSizeObject))) {
-        Y_DEBUG_ABORT_UNLESS(size == 0);
         return;
     }
 
-    mem = NYql::NUdf::GetOriginalAllocatedObject(mem, size);
+    mem = NYql::NUdf::GetOriginalAllocatedObject(mem);
     TAllocState* state = TlsAllocState;
     Y_ENSURE(state);
     if (!state->EnableArrowTracking) {
         return;
     }
 
-    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
-        if (size <= ArrowSizeForArena) {
+    // NOTE: Check original pointer first and only then check for an arena page.
+    // There is a special case of class `arrow::ImportedBuffer` which is used to transfer buffers across .so boundaries (i.e. UDFs),
+    // this buffer shrinks original capacity and if it's too small it may wrongly choose the branch for arena page untracking.
+    auto it = state->ArrowBuffers.find(mem);
+    if (it == state->ArrowBuffers.end()) {
+        if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
             auto* page = (TMkqlArrowHeader*)TAllocState::GetPageStart(mem);
 
             auto it = state->ArrowBuffers.find(page);
@@ -461,15 +473,13 @@ void MKQLArrowUntrack(const void* mem, ui64 size) {
                 state->ArrowBuffers.erase(it);
                 state->OffloadFree(page->Size + sizeof(TMkqlArrowHeader));
             }
-
-            return;
         }
-    }
 
-    auto it = state->ArrowBuffers.find(mem);
-    if (it == state->ArrowBuffers.end()) {
         return;
     }
+
+    // If original pointer is found among buffers then it's definitely a non-arena page,
+    // because arena pages are stored by the page-start pointer.
 
     auto* header = ((TMkqlArrowHeader*)mem) - 1;
     Y_ENSURE(header->UseCount == 0);

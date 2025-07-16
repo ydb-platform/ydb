@@ -37,6 +37,9 @@ struct TCmsSentinelConfig {
 
     TMaybeFail<EPDiskStatus> EvictVDisksStatus;
 
+    ui32 NodeBadStateLimit;
+    ui32 NodeGoodStateLimit;
+
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
         config.SetDryRun(DryRun);
@@ -74,6 +77,9 @@ struct TCmsSentinelConfig {
         RackRatio = config.GetRackRatio();
         PileRatio = config.GetPileRatio();
         FaultyPDisksThresholdPerNode = config.GetFaultyPDisksThresholdPerNode();
+
+        NodeBadStateLimit = config.GetNodeBadStateLimit();
+        NodeGoodStateLimit = config.GetNodeGoodStateLimit();
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);

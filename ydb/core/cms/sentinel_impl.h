@@ -39,7 +39,7 @@ private:
     mutable EPDiskState PrevState = State;
     ui64 StateCounter;
     TMaybe<EPDiskStatus> ForcedStatus;
-    
+
     mutable bool HadBadStateRecently = false;
 
 }; // TPDiskStatusComputer
@@ -108,7 +108,24 @@ private:
 
 }; // TPDiskInfo
 
-struct TNodeInfo {
+struct TNodeStatusComputer {
+    enum ENodeStatus {
+        GOOD = 0,
+        BAD
+    };
+
+    ENodeStatus CurrentState = ENodeStatus::GOOD;
+    ENodeStatus ActualState = ENodeStatus::GOOD;
+    ui64 StateCounter = 0;
+    ui32 BadStateLimit;
+    ui32 GoodStateLimit;
+
+    bool GetCurrentState() const;
+    bool Compute();
+    void AddState(ENodeStatus newState);
+};
+
+struct TNodeInfo : public TNodeStatusComputer {
     TString Host;
     NActors::TNodeLocation Location;
     TMaybeFail<ui32> PileId;

@@ -438,7 +438,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildExtendStage(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqBuildExtendStage(node, ctx);
+        TExprBase output = DqBuildExtendStage(node, ctx, KqpCtx.Config->GetEnableHashShuffleConnectionsForExtend());
         DumpAppliedRule("BuildExtendStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

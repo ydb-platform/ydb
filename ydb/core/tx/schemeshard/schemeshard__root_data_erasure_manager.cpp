@@ -30,7 +30,7 @@ TRootDataErasureManager::TRootDataErasureManager(TSchemeShard* const schemeShard
     ctx.RegisterWithSameMailbox(Queue);
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[RootDataErasureManager] Created: Timeout# " << config.GetTimeoutSeconds()
+        "[RootDataErasureManager] Created: Timeout# 0"
         << ", Rate# " << Queue->GetRate()
         << ", InflightLimit# " << config.GetInflightLimit()
         << ", DataErasureInterval# " << DataErasureInterval
@@ -500,7 +500,6 @@ TRootDataErasureManager::TQueue::TConfig TRootDataErasureManager::ConvertConfig(
     queueConfig.IsCircular = false;
     queueConfig.MaxRate = config.GetMaxRate();
     queueConfig.InflightLimit = config.GetInflightLimit();
-    queueConfig.Timeout = TDuration::Seconds(config.GetTimeoutSeconds());
 
     return queueConfig;
 }

@@ -23,7 +23,7 @@ private:
     void CountResponseBytes(ui32 /*responseSize*/) override {
     }
 
-    void StartProcessing(ui32 /*requestSize*/) override {
+    void StartProcessing(ui32 /*requestSize*/, TInstant /*deadline*/) override {
     }
 
     void FinishProcessing(

@@ -1615,6 +1615,72 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     // Unit tests for datetime pushdowns in scan query
+    Y_UNIT_TEST(BUG) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/test_db_bug` (
+            Db Utf8 not null,
+            Suite Utf8 not null,
+            RunTs Timestamp not null,
+            Version Utf8 not null,
+            Report Utf8 not null,
+            YdbSumMeans Double not null,
+            YdbSumMax Double not null,
+            YdbSumMin Double not null,
+            SumImportWithCompactionTime Float not null,
+            SumCompactedBytes Float not null,
+            SumWrittenBytes Float not null,
+            GrossTime Float not null,
+            SuccessCount Uint64 not null,
+            FailCount Uint64 not null,
+            AvgImportSpeed Double not null,
+            AvgCpuCores Double not null,
+            AvgCpuTime Double not null,
+            Begin TimeStamp not null,
+            End TimeStamp not null,
+            DiffTests String not null,
+            FailTests String not null,
+            PRIMARY KEY (RunTs, Db, Suite)
+        )
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        auto query = R"(
+        SELECT DISTINCT `t1`.`Suite` AS `res_0` FROM (
+            SELECT    AvgCpuCores,  AvgCpuTime,    AvgImportSpeed,    Begin,   Db,    DiffTests,    End,    FailCount,   FailTests,    GrossTime,    Report,    RunTs,    SuccessCount,    Suite,   SumCompactedBytes,   SumImportWithCompactionTime,   SumWrittenBytes,    Version,    YdbSumMax,    YdbSumMeans,    YdbSumMin FROM `test_db_bug`) AS `t1` WHERE CASE WHEN String::Contains(`t1`.`Db`, 'sas-daily') THEN 'sas_small_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'sas-perf') THEN 'sas_big_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'sas') THEN 'sas_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla-acceptance') THEN 'vla_small_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla-perf') THEN 'vla_big_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla4-8154') THEN 'vla_8154_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla4-8161') THEN 'vla_8161_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla') THEN 'vla_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END ELSE 'new_db_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END END IN ('vla_big_column') AND CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END IN ('column') AND `t1`.`RunTs` BETWEEN DateTime::MakeDatetime(DateTime::ParseIso8601('2025-07-12T00:00:00')) AND DateTime::MakeDatetime(DateTime::ParseIso8601('2025-07-15T23:59:59.999000')) ORDER BY `res_0` ASC LIMIT 1000;
+        )";
+
+        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings)
+                      .GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        auto ast = result.QueryStats->Getquery_ast();
+
+        it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        result = CollectStreamResult(it);
+        Cout << result.ResultSetYson;
+    }
+
+    // Unit tests for datetime pushdowns in scan query
     Y_UNIT_TEST(PredicatePushdown_Datetime_SQ) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

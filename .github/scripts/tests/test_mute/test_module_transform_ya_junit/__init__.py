@@ -1,0 +1,1 @@
+# Тесты для transform_ya_junit.py модуля 

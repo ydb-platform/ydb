@@ -14,6 +14,7 @@
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -1081,6 +1082,14 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
              " Step " << ev->Get()->Step <<
              ", TxId " << ev->Get()->TxId);
 
+    ev->Get()->Span = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                     std::move(ev->TraceId),
+                                     "Topic.Partition.CalcPredicate",
+                                     NWilson::EFlags::AUTO_END);
+    auto span = ev->Get()->Span.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                            "Topic.Partition.ProcessEvent",
+                                            NWilson::EFlags::AUTO_END);
+
     ProcessPendingEvent(ev, ctx);
 }
 
@@ -1113,6 +1122,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
                        "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
                        TabletID, Partition.OriginalPartitionId,
                        ev->Step, ev->TxId);
+
+        txIter->second->CommitSpan = std::move(ev->Span);
     }
     Y_ABORT_UNLESS(txIter->second->State == ECommitState::Pending);
 
@@ -1125,6 +1136,14 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
     PQ_LOG_D("Handle TEvPQ::TEvTxCommit" <<
              " Step " << ev->Get()->Step <<
              ", TxId " << ev->Get()->TxId);
+
+    ev->Get()->Span = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                     std::move(ev->TraceId),
+                                     "Topic.Partition.Commit",
+                                     NWilson::EFlags::AUTO_END);
+    auto span = ev->Get()->Span.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                            "Topic.Partition.ProcessEvent",
+                                            NWilson::EFlags::AUTO_END);
 
     ProcessPendingEvent(ev, ctx);
 }
@@ -1207,6 +1226,10 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoRequest");
 
     ev->Get()->OriginalPartition = ev->Sender;
+    ev->Get()->Span = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                     std::move(ev->TraceId),
+                                     "Topic.Partition.GetWriteInfo",
+                                     NWilson::EFlags::AUTO_END);
 
     ProcessPendingEvent(ev, ctx);
 }
@@ -1220,6 +1243,9 @@ void TPartition::WriteInfoResponseHandler(
     Y_ABORT_UNLESS(!txIter.IsEnd());
 
     auto& tx = (*txIter->second);
+
+    tx.GetWriteInfoSpan.End();
+    tx.GetWriteInfoSpan = {};
 
     std::visit(TOverloaded{
         [&tx](TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>& msg) {
@@ -1334,8 +1360,12 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorConte
 void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, bool isPredicate) {
 
     if (isPredicate) {
+        tx->CalcPredicateSpan.End();
+        tx->CalcPredicateSpan = {};
+
         auto insRes = TransactionsInflight.emplace(tx->Tx->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
+
         Send(Tablet,
              MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
                                                          tx->Tx->TxId,
@@ -1344,6 +1374,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
     } else {
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
+
         Send(Tablet,
              MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
                                                                 tx->ProposeConfig->TxId,
@@ -1841,7 +1872,9 @@ void TPartition::RequestWriteInfoIfRequired()
     auto tx = std::get<1>(UserActionAndTransactionEvents.back().Event);
     auto supportId = tx->SupportivePartitionActor;
     if (supportId) {
-        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest());
+        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(),
+             0, 0,
+             tx->CalcPredicateSpan.GetTraceId());
         WriteInfosToTx.insert(std::make_pair(supportId, tx));
     }
 }
@@ -1910,7 +1943,14 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        ctx.Send(Tablet, PersistRequest.Release());
+        KVWriteSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                     NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
+                                     "Topic.Partition.Persist",
+                                     NWilson::EFlags::AUTO_END);
+
+        ctx.Send(Tablet, PersistRequest.Release(),
+                 0, 0,
+                 KVWriteSpan ? KVWriteSpan.GetTraceId() : NWilson::TTraceId());
         PersistRequest = nullptr;
         DeletePartitionState = DELETION_IN_PROCESS;
         KVWriteInProgress = true;
@@ -2116,7 +2156,23 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
-        ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release());
+        KVWriteSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                     NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
+                                     "Topic.Partition.RunPersist",
+                                     NWilson::EFlags::AUTO_END);
+
+        for (auto& traceId : TxForPersistTraceIds) {
+            TxForPersistSpans.emplace_back(TWilsonTopic::ExecuteTransaction,
+                                           std::move(traceId),
+                                           "Topic.Partition.Persist",
+                                           NWilson::EFlags::AUTO_END);
+            TxForPersistSpans.back().Link(KVWriteSpan.GetTraceId());
+        }
+        TxForPersistTraceIds.clear();
+
+        ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(),
+                 0, 0,
+                 KVWriteSpan ? KVWriteSpan.GetTraceId() : NWilson::TTraceId());
         KVWriteInProgress = true;
     } else {
         OnProcessTxsAndUserActsWriteComplete(ActorContext());
@@ -2138,6 +2194,10 @@ void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 
 TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
+    auto span = t->CalcPredicateSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                                 "Topic.Partition.PreProcess",
+                                                 NWilson::EFlags::AUTO_END);
+
     auto result = EProcessResult::Continue;
     if (t->SupportivePartitionActor && !t->WriteInfo && !t->WriteInfoApplied) { // Pending for write info
         return EProcessResult::NotReady;
@@ -2195,6 +2255,9 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
 
 bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, TEvKeyValue::TEvRequest*)
 {
+    auto span = t->CommitSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                          "Topic.Partition.Process",
+                                          NWilson::EFlags::AUTO_END);
     if (t->ProposeTransaction) {
         ExecImmediateTx(*t);
         return true;
@@ -2450,7 +2513,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
         }
         CommitWriteOperations(*t);
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
-        ScheduleReplyCommitDone(t->Tx->Step, t->Tx->TxId);
+        ScheduleReplyCommitDone(t->Tx->Step, t->Tx->TxId, std::move(t->CommitSpan));
     } else if (t->ProposeConfig) {
         Y_ABORT_UNLESS(t->Predicate.Defined() && *t->Predicate);
 
@@ -2458,7 +2521,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
         ExecChangePartitionConfig();
         ChangePlanStepAndTxId(t->ProposeConfig->Step, t->ProposeConfig->TxId);
 
-        ScheduleReplyCommitDone(t->ProposeConfig->Step, t->ProposeConfig->TxId);
+        ScheduleReplyCommitDone(t->ProposeConfig->Step, t->ProposeConfig->TxId, std::move(t->CommitSpan));
     } else {
         Y_ABORT_UNLESS(t->ChangeConfig);
         ExecChangePartitionConfig();
@@ -3163,10 +3226,14 @@ void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& ev
                                           kind, reason).Release());
 }
 
-void TPartition::ScheduleReplyCommitDone(ui64 step, ui64 txId)
+void TPartition::ScheduleReplyCommitDone(ui64 step, ui64 txId, NWilson::TSpan&& commitSpan)
 {
-    Replies.emplace_back(Tablet,
-                         MakeCommitDone(step, txId).Release());
+    TxForPersistTraceIds.push_back(commitSpan.GetTraceId());
+
+    auto event = MakeCommitDone(step, txId);
+    event->Span = std::move(commitSpan);
+
+    Replies.emplace_back(Tablet, event.Release());
 }
 
 void TPartition::ScheduleDropPartitionLabeledCounters(const TString& group)

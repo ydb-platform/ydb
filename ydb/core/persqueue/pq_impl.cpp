@@ -810,7 +810,6 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
 
     switch (tx.Kind) {
     case NKikimrPQ::TTransaction::KIND_DATA:
-        tx.BeginCalcPredicateSpan(TabletID());
         SendEvTxCalcPredicateToPartitions(ctx, tx);
         break;
     case NKikimrPQ::TTransaction::KIND_CONFIG: {
@@ -3552,8 +3551,6 @@ void TPersQueue::Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& c
         return;
     }
 
-    tx->EndCommitSpan();
-
     Y_ABORT_UNLESS(tx->State == NKikimrPQ::TTransaction::EXECUTING);
 
     tx->OnTxCommitDone(event);
@@ -4129,7 +4126,9 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
 
         event->ForceFalse = forceFalse;
 
-        ctx.Send(partition.Actor, event.release());
+        ctx.Send(partition.Actor, event.release(),
+                 0, 0,
+                 tx.GetExecuteSpanTraceId());
     }
 
     tx.PartitionRepliesCount = 0;
@@ -4149,9 +4148,9 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
                        "PQ %" PRIu64 ", Partition %" PRIu32 ", TxId %" PRIu64,
                        TabletID(), partitionId, tx.TxId);
 
-        tx.BeginCommitSpan(TabletID());
-
-        ctx.Send(p->second.Actor, event.release());
+        ctx.Send(p->second.Actor, event.release(),
+                 0, 0,
+                 tx.GetExecuteSpanTraceId());
     }
 
     tx.PartitionRepliesCount = 0;
@@ -4451,8 +4450,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                  ", Expected " << tx.PartitionRepliesExpected);
 
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
-            tx.EndCalcPredicateSpan();
-
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
             case NKikimrPQ::TTransaction::KIND_CONFIG:

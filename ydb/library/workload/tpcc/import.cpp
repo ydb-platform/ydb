@@ -5,6 +5,7 @@
 #include "import_tui.h"
 #include "log.h"
 #include "log_backend.h"
+#include "path_checker.h"
 #include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
@@ -837,6 +838,8 @@ public:
             std::cerr << "Specified zero warehouses" << std::endl;
             std::exit(1);
         }
+
+        CheckPathForImport(ConnectionConfig, Config.Path);
 
         Config.SetDisplay();
         CalculateApproximateDataSize();

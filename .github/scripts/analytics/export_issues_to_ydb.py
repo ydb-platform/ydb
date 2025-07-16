@@ -48,8 +48,8 @@ def get_last_update_time(driver, table_path: str) -> Optional[datetime]:
     """Get the latest updated_at timestamp from existing records"""
     try:
         session = driver.table_client.session().create()
-        try:
-            result = session.transaction().execute(
+        with session.transaction() as tx:
+            result = tx.execute(
                 f"SELECT MAX(updated_at) as max_updated_at FROM `{table_path}`",
                 commit_tx=True,
                 settings=ydb.BaseRequestSettings().with_timeout(30)
@@ -58,8 +58,7 @@ def get_last_update_time(driver, table_path: str) -> Optional[datetime]:
             if rows and rows[0]['max_updated_at']:
                 return rows[0]['max_updated_at']
             return None
-        finally:
-            session.close()
+
     except Exception as e:
         print(f"Warning: Could not get last update time: {e}")
         return None
@@ -193,7 +192,7 @@ def get_project_fields_for_issues(org_name: str, project_id: str, issue_numbers:
           id
           title
           url
-          items(first: 100, after: %s) {
+          items(first: 1000, after: %s) {
             nodes {
               id
               content {
@@ -379,34 +378,87 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             'url': author.get('url', '') if author else ''
         }
         
+        # Parse timestamps
+        created_at = parse_datetime(issue.get('createdAt'))
+        updated_at = parse_datetime(issue.get('updatedAt'))
+        closed_at = parse_datetime(issue.get('closedAt'))
+        now = datetime.now(timezone.utc)
+        
+        # Calculate BI metrics
+        body_text = issue.get('body', '') or ''
+        body_length = len(body_text)
+        labels_count = len(labels)
+        assignees_count = len(assignees)
+        is_in_project = bool(issue_project_fields)
+        
+        # Calculate time-based metrics
+        days_since_created = 0
+        days_since_updated = 0
+        time_to_close_hours = 0
+        
+        if created_at:
+            days_since_created = (now - created_at).days
+        if updated_at:
+            days_since_updated = (now - updated_at).days
+        if closed_at and created_at:
+            time_to_close_hours = int((closed_at - created_at).total_seconds() / 3600)
+        
         # Build the record
         issue_record = {
-            'project_item_id': f"repo-{issue.get('number', 0)}",  # Generate ID for repository issues
+            # Primary identifiers
+            'project_item_id': f"repo-{issue.get('number', 0)}",
             'issue_id': issue.get('id', ''),
             'issue_number': issue.get('number', 0),
+            
+            # Core issue data
             'title': issue.get('title', ''),
             'url': issue.get('url', ''),
             'state': issue.get('state', ''),
-            'body': issue.get('body', ''),
+            'body': body_text,
             'body_text': issue.get('bodyText', ''),
-            'created_at': parse_datetime(issue.get('createdAt')),
-            'updated_at': parse_datetime(issue.get('updatedAt')),
-            'closed_at': parse_datetime(issue.get('closedAt')),
+            
+            # Time dimensions
+            'created_at': created_at,
+            'updated_at': updated_at,
+            'closed_at': closed_at,
+            'created_date': created_at.date() if created_at else None,
+            'updated_date': updated_at.date() if updated_at else None,
+            
+            # User dimensions
             'author_login': author_info['login'],
             'author_url': author_info['url'],
-            'assignees': json.dumps(assignees) if assignees else None,
-            'labels': json.dumps(labels) if labels else None,
-            'milestone': json.dumps(milestone_info) if milestone_info else None,
+            
+            # Metrics
             'reactions_count': issue.get('reactions', {}).get('totalCount', 0),
             'comments_count': issue.get('comments', {}).get('totalCount', 0),
             'participants_count': issue.get('participants', {}).get('totalCount', 0),
+            'body_length': body_length,
+            'labels_count': labels_count,
+            'assignees_count': assignees_count,
+            
+            # Repository dimensions
             'repository_name': issue.get('repository', {}).get('name', ''),
             'repository_url': issue.get('repository', {}).get('url', ''),
+            
+            # Project dimensions
             'project_status': issue_project_fields.get('status'),
             'project_owner': issue_project_fields.get('owner'),
             'project_priority': issue_project_fields.get('priority'),
+            'is_in_project': is_in_project,
+            
+            # Time-based metrics
+            'days_since_created': days_since_created,
+            'days_since_updated': days_since_updated,
+            'time_to_close_hours': time_to_close_hours,
+            
+            # Complex data
+            'assignees': json.dumps(assignees) if assignees else None,
+            'labels': json.dumps(labels) if labels else None,
+            'milestone': json.dumps(milestone_info) if milestone_info else None,
             'project_fields': json.dumps(issue_project_fields) if issue_project_fields else None,
-            'exported_at': datetime.now(timezone.utc)
+            
+            # System fields
+            'exported_at': now
         }
         
         transformed_issues.append(issue_record)
@@ -427,93 +479,155 @@ def check_table_exists(session, table_path: str) -> bool:
         return False
 
 def create_issues_table(session, table_path: str):
-    """Create issues table in YDB"""
-    print(f"Creating table: {table_path}")
+    """Create issues table in YDB optimized for BI"""
+    print(f"Creating BI-optimized table: {table_path}")
     start_time = time.time()
     
     try:
         session.execute_scheme(f"""
-            CREATE TABLE `{table_path}` (
+            CREATE TABLE IF NOT EXISTS `{table_path}` (
+                -- Primary identifiers
                 `project_item_id` Utf8 NOT NULL,
                 `issue_id` Utf8 NOT NULL,
-                `issue_number` Uint64,
+                `issue_number` Uint64 NOT NULL,
+                
+                -- Core issue data
                 `title` Utf8,
                 `url` Utf8,
                 `state` Utf8,
                 `body` Utf8,
                 `body_text` Utf8,
-                `created_at` Timestamp,
+                
+                -- Time dimensions for BI (partitioning keys)
+                `created_at` Timestamp NOT NULL,
                 `updated_at` Timestamp,
                 `closed_at` Timestamp,
+                `created_date` Date NOT NULL,  -- Extracted date for better partitioning
+                `updated_date` Date NOT NULL,  -- Extracted date for better partitioning
+                
+                -- User dimensions
                 `author_login` Utf8,
                 `author_url` Utf8,
-                `assignees` Json,
-                `labels` Json,
-                `milestone` Json,
+                
+                -- Metrics (denormalized for BI)
                 `reactions_count` Uint64,
                 `comments_count` Uint64,
                 `participants_count` Uint64,
+                `body_length` Uint64,  -- Text length metric
+                `labels_count` Uint64,  -- Count of labels
+                `assignees_count` Uint64,  -- Count of assignees
+                
+                -- Repository dimensions
                 `repository_name` Utf8,
                 `repository_url` Utf8,
+                
+                -- Project dimensions (nullable for issues not in project)
                 `project_status` Utf8,
                 `project_owner` Utf8,
                 `project_priority` Utf8,
+                `is_in_project` Int NOT NULL,  -- Boolean flag for faster filtering
+                
+                -- Time-based metrics
+                `days_since_created` Uint64,  -- Days since creation
+                `days_since_updated` Uint64,  -- Days since last update
+                `time_to_close_hours` Uint64,  -- Time to close in hours (if closed)
+                
+                -- Complex data (keep as JSON for detailed analysis)
+                `assignees` Json,
+                `labels` Json,
+                `milestone` Json,
                 `project_fields` Json,
+                
+                -- System fields
                 `exported_at` Timestamp NOT NULL,
-                PRIMARY KEY (`project_item_id`)
+                
+                PRIMARY KEY (`created_date`, `issue_number`, `project_item_id`)
             )
+            PARTITION BY HASH(`created_date`)
             WITH (
-                STORE = COLUMN
+                STORE = COLUMN,
+                
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 2048,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
             )
         """)
         
         elapsed = time.time() - start_time
-        print(f"Table created successfully (took {elapsed:.2f}s)")
+        print(f"BI-optimized table created successfully (took {elapsed:.2f}s)")
         
     except Exception as e:
         elapsed = time.time() - start_time
-        print(f"Error creating table: {e} (took {elapsed:.2f}s)")
+        print(f"Error creating BI-optimized table: {e} (took {elapsed:.2f}s)")
         raise
 
 def bulk_upsert_issues(table_client, table_path: str, issues: List[Dict[str, Any]]):
-    """Bulk upsert issues into YDB table"""
-    print(f"Bulk upserting {len(issues)} issues to {table_path}")
+    """Bulk upsert issues into YDB table optimized for BI"""
+    print(f"Bulk upserting {len(issues)} issues to BI-optimized table {table_path}")
     start_time = time.time()
     
     column_types = (
         ydb.BulkUpsertColumns()
+        # Primary identifiers
         .add_column("project_item_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("issue_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        
+        # Core issue data
         .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        
+        # Time dimensions
         .add_column("created_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
         .add_column("updated_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
         .add_column("closed_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("created_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+        .add_column("updated_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+        
+        # User dimensions
         .add_column("author_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("author_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("assignees", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("labels", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("milestone", ydb.OptionalType(ydb.PrimitiveType.Json))
+        
+        # Metrics
         .add_column("reactions_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("comments_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("participants_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("body_length", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("labels_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("assignees_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        
+        # Repository dimensions
         .add_column("repository_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("repository_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        
+        # Project dimensions
         .add_column("project_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("project_owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("project_priority", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("is_in_project", ydb.OptionalType(ydb.PrimitiveType.Int32))
+        
+        # Time-based metrics
+        .add_column("days_since_created", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("days_since_updated", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("time_to_close_hours", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        
+        # Complex data
+        .add_column("assignees", ydb.OptionalType(ydb.PrimitiveType.Json))
+        .add_column("labels", ydb.OptionalType(ydb.PrimitiveType.Json))
+        .add_column("milestone", ydb.OptionalType(ydb.PrimitiveType.Json))
         .add_column("project_fields", ydb.OptionalType(ydb.PrimitiveType.Json))
+        
+        # System fields
         .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     )
     
     table_client.bulk_upsert(table_path, issues, column_types)
     
     elapsed = time.time() - start_time
-    print(f"Bulk upsert completed (took {elapsed:.2f}s)")
+    print(f"BI-optimized bulk upsert completed (took {elapsed:.2f}s)")
 
 def main():
     """Main function to export GitHub issues to YDB"""
@@ -532,7 +646,7 @@ def main():
         "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
     ]
     
-    table_path = "github_data/issues"
+    table_path = "github_data/all_issues_table_2"
     full_table_path = f"{DATABASE_PATH}/{table_path}"
     batch_size = 100
     
@@ -548,14 +662,14 @@ def main():
             with ydb.SessionPool(driver) as pool:
                 # Check and create table if needed
                 def check_and_create_table(session):
-                    if not check_table_exists(session, full_table_path):
-                        create_issues_table(session, full_table_path)
+                   # if not check_table_exists(session, full_table_path):
+                    create_issues_table(session, table_path)
                     return True
                 
                 pool.retry_operation_sync(check_and_create_table)
                 
                 # Check if this is an incremental update
-                last_update_time = get_last_update_time(driver, full_table_path)
+                last_update_time = get_last_update_time(driver, table_path)
                 
                 if last_update_time:
                     print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")

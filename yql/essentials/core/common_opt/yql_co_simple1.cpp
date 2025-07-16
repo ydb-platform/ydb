@@ -3833,6 +3833,10 @@ TExprNode::TPtr MemberOverRenamingFlatMap(const TExprNode::TPtr& node, TExprCont
     }
 
     auto arg = maybeFlatMap.Cast().Lambda().Args().Arg(0);
+    if (arg.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
+        return node;
+    }
+
     auto asStruct  = maybeFlatMap.Cast().Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
     if (!asStruct) {
         return node;

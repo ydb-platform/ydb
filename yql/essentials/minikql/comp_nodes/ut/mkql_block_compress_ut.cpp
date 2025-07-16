@@ -84,7 +84,7 @@ void DoNestedTuplesCompressTest() {
     node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
 
     node = pb.BlockExpandChunked(node);
-    node = pb.WideSkipBlocks(node, pb.template NewDataLiteral<ui64>(19));
+    node = pb.ToFlow(pb.WideSkipBlocks(pb.FromFlow(node), pb.template NewDataLiteral<ui64>(19)));
     node = pb.BlockCompress(node, 2);
     node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
 

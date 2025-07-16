@@ -1,3 +1,5 @@
+#include "generate_vim.h"
+
 #include <yql/essentials/sql/v1/highlight/sql_highlight_json.h>
 #include <yql/essentials/sql/v1/highlight/sql_highlight.h>
 #include <yql/essentials/sql/v1/highlight/sql_highlighter.h>
@@ -14,6 +16,12 @@ int RunGenerateJSON() {
     THighlighting highlighting = MakeHighlighting();
     NJson::TJsonValue json = ToJson(highlighting);
     NJson::WriteJson(&Cout, &json, /* formatOutput = */ true);
+    return 0;
+}
+
+int RunGenerateVim() {
+    THighlighting highlighting = MakeHighlighting();
+    GenerateVim(Cout, highlighting);
     return 0;
 }
 
@@ -53,7 +61,7 @@ int Run(int argc, char* argv[]) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('g', "generate", "generate a highlighting configuration")
         .RequiredArgument("target")
-        .Choices({"json"})
+        .Choices({"json", "vim"})
         .StoreResult(&target);
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
@@ -62,6 +70,9 @@ int Run(int argc, char* argv[]) {
     if (res.Has("generate")) {
         if (target == "json") {
             return RunGenerateJSON();
+        }
+        if (target == "vim") {
+            return RunGenerateVim();
         }
         Y_ABORT();
     }

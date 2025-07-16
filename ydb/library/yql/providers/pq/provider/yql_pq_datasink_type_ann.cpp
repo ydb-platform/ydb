@@ -94,7 +94,6 @@ public:
         input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
         return TStatus::Ok;
     }
-  
 
     TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
         if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {

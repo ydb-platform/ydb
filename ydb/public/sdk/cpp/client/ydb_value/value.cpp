@@ -17,6 +17,7 @@
 #include <util/generic/bitmap.h>
 #include <util/generic/map.h>
 #include <util/string/builder.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NYdb {
 
@@ -1253,6 +1254,24 @@ public:
         CheckPrimitive(NYdb::EPrimitiveType::Uuid);
         return TUuidValue(GetProto());
     }
+    
+    TUuidValue GetUuidHack() const {
+        CheckUuid();
+        auto& bytes = GetProto().bytes_value();
+        if (bytes.size() != 16) {
+            FatalError(TStringBuilder() << "Uuid size is not 16");
+        }
+
+        struct TUuidData {
+            ui64 Low;
+            ui64 High;
+        } value;
+        
+        // unpack bytes into value 
+        value = ReadUnaligned<TUuidData>(bytes.data());
+
+        return TUuidValue(value.Low, value.High);
+    }
 
     const TString& GetJsonDocument() const {
         CheckPrimitive(NYdb::EPrimitiveType::JsonDocument);
@@ -1548,6 +1567,15 @@ private:
         CheckTransportKind(GetPrimitiveValueCase(primitiveType));
     }
 
+    void CheckUuid() const {
+        CheckKind(ETypeKind::Primitive, "Get");
+        if (EPrimitiveType::Uuid != TypeParser_.GetPrimitive()) {
+            FatalError(TStringBuilder() << "Type mismatch, requested: " << EPrimitiveType::Uuid
+                << ", actual: " << TypeParser_.GetPrimitive());
+        }
+        CheckTransportKind(Ydb::Value::kBytesValue);
+    }
+
     void CheckDecimal() const {
         CheckKind(ETypeKind::Decimal, "Get");
         CheckTransportKind(Ydb::Value::kLow128);
@@ -1768,6 +1796,10 @@ const TString& TValueParser::GetJson() const {
 
 TUuidValue TValueParser::GetUuid() const {
     return Impl_->GetUuid();
+}
+
+TUuidValue TValueParser::GetUuidHack() const {
+    return Impl_->GetUuidHack();
 }
 
 const TString& TValueParser::GetJsonDocument() const {

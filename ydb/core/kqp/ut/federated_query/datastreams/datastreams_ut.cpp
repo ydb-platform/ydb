@@ -340,14 +340,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         const TString sql = fmt::format(R"(
-                $input = SELECT key FROM `{source}`.`{input_topic}`
+                $input = SELECT key, value FROM `{source}`.`{input_topic}`
                     WITH (
                         FORMAT="json_each_row",
                         SCHEMA=(
-                            key String NOT NULL
+                            key String NOT NULL,
+                            value String  NOT NULL
                         ));
                 INSERT INTO `{source}`.`{output_topic}`
-                    SELECT * FROM $input;
+                    SELECT key || value FROM $input;
             )", "source"_a=sourceName, "input_topic"_a=inputTopicName, "output_topic"_a=outputTopicName);
 
         auto queryClient = kikimr->GetQueryClient();
@@ -355,11 +356,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto scriptExecutionOperation = queryClient.ExecuteScript(sql, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
       
+        // while (true) {
+        //     NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        //     Cerr << "ExecuteScript ok " << readyOp.Metadata().ExecStatus << Endl;
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // }
+
+         //UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
         auto writeSettings = NYdb::NTopic::TWriteSessionSettings().Path(inputTopicName);
         auto topicSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
-        topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key1"})"));
+        topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key1", "value":"value1"})"));
         topicSession->Close();
 
         NYdb::NTopic::TReadSessionSettings readSettings;
@@ -375,23 +384,21 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             }
         );
 
+        Cerr << "Writing ok " << Endl;
+
         auto readSession = topicClient.CreateReadSession(readSettings);
         std::vector<std::string> received;
         while (true) {
             auto event = readSession->GetEvent(/*block = */true);
-            Cerr << "Got new read session event: " << DebugString(*event) << Endl;
              if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-                    Cerr << "Got new read session event: data" <<  Endl;
-
-                     for (const auto& message : dataEvent->GetMessages()) {
-                        std::cerr << "Data message: \"" << message.GetData() << "\"" << std::endl;
+                    for (const auto& message : dataEvent->GetMessages()) {
                         received.push_back(message.GetData());
                     }
                     break;
              }
         }
         UNIT_ASSERT_EQUAL(received.size(), 1);
-        UNIT_ASSERT_EQUAL(received[0], "key1");
+        UNIT_ASSERT_EQUAL(received[0], "key1value1");
 
         NYdb::NOperation::TOperationClient client(kikimr->GetDriver());
         status = client.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();

@@ -95,76 +95,25 @@ public:
         return TStatus::Ok;
     }
   
-    const TTypeAnnotationNode* AnnotateTargetBase(/*TCoAtom format, const TExprNode::TListType& keys, const TStructExprType* structType,*/ TExprContext& ctx) {
-        // const bool isSingleRowPerFileFormat = IsIn({TStringBuf("raw"), TStringBuf("json_list")}, format);
 
-        // auto keysCount = keys.size();
-        // if (keysCount) {
-        //     if (isSingleRowPerFileFormat) {
-        //         ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Partitioned isn't supported for " << (TStringBuf)format << " output format."));
-        //         return nullptr;
-        //     }
-
-        //     for (auto i = 0U; i < keysCount; ++i) {
-        //         const auto key = keys[i];
-        //         if (const auto keyType = structType->FindItemType(key->Content())) {
-        //             if (!EnsureDataType(key->Pos(), *keyType, ctx)) {
-        //                 return nullptr;
-        //             }
-        //         } else {
-        //             ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Missed key column."));
-        //             return nullptr;
-        //         }
-        //     }
-
-        //     TTypeAnnotationNode::TListType itemTypes(keysCount + 1U, ctx.MakeType<TDataExprType>(EDataSlot::Utf8));
-        //     itemTypes.front() = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String));
-
-        //     return ctx.MakeType<TTupleExprType>(itemTypes);
-        // }
-
-        const TTypeAnnotationNode* listItemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
-      //  if (!isSingleRowPerFileFormat) {
-            return listItemType;//ctx.MakeType<TOptionalExprType>(listItemType);
-      //  }
-
-      //  return listItemType;
-    }
-
-     TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
-        YQL_CLOG(INFO, ProviderPq) << "TPqDataSinkTypeAnnotationTransformer::HandleInsert " ;
-
+    TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
         if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {
             return TStatus::Error;
         }
 
-    //   const TTypeAnnotationNode* listItemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
-
-    //  TVector<const TItemExprType*> blockRowTypeItems;
-
-    // blockRowTypeItems.push_back(listItemType);
-    // const TTypeAnnotationNode* structNode = ctx.MakeType<TStructExprType>(blockRowTypeItems);
-
-        TVector<const TItemExprType*> items;
-        auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
-        items.push_back(ctx.MakeType<TItemExprType>("key", stringType));
-        auto itemType = ctx.MakeType<TStructExprType>(items);
-
-        auto t = ctx.MakeType<TTupleExprType>(
-                    TTypeAnnotationNode::TListType{
-                        ctx.MakeType<TListExprType>(
-                            itemType
-                        )
-                    });
-
-        input.Ptr()->SetTypeAnn(t);
-
-        const auto write = input.Cast<TPqInsert>();
-        const auto& writeInput = write.Input().Ref();
-        if (!EnsureStructTypeWithSingleStringMember(writeInput.GetTypeAnn(), writeInput.Pos(), ctx)) {
+        const auto insert = input.Cast<TPqInsert>();
+        const auto& insertInput = insert.Input().Ref();
+        if (!EnsureStructTypeWithSingleStringMember(insertInput.GetTypeAnn(), insertInput.Pos(), ctx)) {
             return TStatus::Error;
         }
 
+        auto itemSchema = insertInput.GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto column = itemSchema->GetItems()[0];
+        TVector<const TItemExprType*> items;
+        items.push_back(column);
+        auto itemType = ctx.MakeType<TStructExprType>(items);
+        auto type = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{ctx.MakeType<TListExprType>(itemType)});
+        input.Ptr()->SetTypeAnn(type);
         return TStatus::Ok;
     }
 

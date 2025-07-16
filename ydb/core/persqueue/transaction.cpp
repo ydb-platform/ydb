@@ -513,19 +513,6 @@ void TDistributedTransaction::EndWaitRSSpan()
     }
 }
 
-void TDistributedTransaction::BeginCalcPredicateSpan(ui64 tabletId)
-{
-    CalcPredicateSpan = CreateSpan("Topic.Transaction.CalcPredicate", tabletId);
-}
-
-void TDistributedTransaction::EndCalcPredicateSpan()
-{
-    if (CalcPredicateSpan) {
-        CalcPredicateSpan.End();
-        CalcPredicateSpan = {};
-    }
-}
-
 void TDistributedTransaction::BeginWaitRSAcksSpan(ui64 tabletId)
 {
     WaitRSAcksSpan = CreateSpan("Topic.Transaction.WaitRSAcks", tabletId);
@@ -536,19 +523,6 @@ void TDistributedTransaction::EndWaitRSAcksSpan()
     if (WaitRSAcksSpan) {
         WaitRSAcksSpan.End();
         WaitRSAcksSpan = {};
-    }
-}
-
-void TDistributedTransaction::BeginCommitSpan(ui64 tabletId)
-{
-    CommitSpan = CreateSpan("Topic.Transaction.Commit", tabletId);
-}
-
-void TDistributedTransaction::EndCommitSpan()
-{
-    if (CommitSpan) {
-        CommitSpan.End();
-        CommitSpan = {};
     }
 }
 
@@ -589,6 +563,11 @@ NWilson::TSpan TDistributedTransaction::CreateSpan(const char* name, ui64 tablet
     span.Attribute("TxId", static_cast<i64>(TxId));
     span.Attribute("TabletId", static_cast<i64>(tabletId));
     return span;
+}
+
+NWilson::TTraceId TDistributedTransaction::GetExecuteSpanTraceId()
+{
+    return ExecuteSpan.GetTraceId();
 }
 
 }

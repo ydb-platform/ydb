@@ -113,26 +113,22 @@ struct TDistributedTransaction {
     void BeginWaitRSSpan(ui64 tabletId);
     void SetLastTabletSentByRS(ui64 tabletId);
     void EndWaitRSSpan();
-    void BeginCalcPredicateSpan(ui64 tabletId);
-    void EndCalcPredicateSpan();
     void BeginWaitRSAcksSpan(ui64 tabletId);
     void EndWaitRSAcksSpan();
-    void BeginCommitSpan(ui64 tabletId);
-    void EndCommitSpan();
     void BeginPersistSpan(ui64 tabletId, EState state, const NWilson::TTraceId& traceId);
     void EndPersistSpan();
     void BeginDeleteSpan(ui64 tabletId, const NWilson::TTraceId& traceId);
     void EndDeleteSpan();
+
+    NWilson::TTraceId GetExecuteSpanTraceId();
 
 private:
     NWilson::TSpan CreateSpan(const char* name, ui64 tabletId);
 
     NWilson::TSpan ExecuteSpan;
     NWilson::TSpan PersistSpan;
-    NWilson::TSpan CalcPredicateSpan;
     NWilson::TSpan WaitRSSpan;
     NWilson::TSpan WaitRSAcksSpan;
-    NWilson::TSpan CommitSpan;
     NWilson::TSpan DeleteSpan;
 };
 

@@ -110,3 +110,6 @@ class WorkloadBase:
     def join(self, timeout = None):
         for t in self.workload_threads:
             t.join(timeout)
+
+    def is_alive(self):
+        return any(t.is_alive() for t in self.workload_threads)

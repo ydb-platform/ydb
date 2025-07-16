@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <util/system/hostname.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/kqp/query_data/kqp_predictor.h>
 
 #include <library/cpp/scheme/scheme.h>
 
@@ -107,6 +108,8 @@ private:
                 auto schedulerType = schedulerSettings["type"].GetString();
                 if (schedulerType == "single_node") {
                     ScheduleOnSingleNode(request, response);
+                } else if (schedulerType == "smart") {
+                    ScheduleSmart(request, response);
                 } else {
                     auto& error = *response->Record.MutableError();
                     error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
@@ -142,7 +145,7 @@ private:
             if (totalMemoryLimit == 0) {
                 totalMemoryLimit = MkqlInitialMemoryLimit;
             }
-            TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
+            TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, 0, DataCenter};
             bool selfPlacement = true;
             if (!Peers.empty()) {
                 auto firstPeer = NextPeer;
@@ -239,6 +242,145 @@ private:
         }
     }
 
+    void ScheduleSmart(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
+        const auto count = request.GetCount();
+        auto resourceId = request.GetResourceId();
+        if (!resourceId) {
+            resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
+        }
+
+        TVector<const NDqProto::TDqTask*> tasks;
+        tasks.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
+            tasks.push_back(&request.GetTask(i));
+        }
+
+        // adjacency list
+        auto findIdx = [&](ui64 taskId) -> int {
+            for (int i = 0; i < (int)count; ++i) {
+                if (tasks[i]->GetId() == taskId) return i;
+            }
+            return -1;
+        };
+        TVector<TVector<std::pair<int,double>>> adj(count);
+        for (ui32 i = 0; i < count; ++i) {
+            auto* src = tasks[i];
+            double outPred = src->GetProgram().GetSettings().GetOutputDataPrediction();
+            for (const auto& inp : src->GetOutputs()) {
+                for (const auto& ch : inp.GetChannels()) {
+                    int dst = findIdx(ch.GetDstTaskId());
+                    if (dst >= 0) {
+                        adj[i].emplace_back(dst, outPred);
+                        adj[dst].emplace_back(i,  outPred);
+                    }
+                }
+            }
+        }
+
+        // clusterizing
+        TVector<int> comp(count, -1);
+        int compCnt = 0;
+        for (ui32 i = 0; i < count; ++i) {
+            if (comp[i] >= 0) continue;
+            // BFS
+            TVector<ui32> q{ i };
+            comp[i] = compCnt;
+            for (size_t qi = 0; qi < q.size(); ++qi) {
+                int u = q[qi];
+                for (auto& [v, _] : adj[u]) {
+                    if (comp[v] < 0) {
+                        comp[v] = compCnt;
+                        q.push_back(v);
+                    }
+                }
+            }
+            ++compCnt;
+        }
+
+        // grouping
+        struct TCluster { TVector<int> Idxs; ui64 MemSum = 0; double CpuScore = 0.0; };
+        TVector<TCluster> clusters(compCnt);
+        for (ui32 i = 0; i < count; ++i) {
+            clusters[comp[i]].Idxs.push_back(i);
+        }
+
+        for (auto& cl : clusters) {
+            for (int idx : cl.Idxs) {
+                const auto* t = tasks[idx];
+                ui64 mem = t->GetInitialTaskMemoryLimit()
+                          ? t->GetInitialTaskMemoryLimit()
+                          : MkqlInitialMemoryLimit;
+                cl.MemSum += mem;
+
+                const auto& s = t->GetProgram().GetSettings();
+                cl.CpuScore
+                    += s.GetHasSort()              ? 2.0 : 0.0
+                    +  s.GetHasMapJoin()           ? 2.0 : 0.0
+                    +  s.GetHasUdf()               ? 1.5 : 0.0
+                    +  s.GetHasStateAggregation()  ? 1.5 : 0.0;
+            }
+        }
+
+        // biggest one first
+        std::sort(clusters.begin(), clusters.end(),
+                  [&](auto& a, auto& b){ return a.Idxs.size() > b.Idxs.size(); });
+
+        bool placementFailure = false;
+        double cpuThreshold = 1000.0;
+
+        TVector<TPeer> assignment(count);
+
+        for (auto& cl : clusters) {
+            TPeer chosenNode;
+            bool placed = false;
+
+            for (bool requireCpu : {true, false}) {
+                ui32 startPeer = NextPeer;
+                ui32 peerIdx   = startPeer;
+                do {
+                    auto& peer = Peers[peerIdx];
+                    if ((!UseDataCenter || DataCenter.empty() || peer.DataCenter.empty() || DataCenter == peer.DataCenter)
+                        && (peer.MemoryLimit == 0 || peer.MemoryLimit >= peer.MemoryAllocated + cl.MemSum)
+                        && (!requireCpu || peer.CpuUsage + cl.CpuScore < cpuThreshold))
+                    {
+                        peer.MemoryAllocated += cl.MemSum;
+                        peer.CpuUsage       += cl.CpuScore;
+                        chosenNode = peer;
+                        placed = true;
+                        break;
+                    }
+                    if (++peerIdx >= Peers.size()) peerIdx = 0;
+                } while (peerIdx != startPeer);
+
+                if (placed) break;
+            }
+
+            if (!placed) {
+                placementFailure = true;
+                auto& error = *response->Record.MutableError();
+                error.SetStatusCode(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED);
+                error.SetMessage("Не удалось разместить кластер из-за нехватки ресурсов");
+                break;
+            }
+
+            for (int idx : cl.Idxs) {
+                assignment[idx] = chosenNode;
+            }
+        }
+
+        if (!placementFailure) {
+            response->Record.ClearError();
+            auto& group = *response->Record.MutableNodes();
+            group.SetResourceId(resourceId);
+            for (ui32 i = 0; i < count; ++i) {
+                const auto& node = assignment[i];
+                auto* worker = group.AddWorker();
+                *worker->MutableGuid() = node.InstanceId;
+                worker->SetNodeId(node.NodeId);
+            }
+        }
+    }
+
     void Handle(NDqs::TEvFreeWorkersNotify::TPtr&) {
         ServiceCounters.Counters->GetCounter("EvFreeWorkersNotify", true)->Inc();
     }
@@ -310,6 +452,7 @@ private:
         node.set_active_workers(AtomicGet(WorkerManagerCounters.ActiveWorkers->GetAtomic()));
         node.set_memory_limit(AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic()));
         node.set_memory_allocated(AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic()));
+        node.set_cpu_usage(AtomicGet(WorkerManagerCounters.ElapsedMicrosec->GetAtomic()));
         node.set_interconnect_port(IcPort);
         node.set_data_center(DataCenter);
         Send(InternalServiceId, new NFq::TEvInternalService::TEvHealthCheckRequest(request));
@@ -341,7 +484,7 @@ private:
                 nodeIds.insert(node.node_id());
 
                 Peers.push_back({node.node_id(), node.instance_id() + "," + node.hostname(),
-                  node.active_workers(), node.memory_limit(), node.memory_allocated(), node.data_center()});
+                  node.active_workers(), node.memory_limit(), node.memory_allocated(), node.cpu_usage(), node.data_center()});
 
                 if (node.interconnect_port()) {
                     nodesInfo->emplace_back(TEvInterconnect::TNodeInfo{
@@ -392,6 +535,7 @@ private:
         ui64 ActiveWorkers;
         ui64 MemoryLimit;
         ui64 MemoryAllocated;
+        ui64 CpuUsage;
         TString DataCenter;
     };
     TVector<TPeer> Peers;

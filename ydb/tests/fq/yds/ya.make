@@ -48,6 +48,7 @@ TEST_SRCS(
     test_select_limit_db_id.py
     test_select_limit.py
     test_select_timings.py
+    test_smart_scheduler.py
     test_stop.py
     test_yds_bindings.py
     test_yq_streaming.py

@@ -8,10 +8,13 @@ struct TWorkerManagerCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryLimit;
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryAllocated;
     ::NMonitoring::TDynamicCounters::TCounterPtr FreeGroupError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosec;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
 
     explicit TWorkerManagerCounters(::NMonitoring::TDynamicCounterPtr root);
-    explicit TWorkerManagerCounters(::NMonitoring::TDynamicCounterPtr root, ::NMonitoring::TDynamicCounterPtr taskCounters);
+    explicit TWorkerManagerCounters(::NMonitoring::TDynamicCounterPtr root,
+                                    ::NMonitoring::TDynamicCounterPtr taskCounters,
+                                    ::NMonitoring::TDynamicCounterPtr userCounters);
     TWorkerManagerCounters();
 };
 

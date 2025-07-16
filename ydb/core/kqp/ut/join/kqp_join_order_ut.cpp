@@ -1097,14 +1097,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(TPCDSEveryQueryWorks, ColumnStore) {
+    Y_UNIT_TEST(TPCDSEveryQueryWorks) {
         auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpcds1000s.json"), true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
         auto session = result.GetSession();
 
-        CreateTables(session, "schema/tpcds.sql", ColumnStore);
+        CreateTables(session, "schema/tpcds.sql", true);
 
         RunBenchmarkQueries(
             session,

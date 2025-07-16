@@ -1317,7 +1317,15 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 
 }
 
-TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin) {
+TExprBase DqBuildHashJoin(
+    const TDqJoin& join,
+    EHashJoinMode mode,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    bool shuffleElimination,
+    bool shuffleEliminationWithMap,
+    bool useBlockHashJoin
+) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
 
@@ -1350,6 +1358,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     TModifyKeysList remapLeft, remapRight;
     bool shuffleLeftSide = !join.ShuffleLeftSideBy() || !join.ShuffleLeftSideBy().Cast().Empty() || !shuffleElimination;
     bool shuffleRightSide = !join.ShuffleRightSideBy() || !join.ShuffleRightSideBy().Cast().Empty() || !shuffleElimination;
+    THashMap<TString, TString> leftColumnRemap;
+    THashMap<TString, TString> rightColumnRemap;
     if (shuffleLeftSide && shuffleRightSide /* for columnshardhashv1 (shuffle elimination) it is important to save original types for join predicate */) {
         for (ui32 i = 0U; i < rightJoinKeys.size() && !badKey; ++i) {
             const auto keyType1 = leftStructType->FindItemType(leftJoinKeys[i]);
@@ -1365,12 +1375,18 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             }
 
             if (commonType) {
+                Cout << "SESESE" << Endl;
+                Cout << leftJoinKeys[i].StringValue() << Endl;
+                Cout << rightJoinKeys[i].StringValue() << Endl<< Endl;
+                Cout << "SESESE" << Endl;
                 if (!IsSameAnnotation(*keyType1, *commonType)) {
                     TString rename = (TString("_yql_dq_key_left_") + ToString(i));
+                    leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
                     remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
                 }
                 if (!IsSameAnnotation(*keyType2, *commonType)) {
                     TString rename = TString("_yql_dq_key_right_") + ToString(i);
+                    rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
                     remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
                 }
             } else
@@ -1461,14 +1477,78 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         TExprNode::TListType fields(items.size());
         std::transform(items.cbegin(), items.cend(), fields.begin(), [&](const TItemExprType* item) { return ctx.NewAtom(join.Pos(), item->GetName()); });
 
-        return Build<TCoExtractMembers>(ctx, join.Pos())
-            .Input<TDqJoin>()
+        auto remapShufflings =
+            [&](const TMaybeNode<TExprList>& maybeShuffleBy, const THashMap<TString, TString>& columnRemap) -> TExprNode::TListType {
+                if (!maybeShuffleBy) {
+                    return {};
+                }
+
+                TExprNode::TListType shuffleBy;
+                shuffleBy.reserve(maybeShuffleBy.Cast().Size());
+
+                for (const auto& columnExprBase: maybeShuffleBy.Cast()) {
+                    auto columnExpr = columnExprBase.Ptr();
+                    TString rel;
+                    TString attr;
+                    if (columnExpr->ChildrenSize() == 1) {
+                        attr = TString(columnExpr->Child(0)->Content());
+                    } else if (columnExpr->ChildrenSize() == 2) {
+                        rel = TString(columnExpr->Child(0)->Content());
+                        attr = TString(columnExpr->Child(1)->Content());
+                    }
+
+                    TString columnName;
+                    if (columnRemap.contains(rel + "." + attr)) {
+                        columnName = columnRemap.at(rel + "." + attr);
+                    } else if (columnRemap.contains(attr)) {
+                        columnName = columnRemap.at(attr);
+                    }
+
+                    if (columnName) {
+                        auto node =
+                            ctx.Builder(join.Pos())
+                                .List()
+                                    .Atom(0, columnName)
+                                .Seal()
+                            .Build();
+
+
+                        shuffleBy.push_back(std::move(node));
+                        continue;
+                    }
+
+                    shuffleBy.push_back(columnExpr);
+                }
+
+                return shuffleBy;
+            };
+
+        auto dqJoin =
+            Build<TDqJoin>(ctx, join.Pos())
                 .InitFrom(join)
                 .LeftInput(connLeft)
                 .RightInput(connRight)
-                .JoinKeys(ctx.ChangeChildren(join.JoinKeys().Ref(), std::move(joinKeys)))
+                .JoinKeys(ctx.ChangeChildren(join.JoinKeys().Ref(), std::move(joinKeys)));
+
+        if (auto shuffleLeftSideBy = remapShufflings(join.ShuffleLeftSideBy(), leftColumnRemap); !shuffleLeftSideBy.empty()) {
+            dqJoin
+                .ShuffleLeftSideBy()
+                    .Add(std::move(shuffleLeftSideBy))
+                .Build();
+        }
+        if (auto shuffleRightSideBy = remapShufflings(join.ShuffleRightSideBy(), rightColumnRemap); !shuffleRightSideBy.empty()) {
+            dqJoin
+                .ShuffleRightSideBy()
+                    .Add(std::move(shuffleRightSideBy))
+                .Build();
+        }
+
+        return
+            Build<TCoExtractMembers>(ctx, join.Pos())
+                .Input(std::move(dqJoin.Build().Value()))
+                .Members()
+                    .Add(std::move(fields))
                 .Build()
-            .Members().Add(std::move(fields)).Build()
             .Done();
     }
 
@@ -1493,7 +1573,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             return std::find_if(
                 joinKeys.begin(),
                 joinKeys.end(),
-                [&column](const TCoAtom& atom){ return atom.StringValue() == column; }
+                [&column](const TCoAtom& atom){ Cout << atom.StringValue() << Endl; return atom.StringValue() == column; }
             ) != joinKeys.end();
         };
 
@@ -1510,12 +1590,10 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             }
 
             TString column;
-            if (contains(attr)) {
-                column = std::move(attr);
-            } else if (contains(rel + "." + attr)){
+            if (contains(rel + "." + attr)){
                 column = rel + "." + attr;
-            } else if (auto maybeRemap = joinKeys[i].StringValue(); maybeRemap.Contains("_yql_dq_key")) {
-                column = maybeRemap;
+            } else if (contains(attr)) {
+                column = std::move(attr);
             } else {
                 Y_ENSURE(false, TStringBuilder{} << "There's no such column for shuffling: " <<  "." << attr);
             }

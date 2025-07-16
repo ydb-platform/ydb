@@ -53,6 +53,7 @@ def ensure_path_exists(path):
 
 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
+    # check
     def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
                  binary_path=None, data_center=None, use_config_store=False, seed_nodes_file=None):

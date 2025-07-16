@@ -103,19 +103,19 @@ class WorkloadTablesCreateDrop(WorkloadBase):
         self.client.query(stmt, True)
 
     def _create_tables_loop(self):
-        logger.debug("_create_tables_loop: starting")
+        logger.debug("starting")
         while not self.is_stop_requested():
             n = self._generate_new_table_n()
             self.create_table(str(n))
             with self.lock:
                 self.tables[n] = WorkloadTablesCreateDrop.TableStatus.AVAILABLE
                 self.created += 1
-                logger.debug(f"_create_tables_loop: iteration {self.created}")
+                logger.debug(f"iteration {self.created}")
         with self.lock:
-            logger.debug(f"_create_tables_loop: exiting after {self.created} iterations")
+            logger.debug(f"exiting after {self.created} iterations")
 
     def _delete_tables_loop(self):
-        logger.debug("_delete_tables_loop: starting")
+        logger.debug("starting")
         while not self.is_stop_requested():
             n = self._get_table_to_delete()
             if n is None:
@@ -126,9 +126,9 @@ class WorkloadTablesCreateDrop(WorkloadBase):
             with self.lock:
                 del self.tables[n]
                 self.deleted += 1
-                logger.debug(f"_delete_tables_loop: iteration {self.deleted}")
+                logger.debug(f"iteration {self.deleted}")
         with self.lock:
-            logger.debug(f"_delete_tables_loop: exiting after {self.deleted} iterations")
+            logger.debug(f"exiting after {self.deleted} iterations")
 
     def get_workload_thread_funcs(self):
         return [self._create_tables_loop] * 3 + [self._delete_tables_loop] * 2
@@ -147,7 +147,7 @@ class WorkloadInsertDelete(WorkloadBase):
             return f"Inserted: {self.inserted}, Current: {self.current}"
 
     def _loop(self):
-        logger.debug("_loop (insert_delete): starting")
+        logger.debug("starting")
         table_path = self.get_table_path(self.table_name)
         self.client.query(
             f"""
@@ -161,7 +161,7 @@ class WorkloadInsertDelete(WorkloadBase):
         )
         i = 1
         while not self.is_stop_requested():
-            logger.debug(f"_loop (insert_delete): iteration {i}")
+            logger.debug(f"iteration {i}")
             self.client.query(
                 f"""
                 INSERT INTO `{table_path}` (`id`, `i64Val`)
@@ -193,7 +193,7 @@ class WorkloadInsertDelete(WorkloadBase):
             with self.lock:
                 self.inserted += 2
                 self.current = actual["cnt"]
-        logger.debug(f"_loop (insert_delete): exiting after {i} iterations")
+        logger.debug(f"exiting after {i} iterations")
 
     def get_workload_thread_funcs(self):
         return [self._loop]
@@ -225,7 +225,7 @@ class WorkloadReconfigStateStorage(WorkloadBase):
         return res
 
     def _loop(self):
-        logger.debug("_loop (reconfig_statestorage): starting")
+        logger.debug("starting")
         while not self.is_stop_requested():
             time.sleep(self.wait_for)
             cfg = self.do_request_config()[f"{self.config_name}Config"]
@@ -261,9 +261,9 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             with self.lock:
                 logger.info(f"Reconfig {self.loop_cnt} finished")
                 self.loop_cnt += 1
-                logger.debug(f"_loop (reconfig_statestorage): iteration {self.loop_cnt}")
+                logger.debug(f"iteration {self.loop_cnt}")
         with self.lock:
-            logger.debug(f"_loop (reconfig_statestorage): exiting after {self.loop_cnt} iterations")
+            logger.debug(f"exiting after {self.loop_cnt} iterations")
 
     def get_workload_thread_funcs(self):
         return [self._loop]
@@ -282,7 +282,7 @@ class WorkloadDiscovery(WorkloadBase):
             return f"Discovery: {self.cnt}"
 
     def _loop(self):
-        logger.debug("_loop (discovery): starting")
+        logger.debug("starting")
         driver_config = ydb.DriverConfig(self.grpc_endpoint, self.client.database)
         while not self.is_stop_requested():
             time.sleep(3)
@@ -294,9 +294,9 @@ class WorkloadDiscovery(WorkloadBase):
                 logger.info(f"Len = {len(result.endpoints)} Endpoints: {result.endpoints}")
             with self.lock:
                 self.cnt += 1
-                logger.debug(f"_loop (discovery): iteration {self.cnt}")
+                logger.debug(f"iteration {self.cnt}")
         with self.lock:
-            logger.debug(f"_loop (discovery): exiting after {self.cnt} iterations")
+            logger.debug(f"exiting after {self.cnt} iterations")
 
     def get_workload_thread_funcs(self):
         return [self._loop]

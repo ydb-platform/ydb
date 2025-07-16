@@ -8,6 +8,7 @@ SRCS(
     string_udf.cpp
     columnshard.cpp
     datetime2_udf.cpp
+    unicode_udf.cpp
 )
 
 PEERDIR(
@@ -17,6 +18,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors_factory
     yql/essentials/public/udf
     yql/essentials/udfs/common/string
+    yql/essentials/udfs/common/unicode_base
     yql/essentials/utils/backtrace
     ydb/public/lib/yson_value
     ydb/core/tx/columnshard/test_helper

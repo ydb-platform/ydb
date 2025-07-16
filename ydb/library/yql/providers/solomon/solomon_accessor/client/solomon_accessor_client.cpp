@@ -225,6 +225,10 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
         std::vector<int64_t> timestamps(queryResponse.timestamp_values().values().begin(), queryResponse.timestamp_values().values().end());
         std::vector<double> values(queryResponse.double_values().values().begin(), queryResponse.double_values().values().end());
 
+        if (TString name = queryResponse.name()) {
+            labels["name"] = name;
+        }
+
         TMetric metric {
             .Labels = labels,
             .Type = type,

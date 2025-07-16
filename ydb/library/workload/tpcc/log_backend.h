@@ -1,5 +1,7 @@
 #pragma once
 
+#include "log.h"
+
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/logger/log.h>
 
@@ -8,6 +10,7 @@
 #include <functional>
 #include <deque>
 #include <string>
+#include <utility>
 
 namespace NYdb::NTPCC {
 
@@ -16,14 +19,15 @@ namespace NYdb::NTPCC {
 class TLogBackendWithCapture : public TLogBackend {
 public:
     explicit TLogBackendWithCapture(const TString& type, ELogPriority priority, size_t maxLines);
-    virtual ~TLogBackendWithCapture();
+    virtual ~TLogBackendWithCapture() = default;
 
     void StartCapture();
     void StopCapture();
+    void StopCaptureAndFlush(IOutputStream& os);
 
     // Get current log lines to display in TUI
     // Assumes single consumer, multiple producers
-    void GetLogLines(const std::function<void(const std::string&)>& processor);
+    void GetLogLines(const TLogProcessor& processor);
 
     // TLogBackend interface (threadsafe)
 
@@ -38,18 +42,18 @@ public:
     }
 
 private:
-    void ProcessNewLines();
+    void ProcessNewLines(bool logTaken);
 
 private:
     THolder<TLogBackend> RealBackend;
     const size_t MaxLines;
 
-    std::deque<std::string> LogLines;
+    std::deque<std::pair<ELogPriority, std::string>> LogLines;
     size_t TruncatedCount = 0;
 
     TMutex CapturingMutex;
     bool IsCapturing = false;
-    std::vector<std::string> CapturedLines;
+    std::vector<std::pair<ELogPriority, std::string>> CapturedLines;
 };
 
 } // namespace NYdb::NTPCC

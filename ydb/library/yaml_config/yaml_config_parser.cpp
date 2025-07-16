@@ -1022,10 +1022,6 @@ endDiskTypeCheck:   ;
             } else {
                 node->SetInterconnectHost(host.GetHost());
             }
-
-            if (host.HasBridgePileName()) {
-                node->SetBridgePileName(host.GetBridgePileName());
-            }
         }
     }
 

@@ -105,8 +105,7 @@ namespace NKikimr {
 
     struct TWilsonTopic {
         enum {
-            ExecuteTransaction = TComponentTracingLevels::TTopic::Basic,
-            PersistTransaction = TComponentTracingLevels::TTopic::Detailed,
+            ExecuteTransaction = TComponentTracingLevels::TTopic::TopLevel,
         };
     };
 } // NKikimr

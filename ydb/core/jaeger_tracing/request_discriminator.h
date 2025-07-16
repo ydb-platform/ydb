@@ -61,6 +61,8 @@ enum class ERequestType: size_t {
     DISCOVERY_NODEREGISTRATION,
     DISCOVERY_LISTENDPOINTS,
 
+    TOPIC_PROPOSE_TRANSACTION,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 

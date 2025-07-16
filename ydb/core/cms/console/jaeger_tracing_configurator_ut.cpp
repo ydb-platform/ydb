@@ -52,7 +52,7 @@ TTenantTestConfig DefaultConsoleTestConfig() {
 
 void InitJaegerTracingConfigurator(
     TTenantTestRuntime& runtime,
-    TSamplingThrottlingConfigurator configurator,
+    TIntrusivePtr<TSamplingThrottlingConfigurator> configurator,
     const NKikimrConfig::TTracingConfig& initCfg
 ) {
     runtime.Register(CreateJaegerTracingConfigurator(std::move(configurator), initCfg));
@@ -125,10 +125,10 @@ private:
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> Controls;
 };
 
-std::pair<TTracingControls, TSamplingThrottlingConfigurator>
+std::pair<TTracingControls, TIntrusivePtr<TSamplingThrottlingConfigurator>>
     CreateSamplingThrottlingConfigurator(size_t n, TIntrusivePtr<ITimeProvider> timeProvider) {
     auto randomProvider = CreateDefaultRandomProvider();
-    TSamplingThrottlingConfigurator configurator(timeProvider, randomProvider);
+    TIntrusivePtr<TSamplingThrottlingConfigurator> configurator = MakeIntrusive<TSamplingThrottlingConfigurator>(timeProvider, randomProvider);
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> controls;
     for (size_t i = 0; i < n; ++i) {
         controls.emplace_back(configurator.GetControl());

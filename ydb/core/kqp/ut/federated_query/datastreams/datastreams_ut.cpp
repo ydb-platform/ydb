@@ -355,14 +355,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto settings = TExecuteScriptSettings().StatsMode(EStatsMode::Basic);
         auto scriptExecutionOperation = queryClient.ExecuteScript(sql, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-      
-        // while (true) {
-        //     NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
-        //     Cerr << "ExecuteScript ok " << readyOp.Metadata().ExecStatus << Endl;
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        // }
-
-         //UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
@@ -383,8 +375,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 event.Confirm(0);
             }
         );
-
-        Cerr << "Writing ok " << Endl;
 
         auto readSession = topicClient.CreateReadSession(readSettings);
         std::vector<std::string> received;

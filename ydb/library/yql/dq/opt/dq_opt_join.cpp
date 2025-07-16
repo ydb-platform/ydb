@@ -1375,10 +1375,6 @@ TExprBase DqBuildHashJoin(
             }
 
             if (commonType) {
-                Cout << "SESESE" << Endl;
-                Cout << leftJoinKeys[i].StringValue() << Endl;
-                Cout << rightJoinKeys[i].StringValue() << Endl<< Endl;
-                Cout << "SESESE" << Endl;
                 if (!IsSameAnnotation(*keyType1, *commonType)) {
                     TString rename = (TString("_yql_dq_key_left_") + ToString(i));
                     leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
@@ -1573,7 +1569,7 @@ TExprBase DqBuildHashJoin(
             return std::find_if(
                 joinKeys.begin(),
                 joinKeys.end(),
-                [&column](const TCoAtom& atom){ Cout << atom.StringValue() << Endl; return atom.StringValue() == column; }
+                [&column](const TCoAtom& atom){ return atom.StringValue() == column; }
             ) != joinKeys.end();
         };
 

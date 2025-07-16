@@ -2359,6 +2359,7 @@ enum class EOperationAttribute : int
     Spec              /* "spec" */,
     FullSpec          /* "full_spec" */,
     UnrecognizedSpec  /* "unrecognized_spec" */,
+    Alerts            /* "alerts" */,
 };
 
 ///

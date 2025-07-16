@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <library/cpp/cron_expression/cron_expression.h>
+
 namespace NYT::NQueueClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,7 +59,11 @@ bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs
 void TQueueStaticExportConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("export_period", &TThis::ExportPeriod)
-        .GreaterThan(TDuration::Zero());
+        .GreaterThan(TDuration::Zero())
+        .Optional();
+    registrar.Parameter("export_cron_schedule", &TThis::ExportCronSchedule)
+        .NonEmpty()
+        .Optional();
     registrar.Parameter("export_directory", &TThis::ExportDirectory);
     registrar.Parameter("export_ttl", &TThis::ExportTtl)
         .Default(TDuration::Zero());
@@ -67,15 +73,31 @@ void TQueueStaticExportConfig::Register(TRegistrar registrar)
         .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
-        if (config->ExportPeriod.GetValue() % TDuration::Seconds(1).GetValue() != 0) {
-            THROW_ERROR_EXCEPTION("The value of \"export_period\" must be a multiple of 1000 (1 second)");
+        if (config->ExportPeriod && config->ExportCronSchedule) {
+            THROW_ERROR_EXCEPTION("Both \"export_period\" and \"export_cron_schedule\" cannot be set at the same time");
+        }
+
+        if (config->ExportPeriod) {
+            if (config->ExportPeriod->GetValue() % TDuration::Seconds(1).GetValue() != 0) {
+                THROW_ERROR_EXCEPTION("The value of \"export_period\" must be a multiple of 1000 (1 second)");
+            }
+        } else if (config->ExportCronSchedule) {
+            try {
+                TCronExpression{*config->ExportCronSchedule};
+            } catch (const std::exception& ex) {
+                THROW_ERROR_EXCEPTION("Export CRON schedule %Qv is not well-formed", *config->ExportCronSchedule)
+                    << ex;
+            }
+        } else {
+            THROW_ERROR_EXCEPTION("One of \"export_period\", \"export_cron_schedule\" must be specified");
         }
     });
 }
 
 bool operator==(const TQueueStaticExportConfig& lhs, const TQueueStaticExportConfig& rhs)
 {
-    return std::tie(lhs.ExportPeriod, lhs.ExportDirectory) == std::tie(rhs.ExportPeriod, rhs.ExportDirectory);
+    return std::tie(lhs.ExportPeriod, lhs.ExportCronSchedule, lhs.ExportDirectory) ==
+        std::tie(rhs.ExportPeriod, lhs.ExportCronSchedule, rhs.ExportDirectory);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

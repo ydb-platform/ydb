@@ -468,6 +468,17 @@ TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::With(ui32 argIndex, const TStr
     return With(argIndex, TString(toName) += ToString(toIndex));
 }
 
+TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::WithArguments(TExprNodeSpan nodes) {
+    Y_ENSURE(Args_, "No arguments");
+    Y_ENSURE(nodes.size() == Args_->ChildrenSize(), "Wrong arguments size");
+    TNodeOnNodeOwnedMap replaces;
+    for (size_t argIndex = 0; argIndex < nodes.size(); ++argIndex) {
+        replaces[Args_->Child(argIndex)] = nodes[argIndex];
+    }
+    Body_ = Owner_->Ctx_.ReplaceNodes(std::move(Body_), replaces);
+    return *this;
+}
+
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::WithNode(const TExprNode& fromNode, TExprNode::TPtr&& toNode) {
     Body_ = Owner_->Ctx_.ReplaceNodes(std::move(Body_), {{&fromNode, std::move(toNode)}});
     return *this;

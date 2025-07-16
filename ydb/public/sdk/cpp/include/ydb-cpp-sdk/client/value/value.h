@@ -4,6 +4,8 @@
 
 #include <util/datetime/base.h>
 
+#include <google/protobuf/arena.h>
+
 #include <optional>
 #include <memory>
 
@@ -529,6 +531,7 @@ protected:
     TValueBuilderBase(TValueBuilderBase&&);
 
     TValueBuilderBase();
+    explicit TValueBuilderBase(google::protobuf::Arena* arena);
 
     TValueBuilderBase(const TType& type);
 
@@ -545,6 +548,7 @@ private:
 class TValueBuilder : public TValueBuilderBase<TValueBuilder> {
 public:
     TValueBuilder();
+    explicit TValueBuilder(google::protobuf::Arena* arena);
 
     TValueBuilder(const TType& type);
 

@@ -19,7 +19,6 @@ struct TEvExternal {
         EvFinishAllocationProcess,
         EvStartAllocationProcessScope,
         EvFinishAllocationProcessScope,
-        EvUpdateMemoryLimits,
         EvEnd
     };
 
@@ -145,18 +144,6 @@ struct TEvExternal {
         explicit TEvStartProcessScope(const ui64 externalProcessId, const ui64 externalScopeId)
             : ExternalProcessId(externalProcessId)
             , ExternalScopeId(externalScopeId) {
-        }
-    };
-
-    class TEvUpdateMemoryLimits: public NActors::TEventLocal<TEvUpdateMemoryLimits, EvUpdateMemoryLimits> {
-    private:
-        YDB_READONLY(ui64, SoftMemoryLimit, 0);
-        YDB_READONLY(ui64, HardMemoryLimit, 0);
-
-    public:
-        explicit TEvUpdateMemoryLimits(const ui64 softMemoryLimit, const ui64 hardMemoryLimit)
-            : SoftMemoryLimit(softMemoryLimit)
-            , HardMemoryLimit(hardMemoryLimit) {
         }
     };
 };

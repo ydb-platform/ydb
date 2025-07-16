@@ -29,13 +29,15 @@ public:
 private:
     void Start() {
         while (Pos_ < Size_) {
-            auto hintType = Keyword({"JoinOrder", "Leading", "JoinType", "Rows"});
+            auto hintType = Keyword({"JoinOrder", "Leading", "JoinType", "Rows", "Bytes"});
             if (hintType == "JoinOrder" || hintType == "Leading") {
                 JoinOrder(hintType == "Leading");
             } else if (hintType == "JoinType") {
                 JoinType();
-            } else if (hintType == "Rows"){
-                Rows();
+            } else if (hintType == "Rows") {
+                CardinalityOrBytes(true);
+            } else if (hintType == "Bytes") {
+                CardinalityOrBytes(false);
             } else {
                 ParseError(Sprintf("Undefined hints type: %s", hintType.c_str()), Pos_ - hintType.size());
             }
@@ -113,7 +115,7 @@ private:
         Y_UNREACHABLE();
     }
 
-    void Rows() {
+    void CardinalityOrBytes(bool isRows) {
         i32 beginPos = Pos_ + 1;
 
         Keyword({"("});
@@ -134,7 +136,11 @@ private:
             default: {ParseError(Sprintf("Unknown operation: '%c'", sign), Pos_ - 1); Y_UNREACHABLE();}
         }
 
-        Hints_.CardinalityHints->PushBack(std::move(labels), op, value, "Rows" + Text_.substr(beginPos, Pos_ - beginPos + 1));
+        if (isRows) {
+            Hints_.CardinalityHints->PushBack(std::move(labels), op, value, "Rows" + Text_.substr(beginPos, Pos_ - beginPos + 1));
+        } else {
+            Hints_.BytesHints->PushBack(std::move(labels), op, value, "Bytes" + Text_.substr(beginPos, Pos_ - beginPos + 1));
+        }
     }
 
 private:

@@ -51,12 +51,9 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_case.test_plan/CASE_TBL",
                                                         "ReadColumns": [
-                                                            "i"
-                                                        ],
-                                                        "ReadLimit": "1001",
-                                                        "ReadRanges": [
                                                             "i (-\u221e, +\u221e)"
                                                         ],
+                                                        "ReadLimit": "1001",
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Sequential",
                                                         "Table": "postgres_case.test_plan/CASE_TBL"

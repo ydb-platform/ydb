@@ -879,7 +879,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     bool acceptExisted,
     bool restore)
 {
-    const auto tablePath = workingDirPath.Child(tableName);
+    const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
     if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore)) {
         return reject;
     }

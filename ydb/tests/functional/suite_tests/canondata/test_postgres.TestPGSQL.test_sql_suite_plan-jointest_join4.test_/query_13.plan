@@ -165,10 +165,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join4.test_plan/qrt1",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "b"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "a (-\u221e, +\u221e)",
                                                             "b (-\u221e, +\u221e)"
                                                         ],

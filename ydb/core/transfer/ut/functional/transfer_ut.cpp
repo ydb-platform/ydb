@@ -845,7 +845,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-1"))
         }});
 
-        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
 
         testCase.DropTopic();
 
@@ -984,14 +984,14 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-1"))
         }});
 
-        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
 
         Cerr << "State: Paused" << Endl << Flush;
 
         testCase.PauseTransfer();
 
         Sleep(TDuration::Seconds(1));
-        testCase.CheckTransferState(TReplicationDescription::EState::Paused);
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
 
         testCase.Write({"Message-2"});
 
@@ -1006,7 +1006,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.ResumeTransfer();
 
         // Transfer is resumed. New messages are added to the table.
-        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
         }, {
@@ -1015,10 +1015,10 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         // More cycles for pause/resume
         testCase.PauseTransfer();
-        testCase.CheckTransferState(TReplicationDescription::EState::Paused);
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
 
         testCase.ResumeTransfer();
-        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
 
         testCase.DropTransfer();
         testCase.DropTable();

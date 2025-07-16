@@ -2443,7 +2443,7 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
         parentFrom++;
     }
 
-    if (parentTo == itFrom->second.From) {
+    if (itFrom != Cluster2Shards.end() && parentTo == itFrom->second.From) {
         // Intersects by parentTo
         if (itFrom->second.From < itFrom->first) {
             auto endShards = itFrom->second.Shards;

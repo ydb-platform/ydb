@@ -3,6 +3,7 @@
 #include "mkql_block_reader.h"
 
 #include <yql/essentials/minikql/arrow/mkql_functions.h>
+#include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
@@ -247,14 +248,16 @@ NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const
     return holderFactory.CreateArrowBlock(arrow::Datum(count));
 }
 
-TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TComputationNodePtrVector&& argsNodes,
-    const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
-    std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder,
-    const arrow::compute::FunctionOptions* functionOptions)
+TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, NYql::NUdf::EValidateDatumMode validateDatumMode, TStringBuf name, TComputationNodePtrVector&& argsNodes,
+                               const TVector<TType*>& argsTypes, TType* outputType, const arrow::compute::ScalarKernel& kernel,
+                               std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder,
+                               const arrow::compute::FunctionOptions* functionOptions)
     : TMutableComputationNode(mutables)
+    , ValidateDatumMode_(validateDatumMode)
     , StateIndex_(mutables.CurValueIndex++)
     , ArgsNodes_(std::move(argsNodes))
     , ArgsValuesDescr_(ToValueDescr(argsTypes))
+    , OutValueDescr_(ToValueDescr(outputType))
     , Kernel_(kernel)
     , KernelHolder_(std::move(kernelHolder))
     , Options_(functionOptions)
@@ -270,7 +273,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     for (ui32 i = 0; i < ArgsNodes_.size(); ++i) {
         const auto& value = ArgsNodes_[i]->GetValue(ctx);
         argDatums.emplace_back(TArrowBlock::From(value).GetDatum());
-        ARROW_DEBUG_CHECK_DATUM_TYPES(ArgsValuesDescr_[i], argDatums.back().descr());
+        ValidateDatum(argDatums.back(), ArgsValuesDescr_[i], ValidateDatumMode_);
     }
 
     if (ScalarOutput_) {
@@ -297,8 +300,9 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
 
         ForEachArrayData(output, [&](const auto& arr) { arrays.push_back(arr); });
     }
-
-    return ctx.HolderFactory.CreateArrowBlock(MakeArray(arrays));
+    auto resultArray = MakeArray(arrays);
+    ValidateDatum(resultArray, OutValueDescr_, ValidateDatumMode_);
+    return ctx.HolderFactory.CreateArrowBlock(std::move(resultArray));
 }
 
 

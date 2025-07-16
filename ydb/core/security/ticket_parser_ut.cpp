@@ -1540,6 +1540,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {"something.read"})), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
         UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
         UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
 
@@ -1550,6 +1551,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {"something.read", "something.connect", "something.list", "something.update"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
         UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
         UNIT_ASSERT_C(result->Token->IsExist("something.connect-bbbb4554@as"), result->Token->ShortDebugString());
         UNIT_ASSERT_C(!result->Token->IsExist("something.list-bbbb4554@as"), result->Token->ShortDebugString());
@@ -1563,6 +1565,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                             {"something.read"})), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
             UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
             UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
         }
@@ -1598,6 +1601,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {"something.read"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
         UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
         UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
 
@@ -1643,6 +1647,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {"something.read"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
         UNIT_ASSERT_C(result->Token->IsExist("something.read-XXXXXXXX@as"), result->Token->ShortDebugString());
 
         if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
@@ -1659,6 +1664,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                            {"something.read"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
         UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
 
         if constexpr (!IsNebiusAccessService<TAccessServiceMock>()) {
@@ -1671,6 +1677,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                             {"monitoring.view"})), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
             UNIT_ASSERT_VALUES_EQUAL_C(result->Token->GetGroupSIDs().size(), 4, result->Token->ShortDebugString());
             UNIT_ASSERT_C(result->Token->IsExist("all-users@well-known"), result->Token->ShortDebugString());
             UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
@@ -1686,10 +1693,72 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                             {"monitoring.view"})), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
             UNIT_ASSERT_VALUES_EQUAL_C(result->Token->GetGroupSIDs().size(), 3, result->Token->ShortDebugString());
             UNIT_ASSERT_C(result->Token->IsExist("all-users@well-known"), result->Token->ShortDebugString());
             UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
             UNIT_ASSERT_C(result->Token->IsExist("user1@as"), result->Token->ShortDebugString());
+        }
+
+        {
+            if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
+                accessServiceMock.AllowedServiceTokens["service1"] =
+                    accessServiceMock.AllowedServiceTokens["service2"] =
+                    accessServiceMock.AllowedServiceTokens["service3"];
+            }
+            accessServiceMock.AllowedServicePermissions["service1-something.write"] =
+                accessServiceMock.AllowedServicePermissions["service2-something.write"] =
+                accessServiceMock.AllowedServicePermissions["service3-something.write"];
+
+            TString serviceToken = "service1";
+            accessServiceMock.AllowedResourceIds.clear();
+            accessServiceMock.AllowedResourceIds.emplace("folder");
+            TVector<std::pair<TString, TString>> serviceAttrs = {{"folder_id", "folder"}, {"database_id", "123"}};
+
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                            serviceToken,
+                                            serviceAttrs,
+                                            {"something.write"})), 0);
+            result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE);
+            UNIT_ASSERT_C(result->Token->IsExist("service1@as"), result->Token->ShortDebugString());
+
+            // Service with impersonation chain
+            if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
+                accessServiceMock
+                    .BuildImpersonationChain()
+                    .ServiceAccount("srv");
+
+                serviceToken = "service2";
+                runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                            serviceToken,
+                                            serviceAttrs,
+                                            {"something.write"})), 0);
+                result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+                UNIT_ASSERT_C(result->Error.empty(), result->Error);
+                UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE);
+                UNIT_ASSERT_C(result->Token->IsExist("service2@as"), result->Token->ShortDebugString());
+
+                accessServiceMock
+                    .BuildImpersonationChain()
+                    .ServiceAccount("one_more_service")
+                    .ChainLink()
+                    .ServiceAccount("srv")
+                    .ServiceAccount("srv2")
+                    .UserAccount("user1")
+                    .ServiceAccount("srv3");
+
+                serviceToken = "service3";
+                runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                            serviceToken,
+                                            serviceAttrs,
+                                            {"something.write"})), 0);
+                result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+                UNIT_ASSERT_C(result->Error.empty(), result->Error);
+                UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE_IMPERSONATED_FROM_USER);
+                UNIT_ASSERT_C(result->Token->IsExist("service3@as"), result->Token->ShortDebugString());
+            }
         }
     }
 

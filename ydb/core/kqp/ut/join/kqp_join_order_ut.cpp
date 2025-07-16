@@ -851,6 +851,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, false, ColumnStore);
     }
 
+    Y_UNIT_TEST(BytesHintForceGraceJoin) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/bytes_hint_force_grace_join.sql", "stats/basic.json", false, true, true);
+        auto joinFinder = TFindJoinWithLabels(plan);
+        auto join = joinFinder.Find({"R", "S"});
+        UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+    }
+
     Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
         auto joinFinder = TFindJoinWithLabels(plan);
@@ -941,15 +948,15 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
         auto joinFinder = TFindJoinWithLabels(plan);
         {
-            auto join = joinFinder.Find({"test/ds/customer", "test/ds/customer_address"});
+            auto join = joinFinder.Find({"customer", "customer_address"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
         }
         {
-            auto join = joinFinder.Find({"test/ds/customer_demographics", "test/ds/customer", "test/ds/customer_address"});
+            auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
         }
         {
-            auto join = joinFinder.Find({"test/ds/customer_demographics", "test/ds/customer", "test/ds/customer_address", "test/ds/store_sales"});
+            auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address", "store_sales"});
             UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (Grace)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);

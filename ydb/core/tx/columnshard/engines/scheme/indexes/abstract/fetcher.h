@@ -28,11 +28,11 @@ public:
         return *BlobData;
     }
 
-    void FillDataFrom(NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
+    void FillDataFrom(NBlobOperations::NRead::TCompositeReadBlobs::TGuard& blobs) {
         AFL_VERIFY(!BlobData);
         AFL_VERIFY(!!BlobRange);
         AFL_VERIFY(!!StorageId);
-        BlobData = blobs.Extract(*StorageId, *BlobRange);
+        BlobData = blobs.ExtractVerified(*StorageId, *BlobRange);
     }
 
     explicit TRangeFetchingState(const TString& storageId, const TBlobRange& range)
@@ -95,12 +95,14 @@ private:
         TFetchingState(const std::vector<TRangeFetchingState>& colsFetching)
             : ColumnsFetching(colsFetching) {
         }
-        void FillDataFrom(NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
-            if (HeaderFetching) {
+        void FillDataFrom(NBlobOperations::NRead::TCompositeReadBlobs::TGuard& blobs) {
+            if (HeaderFetching && !HeaderFetching->HasData()) {
                 HeaderFetching->FillDataFrom(blobs);
             }
             for (auto&& i : ColumnsFetching) {
-                i.FillDataFrom(blobs);
+                if (!i.HasData()) {
+                    i.FillDataFrom(blobs);
+                }
             }
         }
     };
@@ -154,7 +156,8 @@ public:
         return Header;
     }
 
-    void FetchFrom(const std::shared_ptr<IIndexMeta>& indexMeta, const TString& storageId, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
+    void FetchFrom(
+        const std::shared_ptr<IIndexMeta>& indexMeta, const TString& storageId, NBlobOperations::NRead::TCompositeReadBlobs::TGuard& blobs) {
         FetchingState.FillDataFrom(blobs);
         bool wasHeader = !!Header;
         if (!Header) {

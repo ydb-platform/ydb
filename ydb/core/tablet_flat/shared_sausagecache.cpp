@@ -285,7 +285,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // because of that DoGC should be called to ensure limits
         Cache.UpdateLimit(limitBytes, TryKeepInMemoryBytes);
         Counters.ActiveLimitBytes->Set(limitBytes);
-        Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
     }
 
     void DoGC() {
@@ -412,7 +411,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Y_ENSURE(pageCollectionId);
         Y_ENSURE(!Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
         auto& collection = EnsureCollection(pageCollectionId, pageCollection, ev->Sender);
-        ECacheTier cacheTier = collection.GetCacheTier();
 
         for (auto &page : msg->Pages) {
             Y_ENSURE(page->PageId < collection.PageMap.size());
@@ -422,7 +420,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             page->Collection = &collection;
             BodyProvided(collection, page.Get());
-            Evict(Cache.MoveTouch(page.Get(), cacheTier));
+            Evict(Cache.Touch(page.Get()));
         }
 
         DoGC();
@@ -459,7 +457,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         for (const ui32 reqIdx : xrange(msg->Fetch->Pages.size())) {
             const TPageId pageId = msg->Fetch->Pages[reqIdx];
-            auto* page = EnsurePage(pageCollection, collection, pageId);
+            auto* page = EnsurePage(pageCollection, collection, pageId, cacheTier);
             TryLoadEvictedPage(page);
 
             Counters.RequestedPages->Inc();
@@ -473,7 +471,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (doTraceLog) {
                     pagesFromCacheTraceLog.push_back(pageId);
                 }
-                Evict(Cache.MoveTouch(page, cacheTier));
+                Evict(Cache.Touch(page));
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -726,7 +724,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 droppedPages[pageCollectionId].insert(touchedPages.begin(), touchedPages.end());
                 continue;
             }
-            ECacheTier cacheTier = collection->GetCacheTier();
 
             for (auto pageId : touchedPages) {
                 Y_ENSURE(pageId < collection->PageMap.size());
@@ -747,10 +744,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     break;
                 case PageStateLoaded:
                     Evict(Cache.Touch(page));
-                    if (cacheTier != page->CacheTier) {
-                        // TODO: make async?
-                        Evict(Cache.TryMove(page, cacheTier));
-                    }
                     break;
                 default:
                     Y_TABLET_ERROR("unknown load state");
@@ -793,7 +786,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Owners.erase(ownerIt);
         Counters.Owners->Dec();
 
-        ProcessGCList();
+        DoGC();
     }
 
     void Handle(NSharedCache::TEvDetach::TPtr &ev, const TActorContext& ctx) {
@@ -828,7 +821,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TryDropExpiredCollection(*collection);
 
-        ProcessGCList();
+        DoGC();
     }
 
     void Handle(NBlockIO::TEvData::TPtr &ev, const TActorContext& ctx) {
@@ -865,7 +858,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (msg->Status != NKikimrProto::OK) {
             DropCollection(*collection, msg->Status);
         } else {
-            ECacheTier cacheTier = collection->GetCacheTier();
             for (auto &paged : msg->Blocks) {
                 Y_ENSURE(paged.PageId < collection->PageMap.size());
                 auto* page = collection->PageMap[paged.PageId].Get();
@@ -875,7 +867,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->Initialize(std::move(paged.Data));
                 BodyProvided(*collection, page);
-                Evict(Cache.MoveTouch(page, cacheTier));
+                Evict(Cache.Touch(page));
             }
         }
 
@@ -886,7 +878,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DoGC();
     }
 
-    TPage* EnsurePage(const NPageCollection::IPageCollection& pageCollection, TCollection& collection, const TPageId pageId) {
+    TPage* EnsurePage(const NPageCollection::IPageCollection& pageCollection, TCollection& collection, const TPageId pageId, ECacheTier initialTier) {
         Y_ENSURE(pageId < collection.PageMap.size(),
             "Page collection " << pageCollection.Label()
             << " requested page " << pageId
@@ -895,6 +887,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         if (!page) {
             Y_ENSURE(collection.PageMap.emplace(pageId, (page = new TPage(pageId, pageCollection.Page(pageId).Size, &collection))));
+            page->CacheTier = initialTier;
         }
 
         return page;
@@ -1167,11 +1160,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             << " to " << ECacheTier::Regular);
         Y_ENSURE(TryKeepInMemoryBytes >= collection.TotalSize);
         TryKeepInMemoryBytes -= collection.TotalSize;
+        Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
         ActualizeCacheSizeLimit();
         // TODO: move pages async and batched
         for (const auto& kv : collection.PageMap) {
             auto* page = kv.second.Get();
-            Evict(Cache.TryMove(page, ECacheTier::Regular));
+            TryMovePageToTier(page, ECacheTier::Regular);
         }
     }
 
@@ -1188,23 +1182,25 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
             << " to " << ECacheTier::TryKeepInMemory);
         TryKeepInMemoryBytes += collection.TotalSize;
+        Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
         ActualizeCacheSizeLimit();
         // TODO: pages async and batched and re-request when evicted
         TVector<TPageId> pagesToRequest(::Reserve(pageCollection->Total()));
         ui64 pagesToRequestBytes = 0;
         for (const auto& pageId : xrange(pageCollection->Total())) {
-            auto* page = EnsurePage(*pageCollection, collection, pageId);
-            TryLoadEvictedPage(page);
+            auto* page = EnsurePage(*pageCollection, collection, pageId, ECacheTier::TryKeepInMemory);
+            TryMovePageToTier(page, ECacheTier::TryKeepInMemory);
+
             switch (page->State) {
-            case PageStateLoaded:
-                Evict(Cache.MoveTouch(page, ECacheTier::TryKeepInMemory));
+            case PageStateEvicted:
+                TryLoadEvictedPage(page);
+                Evict(Cache.Touch(page));
                 break;
             case PageStateNo:
-                page->State = PageStateRequested;
+                page->State = PageStateRequestedAsync;
                 pagesToRequest.push_back(pageId);
                 pagesToRequestBytes += page->Size;
                 break;
-
             }
         }
 
@@ -1214,6 +1210,22 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, std::move(pageCollection), std::move(pagesToRequest), NWilson::TTraceId());
             // TODO: add some counters for these fetches?
             NBlockIO::Start(this, owner, NO_QUEUE_COOKIE, NBlockIO::EPriority::Bulk, fetch);
+        }
+    }
+
+    void TryMovePageToTier(TPage* page, ECacheTier targetTier) {
+        if (page->CacheTier != targetTier) {
+            switch (page->State) {
+            case PageStateLoaded:
+                Cache.Erase(page);
+                page->EnsureNoCacheFlags();
+                page->CacheTier = targetTier;
+                Evict(Cache.Touch(page));
+                break;
+            default:
+                page->CacheTier = targetTier;
+                break;
+            }
         }
     }
 

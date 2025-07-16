@@ -1343,28 +1343,26 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         });
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3});
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1, 2, 3});
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
 
         sharedCache.CheckResults({
@@ -1372,6 +1370,11 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         });
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 7);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
     }
 
@@ -1390,13 +1393,11 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
             NPageCollection::TFetch{1, sharedCache.Collection2, {1}}
         });
 
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         // load in-memory collection
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
@@ -1407,13 +1408,11 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckResults({});
         sharedCache.CheckFetches({});
 
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
         
         // not in-memory page should be loaded again
         sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, {1});
@@ -1425,15 +1424,17 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
             NPageCollection::TFetch{2, sharedCache.Collection2, {1}}
         });
 
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 2);
+        // in-fly pages can preempt in-memory pages
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 1);
-        // in-fly pages can preempt in-memory pages
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 3);
     }
 
     Y_UNIT_TEST(InMemory_NotEnoughMemory) {
@@ -1451,11 +1452,12 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), MemoryLimit);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3, 4, 5});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 2);
     }
 
     Y_UNIT_TEST(InMemory_Enabling) {
@@ -1472,14 +1474,12 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
             NPageCollection::TFetch{1, sharedCache.Collection1, {2}}
         });
 
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({
@@ -1491,12 +1491,13 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 1);
     }
 
     Y_UNIT_TEST(InMemory_Enabling_AllRequested) {
@@ -1513,26 +1514,25 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
             NPageCollection::TFetch{1, sharedCache.Collection1, {0, 1, 2, 3}}
         });
 
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 4);
     }
 
     Y_UNIT_TEST(InMemory_Disabling) {
@@ -1550,23 +1550,21 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular);
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
     }
 
     Y_UNIT_TEST(InMemory_Detach) {
@@ -1583,39 +1581,31 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Detach(sharedCache.Sender2, sharedCache.Collection1);
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
     }
 
     Y_UNIT_TEST(InMemory_Unregister) {
@@ -1632,39 +1622,31 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Unregister(sharedCache.Sender1);
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit - collection1TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         sharedCache.Unregister(sharedCache.Sender2);
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::Regular)->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePagesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::Regular)->Val(), MemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LimitBytesTier(ECacheTier::TryKeepInMemory)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
     }
 }
 }

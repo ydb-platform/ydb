@@ -1,16 +1,4 @@
-ydb/apps/ydb/ut YdbWorkloadTopic.Double_Init
-ydb/apps/ydb/ut YdbWorkloadTopic.Full_Statistics_UseTx
-ydb/apps/ydb/ut YdbWorkloadTopic.Init_Clean
-ydb/apps/ydb/ut YdbWorkloadTopic.ReadWrite_Statistics
-ydb/apps/ydb/ut YdbWorkloadTopic.Read_Statistics
-ydb/apps/ydb/ut YdbWorkloadTopic.WriteInTx
-ydb/apps/ydb/ut YdbWorkloadTopic.WriteProducesToAllPartitionsEvenly
-ydb/apps/ydb/ut YdbWorkloadTopic.Write_Statistics
-ydb/apps/ydb/ut YdbWorkloadTopic.Write_Statistics_UseTx
-ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Init_Clean
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
-ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Specific_Init_Clean
-ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Statistics
 ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
@@ -19,54 +7,45 @@ ydb/core/blobstorage/pdisk/ut TPDiskTest.PDiskSlotSizeInUnits
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
-ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
-ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
+ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
+ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
-ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
+ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
-ydb/core/external_sources/s3/ut sole chunk chunk
-ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
+ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
-ydb/core/kqp/ut/batch_operations [*/*] chunk chunk
+ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
 ydb/core/kqp/ut/cost KqpCost.VectorIndexLookup+useSink
 ydb/core/kqp/ut/cost KqpCost.VectorIndexLookup-useSink
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWriteQueryService-isOlap+useOltpSink
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
-ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
+ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap [*/*] chunk chunk
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterEqual
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterNulls
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestJoinByDecimal
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestJoinById
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestOrderByDecimal
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestSimpleQueries
-ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
-ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal
-ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal35
-ydb/core/kqp/ut/scheme KqpOlapTypes.DecimalCsv
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/scan KqpSplit.StreamLookupJoinDeliveryProblemAfterFirstResult
+ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
-ydb/core/kqp/ut/scheme [*/*] chunk chunk
-ydb/core/kqp/ut/service [*/*] chunk chunk
+ydb/core/kqp/ut/scheme unittest.[*/*] chunk
+ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
+ydb/core/mind/hive/ut THiveTest.TestBridgeDisconnectWithReboots
+ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/sys_view/ut SystemView.AuthGroupMembers_Access
@@ -77,7 +56,6 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPar
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable_TopicAutoPartitioning
 ydb/core/tx/conveyor_composite/ut CompositeConveyorTests.TestUniformDistribution
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.E2EBackupCollection
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.MultiRestore
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.SimpleRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
@@ -89,73 +67,53 @@ ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
-ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
-ydb/library/yql/dq/opt/ut InterestingOrderingsShuffle.Join64ChainImitation
-ydb/library/yql/dq/opt/ut sole chunk chunk
-ydb/library/yql/tests/sql/dq_file/part11 [*/*] chunk chunk
+ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
+ydb/library/yql/dq/opt/ut unittest.sole chunk
+ydb/library/yql/tests/sql/dq_file/part11 py2_flake8.sole chunk
+ydb/library/yql/tests/sql/dq_file/part11 pytest.[*/*] chunk
 ydb/library/yql/tests/sql/dq_file/part11 test.py.test[pg-tpch-q02-default.txt-ForceBlocks]
-ydb/mvp/oidc_proxy/ut sole chunk chunk
+ydb/mvp/oidc_proxy/ut unittest.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PropagateSessionClosed
-ydb/public/sdk/cpp/src/client/federated_topic/ut [*/*] chunk chunk
+ydb/public/sdk/cpp/src/client/federated_topic/ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
-ydb/public/sdk/cpp/src/client/topic/ut TxUsage.WriteToTopic_Demo_25_Query
-ydb/public/sdk/cpp/src/client/topic/ut TxUsage.WriteToTopic_Demo_26_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_25_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_26_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut [*/*] chunk chunk
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/public/sdk/cpp/tests/integration/topic TxUsageQuery.WriteToTopic_Demo_26
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read DirectReadWithClient.ManyMessages
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read TxUsageQuery.WriteToTopic_Demo_26
-ydb/public/sdk/cpp/tests/integration/topic/with_direct_read [*/*] chunk chunk
+ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/persqueue_v1/ut TPersQueueTest.LOGBROKER_7820
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
-ydb/services/persqueue_v1/ut [*/*] chunk chunk
+ydb/services/persqueue_v1/ut unittest.[*/*] chunk
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestReadAtTimestamp_3
 ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/backup_ut CommonEncryptionRequirementsTest.CommonEncryptionRequirements
-ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
-ydb/services/ydb/table_split_ut [*/*] chunk chunk
+ydb/services/ydb/table_split_ut unittest.[*/*] chunk
 ydb/services/ydb/ut TGRpcAuthentication.NoDescribeRights
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility [test_compatibility.py */*] chunk chunk
 ydb/tests/compatibility [test_example.py */*] chunk chunk
 ydb/tests/compatibility [test_statistics.py */*] chunk chunk
 ydb/tests/compatibility [test_transfer.py */*] chunk chunk
-ydb/tests/compatibility sole chunk chunk
-ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_24-4_to_25-1]
+ydb/tests/compatibility flake8.sole chunk
+ydb/tests/compatibility import_test.sole chunk
+ydb/tests/compatibility py3test.[test_compatibility.py */*] chunk
+ydb/tests/compatibility py3test.[test_transfer.py */*] chunk
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-24-4_to_stable-25-1-2]
-ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_24-4_to_25-1]
-ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_25-1_to_current]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-25-1-2_to_current]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-24-4_to_stable-25-1-2]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-25-1-2_to_current]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-25-1_to_current]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_25-1_to_current-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_stable-25-1-2_to_current-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_24-4_to_25-1-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_24-4_to_25-1-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_24-4_to_25-1-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_24-4-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_24-4-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_24-4-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_25-1-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_25-1-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_25-1-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_current-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_current-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_25-1_to_current-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_25-1-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_25-1-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_25-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_current-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_stable-25-1-2-column-date64]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_stable-25-1-2-column]
@@ -181,34 +139,17 @@ ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[resta
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_stable-25-1-column-date64]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_stable-25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_stable-25-1-row]
-ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_25-1_to_current-True]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_24-4_to_25-1-column]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_24-4_to_25-1-row]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_25-1_to_current-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-24-4_to_stable-25-1-2-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-24-4_to_stable-25-1-2-row]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-1-2_to_current-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-1_to_current-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_25-1_and_24-4-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_current_and_25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_current_and_stable-25-1-2-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_25-1_and_24-4-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current_and_25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current_and_stable-25-1-2-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current_and_stable-25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_stable-25-1-2_and_stable-24-4-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_stable-25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1-column-date64]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1_and_24-4-column-date64]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1_and_24-4-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1_and_24-4-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_25-1-column-date64]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_25-1-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-1-2-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-1-2-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-1-2-row]
@@ -219,6 +160,7 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2_and_stable-24-4-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2_and_stable-24-4-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2_and_stable-24-4-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-row]
@@ -226,14 +168,13 @@ ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.tes
 ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.test_transfer[restart_current_to_stable-25-1-row-False]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-1-2_to_current-row-False]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-1_to_current-row-False]
-ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[mixed_current_and_25-1]
 ydb/tests/datashard/vector_index/large test_vector_index.py.TestVectorIndex.test_vector_index
 ydb/tests/datashard/vector_index/large test_vector_index_large_levels_and_clusters.py.TestVectorIndexLargeLevelsAndClusters.test_vecot_index_large_levels_and_clusters
-ydb/tests/fq/control_plane_storage [*/*] chunk chunk
+ydb/tests/fq/control_plane_storage unittest.[*/*] chunk
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane [test_retry.py] chunk chunk
 ydb/tests/fq/multi_plane [test_retry_high_rate.py] chunk chunk
-ydb/tests/fq/yds [*/*] chunk chunk
+ydb/tests/fq/yds py3test.[*/*] chunk
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
@@ -255,11 +196,6 @@ ydb/tests/functional/config test_config_migration.py.TestConfigMigrationToV2.tes
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_distconf
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_is_operational_with_distconf
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageBadCases.test_cluster_change_state_storage
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageMultipleRingGroup.test_cluster_change_state_storage
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageNoChanges.test_cluster_change_state_storage
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageReuseSameNodes.test_cluster_change_state_storage
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageToTheSameConfig.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig2Nodes.test
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig3Nodes.test
 ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig6Nodes.test
@@ -273,7 +209,9 @@ ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDi
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
-ydb/tests/functional/serializable sole chunk chunk
+ydb/tests/functional/serializable flake8.sole chunk
+ydb/tests/functional/serializable import_test.sole chunk
+ydb/tests/functional/serializable py3test.sole chunk
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/suite_tests [test_postgres.py */*] chunk chunk
@@ -287,15 +225,15 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_abov
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
-ydb/tests/functional/tpc/large sole chunk chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[59]
-ydb/tests/functional/tpc/medium test_workload_oltp.py.TestWorkloadSimpleQueue.test_workload_oltp
-ydb/tests/functional/tpc/medium test_workload_simple_queue.py.TestWorkloadSimpleQueue.test_workload_simple_queue[row]
+ydb/tests/functional/tpc/large flake8.sole chunk
+ydb/tests/functional/tpc/large import_test.sole chunk
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database_backup
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
-ydb/tests/olap [*/*] chunk chunk
-ydb/tests/olap sole chunk chunk
-ydb/tests/olap/scenario sole chunk chunk
+ydb/tests/olap flake8.sole chunk
+ydb/tests/olap import_test.sole chunk
+ydb/tests/olap py3test.[*/*] chunk
+ydb/tests/olap/scenario flake8.sole chunk
+ydb/tests/olap/scenario import_test.sole chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayScanBackend]
@@ -374,12 +312,13 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimestampWithTimeZone]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTxOptions]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestXactMultiStmt]
-ydb/tests/sql/large sole chunk chunk
+ydb/tests/sql/large flake8.sole chunk
+ydb/tests/sql/large import_test.sole chunk
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
-ydb/tests/stress/mixedpy test_mixed.py.TestYdbMixedWorkload.test[column]
-ydb/tests/stress/reconfig_state_storage_workload/tests sole chunk chunk
+ydb/tests/stress/reconfig_state_storage_workload/tests flake8.sole chunk
+ydb/tests/stress/reconfig_state_storage_workload/tests import_test.sole chunk
+ydb/tests/stress/reconfig_state_storage_workload/tests py3test.sole chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
-ydb/tests/stress/transfer/tests test_workload.py.TestYdbTransferWorkload.test[column]
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

@@ -1532,8 +1532,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         {
             TStringBuilder response;
             response << "HTTP/1.1 " << status << "\r\n"
-                    << "Connection: close\r\n"
-                    << "Content-Type: " << contentType << "\r\n";
+                     << "Connection: close\r\n"
+                     << "Content-Type: " << contentType << "\r\n"
+                     << "Access-Control-Allow-Origin: *\r\n"
+                     << "Access-Control-Allow-Credentials: true\r\n"
+                     << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                     << "Access-Control-Allow-Headers: Authorization, Content-Type\r\n";
             for (const auto& [key, value] : extraHeaders) {
                 response << key << ": " << value << "\r\n";
             }
@@ -1623,6 +1627,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NJson::TJsonValue json;
         NHttp::THeaders headers(outgoing->Response->Headers);
 
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Methods"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Origin"));
         if (!outgoing->Response->Status.StartsWith("3") && outgoing->Response->Status != "404") {
             UNIT_ASSERT(headers.Has("Content-Type"));
             UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Content-Type").NextTok(';'), "application/json");

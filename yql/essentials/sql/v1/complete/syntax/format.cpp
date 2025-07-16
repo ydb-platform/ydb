@@ -40,17 +40,32 @@ namespace NSQLComplete {
         return text;
     }
 
+    bool IsPlain(TStringBuf content) {
+        return GetSqlGrammar().IsPlainIdentifier(content);
+    }
+
+    bool IsQuoted(TStringBuf content) {
+        return 2 <= content.size() && content.front() == '`' && content.back() == '`';
+    }
+
     TString Quoted(TString content) {
         content.prepend('`');
         content.append('`');
         return content;
     }
 
-    TString Unquoted(TString content) {
-        Y_ENSURE(2 <= content.size() && content.front() == '`' && content.back() == '`');
-        content.erase(0, 1);
-        content.pop_back();
-        return content;
+    TStringBuf Unquoted(TStringBuf content) {
+        Y_ENSURE(IsQuoted(content));
+        return content.SubStr(1, content.size() - 2);
+    }
+
+    bool IsBinding(TStringBuf content) {
+        return 1 <= content.size() && content.front() == '$';
+    }
+
+    TStringBuf Unbinded(TStringBuf content) {
+        Y_ENSURE(IsBinding(content));
+        return content.SubStr(1);
     }
 
 } // namespace NSQLComplete

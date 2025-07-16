@@ -7,6 +7,8 @@
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
 
+#include <library/cpp/malloc/api/malloc.h>
+
 #include <util/stream/printf.h>
 #include <util/stream/str.h>
 #include <util/stream/file.h>
@@ -43,15 +45,34 @@ public:
         }
         if (buffer) {
             try {
-                TUnbufferedFileOutput out(TFile(DebugLogFile_, OpenAlways | WrOnly | Seq | ForAppend | NoReuse));
+                TFileHandle fh(DebugLogFile_, OpenAlways | WrOnly | Seq | ForAppend | NoReuse);
+
+                auto write = [&](const void* buf, size_t numBytes) {
+                    const ui8* ubuf = (const ui8*)buf;
+
+                    while (numBytes) {
+                        const i32 reallyWritten = fh.Write(ubuf, numBytes);
+
+                        if (reallyWritten < 0) {
+                            Cerr << "can't write " << numBytes << " bytes to " << DebugLogFile_ << Endl;
+                            return false;
+                        }
+
+                        ubuf += reallyWritten;
+                        numBytes -= reallyWritten;
+                    }
+                    return true;
+                };
+
+                bool success = true;
                 if (BufferFull_ && BufferWritePos_ < BufferSize_) {
-                    out.Write(buffer.Get() + BufferWritePos_, BufferSize_ - BufferWritePos_);
+                    success = write(buffer.Get() + BufferWritePos_, BufferSize_ - BufferWritePos_);
                 }
-                if (BufferWritePos_ > 0) {
-                    out.Write(buffer.Get(), BufferWritePos_);
+                if (success && BufferWritePos_ > 0) {
+                    write(buffer.Get(), BufferWritePos_);
                 }
-            } catch (...) {
-                YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            } catch (const std::exception& e) {
+                Cerr << e.what() << Endl;
             }
         }
     }
@@ -140,9 +161,11 @@ void SetYtLoggerGlobalBackend(int level, size_t debugLogBufferSize, const TStrin
 }
 
 void FlushYtDebugLog() {
-    auto logger = NYT::GetLogger();
-    if (auto yqlLogger = dynamic_cast<TGlobalLoggerImpl*>(logger.Get())) {
-        yqlLogger->FlushYtDebugLog();
+    if (!NMalloc::IsAllocatorCorrupted) {
+        auto logger = NYT::GetLogger();
+        if (auto yqlLogger = dynamic_cast<TGlobalLoggerImpl*>(logger.Get())) {
+            yqlLogger->FlushYtDebugLog();
+        }
     }
 }
 

@@ -1,7 +1,6 @@
 use plato;
 
 pragma Engine = "ytflow";
-pragma Ytflow.TestPipelineFile = "test_pipeline.yson";
 
 pragma Ytflow.Cluster = "plato";
 pragma Ytflow.PipelinePath = "pipeline";

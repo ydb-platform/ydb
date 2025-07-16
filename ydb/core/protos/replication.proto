@@ -224,6 +224,7 @@ message TEvDescribeReplicationResult {
     optional TConsistencySettings ConsistencySettings = 5;
     repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
     optional TReplicationState State = 4;
+    optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
 }
 
 message TControllerIdentity {

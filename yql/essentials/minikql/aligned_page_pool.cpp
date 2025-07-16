@@ -32,6 +32,11 @@ void UseDefaultAllocator() {
     IsDefaultAllocator = true;
 }
 #endif
+static bool IsDefaultArrowAllocator = false;
+void UseDefaultArrowAllocator() {
+    // TODO: check that we didn't already used the MKQL allocator
+    IsDefaultArrowAllocator = true;
+}
 
 static ui64 SYS_PAGE_SIZE = NSystemInfo::GetPageSize();
 
@@ -707,6 +712,11 @@ bool TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed() {
     return IsDefaultAllocator;
 }
 #endif
+// static
+template<typename T>
+bool TAlignedPagePoolImpl<T>::IsDefaultArrowAllocatorUsed() {
+    return IsDefaultArrowAllocator || IsDefaultAllocatorUsed();
+}
 
 template class TAlignedPagePoolImpl<>;
 template class TAlignedPagePoolImpl<TFakeMmap>;

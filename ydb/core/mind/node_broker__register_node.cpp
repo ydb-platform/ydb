@@ -235,6 +235,8 @@ public:
         }
 
         Reply(ctx);
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

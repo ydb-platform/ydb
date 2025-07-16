@@ -2370,18 +2370,15 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(BridgeModeCollectInfo)
     {
-        TTestEnvOpts opts(8);
+        TTestEnvOpts opts(16);
         TCmsTestEnv env(opts.WithBridgeMode());
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
                 auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
                 ChangePileMap(x);
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        env.SetObserverFunc(observerFunc);
-
+            return prev(ev);
+        });
         env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));
 
         TAutoPtr<IEventHandle> handle;
@@ -2389,12 +2386,96 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT(reply);
         const auto &info = *reply->Info;
         UNIT_ASSERT(info.IsBridgeMode);
-        UNIT_ASSERT(info.NodeIdToPileId.size() == 8);
-
+        UNIT_ASSERT_EQUAL(info.NodeIdToPileId.size(), 16);
+        UNIT_ASSERT_EQUAL(info.BSGroupsCount(), 8);
+        for (const auto& [_, group] : info.AllBSGroups()) {
+            // Checking (group.VDisks.size() > 0) means there are no proxy groups.
+            UNIT_ASSERT(group.VDisks.size() > 0);
+        }
         for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
+            // In ChangePileMap, nodes are distributed among piles based on the parity.
             UNIT_ASSERT(nodeId % opts.PileCount == pileId);
         }
+    }
 
+    Y_UNIT_TEST(BridgeModeGroups)
+    {
+        TTestEnvOpts opts(16, 4);
+        opts.NToSelect = 8;
+        TCmsTestEnv env(opts.WithBridgeMode());
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Pile #1.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: there are no vdisks that are the same as on the node with index 0.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+        // Pile #1: the vdisk from this pile is already locked.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: the vdisk from this pile is already locked.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        // Pile #1: in MODE_KEEP_AVAILABLE mode, two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #2: in MODE_KEEP_AVAILABLE mode, two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        // Pile #1: in MODE_KEEP_AVAILABLE mode, no more than two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        // Pile #2: in MODE_KEEP_AVAILABLE mode, no more than two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(13), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeStateStorage)
+    {
+        TTestEnvOpts opts(16);
+        opts.VDisks = 0;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Pile #1: There are 0 rings locked on this pile => it is possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.                            
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        // Pile #1: There is already one ring locked on this pile => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: There is already one ring locked on this pile => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        // Pile #1: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings => it is possible to lock
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings => it is possible to lock
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        // Pile #1: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
     }
 }
 

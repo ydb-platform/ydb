@@ -72,20 +72,40 @@ public:
         return PopStats;
     }
 
-    [[nodiscard]]
-    bool IsFull() const override {
-        if (!Storage) {
-            return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes;
+    EDqFillLevel CalcFillLevel() const {
+        if (Storage) {
+            return FirstStoredId < NextStoredId ? (Storage->IsFull() ? HardLimit : SoftLimit) : NoLimit;
+        } else {
+            return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes ? HardLimit : NoLimit;
         }
-        return Storage->IsFull();
     }
 
-    virtual void Push(NUdf::TUnboxedValue&& value) override {
+    EDqFillLevel GetFillLevel() const override {
+        return FillLevel;
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
+        auto result = CalcFillLevel();
+        if (FillLevel != result) {
+            if (Aggregator) {
+                Aggregator->UpdateCount(FillLevel, result);
+            }
+            FillLevel = result;
+        }
+        return result;
+    }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
+        Aggregator = aggregator;
+        Aggregator->AddCount(FillLevel);
+    }
+
+    void Push(NUdf::TUnboxedValue&& value) override {
         YQL_ENSURE(!OutputType->IsMulti());
         DoPushSafe(&value, 1);
     }
 
-    virtual void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
+    void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
         YQL_ENSURE(OutputType->IsMulti());
         YQL_ENSURE(Width == width);
         DoPushSafe(values, width);
@@ -93,7 +113,7 @@ public:
 
     // Try to split data before push to fulfill ChunkSizeLimit
     void DoPushSafe(NUdf::TUnboxedValue* values, ui32 width) {
-        YQL_ENSURE(!IsFull());
+        YQL_ENSURE(GetFillLevel() != HardLimit);
 
         if (Finished) {
             return;
@@ -194,11 +214,12 @@ public:
             LOG("Data spilled. Total rows spilled: " << SpilledChunkCount << ", bytesInMemory: " << (PackedDataSize + packerSize)); // FIXME with RowCount
         }
 
-        if (IsFull() || FirstStoredId < NextStoredId) {
-            PopStats.TryPause();
-        }
+        UpdateFillLevel();
 
         if (PopStats.CollectFull()) {
+            if (FillLevel != NoLimit) {
+                PopStats.TryPause();
+            }
             PopStats.MaxMemoryUsage = std::max(PopStats.MaxMemoryUsage, PackedDataSize + packerSize);
             PopStats.MaxRowsInMemory = std::max(PopStats.MaxRowsInMemory, PackedChunkCount);
         }
@@ -257,11 +278,13 @@ public:
 
         DLOG("Took " << data.RowCount() << " rows");
 
+        UpdateFillLevel();
+
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
             PopStats.Rows += data.RowCount();
             PopStats.Chunks++; // pop chunks do not match push chunks
-            if (!IsFull() || FirstStoredId == NextStoredId) {
+            if (FillLevel == NoLimit) {
                 PopStats.Resume();
             }
         }
@@ -359,7 +382,7 @@ public:
             PopStats.Bytes += data.Size();
             PopStats.Rows += data.RowCount();
             PopStats.Chunks++;
-            if (!IsFull() || FirstStoredId == NextStoredId) {
+            if (UpdateFillLevel() == NoLimit) {
                 PopStats.Resume();
             }
         }
@@ -391,7 +414,7 @@ public:
     }
 
     ui64 Drop() override { // Drop channel data because channel was finished. Leave checkpoint because checkpoints keep going through channel after finishing channel data transfer.
-        ui64 rows = GetValuesCount();
+        ui64 chunks = GetValuesCount();
         Data.clear();
         Packer.Clear();
         PackedDataSize = 0;
@@ -401,7 +424,8 @@ public:
         PackerCurrentChunkCount = 0;
         PackerCurrentRowCount = 0;
         FirstStoredId = NextStoredId;
-        return rows;
+        UpdateFillLevel();
+        return chunks;
     }
 
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
@@ -455,6 +479,8 @@ private:
 
     TMaybe<NDqProto::TWatermark> Watermark;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    EDqFillLevel FillLevel = NoLimit;
 };
 
 } // anonymous namespace

@@ -49,6 +49,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableVectorIndex(true);
     featureFlags.SetEnableTieringInColumnShard(true);
     featureFlags.SetEnableExternalDataSources(true);
+    featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
+    featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
+    if (settings.EnableRealSystemViewPaths) {
+        featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
+    }
 
     Settings->SetFeatureFlags(featureFlags);
 
@@ -61,6 +66,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
     appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+    appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(settings.AlterObjectEnabled);
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {

@@ -1,0 +1,5 @@
+--- a/PIL/features.py
++++ b/PIL/features.py
+@@ -246 +246 @@ def pilinfo(out=None):
+-        f"Binary modules loaded from {os.path.dirname(Image.core.__file__)}",
++        f"Binary modules loaded from {sys.executable}",

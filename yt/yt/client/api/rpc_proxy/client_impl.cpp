@@ -1,12 +1,14 @@
 #include "client_impl.h"
 
 #include "config.h"
+#include "chaos_lease.h"
 #include "helpers.h"
 #include "private.h"
 #include "row_batch_reader.h"
 #include "row_batch_writer.h"
 #include "table_mount_cache.h"
 #include "table_writer.h"
+#include "target_cluster_injecting_channel.h"
 #include "timestamp_provider.h"
 #include "transaction.h"
 
@@ -26,6 +28,8 @@
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/wire_protocol.h>
 
+#include <yt/yt/client/object_client/helpers.h>
+
 #include <yt/yt/client/api/distributed_table_session.h>
 
 #include <yt/yt/client/ypath/rich.h>
@@ -36,6 +40,8 @@
 #include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/ytree/convert.h>
+
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -65,12 +71,10 @@ TClient::TClient(
     TConnectionPtr connection,
     const TClientOptions& clientOptions)
     : Connection_(std::move(connection))
-    , RetryingChannel_(CreateSequoiaAwareRetryingChannel(
-        CreateCredentialsInjectingChannel(
-            Connection_->CreateChannel(false),
-            clientOptions),
-        /*retryProxyBanned*/ true))
     , ClientOptions_(clientOptions)
+    , RetryingChannel_(MaybeCreateRetryingChannel(
+        WrapNonRetryingChannel(Connection_->CreateChannel(false)),
+        /*retryProxyBanned*/ true))
     , TableMountCache_(BIND(
         &CreateTableMountCache,
         Connection_->GetConfig()->TableMountCache,
@@ -100,25 +104,24 @@ void TClient::Terminate()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool retryProxyBanned) const
+IChannelPtr TClient::MaybeCreateRetryingChannel(IChannelPtr channel, bool retryProxyBanned) const
 {
     const auto& config = Connection_->GetConfig();
-    bool retrySequoiaErrorsOnly = !config->EnableRetries;
-    // NB: Even if client's retries are disabled Sequoia transient failures are
-    // still retriable. See IsRetriableError().
-    return CreateRetryingChannel(
-        config->RetryingChannel,
-        std::move(channel),
-        BIND([=] (const TError& error) {
-            return IsRetriableError(error, retryProxyBanned, retrySequoiaErrorsOnly);
-        }));
+    if (config->EnableRetries) {
+        return NRpc::CreateRetryingChannel(
+            config->RetryingChannel,
+            std::move(channel),
+            BIND([=] (const TError& error) {
+                return IsRetriableError(error, retryProxyBanned);
+            }));
+    } else {
+        return channel;
+    }
 }
 
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
-    return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannelByAddress(address),
-        ClientOptions_);
+    return WrapNonRetryingChannel(Connection_->CreateChannelByAddress(address));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -142,16 +145,27 @@ IChannelPtr TClient::GetRetryingChannel() const
 
 IChannelPtr TClient::CreateNonRetryingStickyChannel() const
 {
-    return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannel(true),
-        ClientOptions_);
+    return WrapNonRetryingChannel(Connection_->CreateChannel(true));
 }
 
 IChannelPtr TClient::WrapStickyChannelIntoRetrying(IChannelPtr underlying) const
 {
-    return CreateSequoiaAwareRetryingChannel(
+    return MaybeCreateRetryingChannel(
         std::move(underlying),
         /*retryProxyBanned*/ false);
+}
+
+IChannelPtr TClient::WrapNonRetryingChannel(IChannelPtr channel) const
+{
+    channel = CreateCredentialsInjectingChannel(
+        std::move(channel),
+        ClientOptions_);
+
+    channel = CreateTargetClusterInjectingChannel(
+        std::move(channel),
+        ClientOptions_.MultiproxyTargetCluster);
+
+    return channel;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,7 +187,7 @@ ITransactionPtr TClient::AttachTransaction(
     auto client = GetRpcProxyClient();
 
     auto channel = options.StickyAddress
-        ? WrapStickyChannelIntoRetrying(CreateNonRetryingChannelByAddress(options.StickyAddress))
+        ? WrapStickyChannelIntoRetrying(CreateNonRetryingChannelByAddress(*options.StickyAddress))
         : GetRetryingChannel();
 
     auto proxy = CreateApiServiceProxy(channel);
@@ -203,7 +217,7 @@ ITransactionPtr TClient::AttachTransaction(
     if (options.StickyAddress || transactionType == ETransactionType::Tablet) {
         stickyParameters.emplace();
         if (options.StickyAddress) {
-            stickyParameters->ProxyAddress = options.StickyAddress;
+            stickyParameters->ProxyAddress = *options.StickyAddress;
         } else {
             stickyParameters->ProxyAddress = rsp->GetAddress();
         }
@@ -224,6 +238,64 @@ ITransactionPtr TClient::AttachTransaction(
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
         "Transaction attached");
+}
+
+TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
+    TChaosLeaseId chaosLeaseId,
+    const TChaosLeaseAttachOptions& options)
+{
+    auto connection = GetRpcProxyConnection();
+    auto client = GetRpcProxyClient();
+    auto channel = GetRetryingChannel();
+
+    auto chaosLeasePath = Format("#%v/@", chaosLeaseId);
+
+    return client->GetNode(chaosLeasePath, {}).Apply(BIND([=](const TYsonString& value) {
+        auto attributes = ConvertToAttributes(value);
+        auto timeoutValue = attributes->Get<i64>("timeout");
+        auto timeout = TDuration::MilliSeconds(timeoutValue);
+
+        auto chaosLease = CreateChaosLease(
+            std::move(client),
+            std::move(channel),
+            chaosLeaseId,
+            timeout,
+            options.PingAncestors,
+            options.PingPeriod);
+
+        if (options.Ping) {
+            return chaosLease->Ping({}).Apply(BIND([=] {
+                return chaosLease;
+            }));
+        }
+
+        return MakeFuture<IPrerequisitePtr>(chaosLease);
+    }));
+}
+
+TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions& options)
+{
+    auto connection = GetRpcProxyConnection();
+    auto client = GetRpcProxyClient();
+    auto channel = GetRetryingChannel();
+
+    auto createOptions = TCreateNodeOptions{};
+    auto timeout = options.LeaseTimeout.value_or(connection->GetConfig()->DefaultChaosLeaseTimeout);
+    createOptions.Attributes = ConvertToAttributes(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("timeout").Value(timeout)
+            .OptionalItem("parent_id", options.ParentId)
+        .EndMap());
+
+    return client->CreateObject(EObjectType::ChaosLease, {}).Apply(BIND([=](const TChaosLeaseId& chaosLeaseId) {
+        return CreateChaosLease(
+            std::move(client),
+            std::move(channel),
+            chaosLeaseId,
+            timeout,
+            options.PingAncestors,
+            options.PingPeriod);
+    }));
 }
 
 IPrerequisitePtr TClient::AttachPrerequisite(
@@ -439,7 +511,7 @@ TFuture<void> TClient::AlterTable(
     req->set_path(path);
 
     if (options.Schema) {
-        req->set_schema(ConvertToYsonString(*options.Schema).ToString());
+        req->set_schema(ToProto(ConvertToYsonString(*options.Schema)));
     }
     if (options.SchemaId) {
         ToProto(req->mutable_schema_id(), *options.SchemaId);
@@ -685,7 +757,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 }
 
 TFuture<std::vector<TTabletActionId>> TClient::BalanceTabletCells(
-    const TString& tabletCellBundle,
+    const std::string& tabletCellBundle,
     const std::vector<TYPath>& movableTables,
     const TBalanceTabletCellsOptions& options)
 {
@@ -730,12 +802,12 @@ TFuture<void> TClient::AlterReplicationCard(
     ToProto(req->mutable_replication_card_id(), replicationCardId);
 
     if (options.ReplicatedTableOptions) {
-        req->set_replicated_table_options(ConvertToYsonString(options.ReplicatedTableOptions).ToString());
+        req->set_replicated_table_options(ToProto(ConvertToYsonString(options.ReplicatedTableOptions)));
     }
     YT_OPTIONAL_SET_PROTO(req, enable_replicated_table_tracker, options.EnableReplicatedTableTracker);
     YT_OPTIONAL_TO_PROTO(req, replication_card_collocation_id, options.ReplicationCardCollocationId);
     if (options.CollocationOptions) {
-        req->set_collocation_options(ConvertToYsonString(options.CollocationOptions).ToString());
+        req->set_collocation_options(ToProto(ConvertToYsonString(options.CollocationOptions)));
     }
 
     return req->Invoke().As<void>();
@@ -912,7 +984,7 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
 TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     const TRichYPath& producerPath,
     const TRichYPath& queuePath,
-    const NQueueClient::TQueueProducerSessionId& sessionId,
+    const TQueueProducerSessionId& sessionId,
     const TCreateQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -926,6 +998,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
     }
+    ToProto(req->mutable_mutating_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateQueueProducerSessionPtr& rsp) {
         INodePtr userMeta;
@@ -944,7 +1017,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
 TFuture<void> TClient::RemoveQueueProducerSession(
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const NQueueClient::TQueueProducerSessionId& sessionId,
+    const TQueueProducerSessionId& sessionId,
     const TRemoveQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -959,9 +1032,23 @@ TFuture<void> TClient::RemoveQueueProducerSession(
     return req->Invoke().AsVoid();
 }
 
+TFuture<TGetCurrentUserResultPtr> TClient::GetCurrentUser(const TGetCurrentUserOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetCurrentUser();
+    SetTimeoutOptions(*req, options);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetCurrentUserPtr& rsp) {
+        auto response = New<TGetCurrentUserResult>();
+        response->User = rsp->user();
+        return response;
+    }));
+}
+
 TFuture<void> TClient::AddMember(
-    const TString& group,
-    const TString& member,
+    const std::string& group,
+    const std::string& member,
     const TAddMemberOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -978,8 +1065,8 @@ TFuture<void> TClient::AddMember(
 }
 
 TFuture<void> TClient::RemoveMember(
-    const TString& group,
-    const TString& member,
+    const std::string& group,
+    const std::string& member,
     const TRemoveMemberOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1042,7 +1129,7 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
 
     YT_OPTIONAL_SET_PROTO(req, user, user);
     req->set_permission(ToProto(permission));
-    req->set_acl(ConvertToYsonString(acl).ToString());
+    req->set_acl(ToProto(ConvertToYsonString(acl)));
     req->set_ignore_missing_subjects(options.IgnoreMissingSubjects);
 
     ToProto(req->mutable_master_read_options(), options);
@@ -1054,8 +1141,8 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
 }
 
 TFuture<void> TClient::TransferAccountResources(
-    const TString& srcAccount,
-    const TString& dstAccount,
+    const std::string& srcAccount,
+    const std::string& dstAccount,
     NYTree::INodePtr resourceDelta,
     const TTransferAccountResourcesOptions& options)
 {
@@ -1066,7 +1153,7 @@ TFuture<void> TClient::TransferAccountResources(
 
     req->set_src_account(srcAccount);
     req->set_dst_account(dstAccount);
-    req->set_resource_delta(ConvertToYsonString(resourceDelta).ToString());
+    req->set_resource_delta(ToProto(ConvertToYsonString(resourceDelta)));
 
     ToProto(req->mutable_mutating_options(), options);
 
@@ -1088,7 +1175,7 @@ TFuture<void> TClient::TransferPoolResources(
     req->set_src_pool(srcPool);
     req->set_dst_pool(dstPool);
     req->set_pool_tree(poolTree);
-    req->set_resource_delta(ConvertToYsonString(resourceDelta).ToString());
+    req->set_resource_delta(ToProto(ConvertToYsonString(resourceDelta)));
 
     ToProto(req->mutable_mutating_options(), options);
 
@@ -1106,7 +1193,7 @@ TFuture<NScheduler::TOperationId> TClient::StartOperation(
     SetTimeoutOptions(*req, options);
 
     req->set_type(NProto::ConvertOperationTypeToProto(type));
-    req->set_spec(spec.ToString());
+    req->set_spec(ToProto(spec));
 
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_transactional_options(), options);
@@ -1188,7 +1275,7 @@ TFuture<void> TClient::UpdateOperationParameters(
 
     NScheduler::ToProto(req, operationIdOrAlias);
 
-    req->set_parameters(parameters.ToString());
+    req->set_parameters(ToProto(parameters));
 
     return req->Invoke().As<void>();
 }
@@ -1326,6 +1413,9 @@ TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
     ToProto(req->mutable_job_id(), jobId);
     YT_OPTIONAL_SET_PROTO(req, limit, options.Limit);
     YT_OPTIONAL_SET_PROTO(req, offset, options.Offset);
+    if (options.Type) {
+        req->set_type(NProto::ConvertJobStderrTypeToProto(*options.Type));
+    }
 
     return req->Invoke().Apply(BIND([req = req](const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
         YT_VERIFY(rsp->Attachments().size() == 1);
@@ -1356,6 +1446,27 @@ TFuture<std::vector<TJobTraceEvent>> TClient::GetJobTrace(
     }));
 }
 
+TFuture<std::vector<TOperationEvent>> TClient::ListOperationEvents(
+    const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+    const TListOperationEventsOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ListOperationEvents();
+    SetTimeoutOptions(*req, options);
+
+    NScheduler::ToProto(req, operationIdOrAlias);
+
+    if (options.EventType) {
+        req->set_event_type(NProto::ConvertOperationEventTypeToProto(*options.EventType));
+    }
+
+    req->set_limit(options.Limit);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListOperationEventsPtr& rsp) {
+        return FromProto<std::vector<TOperationEvent>>(rsp->events());
+    }));
+}
 
 TFuture<TSharedRef> TClient::GetJobFailContext(
     const TOperationIdOrAlias& operationIdOrAlias,
@@ -1391,7 +1502,7 @@ TFuture<TListOperationsResult> TClient::ListOperations(
     YT_OPTIONAL_TO_PROTO(req, user_filter, options.UserFilter);
 
     if (options.AccessFilter) {
-        req->set_access_filter(ConvertToYsonString(options.AccessFilter).ToString());
+        req->set_access_filter(ToProto(ConvertToYsonString(options.AccessFilter)));
     }
 
     if (options.StateFilter) {
@@ -1562,7 +1673,7 @@ TFuture<TPollJobShellResponse> TClient::PollJobShell(
     SetTimeoutOptions(*req, options);
 
     ToProto(req->mutable_job_id(), jobId);
-    req->set_parameters(parameters.ToString());
+    req->set_parameters(ToProto(parameters));
     if (shellName) {
         req->set_shell_name(*shellName);
     }
@@ -2273,10 +2384,10 @@ TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     req->set_draft(options.Draft);
 
     if (options.Settings) {
-        req->set_settings(ConvertToYsonString(options.Settings).ToString());
+        req->set_settings(ToProto(ConvertToYsonString(options.Settings)));
     }
     if (options.Annotations) {
-        req->set_annotations(ConvertToYsonString(options.Annotations).ToString());
+        req->set_annotations(ToProto(ConvertToYsonString(options.Annotations)));
     }
     if (options.AccessControlObject) {
         req->set_access_control_object(*options.AccessControlObject);
@@ -2480,7 +2591,7 @@ TFuture<void> TClient::AlterQuery(
     ToProto(req->mutable_query_id(), queryId);
 
     if (options.Annotations) {
-        req->set_annotations(ConvertToYsonString(options.Annotations).ToString());
+        req->set_annotations(ToProto(ConvertToYsonString(options.Annotations)));
     }
     if (options.AccessControlObject) {
         req->set_access_control_object(*options.AccessControlObject);
@@ -2511,24 +2622,24 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
-            .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
+            .QueryTrackerStage = FromProto<std::string>(rsp->query_tracker_stage()),
             .ClusterName = FromProto<std::string>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
-            .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
+            .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),
             .Clusters = FromProto<std::vector<std::string>>(rsp->clusters())
         };
     }));
 }
 
 TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
-    const TString& /*bundleName*/,
+    const std::string& /*bundleName*/,
     const NBundleControllerClient::TGetBundleConfigOptions& /*options*/)
 {
     ThrowUnimplemented("GetBundleConfig");
 }
 
 TFuture<void> TClient::SetBundleConfig(
-    const TString& /*bundleName*/,
+    const std::string& /*bundleName*/,
     const NBundleControllerClient::TBundleTargetConfigPtr& /*bundleConfig*/,
     const NBundleControllerClient::TSetBundleConfigOptions& /*options*/)
 {
@@ -2599,7 +2710,7 @@ TFuture<TSetPipelineSpecResult> TClient::SetPipelineSpec(
     SetTimeoutOptions(*req, options);
 
     req->set_pipeline_path(pipelinePath);
-    req->set_spec(spec.ToString());
+    req->set_spec(ToProto(spec));
     req->set_force(options.Force);
     if (options.ExpectedVersion) {
         req->set_expected_version(ToProto(*options.ExpectedVersion));
@@ -2642,7 +2753,7 @@ TFuture<TSetPipelineDynamicSpecResult> TClient::SetPipelineDynamicSpec(
     SetTimeoutOptions(*req, options);
 
     req->set_pipeline_path(pipelinePath);
-    req->set_spec(spec.ToString());
+    req->set_spec(ToProto(spec));
     if (options.ExpectedVersion) {
         req->set_expected_version(ToProto(*options.ExpectedVersion));
     }
@@ -2749,7 +2860,7 @@ TFuture<TFlowExecuteResult> TClient::FlowExecute(
     req->set_pipeline_path(pipelinePath);
     req->set_command(command);
     if (argument) {
-        req->set_argument(argument.ToString());
+        req->set_argument(ToProto(argument));
     }
 
     return req->Invoke().Apply(BIND([](const TApiServiceProxy::TRspFlowExecutePtr& rsp) {
@@ -2759,7 +2870,7 @@ TFuture<TFlowExecuteResult> TClient::FlowExecute(
     }));
 }
 
-TFuture<TShuffleHandlePtr> TClient::StartShuffle(
+TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     const std::string& account,
     int partitionCount,
     TTransactionId parentTransactionId,
@@ -2781,23 +2892,31 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
-        return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));
+        return ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
     }));
 }
 
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
-    const TShuffleHandlePtr& shuffleHandle,
+    const TSignedShuffleHandlePtr& signedShuffleHandle,
     int partitionIndex,
-    const TTableReaderConfigPtr& config)
+    std::optional<std::pair<int, int>> writerIndexRange,
+    const TShuffleReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.ReadShuffleData();
     InitStreamingRequest(*req);
 
-    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+    req->set_signed_shuffle_handle(ToProto(ConvertToYsonString(signedShuffleHandle)));
     req->set_partition_index(partitionIndex);
-    req->set_reader_config(ConvertToYsonString(config).ToString());
+    if (options.Config) {
+        req->set_reader_config(ToProto(ConvertToYsonString(options.Config)));
+    }
+    if (writerIndexRange) {
+        auto* writerIndexRangeProto = req->mutable_writer_index_range();
+        writerIndexRangeProto->set_begin(writerIndexRange->first);
+        writerIndexRangeProto->set_end(writerIndexRange->second);
+    }
 
     return CreateRpcClientInputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2806,17 +2925,24 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 }
 
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
-    const TShuffleHandlePtr& shuffleHandle,
+    const TSignedShuffleHandlePtr& signedShuffleHandle,
     const std::string& partitionColumn,
-    const TTableWriterConfigPtr& config)
+    std::optional<int> writerIndex,
+    const TShuffleWriterOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
     auto req = proxy.WriteShuffleData();
     InitStreamingRequest(*req);
 
-    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+    req->set_signed_shuffle_handle(ToProto(ConvertToYsonString(signedShuffleHandle)));
     req->set_partition_column(ToProto(partitionColumn));
-    req->set_writer_config(ConvertToYsonString(config).ToString());
+    if (options.Config) {
+        req->set_writer_config(ToProto(ConvertToYsonString(options.Config)));
+    }
+    if (writerIndex) {
+        req->set_writer_index(*writerIndex);
+    }
+    req->set_overwrite_existing_writer_data(options.OverwriteExistingWriterData);
 
     return CreateRpcClientOutputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {

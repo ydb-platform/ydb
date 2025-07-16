@@ -91,10 +91,10 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     TVector<NUserData::TUserData> userData;
     for (const auto& x : options.SqlLibs) {
         NUserData::TUserData data;
-        data.Type_ = NUserData::EType::LIBRARY;
-        data.Disposition_ = NUserData::EDisposition::INLINE;
-        data.Name_ = x.first;
-        data.Content_ = x.second;
+        data.Type = NUserData::EType::LIBRARY;
+        data.Disposition = NUserData::EDisposition::INLINE;
+        data.Name = x.first;
+        data.Content = x.second;
         userData.push_back(data);
     }
 

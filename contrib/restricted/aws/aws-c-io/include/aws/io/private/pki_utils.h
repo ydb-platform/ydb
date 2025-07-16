@@ -23,41 +23,11 @@ struct aws_string;
 AWS_EXTERN_C_BEGIN
 
 /**
- * Cleans up and securely zeroes out the outputs of 'aws_decode_pem_to_buffer_list()'
- * and 'aws_read_and_decode_pem_file_to_buffer_list()'
- */
-AWS_IO_API void aws_cert_chain_clean_up(struct aws_array_list *cert_chain);
-
-/**
- * Decodes a PEM file and adds the results to 'cert_chain_or_key' if successful.
- * Otherwise, 'cert_chain_or_key' will be empty. The type stored in 'cert_chain_or_key'
- * is 'struct aws_byte_buf' by value. This code is slow, and it allocates, so please try
- * not to call this in the middle of something that needs to be fast or resource sensitive.
- */
-AWS_IO_API int aws_decode_pem_to_buffer_list(
-    struct aws_allocator *alloc,
-    const struct aws_byte_cursor *pem_cursor,
-    struct aws_array_list *cert_chain_or_key);
-
-/**
  * Returns the path to the directory and file, respectively, which holds the
  * SSL certificate trust store on the system.
  */
 AWS_IO_API const char *aws_determine_default_pki_dir(void);
 AWS_IO_API const char *aws_determine_default_pki_ca_file(void);
-
-/**
- * Decodes a PEM file at 'filename' and adds the results to 'cert_chain_or_key' if successful.
- * Otherwise, 'cert_chain_or_key' will be empty.
- * The passed-in parameter 'cert_chain_or_key' should be empty and dynamically initialized array_list
- * with item type 'struct aws_byte_buf' in value.
- * This code is slow, and it allocates, so please try not to call this in the middle of
- * something that needs to be fast or resource sensitive.
- */
-AWS_IO_API int aws_read_and_decode_pem_file_to_buffer_list(
-    struct aws_allocator *alloc,
-    const char *filename,
-    struct aws_array_list *cert_chain_or_key);
 
 #ifdef AWS_OS_APPLE
 #    if !defined(AWS_OS_IOS)

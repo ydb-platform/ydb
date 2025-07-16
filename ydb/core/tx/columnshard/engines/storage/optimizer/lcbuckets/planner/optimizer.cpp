@@ -1,7 +1,9 @@
-#include "accumulation_level.h"
-#include "common_level.h"
 #include "optimizer.h"
-#include "zero_level.h"
+
+#include "level/common_level.h"
+#include "level/zero_level.h"
+#include "selector/snapshot.h"
+#include "selector/transparent.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.h>
 
@@ -10,34 +12,15 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors)
-    : TBase(pathId)
-    , Counters(std::make_shared<TCounters>())
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
+    std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const ui32 nodePortionsCountLimit)
+    : TBase(pathId, nodePortionsCountLimit)
+    , Counters(counters)
+    , PortionsInfo(portionsGroupInfo)
+    , Selectors(std::move(selectors))
+    , Levels(std::move(levels))
     , StoragesManager(storagesManager)
     , PrimaryKeysSchema(primaryKeysSchema) {
-    std::shared_ptr<IPortionsLevel> nextLevel;
-    /*
-    const ui64 maxPortionBlobBytes = (ui64)1 << 20;
-    Levels.emplace_back(
-        std::make_shared<TLevelPortions>(2, 0.9, maxPortionBlobBytes, nullptr, PortionsInfo, Counters->GetLevelCounters(2)));
-*/
-    if (levelConstructors.size()) {
-        std::shared_ptr<IPortionsLevel> nextLevel;
-        ui32 idx = levelConstructors.size();
-        for (auto it = levelConstructors.rbegin(); it != levelConstructors.rend(); ++it) {
-            --idx;
-            Levels.emplace_back((*it)->BuildLevel(nextLevel, idx, PortionsInfo, Counters->GetLevelCounters(idx)));
-            nextLevel = Levels.back();
-        }
-    } else {
-        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-            2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20, 10, std::nullopt));
-        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-            1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max(), 1 << 20, 10, std::nullopt));
-        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-            0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180), 1 << 20, 10, std::nullopt));
-    }
-    std::reverse(Levels.begin(), Levels.end());
     RefreshWeights();
 }
 
@@ -57,10 +40,7 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     //        result->AddMovePortions(data.GetMovePortions());
     //    }
     result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
-    auto levelPortions = std::dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()]);
-    if (levelPortions) {
-        result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
-    }
+    result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
     auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
         "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());

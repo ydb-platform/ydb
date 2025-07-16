@@ -140,14 +140,18 @@ message TConfigItem {
         BackgroundCleaningConfigItem = 77;
         MetadataCacheConfigItem = 80;
         MemoryControllerConfigItem = 81;
-        GroupedMemoryLimiterConfig = 82;
+        ScanGroupedMemoryLimiterConfig = 82;
         ReplicationConfigItem = 83;
         CompPrioritiesConfig = 85;
         HealthCheckConfigItem = 89;
         WorkloadManagerConfigItem = 90;
+        CompGroupedMemoryLimiterConfig = 92;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
+
+        CompositeConveyorConfigItem = 109;
+        PortionsMetadataCacheItem = 110;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;
@@ -662,6 +666,26 @@ message TFetchStartupConfigRequest {
 
 message TFetchStartupConfigResponse {
     optional Ydb.DynamicConfig.FetchStartupConfigResult Response = 1;
+}
+
+message TGetConfigurationVersionRequest {
+    optional Ydb.DynamicConfig.GetConfigurationVersionRequest Request = 1;
+    optional bytes UserToken = 2;
+    optional string PeerName = 3;
+    optional string IngressDatabase = 4;
+}
+
+message TGetConfigurationVersionResponse {
+    optional Ydb.DynamicConfig.GetConfigurationVersionResult Response = 1;
+}
+
+message TGetNodeConfigurationVersionRequest {
+    optional uint32 NodeId = 1;
+}
+
+message TGetNodeConfigurationVersionResponse {
+    optional TStatus Status = 1;
+    optional string Version = 2;
 }
 
 enum EValidationLevel {

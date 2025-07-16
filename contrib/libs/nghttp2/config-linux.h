@@ -10,7 +10,7 @@
 /* Define to 1 if HTTP/3 is enabled. */
 /* #undef ENABLE_HTTP3 */
 
-/* Define to 1 if you have the `accept4' function. */
+/* Define to 1 if you have the 'accept4' function. */
 #define HAVE_ACCEPT4 1
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
@@ -18,48 +18,48 @@
 
 /* Define to 1 if you have the std::atomic<std::shared_ptr<T>> is supported.
    */
-/* #undef HAVE_ATOMIC_STD_SHARED_PTR */
+#define HAVE_ATOMIC_STD_SHARED_PTR 1
 
 /* Define to 1 if you have enum bpf_stats_type in linux/bpf.h. */
 /* #undef HAVE_BPF_STATS_TYPE */
 
-/* Define to 1 if your system has a working `chown' function. */
+/* Define to 1 if your system has a working 'chown' function. */
 #define HAVE_CHOWN 1
 
-/* Define to 1 if you have the `clock_gettime' function. */
+/* Define to 1 if you have the 'clock_gettime' function. */
 #define HAVE_CLOCK_GETTIME 1
 
 /* define if the compiler supports basic C++20 syntax */
 #define HAVE_CXX20 1
 
-/* Define to 1 if you have the declaration of `CLOCK_MONOTONIC', and to 0 if
+/* Define to 1 if you have the declaration of 'CLOCK_MONOTONIC', and to 0 if
    you don't. */
 #define HAVE_DECL_CLOCK_MONOTONIC 1
 
-/* Define to 1 if you have the declaration of `initgroups', and to 0 if you
+/* Define to 1 if you have the declaration of 'initgroups', and to 0 if you
    don't. */
 #define HAVE_DECL_INITGROUPS 1
 
-/* Define to 1 if you have the declaration of `strerror_r', and to 0 if you
+/* Define to 1 if you have the declaration of 'strerror_r', and to 0 if you
    don't. */
 #define HAVE_DECL_STRERROR_R 1
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
-/* Define to 1 if you have the `dup2' function. */
+/* Define to 1 if you have the 'dup2' function. */
 #define HAVE_DUP2 1
 
 /* Define to 1 if you have the <fcntl.h> header file. */
 #define HAVE_FCNTL_H 1
 
-/* Define to 1 if you have the `fork' function. */
+/* Define to 1 if you have the 'fork' function. */
 #define HAVE_FORK 1
 
-/* Define to 1 if you have the `getcwd' function. */
+/* Define to 1 if you have the 'getcwd' function. */
 #define HAVE_GETCWD 1
 
-/* Define to 1 if you have the `getpwnam' function. */
+/* Define to 1 if you have the 'getpwnam' function. */
 #define HAVE_GETPWNAM 1
 
 /* Define to 1 if you have `GetTickCount64` function. */
@@ -83,6 +83,9 @@
 /* Define to 1 if you have `libngtcp2_crypto_boringssl` library. */
 /* #undef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL */
 
+/* Define to 1 if you have `libngtcp2_crypto_ossl` library. */
+/* #undef HAVE_LIBNGTCP2_CRYPTO_OSSL */
+
 /* Define to 1 if you have `libngtcp2_crypto_quictls` library. */
 /* #undef HAVE_LIBNGTCP2_CRYPTO_QUICTLS */
 
@@ -98,22 +101,22 @@
 /* Define to 1 if you have the <limits.h> header file. */
 #define HAVE_LIMITS_H 1
 
-/* Define to 1 if you have the `localtime_r' function. */
+/* Define to 1 if you have the 'localtime_r' function. */
 #define HAVE_LOCALTIME_R 1
 
-/* Define to 1 if you have the `memchr' function. */
+/* Define to 1 if you have the 'memchr' function. */
 #define HAVE_MEMCHR 1
 
-/* Define to 1 if you have the `memmove' function. */
+/* Define to 1 if you have the 'memmove' function. */
 #define HAVE_MEMMOVE 1
 
-/* Define to 1 if you have the `memset' function. */
+/* Define to 1 if you have the 'memset' function. */
 #define HAVE_MEMSET 1
 
 /* Define to 1 if you have the <minix/config.h> header file. */
 /* #undef HAVE_MINIX_CONFIG_H */
 
-/* Define to 1 if you have the `mkostemp' function. */
+/* Define to 1 if you have the 'mkostemp' function. */
 #define HAVE_MKOSTEMP 1
 
 /* Define to 1 if you have `mruby` library. */
@@ -131,10 +134,10 @@
 /* Define to 1 if you have `neverbleed` library. */
 /* #undef HAVE_NEVERBLEED */
 
-/* Define to 1 if you have the `pipe2' function. */
+/* Define to 1 if you have the 'pipe2' function. */
 #define HAVE_PIPE2 1
 
-/* Define to 1 if the system has the type `ptrdiff_t'. */
+/* Define to 1 if the system has the type 'ptrdiff_t'. */
 #define HAVE_PTRDIFF_T 1
 
 /* Define to 1 if you have the <pwd.h> header file. */
@@ -146,10 +149,10 @@
 /* Define to 1 if struct sockaddr_in has sin_len member. */
 /* #undef HAVE_SOCKADDR_IN_SIN_LEN */
 
-/* Define to 1 if you have the `socket' function. */
+/* Define to 1 if you have the 'socket' function. */
 #define HAVE_SOCKET 1
 
-/* Define to 1 if you have the `sqrt' function. */
+/* Define to 1 if you have the 'sqrt' function. */
 /* #undef HAVE_SQRT */
 
 /* Define to 1 if you have the <stddef.h> header file. */
@@ -164,22 +167,22 @@
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
 
+/* Define to 1 if you have the `std::chrono::time_zone`. */
+#define HAVE_STD_CHRONO_TIME_ZONE 1
+
 /* Define to 1 if you have the `std::future`. */
 #define HAVE_STD_FUTURE 1
 
-/* Define to 1 if you have the `std::map::emplace`. */
-#define HAVE_STD_MAP_EMPLACE 1
-
-/* Define to 1 if you have the `strchr' function. */
+/* Define to 1 if you have the 'strchr' function. */
 #define HAVE_STRCHR 1
 
-/* Define to 1 if you have the `strdup' function. */
+/* Define to 1 if you have the 'strdup' function. */
 #define HAVE_STRDUP 1
 
-/* Define to 1 if you have the `strerror' function. */
+/* Define to 1 if you have the 'strerror' function. */
 #define HAVE_STRERROR 1
 
-/* Define if you have `strerror_r'. */
+/* Define if you have 'strerror_r'. */
 #define HAVE_STRERROR_R 1
 
 /* Define to 1 if you have the <strings.h> header file. */
@@ -188,16 +191,16 @@
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
 
-/* Define to 1 if you have the `strndup' function. */
+/* Define to 1 if you have the 'strndup' function. */
 #define HAVE_STRNDUP 1
 
-/* Define to 1 if you have the `strstr' function. */
+/* Define to 1 if you have the 'strstr' function. */
 #define HAVE_STRSTR 1
 
-/* Define to 1 if you have the `strtol' function. */
+/* Define to 1 if you have the 'strtol' function. */
 #define HAVE_STRTOL 1
 
-/* Define to 1 if you have the `strtoul' function. */
+/* Define to 1 if you have the 'strtoul' function. */
 #define HAVE_STRTOUL 1
 
 /* Define to 1 if you have `struct tm.tm_gmtoff` member. */
@@ -218,16 +221,13 @@
 /* Define to 1 if you have the <sys/types.h> header file. */
 #define HAVE_SYS_TYPES_H 1
 
-/* Define to 1 if you have thread_local storage specifier. */
-#define HAVE_THREAD_LOCAL 1
-
-/* Define to 1 if you have the `timegm' function. */
+/* Define to 1 if you have the 'timegm' function. */
 #define HAVE_TIMEGM 1
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
-/* Define to 1 if you have the `vfork' function. */
+/* Define to 1 if you have the 'vfork' function. */
 #define HAVE_VFORK 1
 
 /* Define to 1 if you have the <vfork.h> header file. */
@@ -242,13 +242,13 @@
 /* Define to 1 if you have 'wolfssl' library. */
 /* #undef HAVE_WOLFSSL */
 
-/* Define to 1 if `fork' works. */
+/* Define to 1 if 'fork' works. */
 #define HAVE_WORKING_FORK 1
 
-/* Define to 1 if `vfork' works. */
+/* Define to 1 if 'vfork' works. */
 #define HAVE_WORKING_VFORK 1
 
-/* Define to 1 if you have the `_Exit' function. */
+/* Define to 1 if you have the '_Exit' function. */
 #define HAVE__EXIT 1
 
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
@@ -273,7 +273,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.65.0"
+#define PACKAGE_STRING "nghttp2 1.66.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -282,9 +282,9 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.65.0"
+#define PACKAGE_VERSION "1.66.0"
 
-/* Define to 1 if all of the C90 standard headers exist (not just the ones
+/* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
@@ -292,7 +292,7 @@
 /* Define to 1 if strerror_r returns char *. */
 #define STRERROR_R_CHAR_P 1
 
-/* Enable extensions on AIX 3, Interix.  */
+/* Enable extensions on AIX, Interix, z/OS.  */
 #ifndef _ALL_SOURCE
 # define _ALL_SOURCE 1
 #endif
@@ -353,11 +353,15 @@
 #ifndef __STDC_WANT_IEC_60559_DFP_EXT__
 # define __STDC_WANT_IEC_60559_DFP_EXT__ 1
 #endif
+/* Enable extensions specified by C23 Annex F.  */
+#ifndef __STDC_WANT_IEC_60559_EXT__
+# define __STDC_WANT_IEC_60559_EXT__ 1
+#endif
 /* Enable extensions specified by ISO/IEC TS 18661-4:2015.  */
 #ifndef __STDC_WANT_IEC_60559_FUNCS_EXT__
 # define __STDC_WANT_IEC_60559_FUNCS_EXT__ 1
 #endif
-/* Enable extensions specified by ISO/IEC TS 18661-3:2015.  */
+/* Enable extensions specified by C23 Annex H and ISO/IEC TS 18661-3:2015.  */
 #ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
 # define __STDC_WANT_IEC_60559_TYPES_EXT__ 1
 #endif
@@ -381,7 +385,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.65.0"
+#define VERSION "1.66.0"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */
@@ -398,8 +402,11 @@
 /* Number of bits in a file offset, on hosts where this is settable. */
 /* #undef _FILE_OFFSET_BITS */
 
-/* Define for large files, on AIX-style hosts. */
+/* Define to 1 on platforms where this makes off_t a 64-bit type. */
 /* #undef _LARGE_FILES */
+
+/* Number of bits in time_t, on hosts where this is settable. */
+/* #undef _TIME_BITS */
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
@@ -416,10 +423,13 @@
    #define below would cause a syntax error. */
 /* #undef _UINT8_T */
 
-/* Define to `int' if <sys/types.h> doesn't define. */
+/* Define to 1 on platforms where this makes time_t a 64-bit type. */
+/* #undef __MINGW_USE_VC2005_COMPAT */
+
+/* Define as 'int' if <sys/types.h> doesn't define. */
 /* #undef gid_t */
 
-/* Define to `__inline__' or `__inline' if that's what the C compiler
+/* Define to '__inline__' or '__inline' if that's what the C compiler
    calls it, or to nothing if 'inline' is not supported under any name.  */
 #ifndef __cplusplus
 /* #undef inline */
@@ -441,19 +451,19 @@
    a type exists and the standard includes do not define it. */
 /* #undef int8_t */
 
-/* Define to `long int' if <sys/types.h> does not define. */
+/* Define to 'long int' if <sys/types.h> does not define. */
 /* #undef off_t */
 
 /* Define as a signed integer type capable of holding a process identifier. */
 /* #undef pid_t */
 
-/* Define to `unsigned int' if <sys/types.h> does not define. */
+/* Define as 'unsigned int' if <stddef.h> doesn't define. */
 /* #undef size_t */
 
-/* Define to `int' if <sys/types.h> does not define. */
+/* Define as 'int' if <sys/types.h> doesn't define. */
 /* #undef ssize_t */
 
-/* Define to `int' if <sys/types.h> doesn't define. */
+/* Define as 'int' if <sys/types.h> doesn't define. */
 /* #undef uid_t */
 
 /* Define to the type of an unsigned integer type of width exactly 16 bits if
@@ -472,5 +482,5 @@
    such a type exists and the standard includes do not define it. */
 /* #undef uint8_t */
 
-/* Define as `fork' if `vfork' does not work. */
+/* Define as 'fork' if 'vfork' does not work. */
 /* #undef vfork */

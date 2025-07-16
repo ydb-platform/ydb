@@ -143,9 +143,12 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
 
         const auto& writeStagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage-Sink");
-        UNIT_ASSERT(writeStagePlan["Operators"].GetArraySafe().size() >= 1);
-        const auto& sinkOp = writeStagePlan["Operators"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage");
+
+        const auto& sinkPlan = plan["Plan"]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkPlan["Node Type"].GetStringSafe(), "Sink");
+        UNIT_ASSERT(sinkPlan["Operators"].GetArraySafe().size() >= 1);
+        const auto& sinkOp = sinkPlan["Operators"].GetArraySafe()[0];
         UNIT_ASSERT_VALUES_EQUAL(sinkOp["ExternalDataSource"].GetStringSafe(), "write_data_source");
         UNIT_ASSERT_VALUES_EQUAL(sinkOp["Compression"].GetStringSafe(), "gzip");
 
@@ -218,8 +221,15 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
 
         const auto& writeStagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage-Sink");
+        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage");
         UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Stats"]["Tasks"], 1);
+
+        const auto& sinkPlan = plan["Plan"]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkPlan["Node Type"].GetStringSafe(), "Sink");
+        UNIT_ASSERT(sinkPlan["Operators"].GetArraySafe().size() >= 1);
+        const auto& sinkOp = sinkPlan["Operators"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkOp["Name"].GetStringSafe(), "FillTable");
+        UNIT_ASSERT_VALUES_EQUAL(sinkOp["Table"].GetStringSafe(), "result_table");
 
         const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
         UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Node Type"].GetStringSafe(), "Stage");
@@ -290,8 +300,15 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
 
         const auto& writeStagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage-Sink");
+        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage");
         UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Stats"]["Tasks"], 42);
+
+        const auto& sinkPlan = plan["Plan"]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkPlan["Node Type"].GetStringSafe(), "Sink");
+        UNIT_ASSERT(sinkPlan["Operators"].GetArraySafe().size() >= 1);
+        const auto& sinkOp = sinkPlan["Operators"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkOp["ExternalDataSource"].GetStringSafe(), "insert_data_sink");
+        UNIT_ASSERT_VALUES_EQUAL(sinkOp["Extension"].GetStringSafe(), ".parquet");
 
         const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
         UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Node Type"].GetStringSafe(), "TableFullScan");

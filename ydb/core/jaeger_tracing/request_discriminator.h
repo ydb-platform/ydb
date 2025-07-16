@@ -112,6 +112,10 @@ enum class ERequestType: size_t {
     TOPIC_ALTERTOPIC,
     TOPIC_DROPTOPIC,
 
+    // Bridge requests
+    BRIDGE_GETCLUSTERSTATE,
+    BRIDGE_UPDATECLUSTERSTATE,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 

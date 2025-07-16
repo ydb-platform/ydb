@@ -175,7 +175,7 @@ struct TTM64Storage {
     }
 
     const TString ToString() const {
-        const auto& tzName = NUdf::GetTimezones()[TimezoneId];
+        const auto& tzName = NTi::GetTimezones()[TimezoneId];
         return Sprintf("%8d-%02d-%02dT%02d:%02d:%02d.%06d,%.*s",
                        Year, Month, Day, Hour, Minute, Second, Microsecond,
                        static_cast<int>(tzName.size()), tzName.data());

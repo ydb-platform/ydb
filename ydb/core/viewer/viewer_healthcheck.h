@@ -26,6 +26,7 @@ class TJsonHealthCheck : public TViewerPipeClient {
     TString Database;
     bool Cache = true;
     bool MergeRecords = false;
+    TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> MetadataCacheEndpointsLookup;
     std::optional<Ydb::Monitoring::SelfCheckResult> Result;
     std::optional<TRequestResponse<NHealthCheck::TEvSelfCheckResult>> SelfCheckResult;
     Ydb::Monitoring::StatusFlag::Status MinStatus = Ydb::Monitoring::StatusFlag::UNSPECIFIED;
@@ -102,7 +103,7 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "The field 'min_status' cannot be parsed"));
         }
         if (AppData()->FeatureFlags.GetEnableDbMetadataCache() && Cache && Database && MergeRecords) {
-            RequestStateStorageMetadataCacheEndpointsLookup(Database);
+            MetadataCacheEndpointsLookup = MakeRequestStateStorageMetadataCacheEndpointsLookup(Database);
         } else {
             SendHealthCheckRequest();
         }
@@ -221,14 +222,17 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        auto activeNode = TDatabaseMetadataCache::PickActiveNode(ev->Get()->InfoEntries);
-        if (activeNode != 0) {
-            TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
-            auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
-            Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
-        } else {
-            SendHealthCheckRequest();
+        MetadataCacheEndpointsLookup.Set(std::move(ev));
+        if (MetadataCacheEndpointsLookup.IsOk()) {
+            auto activeNode = TDatabaseMetadataCache::PickActiveNode(MetadataCacheEndpointsLookup->InfoEntries);
+            if (activeNode != 0) {
+                TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
+                auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
+                Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+                return;
+            }
         }
+        SendHealthCheckRequest();
     }
 
     static YAML::Node GetSwagger() {
@@ -239,24 +243,10 @@ public:
             .Description = "Performs self-check and returns result",
         });
         yaml.AddParameter({
-            .Name = "enums",
-            .Description = "convert enums to strings",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "ui64",
-            .Description = "return ui64 as number",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "timeout",
-            .Description = "timeout in ms",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
             .Name = "database",
-            .Description = "database name",
+            .Description = "database name, use cluster domain name to get cluster storage status",
             .Type = "string",
+            .Required = true,
         });
         yaml.AddParameter({
             .Name = "cache",

@@ -5,30 +5,16 @@ import pytest
 
 import yatest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.param_constants import kikimr_driver_path
-from ydb.tests.library.common.types import Erasure
 from ydb.tests.stress.simple_queue.workload import Workload
-
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
-current_binary_path = kikimr_driver_path()
-
-all_binary_combinations = [
-    [last_stable_binary_path],
-    [current_binary_path],
-    [last_stable_binary_path, current_binary_path],
-]
-all_binary_combinations_ids = ["last_stable", "current", "mixed"]
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
 
 
-class TestStress(object):
-    @pytest.fixture(autouse=True, params=all_binary_combinations, ids=all_binary_combinations_ids)
-    def setup(self, request):
-        binary_paths = request.param
-        self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
-            binary_paths=binary_paths,
+class TestStress(MixedClusterFixture):
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        output_path = yatest.common.test_output_path()
+        self.output_f = open(os.path.join(output_path, "out.log"), "w")
+        yield from self.setup_cluster(
             # uncomment for 64 datetime in tpc-h/tpc-ds
             # extra_feature_flags={"enable_table_datetime64": True},
 
@@ -36,14 +22,6 @@ class TestStress(object):
                 'disabled_on_scheme_shard': False,
             },
         )
-
-        self.cluster = KiKiMR(self.config)
-        self.cluster.start()
-        self.endpoint = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
-        output_path = yatest.common.test_output_path()
-        self.output_f = open(os.path.join(output_path, "out.log"), "w")
-        yield
-        self.cluster.stop()
 
     def get_command_prefix_log(self, subcmds: list[str], path: str) -> list[str]:
         return (
@@ -129,8 +107,7 @@ class TestStress(object):
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple_queue(self, store_type: str):
         with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, store_type) as workload:
-            for handle in workload.loop():
-                handle()
+            workload.start()
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_kv(self, store_type):
@@ -202,8 +179,12 @@ class TestStress(object):
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
-    @pytest.mark.parametrize("store_type", ["row", "column"])
-    def test_tpch1(self, store_type):
+    @pytest.mark.parametrize("store_type, date_args", [
+        pytest.param("row",    ["--datetime"], id="row"),
+        pytest.param("column", ["--datetime"], id="column"),
+        pytest.param("column", []            , id="column-date64")
+    ])
+    def test_tpch1(self, store_type, date_args):
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -216,9 +197,8 @@ class TestStress(object):
             "tpch",
             "init",
             "--store={}".format(store_type),
-            "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
             "--partition-size=25",
-        ]
+        ] + date_args  # use 32 bit dates instead of 64 (not supported in 24-4)]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -257,8 +237,12 @@ class TestStress(object):
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     @pytest.mark.skip(reason="Not stabilized yet")
-    @pytest.mark.parametrize("store_type", ["row", "column"])
-    def test_tpcds1(self, store_type):
+    @pytest.mark.parametrize("store_type, date_args", [
+        pytest.param("row",    ["--datetime"], id="row"),
+        pytest.param("column", ["--datetime"], id="column"),
+        pytest.param("column", []            , id="column-date64")
+    ])
+    def test_tpcds1(self, store_type, date_args):
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -269,12 +253,10 @@ class TestStress(object):
             "tpcds",
             "-p",
             "tpcds",
-
             "init",
             "--store={}".format(store_type),
-            "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
             "--partition-size=25",
-        ]
+        ] + date_args  # use 32 bit dates instead of 64 (not supported in 24-4)]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",

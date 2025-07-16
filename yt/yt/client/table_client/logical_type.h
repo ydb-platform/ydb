@@ -104,6 +104,7 @@ private:
 
 DEFINE_REFCOUNTED_TYPE(TLogicalType)
 
+TLogicalTypePtr ParseType(TStringBuf typeString);
 TString ToString(const TLogicalType& logicalType);
 void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf /*spec*/);
 
@@ -144,6 +145,8 @@ void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logi
 void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLogicalType);
 
 bool IsComparable(const TLogicalTypePtr& type);
+
+bool IsTzType(const TLogicalTypePtr& logicalType);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -437,6 +440,11 @@ TLogicalTypePtr MakeOptionalIfNot(TLogicalTypePtr element);
 // IMPORTANT: Only used for compatibility reasons.
 // In modern code, one should use OptionalLogicalType + SimpleLogicalType instead.
 TLogicalTypePtr MakeLogicalType(ESimpleLogicalValueType type, bool required);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template<ESimpleLogicalValueType type>
+constexpr ESimpleLogicalValueType GetUnderlyingDateType();
 
 ////////////////////////////////////////////////////////////////////////////////
 

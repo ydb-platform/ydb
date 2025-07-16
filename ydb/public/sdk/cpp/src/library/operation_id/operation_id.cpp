@@ -39,6 +39,8 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
     reflection.ListFields(proto, &fields);
     TStringStream res;
     switch (proto.kind()) {
+        case Ydb::TOperationId::UNUSED:
+            break;
         case Ydb::TOperationId::OPERATION_DDL:
         case Ydb::TOperationId::OPERATION_DML:
             res << "ydb://operation";

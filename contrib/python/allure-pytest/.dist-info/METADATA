@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: allure-pytest
-Version: 2.14.0
+Version: 2.14.3
 Summary: Allure pytest integration
 Home-page: https://allurereport.org/
 Author: Qameta Software Inc., Stanislav Seliverstov
@@ -25,7 +25,7 @@ Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Description-Content-Type: text/markdown
 Requires-Dist: pytest>=4.5.0
-Requires-Dist: allure-python-commons==2.14.0
+Requires-Dist: allure-python-commons==2.14.3
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier

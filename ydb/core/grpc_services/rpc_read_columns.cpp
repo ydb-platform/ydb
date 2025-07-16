@@ -230,9 +230,9 @@ private:
                                   ctx);
         }
 
-        if (ResolveNamesResult->ResultSet.front().TableId.IsSystemView()) {
+        if (entry.TableId.IsSystemView() || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
             return ScanSystemView(ctx);
-        } if (TryParseLocalDbPath(ResolveNamesResult->ResultSet.front().Path)) {
+        } if (TryParseLocalDbPath(entry.Path)) {
             return ScanLocalDbTable(ctx);
         } else {
             return ResolveShards(ctx);
@@ -316,9 +316,18 @@ private:
 
         {
             TTableRange range(MinKey.GetCells(), MinKeyInclusive, MaxKey.GetCells(), MaxKeyInclusive);
+            TMaybe<NKikimrSysView::TSysViewDescription> sysViewInfo;
+            const auto& entry = ResolveNamesResult->ResultSet.front();
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
+                Y_ABORT_UNLESS(entry.SysViewInfo);
+                sysViewInfo.ConstructInPlace();
+                sysViewInfo->SetType(entry.SysViewInfo->Description.GetType());
+                *sysViewInfo->MutableSourceObject() = entry.SysViewInfo->Description.GetSourceObject();
+            }
             auto tableScanActor = NSysView::CreateSystemViewScan(ctx.SelfID, 0,
-                ResolveNamesResult->ResultSet.front().TableId,
-                JoinPath(ResolveNamesResult->ResultSet.front().Path),
+                entry.TableId,
+                JoinPath(entry.Path),
+                sysViewInfo,
                 range,
                 columns,
                 Request->GetInternalToken(),

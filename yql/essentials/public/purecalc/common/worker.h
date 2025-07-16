@@ -31,27 +31,28 @@ namespace NYql {
                 NKikimr::NUdf::ICountersProvider* countersProvider,
                 ui64 nativeYtTypeFlags,
                 TMaybe<ui64> deterministicTimeProviderSeed,
-                TLangVersion langver
+                TLangVersion langver,
+                bool insideEvaluation
             );
 
             ~TWorkerGraph();
 
-            NKikimr::NMiniKQL::TScopedAlloc ScopedAlloc_;
-            NKikimr::NMiniKQL::TTypeEnvironment Env_;
-            const NKikimr::NMiniKQL::IFunctionRegistry& FuncRegistry_;
-            TIntrusivePtr<IRandomProvider> RandomProvider_;
-            TIntrusivePtr<ITimeProvider> TimeProvider_;
-            NKikimr::NMiniKQL::IComputationPattern::TPtr ComputationPattern_;
-            THolder<NKikimr::NMiniKQL::IComputationGraph> ComputationGraph_;
-            TString LLVMSettings_;
-            ui64 NativeYtTypeFlags_;
-            TMaybe<TString> TimestampColumn_;
-            const NKikimr::NMiniKQL::TType* OutputType_;
-            const NKikimr::NMiniKQL::TType* RawOutputType_;
-            TVector<NKikimr::NMiniKQL::IComputationExternalNode*> SelfNodes_;
-            TVector<const NKikimr::NMiniKQL::TStructType*> InputTypes_;
-            TVector<const NKikimr::NMiniKQL::TStructType*> OriginalInputTypes_;
-            TVector<const NKikimr::NMiniKQL::TStructType*> RawInputTypes_;
+            NKikimr::NMiniKQL::TScopedAlloc ScopedAlloc;
+            NKikimr::NMiniKQL::TTypeEnvironment Env;
+            const NKikimr::NMiniKQL::IFunctionRegistry& FuncRegistry;
+            TIntrusivePtr<IRandomProvider> RandomProvider;
+            TIntrusivePtr<ITimeProvider> TimeProvider;
+            NKikimr::NMiniKQL::IComputationPattern::TPtr ComputationPattern;
+            THolder<NKikimr::NMiniKQL::IComputationGraph> ComputationGraph;
+            TString LLVMSettings;
+            ui64 NativeYtTypeFlags;
+            TMaybe<TString> TimestampColumn;
+            const NKikimr::NMiniKQL::TType* OutputType;
+            const NKikimr::NMiniKQL::TType* RawOutputType;
+            TVector<NKikimr::NMiniKQL::IComputationExternalNode*> SelfNodes;
+            TVector<const NKikimr::NMiniKQL::TStructType*> InputTypes;
+            TVector<const NKikimr::NMiniKQL::TStructType*> OriginalInputTypes;
+            TVector<const NKikimr::NMiniKQL::TStructType*> RawInputTypes;
         };
 
         template <typename TBase>

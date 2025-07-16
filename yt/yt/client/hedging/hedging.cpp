@@ -134,11 +134,13 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, AlterTable, (const TYPath&, const TAlterTableOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AlterTableReplica, (NTabletClient::TTableReplicaId, const TAlterTableReplicaOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AlterReplicationCard, (NChaosClient::TReplicationCardId, const TAlterReplicationCardOptions&));
+    UNSUPPORTED_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (const TChaosLeaseStartOptions&));
+    UNSUPPORTED_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeaseAttachOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const TYPath&, const NTableClient::TNameTablePtr&, const TSharedRange<NTableClient::TUnversionedRow>&, const TGetInSyncReplicasOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const TYPath&, const TGetInSyncReplicasOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<TTabletInfo>>, GetTabletInfos, (const TYPath&, const std::vector<int>&, const TGetTabletInfosOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetTabletErrorsResult>, GetTabletErrors, (const TYPath&, const TGetTabletErrorsOptions&));
-    UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (const TString&, const std::vector<TYPath>&, const TBalanceTabletCellsOptions&));
+    UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (const std::string&, const std::vector<TYPath>&, const TBalanceTabletCellsOptions&));
     UNSUPPORTED_METHOD(TFuture<TSkynetSharePartsLocationsPtr>, LocateSkynetShare, (const TRichYPath&, const TLocateSkynetShareOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTableClient::TColumnarStatistics>>, GetColumnarStatistics, (const std::vector<TRichYPath>&, const TGetColumnarStatisticsOptions&));
     UNSUPPORTED_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (const std::vector<TRichYPath>&, const TPartitionTablesOptions&));
@@ -149,11 +151,12 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, TruncateJournal, (const TYPath&, i64, const TTruncateJournalOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (const TString&, const TGetFileFromCacheOptions&));
     UNSUPPORTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const TYPath&, const TString&, const TPutFileToCacheOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, AddMember, (const TString&, const TString&, const TAddMemberOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, RemoveMember, (const TString&, const TString&, const TRemoveMemberOptions&));
+    UNSUPPORTED_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (const TGetCurrentUserOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, AddMember, (const std::string&, const std::string&, const TAddMemberOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, RemoveMember, (const std::string&, const std::string&, const TRemoveMemberOptions&));
     UNSUPPORTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const std::string&, const TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
     UNSUPPORTED_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (const std::optional<std::string>&, NYTree::EPermission, NYTree::INodePtr, const TCheckPermissionByAclOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, TransferAccountResources, (const TString&, const TString&, NYTree::INodePtr, const TTransferAccountResourcesOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TransferAccountResources, (const std::string&, const std::string&, NYTree::INodePtr, const TTransferAccountResourcesOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, TransferPoolResources, (const TString&, const TString&, const TString&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
     UNSUPPORTED_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (NScheduler::EOperationType, const NYson::TYsonString&, const TStartOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortOperation, (const NScheduler::TOperationIdOrAlias&, const TAbortOperationOptions&));
@@ -170,6 +173,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobStderrOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (const NScheduler::TOperationIdOrAlias&, const TGetJobTraceOptions&));
     UNSUPPORTED_METHOD(TFuture<TSharedRef>, GetJobFailContext, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobFailContextOptions&));
+    UNSUPPORTED_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (const NScheduler::TOperationIdOrAlias&, const TListOperationEventsOptions&));
     UNSUPPORTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJob, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobOptions&));
@@ -222,21 +226,21 @@ public:
     UNSUPPORTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (const TGetQueryTrackerInfoOptions&));
-    UNSUPPORTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const TString&, const NBundleControllerClient::TGetBundleConfigOptions&));
+    UNSUPPORTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const std::string&, const NBundleControllerClient::TGetBundleConfigOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetPipelineSpecResult>, GetPipelineSpec, (const NYPath::TYPath&, const TGetPipelineSpecOptions&));
     UNSUPPORTED_METHOD(TFuture<TSetPipelineSpecResult>, SetPipelineSpec, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetPipelineSpecOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetPipelineDynamicSpecResult>, GetPipelineDynamicSpec, (const NYPath::TYPath&, const TGetPipelineDynamicSpecOptions&));
     UNSUPPORTED_METHOD(TFuture<TSetPipelineDynamicSpecResult>, SetPipelineDynamicSpec, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetPipelineDynamicSpecOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, SetBundleConfig, (const TString&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, SetBundleConfig, (const std::string&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, StartPipeline, (const TYPath&, const TStartPipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, StopPipeline, (const TYPath&, const TStopPipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, PausePipeline, (const TYPath&, const TPausePipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<TPipelineState>, GetPipelineState, (const TYPath&, const TGetPipelineStateOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
     UNSUPPORTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const TString&, const NYson::TYsonString&, const TFlowExecuteOptions&));
-    UNSUPPORTED_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (const std::string&, int, NObjectClient::TTransactionId, const TStartShuffleOptions&));
-    UNSUPPORTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TShuffleHandlePtr&, int, const NTableClient::TTableReaderConfigPtr&));
-    UNSUPPORTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TShuffleHandlePtr&, const std::string&, const NTableClient::TTableWriterConfigPtr&));
+    UNSUPPORTED_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (const std::string&, int, NObjectClient::TTransactionId, const TStartShuffleOptions&));
+    UNSUPPORTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TSignedShuffleHandlePtr&, int, std::optional<std::pair<int, int>>, const TShuffleReaderOptions&));
+    UNSUPPORTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TSignedShuffleHandlePtr&, const std::string&, std::optional<int>, const TShuffleWriterOptions&));
 
 private:
     const THedgingExecutorPtr Executor_;

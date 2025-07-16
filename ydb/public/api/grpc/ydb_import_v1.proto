@@ -11,6 +11,9 @@ service ImportService {
     // Method starts an asynchronous operation that can be cancelled while it is in progress.
     rpc ImportFromS3(Import.ImportFromS3Request) returns (Import.ImportFromS3Response);
 
+    // List objects from existing export stored in S3 bucket
+    rpc ListObjectsInS3Export(Import.ListObjectsInS3ExportRequest) returns (Import.ListObjectsInS3ExportResponse);
+
     // Writes data to a table.
     // Method accepts serialized data in the selected format and writes it non-transactionally.
     rpc ImportData(Import.ImportDataRequest) returns (Import.ImportDataResponse);

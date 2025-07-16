@@ -5,6 +5,7 @@
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
+#include <util/string/join.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
@@ -45,13 +46,19 @@ const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext
 }
 
 template <typename TType>
-bool EnsureConvertibleTo(const TExprNode& value, const TStringBuf name, TExprContext& ctx) {
+bool EnsureConvertibleTo(const TExprNode& value, const TStringBuf name, TExprContext& ctx, TType& result) {
     auto&& stringValue = value.Content();
-    if (!TryFromString<TType>(stringValue)) {
+    if (!TryFromString(stringValue, result)) {
         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Unsupported " << name << " value: " << stringValue));
         return false;
     }
     return true;
+}
+
+template <typename TType>
+bool EnsureConvertibleTo(const TExprNode& value, const TStringBuf name, TExprContext& ctx) {
+    TType dummy;
+    return EnsureConvertibleTo(value, name, ctx, dummy);
 }
 
 template <typename TStage>
@@ -296,7 +303,8 @@ ParseJoinInputType(const TStructExprType& rowType, const THashSet<TStringBuf>& t
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExprType& leftRowType,
     const THashSet<TStringBuf>& leftLabels, const TStructExprType& rightRowType, const THashSet<TStringBuf>& rightLabels,
-    const TStringBuf& joinType, const TDqJoinKeyTupleList& joinKeys, TExprContext& ctx)
+    const TStringBuf& joinType, const TDqJoinKeyTupleList& joinKeys, TExprContext& ctx,
+    bool isMultiget = false)
 {
     // check left
     bool isLeftOptional = IsLeftJoinSideOptional(joinType);
@@ -355,6 +363,19 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
                 << "Left key " << leftKeyLabel << "." << leftKeyColumn << " not found"));
             return nullptr;
         }
+        auto leftKeyType = *maybeLeftKeyType;
+
+        if (isMultiget) {
+            if (ETypeAnnotationKind::Optional == leftKeyType->GetKind()) {
+                leftKeyType = leftKeyType->Cast<TOptionalExprType>()->GetItemType();
+            }
+            if (ETypeAnnotationKind::List != leftKeyType->GetKind()) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos),
+                            TStringBuilder() << "MultiGet option requested, but left side key is not a List[]"));
+                return nullptr;
+            }
+            leftKeyType = leftKeyType->Cast<TListExprType>()->GetItemType();
+        }
 
         auto maybeRightKeyType = rightType[rightKeyLabel].FindPtr(rightKeyColumn);
         if (!maybeRightKeyType && rightKeyColumn.starts_with("_yql_dq_key_right"))
@@ -364,28 +385,35 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
                 << "Right key " << rightKeyLabel << "." << rightKeyColumn << " not found"));
             return nullptr;
         }
+        auto rightKeyType = *maybeRightKeyType;
 
-        auto comparable = CanCompare<true>(*maybeLeftKeyType, *maybeRightKeyType);
+        auto comparable = CanCompare<true>(leftKeyType, rightKeyType);
         if (comparable != ECompareOptions::Comparable && comparable != ECompareOptions::Optional) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                 << "Not comparable keys: " << leftKeyLabel << "." << leftKeyColumn
                 << " and " << rightKeyLabel << "." << rightKeyColumn << ", "
-                << FormatType(*maybeLeftKeyType) << " != " << FormatType(*maybeRightKeyType)));
+                << FormatType(leftKeyType) << " != " << FormatType(rightKeyType)));
             return nullptr;
         }
     }
 
     auto addAllMembersFrom = [&ctx](const THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>& type,
-        TVector<const TItemExprType*>* result, bool makeOptional = false)
+        TVector<const TItemExprType*>* result, bool makeOptional = false, bool isMultiget = false)
     {
         for (const auto& it : type) {
             for (const auto& it2 : it.second) {
                 const auto memberName = it.first.empty() ? TString(it2.first) : FullColumnName(it.first, it2.first);
-                if (makeOptional && !it2.second->IsOptionalOrNull()) {
-                    result->emplace_back(ctx.MakeType<TItemExprType>(memberName, ctx.MakeType<TOptionalExprType>(it2.second)));
-                } else {
-                    result->emplace_back(ctx.MakeType<TItemExprType>(memberName, it2.second));
+                auto memberType = it2.second;
+                if (makeOptional && !memberType->IsOptionalOrNull()) {
+                    memberType = ctx.MakeType<TOptionalExprType>(memberType);
                 }
+                if (isMultiget) {
+                    memberType = ctx.MakeType<TListExprType>(memberType);
+                    if (makeOptional && !memberType->IsOptionalOrNull()) {
+                        memberType = ctx.MakeType<TOptionalExprType>(memberType);
+                    }
+                }
+                result->emplace_back(ctx.MakeType<TItemExprType>(memberName, memberType));
             }
         }
     };
@@ -395,7 +423,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
         addAllMembersFrom(leftType, &resultStructItems, joinType == "Right");
     }
     if (joinType != "LeftOnly" && joinType != "LeftSemi") {
-        addAllMembersFrom(rightType, &resultStructItems, joinType == "Left");
+        addAllMembersFrom(rightType, &resultStructItems, joinType == "Left", isMultiget);
     }
 
     auto rowType = ctx.MakeType<TStructExprType>(resultStructItems);
@@ -505,6 +533,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         rightTableLabels.emplace("");
     }
 
+    bool isMultiget = false;
     if (input->ChildrenSize() > TDqJoin::idx_JoinAlgoOptions) {
         const auto& joinAlgo = *input->Child(TDqJoin::idx_JoinAlgo);
         if (!EnsureAtom(joinAlgo, ctx)) {
@@ -518,11 +547,17 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
             }
             auto& name = *joinAlgoOption.Child(TCoNameValueTuple::idx_Name);
             if (joinAlgo.IsAtom("StreamLookupJoin")) {
+                if (!EnsureTupleSize(joinAlgoOption, 2, ctx)) {
+                    return nullptr;
+                }
+                auto& value = *joinAlgoOption.Child(TCoNameValueTuple::idx_Value);
+                if (name.IsAtom("MultiGet")) {
+                    if (!EnsureConvertibleTo(value, name.Content(), ctx, isMultiget)) {
+                        return nullptr;
+                    }
+                    continue;
+                }
                 if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
-                   if (!EnsureTupleSize(joinAlgoOption, 2, ctx)) {
-                       return nullptr;
-                   }
-                   auto& value = *joinAlgoOption.Child(TCoNameValueTuple::idx_Value);
                    if (!EnsureConvertibleTo<ui64>(value, name.Content(), ctx)) {
                        return nullptr;
                    }
@@ -545,8 +580,8 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
     }
 
     return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabels, *rightStructType,
-        rightTableLabels, join.JoinType(), join.JoinKeys(), ctx);
-    }
+        rightTableLabels, join.JoinType(), join.JoinKeys(), ctx, isMultiget);
+}
 
 } // unnamed
 
@@ -649,7 +684,7 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 11, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 11, 12, ctx)) {
         return TStatus::Error;
     }
     if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {
@@ -722,6 +757,9 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!EnsureStructType(input->Pos(), rightRowType, ctx)) {
         return TStatus::Error;
     }
+    bool isMultiget = input->ChildrenSize() > TDqCnStreamLookup::idx_IsMultiget
+        && cnStreamLookup.IsMultiget().Maybe<TCoAtom>()
+        && FromString<bool>(cnStreamLookup.IsMultiget().Cast().StringValue());
 
     THashSet<TStringBuf> leftLabels;
     if (cnStreamLookup.LeftLabel().Maybe<TCoAtom>()) {
@@ -749,7 +787,8 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         rightLabels,
         cnStreamLookup.JoinType().StringValue(),
         cnStreamLookup.JoinKeys(),
-        ctx
+        ctx,
+        isMultiget
     );
     if (!outputRowType) {
         return TStatus::Error;
@@ -829,7 +868,7 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 2, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 2, 4, ctx)) {
         return TStatus::Error;
     }
 
@@ -871,6 +910,16 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
                 TStringBuilder() << "Non-hashable key column: " << column->Content()));
             return TStatus::Error;
         }
+    }
+
+    if (TDqCnHashShuffle::idx_HashFunc < input->ChildrenSize()) {
+        TString hashFuncName = TString(input->Child(TDqCnHashShuffle::idx_HashFunc)->Content()); hashFuncName.to_lower();
+
+        static const auto allowableHashFuncs = { "columnshardhashv1", "hashv1" };
+        Y_ENSURE(
+            std::find(allowableHashFuncs.begin(), allowableHashFuncs.end(), hashFuncName) != allowableHashFuncs.end(),
+            TStringBuilder{} << "No such hash function: "  << hashFuncName << ", allowable: "  << "{" << JoinSeq(",", allowableHashFuncs) << "}"
+        );
     }
 
     input->SetTypeAnn(outputType);
@@ -1157,6 +1206,73 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    // BlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
+    if (!EnsureArgsCount(*node, 5, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    const auto& leftInputNode = *node->Child(0);
+    const auto& rightInputNode = *node->Child(1);
+    const auto& joinTypeNode = *node->Child(2);
+    auto& leftKeysNode = *node->Child(3);
+    auto& rightKeysNode = *node->Child(4);
+
+    if (!EnsureAtom(joinTypeNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    const auto joinType = joinTypeNode.Content();
+    if (joinType != "Inner") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
+                    << ", supported: Inner"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    TTypeAnnotationNode::TListType leftItemTypes;
+    if (!EnsureWideStreamBlockType(leftInputNode, leftItemTypes, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    // Remove length column
+    leftItemTypes.pop_back();
+
+    TTypeAnnotationNode::TListType rightItemTypes;
+    if (!EnsureWideStreamBlockType(rightInputNode, rightItemTypes, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    // Remove length column
+    rightItemTypes.pop_back(); 
+
+    if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    std::vector<const TTypeAnnotationNode*> resultItems;
+
+    // Add left side columns
+    for (auto itemType : leftItemTypes) {
+        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    }
+
+    // Add right side columns
+    for (auto itemType : rightItemTypes) {
+        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    }
+
+    // Add scalar length column at the end
+    resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+    return IGraphTransformer::TStatus(TStatus::Ok);
+}
+
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -1167,6 +1283,11 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()),
                     TStringBuilder() << "At function: " << input->Content());
             });
+
+            // Handle BlockHashJoinCore callable (from peephole)
+            if (input->Content() == "BlockHashJoinCore") {
+                return AnnotateDqBlockHashJoinCore(input, ctx);
+            }
 
             if (TDqStage::Match(input.Get())) {
                 return AnnotateDqStage(input, ctx);
@@ -1220,6 +1341,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             }
 
             if (TDqPhyGraceJoin::Match(input.Get())) {
+                return AnnotateDqMapOrDictJoin(input, ctx);
+            }
+
+            if (TDqPhyBlockHashJoin::Match(input.Get())) {
                 return AnnotateDqMapOrDictJoin(input, ctx);
             }
 

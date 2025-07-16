@@ -25,8 +25,7 @@
 
 namespace NKikimr::NPQ {
 
-static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
-static const ui32 MAX_INLINE_SIZE = 1000;
+static const ui64 MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER = std::numeric_limits<i32>::max() / 2;
 static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
@@ -248,11 +247,59 @@ void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ct
     HandlePendingRequests(ctx);
 }
 
+ui64 CalculateReplyOffset(bool already, bool kafkaDeduplication, ui64 maxOffset, ui64 offset, ui64 maxSeqNo, ui64 seqNo) {
+    if (!already) {
+        // If it's not a duplicate message, return its offset.
+        return offset;
+    }
+
+    if (!kafkaDeduplication) {
+        // If it's a duplicate message, return the maxOffset, if we're not dealing with Kafka protocol.
+        return maxOffset;
+    }
+
+    // At this point we're working with Kafka protocol deduplication.
+    // SeqNos in Kafka are of int32 type and may overflow, i.e. the next seqno after int32max is 0.
+
+    // Try to return offset of the message, given the maxOffset, maxSeqNo and seqNo.
+    // The basic formula is (maxOffset - (maxSeqNo - seqNo)), but we need to handle various overflows.
+
+    if (maxSeqNo < seqNo) {
+        maxSeqNo += 1ul << 31;
+    }
+
+    auto diff = maxSeqNo - seqNo;
+
+    if (maxOffset < diff) {
+        return 0;
+    }
+
+    return maxOffset - diff;
+}
+
+// IsDuplicate is only needed for Kafka protocol deduplication.
+// baseSequence field in Kafka protocol has type int32 and the numbers loop back from the maximum possible value back to 0.
+// I.e. the next seqno after int32max is 0.
+// To decide if we got a duplicate seqno or an out of order seqno,
+// we are comparing the difference between maxSeqNo and seqNo with MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER.
+// The value of MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER is half of the int32 range.
+bool IsDuplicate(ui64 maxSeqNo, ui64 seqNo) {
+    if (maxSeqNo < seqNo) {
+        maxSeqNo += 1ul << 31;
+    }
+    return maxSeqNo - seqNo < MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER;
+}
+
+// InSequence is only needed for Kafka protocol deduplication.
+bool InSequence(ui64 maxSeqNo, ui64 seqNo) {
+    return (maxSeqNo + 1 == seqNo) || (maxSeqNo == std::numeric_limits<i32>::max() && seqNo == 0);
+}
+
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
     const auto now = ctx.Now();
 
-    ui64 offset = EndOffset;
+    ui64 offset = BlobEncoder.EndOffset;
     while (!Responses.empty()) {
         auto& response = Responses.front();
 
@@ -265,6 +312,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             const ui64& seqNo = writeResponse.Msg.SeqNo;
             const ui16& partNo = writeResponse.Msg.PartNo;
             const ui16& totalParts = writeResponse.Msg.TotalParts;
+            const TMaybe<i16>& producerEpoch = writeResponse.Msg.ProducerEpoch;
             const TMaybe<ui64>& wrOffset = writeResponse.Offset;
 
             bool already = false;
@@ -278,9 +326,13 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
                 maxSeqNo = std::max(it->second.SeqNo, writeResponse.InitialSeqNo.value_or(0));
                 maxOffset = it->second.Offset;
-                if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
-                    already = true;
-                }
+                already = maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication ||
+                    (
+                        writeResponse.Msg.EnableKafkaDeduplication &&
+                        writeResponse.Msg.ProducerEpoch.Defined() &&
+                        writeResponse.Msg.ProducerEpoch == it->second.ProducerEpoch &&
+                        IsDuplicate(maxSeqNo, seqNo)
+                    );
             } else if (writeResponse.InitialSeqNo) {
                 maxSeqNo = writeResponse.InitialSeqNo.value();
                 if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
@@ -299,20 +351,23 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
                     Y_ABORT_UNLESS(!writeResponse.Msg.HeartbeatVersion);
                     TabletCounters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
-                    SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp);
+                    SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp, producerEpoch);
                 } else if (const auto& hbVersion = writeResponse.Msg.HeartbeatVersion) {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(
-                        seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}
-                    ));
+                        seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}, producerEpoch));
                 } else {
-                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(seqNo, offset, CurrentTimestamp));
+                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(
+                        seqNo, offset, CurrentTimestamp, producerEpoch));
                 }
 
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_OK].Increment(1);
             }
+
+            ui64 replyOffset = CalculateReplyOffset(already, writeResponse.Msg.EnableKafkaDeduplication, maxOffset, offset, maxSeqNo, seqNo);
+
             ReplyWrite(
                 ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
-                already ? maxOffset : offset, CurrentTimestamp, already, maxSeqNo,
+                replyOffset, CurrentTimestamp, already, maxSeqNo,
                 PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime, response.Span
             );
 
@@ -326,8 +381,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (PartitionWriteQuotaWaitCounter && !writeResponse.Internal) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
-            if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
+            if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion) {
                 ++offset;
+            }
         } else if (response.IsOwnership()) {
             const auto& r = response.GetOwnership();
             const TString& ownerCookie = r.OwnerCookie;
@@ -385,76 +441,36 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
-    if (!CompactedKeys.empty()) {
-        HeadKeys.clear();
-    }
+    BlobEncoder.SyncHeadKeys();
 
     // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
     DefferedKeysForDeletion.clear();
 
-    if (NewHeadKey.Size > 0) {
-        while (!HeadKeys.empty() &&
-               (HeadKeys.back().Key.GetOffset() > NewHeadKey.Key.GetOffset() ||
-                (HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset() && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo()))) {
-            HeadKeys.pop_back();
-        }
+    BlobEncoder.SyncNewHeadKey();
 
-        HeadKeys.push_back(std::move(NewHeadKey));
-
-        NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
-    }
-
-    if (CompactedKeys.empty() && NewHead.PackedSize == 0) { //Nothing writed at all
+    if (BlobEncoder.IsNothingWritten()) { //Nothing writed at all
         return;
     }
 
-    Y_ABORT_UNLESS(EndOffset == Head.GetNextOffset());
+    Y_ABORT_UNLESS(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset());
 
-    if (!CompactedKeys.empty() || Head.PackedSize == 0) { //has compactedkeys or head is already empty
-        Head.PackedSize = 0;
-        Head.Offset = NewHead.Offset;
-        Head.PartNo = NewHead.PartNo; //no partNo at this point
-        Head.ClearBatches();
+    // a) !CompactedKeys.empty() && NewHead.PackedSize == 0
+    // b) !CompactedKeys.empty() && NewHead.PackedSize != 0
+    // c)  CompactedKeys.empty() && NewHead.PackedSize != 0
+    if (!BlobEncoder.CompactedKeys.empty() || BlobEncoder.Head.PackedSize == 0) { //has compactedkeys or head is already empty
+        BlobEncoder.SyncHeadFromNewHead();
     }
 
-    while (!CompactedKeys.empty()) {
-        const auto& ck = CompactedKeys.front();
-        BodySize += ck.second;
-        Y_ABORT_UNLESS(!ck.first.HasSuffix());
-        ui64 lastOffset = DataKeysBody.empty() ? 0 : (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
-        Y_ABORT_UNLESS(lastOffset <= ck.first.GetOffset());
-        if (DataKeysBody.empty()) {
-            StartOffset = ck.first.GetOffset() + (ck.first.GetPartNo() > 0 ? 1 : 0);
-        } else {
-            if (lastOffset < ck.first.GetOffset()) {
-                GapOffsets.push_back(std::make_pair(lastOffset, ck.first.GetOffset()));
-                GapSize += ck.first.GetOffset() - lastOffset;
-            }
-        }
-        DataKeysBody.emplace_back(ck.first,
-                                  ck.second,
-                                  ctx.Now(),
-                                  DataKeysBody.empty() ? 0 : DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size,
-                                  MakeBlobKeyToken(ck.first.ToString()));
+    BlobEncoder.SyncDataKeysBody(ctx.Now(),
+                                 [this](const TString& key){ return MakeBlobKeyToken(key); },
+                                 BlobEncoder.StartOffset,
+                                 GapOffsets,
+                                 GapSize);
+    BlobEncoder.SyncHeadFastWrite(BlobEncoder.StartOffset, BlobEncoder.EndOffset);
 
-        CompactedKeys.pop_front();
-    } // head cleared, all data moved to body
-
-    //append Head with newHead
-    while (!NewHead.GetBatches().empty()) {
-        Head.AddBatch(NewHead.ExtractFirstBatch());
-    }
-    Head.PackedSize += NewHead.PackedSize;
-
-    if (Head.PackedSize > 0 && DataKeysBody.empty()) {
-        StartOffset = Head.Offset + (Head.PartNo > 0 ? 1 : 0);
-    }
-
-    EndOffset = Head.GetNextOffset();
     EndWriteTimestamp = PendingWriteTimestamp;
 
-    NewHead.Clear();
-    NewHead.Offset = EndOffset;
+    BlobEncoder.ResetNewHead(BlobEncoder.EndOffset);
 
     CheckHeadConsistency();
 
@@ -475,6 +491,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
+    TryRunCompaction();
 
     if (DeletePartitionState == DELETION_IN_PROCESS) {
         DestroyActor(ctx);
@@ -531,7 +548,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     if (UserActionAndTransactionEvents.empty()) {
         WriteInfosToTx.clear();
     }
-    ui64 prevEndOffset = EndOffset;
+    ui64 prevEndOffset = BlobEncoder.EndOffset;
 
     ui32 totalLatencyMs = (now - WriteCycleStartTime).MilliSeconds();
     ui32 writeLatencyMs = (now - WriteStartTime).MilliSeconds();
@@ -582,16 +599,16 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    if (SplitMergeEnabled(Config) && !IsSupportive()) {
+    if (SplitMergeEnabled(Config) && !IsSupportive() && !MirroringEnabled(Config)) {
         SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
         auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
     }
 
     //if EndOffset changed there could be subscriptions witch could be completed
-    TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(EndOffset);
+    TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(BlobEncoder.EndOffset);
     for (auto& read : reads) {
-        Y_ABORT_UNLESS(EndOffset > read.first.Offset);
+        Y_ABORT_UNLESS(BlobEncoder.EndOffset > read.first.Offset);
         ProcessRead(ctx, std::move(read.first), read.second, true);
     }
     //same for read requests
@@ -666,7 +683,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return sum + msg.Data.size();
     });
 
-    bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
+    bool mirroredPartition = MirroringEnabled(Config);
 
     if (mirroredPartition && !ev->Get()->OwnerCookie.empty()) {
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -879,27 +896,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TAct
     EmplacePendingRequest(std::move(msg), NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.SplitMessageGroup"), ctx);
 }
 
-std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool headCleared) {
-    std::pair<TKey, ui32> res({key, size});
-    ui32 x = headCleared ? 0 : Head.PackedSize;
-    Y_ABORT_UNLESS(std::accumulate(DataKeysHead.begin(), DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == NewHead.PackedSize + x);
-    for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
-        auto jt = it; ++jt;
-        if (it->NeedCompaction()) {
-            res = it->Compact();
-            if (jt != DataKeysHead.rend()) {
-                jt->AddKey(res.first, res.second);
-            }
-        } else {
-            Y_ABORT_UNLESS(jt == DataKeysHead.rend() || !jt->NeedCompaction()); //compact must start from last level, not internal
-        }
-        Y_ABORT_UNLESS(!it->NeedCompaction());
-    }
-    Y_ABORT_UNLESS(res.second >= size);
-    Y_ABORT_UNLESS(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
-    return res;
-}
-
 void TPartition::StartProcessChangeOwnerRequests(const TActorContext& ctx)
 {
     ctx.Send(ctx.SelfID, new TEvPQ::TEvProcessChangeOwnerRequests());
@@ -1067,12 +1063,16 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
+                             ui64 creationUnixTime,
                              const TActorContext& ctx)
 {
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
     write->SetValue(newWrite->Value);
-    Y_ABORT_UNLESS(!newWrite->Key.HasSuffix());
+    if (creationUnixTime) {
+        write->SetCreationUnixTime(creationUnixTime);
+    }
+    //Y_ABORT_UNLESS(newWrite->Key.IsFastWrite());
     auto channel = GetChannel(NextChannel(newWrite->Key.HasSuffix(), newWrite->Value.size()));
     write->SetStorageChannel(channel);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
@@ -1082,10 +1082,18 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
     WriteCycleSize += newWrite->Value.size();
 }
 
+void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                             TEvKeyValue::TEvRequest* request,
+                             const TActorContext& ctx)
+{
+    AddCmdWrite(newWrite, request, 0, ctx);
+}
+
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
-                                   ProcessParameters& parameters,
+                                   TProcessParametersBase& parameters,
                                    ui32 curWrites,
                                    TEvKeyValue::TEvRequest* request,
+                                   TPartitionBlobEncoder& zone,
                                    const TActorContext& ctx)
 {
     for (ui32 i = 0; i < formedBlobs.size(); ++i) {
@@ -1095,29 +1103,30 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
             rename->SetOldKey(x.OldKey.ToString());
             rename->SetNewKey(x.NewKey.ToString());
         }
-        if (!DataKeysBody.empty() && CompactedKeys.empty()) {
-            Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
+        if (!zone.DataKeysBody.empty() && zone.CompactedKeys.empty()) {
+            Y_ABORT_UNLESS(zone.DataKeysBody.back().Key.GetOffset() + zone.DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
                            "PQ: %" PRIu64 ", Partition: %s, "
                            "LAST KEY %s, HeadOffset %lu, NEWKEY %s",
                            TabletID, Partition.ToString().c_str(),
-                           DataKeysBody.back().Key.ToString().c_str(),
-                           Head.Offset,
+                           zone.DataKeysBody.back().Key.ToString().c_str(),
+                           zone.Head.Offset,
                            x.NewKey.ToString().c_str());
         }
         PQ_LOG_D("writing blob: topic '" << TopicName() << "' partition " << Partition <<
                  " old key " << x.OldKey.ToString() << " new key " << x.NewKey.ToString() <<
                  " size " << x.Size << " WTime " << ctx.Now().MilliSeconds());
 
-        CompactedKeys.emplace_back(x.NewKey, x.Size);
+        zone.CompactedKeys.emplace_back(x.NewKey, x.Size);
     }
 
     if (!formedBlobs.empty()) {
         parameters.HeadCleared = true;
 
-        NewHead.Clear();
-        NewHead.Offset = PartitionedBlob.GetOffset();
-        NewHead.PartNo = PartitionedBlob.GetHeadPartNo();
-        NewHead.PackedSize = 0;
+        // zone.ResetNewHead ???
+        zone.NewHead.Clear();
+        zone.NewHead.Offset = zone.PartitionedBlob.GetOffset();
+        zone.NewHead.PartNo = zone.PartitionedBlob.GetHeadPartNo();
+        zone.NewHead.PackedSize = 0;
     }
 }
 
@@ -1133,6 +1142,18 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
         }
     }
     return curWrites;
+}
+
+void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
+{
+    auto tryCorrectStartOffset = [](TPartitionBlobEncoder& encoder, TMaybe<ui64> offset) {
+        if (!encoder.Head.GetCount() && !encoder.NewHead.GetCount() && encoder.IsEmpty() && offset) {
+            encoder.StartOffset = *offset;
+        }
+    };
+
+    tryCorrectStartOffset(CompactionBlobEncoder, offset);
+    tryCorrectStartOffset(BlobEncoder, offset);
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
@@ -1162,7 +1183,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 poffset = p.Offset ? *p.Offset : curOffset;
+    ui64 poffset = p.Offset.GetOrElse(curOffset);
 
     PQ_LOG_T("Topic '" << TopicName() << "' partition " << Partition
             << " process write for '" << EscapeC(p.Msg.SourceId) << "'"
@@ -1170,18 +1191,69 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " SeqNo=" << p.Msg.SeqNo
             << " LocalSeqNo=" << sourceId.SeqNo()
             << " InitialSeqNo=" << p.InitialSeqNo
+            << " EnableKafkaDeduplication=" << p.Msg.EnableKafkaDeduplication
+            << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
 
-    if (!p.Msg.DisableDeduplication
-        && ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo)
-        || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))) {
+    if (p.Msg.EnableKafkaDeduplication &&
+        sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined() &&
+        p.Msg.ProducerEpoch.Defined()
+    ) {
+        auto WriteError = [this, &ctx, &p](NPersQueue::NErrorCode::EErrorCode errorCode, TStringBuilder message) {
+            CancelOneWriteOnWrite(ctx, message, p, errorCode);
+        };
+
+        auto lastEpoch = *sourceId.ProducerEpoch().value();
+        auto messageEpoch = *p.Msg.ProducerEpoch;
+        auto lastSeqNo = *sourceId.SeqNo();
+        auto messageSeqNo = p.Msg.SeqNo;
+
+        if (lastEpoch > messageEpoch) {
+            // INVALID_PRODUCER_EPOCH
+            WriteError(
+                NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH,
+                TStringBuilder() << "Epoch of producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                 << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " is " << messageEpoch
+                                 << ", which is smaller than the last seen epoch " << lastEpoch);
+            return false;
+        } else if (lastEpoch < messageEpoch) {
+            if (messageSeqNo != 0) {
+                // OUT_OF_ORDER_SEQUENCE_NUMBER
+                WriteError(
+                    NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                    TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                     << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": "
+                                     << "expected 0, got " << messageSeqNo);
+                return false;
+            }
+        } else if (InSequence(lastSeqNo, messageSeqNo)) {
+            // Continue processing the message.
+        } else if (IsDuplicate(lastSeqNo, messageSeqNo)) {
+            // "DUPLICATE_SEQUENCE_NUMBER". Kafka sends successful answer in response
+            // to requests that exactly match some of the last 5 batches (that may contain multiple records each).
+
+            return true;
+        } else {
+            // OUT_OF_ORDER_SEQUENCE_NUMBER
+            WriteError(
+                NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                    << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": " << messageSeqNo << " (incoming seq. number), "
+                                    << lastSeqNo << " (current end sequence number)");
+            return false;
+        }
+    }
+
+    if (!p.Msg.DisableDeduplication &&
+        ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
+    ) {
         if (poffset >= curOffset) {
             PQ_LOG_D("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)
                     << "'. Message seqNo: " << p.Msg.SeqNo
                     << ". Committed seqNo: " << sourceId.CommittedSeqNo()
                     << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
-                    << ". EndOffset: " << EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
+                    << ". EndOffset: " << BlobEncoder.EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
             );
             Y_ENSURE(!p.Internal); // No Already for transactions;
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
@@ -1264,7 +1336,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             NPQ::AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, Partition);
         }
 
-        if (PartitionedBlob.HasFormedBlobs()) {
+        if (BlobEncoder.PartitionedBlob.HasFormedBlobs()) {
             //clear currently-writed blobs
             auto oldCmdWrite = request->Record.GetCmdWrite();
             request->Record.ClearCmdWrite();
@@ -1275,9 +1347,15 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 }
             }
         }
-        PartitionedBlob = TPartitionedBlob(Partition, curOffset, p.Msg.SourceId, p.Msg.SeqNo,
-                                            p.Msg.TotalParts, p.Msg.TotalSize, Head, NewHead,
-                                            parameters.HeadCleared, needCompactHead, MaxBlobSize);
+        BlobEncoder.NewPartitionedBlob(Partition,
+                                       curOffset,
+                                       p.Msg.SourceId,
+                                       p.Msg.SeqNo,
+                                       p.Msg.TotalParts,
+                                       p.Msg.TotalSize,
+                                       parameters.HeadCleared,
+                                       needCompactHead,
+                                       MaxBlobSize);
     }
 
     PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
@@ -1285,7 +1363,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo
     );
     TString s;
-    if (!PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
+    if (!BlobEncoder.PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
         //this must not be happen - client sends gaps, fail this client till the end
         //now no changes will leak
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
@@ -1306,9 +1384,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
-    if (!Head.GetCount() && !NewHead.GetCount() && DataKeysBody.empty() && HeadKeys.empty() && p.Offset) {
-        StartOffset = *p.Offset;
-    }
+    TryCorrectStartOffset(p.Offset);
 
     TMaybe<TPartData> partData;
     if (p.Msg.TotalParts > 1) { //this is multi-part message
@@ -1317,8 +1393,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteTimestamp = ctx.Now();
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(p.Msg.SourceId, p.Msg.SeqNo, std::move(p.Msg.Data), std::move(partData), WriteTimestampEstimate,
-                        TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                        p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime
+                     TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
+                     p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
@@ -1334,9 +1410,10 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     bool lastBlobPart = blob.IsLastPart();
 
     //will return compacted tmp blob
-    auto newWrite = PartitionedBlob.Add(std::move(blob));
+    auto newWrite = BlobEncoder.PartitionedBlob.Add(std::move(blob));
 
     if (newWrite && !newWrite->Value.empty()) {
+        newWrite->Key.SetFastWrite();
         AddCmdWrite(newWrite, request, ctx);
 
         PQ_LOG_D("Topic '" << TopicName() <<
@@ -1349,32 +1426,36 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     if (lastBlobPart) {
-        Y_ABORT_UNLESS(PartitionedBlob.IsComplete());
+        Y_ABORT_UNLESS(BlobEncoder.PartitionedBlob.IsComplete());
         ui32 curWrites = RenameTmpCmdWrites(request);
-        Y_ABORT_UNLESS(curWrites <= PartitionedBlob.GetFormedBlobs().size());
-        RenameFormedBlobs(PartitionedBlob.GetFormedBlobs(),
+        Y_ABORT_UNLESS(curWrites <= BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
+        RenameFormedBlobs(BlobEncoder.PartitionedBlob.GetFormedBlobs(),
                           parameters,
                           curWrites,
                           request,
+                          BlobEncoder,
                           ctx);
+
+        // Here we put together everything we want to burn to a disc. The list of keys for the finished
+        // blocks will be in BlobEncoder.CompactedKeys, and the remaining small blobs in BlobEncoder.NewHead.
+        // The key for them will appear later in the TPartition::EndProcessWrites function.
+
         ui32 countOfLastParts = 0;
-        for (auto& x : PartitionedBlob.GetClientBlobs()) {
-            if (NewHead.GetBatches().empty() || NewHead.GetLastBatch().Packed) {
-                NewHead.AddBatch(TBatch(curOffset, x.GetPartNo()));
-                NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
+        for (auto& x : BlobEncoder.PartitionedBlob.GetClientBlobs()) {
+            if (BlobEncoder.NewHead.GetBatches().empty() || BlobEncoder.NewHead.GetLastBatch().Packed) {
+                BlobEncoder.NewHead.AddBatch(TBatch(curOffset, x.GetPartNo()));
+                BlobEncoder.NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
             }
+
             if (x.IsLastPart()) {
                 ++countOfLastParts;
             }
-            Y_ABORT_UNLESS(!NewHead.GetLastBatch().Packed);
-            NewHead.AddBlob(x);
-            NewHead.PackedSize += x.GetBlobSize();
-            if (NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                NewHead.MutableLastBatch().Pack();
-                NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
-                NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-                NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
+            Y_ABORT_UNLESS(!BlobEncoder.NewHead.GetLastBatch().Packed);
+            BlobEncoder.NewHead.AddBlob(x);
+            BlobEncoder.NewHead.PackedSize += x.GetBlobSize();
+            if (BlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
+                BlobEncoder.PackLastBatch();
             }
         }
 
@@ -1382,119 +1463,49 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
                 << " part blob complete sourceId '" << EscapeC(p.Msg.SourceId) << "' seqNo " << p.Msg.SeqNo
-                << " partNo " << p.Msg.PartNo << " FormedBlobsCount " << PartitionedBlob.GetFormedBlobs().size()
-                << " NewHead: " << NewHead
+                << " partNo " << p.Msg.PartNo << " FormedBlobsCount " << BlobEncoder.PartitionedBlob.GetFormedBlobs().size()
+                << " NewHead: " << BlobEncoder.NewHead
         );
 
-        sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp);
+        sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp, p.Msg.ProducerEpoch);
 
         ++curOffset;
-        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
+        BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
     return true;
 }
 
-std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 HeadSize)
+std::pair<TKey, ui32> TPartition::GetNewFastWriteKeyImpl(bool headCleared, ui32 headSize)
 {
-    TKey key;
-    if (needCompaction) {
-        key = TKey::ForBody(TKeyPrefix::TypeData, Partition, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
-    } else {
-        key = TKey::ForHead(TKeyPrefix::TypeData, Partition, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
-    }
+    TKey key = BlobEncoder.KeyForFastWrite(TKeyPrefix::TypeData, Partition);
 
-    if (NewHead.PackedSize > 0)
-        DataKeysHead[TotalLevels - 1].AddKey(key, NewHead.PackedSize);
-    Y_ABORT_UNLESS(HeadSize + NewHead.PackedSize <= 3 * MaxSizeCheck);
+    BlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, BlobEncoder.NewHead.PackedSize);
+    Y_ABORT_UNLESS(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
 
-    std::pair<TKey, ui32> res;
-
-    if (needCompaction) { //compact all
-        for (ui32 i = 0; i < TotalLevels; ++i) {
-            DataKeysHead[i].Clear();
-        }
-        if (!headCleared) { //compacted blob must contain both head and NewHead
-            key = TKey::ForBody(TKeyPrefix::TypeData, Partition, Head.Offset, Head.PartNo, NewHead.GetCount() + Head.GetCount(),
-                                Head.GetInternalPartsCount() +  NewHead.GetInternalPartsCount());
-        } //otherwise KV blob is not from head (!key.HasSuffix()) and contains only new data from NewHead
-        res = std::make_pair(key, HeadSize + NewHead.PackedSize);
-    } else {
-        res = Compact(key, NewHead.PackedSize, headCleared);
-        Y_ABORT_UNLESS(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
-        Y_ABORT_UNLESS(res.second >= NewHead.PackedSize); //at least new data must be writed
-    }
+    auto res = BlobEncoder.Compact(key, headCleared);
+    Y_ABORT_UNLESS(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
+    Y_ABORT_UNLESS(res.second >= BlobEncoder.NewHead.PackedSize); //at least new data must be writed
     Y_ABORT_UNLESS(res.second <= MaxBlobSize);
+
     return res;
 }
 
-std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
-    bool needCompaction = false;
-    ui32 HeadSize = headCleared ? 0 : Head.PackedSize;
-    if (HeadSize + NewHead.PackedSize > 0 && HeadSize + NewHead.PackedSize
-                                                        >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark()))
-        needCompaction = true;
+std::pair<TKey, ui32> TPartition::GetNewFastWriteKey(bool headCleared)
+{
+    ui32 headSize = headCleared ? 0 : BlobEncoder.Head.PackedSize;
 
-    if (PartitionedBlob.IsInited()) { //has active partitioned blob - compaction is forbiden, head and newHead will be compacted when this partitioned blob is finished
-        needCompaction = false;
-    }
+    Y_ABORT_UNLESS(BlobEncoder.NewHead.PackedSize > 0); // smthing must be here
 
-    Y_ABORT_UNLESS(NewHead.PackedSize > 0 || needCompaction); //smthing must be here
-
-    return GetNewWriteKeyImpl(headCleared, needCompaction, HeadSize);
+    return GetNewFastWriteKeyImpl(headCleared, headSize);
 }
 
-void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::AddNewWriteBlob.");
+void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+{
+    PQ_LOG_T("TPartition::AddNewFastWriteBlob");
 
     const auto& key = res.first;
 
-    TString valueD;
-    valueD.reserve(res.second);
-    ui32 pp = Head.FindPos(key.GetOffset(), key.GetPartNo());
-    if (pp < Max<ui32>() && key.GetOffset() < EndOffset) { //this batch trully contains this offset
-        Y_ABORT_UNLESS(pp < Head.GetBatches().size());
-        Y_ABORT_UNLESS(Head.GetBatch(pp).GetOffset() == key.GetOffset());
-        Y_ABORT_UNLESS(Head.GetBatch(pp).GetPartNo() == key.GetPartNo());
-        for (; pp < Head.GetBatches().size(); ++pp) { //TODO - merge small batches here
-            Y_ABORT_UNLESS(Head.GetBatch(pp).Packed);
-            auto& batch = Head.GetBatch(pp);
-            batch.SerializeTo(valueD);
-            PendingWriteTimestamp = std::max(PendingWriteTimestamp, batch.GetEndWriteTimestamp());
-        }
-    }
-    for (auto& b : NewHead.GetBatches()) {
-        Y_ABORT_UNLESS(b.Packed);
-        b.SerializeTo(valueD);
-        PendingWriteTimestamp = std::max(PendingWriteTimestamp, b.GetEndWriteTimestamp());
-    }
-
-    Y_ABORT_UNLESS(res.second >= valueD.size());
-
-    if (res.second > valueD.size() && res.first.HasSuffix()) { //change to real size if real packed size is smaller
-
-        Y_ABORT("Can't be here right now, only after merging of small batches");
-
-        for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
-            if (it->KeysCount() > 0 ) {
-                auto res2 = it->PopBack();
-                Y_ABORT_UNLESS(res2 == res);
-                res2.second = valueD.size();
-
-                DataKeysHead[TotalLevels - 1].AddKey(res2.first, res2.second);
-
-                res2 = Compact(res2.first, res2.second, headCleared);
-
-                Y_ABORT_UNLESS(res2.first == res.first);
-                Y_ABORT_UNLESS(res2.second == valueD.size());
-                res = res2;
-                break;
-            }
-        }
-    }
-
-    Y_ABORT_UNLESS(res.second == valueD.size() || res.first.HasSuffix());
-
-    TClientBlob::CheckBlob(key, valueD);
+    TString valueD = BlobEncoder.SerializeForKey(key, res.second, BlobEncoder.EndOffset, PendingWriteTimestamp);
 
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
@@ -1502,30 +1513,58 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     bool isInline = key.HasSuffix() && valueD.size() < MAX_INLINE_SIZE;
 
-    if (isInline)
+    if (isInline) {
         write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-    else {
+    } else {
+        auto channel = GetChannel(NextChannel(key.HasSuffix(), valueD.size()));
+        write->SetStorageChannel(channel);
+        write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
+    }
+
+    Y_ABORT_UNLESS(BlobEncoder.NewHeadKey.Size == 0);
+    BlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+
+    WriteCycleSize += write->GetValue().size();
+    UpdateWriteBufferIsFullState(ctx.Now());
+}
+
+void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+    PQ_LOG_T("TPartition::AddNewWriteBlob.");
+
+    const auto& key = res.first;
+    TString valueD = BlobEncoder.SerializeForKey(key, res.second, BlobEncoder.EndOffset, PendingWriteTimestamp);
+
+    auto write = request->Record.AddCmdWrite();
+    write->SetKey(key.Data(), key.Size());
+    write->SetValue(valueD);
+
+    bool isInline = key.HasSuffix() && valueD.size() < MAX_INLINE_SIZE;
+
+    if (isInline) {
+        write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+    } else {
         auto channel = GetChannel(NextChannel(key.HasSuffix(), valueD.size()));
         write->SetStorageChannel(channel);
         write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
     }
 
     //Need to clear all compacted blobs
-    const TKey& k = CompactedKeys.empty() ? key : CompactedKeys.front().first;
-    ClearOldHead(k.GetOffset(), k.GetPartNo(), request);
+    const TKey& k = BlobEncoder.CompactedKeys.empty() ? key : BlobEncoder.CompactedKeys.front().first;
+    ClearOldHead(k.GetOffset(), k.GetPartNo()); // schedule to delete the keys from the head
 
     if (!key.HasSuffix()) {
-        if (!DataKeysBody.empty() && CompactedKeys.empty()) {
-            Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
-                "LAST KEY %s, HeadOffset %lu, NEWKEY %s", DataKeysBody.back().Key.ToString().c_str(), Head.Offset, key.ToString().c_str());
+        if (!BlobEncoder.DataKeysBody.empty() && BlobEncoder.CompactedKeys.empty()) {
+            Y_ABORT_UNLESS(BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
+                "LAST KEY %s, HeadOffset %lu, NEWKEY %s", BlobEncoder.DataKeysBody.back().Key.ToString().c_str(), BlobEncoder.Head.Offset, key.ToString().c_str());
         }
-        CompactedKeys.push_back(res);
-        NewHead.Clear();
-        NewHead.Offset = res.first.GetOffset() + res.first.GetCount();
-        NewHead.PartNo = 0;
+        BlobEncoder.CompactedKeys.push_back(res);
+        // BlobEncoder.ResetNewHead ???
+        BlobEncoder.NewHead.Clear();
+        BlobEncoder.NewHead.Offset = res.first.GetOffset() + res.first.GetCount();
+        BlobEncoder.NewHead.PartNo = 0;
     } else {
-        Y_ABORT_UNLESS(NewHeadKey.Size == 0);
-        NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+        Y_ABORT_UNLESS(BlobEncoder.NewHeadKey.Size == 0);
+        BlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
     }
     WriteCycleSize += write->GetValue().size();
     UpdateWriteBufferIsFullState(ctx.Now());
@@ -1650,12 +1689,12 @@ void TPartition::HandlePendingRequests(const TActorContext& ctx)
 
 void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
+    Y_ABORT_UNLESS(BlobEncoder.Head.PackedSize + BlobEncoder.NewHead.PackedSize <= 2 * MaxSizeCheck);
 
     TInstant now = ctx.Now();
     WriteCycleStartTime = now;
 
-    HaveData = false;
+    BlobEncoder.HaveData = false;
     HaveCheckDisk = false;
 
     if (!DiskIsFull) {
@@ -1668,10 +1707,8 @@ void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TAc
 
 void TPartition::EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    HaveDrop = CleanUp(request, ctx);
-
     ProcessReserveRequests(ctx);
-    if (!HaveData && !HaveDrop && !HaveCheckDisk) { //no data writed/deleted
+    if (!BlobEncoder.HaveData && !HaveDrop && !HaveCheckDisk) { //no data writed/deleted
         return;
     }
 
@@ -1687,51 +1724,51 @@ void TPartition::BeginProcessWrites(const TActorContext& ctx)
 {
     SourceIdBatch.ConstructInPlace(SourceManager.CreateModificationBatch(ctx));
 
-    HeadCleared = false;
+    BlobEncoder.HeadCleared = false;
 }
 
 void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    if (HeadCleared) {
-        Y_ABORT_UNLESS(!CompactedKeys.empty() || Head.PackedSize == 0);
+    if (BlobEncoder.HeadCleared) {
+        Y_ABORT_UNLESS(!BlobEncoder.CompactedKeys.empty() || BlobEncoder.Head.PackedSize == 0);
         for (ui32 i = 0; i < TotalLevels; ++i) {
-            DataKeysHead[i].Clear();
+            BlobEncoder.DataKeysHead[i].Clear();
         }
     }
 
-    if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
+    if (BlobEncoder.NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
         if (!SourceIdBatch->HasModifications()) {
-            HaveData = request->Record.CmdWriteSize() > 0
+            BlobEncoder.HaveData = request->Record.CmdWriteSize() > 0
                 || request->Record.CmdRenameSize() > 0
                 || request->Record.CmdDeleteRangeSize() > 0;
             return;
         } else {
             SourceIdBatch->FillRequest(request);
-            HaveData = true;
+            BlobEncoder.HaveData = true;
             return;
         }
     }
 
     SourceIdBatch->FillRequest(request);
 
-    std::pair<TKey, ui32> res = GetNewWriteKey(HeadCleared);
+    std::pair<TKey, ui32> res = GetNewFastWriteKey(BlobEncoder.HeadCleared);
     const auto& key = res.first;
 
     PQ_LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
             << " compactOffset " << key.GetOffset() << "," << key.GetCount()
-            << " HeadOffset " << Head.Offset << " endOffset " << EndOffset << " curOffset "
-            << NewHead.GetNextOffset() << " " << key.ToString()
+            << " HeadOffset " << BlobEncoder.Head.Offset << " endOffset " << BlobEncoder.EndOffset << " curOffset "
+            << BlobEncoder.NewHead.GetNextOffset() << " " << key.ToString()
             << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
-    AddNewWriteBlob(res, request, HeadCleared, ctx);
+    AddNewFastWriteBlob(res, request, ctx);
 
-    HaveData = true;
+    BlobEncoder.HaveData = true;
 }
 
 void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 {
     Parameters.ConstructInPlace(*SourceIdBatch);
-    Parameters->CurOffset = PartitionedBlob.IsInited() ? PartitionedBlob.GetOffset() : EndOffset;
+    Parameters->CurOffset = BlobEncoder.PartitionedBlob.IsInited() ? BlobEncoder.PartitionedBlob.GetOffset() : BlobEncoder.EndOffset;
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -1741,17 +1778,18 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
     UpdateWriteBufferIsFullState(ctx.Now());
     CurrentTimestamp = ctx.Now();
 
-    NewHead.Offset = EndOffset;
-    NewHead.PartNo = 0;
-    NewHead.PackedSize = 0;
+    // BlobEncoder.ResetNewHead ???
+    BlobEncoder.NewHead.Offset = BlobEncoder.EndOffset;
+    BlobEncoder.NewHead.PartNo = 0;
+    BlobEncoder.NewHead.PackedSize = 0;
 
-    Y_ABORT_UNLESS(NewHead.GetBatches().empty());
+    Y_ABORT_UNLESS(BlobEncoder.NewHead.GetBatches().empty());
 
     Parameters->OldPartsCleared = false;
-    Parameters->HeadCleared = (Head.PackedSize == 0);
+    Parameters->HeadCleared = (BlobEncoder.Head.PackedSize == 0);
 }
 
-void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
 {
     if (const auto heartbeat = SourceIdBatch->CanEmitHeartbeat()) {
         if (heartbeat->Version > LastEmittedHeartbeat) {
@@ -1778,7 +1816,7 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
             }, std::nullopt};
 
             WriteInflightSize += heartbeat->Data.size();
-            ExecRequest(hbMsg, *Parameters, request);
+            ExecRequest(hbMsg, *Parameters, PersistRequest.Get());
 
             LastEmittedHeartbeat = heartbeat->Version;
         }
@@ -1787,18 +1825,14 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
 
     UpdateWriteBufferIsFullState(ctx.Now());
 
-    if (!NewHead.GetBatches().empty() && !NewHead.GetLastBatch().Packed) {
-        NewHead.MutableLastBatch().Pack();
-        NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
-
-        NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-        NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
+    if (!BlobEncoder.IsLastBatchPacked()) {
+        BlobEncoder.PackLastBatch();
     }
 
-    Y_ABORT_UNLESS((Parameters->HeadCleared ? 0 : Head.PackedSize) + NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
-    MaxWriteResponsesSize = Max<ui32>(MaxWriteResponsesSize, Responses.size());
+    Y_ABORT_UNLESS((Parameters->HeadCleared ? 0 : BlobEncoder.Head.PackedSize) + BlobEncoder.NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
+    BlobEncoder.MaxWriteResponsesSize = Max<ui32>(BlobEncoder.MaxWriteResponsesSize, Responses.size());
 
-    HeadCleared = Parameters->HeadCleared;
+    BlobEncoder.HeadCleared = Parameters->HeadCleared;
 }
 
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {

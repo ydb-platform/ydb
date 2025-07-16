@@ -15,12 +15,6 @@ class TllDeleteBase(TllTieringTestBase):
     days_to_freeze = 3000
 
     @classmethod
-    def portions_actualized_in_sys(self, table):
-        portions = table.get_portion_stat_by_tier()
-        logger.info(f"portions: {portions}, blobs: {table.get_blob_stat_by_tier()}")
-        return "__DEFAULT" in portions and self.row_count > portions["__DEFAULT"]["Rows"]
-
-    @classmethod
     def get_row_count_by_date(self, table_path: str, past_days: int) -> int:
         return self.ydb_client.query(f"SELECT count(*) as Rows from `{table_path}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromDays({past_days})")[0].rows[0]["Rows"]
 
@@ -131,6 +125,19 @@ class TestDeleteS3Ttl(TllDeleteBase):
 
         return not_empty
 
+    def wait_rows_stable(self, table_path, expected, attempts=3, timeout=300):
+        ok = [False] * attempts
+        last = None
+
+        def _cond():
+            last = self.get_aggregated(table_path)
+            ok.pop(0)
+            ok.append(last == expected)
+            return all(ok)
+
+        if not self.wait_for(_cond, timeout):
+            raise Exception(f"Row count not stable: last = {last}, expected = {expected}")
+
     def teset_generator(self, test_name, buckets, ttl, single_upsert_row_count, upsert_number):
         test_dir = f"{self.ydb_client.database}/{test_name}"
         table_path = f"{test_dir}/table"
@@ -154,18 +161,14 @@ class TestDeleteS3Ttl(TllDeleteBase):
         if not self.wait_for(lambda: self.all_buckets(lambda x: x != 0, buckets, table), 300):
             raise Exception("Data eviction has not been started")
 
-        data1 = self.get_aggregated(table_path)
-        if data1 != data:
-            raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
+        self.wait_rows_stable(table_path, expected=data, attempts=3, timeout=300)
 
         self.reset_ttl(table_path)
 
         if not self.wait_for(lambda: self.all_buckets(lambda x: x == 0, buckets, table), 300):
             raise Exception("not all data deleted")
 
-        data1 = self.get_aggregated(table_path)
-        if data1 != data:
-            raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
+        self.wait_rows_stable(table_path, expected=data, attempts=3, timeout=300)
 
     @link_test_case("#13542")
     def test_data_unchanged_after_ttl_change(self):
@@ -273,8 +276,7 @@ class TestDeleteS3Ttl(TllDeleteBase):
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
 
-        if not self.wait_for(lambda: self.portions_actualized_in_sys(self.table), 120):
-            raise Exception(".sys reports incorrect data portions")
+        assert ColumnTableHelper.portions_actualized_in_sys(self.table)
 
         stmt = f"""
             DELETE FROM `{table_path}`
@@ -282,9 +284,7 @@ class TestDeleteS3Ttl(TllDeleteBase):
         logger.info(stmt)
         self.ydb_client.query(stmt)
 
-        if not self.wait_for(lambda: self.data_deleted_from_buckets('cold_delete', 'frozen_delete'), 300):
-            # raise Exception("not all data deleted") TODO FIXME after https://github.com/ydb-platform/ydb/issues/13594
-            pass
+        assert self.wait_for(lambda: self.data_deleted_from_buckets('cold_delete', 'frozen_delete'), 200), "not all data deleted"
 
 
 class TestDeleteTtl(TllDeleteBase):
@@ -325,6 +325,12 @@ class TestDeleteTtl(TllDeleteBase):
                 PRIMARY KEY(ts),
             )
             WITH (STORE = COLUMN)
+            """
+        )
+
+        self.ydb_client.query(
+            f"""
+            ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
             """
         )
 
@@ -382,8 +388,7 @@ class TestDeleteTtl(TllDeleteBase):
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
 
-        if not self.wait_for(lambda: self.portions_actualized_in_sys(self.table), 200):
-            raise Exception(".sys reports incorrect data portions")
+        assert ColumnTableHelper.portions_actualized_in_sys(self.table)
 
         t0 = time.time()
         stmt = f"""
@@ -408,5 +413,4 @@ class TestDeleteTtl(TllDeleteBase):
             # So we wait until some data appears in any bucket
             return cold_bucket_stat[0] != 0 or frozen_bucket_stat[0] != 0
 
-        if not self.wait_for(lambda: data_distributes_across_tiers(), 600):
-            raise Exception("Data eviction has not been started")
+        assert self.wait_for(lambda: data_distributes_across_tiers(), 200), "Data eviction has not been started"

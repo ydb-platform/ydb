@@ -1,14 +1,12 @@
 #pragma once
 
-#include <util/generic/ptr.h>
-
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/tx/schemeshard/operation_queue_timer.h>
+#include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/util/circular_queue.h>
 
-#include <ydb/core/tx/schemeshard/operation_queue_timer.h>
-#include <ydb/core/tx/schemeshard/schemeshard_private.h>
-#include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
-
-#include <ydb/core/scheme/scheme_pathid.h>
+#include <util/generic/ptr.h>
 
 namespace NKikimrConfig {
 
@@ -26,6 +24,9 @@ protected:
     EDataErasureStatus Status = EDataErasureStatus::UNSPECIFIED;
     ui64 Generation = 0;
     bool Running = false;
+
+    ui64 CounterDataErasureOk = 0;
+    ui64 CounterDataErasureTimeout = 0;
 
 public:
     TDataErasureManager(TSchemeShard* const schemeShard);
@@ -51,6 +52,7 @@ public:
     virtual bool Remove(const TPathId& pathId) = 0;
     virtual bool Remove(const TShardIdx& shardIdx) = 0;
     virtual void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) = 0;
+    virtual void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) = 0;
 
     void Clear();
 
@@ -125,6 +127,7 @@ public:
     bool Remove(const TPathId& pathId) override;
     bool Remove(const TShardIdx& shardIdx) override;
     void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
+    void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);
@@ -186,6 +189,7 @@ public:
     bool Remove(const TPathId& pathId) override;
     bool Remove(const TShardIdx& shardIdx) override;
     void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
+    void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);

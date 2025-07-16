@@ -156,12 +156,21 @@ public:
                 TDqPqTopicSource topicSource = maybeTopicSource.Cast();
 
                 TPqTopic topic = topicSource.Topic();
-                srcDesc.SetTopicPath(TString(topic.Path().Value()));
-                srcDesc.SetDatabase(TString(topic.Database().Value()));
                 const TStringBuf cluster = topic.Cluster().Value();
                 const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
                 YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
+                auto topicPath = topic.Path().Value();
+                auto topicDatabase = topic.Database().Value();
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
+                    auto pos = topicPath.find('/');
+                    Y_ENSURE(pos != TStringBuf::npos);
+                    srcDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
+                    srcDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
+                } else {
+                    srcDesc.SetTopicPath(TString(topicPath));
+                    srcDesc.SetDatabase(TString(topicDatabase));
+                }
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
                 const TStructExprType* fullRowType = topicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -252,6 +261,12 @@ public:
                     srcDesc.SetSharedReading(true);
                 }
                 *srcDesc.MutableDisposition() = State_->Disposition;
+
+                for (const auto& [label, value] : State_->TaskSensorLabels) {
+                    auto taskSensorLabel = srcDesc.AddTaskSensorLabel();
+                    taskSensorLabel->SetLabel(label);
+                    taskSensorLabel->SetValue(value);
+                }
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
@@ -273,8 +288,17 @@ public:
                 const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
                 YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
                 sinkDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
-                sinkDesc.SetTopicPath(TString(topic.Path().Value()));
-                sinkDesc.SetDatabase(TString(topic.Database().Value()));
+                auto topicPath = topic.Path().Value();
+                auto topicDatabase = topic.Database().Value();
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
+                    auto pos = topicPath.find('/');
+                    Y_ENSURE(pos != TStringBuf::npos);
+                    sinkDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
+                    sinkDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
+                } else {
+                    sinkDesc.SetTopicPath(TString(topicPath));
+                    sinkDesc.SetDatabase(TString(topicDatabase));
+                }
 
                 size_t const settingsCount = topicSink.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
@@ -297,6 +321,17 @@ public:
                 sinkType = "PqSink";
             }
         }
+    }
+
+    bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+        return TPqReadTopic::Match(&read);
+    }
+
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) { return TPqReadTopic::Match(val); })) {
+            return 0ul; // TODO: return real size
+        }
+        return Nothing();
     }
 
     NNodes::TCoNameValueTupleList BuildTopicReadSettings(

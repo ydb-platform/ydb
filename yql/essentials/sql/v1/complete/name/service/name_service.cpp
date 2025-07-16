@@ -8,7 +8,7 @@ namespace NSQLComplete {
 
     namespace {
 
-        void SetPrefix(TString& name, const TStringBuf delimeter, const TNamespaced& namespaced) {
+        void SetPrefix(TString& name, TStringBuf delimeter, const TNamespaced& namespaced) {
             if (namespaced.Namespace.empty()) {
                 return;
             }
@@ -17,7 +17,7 @@ namespace NSQLComplete {
             name.prepend(namespaced.Namespace);
         }
 
-        void FixPrefix(TString& name, const TStringBuf delimeter, const TNamespaced& namespaced) {
+        void FixPrefix(TString& name, TStringBuf delimeter, const TNamespaced& namespaced) {
             if (namespaced.Namespace.empty()) {
                 return;
             }
@@ -31,9 +31,11 @@ namespace NSQLComplete {
         return std::visit([&](auto&& name) -> TGenericName {
             using T = std::decay_t<decltype(name)>;
             if constexpr (std::is_same_v<T, TPragmaName>) {
-                SetPrefix(name.Indentifier, ".", *Pragma);
+                SetPrefix(name.Identifier, ".", *Pragma);
             } else if constexpr (std::is_same_v<T, TFunctionName>) {
-                SetPrefix(name.Indentifier, "::", *Function);
+                SetPrefix(name.Identifier, "::", *Function);
+            } else if constexpr (std::is_same_v<T, TClusterName>) {
+                SetPrefix(name.Identifier, ":", *Cluster);
             }
             return name;
         }, std::move(unqualified));
@@ -43,9 +45,11 @@ namespace NSQLComplete {
         return std::visit([&](auto&& name) -> TGenericName {
             using T = std::decay_t<decltype(name)>;
             if constexpr (std::is_same_v<T, TPragmaName>) {
-                FixPrefix(name.Indentifier, ".", *Pragma);
+                FixPrefix(name.Identifier, ".", *Pragma);
             } else if constexpr (std::is_same_v<T, TFunctionName>) {
-                FixPrefix(name.Indentifier, "::", *Function);
+                FixPrefix(name.Identifier, "::", *Function);
+            } else if constexpr (std::is_same_v<T, TClusterName>) {
+                FixPrefix(name.Identifier, ":", *Cluster);
             }
             return name;
         }, std::move(qualified));

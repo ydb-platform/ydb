@@ -57,8 +57,9 @@ struct TDqTaskRunnerStats {
     TDuration WaitStartTime;
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
-    TDuration CurrentWaitInputTime;
-    TDuration CurrentWaitOutputTime;
+
+    TInstant CurrentWaitInputStartTime;
+    TInstant CurrentWaitOutputStartTime;
 
     ui64 SpillingComputeWriteBytes;
     ui64 SpillingChannelWriteBytes;
@@ -219,6 +220,7 @@ struct TDqTaskRunnerMemoryLimits {
     ui32 OutputChunkMaxSize = 0;
     ui32 ChunkSizeLimit = 48_MB;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    TMaybe<size_t> BufferPageAllocSize;
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
@@ -453,6 +455,7 @@ public:
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 
     virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
+    virtual TString GetOutputDebugString() = 0;
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(

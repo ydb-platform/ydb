@@ -196,6 +196,7 @@ private:
     void Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvGetConfigurationVersionRequest::TPtr & ev, const TActorContext & ctx);
     void HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvDropConfigRequest::TPtr & ev, const TActorContext & ctx);
@@ -270,6 +271,7 @@ private:
             HFunc(TEvConsole::TEvGetNodeLabelsRequest, HandleWithRights);
             HFunc(TEvConsole::TEvGetAllMetadataRequest, HandleWithRights);
             HFunc(TEvConsole::TEvFetchStartupConfigRequest, HandleWithRights);
+            HFunc(TEvConsole::TEvGetConfigurationVersionRequest, HandleWithRights);
             HFunc(TEvConsole::TEvAddVolatileConfigRequest, HandleWithRights);
             HFunc(TEvConsole::TEvRemoveVolatileConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsProvider);
@@ -297,8 +299,7 @@ private:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
-            Y_ABORT("TConfigsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->ToString().data());
+            break; 
         }
     }
 

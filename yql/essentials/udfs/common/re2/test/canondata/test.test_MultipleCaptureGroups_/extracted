@@ -1,6 +1,6 @@
 <tmp_path>/program.sql:<main>: Error: Type annotation
 
-    <tmp_path>/program.sql:<main>:8:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:8:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	select $regexp("abc");
 	^
         <tmp_path>/program.sql:<main>:8:8: Error: At function: Apply

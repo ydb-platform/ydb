@@ -19,6 +19,7 @@
 namespace NYT::NFormats {
 
 using namespace NSkiff;
+using namespace NSkiffExt;
 using namespace NYson;
 using namespace NTableClient;
 
@@ -654,6 +655,48 @@ TYsonToSkiffConverter CreatePrimitiveTypeYsonToSkiffConverter(
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+TYsonToSkiffConverter CreateTzTypeYsonToSkiffConverter(
+    TComplexTypeFieldDescriptor descriptor,
+    const std::shared_ptr<TSkiffSchema>& skiffSchema)
+{
+    auto wireType = skiffSchema->GetWireType();
+    switch (wireType) {
+        case EWireType::String32:
+            return CreatePrimitiveTypeYsonToSkiffConverter(descriptor, wireType);
+        case EWireType::Tuple:
+        {
+            const auto& children = skiffSchema->GetChildren();
+            YT_VERIFY(children.size() == 2);
+            const auto innerWireType = children[0]->GetWireType();
+            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
+            switch (innerWireType) {
+        #define CASE(x) \
+                case ((x)): \
+                    return CreatePrimitiveTypeYsonToSkiffConverter<EYsonItemType::StringValue>( \
+                        std::move(descriptor), \
+                        TTzSkiffWriter<(x)>());
+                CASE(EWireType::Int32);
+                CASE(EWireType::Int64);
+                CASE(EWireType::Uint16);
+                CASE(EWireType::Uint32);
+                CASE(EWireType::Uint64);
+        #undef CASE
+                default:
+                    break;
+            }
+            YT_ABORT();
+        }
+        case EWireType::Yson32:
+            return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
+        default:
+            YT_ABORT();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TYsonToSkiffConverter CreateSimpleYsonToSkiffConverter(
     TComplexTypeFieldDescriptor descriptor,
     const std::shared_ptr<TSkiffSchema>& skiffSchema)
@@ -722,6 +765,14 @@ TYsonToSkiffConverter CreateSimpleYsonToSkiffConverter(
             case ESimpleLogicalValueType::Interval64:
                 CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
+            case ESimpleLogicalValueType::TzDate32:
+            case ESimpleLogicalValueType::TzDatetime64:
+            case ESimpleLogicalValueType::TzTimestamp64:
+            case ESimpleLogicalValueType::TzDate:
+            case ESimpleLogicalValueType::TzDatetime:
+            case ESimpleLogicalValueType::TzTimestamp:
+                CheckTzType(skiffSchema, logicalType);
+                return CreateTzTypeYsonToSkiffConverter(std::move(descriptor), skiffSchema);
         }
     } catch (const std::exception& ex) {
         RethrowCannotMatchField(descriptor, skiffSchema, ex);
@@ -1361,6 +1412,45 @@ TSkiffToYsonConverter CreatePrimitiveTypeSkiffToYsonConverter(EWireType wireType
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+TSkiffToYsonConverter CreateTzTypeSkiffToYsonConverter(const std::shared_ptr<TSkiffSchema>& skiffSchema)
+{
+    auto wireType = skiffSchema->GetWireType();
+
+    switch (wireType) {
+        case EWireType::String32:
+            return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
+        case EWireType::Tuple:
+        {
+            const auto& children = skiffSchema->GetChildren();
+            YT_VERIFY(children.size() == 2);
+            const auto innerWireType = children[0]->GetWireType();
+            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
+            switch (innerWireType) {
+        #define CASE(x) \
+                case ((x)): \
+                    return TPrimitiveTypeSkiffToYsonConverter(TTzSkiffParser<(x)>());
+                CASE(EWireType::Int32);
+                CASE(EWireType::Int64);
+                CASE(EWireType::Uint16);
+                CASE(EWireType::Uint32);
+                CASE(EWireType::Uint64);
+        #undef CASE
+                default:
+                    break;
+            }
+            YT_ABORT();
+        }
+        case EWireType::Yson32:
+            return TYson32SkiffToYsonConverter();
+        default:
+            YT_ABORT();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSkiffToYsonConverter CreateSimpleSkiffToYsonConverter(
     const TComplexTypeFieldDescriptor& descriptor,
     const std::shared_ptr<TSkiffSchema>& skiffSchema,
@@ -1430,6 +1520,14 @@ TSkiffToYsonConverter CreateSimpleSkiffToYsonConverter(
             case ESimpleLogicalValueType::Interval64:
                 CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
+            case ESimpleLogicalValueType::TzDate32:
+            case ESimpleLogicalValueType::TzDatetime64:
+            case ESimpleLogicalValueType::TzTimestamp64:
+            case ESimpleLogicalValueType::TzDate:
+            case ESimpleLogicalValueType::TzDatetime:
+            case ESimpleLogicalValueType::TzTimestamp:
+                CheckTzType(skiffSchema, valueType);
+                return CreateTzTypeSkiffToYsonConverter(skiffSchema);
         }
         YT_ABORT();
     } catch (const std::exception& ex) {
@@ -1924,6 +2022,71 @@ void CheckWireType(EWireType wireType, const std::initializer_list<EWireType>& a
         THROW_ERROR_EXCEPTION("Unexpected wire type %Qlv",
             wireType);
     }
+}
+
+void CheckTzType(const std::shared_ptr<TSkiffSchema>& skiffSchema, ESimpleLogicalValueType columnType)
+{
+    auto error = TError(
+        "TzType cannot be represented with Skiff schema %Qv",
+        GetShortDebugString(skiffSchema));
+
+    auto wireType = skiffSchema->GetWireType();
+    if (wireType == EWireType::String32 || wireType == EWireType::Yson32) {
+        return;
+    }
+    if (wireType == EWireType::Tuple) {
+        const auto& children = skiffSchema->GetChildren();
+        if (children.size() != 2) {
+            THROW_ERROR_EXCEPTION("Tuple is expected to have two fields for the TzType representation");
+        }
+        const auto innerTimeType = children[0]->GetWireType();
+        const auto innerTimezoneType = children[1]->GetWireType() ;
+        if (innerTimezoneType != EWireType::Uint16) {
+            THROW_ERROR_EXCEPTION("The second field in the tuple is expected to be a uint16");
+        }
+        try {
+            switch (columnType) {
+                case ESimpleLogicalValueType::TzDate32:
+                    CheckWireType(
+                        innerTimeType,
+                        {EWireType::Int32});
+                    break;
+                case ESimpleLogicalValueType::TzDatetime64:
+                    CheckWireType(
+                        innerTimeType,
+                        {EWireType::Int64});
+                    break;
+                case ESimpleLogicalValueType::TzTimestamp64:
+                    CheckWireType(
+                        innerTimeType,
+                        {EWireType::Int64,});
+                    break;
+                case ESimpleLogicalValueType::TzDate:
+                    CheckWireType(
+                        innerTimeType,
+                        {EWireType::Uint16});
+                    break;
+                case ESimpleLogicalValueType::TzDatetime:
+                    CheckWireType(
+                        innerTimeType,
+                        {EWireType::Uint32});
+                    break;
+                case ESimpleLogicalValueType::TzTimestamp:
+                    CheckWireType(
+                        innerTimeType,
+                        {EWireType::Uint64});
+                    break;
+                default:
+                    YT_ABORT();
+            }
+        } catch (const NYT::TErrorException& ex) {
+            error <<= ex.Error();
+            THROW_ERROR(error);
+        }
+        return;
+    }
+
+    THROW_ERROR(error);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

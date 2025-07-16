@@ -2,9 +2,12 @@
 
 #include <util/generic/hash.h>
 #include "yql_expr_type_annotation.h"
+#include "yql_func_stack.h"
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/profile.h>
+
+#include <util/generic/scope.h>
 
 namespace NYql {
 
@@ -18,6 +21,7 @@ namespace {
         const TNodeOnNodeOwnedMap* Replaces;
         ui64 LastNodeId;
         bool HasRemaps;
+        TMaybe<TFunctionStack> FunctionStack;
 
         TOptimizationContext(TOptimizer optimizer, const TNodeOnNodeOwnedMap* replaces, TExprContext& expr, const TOptimizeExprSettings& settings)
             : Optimizer(optimizer)
@@ -27,6 +31,9 @@ namespace {
             , LastNodeId(expr.NextUniqueId)
             , HasRemaps(false)
         {
+            if (settings.TrackFrames) {
+                FunctionStack.ConstructInPlace();
+            }
         }
 
         void RemapNode(const TExprNode& fromNode, const TExprNode::TPtr& toNode) final {
@@ -106,6 +113,16 @@ namespace {
 
     template<typename TContext>
     TExprNode::TPtr OptimizeNode(const TExprNode::TPtr& node, TContext& ctx, size_t level) {
+        if (ctx.FunctionStack) {
+            ctx.FunctionStack->EnterFrame(*node, ctx.Expr);
+        }
+
+        Y_DEFER {
+            if (ctx.FunctionStack) {
+                ctx.FunctionStack->LeaveFrame(*node, ctx.Expr);
+            }
+        };
+
         if ((!ctx.Replaces && node->Type() == TExprNode::Argument) || node->Type() == TExprNode::Atom ||
             node->Type() == TExprNode::Arguments || node->Type() == TExprNode::World) {
             return node;
@@ -904,6 +921,10 @@ void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func) {
 
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc) {
     TNodeSet visitedNodes;
+    VisitExprInternal(root, preFunc, postFunc, visitedNodes);
+}
+
+void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc, TNodeSet& visitedNodes) {
     VisitExprInternal(root, preFunc, postFunc, visitedNodes);
 }
 

@@ -29,7 +29,7 @@ YSON — разработанный в Яндексе формат данных,
   * `Yson::YPath***` — получение одного элемента дерева документа по указанному относительному пути с опциональным преобразованием в нужный тип данных;
   * `Yson::Serialize***` — получить из ресурса копию его данных, сериализованную в одном из форматов;
 
-* Для удобства при передаче сериализованного Yson и Json в функции, ожидающие на входе ресурс с DOM-объектом, неявное преобразование через `Yson::Parse` или `Yson::ParseJson` происходит автоматически. Также в SQL синтаксисе оператор точки или квадратных скобок автоматически добавляет вызов `Yson::Lookup`. Для сериализации ресурса по-прежнему нужно вызывать `Yson::ConvertTo***` или `Yson::Serialize***`. Таким образом, например, получение элемента "foo" словаря из колонки mycolumn типа Yson в виде строки может выглядеть так: `SELECT Yson::ConvertToString(mycolumn["foo"]) FROM mytable;` или `SELECT Yson::ConvertToString(mycolumn.foo) FROM mytable;`. В варианте с точкой можно экранировать спецсимволы по [общим правилам для индентификаторов](../../syntax/expressions.md#escape).
+* Для удобства при передаче сериализованного Yson и Json в функции, ожидающие на входе ресурс с DOM-объектом, неявное преобразование через `Yson::Parse` или `Yson::ParseJson` происходит автоматически. Также в SQL синтаксисе оператор точки или квадратных скобок автоматически добавляет вызов `Yson::Lookup`. Для сериализации ресурса по-прежнему нужно вызывать `Yson::ConvertTo***` или `Yson::Serialize***`. Таким образом, например, получение элемента "foo" словаря из колонки mycolumn типа Yson в виде строки может выглядеть так: `SELECT Yson::ConvertToString(mycolumn["foo"]) FROM mytable;` или `SELECT Yson::ConvertToString(mycolumn.foo) FROM mytable;`. В варианте с точкой можно экранировать спецсимволы по [общим правилам для идентификаторов](../../syntax/expressions.md#escape).
 
 Функции модуля стоит рассматривать как «кубики», из которых можно собирать разные конструкции, например:
 
@@ -82,7 +82,7 @@ Yson::ParseJson(String{Flags:AutoMap}) -> Resource<'Yson2.Node'>?
 Yson::ParseJsonDecodeUtf8(String{Flags:AutoMap}) -> Resource<'Yson2.Node'>?
 ```
 
-Результат всех трёх функций является несериализуемым: его можно только передать на вход другой функции из библиотеки Yson, но нельзя сохранить в таблицу или вернуть на клиент в результате операции — попытка так сделать приведет к ошибке типизации. Также запрещено возвращать его за пределы [подзапросов](../../syntax/select/index.md): если это требуется, то надо вызвать [Yson::Serialize](#ysonserialize), а оптимизатор уберёт лишнюю сериализию и десериализацию, если материализация в конечном счёте не потребуется.
+Результат всех трёх функций является несериализуемым: его можно только передать на вход другой функции из библиотеки Yson, но нельзя сохранить в таблицу или вернуть на клиент в результате операции — попытка так сделать приведет к ошибке типизации. Также запрещено возвращать его за пределы [подзапросов](../../syntax/select/index.md): если это требуется, то надо вызвать [Yson::Serialize](#ysonserialize), а оптимизатор уберёт лишнюю сериализацию и десериализацию, если материализация в конечном счёте не потребуется.
 
 {% note info %}
 
@@ -292,16 +292,16 @@ $yson = @@{y = true; x = 5.5}@@y;
 SELECT Yson::LookupBool($yson, "z"); --- null
 SELECT Yson::LookupBool($yson, "y"); --- true
 
-SELECT Yson::LookupInt64($yson, "x"); --- Ошибка
+-- SELECT Yson::LookupInt64($yson, "x"); --- Ошибка
 SELECT Yson::LookupInt64($yson, "x", Yson::Options(false as Strict)); --- null
 SELECT Yson::LookupInt64($yson, "x", Yson::Options(true as AutoConvert)); --- 5
 
-SELECT Yson::ConvertToBoolDict($yson); --- Ошибка
+-- SELECT Yson::ConvertToBoolDict($yson); --- Ошибка
 SELECT Yson::ConvertToBoolDict($yson, Yson::Options(false as Strict)); --- { "y": true }
 SELECT Yson::ConvertToDoubleDict($yson, Yson::Options(false as Strict)); --- { "x": 5.5 }
 ```
 
-Если во всём запросе требуется применять одинаковые значения настроек библиотеки Yson, то удобнее воспользоваться [PRAGMA yson.AutoConvert;](../../syntax/pragma.md#yson.autoconvert) и/или [PRAGMA yson.Strict;](../../syntax/pragma.md#yson.strict). Также эти `PRAGMA` являются единственным способом повлиять на неявные вызовы библиотеки Yson, которые возникают при работе с типами данных Yson/Json.
+Если во всём запросе требуется применять одинаковые значения настроек библиотеки Yson, то удобнее воспользоваться [PRAGMA yson.AutoConvert;](../../syntax/pragma/yson.md#autoconvert) и/или [PRAGMA yson.Strict;](../../syntax/pragma/yson.md#strict). Также эти `PRAGMA` являются единственным способом повлиять на неявные вызовы библиотеки Yson, которые возникают при работе с типами данных Yson/Json.
 
 ## Смотрите также
 

@@ -4,11 +4,14 @@
 
 **Vector search**, also known as [nearest neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN), is an optimization problem where the goal is to find the nearest vector (or a set of vectors) in a given dataset relative to a specified query vector. The proximity between vectors is determined using distance or similarity metrics.
 
+One common approach, especially for large datasets, is **approximate nearest neighbor (ANN) search**, which allows faster vector retrieval at the cost of potential accuracy trade-offs.
+
+
 Vector search is actively used in the following areas:
 
 * recommendation systems
 * semantic search
-* search for similar images
+* image similarity search
 * anomaly detection
 * classification systems
 
@@ -24,13 +27,13 @@ The choice of a method depends on the number of vectors and the nature of the wo
 
 ## Exact vector search {#vector-search-exact}
 
-{% include [vector_search_exact.md](_includes/vector_search_exact.md) %}
+{% include [vector_search_exact.md](../yql/reference/_includes/vector_search_exact.md) %}
 
 Learn more about [exact vector search](../yql/reference/udf/list/knn.md#exact-vector-search-examples).
 
 ## Approximate vector search without index {#vector-search-approximate}
 
-{% include [vector_search_approximate.md](_includes/vector_search_approximate.md) %}
+{% include [vector_search_approximate.md](../yql/reference/_includes/vector_search_approximate.md) %}
 
 Learn more about [approximate vector search without index](../yql/reference/udf/list/knn.md#approximate-vector-search-examples).
 

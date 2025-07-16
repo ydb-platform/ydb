@@ -25,6 +25,7 @@ struct TOptimizeExprSettings {
     TTypeAnnotationContext* Types;
     bool VisitTuples = false;
     std::function<bool(const TExprNode&)> VisitChecker;
+    bool TrackFrames = false;
 };
 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,
@@ -57,6 +58,7 @@ typedef std::function<bool (const TExprNode&)> TExprVisitRefFunc;
 
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);
+void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc, TNodeSet& visitedNodes);
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
 void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func);
 void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& preFunc, const TExprVisitRefFunc& postFunc);

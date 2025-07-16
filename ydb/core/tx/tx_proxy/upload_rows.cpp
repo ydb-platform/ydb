@@ -14,13 +14,15 @@ public:
         std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
         EUploadRowsMode mode,
-        bool writeToPrivateTable)
+        bool writeToPrivateTable,
+        bool writeToIndexImplTable)
         : Sender(sender)
         , Table(table)
         , ColumnTypes(types)
         , Rows(rows)
     {
         AllowWriteToPrivateTable = writeToPrivateTable;
+        AllowWriteToIndexImplTable = writeToIndexImplTable;
 
         switch (mode) {
             case EUploadRowsMode::Normal:
@@ -88,14 +90,16 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
     std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
-    bool writeToPrivateTable)
+    bool writeToPrivateTable,
+    bool writeToIndexImplTable)
 {
     return new TUploadRowsInternal(sender,
         table,
         types,
         rows,
         mode,
-        writeToPrivateTable);
+        writeToPrivateTable,
+        writeToIndexImplTable);
 }
 
 } // namespace NTxProxy

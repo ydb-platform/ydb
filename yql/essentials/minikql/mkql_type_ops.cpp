@@ -4,7 +4,6 @@
 
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 #include <yql/essentials/utils/parse_double.h>
 #include <yql/essentials/utils/swap_bytes.h>
 #include <yql/essentials/utils/utf8.h>
@@ -15,6 +14,8 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+
+#include <library/cpp/type_info/tz/tz.h>
 
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/consumer.h>
@@ -49,7 +50,7 @@ struct TTimezones {
         NResource::TResources resList;
         const TStringBuf prefix = "/cctz/tzdata/";
         NResource::FindMatch(prefix, &resList);
-        const auto allTimezones = NUdf::GetTimezones();
+        const auto allTimezones = NTi::GetTimezones();
         for (ui16 id = 0; id < allTimezones.size(); ++id) {
             const auto& t = allTimezones[id];
             if (!t.empty()) {
@@ -136,22 +137,22 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
         return bool(value) && (ui64)std::abs(value.Get<i64>()) <= NUdf::MAX_INTERVAL64;
 
     case NUdf::EDataSlot::TzDate:
-        return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzDatetime:
-        return bool(value) && value.Get<ui32>() < NUdf::MAX_DATETIME && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<ui32>() < NUdf::MAX_DATETIME && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzTimestamp:
-        return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzDate32:
-        return bool(value) && value.Get<i32>() >= NUdf::MIN_DATE32 && value.Get<i32>() <= NUdf::MAX_DATE32 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<i32>() >= NUdf::MIN_DATE32 && value.Get<i32>() <= NUdf::MAX_DATE32 && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzDatetime64:
-        return bool(value) && value.Get<i64>() >= NUdf::MIN_DATETIME64 && value.Get<i64>() <= NUdf::MAX_DATETIME64 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<i64>() >= NUdf::MIN_DATETIME64 && value.Get<i64>() <= NUdf::MAX_DATETIME64 && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzTimestamp64:
-        return bool(value) && value.Get<i64>() >= NUdf::MIN_TIMESTAMP64 && value.Get<i64>() <= NUdf::MAX_TIMESTAMP64 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<i64>() >= NUdf::MIN_TIMESTAMP64 && value.Get<i64>() <= NUdf::MAX_TIMESTAMP64 && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::Utf8:
         return bool(value) && IsUtf8(value.AsStringRef());
@@ -630,7 +631,9 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
     }
 
     case NUdf::EDataSlot::DyNumber: {
-        out << NDyNumber::DyNumberToString(value.AsStringRef());
+        const auto& res = NDyNumber::DyNumberToString(value.AsStringRef());
+        MKQL_ENSURE(res, "Invalid DyNumber value : " << EscapeC(TString(value.AsStringRef())));
+        out << *res;
         break;
     }
 
@@ -1037,7 +1040,7 @@ public:
             year++;
         }
         cctz::civil_second cs(year, month, day, 0, 0, 0);
-        auto unixSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        auto unixSeconds = tz.lookup(cs).pre.time_since_epoch().count();
         value = unixSeconds / 86400ll;
         return NUdf::MIN_DATE32 <= value && value <= NUdf::MAX_DATE32;
     }
@@ -1064,7 +1067,7 @@ public:
             year++;
         }
         cctz::civil_second cs(year, month, day, hour, min, sec);
-        value = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        value = tz.lookup(cs).pre.time_since_epoch().count();
         return NUdf::MIN_DATETIME64 <= value && value <= NUdf::MAX_DATETIME64;
     }
 
@@ -1285,7 +1288,7 @@ bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 s
     if (tzId) {
         const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
         cctz::civil_second cs(year, month, day, hour, min, sec);
-        auto utcSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        auto utcSeconds = tz.lookup(cs).pre.time_since_epoch().count();
         if (utcSeconds < 0 || utcSeconds >= (std::int_fast64_t) NUdf::MAX_DATETIME) {
             return false;
         }
@@ -2789,12 +2792,12 @@ ui16 GetTimezoneId(TStringBuf ianaName) {
 }
 
 bool IsValidTimezoneId(ui16 id) {
-    const auto zones = NUdf::GetTimezones();
+    const auto zones = NTi::GetTimezones();
     return id < zones.size() && !zones[id].empty();
 }
 
 TMaybe<TStringBuf> FindTimezoneIANAName(ui16 id) {
-    const auto zones = NUdf::GetTimezones();
+    const auto zones = NTi::GetTimezones();
     if (id >= zones.size() || zones[id].empty()) {
         return Nothing();
     }
@@ -2803,14 +2806,14 @@ TMaybe<TStringBuf> FindTimezoneIANAName(ui16 id) {
 }
 
 TStringBuf GetTimezoneIANAName(ui16 id) {
-    const auto zones = NUdf::GetTimezones();
+    const auto zones = NTi::GetTimezones();
     MKQL_ENSURE(id < zones.size() && !zones[id].empty(), "Invalid time zone id: " << id);
     return TStringBuf(zones[id]);
 }
 
 std::vector<ui16> GetTzBlackList() {
     std::vector<ui16> result;
-    const auto& zones = NUdf::GetTimezones();
+    const auto& zones = NTi::GetTimezones();
     for (ui16 id = 0; id < zones.size(); ++id) {
         if (zones[id].empty()) {
             result.emplace_back(id);

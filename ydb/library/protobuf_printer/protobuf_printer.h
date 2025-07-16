@@ -10,7 +10,13 @@ public:
     bool RegisterFieldValuePrinters(const google::protobuf::Descriptor* desc, const char* name) {
         const google::protobuf::FieldDescriptor* field = desc->FindFieldByName(name);
         Y_ASSERT(field != nullptr);
-        return RegisterFieldValuePrinter(field, new TPrinter());
+        auto printer = std::make_unique<TPrinter>();
+        const auto success = RegisterFieldValuePrinter(field, printer.get());
+        if (success) {
+            // RegisterFieldValuePrinter took a ownership of the printer => release it.
+            printer.release();
+        }
+        return success;
     }
 
     template <class TPrinter, class... T>

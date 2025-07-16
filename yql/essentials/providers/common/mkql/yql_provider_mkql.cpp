@@ -251,11 +251,11 @@ std::pair<TLayout, ui16> CutTimezone(const std::string_view& atom) {
 } // namespace
 
 bool TMkqlCallableCompilerBase::HasCallable(const std::string_view& name) const {
-    return Callables.contains(name);
+    return Callables_.contains(name);
 }
 
 void TMkqlCallableCompilerBase::AddCallable(const std::string_view& name, TCompiler compiler) {
-    const auto result = Callables.emplace(TString(name), compiler);
+    const auto result = Callables_.emplace(TString(name), compiler);
     YQL_ENSURE(result.second, "Callable already exists: " << name);
 }
 
@@ -354,21 +354,21 @@ void TMkqlCallableCompilerBase::AddSimpleCallables(const std::initializer_list<s
 }
 
 void TMkqlCallableCompilerBase::OverrideCallable(const std::string_view& name, TCompiler compiler) {
-    const auto prevCompiler = Callables.find(name);
-    YQL_ENSURE(Callables.cend() != prevCompiler, "Missed callable: " << name);
+    const auto prevCompiler = Callables_.find(name);
+    YQL_ENSURE(Callables_.cend() != prevCompiler, "Missed callable: " << name);
     prevCompiler->second = compiler;
-    Callables[name] = compiler;
+    Callables_[name] = compiler;
 }
 
 IMkqlCallableCompiler::TCompiler TMkqlCallableCompilerBase::GetCallable(const std::string_view& name) const {
-    const auto compiler = Callables.find(name);
-    YQL_ENSURE(Callables.cend() != compiler, "Missed callable: " << name);
+    const auto compiler = Callables_.find(name);
+    YQL_ENSURE(Callables_.cend() != compiler, "Missed callable: " << name);
     return compiler->second;
 }
 
 IMkqlCallableCompiler::TCompiler TMkqlCallableCompilerBase::FindCallable(const std::string_view& name) const {
-    const auto compiler = Callables.find(name);
-    return Callables.cend() != compiler ? compiler->second : IMkqlCallableCompiler::TCompiler();
+    const auto compiler = Callables_.find(name);
+    return Callables_.cend() != compiler ? compiler->second : IMkqlCallableCompiler::TCompiler();
 }
 
 bool TMkqlCommonCallableCompiler::HasCallable(const std::string_view& name) const {
@@ -3016,7 +3016,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
-    AddCallable({ "AssumeStrict", "AssumeNonStrict", "Likely" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({ "AssumeStrict", "AssumeNonStrict", "NoPush", "Likely" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 

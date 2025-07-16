@@ -354,6 +354,7 @@ TRequestResult TFqSetup::DescribeQuery(const TString& queryId, const TFqOptions&
 
     meta.Ast = result.ast().data();
     meta.Plan = result.plan().json();
+    meta.Statistics = result.statistics().json();
 
     return GetStatus(response->Get()->Issues);
 }

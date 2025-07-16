@@ -1531,7 +1531,7 @@ static struct aws_h2err s_decoder_on_settings_ack(void *userdata) {
         }
         connection->thread_data.settings_self[settings_array[i].id] = settings_array[i].value;
     }
-    /* invoke the change settings compeleted user callback */
+    /* invoke the change settings completed user callback */
     if (pending_settings->on_completed) {
         pending_settings->on_completed(&connection->base, AWS_ERROR_SUCCESS, pending_settings->user_data);
     }
@@ -2057,6 +2057,7 @@ int aws_h2_stream_activate(struct aws_http_stream *stream) {
 
     /* connection keeps activated stream alive until stream completes */
     aws_atomic_fetch_add(&stream->refcount, 1);
+    stream->metrics.stream_id = stream->id;
 
     if (!was_cross_thread_work_scheduled) {
         CONNECTION_LOG(TRACE, connection, "Scheduling cross-thread work task");

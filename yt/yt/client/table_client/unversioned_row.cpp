@@ -1074,6 +1074,13 @@ void ValidateValueType(
             CASE(ESimpleLogicalValueType::Datetime64)
             CASE(ESimpleLogicalValueType::Timestamp64)
             CASE(ESimpleLogicalValueType::Interval64)
+
+            CASE(ESimpleLogicalValueType::TzDate)
+            CASE(ESimpleLogicalValueType::TzDatetime)
+            CASE(ESimpleLogicalValueType::TzTimestamp)
+            CASE(ESimpleLogicalValueType::TzDate32)
+            CASE(ESimpleLogicalValueType::TzDatetime64)
+            CASE(ESimpleLogicalValueType::TzTimestamp64)
 #undef CASE
         }
         YT_ABORT();

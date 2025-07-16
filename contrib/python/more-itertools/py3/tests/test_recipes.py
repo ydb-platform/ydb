@@ -1,10 +1,11 @@
+from collections import Counter
 from decimal import Decimal
 from doctest import DocTestSuite
 from fractions import Fraction
 from functools import reduce
 from itertools import combinations, count, groupby, permutations
 from operator import mul
-from math import comb, factorial
+from math import comb, prod, factorial
 from sys import version_info
 from unittest import TestCase, skipIf
 from unittest.mock import patch
@@ -1385,3 +1386,55 @@ class LoopsTests(TestCase):
         self.assertTrue(
             all(list(mi.loops(n)) == [None] * n for n in range(-10, 10))
         )
+
+
+class MultinomialTests(TestCase):
+    def test_basic(self):
+        multinomial = mi.multinomial
+
+        # Case M(11; 5, 2, 1, 1, 2) = 83160
+        # https://www.wolframalpha.com/input?i=Multinomia%285%2C+2%2C+1%2C+1%2C+2%29
+        self.assertEqual(multinomial(5, 2, 1, 1, 2), 83160)
+
+        # Commutative
+        self.assertEqual(multinomial(2, 1, 1, 2, 5), 83160)
+
+        # Unaffected by zero-sized bins
+        self.assertEqual(multinomial(2, 0, 1, 0, 1, 2, 5, 0), 83160)
+
+        # Matches definition
+        self.assertEqual(
+            multinomial(5, 2, 1, 1, 2),
+            (
+                factorial(sum([5, 2, 1, 1, 2]))
+                // prod(map(factorial, [5, 2, 1, 1, 2]))
+            ),
+        )
+
+        # Corner cases and identities
+        self.assertEqual(multinomial(), 1)
+        self.assertEqual(multinomial(5), 1)
+        self.assertEqual(multinomial(5, 7), comb(12, 5))
+        self.assertEqual(multinomial(1, 1, 1, 1, 1, 1, 1), factorial(7))
+
+        # Relationship to distinct_permuations() and permutations()
+        for word in ['plain', 'pizza', 'coffee', 'honolulu', 'assists']:
+            with self.subTest(word=word):
+                self.assertEqual(
+                    multinomial(*Counter(word).values()),
+                    mi.ilen(mi.distinct_permutations(word)),
+                )
+                self.assertEqual(
+                    multinomial(*Counter(word).values()),
+                    len(set(permutations(word))),
+                )
+
+        # Error cases
+        with self.assertRaises(ValueError):
+            multinomial(-5, 7)  # No negative inputs
+        with self.assertRaises(TypeError):
+            multinomial(5, 7.25)  # No float inputs
+        with self.assertRaises(TypeError):
+            multinomial(5, 'x')  # No non-numeric inputs
+        with self.assertRaises(TypeError):
+            multinomial([5, 7])  # No sequence inputs

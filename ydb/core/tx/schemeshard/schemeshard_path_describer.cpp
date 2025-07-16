@@ -1,11 +1,12 @@
 #include "schemeshard_path_describer.h"
 
+#include <ydb/public/api/protos/annotations/sensitive.pb.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
 #include <util/stream/format.h>
 
@@ -899,6 +900,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     entry->SetShardsLimit(subDomainInfo->GetSchemeLimits().MaxShards);
     entry->SetPQPartitionsInside(subDomainInfo->GetPQPartitionsInside());
     entry->SetPQPartitionsLimit(subDomainInfo->GetSchemeLimits().MaxPQPartitions);
+    *entry->MutableSchemeLimits() = subDomainInfo->GetSchemeLimits().AsProto();
 
     NKikimrSubDomains::TDomainKey *resourcesKey = entry->MutableResourcesDomainKey();
     resourcesKey->SetSchemeShard(subDomainInfo->GetResourcesDomainId().OwnerId);
@@ -1117,6 +1119,20 @@ void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr
     entry->CopyFrom(backupCollectionInfo->Description);
 }
 
+void TPathDescriber::DescribeSysView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->SysViews.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "SysView is not found");
+    TSysViewInfo::TPtr sysViewInfo = *it;
+
+    const TPath sysViewPath = TPath::Init(pathId, Self);
+    const TPath sourceObjectPath = sysViewPath.Parent().Parent();
+
+    auto entry = Result->Record.MutablePathDescription()->MutableSysViewDescription();
+    entry->SetName(pathEl->Name);
+    entry->SetType(sysViewInfo->Type);
+    sourceObjectPath.GetPathIdForDomain().ToProto(entry->MutableSourceObject());
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1277,6 +1293,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeBackupCollection:
             DescribeDir(path);
             DescribeBackupCollection(base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            DescribeSysView(ctx, base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
@@ -1458,20 +1477,8 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
         << ", name# " << name);
 
     desc.SetName(name);
-    desc.SetMode(info->Mode);
-    desc.SetFormat(info->Format);
-    desc.SetVirtualTimestamps(info->VirtualTimestamps);
-    desc.SetResolvedTimestampsIntervalMs(info->ResolvedTimestamps.MilliSeconds());
-    desc.SetAwsRegion(info->AwsRegion);
     pathId.ToProto(desc.MutablePathId());
-    desc.SetState(info->State);
-    desc.SetSchemaVersion(info->AlterVersion);
-
-    if (info->ScanShards) {
-        auto& scanProgress = *desc.MutableScanProgress();
-        scanProgress.SetShardsTotal(info->ScanShards.size());
-        scanProgress.SetShardsCompleted(info->DoneShards.size());
-    }
+    info->Serialize(desc);
 
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     auto path = PathsById.at(pathId);

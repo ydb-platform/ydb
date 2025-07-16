@@ -138,7 +138,7 @@ public:
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 
-    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
+    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings, bool canMove);
     TAsyncBulkUpsertResult BulkUpsert(const std::string& table, EDataFormat format,
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);
 

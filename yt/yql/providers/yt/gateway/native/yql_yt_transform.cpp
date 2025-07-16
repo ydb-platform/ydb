@@ -85,7 +85,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                 YQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
 
                 const TString cluster = ExecCtx_.Cluster_;
-                const TString tmpFolder = GetTablesTmpFolder(*Settings_);
+                const TString tmpFolder = GetTablesTmpFolder(*Settings_, cluster);
                 TTransactionCache::TEntry::TPtr entry = ExecCtx_.GetEntry();
                 auto tx = entry->Tx;
 
@@ -96,7 +96,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                 TVector<NYT::TRichYPath> richPaths;
                 for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
                     TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
-                    YQL_ENSURE(tuple->GetValuesCount() == 7, "Expect 7 elements in the Tuple item");
+                    YQL_ENSURE(tuple->GetValuesCount() == 8, "Expect 8 elements in the Tuple item");
 
                     NYT::TRichYPath richYPath;
                     NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
@@ -113,6 +113,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                 bool useSkiff = !useBlocks && Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
                 const bool ensureOldTypesOnly = !useSkiff;
                 const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
+                const ui64 localDataSizeLimit = Settings_->_LocalTableContentLimit.Get().GetOrElse(DEFAULT_LOCAL_TABLE_CONTENT_LIMIT);
                 TString contentTmpFolder = ForceLocalTableContent_ ? TString() : Settings_->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
                 if (contentTmpFolder.StartsWith("//")) {
                     contentTmpFolder = contentTmpFolder.substr(2);
@@ -143,9 +144,10 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                     }
                 }
 
+                ui64 totalDataSize = 0;
                 for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
                     TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
-                    YQL_ENSURE(tuple->GetValuesCount() == 7, "Expect 7 elements in the Tuple item");
+                    YQL_ENSURE(tuple->GetValuesCount() == 8, "Expect 8 elements in the Tuple item");
 
                     TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
                     TString specStr = TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef());
@@ -196,6 +198,14 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                         YQL_CLOG(DEBUG, ProviderYt) << "Switching to file delivery mode, because table "
                             << tablePath.Quote() << " has too many chunks: " << chunkCount;
                     }
+
+                    totalDataSize += AS_VALUE(TDataLiteral, tuple->GetValue(7))->AsValue().Get<ui64>();
+                }
+
+                const bool localTableContent = ETableContentDeliveryMode::File == deliveryMode && !contentTmpFolder;
+                if (localTableContent && totalDataSize > localDataSizeLimit) {
+                    YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                        << "Tables are too big for local table content";
                 }
 
                 for (size_t i = 0; i < richPaths.size(); ++i) {
@@ -470,7 +480,7 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
         opts.BypassArtifactCache(file.second.BypassArtifactCache);
         spec.AddLocalFile(file.first, opts);
     }
-    const TString binTmpFolder = Settings_->BinaryTmpFolder.Get().GetOrElse(TString());
+    const TString binTmpFolder = Settings_->BinaryTmpFolder.Get(ExecCtx_.Cluster_).GetOrElse(TString());
     const TString binCacheFolder = Settings_->_BinaryCacheFolder.Get(ExecCtx_.Cluster_).GetOrElse(TString());
     if (!localRun && binCacheFolder) {
         auto udfFiles = std::move(*DeferredUdfFiles_);

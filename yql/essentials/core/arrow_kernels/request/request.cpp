@@ -9,10 +9,11 @@ namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
 
-TKernelRequestBuilder::TKernelRequestBuilder(const IFunctionRegistry& functionRegistry)
-    : Alloc_(__LOCATION__)
+TKernelRequestBuilder::TKernelRequestBuilder(const IFunctionRegistry& functionRegistry, TLangVersion langver)
+    : Langver_(langver)
+    , Alloc_(__LOCATION__)
     , Env_(Alloc_)
-    , Pb_(Env_, functionRegistry)
+    , Pb_(Env_, functionRegistry, false, Langver_)
 {
     Alloc_.Release();
 }
@@ -104,6 +105,21 @@ ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const T
         Pb_.NewTupleType(inputTypes),
         Pb_.NewEmptyStructType(),
         Pb_.NewEmptyTupleType()});
+
+    if (!isPolymorphic) {
+        // find scalar func too
+        std::vector<TType*> scalarInputTypes;
+        for (const auto& t : inputTypes) {
+            scalarInputTypes.push_back(AS_TYPE(TBlockType, t)->GetItemType());
+        }
+
+        const auto scalarUserType = Pb_.NewTupleType({
+            Pb_.NewTupleType(scalarInputTypes),
+            Pb_.NewEmptyStructType(),
+            Pb_.NewEmptyTupleType()});
+
+        Pb_.Udf(name, Pb_.NewVoid(), scalarUserType);
+    }
 
     auto udf = Pb_.Udf(isPolymorphic ? name : (name + "_BlocksImpl"), Pb_.NewVoid(), userType);
     TRuntimeNode::TList args;
@@ -229,7 +245,7 @@ TString TKernelRequestBuilder::Serialize() {
     const auto kernelTuple = Items_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(Items_);
     const auto argsTuple = ArgsItems_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(ArgsItems_);
     const auto tuple = Pb_.BlockAsTuple( { argsTuple, kernelTuple });
-    return SerializeRuntimeNode(tuple, Env_);
+    return SerializeRuntimeNode(tuple, Env_.GetNodeStack());
 }
 
 TRuntimeNode TKernelRequestBuilder::MakeArg(const TTypeAnnotationNode* type) {

@@ -27,7 +27,6 @@
 
 AWS_STATIC_STRING_FROM_LITERAL(s_ecs_creds_env_relative_uri, "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI");
 AWS_STATIC_STRING_FROM_LITERAL(s_ecs_creds_env_full_uri, "AWS_CONTAINER_CREDENTIALS_FULL_URI");
-AWS_STATIC_STRING_FROM_LITERAL(s_ecs_creds_env_token, "AWS_CONTAINER_AUTHORIZATION_TOKEN");
 AWS_STATIC_STRING_FROM_LITERAL(s_ecs_host, "169.254.170.2");
 AWS_STATIC_STRING_FROM_LITERAL(s_ec2_creds_env_disable, "AWS_EC2_METADATA_DISABLED");
 
@@ -41,27 +40,18 @@ static struct aws_credentials_provider *s_aws_credentials_provider_new_ecs_or_im
     struct aws_client_bootstrap *bootstrap,
     struct aws_tls_ctx *tls_ctx) {
 
-    struct aws_byte_cursor auth_token_cursor;
-    AWS_ZERO_STRUCT(auth_token_cursor);
-
     struct aws_credentials_provider *ecs_or_imds_provider = NULL;
     struct aws_string *ecs_relative_uri = NULL;
     struct aws_string *ecs_full_uri = NULL;
     struct aws_string *ec2_imds_disable = NULL;
-    struct aws_string *ecs_token = NULL;
 
     if (aws_get_environment_value(allocator, s_ecs_creds_env_relative_uri, &ecs_relative_uri) != AWS_OP_SUCCESS ||
         aws_get_environment_value(allocator, s_ecs_creds_env_full_uri, &ecs_full_uri) != AWS_OP_SUCCESS ||
-        aws_get_environment_value(allocator, s_ec2_creds_env_disable, &ec2_imds_disable) != AWS_OP_SUCCESS ||
-        aws_get_environment_value(allocator, s_ecs_creds_env_token, &ecs_token) != AWS_OP_SUCCESS) {
+        aws_get_environment_value(allocator, s_ec2_creds_env_disable, &ec2_imds_disable) != AWS_OP_SUCCESS) {
         AWS_LOGF_ERROR(
             AWS_LS_AUTH_CREDENTIALS_PROVIDER,
             "Failed reading environment variables during default credentials provider chain initialization.");
         goto clean_up;
-    }
-
-    if (ecs_token && ecs_token->len) {
-        auth_token_cursor = aws_byte_cursor_from_string(ecs_token);
     }
 
     /*
@@ -69,13 +59,16 @@ static struct aws_credentials_provider *s_aws_credentials_provider_new_ecs_or_im
      * to try and use the ecs provider anywhere outside the default chain.
      */
     if (ecs_relative_uri && ecs_relative_uri->len) {
+        AWS_LOGF_INFO(
+            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+            "default chain: ECS credentials provider with relative URI %s will be used to retrieve credentials",
+            aws_string_c_str(ecs_relative_uri));
         struct aws_credentials_provider_ecs_options ecs_options = {
             .shutdown_options = *shutdown_options,
             .bootstrap = bootstrap,
             .host = aws_byte_cursor_from_string(s_ecs_host),
             .path_and_query = aws_byte_cursor_from_string(ecs_relative_uri),
             .tls_ctx = NULL,
-            .auth_token = auth_token_cursor,
         };
         ecs_or_imds_provider = aws_credentials_provider_new_ecs(allocator, &ecs_options);
 
@@ -83,22 +76,39 @@ static struct aws_credentials_provider *s_aws_credentials_provider_new_ecs_or_im
         struct aws_uri uri;
         struct aws_byte_cursor uri_cstr = aws_byte_cursor_from_string(ecs_full_uri);
         if (AWS_OP_ERR == aws_uri_init_parse(&uri, allocator, &uri_cstr)) {
+            AWS_LOGF_ERROR(
+                AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+                "default chain: failed to parse URI %s during default credentials provider chain initialization: %s",
+                aws_string_c_str(ecs_full_uri),
+                aws_error_str(aws_last_error()));
             goto clean_up;
+        }
+
+        AWS_LOGF_INFO(
+            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+            "default chain: ECS credentials provider with full URI %s will be used to retrieve credentials",
+            aws_string_c_str(ecs_full_uri));
+
+        struct aws_byte_cursor path_and_query = uri.path_and_query;
+        if (path_and_query.len == 0) {
+            path_and_query = aws_byte_cursor_from_c_str("/");
         }
 
         struct aws_credentials_provider_ecs_options ecs_options = {
             .shutdown_options = *shutdown_options,
             .bootstrap = bootstrap,
             .host = uri.host_name,
-            .path_and_query = uri.path_and_query,
+            .path_and_query = path_and_query,
             .tls_ctx = aws_byte_cursor_eq_c_str_ignore_case(&(uri.scheme), "HTTPS") ? tls_ctx : NULL,
-            .auth_token = auth_token_cursor,
             .port = uri.port,
         };
 
         ecs_or_imds_provider = aws_credentials_provider_new_ecs(allocator, &ecs_options);
         aws_uri_clean_up(&uri);
     } else if (ec2_imds_disable == NULL || aws_string_eq_c_str_ignore_case(ec2_imds_disable, "false")) {
+        AWS_LOGF_INFO(
+            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+            "default chain: IMDS credentials provider will be used to retrieve credentials");
         struct aws_credentials_provider_imds_options imds_options = {
             .shutdown_options = *shutdown_options,
             .bootstrap = bootstrap,
@@ -107,11 +117,15 @@ static struct aws_credentials_provider *s_aws_credentials_provider_new_ecs_or_im
     }
 
 clean_up:
+    if (ecs_or_imds_provider == NULL) {
+        AWS_LOGF_INFO(
+            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+            "default chain: neither ECS nor IMDS will be used to retrieve credentials");
+    }
 
     aws_string_destroy(ecs_relative_uri);
     aws_string_destroy(ecs_full_uri);
     aws_string_destroy(ec2_imds_disable);
-    aws_string_destroy(ecs_token);
 
     return ecs_or_imds_provider;
 }
@@ -273,6 +287,7 @@ struct aws_credentials_provider *aws_credentials_provider_new_chain_default(
     struct aws_tls_ctx *tls_ctx = NULL;
     struct aws_credentials_provider *environment_provider = NULL;
     struct aws_credentials_provider *profile_provider = NULL;
+    struct aws_credentials_provider *process_provider = NULL;
     struct aws_credentials_provider *sts_provider = NULL;
     struct aws_credentials_provider *ecs_or_imds_provider = NULL;
     struct aws_credentials_provider *chain_provider = NULL;
@@ -305,19 +320,23 @@ struct aws_credentials_provider *aws_credentials_provider_new_chain_default(
 #endif /* BYO_CRYPTO */
     }
 
-    enum { providers_size = 4 };
+    enum { providers_size = 5 };
     struct aws_credentials_provider *providers[providers_size];
     AWS_ZERO_ARRAY(providers);
     size_t index = 0;
 
-    struct aws_credentials_provider_environment_options environment_options;
-    AWS_ZERO_STRUCT(environment_options);
-    environment_provider = aws_credentials_provider_new_environment(allocator, &environment_options);
-    if (environment_provider == NULL) {
-        goto on_error;
+    /* Providers that touch fast local resources... */
+    if (!options->skip_environment_credentials_provider) {
+        struct aws_credentials_provider_environment_options environment_options;
+        AWS_ZERO_STRUCT(environment_options);
+        environment_provider = aws_credentials_provider_new_environment(allocator, &environment_options);
+        if (environment_provider == NULL) {
+            goto on_error;
+        }
+        providers[index++] = environment_provider;
     }
 
-    providers[index++] = environment_provider;
+    /* Providers that will make a network call only if the relevant configuration is present... */
 
     struct aws_credentials_provider_profile_options profile_options;
     AWS_ZERO_STRUCT(profile_options);
@@ -325,6 +344,7 @@ struct aws_credentials_provider *aws_credentials_provider_new_chain_default(
     profile_options.tls_ctx = tls_ctx;
     profile_options.shutdown_options = sub_provider_shutdown_options;
     profile_options.profile_collection_cached = options->profile_collection_cached;
+    profile_options.profile_name_override = options->profile_name_override;
     profile_provider = aws_credentials_provider_new_profile(allocator, &profile_options);
     if (profile_provider != NULL) {
         providers[index++] = profile_provider;
@@ -338,12 +358,27 @@ struct aws_credentials_provider *aws_credentials_provider_new_chain_default(
     sts_options.tls_ctx = tls_ctx;
     sts_options.shutdown_options = sub_provider_shutdown_options;
     sts_options.config_profile_collection_cached = options->profile_collection_cached;
+    sts_options.profile_name_override = options->profile_name_override;
     sts_provider = aws_credentials_provider_new_sts_web_identity(allocator, &sts_options);
     if (sts_provider != NULL) {
         providers[index++] = sts_provider;
         /* 1 shutdown call from the web identity provider's shutdown */
         aws_atomic_fetch_add(&impl->shutdowns_remaining, 1);
     }
+
+    struct aws_credentials_provider_process_options process_options;
+    AWS_ZERO_STRUCT(process_options);
+    process_options.shutdown_options = sub_provider_shutdown_options;
+    process_options.config_profile_collection_cached = options->profile_collection_cached;
+    process_options.profile_to_use = options->profile_name_override;
+    process_provider = aws_credentials_provider_new_process(allocator, &process_options);
+    if (process_provider != NULL) {
+        providers[index++] = process_provider;
+        /* 1 shutdown call from the process provider's shutdown */
+        aws_atomic_fetch_add(&impl->shutdowns_remaining, 1);
+    }
+
+    /* Providers that will always make a network call unless explicitly disabled... */
 
     ecs_or_imds_provider = s_aws_credentials_provider_new_ecs_or_imds(
         allocator, &sub_provider_shutdown_options, options->bootstrap, tls_ctx);
@@ -370,6 +405,7 @@ struct aws_credentials_provider *aws_credentials_provider_new_chain_default(
      */
     aws_credentials_provider_release(environment_provider);
     aws_credentials_provider_release(profile_provider);
+    aws_credentials_provider_release(process_provider);
     aws_credentials_provider_release(sts_provider);
     aws_credentials_provider_release(ecs_or_imds_provider);
 
@@ -411,6 +447,7 @@ on_error:
     } else {
         aws_credentials_provider_release(ecs_or_imds_provider);
         aws_credentials_provider_release(profile_provider);
+        aws_credentials_provider_release(process_provider);
         aws_credentials_provider_release(sts_provider);
         aws_credentials_provider_release(environment_provider);
     }

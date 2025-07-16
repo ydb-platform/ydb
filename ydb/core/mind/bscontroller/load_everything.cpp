@@ -2,6 +2,8 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
 #include <ydb/library/yaml_config/yaml_config.h>
 
 namespace NKikimr {
@@ -219,6 +221,10 @@ public:
                                                    groups.GetValueOrDefault<T::MainKeyVersion>(),
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
+                                                   groups.GetValueOrDefault<T::GroupSizeInUnits>(),
+                                                   groups.HaveValue<T::BridgePileId>()
+                                                       ? std::make_optional(groups.GetValue<T::BridgePileId>())
+                                                       : std::nullopt,
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
@@ -245,6 +251,10 @@ public:
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
                     Y_DEBUG_ABORT_UNLESS(success);
+                }
+
+                if (groups.HaveValue<T::BridgeGroupInfo>()) {
+                    group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
                 }
 
 #undef OPTIONAL
@@ -343,7 +353,8 @@ public:
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
                     disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
-                    disks.GetValueOrDefault<T::ShredComplete>());
+                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>(),
+                    disks.GetValueOrDefault<T::InferPDiskSlotCountFromUnitSize>());
 
                 if (!disks.Next())
                     return false;
@@ -514,6 +525,19 @@ public:
 
         THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
 
+        // fill in correct relations between bridged groups
+        for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
+            if (proxyGroup->BridgeGroupInfo) {
+                for (size_t i = 0; i < proxyGroup->BridgeGroupInfo->BridgeGroupIdsSize(); ++i) {
+                    auto *group = Self->FindGroup(TGroupId::FromValue(proxyGroup->BridgeGroupInfo->GetBridgeGroupIds(i)));
+                    Y_ABORT_UNLESS(group);
+                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromValue(i));
+                    Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
+                    group->BridgeProxyGroupId = proxyGroupId;
+                }
+            }
+        }
+
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
@@ -537,6 +561,42 @@ public:
         }
         for (const auto& key : vdiskMetricsToDelete) {
             db.Table<Schema::VDiskMetrics>().Key(key).Delete();
+        }
+
+        // issue all sys view updates just after the start
+        for (const auto& [pdiskId, _] : Self->PDisks) {
+            Self->SysViewChangedPDisks.insert(pdiskId);
+        }
+        for (const auto& [vdiskId, _] : Self->VSlots) {
+            Self->SysViewChangedVSlots.insert(vdiskId);
+        }
+        for (const auto& [groupId, _] : Self->GroupMap) {
+            Self->SysViewChangedGroups.insert(groupId);
+        }
+
+        // send notification to node warden about new groups
+        {
+            NKikimrBlobStorage::TCacheUpdate m;
+            for (const auto& [groupId, groupInfo] : Self->GroupMap) {
+                auto *kvp = m.AddKeyValuePairs();
+                kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
+                kvp->SetGeneration(groupInfo->Generation);
+
+                TMaybe<TKikimrScopeId> scopeId;
+                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
+                if (info.SchemeshardId && info.PathItemId) {
+                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
+                } else {
+                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
+                }
+
+                NKikimrBlobStorage::TGroupInfo proto;
+                SerializeGroupInfo(&proto, *groupInfo, info.Name, scopeId);
+                const bool success = proto.SerializeToString(kvp->MutableValue());
+                Y_DEBUG_ABORT_UNLESS(success);
+            }
+            const auto& selfId = Self->SelfId();
+            selfId.Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), new NStorage::TEvNodeWardenUpdateCache(std::move(m)));
         }
 
         return true;

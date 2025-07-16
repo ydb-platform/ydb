@@ -210,8 +210,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (columns1Remove.empty() && portions0.empty()) {
         return tasks;
     }
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return tasks;
+    }
 
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     {
         std::vector<TPatchItemRemoveV1> package;

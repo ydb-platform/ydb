@@ -185,7 +185,7 @@ protected:
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> UnorderedOverStageInput(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqUnorderedOverStageInput(node, ctx, optCtx, *Types, *getParents(), IsGlobal);
+        return DqUnorderedOverStageInput(node, ctx, optCtx, *GetTypes(), *getParents(), IsGlobal);
     }
 
 
@@ -313,6 +313,7 @@ protected:
         TExprNode::TPtr ttl;
         TExprNode::TPtr maxCachedRows;
         TExprNode::TPtr maxDelayedRows;
+        TExprNode::TPtr isMultiget;
         if (const auto maybeOptions = join.JoinAlgoOptions()) {
             for (auto&& option: maybeOptions.Cast()) {
                 auto&& name = option.Name().Value();
@@ -322,6 +323,8 @@ protected:
                     maxCachedRows = option.Value().Cast().Ptr();
                 } else if (name == "MaxDelayedRows"sv) {
                     maxDelayedRows = option.Value().Cast().Ptr();
+                } else if (name == "MultiGet"sv) {
+                    isMultiget = option.Value().Cast().Ptr();
                 }
             }
         }
@@ -352,8 +355,11 @@ protected:
             .RightJoinKeyNames(join.RightJoinKeyNames())
             .TTL(ttl)
             .MaxCachedRows(maxCachedRows)
-            .MaxDelayedRows(maxDelayedRows)
-        .Done();
+            .MaxDelayedRows(maxDelayedRows);
+
+        if (isMultiget) {
+            cn.IsMultiget(isMultiget);
+        }
 
         auto lambda = Build<TCoLambda>(ctx, pos)
             .Args({"stream"})
@@ -361,7 +367,7 @@ protected:
             .Done();
         const auto stage = Build<TDqStage>(ctx, pos)
             .Inputs()
-                .Add(cn)
+                .Add(cn.Done())
                 .Build()
             .Program(lambda)
             .Settings(TDqStageSettings().BuildNode(ctx, pos))

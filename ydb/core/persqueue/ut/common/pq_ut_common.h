@@ -260,6 +260,7 @@ struct TTabletPreparationParameters {
     TString databasePath{"/Root/PQ"};
     TString account{"federationAccount"};
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
+    bool enableCompactificationByKey{false};
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
@@ -449,11 +450,12 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui32 MaxTimeLagMs = 0;
     ui32 ReadTimestampMs = 0;
     ui64 DirectReadId = 0;
+    i64 LastOffset = 0;
     TActorId Pipe;
     TPQCmdReadSettings() = default;
     TPQCmdReadSettings(const TString& session, ui32 partition, i64 offset, ui32 count, ui32 size, ui32 resCount, bool timeout = false,
                        TVector<i32> offsets = {}, const ui32 maxTimeLagMs = 0, const ui64 readTimestampMs = 0,
-                       const TString user = "user")
+                       const TString user = "user", const i64 lastOffset = 0)
 
         : TPQCmdSettingsBase{partition, user, session, 0, offset, false}
         , Count(count)
@@ -463,6 +465,7 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
         , Offsets (offsets)
         , MaxTimeLagMs(maxTimeLagMs)
         , ReadTimestampMs(readTimestampMs)
+        , LastOffset(lastOffset)
     {}
 };
 

@@ -121,10 +121,11 @@ public:
         const NApi::TGetTabletErrorsOptions& options) override;
 
     TFuture<std::vector<NTabletClient::TTabletActionId>> BalanceTabletCells(
-        const TString& tabletCellBundle,
+        const std::string& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const NApi::TBalanceTabletCellsOptions& options) override;
 
+    // Chaos.
     TFuture<NChaosClient::TReplicationCardPtr> GetReplicationCard(
         NChaosClient::TReplicationCardId replicationCardId,
         const TGetReplicationCardOptions& options = {}) override;
@@ -136,6 +137,13 @@ public:
     TFuture<void> AlterReplicationCard(
         NChaosClient::TReplicationCardId replicationCardId,
         const TAlterReplicationCardOptions& options = {}) override;
+
+    TFuture<NApi::IPrerequisitePtr> AttachChaosLease(
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options = {}) override;
+
+    TFuture<NApi::IPrerequisitePtr> StartChaosLease(
+        const TChaosLeaseStartOptions& options = {}) override;
 
     // Distributed table client
     TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
@@ -197,14 +205,17 @@ public:
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.
+    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
+        const TGetCurrentUserOptions& options) override;
+
     TFuture<void> AddMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const NApi::TAddMemberOptions& options) override;
 
     TFuture<void> RemoveMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const NApi::TRemoveMemberOptions& options) override;
 
     TFuture<TCheckPermissionResponse> CheckPermission(
@@ -220,8 +231,8 @@ public:
         const NApi::TCheckPermissionByAclOptions& options) override;
 
     TFuture<void> TransferAccountResources(
-        const TString& srcAccount,
-        const TString& dstAccount,
+        const std::string& srcAccount,
+        const std::string& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options) override;
 
@@ -299,6 +310,10 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobFailContextOptions& options) override;
+
+    TFuture<std::vector<TOperationEvent>> ListOperationEvents(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options) override;
 
     TFuture<NApi::TListOperationsResult> ListOperations(
         const NApi::TListOperationsOptions& options) override;
@@ -540,11 +555,11 @@ public:
     // Bundle Controller
 
     TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> GetBundleConfig(
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options = {}) override;
 
     TFuture<void> SetBundleConfig(
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
 
@@ -596,35 +611,37 @@ public:
         const TFlowExecuteOptions& options = {}) override;
 
     // Shuffle service client
-    TFuture<TShuffleHandlePtr> StartShuffle(
+    TFuture<TSignedShuffleHandlePtr> StartShuffle(
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) override;
 
     TFuture<IRowBatchReaderPtr> CreateShuffleReader(
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        const NTableClient::TTableReaderConfigPtr& config) override;
+        std::optional<std::pair<int, int>> writerIndexRange,
+        const TShuffleReaderOptions& options) override;
 
     TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        const NTableClient::TTableWriterConfigPtr& config) override;
+        std::optional<int> writerIndex,
+        const TShuffleWriterOptions& options) override;
 
 private:
     const TConnectionPtr Connection_;
+    const TClientOptions ClientOptions_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;
     const NRpc::IChannelPtr RetryingChannel_;
-    const TClientOptions ClientOptions_;
 
     TLazyIntrusivePtr<NTabletClient::ITableMountCache> TableMountCache_;
 
     TLazyIntrusivePtr<NTransactionClient::ITimestampProvider> TimestampProvider_;
-
     NTransactionClient::ITimestampProviderPtr CreateTimestampProvider() const;
 
-    NRpc::IChannelPtr CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
+    NRpc::IChannelPtr MaybeCreateRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
+
     // Returns an RPC channel to use for API calls to the particular address (e.g.: AttachTransaction).
     // The channel is non-retrying, so should be wrapped into retrying channel on demand.
     NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const std::string& address) const;
@@ -635,6 +652,7 @@ private:
     NRpc::IChannelPtr GetRetryingChannel() const override;
     NRpc::IChannelPtr CreateNonRetryingStickyChannel() const override;
     NRpc::IChannelPtr WrapStickyChannelIntoRetrying(NRpc::IChannelPtr underlying) const override;
+    NRpc::IChannelPtr WrapNonRetryingChannel(NRpc::IChannelPtr underyling) const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClient)

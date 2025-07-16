@@ -50,8 +50,6 @@ TRACE_FILE_NAME = "ytest.report.trace"
 TRUNCATING_IGNORE_FILE_LIST = {TRACE_FILE_NAME, SUITE_CONTEXT_FILE_NAME, "run_test.log"}
 YT_RUN_TEST_DIR_NAME = "yt_run_test"
 YT_RUN_TEST_TAR_NAME = "yt_run_test.tar"
-COVERAGE_CFLAGS = ["-fprofile-instr-generate", "-fcoverage-mapping", "-DCLANG_COVERAGE"]
-COVERAGE_LDFLAGS = ["-fprofile-instr-generate", "-fcoverage-mapping"]
 
 CANON_BACKEND_KEY = "{canondata_backend}"
 DEFAULT_CANONIZATION_BACKEND = "storage.yandex-team.ru/get-devtools"
@@ -438,8 +436,9 @@ class ServiceTags(Enum):
     AnyTag = "ya:anytag"
 
 
-# NOTE: Linter constants are used in ya style, ya ide, config validator check (devtools/ya/handlers/style/config_validator).
-# ya and validator have different release cycles, make sure you preserve compatibility:
+# NOTE: Linter constants are used in ya style, ya ide, config validator check
+# (devtools/ya/handlers/style/config_validator, devtools/pr_checks/checker).
+# ya and pr_checks have different release cycles, make sure you preserve compatibility:
 # - don't delete anything from here until you get rid of all usages and roll out the changes;
 # - keep in mind that changes of constants used in multiple tools may get to production at different times;
 
@@ -607,8 +606,8 @@ Highlight = _Highlight()
 
 
 class _StatusColorMap(object):
-    # There should be no XFAILDIFF, because it's internal status.
-    # It should be replaced with XFAIL or XPASS during verification of canon data.
+    # XFAILDIFF is internal status and should be replaced
+    # with XFAIL or XPASS during verification stage of canon data
 
     _MAP = {
         'crashed': Highlight.WARNING,
@@ -623,6 +622,7 @@ class _StatusColorMap(object):
         'skipped': Highlight.UNIMPORTANT,
         'timeout': Highlight.BAD,
         'xfail': Highlight.WARNING,
+        'xfaildiff': Highlight.WARNING,
         'xpass': Highlight.WARNING,
     }
 

@@ -332,7 +332,7 @@ namespace NLWTrace {
     bool TEditLogShuttleActionExecutor<TDepot>::DoExecute(TOrbit& orbit, const TParams& params) {
         Y_UNUSED(params);
         bool ignore = Action.GetIgnore();
-        orbit.ForEachShuttle(this->GetTraceIdx(), [=](IShuttle* shuttle) {
+        orbit.ForEachShuttle(this->GetTraceIdx(), [=, this](IShuttle* shuttle) {
             this->Cast(shuttle)->SetIgnore(ignore);
             return true;
         });

@@ -261,7 +261,7 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
     TKafkaWritable writable(buf);
     writable << ASSIGNMENT_VERSION;
     assignment.Write(writable, ASSIGNMENT_VERSION);
-    response->AssignmentStr = TString(buf.GetBuffer().data(), buf.GetBuffer().size());
+    response->AssignmentStr = TString(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
     response->Assignment = response->AssignmentStr;
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
@@ -389,6 +389,7 @@ void TKafkaReadSessionActor::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metada
         if (topic.has_value()) {
             auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
             OriginalTopicNames[normalizedTopicName] = topic.value();
+            OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
             topics.emplace(normalizedTopicName);
             KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);
         }
@@ -442,7 +443,7 @@ void TKafkaReadSessionActor::ProcessBalancerDead(ui64 tabletId, const TActorCont
 void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
 
     auto topicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-        AppData(ctx)->PQConfig, ""
+        true, "", ""
     );
     auto topicHandler = std::make_unique<NPersQueue::TTopicsListController>(
         topicConverterFactory
@@ -475,7 +476,7 @@ void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthRes
 
     for (const auto& [name, t] : ev->Get()->TopicAndTablets) {
         auto internalName = t.TopicNameConverter->GetInternalName();
-        TopicsInfo[internalName] = NGRpcProxy::TTopicHolder::FromTopicInfo(t);
+        TopicsInfo[internalName] = NKikimr::NGRpcProxy::TTopicHolder(t);
         FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
         FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
     }

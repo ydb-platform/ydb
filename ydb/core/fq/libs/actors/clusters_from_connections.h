@@ -10,7 +10,7 @@ NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name, bool useBearer
 
 NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name, const TString& authToken, const TString& objectStorageEndpoint, const TString& accountSignature, const FederatedQuery::ObjectStorageConnection& s3);
 
-NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name, const TString& authToken, const TString& endpoint, const TString& accountSignature, const FederatedQuery::Monitoring& monitoring);
+NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name, const TString& authToken, const TString& monitoringEndpoint, const TString& accountSignature, const FederatedQuery::Monitoring& monitoring);
 
 void AddClustersFromConnections(const NConfig::TCommonConfig& common,
     const THashMap<TString, FederatedQuery::Connection>& connections,

@@ -1,0 +1,876 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     Zlib                 0b2c2142ae5163b2338d3444a664a4d2
+BELONGS ya.make
+FILE_IGNORE simd/nasm/jsimdext.inc found in files: simd/arm/aarch32/jsimd.c at line 13, simd/arm/aarch64/jsimd.c at line 13, simd/i386/jsimd.c at line 10, simd/jsimd.h at line 14, simd/x86_64/jsimd.c at line 10, src/jsimd.h at line 11, src/jsimddct.h at line 8
+    License text:
+         * For conditions of distribution and use, see copyright notice in jsimdext.inc
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        simd/arm/aarch32/jsimd.c [13:13]
+        simd/arm/aarch64/jsimd.c [13:13]
+        simd/i386/jsimd.c [10:10]
+        simd/jsimd.h [14:14]
+        simd/x86_64/jsimd.c [10:10]
+        src/jsimd.h [11:11]
+        src/jsimddct.h [8:8]
+
+KEEP     BSD-3-Clause         11d698b5bde51c49edd95b88f640964c
+BELONGS ya.make
+    License text:
+        libjpeg-turbo is covered by three compatible BSD-style open source licenses.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [49:49]
+
+KEEP     Zlib                 1661ad60dffa54137d6416dfd7689e04
+BELONGS ya.make
+    License text:
+                - Clause 2 of the zlib License
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.md [50:50]
+
+KEEP     BSD-3-Clause         215800e23d49e25c39ec19c06b3a4b7e
+BELONGS ya.make
+    License text:
+        - The Modified (3-clause) BSD License, which is listed below
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [16:16]
+
+KEEP     BSD-3-Clause         23f26458908411db285fd7e9618d0400
+BELONGS ya.make
+    License text:
+                - Clause 1 of the Modified BSD License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [40:40]
+
+KEEP     BSD-3-Clause         2795fc0c0a7bc60174daf8e80fd02db8
+BELONGS ya.make
+    License text:
+            - IJG License
+            - Modified BSD License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 16.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [89:90]
+
+KEEP     Zlib                 370cc1c89505a373c6d4b6dcaa01930f
+BELONGS ya.make
+    License text:
+          the overall libjpeg API library, the terms of the zlib License are subsumed
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.md [13:13]
+
+KEEP     BSD-3-Clause AND BSD-3-Clause 4694a148911c95fc84a45824e7b3c243
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/tjutil.h [4:26]
+        src/turbojpeg-mp.c [4:26]
+        src/turbojpeg.c [5:27]
+        src/turbojpeg.h [5:27]
+
+KEEP     Zlib                 49b2005eb74289158192a07e3d97f167
+BELONGS ya.make
+    License text:
+                - Clauses 1 and 3 of the zlib License
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.md [41:41]
+
+KEEP     IJG                  49f21ef3a9ec8414db54cb3989614ee3
+BELONGS ya.make
+    License text:
+         * This file was part of the Independent JPEG Group's software:
+    Scancode info:
+        Original SPDX id: IJG
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://fedoraproject.org/wiki/Licensing/IJG, https://spdx.org/licenses/IJG
+    Files with this license:
+        jversion.h [4:4]
+        simd/arm/jchuff.h [4:4]
+        src/cderror.h [4:4]
+        src/cdjpeg.c [4:4]
+        src/cdjpeg.h [4:4]
+        src/cjpeg.c [4:4]
+        src/djpeg.c [4:4]
+        src/jaricom.c [4:4]
+        src/jcapimin.c [4:4]
+        src/jcapistd.c [4:4]
+        src/jcarith.c [4:4]
+        src/jccoefct.c [4:4]
+        src/jccolext.c [4:4]
+        src/jccolor.c [4:4]
+        src/jcdctmgr.c [4:4]
+        src/jcdiffct.c [4:4]
+        src/jchuff.c [4:4]
+        src/jchuff.h [4:4]
+        src/jcinit.c [4:4]
+        src/jclhuff.c [4:4]
+        src/jclossls.c [4:4]
+        src/jcmainct.c [4:4]
+        src/jcmarker.c [4:4]
+        src/jcmaster.c [4:4]
+        src/jcmaster.h [4:4]
+        src/jcomapi.c [4:4]
+        src/jcparam.c [4:4]
+        src/jcphuff.c [4:4]
+        src/jcprepct.c [4:4]
+        src/jcsample.c [4:4]
+        src/jctrans.c [4:4]
+        src/jdapimin.c [4:4]
+        src/jdapistd.c [4:4]
+        src/jdarith.c [4:4]
+        src/jdatadst-tj.c [4:4]
+        src/jdatadst.c [4:4]
+        src/jdatasrc-tj.c [4:4]
+        src/jdatasrc.c [4:4]
+        src/jdcoefct.c [4:4]
+        src/jdcoefct.h [4:4]
+        src/jdcol565.c [4:4]
+        src/jdcolext.c [4:4]
+        src/jdcolor.c [4:4]
+        src/jdct.h [4:4]
+        src/jddctmgr.c [4:4]
+        src/jddiffct.c [4:4]
+        src/jdhuff.c [4:4]
+        src/jdhuff.h [4:4]
+        src/jdinput.c [4:4]
+        src/jdlhuff.c [4:4]
+        src/jdlossls.c [4:4]
+        src/jdmainct.c [4:4]
+        src/jdmainct.h [4:4]
+        src/jdmarker.c [4:4]
+        src/jdmaster.c [4:4]
+        src/jdmaster.h [4:4]
+        src/jdmerge.c [4:4]
+        src/jdmerge.h [4:4]
+        src/jdmrg565.c [4:4]
+        src/jdmrgext.c [4:4]
+        src/jdphuff.c [4:4]
+        src/jdpostct.c [4:4]
+        src/jdsample.c [4:4]
+        src/jdsample.h [4:4]
+        src/jdtrans.c [4:4]
+        src/jerror.c [4:4]
+        src/jerror.h [4:4]
+        src/jfdctfst.c [4:4]
+        src/jfdctint.c [4:4]
+        src/jidctflt.c [4:4]
+        src/jidctfst.c [4:4]
+        src/jidctint.c [4:4]
+        src/jidctred.c [4:4]
+        src/jinclude.h [4:4]
+        src/jlossls.h [4:4]
+        src/jmemmgr.c [4:4]
+        src/jmemnobs.c [4:4]
+        src/jmemsys.h [4:4]
+        src/jmorecfg.h [4:4]
+        src/jpegint.h [4:4]
+        src/jpeglib.h [4:4]
+        src/jpegtran.c [4:4]
+        src/jquant1.c [4:4]
+        src/jquant2.c [4:4]
+        src/jstdhuff.c [4:4]
+        src/jutils.c [4:4]
+        src/rdbmp.c [4:4]
+        src/rdcolmap.c [4:4]
+        src/rdgif.c [4:4]
+        src/rdppm.c [4:4]
+        src/rdswitch.c [4:4]
+        src/rdtarga.c [4:4]
+        src/transupp.c [4:4]
+        src/transupp.h [4:4]
+        src/wrbmp.c [4:4]
+        src/wrgif.c [4:4]
+        src/wrppm.c [4:4]
+        src/wrtarga.c [4:4]
+
+KEEP     Zlib                 5627c2f3c456186103c1295c24b27409
+BELONGS ya.make
+    License text:
+        conditions of the zlib License, this would have effectively placed
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.md [130:130]
+
+KEEP     BSD-3-Clause         67ada8383dd2efffa1e47a6970948655
+BELONGS ya.make
+    License text:
+                - Clause 2 of the Modified BSD License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [75:75]
+
+KEEP     BSD-3-Clause         738e8e69237a0b8ae0317e73ee006be2
+BELONGS ya.make
+    License text:
+        libjpeg-turbo is covered by two compatible BSD-style open source licenses:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [4:4]
+
+KEEP     Zlib                 758530b81bedb384e1d293db2dc592cf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        simd/nasm/jsimdext.inc [14:28]
+
+KEEP     BSD-3-Clause         78ca2039132b440c1f7a5473212df4e3
+BELONGS ya.make
+    License text:
+          both the terms of the IJG License and the terms of the Modified (3-clause)
+          BSD License apply.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [21:22]
+
+KEEP     IJG                  7aecae112681f0e63e5d5f9a9342893a
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jfdctflt.c at line 6
+    License text:
+         * This file is part of the Independent JPEG Group's software.
+         * For conditions of distribution and use, see the accompanying README.ijg
+    Scancode info:
+        Original SPDX id: IJG
+        Score           : 95.24
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing/IJG, https://spdx.org/licenses/IJG
+    Files with this license:
+        src/jfdctflt.c [5:6]
+
+KEEP     IJG                  7e97c9e006fbb17d004858a2472e48cd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: IJG
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing/IJG, https://spdx.org/licenses/IJG
+    Files with this license:
+        README.ijg [114:124]
+
+KEEP     BSD-3-Clause         8cfc9281adee4768f2232b6e22a82a6d
+BELONGS ya.make
+    License text:
+        The Modified (3-clause) BSD License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [94:94]
+
+KEEP     BSD-3-Clause         9778dab78425d5cabd719681a55257aa
+BELONGS ya.make
+    License text:
+        The zlib License could have been used instead of the Modified (3-clause) BSD
+        License, and since the IJG License effectively subsumes the distribution
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [128:129]
+
+KEEP     BSD-3-Clause         98d00c840630f45af91f7f4204a1191c
+BELONGS ya.make
+    License text:
+            - Clause 3 of the Modified BSD License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [82:82]
+
+SKIP     Unknown              9ceeef4406e152a852bacc703754696c
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: jversion.h at line 8, simd/arm/jchuff.h at line 10, src/cderror.h at line 9, src/cdjpeg.c at line 8, src/cdjpeg.h at line 9, src/cjpeg.c at line 12, src/cmyk.h at line 5, src/djpeg.c at line 10, src/jaricom.c at line 8, src/jcapimin.c at line 9, src/jcapistd.c at line 8, src/jcarith.c at line 8, src/jccoefct.c at line 8, src/jccolext.c at line 8, src/jccolor.c at line 10, src/jcdctmgr.c at line 10, src/jcdiffct.c at line 10, src/jchuff.c at line 14, src/jchuff.h at line 8, src/jcicc.c at line 6, src/jcinit.c at line 10, src/jclhuff.c at line 10, src/jclossls.c at line 10, src/jcmainct.c at line 10, src/jcmarker.c at line 11, src/jcmaster.c at line 11, src/jcmaster.h at line 8, src/jcomapi.c at line 8, src/jcparam.c at line 11, src/jcphuff.c at line 13, src/jcprepct.c at line 10, src/jcsample.c at line 12, src/jctrans.c at line 9, src/jdapimin.c at line 10, src/jdapistd.c at line 9, src/jdarith.c at line 8, src/jdatadst-tj.c at line 9, src/jdatadst.c at line 9, src/jdatasrc-tj.c at line 9, src/jdatasrc.c at line 9, src/jdcoefct.c at line 10, src/jdcoefct.h at line 10, src/jdcol565.c at line 9, src/jdcolext.c at line 8, src/jdcolor.c at line 11, src/jdct.h at line 8, src/jddctmgr.c at line 11, src/jddiffct.c at line 10, src/jdhuff.c at line 11, src/jdhuff.h at line 11, src/jdicc.c at line 6, src/jdinput.c at line 11, src/jdlhuff.c at line 10, src/jdlossls.c at line 10, src/jdmainct.c at line 8, src/jdmainct.h at line 8, src/jdmarker.c at line 10, src/jdmaster.c at line 13, src/jdmaster.h at line 6, src/jdmerge.c at line 10, src/jdmerge.h at line 8, src/jdmrg565.c at line 9, src/jdmrgext.c at line 8, src/jdphuff.c at line 10, src/jdpostct.c at line 8, src/jdsample.c at line 12, src/jdsample.h at line 8, src/jdtrans.c at line 8, src/jerror.c at line 8, src/jerror.h at line 11, src/jfdctfst.c at line 8, src/jfdctint.c at line 8, src/jidctflt.c at line 9, src/jidctfst.c at line 8, src/jidctint.c at line 9, src/jidctred.c at line 8, src/jinclude.h at line 8, src/jlossls.h at line 10, src/jmemmgr.c at line 8, src/jmemnobs.c at line 8, src/jmemsys.h at line 8, src/jmorecfg.h at line 11, src/jpeg_nbits.c at line 4, src/jpeg_nbits.h at line 6, src/jpegapicomp.h at line 5, src/jpegint.h at line 13, src/jpeglib.h at line 13, src/jpegtran.c at line 8, src/jquant1.c at line 8, src/jquant2.c at line 8, src/jsamplecomp.h at line 5, src/jstdhuff.c at line 8, src/jutils.c at line 8, src/rdbmp.c at line 10, src/rdswitch.c at line 8, src/rdtarga.c at line 9, src/transupp.c at line 8, src/transupp.h at line 8, src/wrapper/jcapistd-12.c at line 5, src/wrapper/jcapistd-16.c at line 5, src/wrapper/jcapistd-8.c at line 5, src/wrapper/jccoefct-12.c at line 5, src/wrapper/jccoefct-8.c at line 5, src/wrapper/jccolor-12.c at line 5, src/wrapper/jccolor-16.c at line 5, src/wrapper/jccolor-8.c at line 5, src/wrapper/jcdctmgr-12.c at line 5, src/wrapper/jcdctmgr-8.c at line 5, src/wrapper/jcdiffct-12.c at line 5, src/wrapper/jcdiffct-16.c at line 5, src/wrapper/jcdiffct-8.c at line 5, src/wrapper/jclossls-12.c at line 5, src/wrapper/jclossls-16.c at line 5, src/wrapper/jclossls-8.c at line 5, src/wrapper/jcmainct-12.c at line 5, src/wrapper/jcmainct-16.c at line 5, src/wrapper/jcmainct-8.c at line 5, src/wrapper/jcprepct-12.c at line 5, src/wrapper/jcprepct-16.c at line 5, src/wrapper/jcprepct-8.c at line 5, src/wrapper/jcsample-12.c at line 5, src/wrapper/jcsample-16.c at line 5, src/wrapper/jcsample-8.c at line 5, src/wrapper/jdapistd-12.c at line 5, src/wrapper/jdapistd-16.c at line 5, src/wrapper/jdapistd-8.c at line 5, src/wrapper/jdcoefct-12.c at line 5, src/wrapper/jdcoefct-8.c at line 5, src/wrapper/jdcolor-12.c at line 5, src/wrapper/jdcolor-16.c at line 5, src/wrapper/jdcolor-8.c at line 5, src/wrapper/jddctmgr-12.c at line 5, src/wrapper/jddctmgr-8.c at line 5, src/wrapper/jddiffct-12.c at line 5, src/wrapper/jddiffct-16.c at line 5, src/wrapper/jddiffct-8.c at line 5, src/wrapper/jdlossls-12.c at line 5, src/wrapper/jdlossls-16.c at line 5, src/wrapper/jdlossls-8.c at line 5, src/wrapper/jdmainct-12.c at line 5, src/wrapper/jdmainct-16.c at line 5, src/wrapper/jdmainct-8.c at line 5, src/wrapper/jdmerge-12.c at line 5, src/wrapper/jdmerge-8.c at line 5, src/wrapper/jdpostct-12.c at line 5, src/wrapper/jdpostct-16.c at line 5, src/wrapper/jdpostct-8.c at line 5, src/wrapper/jdsample-12.c at line 5, src/wrapper/jdsample-16.c at line 5, src/wrapper/jdsample-8.c at line 5, src/wrapper/jfdctfst-12.c at line 5, src/wrapper/jfdctfst-8.c at line 5, src/wrapper/jfdctint-12.c at line 5, src/wrapper/jfdctint-8.c at line 5, src/wrapper/jidctflt-12.c at line 5, src/wrapper/jidctflt-8.c at line 5, src/wrapper/jidctfst-12.c at line 5, src/wrapper/jidctfst-8.c at line 5, src/wrapper/jidctint-12.c at line 5, src/wrapper/jidctint-8.c at line 5, src/wrapper/jidctred-12.c at line 5, src/wrapper/jidctred-8.c at line 5, src/wrapper/jquant1-12.c at line 5, src/wrapper/jquant1-8.c at line 5, src/wrapper/jquant2-12.c at line 5, src/wrapper/jquant2-8.c at line 5, src/wrapper/jutils-12.c at line 5, src/wrapper/jutils-16.c at line 5, src/wrapper/jutils-8.c at line 5, src/wrapper/rdcolmap-12.c at line 5, src/wrapper/rdcolmap-8.c at line 5, src/wrapper/rdppm-12.c at line 5, src/wrapper/rdppm-16.c at line 5, src/wrapper/rdppm-8.c at line 5, src/wrapper/wrgif-12.c at line 5, src/wrapper/wrgif-8.c at line 5, src/wrapper/wrppm-12.c at line 5, src/wrapper/wrppm-16.c at line 5, src/wrapper/wrppm-8.c at line 5, src/wrbmp.c at line 9, src/wrppm.c at line 9, src/wrtarga.c at line 8
+    # whole file README.ijg allready included
+    License text:
+         * For conditions of distribution and use, see the accompanying README.ijg
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 90.91
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        jversion.h [8:8]
+        simd/arm/jchuff.h [10:10]
+        src/cderror.h [9:9]
+        src/cdjpeg.c [8:8]
+        src/cdjpeg.h [9:9]
+        src/cjpeg.c [12:12]
+        src/cmyk.h [5:5]
+        src/djpeg.c [10:10]
+        src/jaricom.c [8:8]
+        src/jcapimin.c [9:9]
+        src/jcapistd.c [8:8]
+        src/jcarith.c [8:8]
+        src/jccoefct.c [8:8]
+        src/jccolext.c [8:8]
+        src/jccolor.c [10:10]
+        src/jcdctmgr.c [10:10]
+        src/jcdiffct.c [10:10]
+        src/jchuff.c [14:14]
+        src/jchuff.h [8:8]
+        src/jcicc.c [6:6]
+        src/jcinit.c [10:10]
+        src/jclhuff.c [10:10]
+        src/jclossls.c [10:10]
+        src/jcmainct.c [10:10]
+        src/jcmarker.c [11:11]
+        src/jcmaster.c [11:11]
+        src/jcmaster.h [8:8]
+        src/jcomapi.c [8:8]
+        src/jcparam.c [11:11]
+        src/jcphuff.c [13:13]
+        src/jcprepct.c [10:10]
+        src/jcsample.c [12:12]
+        src/jctrans.c [9:9]
+        src/jdapimin.c [10:10]
+        src/jdapistd.c [9:9]
+        src/jdarith.c [8:8]
+        src/jdatadst-tj.c [9:9]
+        src/jdatadst.c [9:9]
+        src/jdatasrc-tj.c [9:9]
+        src/jdatasrc.c [9:9]
+        src/jdcoefct.c [10:10]
+        src/jdcoefct.h [10:10]
+        src/jdcol565.c [9:9]
+        src/jdcolext.c [8:8]
+        src/jdcolor.c [11:11]
+        src/jdct.h [8:8]
+        src/jddctmgr.c [11:11]
+        src/jddiffct.c [10:10]
+        src/jdhuff.c [11:11]
+        src/jdhuff.h [11:11]
+        src/jdicc.c [6:6]
+        src/jdinput.c [11:11]
+        src/jdlhuff.c [10:10]
+        src/jdlossls.c [10:10]
+        src/jdmainct.c [8:8]
+        src/jdmainct.h [8:8]
+        src/jdmarker.c [10:10]
+        src/jdmaster.c [13:13]
+        src/jdmaster.h [6:6]
+        src/jdmerge.c [10:10]
+        src/jdmerge.h [8:8]
+        src/jdmrg565.c [9:9]
+        src/jdmrgext.c [8:8]
+        src/jdphuff.c [10:10]
+        src/jdpostct.c [8:8]
+        src/jdsample.c [12:12]
+        src/jdsample.h [8:8]
+        src/jdtrans.c [8:8]
+        src/jerror.c [8:8]
+        src/jerror.h [11:11]
+        src/jfdctfst.c [8:8]
+        src/jfdctint.c [8:8]
+        src/jidctflt.c [9:9]
+        src/jidctfst.c [8:8]
+        src/jidctint.c [9:9]
+        src/jidctred.c [8:8]
+        src/jinclude.h [8:8]
+        src/jlossls.h [10:10]
+        src/jmemmgr.c [8:8]
+        src/jmemnobs.c [8:8]
+        src/jmemsys.h [8:8]
+        src/jmorecfg.h [11:11]
+        src/jpeg_nbits.c [4:4]
+        src/jpeg_nbits.h [6:6]
+        src/jpegapicomp.h [5:5]
+        src/jpegint.h [13:13]
+        src/jpeglib.h [13:13]
+        src/jpegtran.c [8:8]
+        src/jquant1.c [8:8]
+        src/jquant2.c [8:8]
+        src/jsamplecomp.h [5:5]
+        src/jstdhuff.c [8:8]
+        src/jutils.c [8:8]
+        src/rdbmp.c [10:10]
+        src/rdswitch.c [8:8]
+        src/rdtarga.c [9:9]
+        src/transupp.c [8:8]
+        src/transupp.h [8:8]
+        src/wrapper/jcapistd-12.c [5:5]
+        src/wrapper/jcapistd-16.c [5:5]
+        src/wrapper/jcapistd-8.c [5:5]
+        src/wrapper/jccoefct-12.c [5:5]
+        src/wrapper/jccoefct-8.c [5:5]
+        src/wrapper/jccolor-12.c [5:5]
+        src/wrapper/jccolor-16.c [5:5]
+        src/wrapper/jccolor-8.c [5:5]
+        src/wrapper/jcdctmgr-12.c [5:5]
+        src/wrapper/jcdctmgr-8.c [5:5]
+        src/wrapper/jcdiffct-12.c [5:5]
+        src/wrapper/jcdiffct-16.c [5:5]
+        src/wrapper/jcdiffct-8.c [5:5]
+        src/wrapper/jclossls-12.c [5:5]
+        src/wrapper/jclossls-16.c [5:5]
+        src/wrapper/jclossls-8.c [5:5]
+        src/wrapper/jcmainct-12.c [5:5]
+        src/wrapper/jcmainct-16.c [5:5]
+        src/wrapper/jcmainct-8.c [5:5]
+        src/wrapper/jcprepct-12.c [5:5]
+        src/wrapper/jcprepct-16.c [5:5]
+        src/wrapper/jcprepct-8.c [5:5]
+        src/wrapper/jcsample-12.c [5:5]
+        src/wrapper/jcsample-16.c [5:5]
+        src/wrapper/jcsample-8.c [5:5]
+        src/wrapper/jdapistd-12.c [5:5]
+        src/wrapper/jdapistd-16.c [5:5]
+        src/wrapper/jdapistd-8.c [5:5]
+        src/wrapper/jdcoefct-12.c [5:5]
+        src/wrapper/jdcoefct-8.c [5:5]
+        src/wrapper/jdcolor-12.c [5:5]
+        src/wrapper/jdcolor-16.c [5:5]
+        src/wrapper/jdcolor-8.c [5:5]
+        src/wrapper/jddctmgr-12.c [5:5]
+        src/wrapper/jddctmgr-8.c [5:5]
+        src/wrapper/jddiffct-12.c [5:5]
+        src/wrapper/jddiffct-16.c [5:5]
+        src/wrapper/jddiffct-8.c [5:5]
+        src/wrapper/jdlossls-12.c [5:5]
+        src/wrapper/jdlossls-16.c [5:5]
+        src/wrapper/jdlossls-8.c [5:5]
+        src/wrapper/jdmainct-12.c [5:5]
+        src/wrapper/jdmainct-16.c [5:5]
+        src/wrapper/jdmainct-8.c [5:5]
+        src/wrapper/jdmerge-12.c [5:5]
+        src/wrapper/jdmerge-8.c [5:5]
+        src/wrapper/jdpostct-12.c [5:5]
+        src/wrapper/jdpostct-16.c [5:5]
+        src/wrapper/jdpostct-8.c [5:5]
+        src/wrapper/jdsample-12.c [5:5]
+        src/wrapper/jdsample-16.c [5:5]
+        src/wrapper/jdsample-8.c [5:5]
+        src/wrapper/jfdctfst-12.c [5:5]
+        src/wrapper/jfdctfst-8.c [5:5]
+        src/wrapper/jfdctint-12.c [5:5]
+        src/wrapper/jfdctint-8.c [5:5]
+        src/wrapper/jidctflt-12.c [5:5]
+        src/wrapper/jidctflt-8.c [5:5]
+        src/wrapper/jidctfst-12.c [5:5]
+        src/wrapper/jidctfst-8.c [5:5]
+        src/wrapper/jidctint-12.c [5:5]
+        src/wrapper/jidctint-8.c [5:5]
+        src/wrapper/jidctred-12.c [5:5]
+        src/wrapper/jidctred-8.c [5:5]
+        src/wrapper/jquant1-12.c [5:5]
+        src/wrapper/jquant1-8.c [5:5]
+        src/wrapper/jquant2-12.c [5:5]
+        src/wrapper/jquant2-8.c [5:5]
+        src/wrapper/jutils-12.c [5:5]
+        src/wrapper/jutils-16.c [5:5]
+        src/wrapper/jutils-8.c [5:5]
+        src/wrapper/rdcolmap-12.c [5:5]
+        src/wrapper/rdcolmap-8.c [5:5]
+        src/wrapper/rdppm-12.c [5:5]
+        src/wrapper/rdppm-16.c [5:5]
+        src/wrapper/rdppm-8.c [5:5]
+        src/wrapper/wrgif-12.c [5:5]
+        src/wrapper/wrgif-8.c [5:5]
+        src/wrapper/wrppm-12.c [5:5]
+        src/wrapper/wrppm-16.c [5:5]
+        src/wrapper/wrppm-8.c [5:5]
+        src/wrbmp.c [9:9]
+        src/wrppm.c [9:9]
+        src/wrtarga.c [8:8]
+
+KEEP     BSD-3-Clause         a0b6446928d785cae9f3fe14c47db8ad
+BELONGS ya.make
+    License text:
+        %define GOT_SYMBOL  __GLOBAL_OFFSET_TABLE_  ; BSD-style a.out supports PIC
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        simd/nasm/jsimdext.inc [113:113]
+
+KEEP     Libpbm               a8c59a0b9632a2c400a492ddc5396cdc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-libpbm
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://web.mit.edu/tex/fontutil/fontutils-0.6/pbm/libpbm1.c, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/libpbm.LICENSE
+    Files with this license:
+        src/rdgif.c [27:32]
+
+KEEP     IJG                  b162017eb4edf0bae69328dcb47110fe
+BELONGS ya.make
+    License text:
+                This software is based in part on the work of the Independent JPEG
+                Group.
+    Scancode info:
+        Original SPDX id: IJG
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing/IJG, https://spdx.org/licenses/IJG
+    Files with this license:
+        LICENSE.md [64:65]
+
+KEEP     IJG                  c0840233d37a3eb9fec3920f0bf1099a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: IJG
+        Score           : 97.95
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing/IJG, https://spdx.org/licenses/IJG
+    Files with this license:
+        README.ijg [126:161]
+
+SKIP     LicenseRef-scancode-unknown-license-reference AND BSD-3-Clause c728e0ae174c1d6b24a9a96924a2e696
+BELONGS ya.make
+    # Changelog
+    License text:
+        libjpeg-turbo, in its entirety, to be re-licensed under a BSD-style license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        ChangeLog.md [2200:2200]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ChangeLog.md [2200:2200]
+
+KEEP     Libpbm               d0197b151ef3a1429e6ed9d61db1ebb9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-libpbm
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://web.mit.edu/tex/fontutil/fontutils-0.6/pbm/libpbm1.c, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/libpbm.LICENSE
+    Files with this license:
+        src/wrgif.c [25:30]
+
+KEEP     BSD-3-Clause         d9457e4e3957eac6bc3c63d753bb59e3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [100:122]
+
+KEEP     Zlib                 e016c8b3c4399311d17cf74e14e4c31b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        simd/arm/aarch32/jccolext-neon.c [7:21]
+        simd/arm/aarch32/jchuff-neon.c [7:21]
+        simd/arm/aarch32/jsimd_neon.S [12:26]
+        simd/arm/aarch64/jccolext-neon.c [6:20]
+        simd/arm/aarch64/jchuff-neon.c [7:21]
+        simd/arm/aarch64/jsimd_neon.S [13:27]
+        simd/arm/align.h [4:18]
+        simd/arm/jccolor-neon.c [7:21]
+        simd/arm/jcgray-neon.c [7:21]
+        simd/arm/jcgryext-neon.c [6:20]
+        simd/arm/jcphuff-neon.c [8:22]
+        simd/arm/jcsample-neon.c [7:21]
+        simd/arm/jdcolext-neon.c [7:21]
+        simd/arm/jdcolor-neon.c [7:21]
+        simd/arm/jdmerge-neon.c [7:21]
+        simd/arm/jdmrgext-neon.c [7:21]
+        simd/arm/jdsample-neon.c [7:21]
+        simd/arm/jfdctfst-neon.c [7:21]
+        simd/arm/jfdctint-neon.c [7:21]
+        simd/arm/jidctfst-neon.c [7:21]
+        simd/arm/jidctint-neon.c [7:21]
+        simd/arm/jidctred-neon.c [7:21]
+        simd/arm/jquanti-neon.c [7:21]
+        simd/arm/neon-compat.h [5:19]
+
+KEEP     Libpbm               e450a16e6dcc10f1721ab5ee51897340
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-libpbm
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://web.mit.edu/tex/fontutil/fontutils-0.6/pbm/libpbm1.c, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/libpbm.LICENSE
+    Files with this license:
+        src/rdcolmap.c [37:42]
+        src/rdppm.c [36:41]
+
+KEEP     Zlib                 e4be14a7c287c27d28e8f07bf3795a43
+BELONGS ya.make
+    License text:
+        The zlib License could have been used instead of the Modified (3-clause) BSD
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.md [128:128]
+
+KEEP     IJG                  eacab87ea58123f318c9a6b4b065125e
+BELONGS ya.make
+    License text:
+        - The IJG (Independent JPEG Group) License, which is listed in
+    Scancode info:
+        Original SPDX id: IJG
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing/IJG, https://spdx.org/licenses/IJG
+    Files with this license:
+        LICENSE.md [6:6]
+
+KEEP     Zlib                 eec9b0748d14af0b992aa3b313ad57ab
+BELONGS ya.make
+    License text:
+            - Modified BSD License
+            - zlib License
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.md [90:91]
+
+KEEP     BSD-3-Clause         f3fe094edad919ad2298437096b480ef
+BELONGS ya.make
+    License text:
+                your product documentation must include the text of the Modified BSD
+                License (see below.)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [71:72]
+
+KEEP     Zlib                 fe6914097b02050a3eed2bbcd16659ac
+BELONGS ya.make
+    License text:
+          [zlib License](https://opensource.org/licenses/Zlib), but in the context of
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.md [12:12]
+
+KEEP     Zlib                 fe97964e6f5a4e0cdab61e2d6f2ba391
+BELONGS ya.make
+FILE_IGNORE simd/nasm/jsimdext.inc found in files: simd/i386/jccolext-avx2.asm at line 9, simd/i386/jccolext-mmx.asm at line 9, simd/i386/jccolext-sse2.asm at line 8, simd/i386/jccolor-avx2.asm at line 9, simd/i386/jccolor-mmx.asm at line 9, simd/i386/jccolor-sse2.asm at line 8, simd/i386/jcgray-avx2.asm at line 9, simd/i386/jcgray-mmx.asm at line 9, simd/i386/jcgray-sse2.asm at line 8, simd/i386/jcgryext-avx2.asm at line 9, simd/i386/jcgryext-mmx.asm at line 9, simd/i386/jcgryext-sse2.asm at line 8, simd/i386/jchuff-sse2.asm at line 10, simd/i386/jcphuff-sse2.asm at line 8, simd/i386/jcsample-avx2.asm at line 10, simd/i386/jcsample-mmx.asm at line 9, simd/i386/jcsample-sse2.asm at line 9, simd/i386/jdcolext-avx2.asm at line 10, simd/i386/jdcolext-mmx.asm at line 9, simd/i386/jdcolext-sse2.asm at line 9, simd/i386/jdcolor-avx2.asm at line 10, simd/i386/jdcolor-mmx.asm at line 9, simd/i386/jdcolor-sse2.asm at line 9, simd/i386/jdmerge-avx2.asm at line 10, simd/i386/jdmerge-mmx.asm at line 9, simd/i386/jdmerge-sse2.asm at line 9, simd/i386/jdmrgext-avx2.asm at line 10, simd/i386/jdmrgext-mmx.asm at line 9, simd/i386/jdmrgext-sse2.asm at line 9, simd/i386/jdsample-avx2.asm at line 10, simd/i386/jdsample-mmx.asm at line 9, simd/i386/jdsample-sse2.asm at line 9, simd/i386/jfdctflt-3dn.asm at line 9, simd/i386/jfdctflt-sse.asm at line 9, simd/i386/jfdctfst-mmx.asm at line 9, simd/i386/jfdctfst-sse2.asm at line 9, simd/i386/jfdctint-avx2.asm at line 9, simd/i386/jfdctint-mmx.asm at line 9, simd/i386/jfdctint-sse2.asm at line 9, simd/i386/jidctflt-3dn.asm at line 9, simd/i386/jidctflt-sse.asm at line 9, simd/i386/jidctflt-sse2.asm at line 9, simd/i386/jidctfst-mmx.asm at line 9, simd/i386/jidctfst-sse2.asm at line 9, simd/i386/jidctint-avx2.asm at line 9, simd/i386/jidctint-mmx.asm at line 9, simd/i386/jidctint-sse2.asm at line 9, simd/i386/jidctred-mmx.asm at line 9, simd/i386/jidctred-sse2.asm at line 9, simd/i386/jquant-3dn.asm at line 9, simd/i386/jquant-mmx.asm at line 9, simd/i386/jquant-sse.asm at line 9, simd/i386/jquantf-sse2.asm at line 9, simd/i386/jquanti-avx2.asm at line 10, simd/i386/jquanti-sse2.asm at line 9, simd/i386/jsimdcpu.asm at line 9, simd/nasm/jcolsamp.inc at line 9, simd/nasm/jdct.inc at line 9, simd/x86_64/jccolext-avx2.asm at line 11, simd/x86_64/jccolext-sse2.asm at line 10, simd/x86_64/jccolor-avx2.asm at line 9, simd/x86_64/jccolor-sse2.asm at line 8, simd/x86_64/jcgray-avx2.asm at line 9, simd/x86_64/jcgray-sse2.asm at line 8, simd/x86_64/jcgryext-avx2.asm at line 11, simd/x86_64/jcgryext-sse2.asm at line 10, simd/x86_64/jchuff-sse2.asm at line 11, simd/x86_64/jcphuff-sse2.asm at line 11, simd/x86_64/jcsample-avx2.asm at line 11, simd/x86_64/jcsample-sse2.asm at line 10, simd/x86_64/jdcolext-avx2.asm at line 12, simd/x86_64/jdcolext-sse2.asm at line 11, simd/x86_64/jdcolor-avx2.asm at line 10, simd/x86_64/jdcolor-sse2.asm at line 9, simd/x86_64/jdmerge-avx2.asm at line 10, simd/x86_64/jdmerge-sse2.asm at line 9, simd/x86_64/jdmrgext-avx2.asm at line 12, simd/x86_64/jdmrgext-sse2.asm at line 11, simd/x86_64/jdsample-avx2.asm at line 12, simd/x86_64/jdsample-sse2.asm at line 11, simd/x86_64/jfdctflt-sse.asm at line 10, simd/x86_64/jfdctfst-sse2.asm at line 10, simd/x86_64/jfdctint-avx2.asm at line 9, simd/x86_64/jfdctint-sse2.asm at line 10, simd/x86_64/jidctflt-sse2.asm at line 11, simd/x86_64/jidctfst-sse2.asm at line 11, simd/x86_64/jidctint-avx2.asm at line 10, simd/x86_64/jidctint-sse2.asm at line 11, simd/x86_64/jidctred-sse2.asm at line 11, simd/x86_64/jquantf-sse2.asm at line 10, simd/x86_64/jquanti-avx2.asm at line 11, simd/x86_64/jquanti-sse2.asm at line 10, simd/x86_64/jsimdcpu.asm at line 11
+    License text:
+        ; For conditions of distribution and use, see copyright notice in jsimdext.inc
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        simd/i386/jccolext-avx2.asm [9:9]
+        simd/i386/jccolext-mmx.asm [9:9]
+        simd/i386/jccolext-sse2.asm [8:8]
+        simd/i386/jccolor-avx2.asm [9:9]
+        simd/i386/jccolor-mmx.asm [9:9]
+        simd/i386/jccolor-sse2.asm [8:8]
+        simd/i386/jcgray-avx2.asm [9:9]
+        simd/i386/jcgray-mmx.asm [9:9]
+        simd/i386/jcgray-sse2.asm [8:8]
+        simd/i386/jcgryext-avx2.asm [9:9]
+        simd/i386/jcgryext-mmx.asm [9:9]
+        simd/i386/jcgryext-sse2.asm [8:8]
+        simd/i386/jchuff-sse2.asm [10:10]
+        simd/i386/jcphuff-sse2.asm [8:8]
+        simd/i386/jcsample-avx2.asm [10:10]
+        simd/i386/jcsample-mmx.asm [9:9]
+        simd/i386/jcsample-sse2.asm [9:9]
+        simd/i386/jdcolext-avx2.asm [10:10]
+        simd/i386/jdcolext-mmx.asm [9:9]
+        simd/i386/jdcolext-sse2.asm [9:9]
+        simd/i386/jdcolor-avx2.asm [10:10]
+        simd/i386/jdcolor-mmx.asm [9:9]
+        simd/i386/jdcolor-sse2.asm [9:9]
+        simd/i386/jdmerge-avx2.asm [10:10]
+        simd/i386/jdmerge-mmx.asm [9:9]
+        simd/i386/jdmerge-sse2.asm [9:9]
+        simd/i386/jdmrgext-avx2.asm [10:10]
+        simd/i386/jdmrgext-mmx.asm [9:9]
+        simd/i386/jdmrgext-sse2.asm [9:9]
+        simd/i386/jdsample-avx2.asm [10:10]
+        simd/i386/jdsample-mmx.asm [9:9]
+        simd/i386/jdsample-sse2.asm [9:9]
+        simd/i386/jfdctflt-3dn.asm [9:9]
+        simd/i386/jfdctflt-sse.asm [9:9]
+        simd/i386/jfdctfst-mmx.asm [9:9]
+        simd/i386/jfdctfst-sse2.asm [9:9]
+        simd/i386/jfdctint-avx2.asm [9:9]
+        simd/i386/jfdctint-mmx.asm [9:9]
+        simd/i386/jfdctint-sse2.asm [9:9]
+        simd/i386/jidctflt-3dn.asm [9:9]
+        simd/i386/jidctflt-sse.asm [9:9]
+        simd/i386/jidctflt-sse2.asm [9:9]
+        simd/i386/jidctfst-mmx.asm [9:9]
+        simd/i386/jidctfst-sse2.asm [9:9]
+        simd/i386/jidctint-avx2.asm [9:9]
+        simd/i386/jidctint-mmx.asm [9:9]
+        simd/i386/jidctint-sse2.asm [9:9]
+        simd/i386/jidctred-mmx.asm [9:9]
+        simd/i386/jidctred-sse2.asm [9:9]
+        simd/i386/jquant-3dn.asm [9:9]
+        simd/i386/jquant-mmx.asm [9:9]
+        simd/i386/jquant-sse.asm [9:9]
+        simd/i386/jquantf-sse2.asm [9:9]
+        simd/i386/jquanti-avx2.asm [10:10]
+        simd/i386/jquanti-sse2.asm [9:9]
+        simd/i386/jsimdcpu.asm [9:9]
+        simd/nasm/jcolsamp.inc [9:9]
+        simd/nasm/jdct.inc [9:9]
+        simd/x86_64/jccolext-avx2.asm [11:11]
+        simd/x86_64/jccolext-sse2.asm [10:10]
+        simd/x86_64/jccolor-avx2.asm [9:9]
+        simd/x86_64/jccolor-sse2.asm [8:8]
+        simd/x86_64/jcgray-avx2.asm [9:9]
+        simd/x86_64/jcgray-sse2.asm [8:8]
+        simd/x86_64/jcgryext-avx2.asm [11:11]
+        simd/x86_64/jcgryext-sse2.asm [10:10]
+        simd/x86_64/jchuff-sse2.asm [11:11]
+        simd/x86_64/jcphuff-sse2.asm [11:11]
+        simd/x86_64/jcsample-avx2.asm [11:11]
+        simd/x86_64/jcsample-sse2.asm [10:10]
+        simd/x86_64/jdcolext-avx2.asm [12:12]
+        simd/x86_64/jdcolext-sse2.asm [11:11]
+        simd/x86_64/jdcolor-avx2.asm [10:10]
+        simd/x86_64/jdcolor-sse2.asm [9:9]
+        simd/x86_64/jdmerge-avx2.asm [10:10]
+        simd/x86_64/jdmerge-sse2.asm [9:9]
+        simd/x86_64/jdmrgext-avx2.asm [12:12]
+        simd/x86_64/jdmrgext-sse2.asm [11:11]
+        simd/x86_64/jdsample-avx2.asm [12:12]
+        simd/x86_64/jdsample-sse2.asm [11:11]
+        simd/x86_64/jfdctflt-sse.asm [10:10]
+        simd/x86_64/jfdctfst-sse2.asm [10:10]
+        simd/x86_64/jfdctint-avx2.asm [9:9]
+        simd/x86_64/jfdctint-sse2.asm [10:10]
+        simd/x86_64/jidctflt-sse2.asm [11:11]
+        simd/x86_64/jidctfst-sse2.asm [11:11]
+        simd/x86_64/jidctint-avx2.asm [10:10]
+        simd/x86_64/jidctint-sse2.asm [11:11]
+        simd/x86_64/jidctred-sse2.asm [11:11]
+        simd/x86_64/jquantf-sse2.asm [10:10]
+        simd/x86_64/jquanti-avx2.asm [11:11]
+        simd/x86_64/jquanti-sse2.asm [10:10]
+        simd/x86_64/jsimdcpu.asm [11:11]

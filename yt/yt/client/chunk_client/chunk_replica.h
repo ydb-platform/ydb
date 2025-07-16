@@ -15,11 +15,6 @@ namespace NYT::NChunkClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ToProto(ui64* protoReplica, TChunkReplicaWithMedium replica);
-void FromProto(TChunkReplicaWithMedium* replica, ui64 protoReplica);
-
-////////////////////////////////////////////////////////////////////////////////
-
 //! A compact representation of |(nodeId, replicaIndex, mediumIndex)| triplet.
 class TChunkReplicaWithMedium
 {
@@ -39,6 +34,15 @@ public:
     TChunkReplica ToChunkReplica() const;
     static TChunkReplicaList ToChunkReplicas(TRange<TChunkReplicaWithMedium> replicasWithMedia);
 
+    friend void ToProto(ui64* value, TChunkReplicaWithMedium replica);
+    friend void ToProto(ui32* value, TChunkReplicaWithMedium replica);
+    friend void FromProto(TChunkReplicaWithMedium* replica, ui64 value);
+    friend void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica);
+    friend void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaInfo value);
+
+    // Protect from accidently deserializing TChunkReplicaWithMedium from ui32.
+    friend void FromProto(TChunkReplicaWithMedium* replica, ui32 value) = delete;
+
 private:
     /*!
      *  Bits:
@@ -49,16 +53,7 @@ private:
     ui64 Value_;
 
     explicit TChunkReplicaWithMedium(ui64 value);
-
-    friend void ToProto(ui64* value, TChunkReplicaWithMedium replica);
-    friend void FromProto(TChunkReplicaWithMedium* replica, ui64 value);
-    friend void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica);
-    friend void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaInfo value);
 };
-
-// These protect from accidently serializing TChunkReplicaWithMedium as ui32.
-void ToProto(ui32* value, TChunkReplicaWithMedium replica) = delete;
-void FromProto(TChunkReplicaWithMedium* replica, ui32 value) = delete;
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithMedium replica, TStringBuf spec);
 
@@ -114,6 +109,13 @@ public:
     NNodeTrackerClient::TNodeId GetNodeId() const;
     int GetReplicaIndex() const;
 
+    friend void ToProto(ui32* value, TChunkReplica replica);
+    friend void FromProto(TChunkReplica* replica, ui32 value);
+    friend void FromProto(TChunkReplica* replica, ui64 value);
+
+    // Protect from accidently serializing TChunkReplicaWithMedium to ui64.
+    friend void ToProto(ui64* value, TChunkReplica replica) = delete;
+
 private:
     /*!
      *  Bits:
@@ -123,9 +125,6 @@ private:
     ui32 Value_;
 
     explicit TChunkReplica(ui32 value);
-
-    friend void ToProto(ui32* value, TChunkReplica replica);
-    friend void FromProto(TChunkReplica* replica, ui32 value);
 
     using TLoadContext = NPhoenix::TLoadContext;
     using TSaveContext = NPhoenix::TSaveContext;
@@ -275,7 +274,7 @@ struct TProtoTraits<NChunkClient::TChunkReplicaWithMedium>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace
+} // namespace NYT
 
 //! A hasher for TChunkIdWithIndex.
 template <>

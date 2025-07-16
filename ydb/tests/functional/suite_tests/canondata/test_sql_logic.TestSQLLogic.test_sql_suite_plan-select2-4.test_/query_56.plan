@@ -29,18 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Filter",
+                                        "Node Type": "Filter",
                                         "Operators": [
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "row.col1"
-                                            },
                                             {
                                                 "Inputs": [
                                                     {
@@ -61,10 +51,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/sqllogictest_select2-4.test_plan/t1",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "b"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "a (-\u221e, +\u221e)",
                                                             "b (-\u221e, +\u221e)",
                                                             "c (-\u221e, +\u221e)",

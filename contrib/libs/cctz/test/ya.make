@@ -15,6 +15,8 @@ ADDINCL(
     contrib/libs/cctz/include
 )
 
+SRCDIR(contrib/libs/cctz/src)
+
 IF (NOT AUTOCHECK)
     # We do not set TZDIR to a stable data source, so
     # LoadZone("libc:localtime") is inconsistent and makes

@@ -227,13 +227,14 @@ struct TEvSaveScriptResultPartFinished : public NActors::TEventLocal<TEvSaveScri
 };
 
 struct TEvSaveScriptResultFinished : public NActors::TEventLocal<TEvSaveScriptResultFinished, TKqpScriptExecutionEvents::EvSaveScriptResultFinished> {
-    TEvSaveScriptResultFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+    TEvSaveScriptResultFinished(Ydb::StatusIds::StatusCode status, size_t resultSetId, NYql::TIssues issues = {})
         : Status(status)
+        , ResultSetId(resultSetId)
         , Issues(std::move(issues))
-    {
-    }
+    {}
 
     Ydb::StatusIds::StatusCode Status;
+    size_t ResultSetId = 0;
     NYql::TIssues Issues;
 };
 

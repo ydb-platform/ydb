@@ -1,7 +1,5 @@
 import json
 import os
-import six
-from _common import rootrel_arc_src, ugly_conftest_exception
 import ymake
 
 
@@ -65,10 +63,7 @@ def onresource_files(unit, *args):
                     ['warn', "Duplicated resource file {} in RESOURCE_FILES() macro. Skipped it.".format(path)]
                 )
                 continue
-            if not ugly_conftest_exception(path):
-                src = 'resfs/src/{}=${{rootrel;context=TEXT;input=TEXT:"{}"}}'.format(key, path)
-            else:
-                src = 'resfs/src/{}={}'.format(key, rootrel_arc_src(path, unit))
+            src = 'resfs/src/{}=${{rootrel;context=TEXT;input=TEXT:"{}"}}'.format(key, path)
             res += ['-', src, path, key]
 
     if unit.enabled('_GO_MODULE'):
@@ -122,7 +117,7 @@ def on_ya_conf_json(unit, conf_file):
             yield name, bottle["formula"]
 
     for bottle_name, formula in _iter_bottles(conf):
-        if isinstance(formula, six.string_types):
+        if isinstance(formula, str):
             if formula.startswith(valid_dirs):
                 abs_path = unit.resolve('$S/' + formula)
                 if os.path.exists(abs_path):

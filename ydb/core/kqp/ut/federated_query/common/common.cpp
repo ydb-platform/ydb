@@ -61,14 +61,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
+        featureFlags.SetEnableMoveColumnTable(true);
         if (!appConfig) {
             appConfig.emplace();
+            appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
-        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");
-        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
-        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
-        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
 
         auto settings = TKikimrSettings();
 
@@ -76,6 +73,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (initializeHttpGateway) {
             httpGateway = MakeHttpGateway(appConfig->GetQueryServiceConfig().GetHttpGateway(), settings.CountersRoot);
         }
+        auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
 
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
@@ -90,7 +88,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             nullptr,
             NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
-            nullptr);
+            nullptr,
+            NYql::TPqGatewayConfig{},
+            NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+            nullptr,
+            driver);
 
         settings
             .SetFeatureFlags(featureFlags)

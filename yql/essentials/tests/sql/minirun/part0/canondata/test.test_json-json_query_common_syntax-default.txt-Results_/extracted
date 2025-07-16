@@ -1,9 +1,9 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:5:1: Warning: At function: SqlProjectItem
+        <tmp_path>/program.sql:<main>:5:1: Warning: At function: SqlProjectItem, At lambda
         	SELECT
 	^
             <tmp_path>/program.sql:<main>:6:4: Warning: At function: JsonQuery
@@ -12,7 +12,7 @@
                 <tmp_path>/program.sql:<main>:6:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                 	    JSON_QUERY(NULL, "strict $.key"),
 	   ^
-        <tmp_path>/program.sql:<main>:5:1: Warning: At function: SqlProjectItem
+        <tmp_path>/program.sql:<main>:5:1: Warning: At function: SqlProjectItem, At lambda
         	SELECT
 	^
             <tmp_path>/program.sql:<main>:7:4: Warning: At function: JsonQuery
@@ -21,7 +21,7 @@
                 <tmp_path>/program.sql:<main>:7:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                 	    JSON_QUERY(Nothing(Json?), "strict $.key");
 	   ^
-    <tmp_path>/program.sql:<main>:11:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:11:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT
 	^
         <tmp_path>/program.sql:<main>:12:4: Warning: At function: JsonQuery

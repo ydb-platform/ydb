@@ -204,6 +204,8 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
     return Tables[std::make_pair(cluster, tablePath)];
 }
 
+
+
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
     auto tablePath = table;
     if (TempTablesState) {
@@ -218,6 +220,26 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
     YQL_ENSURE(desc, "Unexpected empty metadata, cluster '" << cluster << "', table '" << table << "'");
 
     return *desc;
+}
+
+bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStringBuf& path) {
+    auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
+    if (mainTableImpl) {
+
+        for(const auto& index: mainTableImpl->Metadata->Indexes) {
+            if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                continue;
+            }
+
+            for(const auto& implTable: index.GetImplTables()) {
+                TString implTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << implTable;
+                if (path == implTablePath)
+                    return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf& cluster,
@@ -632,12 +654,14 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             protoValue.SetBool(FromString<bool>(value));
             break;
         case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
         case EDataSlot::Uint32:
         case EDataSlot::Date:
         case EDataSlot::Datetime:
             protoValue.SetUint32(FromString<ui32>(value));
             break;
         case EDataSlot::Int8:
+        case EDataSlot::Int16:
         case EDataSlot::Int32:
         case EDataSlot::Date32:
             protoValue.SetInt32(FromString<i32>(value));
@@ -791,12 +815,14 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_bool_value(FromString<bool>(value));
             break;
         case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
         case EDataSlot::Uint32:
         case EDataSlot::Date:
         case EDataSlot::Datetime:
             protoValue.set_uint32_value(FromString<ui32>(value));
             break;
         case EDataSlot::Int8:
+        case EDataSlot::Int16:
         case EDataSlot::Int32:
         case EDataSlot::Date32:
             protoValue.set_int32_value(FromString<i32>(value));

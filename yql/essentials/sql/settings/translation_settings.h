@@ -77,7 +77,8 @@ namespace NSQLTranslation {
         TTranslationSettings();
         google::protobuf::Arena* Arena = nullptr;
 
-        NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
+        NYql::TLangVersion LangVer = NYql::MinLangVersion;
+        NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::None;
         THashMap<TString, TString> ClusterMapping;
         TString PathPrefix;
         // keys (cluster name) should be normalized

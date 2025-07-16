@@ -94,6 +94,10 @@ enum EOperationType {
     ESchemeOpDropCdcStream = 68;
     ESchemeOpDropCdcStreamImpl = 69;
     ESchemeOpDropCdcStreamAtTable = 70;
+    // Rotate
+    ESchemeOpRotateCdcStream = 120;
+    ESchemeOpRotateCdcStreamImpl = 121;
+    ESchemeOpRotateCdcStreamAtTable = 122;
 
     ESchemeOpMoveTable = 71;
     ESchemeOpMoveTableIndex = 72;
@@ -173,7 +177,16 @@ enum EOperationType {
     ESchemeOpAlterTransfer = 113;
     ESchemeOpDropTransfer = 114;
     ESchemeOpDropTransferCascade = 115;
-    
-    
+
+    // SysView
+    ESchemeOpCreateSysView = 116;
+    ESchemeOpDropSysView = 117;
+
+    // Long Incremental Restore
+    ESchemeOpCreateLongIncrementalRestoreOp = 118;
+
+    // Change Path State
+    ESchemeOpChangePathState = 119;
+
     // Some entries are grouped by semantics, so are out of order
 }

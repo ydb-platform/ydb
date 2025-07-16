@@ -4,6 +4,7 @@ import logging
 
 from .base import TllTieringTestBase
 from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
 
 
 logger = logging.getLogger(__name__)
@@ -152,8 +153,8 @@ class TestTierDelete(TllTieringTestBase):
                 return False
             return row_count <= rows_by_tier["__DEFAULT"]
 
-        if not self.wait_for(lambda: portions_actualized_in_sys(), 60):
-            raise Exception(".sys reports incorrect data portions")
+        table = ColumnTableHelper(self.ydb_client, table_path)
+        assert table.portions_actualized_in_sys(), ".sys reports incorrect data portions"
 
         t0 = time.time()
         stmt = f"""
@@ -196,10 +197,4 @@ class TestTierDelete(TllTieringTestBase):
             print(f"rows by tier: {rows_by_tier}, portions: {get_portion_count()}, cold bucket stat: {cold_bucket_stat}, frozen bucket stat: {frozen_bucket_stat}")
             return cold_bucket_stat[0] == 0 and frozen_bucket_stat[0] == 0
 
-        if self.wait_for(lambda: data_deleted_from_buckets(), 180):
-            print("all data deleted")
-            return
-        # Now ydbd has a bug which results in not deletion all data from tiers
-        # After fixing next line should be replaced by
-        # raise Exception('Not all data deleted')
-        print('Not all data deleted')
+        assert self.wait_for(lambda: data_deleted_from_buckets(), 180), "Not all data deleted"

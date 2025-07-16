@@ -7,10 +7,13 @@
 
 #include <yt/yt/core/rpc/grpc/proto/grpc.pb.h>
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/blob.h>
 
 #include <random>
 
@@ -19,6 +22,7 @@ namespace NYT::NRpc {
 using namespace NConcurrency;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -114,7 +118,7 @@ public:
         if (request->wait_on_latch()) {
             Latch()->Wait();
         }
-        response->set_allocated_string(TString("r", request->size()));
+        response->set_allocated_string(std::string("r", request->size()));
         context->Reply();
     }
 
@@ -354,7 +358,7 @@ public:
     {
         context->SetRequestInfo();
         auto* traceContext = NTracing::TryGetCurrentTraceContext();
-        response->set_baggage(NYson::ConvertToYsonString(traceContext->UnpackBaggage()).ToString());
+        response->set_baggage(ToProto(NYson::ConvertToYsonString(traceContext->UnpackBaggage())));
         context->Reply();
     }
 

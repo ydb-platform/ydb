@@ -8,6 +8,10 @@
 
 #include <aws/http/http.h>
 
+#include <aws/io/future.h>
+
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_http_connection;
 struct aws_input_stream;
 
@@ -135,7 +139,8 @@ typedef void(aws_http_message_transform_fn)(
  * This is always invoked on the HTTP connection's event-loop thread.
  *
  * Return AWS_OP_SUCCESS to continue processing the stream.
- * Return AWS_OP_ERR to indicate failure and cancel the stream.
+ * Return aws_raise_error(E) to indicate failure and cancel the stream.
+ * The error you raise will be reflected in the error_code passed to the on_complete callback.
  */
 typedef int(aws_http_on_incoming_headers_fn)(
     struct aws_http_stream *stream,
@@ -149,7 +154,8 @@ typedef int(aws_http_on_incoming_headers_fn)(
  * This is always invoked on the HTTP connection's event-loop thread.
  *
  * Return AWS_OP_SUCCESS to continue processing the stream.
- * Return AWS_OP_ERR to indicate failure and cancel the stream.
+ * Return aws_raise_error(E) to indicate failure and cancel the stream.
+ * The error you raise will be reflected in the error_code passed to the on_complete callback.
  */
 typedef int(aws_http_on_incoming_header_block_done_fn)(
     struct aws_http_stream *stream,
@@ -167,7 +173,8 @@ typedef int(aws_http_on_incoming_header_block_done_fn)(
  * aws_http_stream_update_window().
  *
  * Return AWS_OP_SUCCESS to continue processing the stream.
- * Return AWS_OP_ERR to indicate failure and cancel the stream.
+ * Return aws_raise_error(E) to indicate failure and cancel the stream.
+ * The error you raise will be reflected in the error_code passed to the on_complete callback.
  */
 typedef int(
     aws_http_on_incoming_body_fn)(struct aws_http_stream *stream, const struct aws_byte_cursor *data, void *user_data);
@@ -177,22 +184,64 @@ typedef int(
  * This is always invoked on the HTTP connection's event-loop thread.
  *
  * Return AWS_OP_SUCCESS to continue processing the stream.
- * Return AWS_OP_ERR to indicate failure and cancel the stream.
+ * Return aws_raise_error(E) to indicate failure and cancel the stream.
+ * The error you raise will be reflected in the error_code passed to the on_complete callback.
  */
 typedef int(aws_http_on_incoming_request_done_fn)(struct aws_http_stream *stream, void *user_data);
 
 /**
- * Invoked when request/response stream is completely destroyed.
- * This may be invoked synchronously when aws_http_stream_release() is called.
- * This is invoked even if the stream is never activated.
+ * Invoked when a request/response stream is complete, whether successful or unsuccessful
+ * This is always invoked on the HTTP connection's event-loop thread.
+ * This will not be invoked if the stream is never activated.
  */
 typedef void(aws_http_on_stream_complete_fn)(struct aws_http_stream *stream, int error_code, void *user_data);
 
 /**
  * Invoked when request/response stream destroy completely.
  * This can be invoked within the same thead who release the refcount on http stream.
+ * This is invoked even if the stream is never activated.
  */
 typedef void(aws_http_on_stream_destroy_fn)(void *user_data);
+
+/**
+ * Tracing metrics for aws_http_stream.
+ * Data maybe not be available if the data of stream was never sent/received before it completes.
+ */
+struct aws_http_stream_metrics {
+    /* The time stamp when the request started to be encoded. -1 means data not available. Timestamp
+     * are from `aws_high_res_clock_get_ticks` */
+    int64_t send_start_timestamp_ns;
+    /* The time stamp when the request finished to be encoded. -1 means data not available.
+     * Timestamp are from `aws_high_res_clock_get_ticks` */
+    int64_t send_end_timestamp_ns;
+    /* The time duration for the request from start encoding to finish encoding (send_end_timestamp_ns -
+     * send_start_timestamp_ns). -1 means data not available. */
+    int64_t sending_duration_ns;
+
+    /* The time stamp when the response started to be received from the network channel. -1 means data not available.
+     * Timestamp are from `aws_high_res_clock_get_ticks` */
+    int64_t receive_start_timestamp_ns;
+    /* The time stamp when the response finished to be received from the network channel. -1 means data not available.
+     * Timestamp are from `aws_high_res_clock_get_ticks` */
+    int64_t receive_end_timestamp_ns;
+    /* The time duration for the request from start receiving to finish receiving. receive_end_timestamp_ns -
+     * receive_start_timestamp_ns. -1 means data not available. */
+    int64_t receiving_duration_ns;
+
+    /* The stream-id on the connection when this stream was activated. */
+    uint32_t stream_id;
+};
+
+/**
+ * Invoked right before request/response stream is complete to report the tracing metrics for aws_http_stream.
+ * This may be invoked synchronously when aws_http_stream_release() is called.
+ * This is invoked even if the stream is never activated.
+ * See `aws_http_stream_metrics` for details.
+ */
+typedef void(aws_http_on_stream_metrics_fn)(
+    struct aws_http_stream *stream,
+    const struct aws_http_stream_metrics *metrics,
+    void *user_data);
 
 /**
  * Options for creating a stream which sends a request from the client and receives a response from the server.
@@ -235,6 +284,13 @@ struct aws_http_make_request_options {
     aws_http_on_incoming_body_fn *on_response_body;
 
     /**
+     * Invoked right before stream is complete, whether successful or unsuccessful
+     * Optional.
+     * See `aws_http_on_stream_metrics_fn`
+     */
+    aws_http_on_stream_metrics_fn *on_metrics;
+
+    /**
      * Invoked when request/response stream is complete, whether successful or unsuccessful
      * Optional.
      * See `aws_http_on_stream_complete_fn`.
@@ -249,6 +305,16 @@ struct aws_http_make_request_options {
      * when data has been supplied via `aws_http2_stream_write_data`
      */
     bool http2_use_manual_data_writes;
+
+    /**
+     * Optional (ignored if 0).
+     * After a request is fully sent, if the server does not begin responding within N milliseconds, then fail with
+     * AWS_ERROR_HTTP_RESPONSE_FIRST_BYTE_TIMEOUT.
+     * It override the connection level settings, when the request completes, the
+     * original monitoring options will be applied back to the connection.
+     * TODO: Only supported in HTTP/1.1 now, support it in HTTP/2
+     */
+    uint64_t response_first_byte_timeout_ms;
 };
 
 struct aws_http_request_handler_options {
@@ -807,6 +873,11 @@ AWS_HTTP_API
 void aws_http_message_set_body_stream(struct aws_http_message *message, struct aws_input_stream *body_stream);
 
 /**
+ * aws_future<aws_http_message*>
+ */
+AWS_FUTURE_T_POINTER_WITH_RELEASE_DECLARATION(aws_future_http_message, struct aws_http_message, AWS_HTTP_API)
+
+/**
  * Submit a chunk of data to be sent on an HTTP/1.1 stream.
  * The stream must have specified "chunked" in a "transfer-encoding" header.
  * For client streams, activate() must be called before any chunks are submitted.
@@ -973,6 +1044,12 @@ struct aws_http_stream *aws_http_stream_new_server_request_handler(
     const struct aws_http_request_handler_options *options);
 
 /**
+ * Acquire refcount on the stream to prevent it from being cleaned up until it is released.
+ */
+AWS_HTTP_API
+struct aws_http_stream *aws_http_stream_acquire(struct aws_http_stream *stream);
+
+/**
  * Users must release the stream when they are done with it, or its memory will never be cleaned up.
  * This will not cancel the stream, its callbacks will still fire if the stream is still in progress.
  *
@@ -1038,6 +1115,18 @@ AWS_HTTP_API
 uint32_t aws_http_stream_get_id(const struct aws_http_stream *stream);
 
 /**
+ * Cancel the stream in flight.
+ * For HTTP/1.1 streams, it's equivalent to closing the connection.
+ * For HTTP/2 streams, it's equivalent to calling reset on the stream with `AWS_HTTP2_ERR_CANCEL`.
+ *
+ * the stream will complete with the error code provided, unless the stream is
+ * already completing for other reasons, or the stream is not activated,
+ * in which case this call will have no impact.
+ */
+AWS_HTTP_API
+void aws_http_stream_cancel(struct aws_http_stream *stream, int error_code);
+
+/**
  * Reset the HTTP/2 stream (HTTP/2 only).
  * Note that if the stream closes before this async call is fully processed, the RST_STREAM frame will not be sent.
  *
@@ -1068,5 +1157,6 @@ AWS_HTTP_API
 int aws_http2_stream_get_sent_reset_error_code(struct aws_http_stream *http2_stream, uint32_t *out_http2_error);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_HTTP_REQUEST_RESPONSE_H */

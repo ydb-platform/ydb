@@ -46,6 +46,9 @@ using TEvResolveAllConfigRequest = TGrpcRequestOperationCall<DynamicConfig::Reso
 using TEvFetchStartupConfigRequest = TGrpcRequestOperationCall<DynamicConfig::FetchStartupConfigRequest,
     DynamicConfig::FetchStartupConfigResponse>;
 
+using TEvGetConfigurationVersionRequest = TGrpcRequestOperationCall<DynamicConfig::GetConfigurationVersionRequest,
+    DynamicConfig::GetConfigurationVersionResponse>;
+
 template <typename TRequest, typename TConsoleRequest, typename TConsoleResponse>
 class TDynamicConfigRPC : public TRpcOperationRequestActor<TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>, TRequest> {
     using TThis = TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>;
@@ -128,6 +131,10 @@ private:
         return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
     }
 
+    void Handle(TEvConsole::TEvGetConfigurationVersionResponse::TPtr& ev) {
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
+    }
+
     void Handle(TEvConsole::TEvUnauthorized::TPtr&) {
         ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
         auto issue = issues.Add();
@@ -142,7 +149,6 @@ private:
         auto issue = issues.Add();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message("Feature is disabled");
-
         return TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
     }
 
@@ -296,4 +302,12 @@ void DoFetchStartupConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacili
                     TEvConsole::TEvFetchStartupConfigRequest,
                     TEvConsole::TEvFetchStartupConfigResponse>(p.release()));
 }
+
+void DoGetConfigurationVersionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TDynamicConfigRPC<TEvGetConfigurationVersionRequest,
+                    TEvConsole::TEvGetConfigurationVersionRequest,
+                    TEvConsole::TEvGetConfigurationVersionResponse>(p.release()));
+}
+
 } // namespace NKikimr::NGRpcService

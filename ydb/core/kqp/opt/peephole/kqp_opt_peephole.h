@@ -18,4 +18,8 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpTxsPeepholeTransformer(
     const NYql::TKikimrConfiguration::TPtr& config
 );
 
+NYql::IGraphTransformer::TStatus PeepHoleOptimize(const NYql::NNodes::TExprBase& program, NYql::TExprNode::TPtr& newProgram, NYql::TExprContext& ctx,
+    NYql::IGraphTransformer& typeAnnTransformer, NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config,
+    bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts);
+
 } // namespace NKikimr::NKqp::NOpt

@@ -46,7 +46,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = RpcClientLogger;
+constinit const auto Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -229,7 +229,7 @@ private:
                 YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
                     attrs.Get<EVerificationMode>("verification_mode"),
                     attrs.Get<EEncryptionMode>("encryption_mode"),
-                    attrs.Get<TString>("address"));
+                    attrs.Get<std::string>("address"));
 
                 session->Initialize(bus);
                 bucket.Sessions.push_back(session);
@@ -372,7 +372,14 @@ private:
                 // NB: Requests without timeout are rare but may occur.
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
                 // since this also provides proper cleanup and cancelation when global shutdown happens.
-                auto effectiveTimeout = options.Timeout.value_or(TDuration::Hours(24));
+                if (TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
+                    YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
+                        requestControl->GetRequestId(),
+                        requestControl->GetService(),
+                        requestControl->GetMethod(),
+                        Bus_->GetEndpointDescription());
+                }
+                auto effectiveTimeout = options.Timeout.value_or(TDispatcher::Get()->GetDefaultRequestTimeout());
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND(&TSession::HandleTimeout, MakeWeak(this), requestControl),
                     effectiveTimeout,
@@ -719,25 +726,28 @@ private:
                 header.clear_timeout();
             }
 
-            if (options.RequestHeavy || request->IsAttachmentCompressionEnabled()) {
+            if (options.RequestHeavy || (request->IsAttachmentCompressionEnabled() && request->HasAttachments())) {
                 BIND(&IClientRequest::Serialize, request)
                     .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
                     .Run()
                     .Subscribe(BIND(
                         &TSession::OnRequestSerialized,
                         MakeStrong(this),
+                        std::move(request),
                         std::move(requestControl),
                         options));
             } else {
                 try {
                     auto requestMessage = request->Serialize();
                     OnRequestSerialized(
-                        std::move(requestControl),
+                        request,
+                        requestControl,
                         options,
                         std::move(requestMessage));
                 } catch (const std::exception& ex) {
                     OnRequestSerialized(
-                        std::move(requestControl),
+                        request,
+                        requestControl,
                         options,
                         TError(ex));
                 }
@@ -769,6 +779,7 @@ private:
 
 
         void OnRequestSerialized(
+            const IClientRequestPtr& request,
             const TClientRequestControlPtr& requestControl,
             const TSendOptions& options,
             TErrorOr<TSharedRefArray> requestMessageOrError)
@@ -867,7 +878,7 @@ private:
             requestControl->ProfileRequest(requestMessage);
 
             YT_LOG_DEBUG("Request sent (RequestId: %v, Method: %v.%v, Timeout: %v, TrackingLevel: %v, "
-                "ChecksummedPartCount: %v, MultiplexingBand: %v, Endpoint: %v, BodySize: %v, AttachmentsSize: %v)",
+                "ChecksummedPartCount: %v, MultiplexingBand: %v, Endpoint: %v, BodySize: %v, AttachmentsSize: %v%v)",
                 requestId,
                 requestControl->GetService(),
                 requestControl->GetMethod(),
@@ -877,7 +888,8 @@ private:
                 options.MultiplexingBand,
                 Bus_->GetEndpointDescription(),
                 GetMessageBodySize(requestMessage),
-                GetTotalMessageAttachmentSize(requestMessage));
+                GetTotalMessageAttachmentSize(requestMessage),
+                !request->GetRequestInfo().empty() ? std::string(Format(", %v", request->GetRequestInfo())) : std::string());
         }
 
 

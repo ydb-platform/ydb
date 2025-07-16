@@ -88,6 +88,7 @@ constexpr auto PG_ERROR = ERROR;
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/utils/fp_bits.h>
 #include <library/cpp/yson/detail.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/split.h>
 #include <util/system/getpid.h>
 
@@ -107,10 +108,8 @@ extern void MkqlDelete(MemoryContext context);
 extern MemoryContext MkqlGetChunkContext(void *pointer);
 extern Size MkqlGetChunkSpace(void *pointer);
 extern bool MkqlIsEmpty(MemoryContext context);
-extern void MkqlStats(MemoryContext context,
-						  MemoryStatsPrintFunc printfunc, void *passthru,
-						      MemoryContextCounters *totals,
-						  bool print_to_stderr);
+extern void MkqlStats(MemoryContext context, MemoryStatsPrintFunc printfunc, void* passthru, MemoryContextCounters* totals,
+                      bool print_to_stderr);
 #ifdef MEMORY_CONTEXT_CHECKING
 extern void MkqlCheck(MemoryContext context);
 #endif
@@ -1337,6 +1336,11 @@ public:
         NUdf::TUnboxedValuePod res;
         if constexpr (!UseContext) {
             TPAllocScope call;
+            Y_DEFER {
+                // This ensures that there is no dangling pointers references to freed
+                // |TPAllocScope| pages that can be allocated and stored inside |callInfo.flinfo->fn_extra|.
+                callInfo.flinfo->fn_extra = nullptr;
+            };
             res = this->DoCall(callInfo);
         } else {
             res = this->DoCall(callInfo);
@@ -3333,7 +3337,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto execFunc = FindExec(id);
                 YQL_ENSURE(execFunc);
                 auto kernel = MakePgKernel(argTypes, returnType, execFunc, id);
-                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argNodes), argTypes, *kernel, kernel);
+                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), std::move(argNodes), argTypes, returnType, *kernel, kernel);
             }
 
             if (name == "PgCast") {
@@ -3395,7 +3399,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 ui32 sourceId = AS_TYPE(TPgType, AS_TYPE(TBlockType, inputType)->GetItemType())->GetTypeId();
                 auto kernel = MakeFromPgKernel(inputType, returnType, sourceId);
-                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), { arg }, { inputType }, *kernel, kernel);
+                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), { arg }, { inputType }, returnType, *kernel, kernel);
             }
 
             if (name == "ToPg") {
@@ -3492,7 +3496,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 auto targetId = AS_TYPE(TPgType, AS_TYPE(TBlockType, returnType)->GetItemType())->GetTypeId();
                 auto kernel = MakeToPgKernel(inputType, returnType, *sourceDataSlot);
-                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), { arg }, { inputType }, *kernel, kernel);
+                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), {arg}, {inputType}, returnType, *kernel, kernel);
             }
 
             if (name == "PgArray") {
@@ -3938,9 +3942,35 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
         return NUdf::TUnboxedValuePod();
     }
 
+    const bool needDecode = (cmd == BeginListSymbol);
+
+    if (needDecode) {
+        cmd = buf.Read();
+    }
+
     CHECK_EXPECTED(cmd, StringMarker);
-    auto s = buf.ReadYtString();
-    return PgValueFromString(s, type->GetTypeId());
+    const i32 length = buf.ReadVarI32();
+    CHECK_STRING_LENGTH(length);
+    TTempBuf tmpBuf(length);
+    buf.ReadMany(tmpBuf.Data(), length);
+
+    NUdf::TUnboxedValue result;
+    if (needDecode) {
+        TString decoded = Base64Decode(TStringBuf(tmpBuf.Data(), length));
+        result = PgValueFromString(decoded, type->GetTypeId());
+    } else {
+        result = PgValueFromString(TStringBuf(tmpBuf.Data(), length), type->GetTypeId());
+    }
+
+    if (needDecode) {
+        cmd = buf.Read();
+        if (cmd == ListItemSeparatorSymbol) {
+            cmd = buf.Read();
+        }
+
+        CHECK_EXPECTED(cmd, EndListSymbol);
+    }
+    return result;
 }
 
 void SkipSkiffPg(TPgType* type, NCommon::TInputBuf& buf) {

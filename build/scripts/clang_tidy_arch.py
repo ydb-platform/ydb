@@ -1,13 +1,12 @@
-import os
 import argparse
 import json
+import os
+import sys
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-file")
-    parser.add_argument("--build-root")
-    parser.add_argument("--source-root")
     return parser.parse_known_args()
 
 
@@ -16,14 +15,18 @@ def main():
     inputs = unknown_args
     result_json = {}
     for inp in inputs:
-        if os.path.exists(inp) and inp.endswith("tidyjson"):
+        if inp.endswith(".tidyjson") and not inp.endswith(".global.tidyjson") and os.path.exists(inp):
             with open(inp, 'r') as afile:
                 file_content = afile.read().strip()
                 if not file_content:
                     continue
+            try:
                 errors = json.loads(file_content)
-            testing_src = errors["file"]
-            result_json[testing_src] = errors
+                testing_src = errors["file"]
+                result_json[testing_src] = errors
+            except Exception as e:
+                print(f'Exception caught during processing of file {inp}\n', file=sys.stderr)
+                raise
 
     with open(args.output_file, 'w') as afile:
         json.dump(result_json, afile, indent=4)  # TODO remove indent

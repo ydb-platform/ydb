@@ -179,7 +179,7 @@ public:
         GRpcPort_ = grpc;
     }
 
-    ui16 GetPort() {
+    ui16 GetPort() const {
         return GRpcPort_;
     }
 

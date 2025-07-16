@@ -10,7 +10,7 @@
 
 namespace NSQLComplete {
 
-    NJson::TJsonValue LoadJsonResource(const TStringBuf filename);
+    NJson::TJsonValue LoadJsonResource(TStringBuf filename);
 
     template <class T, class U>
     T Merge(T lhs, U rhs) {

@@ -28,7 +28,7 @@ static int s_aws_signable_trailing_headers_get_property(
     if (aws_string_eq(name, g_aws_previous_signature_property_name)) {
         *out_value = aws_byte_cursor_from_string(impl->previous_signature);
     } else {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
     return AWS_OP_SUCCESS;
 }
@@ -48,7 +48,7 @@ static int s_aws_signable_trailing_headers_get_property_list(
     if (aws_string_eq(name, g_aws_http_headers_property_list_name)) {
         *out_list = &impl->headers;
     } else {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_UNSUPPORTED_OPERATION);
     }
 
     return AWS_OP_SUCCESS;

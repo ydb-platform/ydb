@@ -39,31 +39,7 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
 bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
 bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
-template<NUdf::EDataSlot slot>
-std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
-    static_assert(slot == NUdf::EDataSlot::TzDate || slot == NUdf::EDataSlot::TzDatetime || slot == NUdf::EDataSlot::TzTimestamp
-        || slot == NUdf::EDataSlot::TzDate32 || slot == NUdf::EDataSlot::TzDatetime64 || slot == NUdf::EDataSlot::TzTimestamp64,
-        "Expected tz date type slot");
-
-    if constexpr (slot == NUdf::EDataSlot::TzDate) {
-        return arrow::uint16();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDatetime) {
-        return arrow::uint32();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzTimestamp) {
-        return arrow::uint64();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDate32) {
-        return arrow::int32();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDatetime64) {
-        return arrow::int64();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzTimestamp64) {
-        return arrow::int64();
-    }
-}
+using NYql::NUdf::MakeTzLayoutArrowType;
 
 template<NUdf::EDataSlot slot>
 std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
@@ -77,17 +53,17 @@ std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
 class TArrowType : public NUdf::IArrowType {
 public:
     TArrowType(const std::shared_ptr<arrow::DataType>& type)
-        : Type(type)
+        : Type_(type)
     {}
 
     std::shared_ptr<arrow::DataType> GetType() const {
-        return Type;
+        return Type_;
     }
 
     void Export(ArrowSchema* out) const final;
 
 private:
-    const std::shared_ptr<arrow::DataType> Type;
+    const std::shared_ptr<arrow::DataType> Type_;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -113,9 +89,9 @@ struct TFunctionTypeInfo
 // TArgInfo
 //////////////////////////////////////////////////////////////////////////////
 struct TArgInfo {
-    NMiniKQL::TType* Type_ = nullptr;
-    TInternName Name_;
-    ui64 Flags_;
+    NMiniKQL::TType* Type = nullptr;
+    TInternName Name;
+    ui64 Flags;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -230,7 +206,7 @@ private:
     ui32 OptionalArgs_ = 0;
     TString Payload_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
-    TBlockTypeHelper BlockTypeHelper;
+    TBlockTypeHelper BlockTypeHelper_;
     TStringBuf ModuleName_;
     NUdf::ICountersProvider* CountersProvider_;
     NUdf::TSourcePosition Pos_;
@@ -293,11 +269,13 @@ ui64 CalcMaxBlockLength(T beginIt, T endIt, const NUdf::ITypeInfoHelper& helper)
 class TTypeBuilder : public TMoveOnly {
 public:
     TTypeBuilder(const TTypeEnvironment& env)
-        : Env(env)
+        : Env_(env)
+        , Env(env)
+        , UseNullType(UseNullType_)
     {}
 
     const TTypeEnvironment& GetTypeEnvironment() const {
-        return Env;
+        return Env_;
     }
 
     TType* NewVoidType() const;
@@ -341,8 +319,12 @@ public:
     TType* ValidateBlockStructType(const TStructType* structType) const;
 
 protected:
-    const TTypeEnvironment& Env;
-    bool UseNullType = true;
+    const TTypeEnvironment& Env_;
+    //FIXME Remove
+    const TTypeEnvironment& Env; // NOLINT(readability-identifier-naming)
+    bool UseNullType_ = true;
+    //FIXME Remove
+    bool& UseNullType; // NOLINT(readability-identifier-naming)
 };
 
 void RebuildTypeIndex();

@@ -272,6 +272,7 @@ def normalize_domain(domain_name):
 
 class ClusterDetailsProvider(object):
     def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
+
         if not validator:
             validator = validation.default_validator()
 
@@ -311,6 +312,7 @@ class ClusterDetailsProvider(object):
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
         self.bootstrap_config = self.__cluster_description.get("bootstrap_config")
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
+        self.kafka_proxy_config = self.__cluster_description.get("kafka_proxy_config")
         self.s3_proxy_resolver_config = self.__cluster_description.get("s3_proxy_resolver_config")
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
         self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
@@ -448,7 +450,7 @@ class ClusterDetailsProvider(object):
         if self._hosts is not None:
             return self._hosts
         futures = []
-        for node_id, host_description in enumerate(self.__cluster_description.get("hosts"), 1):
+        for node_id, host_description in enumerate(self.__cluster_description.get("hosts", []), 1):
             futures.append(self._thread_pool.submit(self.__collect_host_info, node_id, host_description))
 
         r = []
@@ -637,6 +639,10 @@ class ClusterDetailsProvider(object):
     @domains.setter
     def domains(self, values):
         self.__cluster_description["domains"] = values
+
+    @property
+    def domains_config_as_dict(self):
+        return self.__cluster_description["domains_config"]
 
     @property
     def domains_config(self):

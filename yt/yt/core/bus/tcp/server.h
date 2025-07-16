@@ -4,11 +4,21 @@
 
 #include "packet.h"
 
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+IBusServerPtr CreatePublicTcpBusServer(
+    TBusServerConfigPtr config,
+    IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
+    IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
+
+IBusServerPtr CreateLocalTcpBusServer(
+    TBusServerConfigPtr config,
+    IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
+    IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
 
 IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,

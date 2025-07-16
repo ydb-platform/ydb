@@ -6,7 +6,6 @@ import copy
 import json
 import os
 import re
-import six
 import subprocess
 
 try:
@@ -309,7 +308,7 @@ def validate_test(unit, kw):
             errors.append("Error when parsing test timeout: [[bad]]{}[[rst]]".format(e))
 
         requirements_list = []
-        for req_name, req_value in six.iteritems(requirements):
+        for req_name, req_value in requirements.items():
             requirements_list.append(req_name + ":" + req_value)
         valid_kw['REQUIREMENTS'] = serialize_list(sorted(requirements_list))
 
@@ -415,8 +414,8 @@ def dump_test(unit, kw):
     if valid_kw is None:
         return None
     string_handler = StringIO()
-    for k, v in six.iteritems(valid_kw):
-        print(k + ': ' + six.ensure_str(v), file=string_handler)
+    for k, v in valid_kw.items():
+        print(k + ': ' + (v if isinstance(v, str) else str(v, encoding='utf-8')), file=string_handler)
     print(BLOCK_SEPARATOR, file=string_handler)
     data = string_handler.getvalue()
     string_handler.close()
@@ -992,7 +991,7 @@ def onsetup_exectest(fields, unit, *args):
     command = command.replace("$EXECTEST_COMMAND_VALUE", "")
     if "PYTHON_BIN" in command:
         unit.ondepends('contrib/tools/python')
-    unit.set(["TEST_BLOB_DATA", base64.b64encode(six.ensure_binary(command))])
+    unit.set(["TEST_BLOB_DATA", base64.b64encode(command.encode('utf-8'))])
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 

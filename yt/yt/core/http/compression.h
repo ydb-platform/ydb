@@ -29,7 +29,7 @@ DEFINE_REFCOUNTED_TYPE(TSharedRefOutputStream)
 inline const TContentEncoding IdentityContentEncoding = "identity";
 const std::vector<TContentEncoding>& GetSupportedContentEncodings();
 bool IsContentEncodingSupported(const TContentEncoding& contentEncoding);
-TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(const TString& clientAcceptEncodingHeader);
+TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(TStringBuf clientAcceptEncodingHeader);
 
 ////////////////////////////////////////////////////////////////////////////////
 

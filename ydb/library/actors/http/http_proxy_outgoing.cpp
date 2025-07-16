@@ -13,7 +13,7 @@ public:
     using TBase::Schedule;
     using TBase::SelfId;
 
-    const TActorId Owner;
+    TActorId Owner;
     SocketAddressType Address;
     TString Destination;
     TActorId RequestOwner;
@@ -23,6 +23,13 @@ public:
     TDuration ConnectionTimeout = CONNECTION_TIMEOUT;
     bool AllowConnectionReuse = false;
     NActors::TPollerToken::TPtr PollerToken;
+
+    enum class EStreamState {
+        Unknown,
+        Declined,
+        Approved,
+    } StreamState = EStreamState::Unknown;
+    std::vector<TString> StreamContentTypes;
 
     TOutgoingConnectionActor(const TActorId& owner, TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event)
         : Owner(owner)
@@ -36,10 +43,17 @@ public:
         PerformRequest();
     }
 
+    bool IsAlive() const {
+        return static_cast<bool>(Owner);
+    }
+
     void PassAway() override {
-        Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionClosed(SelfId(), Destination));
-        TSocketImpl::Shutdown(); // to avoid errors when connection already closed
-        TBase::PassAway();
+        if (IsAlive()) {
+            Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionClosed(SelfId(), Destination));
+            TSocketImpl::Shutdown(); // to avoid errors when connection already closed
+            TBase::PassAway();
+            Owner = {};
+        }
     }
 
     TString GetSocketName() {
@@ -54,19 +68,52 @@ public:
         return builder;
     }
 
+    TString GetRequestDebugText() {
+        TStringBuilder text;
+        if (Request) {
+            text << Request->Method << " " << Request->URL;
+            if (Request->Body) {
+                text << ", " << Request->Body.Size() << " bytes";
+            }
+        }
+        return text;
+    }
+
+    TString GetResponseDebugText() {
+        TStringBuilder text;
+        if (Response) {
+            text << Response->Status << " " << Response->Message;
+            if (Response->Body) {
+                text << ", " << Response->Body.Size() << " bytes";
+            }
+        }
+        return text;
+    }
+
     void ReplyAndPassAway() {
-        ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << Response->Status << " " << Response->Message << ")");
-        Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
-        RequestOwner = TActorId();
-        THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
-        Send(Owner, sensors.Release());
+        if (RequestOwner) {
+            if (StreamState == EStreamState::Approved) {
+                ALOG_DEBUG(HttpLog, GetSocketName() << "-> (end of stream)");
+                auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
+                dataChunk->SetEndOfData();
+                Send(RequestOwner, dataChunk.release());
+            } else {
+                ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << GetResponseDebugText() << ")");
+                Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
+                RequestOwner = TActorId();
+            }
+            THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
+            Send(Owner, sensors.Release());
+        }
         if (!AllowConnectionReuse || Response->IsConnectionClose()) {
             ALOG_DEBUG(HttpLog, GetSocketName() << "connection closed");
             PassAway();
         } else {
-            ALOG_DEBUG(HttpLog, GetSocketName() << "connection available for reuse");
             CheckClose();
-            Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionAvailable(SelfId(), Destination));
+            if (IsAlive()) {
+                ALOG_DEBUG(HttpLog, GetSocketName() << "connection available for reuse");
+                Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionAvailable(SelfId(), Destination));
+            }
         }
     }
 
@@ -76,11 +123,18 @@ public:
         } else {
             ALOG_DEBUG(HttpLog, GetSocketName() << "connection closed");
         }
+        // TODO(xenoxeno): reply with error on data chunk
         if (RequestOwner) {
-            if (!error && Response && !Response->IsReady()) {
-                Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, "ConnectionClosed")); // connection closed prematurely
+            if (StreamState == EStreamState::Approved) {
+                auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
+                dataChunk->Error = error ? error : "ConnectionClosed";
+                Send(RequestOwner, dataChunk.release());
             } else {
-                Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
+                if (!error && Response && !Response->IsReady()) {
+                    Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, "ConnectionClosed")); // connection closed prematurely
+                } else {
+                    Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
+                }
             }
             RequestOwner = TActorId();
             THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
@@ -118,15 +172,18 @@ protected:
     void InitiateRequest(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         Request = std::move(event->Get()->Request);
         Destination = Request->GetDestination();
-        TSocketImpl::SetHost(TString(Request->Host));
+        Response = nullptr;
         RequestOwner = event->Sender;
         if (event->Get()->Timeout) {
             ConnectionTimeout = event->Get()->Timeout;
         }
         AllowConnectionReuse = event->Get()->AllowConnectionReuse;
+        StreamContentTypes = event->Get()->StreamContentTypes;
+        StreamState = EStreamState::Unknown;
     }
 
     void PerformRequest() {
+        TSocketImpl::SetHost(TString(Request->Host));
         Request->Timer.Reset();
         ALOG_DEBUG(HttpLog, GetSocketName() << "resolving " << TSocketImpl::Host);
         Send(Owner, new TEvHttpProxy::TEvResolveHostRequest(TSocketImpl::Host));
@@ -136,7 +193,7 @@ protected:
     }
 
     void FlushOutput() {
-        if (Request != nullptr) {
+        if (IsAlive() && Request != nullptr) {
             Request->Finish();
             while (auto size = Request->Size()) {
                 bool read = false, write = false;
@@ -166,7 +223,7 @@ protected:
 
     void CheckClose() {
         char buf[8];
-        for (;;) {
+        while (IsAlive()) {
             bool read = false, write = false;
             ssize_t res = TSocketImpl::Recv(&buf, 0, read, write);
             if (res > 0) {
@@ -190,7 +247,7 @@ protected:
     }
 
     void PullInput() {
-        for (;;) {
+        while (IsAlive()) {
             if (Response == nullptr) {
                 Response = new THttpIncomingResponse(Request);
             }
@@ -201,8 +258,32 @@ protected:
             ssize_t res = TSocketImpl::Recv(Response->Pos(), Response->Avail(), read, write);
             if (res > 0) {
                 LastActivity = NActors::TActivationContext::Now();
-                Response->Advance(res);
-                if (Response->IsDone() && Response->IsReady()) {
+                do {
+                    res -= Response->AdvancePartial(res);
+                    if (StreamState == EStreamState::Unknown && Response->HasCompletedHeaders()) {
+                        auto contentType = Response->ContentType.Before(';');
+                        if (Response->IsChunkedEncoding() && std::ranges::find(StreamContentTypes, contentType) != std::ranges::end(StreamContentTypes)) {
+                            ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << GetResponseDebugText() << ") (incomplete)");
+                            Send(RequestOwner, new TEvHttpProxy::TEvHttpIncompleteIncomingResponse(Request, Response));
+                            StreamState = EStreamState::Approved;
+                            Response->SwitchToStreaming();
+                        } else {
+                            StreamState = EStreamState::Declined;
+                        }
+                    }
+
+                    if (Response->HasNewStreamingDataChunk()) {
+                        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (data chunk " << Response->ChunkLength << " bytes)");
+                        auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
+                        dataChunk->SetData(Response->ExtractDataChunk());
+                        Send(RequestOwner, dataChunk.release());
+                        if (res == 0) {
+                            // when we finish reading at the end of a chunk we could remove processed chunks to save memory and allocations very easily
+                            Response->TruncateToHeaders();
+                        }
+                    }
+                } while (res > 0);
+                if (Response->IsDone()) {
                     return ReplyAndPassAway();
                 }
             } else if (-res == EINTR) {
@@ -247,7 +328,7 @@ protected:
         }
         ALOG_DEBUG(HttpLog, GetSocketName() << "outgoing connection opened");
         TBase::Become(&TOutgoingConnectionActor::StateConnected);
-        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
+        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << GetRequestDebugText() << ")");
         Send(SelfId(), new NActors::TEvPollerReady(nullptr, true, true));
     }
 
@@ -311,17 +392,10 @@ protected:
     }
 
     void HandleConnected(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
-        Request = std::move(event->Get()->Request);
-        Request->Timer.Reset();
-        Response = nullptr;
-        RequestOwner = event->Sender;
-        if (event->Get()->Timeout) {
-            ConnectionTimeout = event->Get()->Timeout;
-        }
-        AllowConnectionReuse = event->Get()->AllowConnectionReuse;
+        InitiateRequest(event);
         Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
         LastActivity = NActors::TActivationContext::Now();
-        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
+        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << GetRequestDebugText() << ")");
         FlushOutput();
         PullInput();
     }
@@ -383,6 +457,7 @@ protected:
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
             hFunc(NActors::TEvPollerRegisterResult, HandleConnected);
             hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleConnected);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
 

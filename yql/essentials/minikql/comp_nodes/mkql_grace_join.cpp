@@ -202,6 +202,8 @@ void TGraceJoinPacker::Pack()  {
 
     TuplesPacked++;
     std::fill(TupleIntVals.begin(), TupleIntVals.end(), 0);
+    std::fill(TupleStrings.begin(), TupleStrings.end(), nullptr);
+    std::fill(TupleStrSizes.begin(), TupleStrSizes.end(), 0);
 
     for (ui64 i = 0; i < ColumnsPackInfo.size(); i++) {
 
@@ -639,6 +641,14 @@ public:
     }
 
 private:
+    bool CanSkipRightOnLeftFinished() const {
+        return !IsSelfJoin_ && LeftPacker->TuplesPacked == 0 && GraceJoin::ShouldSkipRightIfLeftEmpty(JoinKind);
+    }
+
+    bool CanSkipLeftOnRightFinished() const {
+        return !IsSelfJoin_ && RightPacker->TuplesPacked == 0 && GraceJoin::ShouldSkipLeftIfRightEmpty(JoinKind);
+    }
+
     EOperatingMode GetMode() const {
         return Mode;
     }
@@ -767,6 +777,12 @@ private:
             }
         }
 
+        if (resultLeft == EFetchResult::Finish && CanSkipRightOnLeftFinished() ||
+                resultRight == EFetchResult::Finish && CanSkipLeftOnRightFinished()) {
+            IsEarlyExitDueToEmptyInput = true;
+            return EFetchResult::Finish;
+        }
+
         if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
             return EFetchResult::Yield;
         }
@@ -861,6 +877,11 @@ private:
             }
 
             auto isYield = FetchAndPackData(ctx, output);
+            if (IsEarlyExitDueToEmptyInput) {
+                *HaveMoreLeftRows = false;
+                *HaveMoreRightRows = false;
+                return EFetchResult::Finish;
+            }
             if (isYield == EFetchResult::One)
                 return isYield;
             if (IsSpillingAllowed && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
@@ -1060,6 +1081,7 @@ private:
     const bool IsSpillingAllowed;
 
     bool IsSpillingFinalized = false;
+    bool IsEarlyExitDueToEmptyInput = false;
 
     NYql::NUdf::TCounter CounterOutputRows_;
     ui32 SpilledBucketsJoinOrderCurrentIndex = 0;

@@ -100,7 +100,13 @@ private:
             : Self(self)
             , LogPrefix(logPrefix)
             , HandlerSettings(handlerSettings)
-            , Settings(ev->Get()->Record)
+            , QueryId(ev->Get()->Record.GetQueryId())
+            , EnabledLLVM(ev->Get()->Record.GetSource().GetEnabledLLVM())
+            , StartingMessageTimestampMs(ev->Get()->Record.GetStartingMessageTimestampMs())
+            , Predicate(ev->Get()->Record.GetSource().GetPredicate())
+            , Columns(GetColumns(ev->Get()->Record.GetSource()))
+            , ConsumerName(ev->Get()->Record.GetSource().GetConsumerName())
+            , UseSsl(ev->Get()->Record.GetSource().GetUseSsl())
             , ReadActorId(ev->Sender)
             , Counters(counters)
         {
@@ -108,15 +114,30 @@ private:
                 NextMessageOffset = *offset;
                 InitialOffset = *offset;
             }
-            Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
-            auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
+            Y_UNUSED(TDuration::TryParse(ev->Get()->Record.GetSource().GetReconnectPeriod(), ReconnectPeriod));
+            for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
+                Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
+            auto queryGroup = Counters->GetSubgroup("query_id", QueryId);
             auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
             RestartSessionByOffsetsByQuery = readSubGroup->GetCounter("RestartSessionByOffsetsByQuery", true);
+
+            const auto& source = ev->Get()->Record.GetSource();
+            Y_ENSURE(source.ColumnsSize() == source.ColumnTypesSize(), "Columns size and types size should be equal, but got " << source.ColumnsSize() << " columns and " << source.ColumnTypesSize() << " types");
         }
 
         ~TClientsInfo() {
-            Counters->RemoveSubgroup("query_id", Settings.GetQueryId());
+            Counters->RemoveSubgroup("query_id", QueryId);
+        }
+
+        static TVector<TSchemaColumn> GetColumns(const NYql::NPq::NProto::TDqPqTopicSource& source) {
+            TVector<TSchemaColumn> result;
+            result.reserve(source.ColumnsSize());
+            for (ui64 i = 0; i < source.ColumnsSize(); ++i) {
+                result.emplace_back(TSchemaColumn{.Name = source.GetColumns().Get(i), .TypeYson = source.GetColumnTypes().Get(i)});
+            }
+            return result;
         }
 
         TActorId GetClientId() const override {
@@ -127,29 +148,20 @@ private:
             return NextMessageOffset;
         }
 
-        TVector<TSchemaColumn> GetColumns() const override {
-            const auto& source = Settings.GetSource();
-            Y_ENSURE(source.ColumnsSize() == source.ColumnTypesSize(), "Columns size and types size should be equal, but got " << source.ColumnsSize() << " columns and " << source.ColumnTypesSize() << " types");
-
-            TVector<TSchemaColumn> Columns;
-            Columns.reserve(source.ColumnsSize());
-            for (ui64 i = 0; i < source.ColumnsSize(); ++i) {
-                Columns.emplace_back(TSchemaColumn{.Name = source.GetColumns().Get(i), .TypeYson = source.GetColumnTypes().Get(i)});
-            }
-
+        const TVector<TSchemaColumn>& GetColumns() const override {
             return Columns;
         }
 
         const TString& GetWhereFilter() const override {
-            return Settings.GetSource().GetPredicate();
+            return Predicate;
         }
 
         TPurecalcCompileSettings GetPurecalcSettings() const override {
-            return {.EnabledLLVM = Settings.GetSource().GetEnabledLLVM()};
+            return {.EnabledLLVM = EnabledLLVM};
         }
 
         void OnClientError(TStatus status) override {
-            Self.SendSessionError(ReadActorId, status);
+            Self.SendSessionError(ReadActorId, status, false);
         }
 
         void StartClientSession() override {
@@ -185,7 +197,13 @@ private:
         TTopicSession& Self;
         const TString& LogPrefix;
         const ITopicFormatHandler::TSettings HandlerSettings;
-        const NFq::NRowDispatcherProto::TEvStartSession Settings;
+        const TString QueryId;
+        const bool EnabledLLVM;
+        const ui64 StartingMessageTimestampMs;
+        const TString Predicate;
+        const TVector<TSchemaColumn> Columns;
+        const TString ConsumerName;
+        const bool UseSsl;
         const TActorId ReadActorId;
         TDuration ReconnectPeriod;
 
@@ -199,7 +217,7 @@ private:
         // Metrics
         ui64 InitialOffset = 0;
         TStats FilteredStat;
-        const ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
         NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
     };
@@ -281,9 +299,9 @@ public:
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_SESSION";
 
 private:
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const;
-    NYql::ITopicClient& GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
-    NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const;
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(bool useSsl) const;
+    NYql::ITopicClient& GetTopicClient(bool useSsl);
+    NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const TString& consumerName) const;
     void CreateTopicSession();
     void CloseTopicSession();
     void SubscribeOnNextEvent();
@@ -310,7 +328,7 @@ private:
     void SendStatistics();
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     TMaybe<ui64> GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings);
-    void SendSessionError(TActorId readActorId, TStatus status);
+    void SendSessionError(TActorId readActorId, TStatus status, bool isFatalError);
     void RestartSessionIfOldestClient(const TClientsInfo& info);
     void RefreshParsers();
 
@@ -411,17 +429,17 @@ void TTopicSession::SubscribeOnNextEvent() {
     });
 }
 
-NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const {
+NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool useSsl) const {
     return PqGateway->GetTopicClientSettings()
         .Database(Database)
         .DiscoveryEndpoint(Endpoint)
-        .SslCredentials(NYdb::TSslCredentials(sourceParams.GetUseSsl()))
+        .SslCredentials(NYdb::TSslCredentials(useSsl))
         .CredentialsProviderFactory(CredentialsProviderFactory);
 }
 
-NYql::ITopicClient& TTopicSession::GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
+NYql::ITopicClient& TTopicSession::GetTopicClient(bool useSsl) {
     if (!TopicClient) {
-        TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings(sourceParams));
+        TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings(useSsl));
     }
     return *TopicClient;
 }
@@ -430,13 +448,13 @@ TInstant TTopicSession::GetMinStartingMessageTimestamp() const {
     auto result = TInstant::Max();
     Y_ENSURE(!Clients.empty());
     for (const auto& [actorId, info] : Clients) {
-       ui64 time = info->Settings.GetStartingMessageTimestampMs();
+       ui64 time = info->StartingMessageTimestampMs;
        result = std::min(result, TInstant::MilliSeconds(time));
     }
     return result;
 }
 
-NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const {
+NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const TString& consumerName) const {
     NYdb::NTopic::TTopicReadSettings topicReadSettings;
     topicReadSettings.Path(TopicPath);
     topicReadSettings.AppendPartitionIds(PartitionId);
@@ -453,7 +471,7 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const N
     if (Config.GetWithoutConsumer()) {
         settings.WithoutConsumer();
     } else {
-        settings.ConsumerName(sourceParams.GetConsumerName());
+        settings.ConsumerName(consumerName);
     }
     return settings;
 }
@@ -465,8 +483,8 @@ void TTopicSession::CreateTopicSession() {
 
     if (!ReadSession) {
         // Use any sourceParams.
-        const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second->Settings.GetSource();
-        ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
+        const auto& client = Clients.begin()->second;
+        ReadSession = GetTopicClient(client->UseSsl).CreateReadSession(GetReadSessionSettings(client->ConsumerName));
         StartingMessageTimestamp = GetMinStartingMessageTimestamp();
         SubscribeOnNextEvent();
     }
@@ -699,7 +717,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
 
 void TTopicSession::StartClientSession(TClientsInfo& info) {
     if (ReadSession) {
-        auto offset = GetOffset(info.Settings);
+        auto offset = info.GetNextMessageOffset();
         if (offset && offset <= LastMessageOffset) {
             LOG_ROW_DISPATCHER_INFO("New client has less offset (" << offset << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
             Metrics.RestartSessionByOffsets->Inc();
@@ -738,7 +756,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
 
     if (auto status = formatIt->second->AddClient(clientInfo); status.IsFail()) {
-        SendSessionError(clientInfo->ReadActorId, status);
+        SendSessionError(clientInfo->ReadActorId, status, false);
         return;
     }
 
@@ -813,7 +831,7 @@ void TTopicSession::FatalError(const TStatus& status) {
 
     for (auto& [readActorId, info] : Clients) {
         LOG_ROW_DISPATCHER_DEBUG("Send TEvSessionError to " << readActorId);
-        SendSessionError(readActorId, status);
+        SendSessionError(readActorId, status, true);
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
@@ -824,12 +842,13 @@ void TTopicSession::ThrowFatalError(const TStatus& status) {
     ythrow yexception() << "FatalError: " << status.GetErrorMessage();
 }
 
-void TTopicSession::SendSessionError(TActorId readActorId, TStatus status) {
+void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool isFatalError) {
     LOG_ROW_DISPATCHER_WARN("SendSessionError to " << readActorId << ", status: " << status.GetErrorMessage());
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
     event->Record.SetStatusCode(status.GetStatus());
     NYql::IssuesToMessage(status.GetErrorDescription(), event->Record.MutableIssues());
     event->ReadActorId = readActorId;
+    event->IsFatalError = isFatalError;
     Send(RowDispatcherActorId, event.release());
 }
 
@@ -911,14 +930,14 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
         LOG_ROW_DISPATCHER_ERROR("Such a client already exists");
-        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Client with id " << ev->Sender << " already exists"));
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Client with id " << ev->Sender << " already exists"), false);
         return false;
     }
 
     const auto& source = ev->Get()->Record.GetSource();
     if (!Config.GetWithoutConsumer() && ConsumerName && ConsumerName != source.GetConsumerName()) {
         LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << source.GetConsumerName() << ", send error");
-        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"));
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"), false);
         return false;
     }
 

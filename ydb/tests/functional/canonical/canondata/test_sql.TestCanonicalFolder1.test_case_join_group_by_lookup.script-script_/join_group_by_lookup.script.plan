@@ -93,9 +93,9 @@
                                                                             "Group",
                                                                             "Value"
                                                                         ],
-                                                                        "E-Cost": "No estimate",
-                                                                        "E-Rows": "No estimate",
-                                                                        "E-Size": "No estimate",
+                                                                        "E-Cost": "0",
+                                                                        "E-Rows": "0",
+                                                                        "E-Size": "0",
                                                                         "LookupKeyColumns": [
                                                                             "Group"
                                                                         ],
@@ -176,6 +176,7 @@
                                                 "PlanNodeId": 4,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "Group"
                                                         ],
@@ -208,9 +209,6 @@
                                                                                 "Name": "TableFullScan",
                                                                                 "Path": "/local/base_join_group_by_lookup_script_script/Input1",
                                                                                 "ReadColumns": [
-                                                                                    "Group"
-                                                                                ],
-                                                                                "ReadRanges": [
                                                                                     "Group (-\u221e, +\u221e)",
                                                                                     "Name (-\u221e, +\u221e)"
                                                                                 ],
@@ -282,29 +280,31 @@
                 "Plans": [
                     {
                         "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Replace",
+                                "Path": "/local/base_join_group_by_lookup_script_script/Temp",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_join_group_by_lookup_script_script/Temp"
+                            }
+                        ],
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [],
                                         "Iterator": "[{Group: 1,Value: \"One\"},{Group: 3,Value: \"Three\"}]",
                                         "Name": "Iterator"
-                                    },
-                                    {
-                                        "Inputs": [],
-                                        "Name": "Replace",
-                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_join_group_by_lookup_script_script/Temp"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_join_group_by_lookup_script_script/Temp"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_join_group_by_lookup_script_script/Temp"
                         ]
                     }
                 ],

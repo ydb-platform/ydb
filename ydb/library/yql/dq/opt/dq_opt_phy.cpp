@@ -2,6 +2,7 @@
 #include "dq_opt_join.h"
 #include "dq_opt.h"
 
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -1075,6 +1076,8 @@ TExprBase DqBuildLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizati
     return DqBuildLMapOverMuxStageStub<TCoLMap>(node, ctx, optCtx, parentsMap);
 }
 
+
+
 TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -1156,6 +1159,110 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
     return result.Cast();
 }
 
+TExprBase DqPushCombineToStageDependsOnOtherStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TParentsMap& parentsMap,
+                                                  bool allowStageMultiUsage) {
+    Y_UNUSED(optCtx);
+    if (!node.Maybe<TCoCombineByKey>().Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto combine = node.Cast<TCoCombineByKey>();
+    auto dqUnion = combine.Input().Cast<TDqCnUnionAll>();
+
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (IsDqDependsOnOtherStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()) &&
+        IsDqDependsOnOtherStage(combine.UpdateHandlerLambda(), dqUnion.Output().Stage()) &&
+        !IsDqDependsOnOtherStage(combine.PreMapLambda(), dqUnion.Output().Stage()) &&
+        !IsDqDependsOnOtherStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()) &&
+        !IsDqDependsOnOtherStage(combine.FinishHandlerLambda(), dqUnion.Output().Stage())) {
+
+        // Collect all connections for `UpdateHnadler` and `InitHandler` lambda, we want to replace them.
+        THashSet<TExprNode::TPtr> uniqueConnections;
+        auto connectionPredicate = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TDqConnection>(node); };
+        const auto connectionsInitHandler = FindNodes(combine.InitHandlerLambda().Ptr(), connectionPredicate);
+        const auto connectionsUpdateHandler = FindNodes(combine.UpdateHandlerLambda().Ptr(), connectionPredicate);
+
+        if (connectionsInitHandler.empty()) {
+            return node;
+        }
+
+        uniqueConnections.insert(connectionsInitHandler.begin(), connectionsInitHandler.end());
+        uniqueConnections.insert(connectionsUpdateHandler.begin(), connectionsUpdateHandler.end());
+
+        TExprNode::TListType connections{dqUnion.Ptr()};
+        for (const auto &connection : uniqueConnections) {
+            connections.push_back(connection);
+        }
+
+        // Arguments for DqStage.
+        TVector<TCoArgument> inputArgs;
+        for (ui32 i = 0; i < connections.size(); ++i) {
+            TCoArgument arg = Build<TCoArgument>(ctx, node.Pos())
+                .Name(TStringBuilder() << "input_arg_" << i)
+                .Done();
+            inputArgs.push_back(arg);
+        }
+
+        // Arguments for the Flatmap's lambdas.
+        TVector<TCoArgument> lambdaArgs;
+        for (ui32 i = 1; i < connections.size(); ++i) {
+            TCoArgument lambdaArg = Build<TCoArgument>(ctx, node.Pos())
+                .Name(TStringBuilder() << "lambda_arg_" << i)
+                .Done();
+            lambdaArgs.push_back(lambdaArg);
+        }
+
+        TNodeOnNodeOwnedMap replaces;
+        replaces[connections[0].Get()] = inputArgs.front().Ptr();
+        for (ui32 i = 0; i < lambdaArgs.size(); ++i) {
+            replaces[connections[i + 1].Get()] = lambdaArgs[i].Ptr();
+        }
+
+        // Replace connections with `lambdaArgs` for the future flatmaps.
+        auto newBody = TExprBase(ctx.ReplaceNodes(combine.Ptr(), replaces));
+
+        // For input args in range [1, n] wrap to `SqueezeToList` and create
+        // a flatmap.
+        for (ui32 i = 1; i < inputArgs.size(); ++i) {
+            auto squeezeToListArg = Build<TCoSqueezeToList>(ctx, node.Pos())
+                .Stream(inputArgs[i])
+            .Done();
+
+            newBody = Build<TCoFlatMap>(ctx, node.Pos())
+                .Input(squeezeToListArg)
+                .Lambda()
+                    .Args(lambdaArgs[i - 1])
+                    .Body(newBody)
+                    .Build()
+                .Done();
+        }
+
+        // Build a stage with inputs.
+        auto stage = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(connections)
+                .Build()
+            .Program()
+                .Args(inputArgs)
+                .Body(newBody)
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+            .Done();
+
+        return Build<TDqCnUnionAll>(ctx, node.Pos())
+            .Output()
+                .Stage(stage)
+                .Index().Build("0")
+                .Build()
+            .Done();
+    }
+
+    return node;
+}
+
 NNodes::TExprBase DqPushAggregateCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -1166,6 +1273,10 @@ NNodes::TExprBase DqPushAggregateCombineToStage(NNodes::TExprBase node, TExprCon
     auto aggCombine = node.Cast<TCoAggregateCombine>();
     auto dqUnion = aggCombine.Input().Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (!IsDqCompletePureExpr(aggCombine.Handlers())) {
         return node;
     }
 
@@ -2737,6 +2848,7 @@ TExprBase DqBuildJoin(
     EHashJoinMode hashJoin,
     bool shuffleMapJoin,
     bool useGraceCoreForMap,
+    bool useBlockHashJoin,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool buildCollectStage
@@ -2778,7 +2890,7 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

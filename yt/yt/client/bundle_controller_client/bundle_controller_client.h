@@ -1,7 +1,6 @@
 #pragma once
 
 #include "public.h"
-#include "bundle_controller_settings.h"
 
 #include <yt/yt/client/api/client_common.h>
 
@@ -22,7 +21,7 @@ struct TSetBundleConfigOptions
 struct TBundleConfigDescriptor
     : public NYTree::TYsonStruct
 {
-    TString BundleName;
+    std::string BundleName;
 
     TBundleTargetConfigPtr Config;
     TBundleConfigConstraintsPtr ConfigConstraints;
@@ -42,11 +41,11 @@ struct IBundleControllerClient
     virtual ~IBundleControllerClient() = default;
 
     virtual TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
-        const TString& bundleName,
+        const std::string& bundleName,
         const TGetBundleConfigOptions& options = {}) = 0;
 
     virtual TFuture<void> SetBundleConfig(
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const TSetBundleConfigOptions& options = {}) = 0;
 };

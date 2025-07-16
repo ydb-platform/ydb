@@ -57,6 +57,7 @@ namespace NPQ {
         TString Value;
         bool Cached;
         TKey Key;
+        ui64 CreationUnixTime = 0;
 
         TRequestedBlob() = delete;
 
@@ -188,7 +189,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-	    EvTxBatchComplete,
+        EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -199,6 +200,7 @@ struct TEvPQ {
         EvDeletePartitionDone,
         EvTransactionCompleted,
         EvListAllTopicsResponse,
+        EvRunCompaction,
         EvEnd
     };
 
@@ -230,6 +232,10 @@ struct TEvPQ {
             bool IgnoreQuotaDeadline;
             // If specified, Data will contain heartbeat's data
             std::optional<TRowVersion> HeartbeatVersion;
+
+            // For Kafka deduplication:
+            bool EnableKafkaDeduplication = false;
+            TMaybe<i16> ProducerEpoch;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
@@ -362,7 +368,8 @@ struct TEvPQ {
 
         TEvSetClientInfo(const ui64 cookie, const TString& clientId, const ui64 offset, const TString& sessionId, const ui64 partitionSessionId,
                             const ui32 generation, const ui32 step, const TActorId& pipeClient,
-                            ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false)
+                            ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false,
+                            const std::optional<TString>& сommittedMetadata = std::nullopt)
         : Cookie(cookie)
         , ClientId(clientId)
         , Offset(offset)
@@ -374,6 +381,7 @@ struct TEvPQ {
         , ReadRuleGeneration(readRuleGeneration)
         , Strict(strict)
         , PipeClient(pipeClient)
+        , CommittedMetadata(сommittedMetadata)
         {
         }
 
@@ -388,6 +396,7 @@ struct TEvPQ {
         ui64 ReadRuleGeneration;
         bool Strict;
         TActorId PipeClient;
+        std::optional<TString> CommittedMetadata;
     };
 
 
@@ -822,6 +831,16 @@ struct TEvPQ {
             Operations.push_back(std::move(operation));
         }
 
+        void AddKafkaOffsetCommitOperation(TString consumer, ui64 offset) {
+            NKikimrPQ::TPartitionOperation operation;
+            operation.SetConsumer(std::move(consumer));
+            operation.SetKafkaTransaction(true);
+            operation.SetCommitOffsetsEnd(offset);
+            operation.SetForceCommit(true);
+
+            Operations.push_back(std::move(operation));
+        }
+
         ui64 Step;
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;
@@ -1078,12 +1097,10 @@ struct TEvPQ {
         TEvGetWriteInfoResponse() = default;
         TEvGetWriteInfoResponse(ui32 cookie,
                                 NPQ::TSourceIdMap&& srcIdInfo,
-                                std::deque<NPQ::TDataKey>&& bodyKeys,
-                                TVector<NPQ::TClientBlob>&& blobsFromHead) :
+                                std::deque<NPQ::TDataKey>&& bodyKeys) :
             Cookie(cookie),
             SrcIdInfo(std::move(srcIdInfo)),
-            BodyKeys(std::move(bodyKeys)),
-            BlobsFromHead(std::move(blobsFromHead))
+            BodyKeys(std::move(bodyKeys))
         {
         }
 
@@ -1092,7 +1109,6 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
-        TVector<NPQ::TClientBlob> BlobsFromHead;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;
@@ -1194,6 +1210,17 @@ struct TEvPQ {
         bool HaveMoreTopics = false;
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         TString Error;
+    };
+
+    struct TEvRunCompaction : TEventLocal<TEvRunCompaction, EvRunCompaction> {
+        TEvRunCompaction(ui64 maxBlobSize, ui64 cumulativeSize) :
+            MaxBlobSize(maxBlobSize),
+            CumulativeSize(cumulativeSize)
+        {
+        }
+
+        ui64 MaxBlobSize = 0;
+        ui64 CumulativeSize = 0;
     };
 };
 

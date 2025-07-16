@@ -1,0 +1,20 @@
+Удалил дублирующиеся функции, они уже определены в _imaging.c
+--- a/_webp.c
++++ b/_webp.c
+@@ -21,16 +21,6 @@
+ 
+ #endif
+ 
+-void
+-ImagingSectionEnter(ImagingSectionCookie *cookie) {
+-    *cookie = (PyThreadState *)PyEval_SaveThread();
+-}
+-
+-void
+-ImagingSectionLeave(ImagingSectionCookie *cookie) {
+-    PyEval_RestoreThread((PyThreadState *)*cookie);
+-}
+-
+ /* -------------------------------------------------------------------- */
+ /* WebP Muxer Error Handling                                            */
+ /* -------------------------------------------------------------------- */

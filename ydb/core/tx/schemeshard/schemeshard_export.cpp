@@ -1,10 +1,12 @@
 #include "schemeshard_export.h"
+
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_impl.h"
 
-#include <util/generic/xrange.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+
+#include <util/generic/xrange.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -17,30 +19,23 @@ namespace {
         issue.set_message(errorMessage);
     }
 
-    void FillIssues(NKikimrExport::TExport& exprt, const TExportInfo::TPtr exportInfo) {
-        if (exportInfo->Issue) {
-            AddIssue(exprt, exportInfo->Issue);
+    void FillIssues(NKikimrExport::TExport& exprt, const TExportInfo& exportInfo) {
+        if (exportInfo.Issue) {
+            AddIssue(exprt, exportInfo.Issue);
         }
 
-        for (const auto& item : exportInfo->Items) {
+        for (const auto& item : exportInfo.Items) {
             if (item.Issue) {
                 AddIssue(exprt, item.Issue);
             }
         }
     }
 
-    NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
-        NProtoBuf::Timestamp timestamp;
-        timestamp.set_seconds((i64)(sec));
-        timestamp.set_nanos(0);
-        return timestamp;
-    }
-
-    void FillItemProgress(TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx,
+    void FillItemProgress(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx,
             Ydb::Export::ExportItemProgress& itemProgress) {
 
-        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
-        const auto& item = exportInfo->Items.at(itemIdx);
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        const auto& item = exportInfo.Items.at(itemIdx);
 
         const auto opId = TOperationId(item.WaitTxId, FirstSubTxId);
         if (item.WaitTxId != InvalidTxId && ss->TxInFlight.contains(opId)) {
@@ -80,22 +75,22 @@ namespace {
 
 } // anonymous
 
-void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo::TPtr exportInfo) {
-    exprt.SetId(exportInfo->Id);
+void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo& exportInfo) {
+    exprt.SetId(exportInfo.Id);
     exprt.SetStatus(Ydb::StatusIds::SUCCESS);
 
-    if (exportInfo->StartTime != TInstant::Zero()) {
-        *exprt.MutableStartTime() = SecondsToProtoTimeStamp(exportInfo->StartTime.Seconds());
+    if (exportInfo.StartTime != TInstant::Zero()) {
+        *exprt.MutableStartTime() = SecondsToProtoTimeStamp(exportInfo.StartTime.Seconds());
     }
-    if (exportInfo->EndTime != TInstant::Zero()) {
-        *exprt.MutableEndTime() = SecondsToProtoTimeStamp(exportInfo->EndTime.Seconds());
-    }
-
-    if (exportInfo->UserSID) {
-        exprt.SetUserSID(*exportInfo->UserSID);
+    if (exportInfo.EndTime != TInstant::Zero()) {
+        *exprt.MutableEndTime() = SecondsToProtoTimeStamp(exportInfo.EndTime.Seconds());
     }
 
-    switch (exportInfo->State) {
+    if (exportInfo.UserSID) {
+        exprt.SetUserSID(*exportInfo.UserSID);
+    }
+
+    switch (exportInfo.State) {
     case TExportInfo::EState::CreateExportDir:
     case TExportInfo::EState::CopyTables:
     case TExportInfo::EState::UploadExportMetadata:
@@ -105,10 +100,10 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     case TExportInfo::EState::AutoDropping:
     case TExportInfo::EState::Transferring:
     case TExportInfo::EState::Done:
-        for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+        for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
             FillItemProgress(this, exportInfo, itemIdx, *exprt.AddItemsProgress());
         }
-        exprt.SetProgress(exportInfo->IsDone()
+        exprt.SetProgress(exportInfo.IsDone()
             ? Ydb::Export::ExportProgress::PROGRESS_DONE
             : Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
         break;
@@ -134,42 +129,42 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         break;
     }
 
-    switch (exportInfo->Kind) {
+    switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:
-        Y_ABORT_UNLESS(exprt.MutableExportToYtSettings()->ParseFromString(exportInfo->Settings));
+        Y_ABORT_UNLESS(exprt.MutableExportToYtSettings()->ParseFromString(exportInfo.Settings));
         exprt.MutableExportToYtSettings()->clear_token();
         break;
 
     case TExportInfo::EKind::S3:
-        Y_ABORT_UNLESS(exprt.MutableExportToS3Settings()->ParseFromString(exportInfo->Settings));
+        Y_ABORT_UNLESS(exprt.MutableExportToS3Settings()->ParseFromString(exportInfo.Settings));
         exprt.MutableExportToS3Settings()->clear_access_key();
         exprt.MutableExportToS3Settings()->clear_secret_key();
         break;
     }
 }
 
-void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo) {
-    db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
-        NIceDb::TUpdate<Schema::Exports::Uid>(exportInfo->Uid),
-        NIceDb::TUpdate<Schema::Exports::Kind>(static_cast<ui8>(exportInfo->Kind)),
-        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
-        NIceDb::TUpdate<Schema::Exports::DomainPathOwnerId>(exportInfo->DomainPathId.OwnerId),
-        NIceDb::TUpdate<Schema::Exports::DomainPathId>(exportInfo->DomainPathId.LocalPathId),
-        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo->Items.size()),
-        NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo->EnableChecksums),
-        NIceDb::TUpdate<Schema::Exports::EnablePermissions>(exportInfo->EnablePermissions)
+void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
+    db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Exports::Uid>(exportInfo.Uid),
+        NIceDb::TUpdate<Schema::Exports::Kind>(static_cast<ui8>(exportInfo.Kind)),
+        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo.Settings),
+        NIceDb::TUpdate<Schema::Exports::DomainPathOwnerId>(exportInfo.DomainPathId.OwnerId),
+        NIceDb::TUpdate<Schema::Exports::DomainPathId>(exportInfo.DomainPathId.LocalPathId),
+        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo.Items.size()),
+        NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo.EnableChecksums),
+        NIceDb::TUpdate<Schema::Exports::EnablePermissions>(exportInfo.EnablePermissions)
     );
 
-    if (exportInfo->UserSID) {
-        db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
-            NIceDb::TUpdate<Schema::Exports::UserSID>(*exportInfo->UserSID)
+    if (exportInfo.UserSID) {
+        db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+            NIceDb::TUpdate<Schema::Exports::UserSID>(*exportInfo.UserSID)
         );
     }
 
-    for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-        const auto& item = exportInfo->Items.at(itemIdx);
+    for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
+        const auto& item = exportInfo.Items.at(itemIdx);
 
-        db.Table<Schema::ExportItems>().Key(exportInfo->Id, itemIdx).Update(
+        db.Table<Schema::ExportItems>().Key(exportInfo.Id, itemIdx).Update(
             NIceDb::TUpdate<Schema::ExportItems::SourcePathName>(item.SourcePathName),
             NIceDb::TUpdate<Schema::ExportItems::SourceOwnerPathId>(item.SourcePathId.OwnerId),
             NIceDb::TUpdate<Schema::ExportItems::SourcePathId>(item.SourcePathId.LocalPathId),
@@ -179,36 +174,43 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::T
     }
 }
 
-void TSchemeShard::PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo) {
-    for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-        db.Table<Schema::ExportItems>().Key(exportInfo->Id, itemIdx).Delete();
+void TSchemeShard::PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
+    for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
+        db.Table<Schema::ExportItems>().Key(exportInfo.Id, itemIdx).Delete();
     }
 
-    db.Table<Schema::Exports>().Key(exportInfo->Id).Delete();
+    db.Table<Schema::Exports>().Key(exportInfo.Id).Delete();
 }
 
-void TSchemeShard::PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo) {
-    db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
-        NIceDb::TUpdate<Schema::Exports::ExportOwnerPathId>(exportInfo->ExportPathId.OwnerId),
-        NIceDb::TUpdate<Schema::Exports::ExportPathId>(exportInfo->ExportPathId.LocalPathId)
+void TSchemeShard::PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
+    db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Exports::ExportOwnerPathId>(exportInfo.ExportPathId.OwnerId),
+        NIceDb::TUpdate<Schema::Exports::ExportPathId>(exportInfo.ExportPathId.LocalPathId)
     );
 }
 
-void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo) {
-    db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
-        NIceDb::TUpdate<Schema::Exports::State>(static_cast<ui8>(exportInfo->State)),
-        NIceDb::TUpdate<Schema::Exports::WaitTxId>(exportInfo->WaitTxId),
-        NIceDb::TUpdate<Schema::Exports::Issue>(exportInfo->Issue),
-        NIceDb::TUpdate<Schema::Exports::StartTime>(exportInfo->StartTime.Seconds()),
-        NIceDb::TUpdate<Schema::Exports::EndTime>(exportInfo->EndTime.Seconds())
+void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
+    db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Exports::State>(static_cast<ui8>(exportInfo.State)),
+        NIceDb::TUpdate<Schema::Exports::WaitTxId>(exportInfo.WaitTxId),
+        NIceDb::TUpdate<Schema::Exports::Issue>(exportInfo.Issue),
+        NIceDb::TUpdate<Schema::Exports::StartTime>(exportInfo.StartTime.Seconds()),
+        NIceDb::TUpdate<Schema::Exports::EndTime>(exportInfo.EndTime.Seconds())
     );
 }
 
-void TSchemeShard::PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo, ui32 itemIdx) {
-    Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
-    const auto& item = exportInfo->Items.at(itemIdx);
+void TSchemeShard::PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
+    db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo.Settings),
+        NIceDb::TUpdate<Schema::Exports::ExportMetadata>(exportInfo.ExportMetadata)
+    );
+}
 
-    db.Table<Schema::ExportItems>().Key(exportInfo->Id, itemIdx).Update(
+void TSchemeShard::PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo, ui32 itemIdx) {
+    Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+    const auto& item = exportInfo.Items.at(itemIdx);
+
+    db.Table<Schema::ExportItems>().Key(exportInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State)),
         NIceDb::TUpdate<Schema::ExportItems::BackupTxId>(item.WaitTxId),
         NIceDb::TUpdate<Schema::ExportItems::Issue>(item.Issue)

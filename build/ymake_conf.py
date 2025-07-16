@@ -15,8 +15,6 @@ import subprocess
 import sys
 import tempfile
 
-import six
-
 from functools import total_ordering
 
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
@@ -162,6 +160,9 @@ class Platform(object):
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
 
+        self.is_freebsd = self.os == 'freebsd'
+        self.is_freebsd_x86_64 = self.is_freebsd and self.is_x86_64
+
         self.is_linux = self.os == 'linux' or 'yocto' in self.os
         self.is_linux_x86_64 = self.is_linux and self.is_x86_64
         self.is_linux_armv8 = self.is_linux and self.is_armv8
@@ -184,13 +185,12 @@ class Platform(object):
         if self.is_android:
             self.android_api = int(preset('ANDROID_API', ANDROID_API_DEFAULT))
 
-        self.is_cygwin = self.os == 'cygwin'
         self.is_yocto = self.os == 'yocto'
         self.is_emscripten = self.os == 'emscripten'
 
         self.is_none = self.os == 'none'
 
-        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_cygwin or self.is_yocto
+        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
     @staticmethod
     def from_json(data):
@@ -210,9 +210,14 @@ class Platform(object):
             yield 'LINUX'
             yield 'OS_LINUX'
 
+        if self.is_freebsd:
+            yield 'FREEBSD'
+            yield 'OS_FREEBSD'
+
         if self.is_macos:
             yield 'DARWIN'
             yield 'OS_DARWIN'
+
         if self.is_iossim:
             yield 'IOS'
             yield 'OS_IOS'
@@ -255,7 +260,7 @@ class Platform(object):
     def find_in_dict(self, dict_, default=None):
         if dict_ is None:
             return default
-        for key in six.iterkeys(dict_):
+        for key in dict_.keys():
             if self._parse_os(key) == self.os:
                 return dict_[key]
         return default
@@ -304,8 +309,6 @@ class Platform(object):
             return 'macos'
         if os in ('win', 'win32', 'win64'):
             return 'windows'
-        if os.startswith('cygwin'):
-            return 'cygwin'
 
         return os
 
@@ -342,9 +345,9 @@ def get_stdout(command):
 def get_stdout_and_code(command):
     # noinspection PyBroadException
     try:
-        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, _ = process.communicate()
-        return six.ensure_str(stdout), process.returncode
+        return stdout, process.returncode
     except Exception as e:
         logger.info("While run: `%s`", e)
         return None, None
@@ -411,7 +414,7 @@ class Variables(dict):
                 emit(k, self[k])
 
     def update_from_presets(self):
-        for k in six.iterkeys(self):
+        for k in self.keys():
             v = preset(k)
             if v is not None:
                 self[k] = v
@@ -421,8 +424,8 @@ class Variables(dict):
             def value_check(v_):
                 return v_ is None
 
-        if any(map(value_check, six.itervalues(self))):
-            for k in six.iterkeys(self):
+        if any(map(value_check, self.values())):
+            for k in self.keys():
                 self[k] = reset_value
 
 
@@ -433,7 +436,7 @@ def format_env(env, list_separator=':'):
     def format(kv):
         return '${env:"%s=%s"}' % (kv[0], format_value(kv[1]))
 
-    return ' '.join(map(format, sorted(six.iteritems(env))))
+    return ' '.join(map(format, sorted(env.items())))
 
 
 # TODO(somov): Проверить, используется ли это. Может быть, выпилить.
@@ -465,7 +468,7 @@ def is_negative_str(s):
 
 
 def to_bool(s, default=None):
-    if isinstance(s, six.string_types):
+    if isinstance(s, str):
         if is_positive_str(s):
             return True
         if is_negative_str(s):
@@ -735,7 +738,7 @@ class Build(object):
         swiftc.configure()
         swiftc.print_compiler()
 
-        if host.is_linux or host.is_macos or host.is_cygwin:
+        if host.is_linux or host.is_macos:
             if is_negative('USE_ARCADIA_PYTHON'):
                 python = Python(self.tc)
                 python.configure_posix()
@@ -755,17 +758,7 @@ class Build(object):
         """
         :rtype: dict[str, Any]
         """
-
-        def un_unicode(o):
-            if isinstance(o, six.text_type):
-                return six.ensure_str(o)
-            if isinstance(o, list):
-                return [un_unicode(oo) for oo in o]
-            if isinstance(o, dict):
-                return {un_unicode(k): un_unicode(v) for k, v in six.iteritems(o)}
-            return o
-
-        return un_unicode(json.loads(base64.b64decode(base64str)))
+        return json.loads(base64.b64decode(base64str))
 
 
 class YMake(object):
@@ -779,7 +772,10 @@ class YMake(object):
         else:
             print('@import "${CONF_ROOT}/conf/export_gradle.no.conf"')
 
-        if presets.get('CLANG_COVERAGE', None) is None:
+        if (preset('CLANG_COVERAGE') is None and
+                (preset('PYTHON_COVERAGE') is None or
+                 preset('COVERAGE_FILTER_PROGRAMS') is None or
+                 preset('CYTHON_COVERAGE') is not None)):
             print('@import "${CONF_ROOT}/conf/coverage_full_instrumentation.conf"')
         else:
             print('@import "${CONF_ROOT}/conf/coverage_selective_instrumentation.conf"')
@@ -900,7 +896,7 @@ class CompilerDetector(object):
             return None
 
         vars_ = {}
-        for line in six.ensure_str(stdout).split('\n'):
+        for line in stdout.split('\n'):
             parts = line.split('=', 1)
             if len(parts) == 2 and parts[0].startswith(prefix):
                 name, value = parts[0][len(prefix):], parts[1]
@@ -992,7 +988,7 @@ class ToolchainOptions(object):
             self.c_compiler = detector.c_compiler
             self.cxx_compiler = detector.cxx_compiler
             self.compiler_version_list = detector.version_list
-            self.compiler_version = '.'.join(map(lambda part: six.ensure_str(str(part)), self.compiler_version_list))
+            self.compiler_version = '.'.join(map(lambda part: str(part), self.compiler_version_list))
 
         else:
             self.type = self.params['type']
@@ -1058,7 +1054,7 @@ class ToolchainOptions(object):
     def get_env(self, convert_list=None):
         convert_list = convert_list or (lambda x: x)
         r = {}
-        for k, v in six.iteritems(self._env):
+        for k, v in self._env.items():
             if isinstance(v, str):
                 r[k] = v
             elif isinstance(v, list):
@@ -1205,6 +1201,8 @@ class GnuToolchain(Toolchain):
             target_triple = self.tc.triplet_opt.get(target.arch, None)
             if not target_triple:
                 target_triple = select(default=None, selectors=[
+                    (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
+
                     (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
                     (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
                     (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
@@ -1318,6 +1316,9 @@ class GnuToolchain(Toolchain):
             if target.is_apple:
                 self.setup_apple_sdk(target)
 
+            if target.is_freebsd:
+                self.setup_freebsd_sdk_impl(project='build/internal/platform/freebsd', var='${FREEBSD_SDK_RESOURCE_GLOBAL}')
+
             if self.tc.is_from_arcadia or self.tc.is_system_cxx:
                 if target.is_linux:
                     if not tc.os_sdk_local:
@@ -1336,6 +1337,11 @@ class GnuToolchain(Toolchain):
                 if target.is_yocto:
                     self.setup_sdk(project='build/platform/yocto_sdk/yocto_sdk', var='${YOCTO_SDK_ROOT_RESOURCE_GLOBAL}')
 
+    def setup_freebsd_sdk_impl(self, project, var):
+        self.platform_projects.append(project)
+        self.c_flags_platform.append('--sysroot')
+        self.c_flags_platform.append(var)
+
     def setup_apple_sdk(self, target):
         if not self.tc.os_sdk_local:
             self.setup_apple_arcadia_sdk(target)
@@ -1351,7 +1357,7 @@ class GnuToolchain(Toolchain):
 
     def setup_apple_local_sdk(self, target):
         def get_output(*args):
-            return six.ensure_str(subprocess.check_output(tuple(args))).strip()
+            return subprocess.check_output(tuple(args), text=True).strip()
 
         def get_sdk_root(sdk):
             root = self.env.get('SDKROOT')
@@ -1493,7 +1499,7 @@ class GnuCompiler(Compiler):
             # Arcadia have API 16 for 32-bit Androids.
             self.c_defines.append('-D_FILE_OFFSET_BITS=64')
 
-        if self.target.is_linux or self.target.is_android or self.target.is_cygwin or self.target.is_none:
+        if self.target.is_linux or self.target.is_android or self.target.is_none:
             self.c_defines.append('-D_GNU_SOURCE')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
@@ -1652,7 +1658,7 @@ class Linker(object):
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
 
-        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm:
+        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd:
             return Linker.LLD
 
         # There is no linker choice on Windows (link.exe)
@@ -1715,6 +1721,8 @@ class LD(Linker):
 
         if self.musl.value:
             self.ld_flags.extend(['-Wl,--no-as-needed'])
+        elif target.is_freebsd:
+            self.ld_flags.extend(['-lc', '-lm', '-lpthread', '-Wl,--no-as-needed'])
         elif target.is_linux:
             self.ld_flags.extend(['-ldl', '-lrt', '-Wl,--no-as-needed'])
             if self.tc.is_gcc:
@@ -2409,7 +2417,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8', '12.9'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True
@@ -2544,7 +2552,7 @@ class CuDNN(object):
         return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0')
 
     def auto_cudnn_version(self):
-        return '8.6.0'
+        return '9.0.0'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

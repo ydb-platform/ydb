@@ -28,12 +28,8 @@ message TChunkSpec
     // Upper boundary, exclusive.
     optional TReadLimit upper_limit = 3;
 
-    // COMPAT(babenko)
-    // Initial seed replicas. The reader may ask the master for additional ones.
-    // No medium indices.
-    repeated fixed32 legacy_replicas = 4;
-
     // Initial seeds replicas. The reader may ask the master for additional ones.
+    // TODO(babenko): Currently no medium indicies are provided. Consider downgrading to fixed32.
     repeated fixed64 replicas = 25;
 
     optional int32 table_index = 7 [default = 0];
@@ -55,6 +51,7 @@ message TChunkSpec
     optional int64 row_count_override = 14;
     optional int64 data_weight_override = 15;
     optional int64 compressed_data_size_override = 27;
+    optional int64 uncompressed_data_size_override = 28;
 
     // Tag of the input data slice this chunk spec belongs to (if any).
     // It helps us restore the correspondence between data slices that
@@ -86,7 +83,7 @@ message TChunkSpec
 
     optional bool use_proxying_data_node_service = 26 [default = false];
 
-    reserved 5, 6, 8;
+    reserved 4, 5, 6, 8;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

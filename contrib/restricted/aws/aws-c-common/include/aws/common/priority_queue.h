@@ -163,6 +163,12 @@ AWS_COMMON_API
 int aws_priority_queue_top(const struct aws_priority_queue *queue, void **item);
 
 /**
+ * Removes all elements from the queue, but does not free internal memory.
+ */
+AWS_COMMON_API
+void aws_priority_queue_clear(struct aws_priority_queue *queue);
+
+/**
  * Current number of elements in the queue
  */
 AWS_COMMON_API
@@ -174,6 +180,24 @@ size_t aws_priority_queue_size(const struct aws_priority_queue *queue);
  */
 AWS_COMMON_API
 size_t aws_priority_queue_capacity(const struct aws_priority_queue *queue);
+
+/**
+ * Initializes a queue node to a default value that indicates the node is not in the queue.
+ *
+ * @param node priority queue node to initialize with a default value
+ */
+AWS_COMMON_API
+void aws_priority_queue_node_init(struct aws_priority_queue_node *node);
+
+/**
+ * Checks if a priority queue node is currently in a priority queue.
+ *
+ * @param node priority queue node to check usage for
+ *
+ * @return true if the node is in a queue, false otherwise
+ */
+AWS_COMMON_API
+bool aws_priority_queue_node_is_in_queue(const struct aws_priority_queue_node *node);
 
 AWS_EXTERN_C_END
 AWS_POP_SANE_WARNING_LEVEL

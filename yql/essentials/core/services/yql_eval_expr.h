@@ -16,6 +16,7 @@ class IFunctionRegistry;
 namespace NYql {
 
 IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExprNode::TPtr& output, TTypeAnnotationContext& types, TExprContext& ctx,
-    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, IGraphTransformer* calcTransfomer = nullptr);
+    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
+    IGraphTransformer* calcTransfomer = nullptr, TTypeAnnCallableFactory typeAnnCallableFactory = {});
 
 }

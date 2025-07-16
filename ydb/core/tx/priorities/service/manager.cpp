@@ -13,6 +13,7 @@ void TManager::AllocateNext() {
         auto it = Clients.find(waitRequest.GetClientId());
         AFL_VERIFY(it != Clients.end());
         UsedCount += waitRequest.GetSize();
+        Counters->Using->Add(waitRequest.GetSize());
         it->second.MutableCount() += waitRequest.GetSize();
         it->second.SetLastPriority(std::nullopt);
         waitRequest.GetRequest()->OnAllocated(std::make_shared<TAllocationGuard>(ServiceActorId, waitRequest.GetClientId(), waitRequest.GetSize()));

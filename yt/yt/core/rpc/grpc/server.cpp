@@ -98,8 +98,8 @@ private:
     TGrpcServerPtr Native_;
     std::vector<TGrpcServerCredentialsPtr> Credentials_;
 
-    std::atomic<int> CallHandlerCount_ = {0};
-    std::atomic<bool> ShutdownStarted_ = {false};
+    std::atomic<int> CallHandlerCount_ = 0;
+    std::atomic<bool> ShutdownStarted_ = false;
     TPromise<void> ShutdownPromise_ = NewPromise<void>();
 
 
@@ -307,7 +307,7 @@ private:
     private:
         const TWeakPtr<TCallHandler> Handler_;
         const TNetworkAddress PeerAddress_;
-        const TString PeerAddressString_;
+        const std::string PeerAddressString_;
         const IAttributeDictionaryPtr EndpointAttributes_;
 
         TSingleShotCallbackList<void(const TError&)> TerminatedList_;
@@ -402,19 +402,19 @@ private:
         bool CancelRequested_ = false;
         TSharedRefArray ResponseMessage_;
 
-        TString PeerAddressString_;
+        std::string PeerAddressString_;
         TNetworkAddress PeerAddress_;
 
         TRequestId RequestId_;
-        std::optional<TString> User_;
-        std::optional<TString> UserTag_;
-        std::optional<TString> UserAgent_;
+        std::optional<std::string> User_;
+        std::optional<std::string> UserTag_;
+        std::optional<std::string> UserAgent_;
         std::optional<NGrpc::NProto::TSslCredentialsExt> SslCredentialsExt_;
         std::optional<NRpc::NProto::TCredentialsExt> RpcCredentialsExt_;
         std::optional<NRpc::NProto::TCustomMetadataExt> CustomMetadataExt_;
         std::optional<NTracing::NProto::TTracingExt> TraceContext_;
-        TString ServiceName_;
-        TString MethodName_;
+        std::string ServiceName_;
+        std::string MethodName_;
         std::optional<TDuration> Timeout_;
         NCompression::ECodec RequestCodec_ = NCompression::ECodec::None;
         NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
@@ -430,7 +430,7 @@ private:
         std::optional<ui32> RequestMessageBodySize_;
         TProtocolVersion ProtocolVersion_ = DefaultProtocolVersion;
         TGrpcByteBufferPtr ResponseBodyBuffer_;
-        TString ErrorMessage_;
+        std::string ErrorMessage_;
         TGrpcSlice ErrorMessageSlice_;
         int RawCanceled_ = 0;
 
@@ -549,20 +549,20 @@ private:
         bool TryParsePeerAddress()
         {
             auto addressString = MakeGprString(grpc_call_get_peer(Call_.Unwrap()));
-            PeerAddressString_ = TString(addressString.get());
+            PeerAddressString_ = std::string(addressString.get());
 
             // Drop ipvN: prefix.
-            if (PeerAddressString_.StartsWith("ipv6:") || PeerAddressString_.StartsWith("ipv4:")) {
+            if (PeerAddressString_.starts_with("ipv6:") || PeerAddressString_.starts_with("ipv4:")) {
                 PeerAddressString_ = PeerAddressString_.substr(5);
             }
 
-            if (PeerAddressString_.StartsWith("unix:")) {
+            if (PeerAddressString_.starts_with("unix:")) {
                 PeerAddress_ = NNet::TNetworkAddress::CreateUnixDomainSocketAddress(PeerAddressString_.substr(5));
                 return true;
             }
 
             // Decode URL-encoded square brackets.
-            CGIUnescape(PeerAddressString_);
+            PeerAddressString_ = CGIUnescapeRet(PeerAddressString_);
 
             auto address = NNet::TNetworkAddress::TryParse(PeerAddressString_);
             if (!address.IsOK()) {
@@ -643,7 +643,7 @@ private:
                 return;
             }
 
-            User_ = TString(userString);
+            User_ = std::string(userString);
         }
 
         void ParseUserTag()
@@ -653,7 +653,7 @@ private:
                 return;
             }
 
-            UserTag_ = TString(userTagString);
+            UserTag_ = std::string(userTagString);
         }
 
         void ParseUserAgent()
@@ -663,7 +663,7 @@ private:
                 return;
             }
 
-            UserAgent_ = TString(userAgentString);
+            UserAgent_ = std::string(userAgentString);
         }
 
         void ParseRequestCodec()
@@ -734,19 +734,19 @@ private:
             RpcCredentialsExt_.emplace();
 
             if (tokenString) {
-                RpcCredentialsExt_->set_token(TString(tokenString));
+                RpcCredentialsExt_->set_token(std::string(tokenString));
             }
             if (sessionIdString) {
-                RpcCredentialsExt_->set_session_id(TString(sessionIdString));
+                RpcCredentialsExt_->set_session_id(std::string(sessionIdString));
             }
             if (sslSessionIdString) {
-                RpcCredentialsExt_->set_ssl_session_id(TString(sslSessionIdString));
+                RpcCredentialsExt_->set_ssl_session_id(std::string(sslSessionIdString));
             }
             if (userTicketString) {
-                RpcCredentialsExt_->set_user_ticket(TString(userTicketString));
+                RpcCredentialsExt_->set_user_ticket(std::string(userTicketString));
             }
             if (serviceTicketString) {
-                RpcCredentialsExt_->set_service_ticket(TString(serviceTicketString));
+                RpcCredentialsExt_->set_service_ticket(std::string(serviceTicketString));
             }
         }
 
@@ -800,7 +800,7 @@ private:
             if (!sslCredentialsExtension->has_value()) {
                 sslCredentialsExtension->emplace();
             }
-            (*sslCredentialsExtension)->set_peer_identity(TString(peerIdentityProperty->value, peerIdentityProperty->value_length));
+            (*sslCredentialsExtension)->set_peer_identity(std::string(peerIdentityProperty->value, peerIdentityProperty->value_length));
         }
 
         static void ParseIssuerAndSerialNumber(const TGrpcAuthContextPtr& authContext, std::optional<NGrpc::NProto::TSslCredentialsExt>* sslCredentialsExtension)

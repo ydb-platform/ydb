@@ -123,7 +123,7 @@ class TSqlTranslation: public TTranslation {
 protected:
     TSqlTranslation(TContext& ctx, NSQLTranslation::ESqlMode mode)
         : TTranslation(ctx)
-        , Mode(mode)
+        , Mode_(mode)
     {
         /// \todo remove NSQLTranslation::ESqlMode params
         YQL_ENSURE(ctx.Settings.Mode == mode);
@@ -267,6 +267,8 @@ protected:
         TVector<TDeferredAtom>& removeTables,
         const TRule_alter_backup_collection_entries& entries);
     bool ParseTransferLambda(TString& lambdaText, const TRule_lambda_or_parameter& lambdaOrParameter);
+    bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
+    bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
@@ -286,7 +288,7 @@ private:
     bool ValidateTableSettings(const TTableSettings& settings);
 
 protected:
-    NSQLTranslation::ESqlMode Mode;
+    NSQLTranslation::ESqlMode Mode_;
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);

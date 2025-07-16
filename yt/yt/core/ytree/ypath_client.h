@@ -34,6 +34,7 @@ public:
     NRpc::TRealmId GetRealmId() const override;
     std::string GetMethod() const override;
     std::string GetService() const override;
+    const std::string& GetRequestInfo() const override;
 
     using NRpc::IClientRequest::DeclareClientFeature;
     using NRpc::IClientRequest::RequireServerFeature;
@@ -47,7 +48,7 @@ public:
     const std::string& GetUserTag() const override;
     void SetUserTag(const std::string& tag) override;
 
-    void SetUserAgent(const TString& userAgent) override;
+    void SetUserAgent(const std::string& userAgent) override;
 
     bool GetRetry() const override;
     void SetRetry(bool value) override;
@@ -61,6 +62,8 @@ public:
     NRpc::NProto::TRequestHeader& Header() override;
 
     bool IsAttachmentCompressionEnabled() const override;
+
+    bool HasAttachments() const override;
 
     bool IsStreamingEnabled() const override;
 

@@ -290,6 +290,11 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
     runtime.SimulateSleep(TDuration::Seconds(1));
 
     ExecuteYqlScript(env, Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
+    )", fullTableName.c_str()));
+    runtime.SimulateSleep(TDuration::Seconds(1));
+
+    ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_value, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Value']}`);
     )", fullTableName.c_str()));
@@ -299,31 +304,36 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
         Ydb::Table::BulkUpsertRequest,
         Ydb::Table::BulkUpsertResponse>;
 
-    Ydb::Table::BulkUpsertRequest request;
-    request.set_table(fullTableName);
-    auto* rows = request.mutable_rows();
+    //send by a few rows with overlap to stimulate compaction
+    const size_t rowsInBlock = 100;
+    const size_t overlap = 20;
+    for (size_t i = 0; i < ColumnTableRowsNumber - overlap;) {
+        Ydb::Table::BulkUpsertRequest request;
+        request.set_table(fullTableName);
+        auto* rows = request.mutable_rows();
 
-    auto* reqRowType = rows->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
-    auto* reqKeyType = reqRowType->add_members();
-    reqKeyType->set_name("Key");
-    reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT64);
-    auto* reqValueType = reqRowType->add_members();
-    reqValueType->set_name("Value");
-    reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+        auto* reqRowType = rows->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+        auto* reqKeyType = reqRowType->add_members();
+        reqKeyType->set_name("Key");
+        reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        auto* reqValueType = reqRowType->add_members();
+        reqValueType->set_name("Value");
+        reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
 
-    auto* reqRows = rows->mutable_value();
-    for (size_t i = 0; i < ColumnTableRowsNumber; ++i) {
-        auto* row = reqRows->add_items();
-        row->add_items()->set_uint64_value(i);
-        row->add_items()->set_uint64_value(i);
+        auto* reqRows = rows->mutable_value();
+        for (size_t j = 0; j < rowsInBlock && i < ColumnTableRowsNumber; ++i, ++j) {
+            auto* row = reqRows->add_items();
+            row->add_items()->set_uint64_value(i);
+            row->add_items()->set_uint64_value(i);
+        }
+        i -= overlap;
+        auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
+            std::move(request), "", "", runtime.GetActorSystem(0));
+        auto response = runtime.WaitFuture(std::move(future));
+    
+        UNIT_ASSERT(response.operation().ready());
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
-
-    auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
-        std::move(request), "", "", runtime.GetActorSystem(0));
-    auto response = runtime.WaitFuture(std::move(future));
-
-    UNIT_ASSERT(response.operation().ready());
-    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
     env.GetController()->WaitActualization(TDuration::Seconds(1));
 }
@@ -509,8 +519,6 @@ void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
 
     waiter.Wait();
 }
-
-
 
 } // NStat
 } // NKikimr

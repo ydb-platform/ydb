@@ -178,6 +178,7 @@ private:
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
+        serverSettings.SetDataCenterCount(Settings_.DcCount);
 
         SetStorageSettings(serverSettings);
 
@@ -197,7 +198,7 @@ private:
         return serverSettings;
     }
 
-    void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& relativePath, const TString& type, TStorageMeta::TTenant tenantInfo, ui32 grpcPort) {
+    void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& relativePath, const TString& type, TStorageMeta::TTenant tenantInfo) {
         const auto absolutePath = request.path();
         const auto [it, inserted] = StorageMeta_.MutableTenants()->emplace(relativePath, tenantInfo);
         if (inserted || it->second.GetCreationInProgress()) {
@@ -230,16 +231,6 @@ private:
                 Tenants_->Run(absolutePath, tenantInfo.GetNodesCount());
             }
         }
-
-        if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
-            if (Settings_.GrpcEnabled) {
-                Server_->EnableGRpc(grpcPort, GetNodeIndexForDatabase(absolutePath), absolutePath);
-            } else if (Settings_.MonitoringEnabled) {
-                ui32 nodeIndex = GetNodeIndexForDatabase(absolutePath);
-                NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
-                GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
-            }
-        }
     }
 
     static void AddTenantStoragePool(Ydb::Cms::StorageUnits* storage, const TString& name) {
@@ -247,7 +238,7 @@ private:
         storage->set_count(1);
     }
 
-    void CreateTenants(TPortGenerator& grpcPortGen) {
+    void CreateTenants() {
         std::set<TString> sharedTenants;
         std::map<TString, TStorageMeta::TTenant> serverlessTenants;
         for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
@@ -257,13 +248,13 @@ private:
             switch (tenantInfo.GetType()) {
                 case TStorageMeta::TTenant::DEDICATED:
                     AddTenantStoragePool(request.mutable_resources()->add_storage_units(), tenantPath);
-                    CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo, grpcPortGen.GetPort());
+                    CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo);
                     break;
 
                 case TStorageMeta::TTenant::SHARED:
                     sharedTenants.emplace(tenantPath);
                     AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), tenantPath);
-                    CreateTenant(std::move(request), tenantPath, "shared", tenantInfo, grpcPortGen.GetPort());
+                    CreateTenant(std::move(request), tenantPath, "shared", tenantInfo);
                     break;
 
                 case TStorageMeta::TTenant::SERVERLESS:
@@ -291,12 +282,11 @@ private:
             request.set_path(GetTenantPath(tenantPath));
             request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(tenantInfo.GetSharedTenant()));
             ServerlessToShared_[request.path()] = request.serverless_resources().shared_database_path();
-            CreateTenant(std::move(request), tenantPath, "serverless", tenantInfo, 0);
+            CreateTenant(std::move(request), tenantPath, "serverless", tenantInfo);
         }
     }
 
-    void InitializeServer() {
-        TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
+    void InitializeServer(TPortGenerator& grpcPortGen) {
         const ui32 domainGrpcPort = grpcPortGen.GetPort();
         NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(domainGrpcPort);
 
@@ -315,7 +305,7 @@ private:
         Client_->InitRootScheme();
 
         Tenants_ = MakeHolder<NKikimr::Tests::TTenants>(Server_);
-        CreateTenants(grpcPortGen);
+        CreateTenants();
     }
 
     void InitializeYqlLogger() {
@@ -327,32 +317,53 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
-    NThreading::TFuture<void> RunHealthCheck(const TString& database) const {
+    NThreading::TFuture<void> InitializeTenantNodes(const TString& database, TPortGenerator& grpcPortGen) const {
         EHealthCheck level = Settings_.HealthCheckLevel;
         i32 nodesCount = Settings_.NodeCount;
+        TVector<ui32> tenantNodesIdx;
         if (database != Settings_.DomainName) {
-            nodesCount = Tenants_->Size(database);
-        } else if (StorageMeta_.TenantsSize() > 0) {
-            level = std::min(level, EHealthCheck::NodesCount);
+            tenantNodesIdx = Tenants_->List(database);
+            nodesCount = tenantNodesIdx.size();
         }
 
+        const auto& absolutePath = NKikimr::CanonizePath(database);
         const TWaitResourcesSettings settings = {
             .ExpectedNodeCount = nodesCount,
             .HealthCheckLevel = level,
             .HealthCheckTimeout = Settings_.HealthCheckTimeout,
             .VerboseLevel = Settings_.VerboseLevel,
-            .Database = NKikimr::CanonizePath(database)
+            .Database = absolutePath
         };
-        const auto promise = NThreading::NewPromise();
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), GetNodeIndexForDatabase(database), GetRuntime()->GetAppData().SystemPoolId);
 
-        return promise.GetFuture();
+        std::vector<NThreading::TFuture<void>> futures;
+        futures.reserve(nodesCount);
+        for (i32 nodeIdx = 0; nodeIdx < nodesCount; ++nodeIdx) {
+            const auto node = tenantNodesIdx ? tenantNodesIdx[nodeIdx] : nodeIdx;
+            if (Settings_.GrpcEnabled) {
+                if (node > 0) {
+                    // Port for first static node also used in cluster initialization
+                    Server_->EnableGRpc(grpcPortGen.GetPort(), node, absolutePath);
+                }
+            } else if (Settings_.MonitoringEnabled) {
+                NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
+                GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), node, GetRuntime()->GetAppData(node).UserPoolId);
+            }
+
+            const auto promise = NThreading::NewPromise();
+            GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), tenantNodesIdx ? tenantNodesIdx[nodeIdx] : nodeIdx, GetRuntime()->GetAppData().SystemPoolId);
+            futures.emplace_back(promise.GetFuture());
+        }
+
+        return NThreading::WaitAll(futures);
     }
 
-    void WaitResourcesPublishing() const {
-        std::vector<NThreading::TFuture<void>> futures(1, RunHealthCheck(Settings_.DomainName));
-        for (const auto& [tenantName, _] : StorageMeta_.GetTenants()) {
-            futures.emplace_back(RunHealthCheck(GetTenantPath(tenantName)));
+    void InitializeTenants(TPortGenerator& grpcPortGen) const {
+        std::vector<NThreading::TFuture<void>> futures(1, InitializeTenantNodes(Settings_.DomainName, grpcPortGen));
+        futures.reserve(StorageMeta_.GetTenants().size() + 1);
+        for (const auto& [tenantName, tenantInfo] : StorageMeta_.GetTenants()) {
+            if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+                futures.emplace_back(InitializeTenantNodes(GetTenantPath(tenantName), grpcPortGen));
+            }
         }
 
         try {
@@ -367,9 +378,10 @@ public:
         : Settings_(settings)
         , CoutColors_(NColorizer::AutoColors(Cout))
     {
+        TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
         InitializeYqlLogger();
-        InitializeServer();
-        WaitResourcesPublishing();
+        InitializeServer(grpcPortGen);
+        InitializeTenants(grpcPortGen);
 
         if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
@@ -437,13 +449,15 @@ public:
     }
 
     NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId) const {
-        TString executionId = *NKikimr::NKqp::ScriptExecutionIdFromOperation(operation);
+        TString error;
+        const auto executionId = NKikimr::NKqp::ScriptExecutionIdFromOperation(operation, error);
+        Y_ENSURE(executionId, error);
 
         ui32 nodeIndex = GetNodeIndexForDatabase(database);
         NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
-        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
+        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), *executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
         GetRuntime()->Register(fetchActor, nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
 
@@ -530,7 +544,11 @@ private:
 private:
     void FillQueryRequest(const TRequestOptions& query, NKikimrKqp::EQueryType type, ui32 targetNodeIndex, NKikimrKqp::TEvQueryRequest& event) {
         event.SetTraceId(query.TraceId);
-        event.SetUserToken(NACLib::TUserToken(Settings_.YqlToken, query.UserSID, {}).SerializeAsString());
+        event.SetUserToken(NACLib::TUserToken(
+            Settings_.YqlToken,
+            query.UserSID,
+            query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers}
+        ).SerializeAsString());
 
         const auto& database = GetDatabasePath(query.Database);
         auto request = event.MutableRequest();
@@ -540,6 +558,7 @@ private:
         request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
+        request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());
 
         if (query.Timeout) {
             request->SetTimeoutMs(query.Timeout.MilliSeconds());

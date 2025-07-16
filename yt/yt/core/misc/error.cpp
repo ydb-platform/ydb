@@ -12,6 +12,7 @@
 #include <yt/yt/core/tracing/trace_context.h>
 
 #include <yt/yt/core/yson/tokenizer.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/fluent.h>
@@ -472,7 +473,7 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
     auto addAttribute = [&] (const TString& key, const auto& value) {
         auto* protoItem = protoError->mutable_attributes()->add_attributes();
         protoItem->set_key(key);
-        protoItem->set_value(ConvertToYsonString(value).ToString());
+        protoItem->set_value(ToProto(ConvertToYsonString(value)));
     };
 
     if (error.HasOriginAttributes()) {
@@ -699,9 +700,9 @@ void TErrorCodicils::Initialize()
     Initialized_ = true;
 
     ErrorCodicilsSlot(); // Warm up the slot.
-    TError::RegisterEnricher([] (TError& error) {
+    TError::RegisterEnricher([] (TError* error) {
         if (auto* codicils = TErrorCodicils::MaybeGet()) {
-            codicils->Apply(error);
+            codicils->Apply(*error);
         }
     });
 }
@@ -757,13 +758,13 @@ void TErrorCodicils::Set(std::string key, TGetter getter)
     if (getter) {
         Getters_.insert_or_assign(std::move(key), std::move(getter));
     } else {
-        Getters_.erase(std::move(key));
+        Getters_.erase(key);
     }
 }
 
 auto TErrorCodicils::Get(const std::string& key) const -> TGetter
 {
-    return GetOrDefault(Getters_, std::move(key));
+    return GetOrDefault(Getters_, key);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -38,15 +38,17 @@ public:
 
 class IChunkedArray {
 public:
+// PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
     enum class EType : ui8 {
         Undefined = 0,
-        Array,
-        ChunkedArray,
-        SerializedChunkedArray,
-        CompositeChunkedArray,
-        SparsedArray,
-        SubColumnsArray,
-        SubColumnsPartialArray
+        Array = 1,
+        ChunkedArray = 2,
+        SerializedChunkedArray = 3,
+        CompositeChunkedArray = 4,
+        SparsedArray = 5,
+        SubColumnsArray = 6,
+        SubColumnsPartialArray = 7,
+        Dictionary = 8
     };
 
     using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
@@ -94,9 +96,13 @@ public:
             return Addresses.size();
         }
 
-        ui32 GetLocalIndex(const ui32 position) const {
-            AFL_VERIFY(Contains(position))("pos", position)("start", GlobalStartPosition);
-            return position - GlobalStartPosition;
+        ui32 GetLocalIndex(const ui32 global) const {
+            AFL_VERIFY(Contains(global))("pos", global)("start", GlobalStartPosition);
+            return global - GlobalStartPosition;
+        }
+
+        ui32 GetGlobalIndex(const ui32 local) const {
+            return local + GlobalStartPosition;
         }
 
         bool Contains(const ui32 position) const {
@@ -332,6 +338,8 @@ protected:
         AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
     }
 
+    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const;
+
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
 
@@ -361,7 +369,7 @@ public:
         for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
             arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
             auto result = actor(arrCurrent->GetArray());
-            if (!!result) {
+            if (result) {
                 return result;
             }
             currentIndex = currentIndex + arrCurrent->GetArray()->GetRecordsCount();
@@ -447,7 +455,7 @@ public:
         return *result;
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+    std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
         const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 
@@ -467,6 +475,7 @@ public:
             case EType::SubColumnsArray:
             case EType::SubColumnsPartialArray:
             case EType::Array:
+            case EType::Dictionary:
                 return true;
             case EType::Undefined:
                 AFL_VERIFY(false);

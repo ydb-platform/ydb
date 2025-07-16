@@ -15,7 +15,7 @@ variable "subnet_id" {
 
 variable "github_runner_version" {
   type    = string
-  default = "2.319.1"
+  default = "2.323.0"
 }
 
 variable "unified_agent_ubuntu_name" {

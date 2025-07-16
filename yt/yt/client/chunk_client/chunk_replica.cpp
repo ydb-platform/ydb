@@ -79,7 +79,7 @@ void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaI
     using NYT::FromProto;
 
     replica->Value_ = value.replica();
-    replica->ChunkLocationUuid_ = FromProto<TGuid>(value.location_uuid());
+    replica->ChunkLocationUuid_ = FromProto<TChunkLocationUuid>(value.location_uuid());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -868,7 +868,7 @@ namespace boost { namespace locale { namespace boundary {
 
     typedef segment_index<std::string::const_iterator> ssegment_index;   ///< convenience typedef
     typedef segment_index<std::wstring::const_iterator> wssegment_index; ///< convenience typedef
-#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+#ifdef __cpp_lib_char8_t
     typedef segment_index<std::u8string::const_iterator> u8ssegment_index; ///< convenience typedef
 #endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
@@ -892,7 +892,7 @@ namespace boost { namespace locale { namespace boundary {
 
     typedef boundary_point_index<std::string::const_iterator> sboundary_point_index;   ///< convenience typedef
     typedef boundary_point_index<std::wstring::const_iterator> wsboundary_point_index; ///< convenience typedef
-#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+#ifdef __cpp_lib_char8_t
     typedef boundary_point_index<std::u8string::const_iterator> u8sboundary_point_index; ///< convenience typedef
 #endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T

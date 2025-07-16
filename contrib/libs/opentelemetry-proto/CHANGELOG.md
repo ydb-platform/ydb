@@ -4,11 +4,23 @@
 
 The full list of changes can be found in the compare view for the respective release at <https://github.com/open-telemetry/opentelemetry-proto/releases>.
 
+## 1.7.0 - 2025-05-19
+
 ### Added
+
+- profiles: introduce Dictionary message in ProfilesData, and move the lookup tables into it. [#650](https://github.com/open-telemetry/opentelemetry-proto/pull/650)
+
+## 1.6.0 - 2025-04-29
+
+### Added
+
+- resource: Add EntityRef. [#635](https://github.com/open-telemetry/opentelemetry-proto/pull/635)
 
 ### Changed
 
-### Removed
+- logs: Stabilize `event_name` field in `LogRecord` message. [#643](https://github.com/open-telemetry/opentelemetry-proto/pull/643)
+- profiles: Move the lookup tables to ProfilesData. [#644](https://github.com/open-telemetry/opentelemetry-proto/pull/644)
+- profiles: Move default sample_type from the string table to sample_type. [#620](https://github.com/open-telemetry/opentelemetry-proto/pull/620)
 
 ## 1.5.0 - 2024-12-12
 

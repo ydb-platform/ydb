@@ -1,1 +1,1514 @@
-[{"name":"Abs","kind":"Normal"},{"name":"AdaptiveDistanceHistogram","kind":"Agg"},{"name":"AdaptiveDistanceHistogramCDF","kind":"Agg"},{"name":"AdaptiveWardHistogram","kind":"Agg"},{"name":"AdaptiveWardHistogramCDF","kind":"Agg"},{"name":"AdaptiveWeightHistogram","kind":"Agg"},{"name":"AdaptiveWeightHistogramCDF","kind":"Agg"},{"name":"AddMember","kind":"Normal"},{"name":"AddTimezone","kind":"Normal"},{"name":"AggList","kind":"Agg"},{"name":"AggListDistinct","kind":"Agg"},{"name":"AggregateFlatten","kind":"Normal"},{"name":"AggregateTransformInput","kind":"Normal"},{"name":"AggregateTransformOutput","kind":"Normal"},{"name":"AsAtom","kind":"Normal"},{"name":"AsDict","kind":"Normal"},{"name":"AsDictStrict","kind":"Normal"},{"name":"AsEnum","kind":"Normal"},{"name":"AsList","kind":"Normal"},{"name":"AsListStrict","kind":"Normal"},{"name":"AsSet","kind":"Normal"},{"name":"AsSetStrict","kind":"Normal"},{"name":"AsTagged","kind":"Normal"},{"name":"AsTuple","kind":"Normal"},{"name":"AsVariant","kind":"Normal"},{"name":"AssumeNonStrict","kind":"Normal"},{"name":"AssumeStrict","kind":"Normal"},{"name":"AtomCode","kind":"Normal"},{"name":"Avg","kind":"Agg"},{"name":"AvgIf","kind":"Agg"},{"name":"BitAnd","kind":"Agg"},{"name":"BitOr","kind":"Agg"},{"name":"BitXor","kind":"Agg"},{"name":"BlockWardHistogram","kind":"Agg"},{"name":"BlockWardHistogramCDF","kind":"Agg"},{"name":"BlockWeightHistogram","kind":"Agg"},{"name":"BlockWeightHistogramCDF","kind":"Agg"},{"name":"BoolAnd","kind":"Agg"},{"name":"BoolOr","kind":"Agg"},{"name":"BoolXor","kind":"Agg"},{"name":"Bottom","kind":"Agg"},{"name":"BottomBy","kind":"Agg"},{"name":"ByteAt","kind":"Normal"},{"name":"Callable","kind":"Normal"},{"name":"CallableArgument","kind":"Normal"},{"name":"CallableArgumentType","kind":"Normal"},{"name":"CallableResultType","kind":"Normal"},{"name":"CallableType","kind":"Normal"},{"name":"CallableTypeComponents","kind":"Normal"},{"name":"CallableTypeHandle","kind":"Normal"},{"name":"ChooseMembers","kind":"Normal"},{"name":"ClearBit","kind":"Normal"},{"name":"Coalesce","kind":"Normal"},{"name":"CombineMembers","kind":"Normal"},{"name":"Corr","kind":"Agg"},{"name":"Correlation","kind":"Agg"},{"name":"Count","kind":"Agg"},{"name":"CountDistinctEstimate","kind":"Agg"},{"name":"CountIf","kind":"Agg"},{"name":"Covar","kind":"Agg"},{"name":"CovarP","kind":"Agg"},{"name":"CovarPop","kind":"Agg"},{"name":"CovarS","kind":"Agg"},{"name":"CovarSamp","kind":"Agg"},{"name":"Covariance","kind":"Agg"},{"name":"CovariancePopulation","kind":"Agg"},{"name":"CovarianceSample","kind":"Agg"},{"name":"CumeDist","kind":"Window"},{"name":"CurrentAuthenticatedUser","kind":"Normal"},{"name":"CurrentLanguageVersion","kind":"Normal"},{"name":"CurrentOperationId","kind":"Normal"},{"name":"CurrentOperationSharedId","kind":"Normal"},{"name":"CurrentTzDate","kind":"Normal"},{"name":"CurrentTzDatetime","kind":"Normal"},{"name":"CurrentTzTimestamp","kind":"Normal"},{"name":"CurrentUtcDate","kind":"Normal"},{"name":"CurrentUtcDatetime","kind":"Normal"},{"name":"CurrentUtcTimestamp","kind":"Normal"},{"name":"DataType","kind":"Normal"},{"name":"DataTypeComponents","kind":"Normal"},{"name":"DataTypeHandle","kind":"Normal"},{"name":"DenseRank","kind":"Window"},{"name":"DictAggregate","kind":"Normal"},{"name":"DictContains","kind":"Normal"},{"name":"DictCreate","kind":"Normal"},{"name":"DictHasItems","kind":"Normal"},{"name":"DictItems","kind":"Normal"},{"name":"DictKeyType","kind":"Normal"},{"name":"DictKeys","kind":"Normal"},{"name":"DictLength","kind":"Normal"},{"name":"DictLookup","kind":"Normal"},{"name":"DictPayloadType","kind":"Normal"},{"name":"DictPayloads","kind":"Normal"},{"name":"DictType","kind":"Normal"},{"name":"DictTypeComponents","kind":"Normal"},{"name":"DictTypeHandle","kind":"Normal"},{"name":"DynamicVariant","kind":"Normal"},{"name":"EmptyDict","kind":"Normal"},{"name":"EmptyDictTypehandle","kind":"Normal"},{"name":"EmptyList","kind":"Normal"},{"name":"EmptyListTypeHandle","kind":"Normal"},{"name":"EndsWith","kind":"Normal"},{"name":"Ensure","kind":"Normal"},{"name":"EnsureConvertibleTo","kind":"Normal"},{"name":"EnsureType","kind":"Normal"},{"name":"Enum","kind":"Normal"},{"name":"EvaluateAtom","kind":"Normal"},{"name":"EvaluateCode","kind":"Normal"},{"name":"EvaluateExpr","kind":"Normal"},{"name":"EvaluateType","kind":"Normal"},{"name":"FileContent","kind":"Normal"},{"name":"FilePath","kind":"Normal"},{"name":"Files","kind":"Normal"},{"name":"Find","kind":"Normal"},{"name":"First","kind":"MatchRec"},{"name":"FirstValue","kind":"Window"},{"name":"FlattenMembers","kind":"Normal"},{"name":"FlipBit","kind":"Normal"},{"name":"FolderPath","kind":"Normal"},{"name":"ForceRemoveMember","kind":"Normal"},{"name":"ForceRemoveMembers","kind":"Normal"},{"name":"ForceRenameMembers","kind":"Normal"},{"name":"ForceSpreadMembers","kind":"Normal"},{"name":"FormatCode","kind":"Normal"},{"name":"FormatType","kind":"Normal"},{"name":"FormatTypeDeffPretty","kind":"Normal"},{"name":"FormatTypeDiff","kind":"Normal"},{"name":"FromBytes","kind":"Normal"},{"name":"FromPg","kind":"Normal"},{"name":"FromYsonSimpleType","kind":"Normal"},{"name":"FuncCode","kind":"Normal"},{"name":"GatherMembers","kind":"Normal"},{"name":"GenericType","kind":"Normal"},{"name":"Grouping","kind":"AggKey"},{"name":"HLL","kind":"Agg"},{"name":"Histogram","kind":"Agg"},{"name":"HistogramCDF","kind":"Agg"},{"name":"HopEnd","kind":"Agg"},{"name":"HopStart","kind":"Agg"},{"name":"HyperLogLog","kind":"Agg"},{"name":"If","kind":"Normal"},{"name":"IfStrict","kind":"Normal"},{"name":"IndexOf","kind":"Normal"},{"name":"InstanceOf","kind":"Normal"},{"name":"JoinTableRow","kind":"Normal"},{"name":"Just","kind":"Normal"},{"name":"Lag","kind":"Window"},{"name":"LambdaArgumentsCount","kind":"Normal"},{"name":"LambdaCode","kind":"Normal"},{"name":"LambdaOptionalArgumentsCount","kind":"Normal"},{"name":"Last","kind":"MatchRec"},{"name":"LastValue","kind":"Window"},{"name":"Lead","kind":"Window"},{"name":"Length","kind":"Normal"},{"name":"Likely","kind":"Normal"},{"name":"LinearHistogram","kind":"Agg"},{"name":"LinearHistogramCDF","kind":"Agg"},{"name":"ListAggregate","kind":"Normal"},{"name":"ListAll","kind":"Normal"},{"name":"ListAny","kind":"Normal"},{"name":"ListAvg","kind":"Normal"},{"name":"ListCode","kind":"Normal"},{"name":"ListCollect","kind":"Normal"},{"name":"ListConcat","kind":"Normal"},{"name":"ListCreate","kind":"Normal"},{"name":"ListEnumerate","kind":"Normal"},{"name":"ListExtend","kind":"Normal"},{"name":"ListExtendStrict","kind":"Normal"},{"name":"ListExtract","kind":"Normal"},{"name":"ListFilter","kind":"Normal"},{"name":"ListFlatMap","kind":"Normal"},{"name":"ListFlatten","kind":"Normal"},{"name":"ListFold","kind":"Normal"},{"name":"ListFold1","kind":"Normal"},{"name":"ListFold1Map","kind":"Normal"},{"name":"ListFoldMap","kind":"Normal"},{"name":"ListFromRange","kind":"Normal"},{"name":"ListFromTuple","kind":"Normal"},{"name":"ListHas","kind":"Normal"},{"name":"ListHasItems","kind":"Normal"},{"name":"ListHead","kind":"Normal"},{"name":"ListItemType","kind":"Normal"},{"name":"ListLast","kind":"Normal"},{"name":"ListLength","kind":"Normal"},{"name":"ListMap","kind":"Normal"},{"name":"ListMax","kind":"Normal"},{"name":"ListMin","kind":"Normal"},{"name":"ListNotNull","kind":"Normal"},{"name":"ListReplicate","kind":"Normal"},{"name":"ListReverse","kind":"Normal"},{"name":"ListSample","kind":"Normal"},{"name":"ListSampleN","kind":"Normal"},{"name":"ListShuffle","kind":"Normal"},{"name":"ListSkip","kind":"Normal"},{"name":"ListSkipWhile","kind":"Normal"},{"name":"ListSkipWhileInclusive","kind":"Normal"},{"name":"ListSort","kind":"Normal"},{"name":"ListSortAsc","kind":"Normal"},{"name":"ListSortDesc","kind":"Normal"},{"name":"ListSum","kind":"Normal"},{"name":"ListTake","kind":"Normal"},{"name":"ListTakeWhile","kind":"Normal"},{"name":"ListTakeWhileInclusive","kind":"Normal"},{"name":"ListToTuple","kind":"Normal"},{"name":"ListTop","kind":"Normal"},{"name":"ListTopAsc","kind":"Normal"},{"name":"ListTopDesc","kind":"Normal"},{"name":"ListTopSort","kind":"Normal"},{"name":"ListTopSortAsc","kind":"Normal"},{"name":"ListTopSortDesc","kind":"Normal"},{"name":"ListType","kind":"Normal"},{"name":"ListTypeHandle","kind":"Normal"},{"name":"ListUnionAll","kind":"Normal"},{"name":"ListUniq","kind":"Normal"},{"name":"ListUniqStable","kind":"Normal"},{"name":"ListZip","kind":"Normal"},{"name":"ListZipAll","kind":"Normal"},{"name":"LogHistogram","kind":"Agg"},{"name":"LogHistogramCDF","kind":"Agg"},{"name":"LogarithmicHistogram","kind":"Agg"},{"name":"LogarithmicHistogramCDF","kind":"Agg"},{"name":"Max","kind":"Agg"},{"name":"MaxBy","kind":"Agg"},{"name":"MaxOf","kind":"Normal"},{"name":"Median","kind":"Agg"},{"name":"Min","kind":"Agg"},{"name":"MinBy","kind":"Agg"},{"name":"MinOf","kind":"Normal"},{"name":"Mode","kind":"Agg"},{"name":"NTile","kind":"Window"},{"name":"Nanvl","kind":"Normal"},{"name":"Nothing","kind":"Normal"},{"name":"NthValue","kind":"Window"},{"name":"NullTypeHandle","kind":"Normal"},{"name":"Nvl","kind":"Normal"},{"name":"Opaque","kind":"Normal"},{"name":"OptionalItemType","kind":"Normal"},{"name":"OptionalType","kind":"Normal"},{"name":"OptionalTypeHandle","kind":"Normal"},{"name":"ParseFile","kind":"Normal"},{"name":"ParseType","kind":"Normal"},{"name":"ParseTypeHandle","kind":"Normal"},{"name":"PercentRank","kind":"Window"},{"name":"Percentile","kind":"Agg"},{"name":"PgAnd","kind":"Normal"},{"name":"PgArray","kind":"Normal"},{"name":"PgCall","kind":"Normal"},{"name":"PgCast","kind":"Normal"},{"name":"PgConst","kind":"Normal"},{"name":"PgNot","kind":"Normal"},{"name":"PgOp","kind":"Normal"},{"name":"PgOr","kind":"Normal"},{"name":"PgRangeCall","kind":"Normal"},{"name":"PgType","kind":"Normal"},{"name":"PgTypeHandle","kind":"Normal"},{"name":"PgTypeName","kind":"Normal"},{"name":"Pickle","kind":"Normal"},{"name":"PopulationStdDev","kind":"Agg"},{"name":"PopulationVariance","kind":"Agg"},{"name":"QuoteCode","kind":"Normal"},{"name":"RFind","kind":"Normal"},{"name":"Random","kind":"Normal"},{"name":"RandomNumber","kind":"Normal"},{"name":"RandomUuid","kind":"Normal"},{"name":"Rank","kind":"Window"},{"name":"RemoveMember","kind":"Normal"},{"name":"RemoveMembers","kind":"Normal"},{"name":"RemoveTimezone","kind":"Normal"},{"name":"RenameMembers","kind":"Normal"},{"name":"ReplaceMember","kind":"Normal"},{"name":"ReprCode","kind":"Normal"},{"name":"ResourceType","kind":"Normal"},{"name":"ResourceTypeHandle","kind":"Normal"},{"name":"ResourceTypeTag","kind":"Normal"},{"name":"RowNumber","kind":"Window"},{"name":"SecureParam","kind":"Normal"},{"name":"SessionStart","kind":"Agg"},{"name":"SessionState","kind":"Agg"},{"name":"SessionWindow","kind":"Partition"},{"name":"SetBit","kind":"Normal"},{"name":"SetCreate","kind":"Normal"},{"name":"SetDifference","kind":"Normal"},{"name":"SetIncludes","kind":"Normal"},{"name":"SetIntersection","kind":"Normal"},{"name":"SetIsDisjoint","kind":"Normal"},{"name":"SetSymmetricDifference","kind":"Normal"},{"name":"SetUnion","kind":"Normal"},{"name":"Some","kind":"Agg"},{"name":"SpreadMembers","kind":"Normal"},{"name":"StablePickle","kind":"Normal"},{"name":"StartsWith","kind":"Normal"},{"name":"StaticFold","kind":"Normal"},{"name":"StaticFold1","kind":"Normal"},{"name":"StaticMap","kind":"Normal"},{"name":"StaticZip","kind":"Normal"},{"name":"StdDev","kind":"Agg"},{"name":"StdDevP","kind":"Agg"},{"name":"StdDevPop","kind":"Agg"},{"name":"StdDevPopulation","kind":"Agg"},{"name":"StdDevS","kind":"Agg"},{"name":"StdDevSamp","kind":"Agg"},{"name":"StdDevSample","kind":"Agg"},{"name":"StreamType","kind":"Normal"},{"name":"StreamTypeHandle","kind":"Normal"},{"name":"StructDifference","kind":"Normal"},{"name":"StructIntersection","kind":"Normal"},{"name":"StructMemberType","kind":"Normal"},{"name":"StructMembers","kind":"Normal"},{"name":"StructSymmetricDifference","kind":"Normal"},{"name":"StructTypeComponents","kind":"Normal"},{"name":"StructTypeHandle","kind":"Normal"},{"name":"StructUnion","kind":"Normal"},{"name":"SubqueryAssumeOrderBy","kind":"Normal"},{"name":"SubqueryExtend","kind":"Normal"},{"name":"SubqueryExtendFor","kind":"Normal"},{"name":"SubqueryMerge","kind":"Normal"},{"name":"SubqueryMergeFor","kind":"Normal"},{"name":"SubqueryOrderBy","kind":"Normal"},{"name":"SubqueryUnionAll","kind":"Normal"},{"name":"SubqueryUnionAllFor","kind":"Normal"},{"name":"SubqueryUnionMerge","kind":"Normal"},{"name":"SubqueryUnionMergeFor","kind":"Normal"},{"name":"Substring","kind":"Normal"},{"name":"Sum","kind":"Agg"},{"name":"SumIf","kind":"Agg"},{"name":"SystemMetadata","kind":"Normal"},{"name":"TablePath","kind":"Normal"},{"name":"TableRecordIndex","kind":"Normal"},{"name":"TableRow","kind":"Normal"},{"name":"TableRows","kind":"Produce"},{"name":"TaggedType","kind":"Normal"},{"name":"TaggedTypeComponents","kind":"Normal"},{"name":"TaggedTypeHandle","kind":"Normal"},{"name":"TestBit","kind":"Normal"},{"name":"ToBytes","kind":"Normal"},{"name":"ToDict","kind":"Normal"},{"name":"ToHashedDict","kind":"Normal"},{"name":"ToHashedMultiDict","kind":"Normal"},{"name":"ToMultiDict","kind":"Normal"},{"name":"ToPg","kind":"Normal"},{"name":"ToSet","kind":"Normal"},{"name":"ToSortedDict","kind":"Normal"},{"name":"ToSortedMultiDict","kind":"Normal"},{"name":"Top","kind":"Agg"},{"name":"TopBy","kind":"Agg"},{"name":"TopFreq","kind":"Agg"},{"name":"TryMember","kind":"Normal"},{"name":"TupleElementType","kind":"Normal"},{"name":"TupleType","kind":"Normal"},{"name":"TupleTypeComponents","kind":"Normal"},{"name":"TupleTypeHandle","kind":"Normal"},{"name":"TypeHandle","kind":"Normal"},{"name":"TypeKind","kind":"Normal"},{"name":"TypeOf","kind":"Normal"},{"name":"UDAF","kind":"Agg"},{"name":"UnitType","kind":"Normal"},{"name":"Unpickle","kind":"Normal"},{"name":"Untag","kind":"Normal"},{"name":"Unwrap","kind":"Normal"},{"name":"VarP","kind":"Agg"},{"name":"VarPop","kind":"Agg"},{"name":"VarS","kind":"Agg"},{"name":"VarSamp","kind":"Agg"},{"name":"Variance","kind":"Agg"},{"name":"VariancePopulation","kind":"Agg"},{"name":"VarianceSample","kind":"Agg"},{"name":"Variant","kind":"Normal"},{"name":"VariantItem","kind":"Normal"},{"name":"VariantType","kind":"Normal"},{"name":"VariantTypeHandle","kind":"Normal"},{"name":"VariantUnderlyingType","kind":"Normal"},{"name":"Version","kind":"Normal"},{"name":"Void","kind":"Normal"},{"name":"VoidType","kind":"Normal"},{"name":"VoidTypeHandle","kind":"Normal"},{"name":"Way","kind":"Normal"},{"name":"WeakField","kind":"Normal"},{"name":"WorldCode","kind":"Normal"}]
+[
+  {
+    "name": "Abs",
+    "kind": "Normal"
+  },
+  {
+    "name": "AdaptiveDistanceHistogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "AdaptiveDistanceHistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "AdaptiveWardHistogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "AdaptiveWardHistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "AdaptiveWeightHistogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "AdaptiveWeightHistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "AddMember",
+    "kind": "Normal"
+  },
+  {
+    "name": "AddTimezone",
+    "kind": "Normal"
+  },
+  {
+    "name": "AggList",
+    "kind": "Agg"
+  },
+  {
+    "name": "AggListDistinct",
+    "kind": "Agg"
+  },
+  {
+    "name": "AggregateFlatten",
+    "kind": "Normal"
+  },
+  {
+    "name": "AggregateTransformInput",
+    "kind": "Normal"
+  },
+  {
+    "name": "AggregateTransformOutput",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsAtom",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsDictStrict",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsEnum",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsList",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsListStrict",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsSet",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsSetStrict",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsTagged",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsTuple",
+    "kind": "Normal"
+  },
+  {
+    "name": "AsVariant",
+    "kind": "Normal"
+  },
+  {
+    "name": "AssumeNonStrict",
+    "kind": "Normal"
+  },
+  {
+    "name": "AssumeStrict",
+    "kind": "Normal"
+  },
+  {
+    "name": "AtomCode",
+    "kind": "Normal"
+  },
+  {
+    "name": "Avg",
+    "kind": "Agg"
+  },
+  {
+    "name": "AvgIf",
+    "kind": "Agg"
+  },
+  {
+    "name": "BitAnd",
+    "kind": "Agg"
+  },
+  {
+    "name": "BitOr",
+    "kind": "Agg"
+  },
+  {
+    "name": "BitXor",
+    "kind": "Agg"
+  },
+  {
+    "name": "BlockWardHistogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "BlockWardHistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "BlockWeightHistogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "BlockWeightHistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "BoolAnd",
+    "kind": "Agg"
+  },
+  {
+    "name": "BoolOr",
+    "kind": "Agg"
+  },
+  {
+    "name": "BoolXor",
+    "kind": "Agg"
+  },
+  {
+    "name": "Bottom",
+    "kind": "Agg"
+  },
+  {
+    "name": "BottomBy",
+    "kind": "Agg"
+  },
+  {
+    "name": "ByteAt",
+    "kind": "Normal"
+  },
+  {
+    "name": "Callable",
+    "kind": "Normal"
+  },
+  {
+    "name": "CallableArgument",
+    "kind": "Normal"
+  },
+  {
+    "name": "CallableArgumentType",
+    "kind": "Normal"
+  },
+  {
+    "name": "CallableResultType",
+    "kind": "Normal"
+  },
+  {
+    "name": "CallableType",
+    "kind": "Normal"
+  },
+  {
+    "name": "CallableTypeComponents",
+    "kind": "Normal"
+  },
+  {
+    "name": "CallableTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "ChooseMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "ClearBit",
+    "kind": "Normal"
+  },
+  {
+    "name": "Coalesce",
+    "kind": "Normal"
+  },
+  {
+    "name": "CombineMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "Corr",
+    "kind": "Agg"
+  },
+  {
+    "name": "Correlation",
+    "kind": "Agg"
+  },
+  {
+    "name": "Count",
+    "kind": "Agg"
+  },
+  {
+    "name": "CountDistinctEstimate",
+    "kind": "Agg"
+  },
+  {
+    "name": "CountIf",
+    "kind": "Agg"
+  },
+  {
+    "name": "Covar",
+    "kind": "Agg"
+  },
+  {
+    "name": "CovarP",
+    "kind": "Agg"
+  },
+  {
+    "name": "CovarPop",
+    "kind": "Agg"
+  },
+  {
+    "name": "CovarS",
+    "kind": "Agg"
+  },
+  {
+    "name": "CovarSamp",
+    "kind": "Agg"
+  },
+  {
+    "name": "Covariance",
+    "kind": "Agg"
+  },
+  {
+    "name": "CovariancePopulation",
+    "kind": "Agg"
+  },
+  {
+    "name": "CovarianceSample",
+    "kind": "Agg"
+  },
+  {
+    "name": "CumeDist",
+    "kind": "Window"
+  },
+  {
+    "name": "CurrentAuthenticatedUser",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentLanguageVersion",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentOperationId",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentOperationSharedId",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentTzDate",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentTzDatetime",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentTzTimestamp",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentUtcDate",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentUtcDatetime",
+    "kind": "Normal"
+  },
+  {
+    "name": "CurrentUtcTimestamp",
+    "kind": "Normal"
+  },
+  {
+    "name": "DataType",
+    "kind": "Normal"
+  },
+  {
+    "name": "DataTypeComponents",
+    "kind": "Normal"
+  },
+  {
+    "name": "DataTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "DenseRank",
+    "kind": "Window"
+  },
+  {
+    "name": "DictAggregate",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictContains",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictCreate",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictHasItems",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictItems",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictKeyType",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictKeys",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictLength",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictLookup",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictPayloadType",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictPayloads",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictType",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictTypeComponents",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "DynamicVariant",
+    "kind": "Normal"
+  },
+  {
+    "name": "EmptyDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "EmptyDictTypehandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "EmptyList",
+    "kind": "Normal"
+  },
+  {
+    "name": "EmptyListTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "EndsWith",
+    "kind": "Normal"
+  },
+  {
+    "name": "Ensure",
+    "kind": "Normal"
+  },
+  {
+    "name": "EnsureConvertibleTo",
+    "kind": "Normal"
+  },
+  {
+    "name": "EnsureType",
+    "kind": "Normal"
+  },
+  {
+    "name": "Enum",
+    "kind": "Normal"
+  },
+  {
+    "name": "EvaluateAtom",
+    "kind": "Normal"
+  },
+  {
+    "name": "EvaluateCode",
+    "kind": "Normal"
+  },
+  {
+    "name": "EvaluateExpr",
+    "kind": "Normal"
+  },
+  {
+    "name": "EvaluateType",
+    "kind": "Normal"
+  },
+  {
+    "name": "FileContent",
+    "kind": "Normal"
+  },
+  {
+    "name": "FilePath",
+    "kind": "Normal"
+  },
+  {
+    "name": "Files",
+    "kind": "Normal"
+  },
+  {
+    "name": "Find",
+    "kind": "Normal"
+  },
+  {
+    "name": "First",
+    "kind": "MatchRec"
+  },
+  {
+    "name": "FirstValue",
+    "kind": "Window"
+  },
+  {
+    "name": "FlattenMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "FlipBit",
+    "kind": "Normal"
+  },
+  {
+    "name": "FolderPath",
+    "kind": "Normal"
+  },
+  {
+    "name": "ForceRemoveMember",
+    "kind": "Normal"
+  },
+  {
+    "name": "ForceRemoveMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "ForceRenameMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "ForceSpreadMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "FormatCode",
+    "kind": "Normal"
+  },
+  {
+    "name": "FormatType",
+    "kind": "Normal"
+  },
+  {
+    "name": "FormatTypeDeffPretty",
+    "kind": "Normal"
+  },
+  {
+    "name": "FormatTypeDiff",
+    "kind": "Normal"
+  },
+  {
+    "name": "FromBytes",
+    "kind": "Normal"
+  },
+  {
+    "name": "FromPg",
+    "kind": "Normal"
+  },
+  {
+    "name": "FromYsonSimpleType",
+    "kind": "Normal"
+  },
+  {
+    "name": "FuncCode",
+    "kind": "Normal"
+  },
+  {
+    "name": "GatherMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "GenericType",
+    "kind": "Normal"
+  },
+  {
+    "name": "Grouping",
+    "kind": "AggKey"
+  },
+  {
+    "name": "HLL",
+    "kind": "Agg"
+  },
+  {
+    "name": "Histogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "HistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "HopEnd",
+    "kind": "Agg"
+  },
+  {
+    "name": "HopStart",
+    "kind": "Agg"
+  },
+  {
+    "name": "HyperLogLog",
+    "kind": "Agg"
+  },
+  {
+    "name": "If",
+    "kind": "Normal"
+  },
+  {
+    "name": "IfStrict",
+    "kind": "Normal"
+  },
+  {
+    "name": "IndexOf",
+    "kind": "Normal"
+  },
+  {
+    "name": "InstanceOf",
+    "kind": "Normal"
+  },
+  {
+    "name": "JoinTableRow",
+    "kind": "Normal"
+  },
+  {
+    "name": "Just",
+    "kind": "Normal"
+  },
+  {
+    "name": "Lag",
+    "kind": "Window"
+  },
+  {
+    "name": "LambdaArgumentsCount",
+    "kind": "Normal"
+  },
+  {
+    "name": "LambdaCode",
+    "kind": "Normal"
+  },
+  {
+    "name": "LambdaOptionalArgumentsCount",
+    "kind": "Normal"
+  },
+  {
+    "name": "Last",
+    "kind": "MatchRec"
+  },
+  {
+    "name": "LastValue",
+    "kind": "Window"
+  },
+  {
+    "name": "Lead",
+    "kind": "Window"
+  },
+  {
+    "name": "Length",
+    "kind": "Normal"
+  },
+  {
+    "name": "Likely",
+    "kind": "Normal"
+  },
+  {
+    "name": "LinearHistogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "LinearHistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "ListAggregate",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListAll",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListAny",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListAvg",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListCode",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListCollect",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListConcat",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListCreate",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListEnumerate",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListExtend",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListExtendStrict",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListExtract",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFilter",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFlatMap",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFlatten",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFold",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFold1",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFold1Map",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFoldMap",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFromRange",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListFromTuple",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListHas",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListHasItems",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListHead",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListItemType",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListLast",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListLength",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListMap",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListMax",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListMin",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListNotNull",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListReplicate",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListReverse",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSample",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSampleN",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListShuffle",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSkip",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSkipWhile",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSkipWhileInclusive",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSort",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSortAsc",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSortDesc",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListSum",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTake",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTakeWhile",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTakeWhileInclusive",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListToTuple",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTop",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTopAsc",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTopDesc",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTopSort",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTopSortAsc",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTopSortDesc",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListType",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListUnionAll",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListUniq",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListUniqStable",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListZip",
+    "kind": "Normal"
+  },
+  {
+    "name": "ListZipAll",
+    "kind": "Normal"
+  },
+  {
+    "name": "LogHistogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "LogHistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "LogarithmicHistogram",
+    "kind": "Agg"
+  },
+  {
+    "name": "LogarithmicHistogramCDF",
+    "kind": "Agg"
+  },
+  {
+    "name": "Max",
+    "kind": "Agg"
+  },
+  {
+    "name": "MaxBy",
+    "kind": "Agg"
+  },
+  {
+    "name": "MaxOf",
+    "kind": "Normal"
+  },
+  {
+    "name": "Median",
+    "kind": "Agg"
+  },
+  {
+    "name": "Min",
+    "kind": "Agg"
+  },
+  {
+    "name": "MinBy",
+    "kind": "Agg"
+  },
+  {
+    "name": "MinOf",
+    "kind": "Normal"
+  },
+  {
+    "name": "Mode",
+    "kind": "Agg"
+  },
+  {
+    "name": "NTile",
+    "kind": "Window"
+  },
+  {
+    "name": "Nanvl",
+    "kind": "Normal"
+  },
+  {
+    "name": "Nothing",
+    "kind": "Normal"
+  },
+  {
+    "name": "NthValue",
+    "kind": "Window"
+  },
+  {
+    "name": "NullTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "Nvl",
+    "kind": "Normal"
+  },
+  {
+    "name": "Opaque",
+    "kind": "Normal"
+  },
+  {
+    "name": "OptionalItemType",
+    "kind": "Normal"
+  },
+  {
+    "name": "OptionalType",
+    "kind": "Normal"
+  },
+  {
+    "name": "OptionalTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "ParseFile",
+    "kind": "Normal"
+  },
+  {
+    "name": "ParseType",
+    "kind": "Normal"
+  },
+  {
+    "name": "ParseTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "PercentRank",
+    "kind": "Window"
+  },
+  {
+    "name": "Percentile",
+    "kind": "Agg"
+  },
+  {
+    "name": "PgAnd",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgArray",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgCall",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgCast",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgConst",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgNot",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgOp",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgOr",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgRangeCall",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgType",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "PgTypeName",
+    "kind": "Normal"
+  },
+  {
+    "name": "Pickle",
+    "kind": "Normal"
+  },
+  {
+    "name": "PopulationStdDev",
+    "kind": "Agg"
+  },
+  {
+    "name": "PopulationVariance",
+    "kind": "Agg"
+  },
+  {
+    "name": "QuoteCode",
+    "kind": "Normal"
+  },
+  {
+    "name": "RFind",
+    "kind": "Normal"
+  },
+  {
+    "name": "Random",
+    "kind": "Normal"
+  },
+  {
+    "name": "RandomNumber",
+    "kind": "Normal"
+  },
+  {
+    "name": "RandomUuid",
+    "kind": "Normal"
+  },
+  {
+    "name": "Rank",
+    "kind": "Window"
+  },
+  {
+    "name": "RemoveMember",
+    "kind": "Normal"
+  },
+  {
+    "name": "RemoveMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "RemoveTimezone",
+    "kind": "Normal"
+  },
+  {
+    "name": "RenameMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "ReplaceMember",
+    "kind": "Normal"
+  },
+  {
+    "name": "ReprCode",
+    "kind": "Normal"
+  },
+  {
+    "name": "ResourceType",
+    "kind": "Normal"
+  },
+  {
+    "name": "ResourceTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "ResourceTypeTag",
+    "kind": "Normal"
+  },
+  {
+    "name": "RowNumber",
+    "kind": "Window"
+  },
+  {
+    "name": "SecureParam",
+    "kind": "Normal"
+  },
+  {
+    "name": "SessionStart",
+    "kind": "Agg"
+  },
+  {
+    "name": "SessionState",
+    "kind": "Agg"
+  },
+  {
+    "name": "SessionWindow",
+    "kind": "Partition"
+  },
+  {
+    "name": "SetBit",
+    "kind": "Normal"
+  },
+  {
+    "name": "SetCreate",
+    "kind": "Normal"
+  },
+  {
+    "name": "SetDifference",
+    "kind": "Normal"
+  },
+  {
+    "name": "SetIncludes",
+    "kind": "Normal"
+  },
+  {
+    "name": "SetIntersection",
+    "kind": "Normal"
+  },
+  {
+    "name": "SetIsDisjoint",
+    "kind": "Normal"
+  },
+  {
+    "name": "SetSymmetricDifference",
+    "kind": "Normal"
+  },
+  {
+    "name": "SetUnion",
+    "kind": "Normal"
+  },
+  {
+    "name": "Some",
+    "kind": "Agg"
+  },
+  {
+    "name": "SpreadMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "StablePickle",
+    "kind": "Normal"
+  },
+  {
+    "name": "StartsWith",
+    "kind": "Normal"
+  },
+  {
+    "name": "StaticFold",
+    "kind": "Normal"
+  },
+  {
+    "name": "StaticFold1",
+    "kind": "Normal"
+  },
+  {
+    "name": "StaticMap",
+    "kind": "Normal"
+  },
+  {
+    "name": "StaticZip",
+    "kind": "Normal"
+  },
+  {
+    "name": "StdDev",
+    "kind": "Agg"
+  },
+  {
+    "name": "StdDevP",
+    "kind": "Agg"
+  },
+  {
+    "name": "StdDevPop",
+    "kind": "Agg"
+  },
+  {
+    "name": "StdDevPopulation",
+    "kind": "Agg"
+  },
+  {
+    "name": "StdDevS",
+    "kind": "Agg"
+  },
+  {
+    "name": "StdDevSamp",
+    "kind": "Agg"
+  },
+  {
+    "name": "StdDevSample",
+    "kind": "Agg"
+  },
+  {
+    "name": "StreamType",
+    "kind": "Normal"
+  },
+  {
+    "name": "StreamTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "StructDifference",
+    "kind": "Normal"
+  },
+  {
+    "name": "StructIntersection",
+    "kind": "Normal"
+  },
+  {
+    "name": "StructMemberType",
+    "kind": "Normal"
+  },
+  {
+    "name": "StructMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "StructSymmetricDifference",
+    "kind": "Normal"
+  },
+  {
+    "name": "StructTypeComponents",
+    "kind": "Normal"
+  },
+  {
+    "name": "StructTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "StructUnion",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryAssumeOrderBy",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryExtend",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryExtendFor",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryMerge",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryMergeFor",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryOrderBy",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryUnionAll",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryUnionAllFor",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryUnionMerge",
+    "kind": "Normal"
+  },
+  {
+    "name": "SubqueryUnionMergeFor",
+    "kind": "Normal"
+  },
+  {
+    "name": "Substring",
+    "kind": "Normal"
+  },
+  {
+    "name": "Sum",
+    "kind": "Agg"
+  },
+  {
+    "name": "SumIf",
+    "kind": "Agg"
+  },
+  {
+    "name": "SystemMetadata",
+    "kind": "Normal"
+  },
+  {
+    "name": "TablePath",
+    "kind": "Normal"
+  },
+  {
+    "name": "TableRecordIndex",
+    "kind": "Normal"
+  },
+  {
+    "name": "TableRow",
+    "kind": "Normal"
+  },
+  {
+    "name": "TableRows",
+    "kind": "Produce"
+  },
+  {
+    "name": "TaggedType",
+    "kind": "Normal"
+  },
+  {
+    "name": "TaggedTypeComponents",
+    "kind": "Normal"
+  },
+  {
+    "name": "TaggedTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "TestBit",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToBytes",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToHashedDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToHashedMultiDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToMultiDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToPg",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToSet",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToSortedDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToSortedMultiDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "Top",
+    "kind": "Agg"
+  },
+  {
+    "name": "TopBy",
+    "kind": "Agg"
+  },
+  {
+    "name": "TopFreq",
+    "kind": "Agg"
+  },
+  {
+    "name": "TryMember",
+    "kind": "Normal"
+  },
+  {
+    "name": "TupleElementType",
+    "kind": "Normal"
+  },
+  {
+    "name": "TupleType",
+    "kind": "Normal"
+  },
+  {
+    "name": "TupleTypeComponents",
+    "kind": "Normal"
+  },
+  {
+    "name": "TupleTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "TypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "TypeKind",
+    "kind": "Normal"
+  },
+  {
+    "name": "TypeOf",
+    "kind": "Normal"
+  },
+  {
+    "name": "UDAF",
+    "kind": "Agg"
+  },
+  {
+    "name": "UnitType",
+    "kind": "Normal"
+  },
+  {
+    "name": "Unpickle",
+    "kind": "Normal"
+  },
+  {
+    "name": "Untag",
+    "kind": "Normal"
+  },
+  {
+    "name": "Unwrap",
+    "kind": "Normal"
+  },
+  {
+    "name": "VarP",
+    "kind": "Agg"
+  },
+  {
+    "name": "VarPop",
+    "kind": "Agg"
+  },
+  {
+    "name": "VarS",
+    "kind": "Agg"
+  },
+  {
+    "name": "VarSamp",
+    "kind": "Agg"
+  },
+  {
+    "name": "Variance",
+    "kind": "Agg"
+  },
+  {
+    "name": "VariancePopulation",
+    "kind": "Agg"
+  },
+  {
+    "name": "VarianceSample",
+    "kind": "Agg"
+  },
+  {
+    "name": "Variant",
+    "kind": "Normal"
+  },
+  {
+    "name": "VariantItem",
+    "kind": "Normal"
+  },
+  {
+    "name": "VariantType",
+    "kind": "Normal"
+  },
+  {
+    "name": "VariantTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "VariantUnderlyingType",
+    "kind": "Normal"
+  },
+  {
+    "name": "Version",
+    "kind": "Normal"
+  },
+  {
+    "name": "Void",
+    "kind": "Normal"
+  },
+  {
+    "name": "VoidType",
+    "kind": "Normal"
+  },
+  {
+    "name": "VoidTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "Way",
+    "kind": "Normal"
+  },
+  {
+    "name": "WeakField",
+    "kind": "Normal"
+  },
+  {
+    "name": "WorldCode",
+    "kind": "Normal"
+  }
+]

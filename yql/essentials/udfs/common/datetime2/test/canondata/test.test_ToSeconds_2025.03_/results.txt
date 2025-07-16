@@ -1,0 +1,54 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "date_to_seconds";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Uint32"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "interval_to_seconds";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Int64"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "1542844800"
+                        ];
+                        [
+                            "208800"
+                        ]
+                    ];
+                    [
+                        [
+                            "1542844800"
+                        ];
+                        [
+                            "2160000000"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

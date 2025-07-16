@@ -496,6 +496,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
     }
 
+// Do not run under ASAN since memory limits is hard to track. Every allocation produce and tracks more memory than requested.
+#if !defined(_asan_enabled_)
     Y_UNIT_TEST_LLVM(TestSkipYieldRespectsMemLimit) {
         TTestStreamParams params;
         params.StringSize = 50000;
@@ -528,6 +530,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
     }
+#endif // defined(_asan_enabled_)
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {

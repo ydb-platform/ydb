@@ -93,6 +93,12 @@ protected:
     virtual int GetMaxChildCount() const;
 
     void ValidateChildCount(const TYPath& path, int childCount) const;
+
+    virtual void SetChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        NYson::TYsonString childValue,
+        bool recursive) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -126,8 +132,20 @@ protected:
 
     virtual int GetMaxKeyLength() const;
 
+    void SetChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        NYson::TYsonString childValue,
+        bool recursive) final;
+
 private:
     void ThrowMaxKeyLengthViolated() const;
+
+    std::pair<TString, INodePtr> PrepareSetChildOrChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        std::variant<INodePtr, NYson::TYsonString> childOrChildValue,
+        bool recursive);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,6 +164,19 @@ protected:
         const TYPath& path,
         INodePtr child,
         bool recursive) override;
+
+    void SetChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        NYson::TYsonString childValue,
+        bool recursive) final;
+
+private:
+    void SetChildOrChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        std::variant<INodePtr, NYson::TYsonString> childOrChildValue,
+        bool recursive);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -242,4 +273,3 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
-

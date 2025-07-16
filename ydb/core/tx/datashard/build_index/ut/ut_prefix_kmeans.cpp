@@ -1,10 +1,12 @@
+#include "ut_helpers.h"
+
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/protos/index_builder.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -25,10 +27,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
         std::function<void(NKikimrTxDataShard::TEvPrefixKMeansRequest&)> setupRequest,
-        TString expectedError, bool expectedErrorSubstring = false)
+        const TString& expectedError, bool expectedErrorSubstring = false)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
-        auto& runtime = *server->GetRuntime();
         auto datashards = GetTableShards(server, sender, kMainTable);
         TTableId tableId = ResolveTableId(server, sender, kMainTable);
 
@@ -50,7 +51,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         VectorIndexSettings settings;
         settings.set_vector_dimension(2);
-        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
         settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
         *rec.MutableSettings() = settings;
 
@@ -65,26 +66,17 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         rec.SetEmbeddingColumn("embedding");
         rec.SetPrefixColumns(1);
-        
+        rec.AddSourcePrimaryKeyColumns("key");
+
+        rec.SetPrefixName(kPrefixTable);
+
         rec.SetLevelName(kLevelTable);
-        rec.SetPostingName(kPostingTable);
+        rec.SetOutputName(kPostingTable);
         rec.SetPrefixName(kPrefixTable);
 
         setupRequest(rec);
 
-        runtime.SendToPipe(datashards[0], sender, ev.release(), 0, GetPipeConfigWithRetries());
-
-        TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvPrefixKMeansResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
-        if (expectedErrorSubstring) {
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToOneLineString(), expectedError);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToOneLineString(), expectedError);
-        }
+        NKikimr::DoBadRequest<TEvDataShard::TEvPrefixKMeansResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     }
 
     static std::tuple<TString, TString, TString> DoPrefixKMeans(
@@ -130,10 +122,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
                 rec.SetPrefixColumns(1);
+                rec.AddSourcePrimaryKeyColumns("key");
 
                 rec.SetPrefixName(kPrefixTable);
                 rec.SetLevelName(kLevelTable);
-                rec.SetPostingName(kPostingTable);
+                rec.SetOutputName(kPostingTable);
 
                 rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
             };
@@ -252,6 +245,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         }, "{ <main>: Error: Unknown table id: 0 }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.ClearSourcePrimaryKeyColumns();
+        }, "{ <main>: Error: Request should include source primary key columns }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
         }, "{ <main>: Error: Wrong vector type }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
@@ -282,8 +279,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             request.ClearLevelName();
         }, "{ <main>: Error: Empty level table name }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
-            request.ClearPostingName();
-        }, "{ <main>: Error: Empty posting table name }");
+            request.ClearOutputName();
+        }, "{ <main>: Error: Empty output table name }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.ClearPrefixName();
         }, "{ <main>: Error: Empty prefix table name }");
@@ -372,25 +369,25 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 "user = user-2, __ydb_id = 43\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(level, 
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
-                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n"
+            UNIT_ASSERT_VALUES_EQUAL(level,
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = 11\3\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\3\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting, 
-                "__ydb_parent = 41, key = 14, data = 1-four\n"
-                "__ydb_parent = 41, key = 15, data = 1-five\n"
-                "__ydb_parent = 42, key = 11, data = 1-one\n"
-                "__ydb_parent = 42, key = 12, data = 1-two\n"
-                "__ydb_parent = 42, key = 13, data = 1-three\n"
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "__ydb_parent = 9223372036854775849, key = 14, data = 1-four\n"
+                "__ydb_parent = 9223372036854775849, key = 15, data = 1-five\n"
+                "__ydb_parent = 9223372036854775850, key = 11, data = 1-one\n"
+                "__ydb_parent = 9223372036854775850, key = 12, data = 1-two\n"
+                "__ydb_parent = 9223372036854775850, key = 13, data = 1-three\n"
 
-                "__ydb_parent = 44, key = 21, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, data = 2-three\n"
-                "__ydb_parent = 45, key = 24, data = 2-four\n"
-                "__ydb_parent = 45, key = 25, data = 2-five\n"
+                "__ydb_parent = 9223372036854775852, key = 21, data = 2-one\n"
+                "__ydb_parent = 9223372036854775852, key = 22, data = 2-two\n"
+                "__ydb_parent = 9223372036854775852, key = 23, data = 2-three\n"
+                "__ydb_parent = 9223372036854775853, key = 24, data = 2-four\n"
+                "__ydb_parent = 9223372036854775853, key = 25, data = 2-five\n"
             );
             recreate();
         }}
@@ -406,25 +403,25 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 "user = user-2, __ydb_id = 43\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(level, 
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n"
+            UNIT_ASSERT_VALUES_EQUAL(level,
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = mm\3\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\3\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting, 
-                "__ydb_parent = 41, key = 11, data = 1-one\n"
-                "__ydb_parent = 41, key = 12, data = 1-two\n"
-                "__ydb_parent = 41, key = 13, data = 1-three\n"
-                "__ydb_parent = 42, key = 14, data = 1-four\n"
-                "__ydb_parent = 42, key = 15, data = 1-five\n"
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
+                "__ydb_parent = 9223372036854775849, key = 12, data = 1-two\n"
+                "__ydb_parent = 9223372036854775849, key = 13, data = 1-three\n"
+                "__ydb_parent = 9223372036854775850, key = 14, data = 1-four\n"
+                "__ydb_parent = 9223372036854775850, key = 15, data = 1-five\n"
 
-                "__ydb_parent = 44, key = 21, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, data = 2-three\n"
-                "__ydb_parent = 45, key = 24, data = 2-four\n"
-                "__ydb_parent = 45, key = 25, data = 2-five\n"
+                "__ydb_parent = 9223372036854775852, key = 21, data = 2-one\n"
+                "__ydb_parent = 9223372036854775852, key = 22, data = 2-two\n"
+                "__ydb_parent = 9223372036854775852, key = 23, data = 2-three\n"
+                "__ydb_parent = 9223372036854775853, key = 24, data = 2-four\n"
+                "__ydb_parent = 9223372036854775853, key = 25, data = 2-five\n"
             );
             recreate();
         }}
@@ -439,23 +436,23 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 "user = user-2, __ydb_id = 43\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(level, 
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n"
+            UNIT_ASSERT_VALUES_EQUAL(level,
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\3\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = II\3\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting, 
-                "__ydb_parent = 41, key = 11, data = 1-one\n"
-                "__ydb_parent = 41, key = 12, data = 1-two\n"
-                "__ydb_parent = 41, key = 13, data = 1-three\n"
-                "__ydb_parent = 41, key = 14, data = 1-four\n"
-                "__ydb_parent = 41, key = 15, data = 1-five\n"
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
+                "__ydb_parent = 9223372036854775849, key = 12, data = 1-two\n"
+                "__ydb_parent = 9223372036854775849, key = 13, data = 1-three\n"
+                "__ydb_parent = 9223372036854775849, key = 14, data = 1-four\n"
+                "__ydb_parent = 9223372036854775849, key = 15, data = 1-five\n"
 
-                "__ydb_parent = 44, key = 21, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, data = 2-three\n"
-                "__ydb_parent = 44, key = 24, data = 2-four\n"
-                "__ydb_parent = 44, key = 25, data = 2-five\n"
+                "__ydb_parent = 9223372036854775852, key = 21, data = 2-one\n"
+                "__ydb_parent = 9223372036854775852, key = 22, data = 2-two\n"
+                "__ydb_parent = 9223372036854775852, key = 23, data = 2-three\n"
+                "__ydb_parent = 9223372036854775852, key = 24, data = 2-four\n"
+                "__ydb_parent = 9223372036854775852, key = 25, data = 2-five\n"
             );
             recreate();
         }}
@@ -525,14 +522,14 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 "user = user-2, __ydb_id = 43\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(level, 
+            UNIT_ASSERT_VALUES_EQUAL(level,
                 "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
                 "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n"
 
                 "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\3\n"
                 "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\3\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting, 
+            UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 41, key = 14, embedding = \x65\x65\3, data = 1-four\n"
                 "__ydb_parent = 41, key = 15, embedding = \x75\x75\3, data = 1-five\n"
                 "__ydb_parent = 42, key = 11, embedding = \x30\x30\3, data = 1-one\n"
@@ -559,14 +556,14 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 "user = user-2, __ydb_id = 43\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(level, 
+            UNIT_ASSERT_VALUES_EQUAL(level,
                 "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
                 "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n"
 
                 "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\3\n"
                 "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\3\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting, 
+            UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 41, key = 11, embedding = \x30\x30\3, data = 1-one\n"
                 "__ydb_parent = 41, key = 12, embedding = \x31\x31\3, data = 1-two\n"
                 "__ydb_parent = 41, key = 13, embedding = \x32\x32\3, data = 1-three\n"
@@ -592,12 +589,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 "user = user-2, __ydb_id = 43\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(level, 
+            UNIT_ASSERT_VALUES_EQUAL(level,
                 "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n"
 
                 "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\3\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting, 
+            UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 41, key = 11, embedding = \x30\x30\3, data = 1-one\n"
                 "__ydb_parent = 41, key = 12, embedding = \x31\x31\3, data = 1-two\n"
                 "__ydb_parent = 41, key = 13, embedding = \x32\x32\3, data = 1-three\n"

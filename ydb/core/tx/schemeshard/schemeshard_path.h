@@ -1,12 +1,18 @@
 #pragma once
 
-#include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_path_element.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/util/source_location.h>
 
 #include <util/generic/maybe.h>
+
+namespace NACLib {
+
+class TUserToken;
+
+}
 
 namespace NKikimr::NSchemeShard {
 
@@ -78,13 +84,14 @@ public:
         const TChecker& IsCdcStream(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsLikeDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
+        const TChecker& IsSysViewDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsRtmrVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTheSameDomain(const TPath& another, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const;
         const TChecker& FailOnWrongType(TPathElement::EPathType expectedType) const;
         const TChecker& FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const;
         const TChecker& FailOnExist(TPathElement::EPathType expectedType, bool acceptAlreadyExist) const;
-        const TChecker& IsValidLeafName(EStatus status = EStatus::StatusSchemeError) const;
+        const TChecker& IsValidLeafName(const NACLib::TUserToken* userToken, EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& DepthLimit(ui64 delta = 0, EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& PathsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& DirChildrenLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
@@ -106,6 +113,7 @@ public:
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSupportedInExports(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSysView(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
@@ -180,7 +188,7 @@ public:
     ui32 Depth() const;
     ui64 Shards() const;
     const TString& LeafName() const;
-    bool IsValidLeafName(TString& explain) const;
+    bool IsValidLeafName(const NACLib::TUserToken* userToken, TString& explain) const;
     TString GetEffectiveACL() const;
     ui64 GetEffectiveACLVersion() const;
     bool IsLocked() const;

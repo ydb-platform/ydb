@@ -10,6 +10,8 @@
 #include <aws/http/exports.h>
 #include <aws/io/io.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_C_HTTP_PACKAGE_ID 2
 
 enum aws_http_errors {
@@ -57,6 +59,7 @@ enum aws_http_errors {
     AWS_ERROR_HTTP_WEBSOCKET_PROTOCOL_ERROR,
     AWS_ERROR_HTTP_MANUAL_WRITE_NOT_ENABLED,
     AWS_ERROR_HTTP_MANUAL_WRITE_HAS_COMPLETED,
+    AWS_ERROR_HTTP_RESPONSE_FIRST_BYTE_TIMEOUT,
 
     AWS_ERROR_HTTP_END_RANGE = AWS_ERROR_ENUM_END_RANGE(AWS_C_HTTP_PACKAGE_ID)
 };
@@ -154,5 +157,6 @@ AWS_HTTP_API extern const struct aws_byte_cursor aws_http_scheme_http;
 AWS_HTTP_API extern const struct aws_byte_cursor aws_http_scheme_https;
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_HTTP_H */

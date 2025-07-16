@@ -64,9 +64,29 @@ void TYsonStructBase::Load(
     INodePtr node,
     bool postprocess,
     bool setDefaults,
+    const std::function<NYPath::TYPath()>& pathGetter)
+{
+    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, pathGetter);
+}
+
+void TYsonStructBase::Load(
+    TYsonPullParserCursor* cursor,
+    bool postprocess,
+    bool setDefaults,
+    const std::function<NYPath::TYPath()>& pathGetter)
+{
+    Meta_->LoadStruct(this, cursor, postprocess, setDefaults, pathGetter);
+}
+
+void TYsonStructBase::Load(
+    INodePtr node,
+    bool postprocess,
+    bool setDefaults,
     const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, path);
+    Load(std::move(node), postprocess, setDefaults, [&] {
+        return path;
+    });
 }
 
 void TYsonStructBase::Load(
@@ -75,7 +95,9 @@ void TYsonStructBase::Load(
     bool setDefaults,
     const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, cursor, postprocess, setDefaults, path);
+    Load(cursor, postprocess, setDefaults, [&] {
+        return path;
+    });
 }
 
 void TYsonStructBase::Load(IInputStream* input)
@@ -154,9 +176,9 @@ void TYsonStructBase::Save(IOutputStream* output) const
     context.Finish();
 }
 
-void TYsonStructBase::Postprocess(const TYPath& path)
+void TYsonStructBase::Postprocess(const std::function<NYPath::TYPath()>& pathGetter)
 {
-    Meta_->PostprocessStruct(this, path);
+    Meta_->PostprocessStruct(this, pathGetter);
 }
 
 void TYsonStructBase::SetDefaults()
@@ -206,6 +228,12 @@ bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const
 const IYsonStructMeta* TYsonStructBase::GetMeta() const
 {
     return Meta_;
+}
+
+void TYsonStructBase::MarkUnrecognized(const std::string& key, const IMapNodePtr& node) {
+    if (!LocalUnrecognized_->FindChild(key)) {
+        LocalUnrecognized_->AddChild(key, node);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

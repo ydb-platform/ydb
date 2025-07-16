@@ -365,13 +365,19 @@ sort_specification: expr (ASC | DESC)?;
 
 sort_specification_list: sort_specification (COMMA sort_specification)*;
 
-select_stmt: select_kind_parenthesis (select_op select_kind_parenthesis)*;
+select_stmt: select_stmt_intersect (union_op select_stmt_intersect)*;
 
-select_unparenthesized_stmt: select_kind_partial (select_op select_kind_parenthesis)*;
+select_stmt_intersect: select_kind_parenthesis (intersect_op select_kind_parenthesis)*;
+
+select_unparenthesized_stmt: select_unparenthesized_stmt_intersect (union_op select_stmt_intersect)*;
+
+select_unparenthesized_stmt_intersect: select_kind_partial (intersect_op select_kind_parenthesis)*;
 
 select_kind_parenthesis: select_kind_partial | LPAREN select_kind_partial RPAREN;
 
-select_op: UNION (ALL)? | INTERSECT | EXCEPT;
+union_op: UNION (DISTINCT | ALL)?;
+
+intersect_op: (INTERSECT | EXCEPT) (DISTINCT | ALL)?;
 
 select_kind_partial: select_kind
   (LIMIT expr ((OFFSET | COMMA) expr)?)?
@@ -693,7 +699,19 @@ table_tablestore: TABLESTORE simple_table_ref_core;
 table_settings_entry: an_id EQUALS table_setting_value;
 table_as_source: AS values_source;
 
-alter_database_stmt: ALTER DATABASE an_id_schema OWNER TO role_name;
+alter_database_stmt: ALTER DATABASE an_id_schema alter_database_action;
+alter_database_action:
+    OWNER TO role_name
+  | set_database_settings
+;
+set_database_settings: SET LPAREN database_settings RPAREN;
+database_settings: database_setting (COMMA database_setting)*;
+database_setting: an_id EQUALS database_setting_value;
+database_setting_value:
+    bool_value
+  | integer
+  | STRING_VALUE
+;
 
 alter_table_stmt: ALTER TABLE simple_table_ref alter_table_action (COMMA alter_table_action)*;
 alter_table_action:
@@ -919,8 +937,8 @@ alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
 
 create_transfer_stmt: CREATE TRANSFER object_ref
-    FROM object_ref TO object_ref (USING lambda_or_parameter)?
-    WITH LPAREN transfer_settings RPAREN
+    FROM object_ref TO object_ref USING lambda_or_parameter
+    (WITH LPAREN transfer_settings RPAREN)?
 ;
 
 lambda_or_parameter:

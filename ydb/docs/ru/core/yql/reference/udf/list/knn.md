@@ -2,17 +2,17 @@
 
 ## Введение {#introduction}
 
-Одним из частных случаев [векторного поиска](../../../../concepts/vector_search.md) является задача [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), где требуется найти `k` ближайших точек к точке запроса. Это может быть полезно в различных приложениях, таких как классификация изображений, рекомендательные системы и многое другое.
+Одним из частных случаев {% if backend_name == 'YDB' %}[векторного поиска](../../../../concepts/vector_search.md){% else %}векторного поиска{% endif %} является задача [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), где требуется найти `k` ближайших точек к точке запроса. Это может быть полезно в различных приложениях, таких как классификация изображений, рекомендательные системы и многое другое.
 
 Решения задачи k-NN разбивается на два крупных подкласса методов: точные и приближенные.
 
 ### Точный метод {#exact-method}
 
-{% include [vector_search_exact.md](../../../../concepts/_includes/vector_search_exact.md) %}
+{% include [vector_search_exact.md](../../_includes/vector_search_exact.md) %}
 
 ### Приближенные методы  {#approximate-methods}
 
-{% include [vector_search_approximate.md](../../../../concepts/_includes/vector_search_approximate.md) %}
+{% include [vector_search_approximate.md](../../_includes/vector_search_approximate.md) %}
 
 {% note info %}
 

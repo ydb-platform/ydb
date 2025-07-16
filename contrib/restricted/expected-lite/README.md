@@ -73,7 +73,7 @@ For more examples, see [1].
 
 ## License
 
-*expected lite* is distributed under the [Boost Software License](https://github.com/martinmoene/XXXX-lite/blob/master/LICENSE.txt).
+*expected lite* is distributed under the [Boost Software License](LICENSE.txt).
 
 ## Dependencies
 
@@ -112,7 +112,12 @@ At default, *expected lite* uses `std::expected` if it is available and lets you
 Define this to `nsel_EXPECTED_STD` to select `std::expected` as `nonstd::expected`. Define this to `nsel_EXPECTED_NONSTD` to select `nonstd::expected` as `nonstd::expected`. Default is undefined, which has the same effect as defining to `nsel_EXPECTED_DEFAULT`.
 
 -D<b>nsel\_P0323R</b>=7  *(default)*  
-Define this to the proposal revision number to control the presence and behavior of features (see tables). Default is 7 for the latest revision.   
+Define this to the proposal revision number to control the presence and behavior of features (see tables). Default is 7 for the latest revision.
+
+#### Define `WIN32_LEAN_AND_MEAN`
+
+-D<b>nsel\_CONFIG\_WIN32\_LEAN\_AND\_MEAN</b>=1  
+Define this to 0 if you want to omit automatic definition of `WIN32_LEAN_AND_MEAN`. Default is 1 when `_MSC_VER` is present.
 
 #### Disable C++ exceptions
 
@@ -123,6 +128,11 @@ Define this to 1 if you want to compile without exceptions. If not defined, the 
 
 -D<b>nsel\_CONFIG\_NO\_EXCEPTIONS\_SEH</b>=0
 Define this to 1 or 0 to control the use of SEH when C++ exceptions are disabled (see above). If not defined, the header tries and detect if SEH is available if C++ exceptions have been disabled (e.g. via `-fno-exceptions` or `/kernel`). Default determined in header.
+
+#### Disable \[\[nodiscard\]\]
+
+-D<b>nsel\_CONFIG\_NO\_NODISCARD</b>=0
+Define this to 1 if you want to compile without \[\[nodiscard\]\]. Note that the default of marking `class expected` with \[\[nodiscard\]\] is not part of the C++23 standard. The rationale to use \[\[nodiscard\]\] is that unnoticed discarded expected error values may break the error handling flow.
 
 #### Enable compilation errors
 
@@ -273,7 +283,8 @@ You can use the R3 revision of P2505, which lacks `error_or`, and uses `remove_c
 | <&ensp;>&ensp;<=&ensp;>=      | constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;std::exception_ptr> const & x,<br>&emsp;unexpected_type&lt;std::exception_ptr> const & y ) |
 | Specialized algorithms        | &nbsp;   | 
 | Make unexpected from          | &nbsp;   | 
-| &emsp;Error                   | template&lt;typename E><br>[constexpr] auto **make_unexpected**( E && v) -><br>&emsp;unexpected_type< typename std::decay&lt;E>::type>| 
+| &emsp;Error                   | template&lt;typename E><br>[constexpr] auto **make_unexpected**(E && v) -><br>&emsp;unexpected_type< typename std::decay&lt;E>::type>| 
+| &emsp;Arguments (in-place)    | template&lt;typename E, typename... Args><br>[constexpr] auto **make_unexpected**(in_place_t, Args &&... args) -><br>&emsp;unexpected_type< typename std::decay&lt;E>::type>| 
 | Make unexpected from          | nsel_P0323R <= 3 | 
 | &emsp;Current exception       | [constexpr] auto **make_unexpected_from_current_exception**() -><br>&emsp;unexpected_type< std::exception_ptr>| 
 
@@ -398,6 +409,7 @@ unexpected_type<std::exception_ptr>: Allows to modify its value
 unexpected_type: Provides relational operators
 unexpected_type: Provides relational operators, std::exception_ptr specialization
 make_unexpected(): Allows to create an unexpected_type<E> from an E
+make_unexpected(): Allows to in-place create an unexpected_type<E> from an E
 unexpected: C++17 and later provide unexpected_type as unexpected
 bad_expected_access: Disallows default construction
 bad_expected_access: Allows construction from error_type

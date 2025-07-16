@@ -70,17 +70,6 @@ namespace NKikimr {
         THeapIterator<TKey, TMemRec, IsForward> HeapIt;
         std::optional<TKey> CurrentKey;
 
-        void MergeAndAdvance() {
-            Merger.Clear();
-            if (HeapIt.Valid()) {
-                CurrentKey.emplace(HeapIt.GetCurKey());
-                HeapIt.PutToMergerAndAdvance(&Merger);
-                Merger.Finish();
-            } else {
-                CurrentKey.reset();
-            }
-        }
-
     public:
         TIndexBaseIterator(const THullCtxPtr &hullCtx, const TLevelIndexSnapshot<TKey, TMemRec> *levelSnap)
             : Merger(hullCtx->VCtx->Top->GType)
@@ -108,6 +97,17 @@ namespace NKikimr {
 
         const TMemRec &GetMemRec() const {
             return Merger.GetMemRec();
+        }
+
+        void MergeAndAdvance() {
+            Merger.Clear();
+            if (HeapIt.Valid()) {
+                CurrentKey.emplace(HeapIt.GetCurKey());
+                HeapIt.PutToMergerAndAdvance(&Merger);
+                Merger.Finish();
+            } else {
+                CurrentKey.reset();
+            }
         }
     };
     ////////////////////////////////////////////////////////////////////////////

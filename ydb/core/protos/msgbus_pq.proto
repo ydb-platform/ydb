@@ -36,6 +36,7 @@ message TPersQueuePartitionRequest {
         optional uint64 PartitionSessionId = 16;
         optional int64 LastOffset = 17;
 
+        optional uint64 SizeEstimate = 18;
     }
 
     message TCmdPublishDirectRead {
@@ -66,9 +67,9 @@ message TPersQueuePartitionRequest {
         optional string ClientId = 1; // mandatory
         optional int64 Offset = 2; // mandatory
         optional string SessionId = 4; // if not set, then no checks
-
         optional bool MirrorerRequest = 10 [default = false];
         optional bool Strict = 11 [default = false];
+        optional string CommittedMetadata = 12; // optional
     }
 
     message TCmdGetClientOffset {
@@ -98,6 +99,9 @@ message TPersQueuePartitionRequest {
         optional bool IgnoreQuotaDeadline = 16 [ default = false ];
 
         optional NKikimrPQ.THeartbeat Heartbeat = 17; // mutually exclusive with Data & related fields
+
+        optional bool EnableKafkaDeduplication = 18 [ default = false ];
+        optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol
     }
 
     message TCmdUpdateWriteTimestamp {
@@ -172,7 +176,7 @@ message TPersQueuePartitionRequest {
     optional bool IsDirectWrite = 18 [default = false];
     optional uint64 PutUnitsSize = 19;
     optional int64 InitialSeqNo = 26;
-    optional bool MeteringV2Enabled = 27 [default = false];
+    optional bool MeteringV2Enabled = 27 [default = false]; 
 }
 
 message TPersQueueMetaRequest {
@@ -420,6 +424,9 @@ message TCmdReadResult {
     optional uint64 StartOffset = 17;
     optional uint64 EndOffset = 15;
     optional bool ReadingFinished = 16;
+    optional bool CommittedToEnd = 18;
+    repeated uint32 AdjacentPartitionIds = 19;
+    repeated uint32 ChildPartitionIds = 20;
 }
 
 
@@ -473,6 +480,7 @@ message TPersQueuePartitionResponse {
         optional uint64 SizeLag = 7;
         optional uint64 WriteTimestampEstimateMS = 8;
         optional bool ClientHasAnyCommits = 9;
+        optional string CommittedMetadata = 10;
     }
 
     message TCmdGetOwnershipResult {

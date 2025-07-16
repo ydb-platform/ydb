@@ -33,7 +33,7 @@ public:
     TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary,
         const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
         const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
-    TFormatResult Format(const TString& tablePath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary);
+    TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary);
 
 private:
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
@@ -43,6 +43,7 @@ private:
     void Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,
         const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId);
     void Format(const TString& fullTablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
+    void FormatIndexImplTable(const TString& tablePath, const TString& indexName, const NKikimrSchemeOp::TTableDescription& indexImplDesc);
 
     void Format(const Ydb::Table::TableIndex& index);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);
@@ -55,11 +56,16 @@ private:
     void Format(const NKikimrSchemeOp::TColumnTableSharding& tableSharding);
     void Format(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings);
 
-    void Format(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue);
+    void FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc, const NKikimrSchemeOp::TFamilyDescription* family);
+    void FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatUpsertOptions(const TString& fullPath, const NKikimrSchemeOp::TColumnTableSchemeOptions& options);
 
     void Format(const Ydb::TypedValue& value, bool isPartition = false);
     void FormatValue(NYdb::TValueParser& parser, bool isPartition = false, TString del = "");
     void FormatPrimitive(NYdb::TValueParser& parser);
+
+    TString ValueToString(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue);
 
     TStringStream Stream;
     NMiniKQL::TScopedAlloc Alloc;

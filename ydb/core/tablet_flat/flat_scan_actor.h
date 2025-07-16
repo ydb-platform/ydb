@@ -26,6 +26,7 @@ namespace NOps {
 
     class TDriver final
             : public ::NActors::TActor<TDriver>
+            , public IActorExceptionHandler
             , private NTable::TFeed
             , private NTable::IDriver
             , private ILoadBlob
@@ -40,7 +41,7 @@ namespace NOps {
         using TSpent = NTable::TSpent;
         using IScan = NTable::IScan;
         using EScan = NTable::EScan;
-        using EAbort = NTable::EAbort;
+        using EStatus = NTable::EStatus;
         using ELnLev = NUtil::ELnLev;
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -216,7 +217,7 @@ namespace NOps {
                 --ReadsLeft;
 
                 Y_ENSURE(Loader);
-                Loader->Save(msg->Cookie, msg->Loaded);
+                Loader->Save(msg->Cookie, msg->Pages);
 
                 if (ReadsLeft == 0) {
                     RunLoader();
@@ -338,7 +339,7 @@ namespace NOps {
                     return Spent->Alter(/* resources not available */ false);
 
                 case EScan::Final:
-                    return Terminate(EAbort::None);
+                    return Terminate(EStatus::Done);
 
                 case EScan::Sleep:
                     Pause();
@@ -442,7 +443,7 @@ namespace NOps {
         void SendStat(const TStatState& stat)
         {
             ui64 elapsedUs = 1000000. * NHPTimer::GetSeconds(stat.ElapsedCycles());
-
+            TotalCpuTimeUs += elapsedUs;
             SendToOwner(new TEvScanStat(elapsedUs, stat.Seen, stat.Skipped));
         }
 
@@ -478,15 +479,15 @@ namespace NOps {
                 processed += stat.UpdateRows(Seen, Skipped);
 
                 if (ready == NTable::EReady::Gone) {
-                    Terminate(EAbort::None);
                     stat.UpdateCycles();
                     SendStat(stat);
+                    Terminate(EStatus::Done);
                     return;
                 }
 
                 while (auto req = Cache->GrabFetches()) {
                     if (auto logl = Logger->Log(ELnLev::Debug))
-                        logl << NFmt::Do(*this) << " " << NFmt::Do(*req);
+                        logl << NFmt::Do(*this) << " Fetches " << req->DebugString();
 
                     Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req));
                 }
@@ -497,9 +498,9 @@ namespace NOps {
                 if (!MayProgress()) {
                     // We must honor EReady::Gone from an implicit callback
                     if (ImplicitPageFault() == NTable::EReady::Gone) {
-                        Terminate(EAbort::None);
                         stat.UpdateCycles();
                         SendStat(stat);
+                        Terminate(EStatus::Done);
                         return;
                     }
 
@@ -543,7 +544,7 @@ namespace NOps {
         void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev)
         {
             if (!BlobQueue.ProcessResult(ev->Get())) {
-                return Terminate(EAbort::Host);
+                return Terminate(EStatus::StorageError);
             }
 
             BlobQueue.SendRequests(SelfId());
@@ -598,7 +599,7 @@ namespace NOps {
             const auto label = msg->Label;
             ColdPartLoaders.erase(label);
 
-            Terminate(EAbort::Host);
+            Terminate(EStatus::StorageError);
         }
 
         void Handle(NSharedCache::TEvResult::TPtr& ev)
@@ -615,10 +616,10 @@ namespace NOps {
                     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_nodata", true)->Inc();
                 }
 
-                return Terminate(EAbort::Host);
+                return Terminate(EStatus::StorageError);
             }
 
-            Cache->DoSave(std::move(msg.Origin), msg.Cookie, std::move(msg.Loaded));
+            Cache->DoSave(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);
@@ -628,21 +629,21 @@ namespace NOps {
 
         void HandleUndelivered()
         {
-            Terminate(EAbort::Lost);
+            Terminate(EStatus::Lost);
         }
 
         void HandlePoison()
         {
-            Terminate(EAbort::Term);
+            Terminate(EStatus::Term);
         }
 
-        void Terminate(EAbort abort)
+        void Terminate(EStatus status, const std::exception* exc = nullptr)
         {
             auto trace = Args.Trace ? Cache->GrabTraces() : nullptr;
 
             if (auto logl = Logger->Log(ELnLev::Info)) {
                 logl
-                    << NFmt::Do(*this) << " end=" << ui32(abort)
+                    << NFmt::Do(*this) << " end=" << status
                     << ", " << Seen << "r seen, " << NFmt::Do(Cache->Stats())
                     << ", bio " << NFmt::If(Spent.Get());
 
@@ -658,11 +659,13 @@ namespace NOps {
 
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
+            IScan* scan = DetachScan();
+            auto prod = exc
+                ? scan->Finish(*exc)
+                : scan->Finish(status);
 
-            auto prod = DetachScan()->Finish(abort);
-
-            if (abort != EAbort::Lost) {
-                auto ev = new TEvResult(Serial, abort, std::move(Snapshot), prod);
+            if (status != EStatus::Lost) {
+                auto ev = new TEvResult(Serial, status, std::move(Snapshot), prod);
 
                 ev->Trace = std::move(trace);
 
@@ -677,6 +680,27 @@ namespace NOps {
             PassAway();
         }
 
+        bool OnUnhandledException(const std::exception& exc) override
+        {
+            if (auto logl = Logger->Log(ELnLev::Error)) {
+                logl
+                    << NFmt::Do(*this)
+                    << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+                    << TBackTrace::FromCurrentException().PrintToString();
+            }
+
+            GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
+
+            Terminate(NTable::EStatus::Exception, &exc);
+
+            return true;
+        }
+
+        void Throw(const std::exception& exc) override
+        {
+            OnUnhandledException(exc);
+        }
+
         void SendToSelf(THolder<IEventBase> event)
         {
             Send(SelfId(), event.Release());
@@ -687,6 +711,11 @@ namespace NOps {
             ui32 flags = nack ? NActors::IEventHandle::FlagTrackDelivery : 0;
 
             Send(Owner, event.Release(), flags);
+        }
+
+        ui64 GetTotalCpuTimeUs() const override
+        {
+            return TotalCpuTimeUs;
         }
 
     private:
@@ -718,6 +747,7 @@ namespace NOps {
 
         const NHPTimer::STime MaxCyclesPerIteration;
         static constexpr ui64 MinRowsPerCheck = 1000;
+        ui64 TotalCpuTimeUs = 0;
     };
 
 }

@@ -1,0 +1,346 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05bdd09fb9fdb384a61f2eb54df462d6
+BELONGS ya.make
+    License text:
+        // Copyright 2016 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dsp/common_sse2.h [1:1]
+        src/dsp/common_sse41.h [1:1]
+        src/dsp/dec_msa.c [1:1]
+        src/dsp/enc_msa.c [1:1]
+        src/dsp/filters_msa.c [1:1]
+        src/dsp/lossless_enc_msa.c [1:1]
+        src/dsp/lossless_msa.c [1:1]
+        src/dsp/msa_macro.h [1:1]
+        src/dsp/rescaler_msa.c [1:1]
+        src/dsp/upsampling_msa.c [1:1]
+        src/enc/predictor_enc.c [1:1]
+        src/mux/animi.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20b71da944b9e6967071fc4782c1355f
+BELONGS ya.make
+    License text:
+        Copyright (c) 2010, Google Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6229b3029004c1905fe5e24a63be2311
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/utils/palette.c [1:1]
+        src/utils/palette.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6499e2ad737f62db5558c81fbd2749a7
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dsp/alpha_processing_neon.c [1:1]
+        src/dsp/filters_neon.c [1:1]
+        src/dsp/ssim.c [1:1]
+        src/dsp/ssim_sse2.c [1:1]
+        src/dsp/yuv_neon.c [1:1]
+        src/enc/backward_references_cost_enc.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6518b015a67ef080ce14d2b770875d6a
+BELONGS ya.make
+    License text:
+        // Copyright 2014 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dsp/alpha_processing_mips_dsp_r2.c [1:1]
+        src/dsp/alpha_processing_sse2.c [1:1]
+        src/dsp/cost.c [1:1]
+        src/dsp/cost_mips32.c [1:1]
+        src/dsp/cost_mips_dsp_r2.c [1:1]
+        src/dsp/dec_clip_tables.c [1:1]
+        src/dsp/dec_mips32.c [1:1]
+        src/dsp/dec_mips_dsp_r2.c [1:1]
+        src/dsp/enc_mips32.c [1:1]
+        src/dsp/enc_mips_dsp_r2.c [1:1]
+        src/dsp/filters_mips_dsp_r2.c [1:1]
+        src/dsp/lossless_mips_dsp_r2.c [1:1]
+        src/dsp/lossless_neon.c [1:1]
+        src/dsp/lossless_sse2.c [1:1]
+        src/dsp/mips_macro.h [1:1]
+        src/dsp/neon.h [1:1]
+        src/dsp/rescaler.c [1:1]
+        src/dsp/rescaler_mips32.c [1:1]
+        src/dsp/rescaler_mips_dsp_r2.c [1:1]
+        src/dsp/upsampling_mips_dsp_r2.c [1:1]
+        src/dsp/yuv_mips32.c [1:1]
+        src/dsp/yuv_mips_dsp_r2.c [1:1]
+        src/dsp/yuv_sse2.c [1:1]
+        src/dsp/yuv_sse41.c [1:1]
+        src/enc/near_lossless_enc.c [1:1]
+        src/enc/picture_csp_enc.c [1:1]
+        src/enc/picture_psnr_enc.c [1:1]
+        src/enc/picture_rescale_enc.c [1:1]
+        src/enc/picture_tools_enc.c [1:1]
+        src/mux/anim_encode.c [1:1]
+        src/utils/bit_reader_inl_utils.h [1:1]
+        src/utils/endian_inl_utils.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e1724b8402b7946ad8f2c8a92df19c3
+BELONGS ya.make
+    License text:
+        // Copyright 2011 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dec/alpha_dec.c [1:1]
+        src/dec/buffer_dec.c [1:1]
+        src/dec/idec_dec.c [1:1]
+        src/dec/io_dec.c [1:1]
+        src/dec/webpi_dec.h [1:1]
+        src/dsp/cpu.c [1:1]
+        src/dsp/dec_sse2.c [1:1]
+        src/dsp/dsp.h [1:1]
+        src/dsp/enc.c [1:1]
+        src/dsp/enc_sse2.c [1:1]
+        src/dsp/filters.c [1:1]
+        src/dsp/upsampling.c [1:1]
+        src/dsp/upsampling_neon.c [1:1]
+        src/dsp/upsampling_sse2.c [1:1]
+        src/dsp/upsampling_sse41.c [1:1]
+        src/enc/alpha_enc.c [1:1]
+        src/enc/analysis_enc.c [1:1]
+        src/enc/config_enc.c [1:1]
+        src/enc/cost_enc.c [1:1]
+        src/enc/cost_enc.h [1:1]
+        src/enc/filter_enc.c [1:1]
+        src/enc/frame_enc.c [1:1]
+        src/enc/iterator_enc.c [1:1]
+        src/enc/picture_enc.c [1:1]
+        src/enc/quant_enc.c [1:1]
+        src/enc/syntax_enc.c [1:1]
+        src/enc/token_enc.c [1:1]
+        src/enc/tree_enc.c [1:1]
+        src/enc/vp8i_enc.h [1:1]
+        src/enc/webp_enc.c [1:1]
+        src/mux/muxedit.c [1:1]
+        src/mux/muxi.h [1:1]
+        src/mux/muxinternal.c [1:1]
+        src/mux/muxread.c [1:1]
+        src/utils/bit_writer_utils.c [1:1]
+        src/utils/bit_writer_utils.h [1:1]
+        src/utils/filters_utils.c [1:1]
+        src/utils/filters_utils.h [1:1]
+        src/utils/huffman_encode_utils.c [1:1]
+        src/utils/huffman_encode_utils.h [1:1]
+        src/utils/quant_levels_utils.c [1:1]
+        src/utils/quant_levels_utils.h [1:1]
+        src/utils/thread_utils.c [1:1]
+        src/utils/thread_utils.h [1:1]
+        src/webp/encode.h [1:1]
+        src/webp/mux.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 904be6eceb61d466f53f25892be2624f
+BELONGS ya.make
+    License text:
+        // Copyright 2021 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dsp/lossless_sse41.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9142ab2af90f5831171712f8d87bc7e3
+BELONGS ya.make
+    License text:
+        \# Copyright (c) 2021, Google Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        PRESUBMIT.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97ff8757487be6d08b12d53768dd6984
+BELONGS ya.make
+    License text:
+        // Copyright 2012 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dec/vp8l_dec.c [1:1]
+        src/dec/vp8li_dec.h [1:1]
+        src/demux/demux.c [1:1]
+        src/dsp/dec_neon.c [1:1]
+        src/dsp/enc_neon.c [1:1]
+        src/dsp/lossless.c [1:1]
+        src/dsp/lossless.h [1:1]
+        src/dsp/lossless_common.h [1:1]
+        src/enc/backward_references_enc.c [1:1]
+        src/enc/backward_references_enc.h [1:1]
+        src/enc/histogram_enc.c [1:1]
+        src/enc/histogram_enc.h [1:1]
+        src/enc/vp8l_enc.c [1:1]
+        src/enc/vp8li_enc.h [1:1]
+        src/utils/color_cache_utils.c [1:1]
+        src/utils/color_cache_utils.h [1:1]
+        src/utils/huffman_utils.c [1:1]
+        src/utils/huffman_utils.h [1:1]
+        src/utils/rescaler_utils.c [1:1]
+        src/utils/rescaler_utils.h [1:1]
+        src/utils/utils.c [1:1]
+        src/utils/utils.h [1:1]
+        src/webp/demux.h [1:1]
+        src/webp/format_constants.h [1:1]
+        src/webp/mux_types.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a562064d974c30e7a4bc2db6f9a9a839
+BELONGS sharpyuv/ya.make ya.make
+    License text:
+        // Copyright 2022 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sharpyuv/sharpyuv.c [1:1]
+        sharpyuv/sharpyuv.h [1:1]
+        sharpyuv/sharpyuv_cpu.c [1:1]
+        sharpyuv/sharpyuv_cpu.h [1:1]
+        sharpyuv/sharpyuv_csp.c [1:1]
+        sharpyuv/sharpyuv_csp.h [1:1]
+        sharpyuv/sharpyuv_dsp.c [1:1]
+        sharpyuv/sharpyuv_dsp.h [1:1]
+        sharpyuv/sharpyuv_gamma.c [1:1]
+        sharpyuv/sharpyuv_gamma.h [1:1]
+        sharpyuv/sharpyuv_neon.c [1:1]
+        sharpyuv/sharpyuv_sse2.c [1:1]
+        src/dsp/cpu.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL da7391eda27a4968d920cc73a32c9b20
+BELONGS ya.make
+    License text:
+        // Copyright 2013 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dec/alphai_dec.h [1:1]
+        src/dsp/alpha_processing.c [1:1]
+        src/utils/quant_levels_dec_utils.c [1:1]
+        src/utils/quant_levels_dec_utils.h [1:1]
+        src/utils/random_utils.c [1:1]
+        src/utils/random_utils.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ef839a7f29c4727d9902b9efada72a47
+BELONGS ya.make
+    License text:
+        // Copyright 2010 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dec/frame_dec.c [1:1]
+        src/dec/quant_dec.c [1:1]
+        src/dec/tree_dec.c [1:1]
+        src/dec/vp8_dec.c [1:1]
+        src/dec/vp8_dec.h [1:1]
+        src/dec/vp8i_dec.h [1:1]
+        src/dec/webp_dec.c [1:1]
+        src/dsp/dec.c [1:1]
+        src/dsp/yuv.c [1:1]
+        src/dsp/yuv.h [1:1]
+        src/utils/bit_reader_utils.c [1:1]
+        src/utils/bit_reader_utils.h [1:1]
+        src/webp/decode.h [1:1]
+        src/webp/types.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4d2490c76552286e9c484abd3bea2b4
+BELONGS ya.make
+    License text:
+        // Copyright 2015 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dec/common_dec.h [1:1]
+        src/demux/anim_decode.c [1:1]
+        src/dsp/alpha_processing_sse41.c [1:1]
+        src/dsp/cost_sse2.c [1:1]
+        src/dsp/dec_sse41.c [1:1]
+        src/dsp/enc_sse41.c [1:1]
+        src/dsp/filters_sse2.c [1:1]
+        src/dsp/lossless_enc.c [1:1]
+        src/dsp/lossless_enc_mips32.c [1:1]
+        src/dsp/lossless_enc_mips_dsp_r2.c [1:1]
+        src/dsp/lossless_enc_neon.c [1:1]
+        src/dsp/lossless_enc_sse2.c [1:1]
+        src/dsp/lossless_enc_sse41.c [1:1]
+        src/dsp/rescaler_neon.c [1:1]
+        src/dsp/rescaler_sse2.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f94740292e5295c1a1432ff96e55c207
+BELONGS ya.make
+    License text:
+        // Copyright 2018 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dsp/cost_neon.c [1:1]
+        src/dsp/quant.h [1:1]

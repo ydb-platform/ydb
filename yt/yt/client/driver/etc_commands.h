@@ -19,8 +19,8 @@ class TUpdateMembershipCommand
     : public TTypedCommand<TOptions>
 {
 protected:
-    TString Group;
-    TString Member;
+    std::string Group;
+    std::string Member;
 
     REGISTER_YSON_STRUCT_LITE(TUpdateMembershipCommand);
 
@@ -29,6 +29,21 @@ protected:
         registrar.Parameter("group", &TUpdateMembershipCommand::Group);
         registrar.Parameter("member", &TUpdateMembershipCommand::Member);
     }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetCurrentUserCommand
+    : public TCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetCurrentUserCommand);
+
+    static void Register(TRegistrar)
+    { }
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -132,7 +147,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    std::optional<TString> User;
+    std::optional<std::string> User;
     NYTree::EPermission Permission;
     NYTree::INodePtr Acl;
 
@@ -150,8 +165,8 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString SourceAccount;
-    TString DestinationAccount;
+std::string SourceAccount;
+    std::string DestinationAccount;
     NYTree::INodePtr ResourceDelta;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -249,7 +264,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString TabletCellBundle;
+    std::string TabletCellBundle;
     std::vector<NYPath::TYPath> MovableTables;
 
     void DoExecute(ICommandContextPtr context) override;

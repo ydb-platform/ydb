@@ -1,0 +1,47 @@
+import "ydb/core/scheme/protos/pathid.proto";
+
+package NKikimrSysView;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+enum ESysViewType {
+    EPartitionStats = 1;
+    ENodes = 2;
+    ETopQueriesByDurationOneMinute = 3;
+    ETopQueriesByDurationOneHour = 4;
+    ETopQueriesByReadBytesOneMinute = 5;
+    ETopQueriesByReadBytesOneHour = 6;
+    ETopQueriesByCpuTimeOneMinute = 7;
+    ETopQueriesByCpuTimeOneHour = 8;
+    ETopQueriesByRequestUnitsOneMinute = 9;
+    ETopQueriesByRequestUnitsOneHour = 10;
+    EQuerySessions = 11;
+    EPDisks = 12;
+    EVSlots = 13;
+    EGroups = 14;
+    EStoragePools = 15;
+    EStorageStats = 16;
+    ETablets = 17;
+    EQueryMetricsOneMinute = 18;
+    ETopPartitionsByCpuOneMinute = 19;
+    ETopPartitionsByCpuOneHour = 20;
+    ETopPartitionsByTliOneMinute = 21;
+    ETopPartitionsByTliOneHour = 22;
+    EResourcePoolClassifiers = 23;
+    EResourcePools = 24;
+    EAuthUsers = 25;
+    EAuthGroups = 26;
+    EAuthGroupMembers = 27;
+    EAuthOwners = 28;
+    EAuthPermissions = 29;
+    EAuthEffectivePermissions = 30;
+    EPgTables = 31;
+    EInformationSchemaTables = 32;
+    EPgClass = 33;
+    EShowCreate = 34;
+}
+
+message TSysViewDescription {
+    optional ESysViewType Type = 1;
+    optional NKikimrProto.TPathID SourceObject = 2;
+}

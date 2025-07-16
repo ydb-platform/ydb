@@ -100,9 +100,9 @@
                                                                 "Columns": [
                                                                     "id"
                                                                 ],
-                                                                "E-Cost": "No estimate",
-                                                                "E-Rows": "No estimate",
-                                                                "E-Size": "No estimate",
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
                                                                 "LookupKeyColumns": [
                                                                     "id"
                                                                 ],
@@ -174,11 +174,8 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join3.test_plan/qb",
                                                         "ReadColumns": [
-                                                            "a_id",
-                                                            "id"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "id (-\u221e, +\u221e)"
+                                                            "id (-\u221e, +\u221e)",
+                                                            "a_id"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",

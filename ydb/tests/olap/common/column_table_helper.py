@@ -49,7 +49,7 @@ class ColumnTableHelper:
         self.ydb_client.query(
             f"""
             ALTER OBJECT `{self.path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                  {{"levels" : [{{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2}},
+                  {{"levels" : [{{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1572864, "portions_count_available" : 2}},
                                 {{"class_name" : "Zero"}}]}}`);
             """
         )
@@ -74,3 +74,8 @@ class ColumnTableHelper:
             raw_bytes, bytes = self._coollect_volumes_column(column_name)
         logging.info(f"Table `{self.path}`, volumes `{column_name}` ({raw_bytes}, {bytes})")
         return raw_bytes, bytes
+
+    def portions_actualized_in_sys(self):
+        portions = self.get_portion_stat_by_tier()
+        logger.info(f"portions: {portions}, blobs: {self.get_blob_stat_by_tier()}")
+        return "__DEFAULT" in portions

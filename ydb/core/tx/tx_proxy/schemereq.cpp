@@ -9,6 +9,7 @@
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <ydb/library/login/login.h>
@@ -166,6 +167,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
+        case NKikimrSchemeOp::ESchemeOpDropSysView:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -323,6 +325,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
             return *modifyScheme.MutableDropCdcStream()->MutableTableName();
 
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStream:
+            return *modifyScheme.MutableRotateCdcStream()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl:
+            Y_ABORT("no implementation for ESchemeOpRotateCdcStreamImpl");
+
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable:
+            return *modifyScheme.MutableRotateCdcStream()->MutableTableName();
+
         case NKikimrSchemeOp::ESchemeOpMoveTable:
             Y_ABORT("no implementation for ESchemeOpMoveTable");
 
@@ -404,7 +415,17 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
             return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp:
+            return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
+            return *modifyScheme.MutableCreateSysView()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpChangePathState:
+            return *modifyScheme.MutableChangePathState()->MutablePath();
         }
+        Y_UNREACHABLE();
     }
 
     static void SetPathNameForScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name) {
@@ -432,6 +453,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
             return true;
         default:
             return false;
@@ -702,6 +724,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:
         case NKikimrSchemeOp::ESchemeOpDropCdcStream:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume:
@@ -713,7 +736,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
-        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
@@ -727,6 +749,24 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+
+            auto& config = pbModifyScheme.GetReplication().GetConfig();
+            auto& target = config.GetTransferSpecific().GetTarget();
+            if (target.HasDstPath()) {
+                auto toWriteTable = TPathToResolve(pbModifyScheme);
+                toWriteTable.Path = SplitPath(target.GetDstPath());
+                toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
+                ResolveForACL.push_back(toWriteTable);
+            }
+
             break;
         }
         case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
@@ -813,7 +853,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
-        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
@@ -825,6 +864,22 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+
+            auto& config = pbModifyScheme.GetReplication().GetConfig();
+            auto& target = config.GetTransferSpecific().GetTarget();
+            auto toWriteTable = TPathToResolve(pbModifyScheme);
+            toWriteTable.Path = SplitPath(target.GetDstPath());
+            toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
+            ResolveForACL.push_back(toWriteTable);
+
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables: {
@@ -864,6 +919,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             break;
         }
         case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetRestoreBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp: {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
             auto collectionPath = SplitPath(pbModifyScheme.GetRestoreBackupCollection().GetName());
@@ -940,6 +1004,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
             break;
         }
+        // TODO(n00bcracker): add processing after support on client side
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::ESchemeOpDropSysView:
+            return false;
+        case NKikimrSchemeOp::ESchemeOpChangePathState:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
         case NKikimrSchemeOp::ESchemeOpCreateTableIndex:
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
@@ -962,6 +1038,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:
@@ -1226,6 +1304,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
                 // Admins can always change ACLs
                 allowACLBypass = isAdmin;
+            } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain) {
+                if (IsDB(entry) && !IsClusterAdministrator) {
+                    const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                        << "only cluster admins can alter databases"
+                    );
+                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                    return false;
+                }
             }
 
             ui32 access = requestIt->RequireAccess;

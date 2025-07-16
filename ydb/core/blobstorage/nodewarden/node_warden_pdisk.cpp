@@ -16,6 +16,22 @@ namespace NKikimr::NStorage {
         {NPDisk::DEVICE_TYPE_NVME, 300000000},
     };
 
+    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes) {
+        Y_ABORT_UNLESS(driveSize);
+        Y_ABORT_UNLESS(unitSizeInBytes);
+
+        const double slotCount = lround(double(driveSize) / unitSizeInBytes);
+        ui32 slotSizeInUnits = 1u;
+
+        constexpr long MaxSlots = 16;
+        while (lround(slotCount/slotSizeInUnits) > MaxSlots) {
+            slotSizeInUnits *= 2;
+        }
+
+        pdiskConfig->ExpectedSlotCount = lround(slotCount/slotSizeInUnits);
+        pdiskConfig->SlotSizeInUnits = slotSizeInUnits;
+    }
+
     TIntrusivePtr<TPDiskConfig> TNodeWarden::CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk)  {
         const TString& path = pdisk.GetPath();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
@@ -119,6 +135,26 @@ namespace NKikimr::NStorage {
         if (auto it = Cfg->SectorMaps.find(path); it != Cfg->SectorMaps.end()) {
             pdiskConfig->SectorMap = it->second;
             pdiskConfig->EnableSectorEncryption = !pdiskConfig->SectorMap;
+        }
+
+        if (pdisk.GetPDiskConfig().GetExpectedSlotCount() != 0) {
+            // Skip inferring PDisk SlotCount
+        } else if (ui64 unitSizeInBytes = pdisk.GetInferPDiskSlotCountFromUnitSize()) {
+            ui64 driveSize = 0;
+            TStringStream outDetails;
+            if (pdiskConfig->SectorMap) {
+                driveSize = pdiskConfig->SectorMap->DeviceSize;
+                outDetails << "drive size obtained from SectorMap";
+            } else if (std::optional<NPDisk::TDriveData> data = NPDisk::GetDriveData(path, &outDetails)) {
+                driveSize = data->Size;
+            }
+
+            if (!driveSize) {
+                STLOG(PRI_ERROR, BS_NODE, NW91, "Unable to determine drive size for inferring PDisk slot count",
+                    (Path, path), (Details, outDetails.Str()));
+            } else {
+                InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes);
+            }
         }
 
         const NPDisk::TMainKey& pdiskKey = Cfg->PDiskKey;
@@ -298,7 +334,7 @@ namespace NKikimr::NStorage {
 
         const ui64 cookie = NextConfigCookie++;
         SendToController(std::move(ev), cookie);
-        ConfigInFlight.emplace(cookie, [=](TEvBlobStorage::TEvControllerConfigResponse *ev) {
+        ConfigInFlight.emplace(cookie, [=, this](TEvBlobStorage::TEvControllerConfigResponse *ev) {
             if (auto node = PDiskRestartRequests.extract(requestCookie)) {
                 if (!ev || !ev->Record.GetResponse().GetSuccess()) {
                     OnUnableToRestartPDisk(node.mapped(), ev ? ev->Record.GetResponse().GetErrorDescription() : "BSC disconnected");

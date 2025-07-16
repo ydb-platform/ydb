@@ -17,6 +17,6 @@ static const char copyright[] =
 "COPYING RESTRICTIONS APPLY\n";
 
 static const char __Version[] =
-"@(#) $OpenLDAP: liblber.la 2.6.9 (" __DATE__ " " __TIME__ ") $\n"
+"@(#) $OpenLDAP: liblber.la 2.6.10 (" __DATE__ " " __TIME__ ") $\n"
 "\topenldap\n";
 

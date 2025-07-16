@@ -10,11 +10,20 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TVirtualCompositeNodeReadOffloadGuard
+{
+public:
+    virtual ~TVirtualCompositeNodeReadOffloadGuard() = default;
+};
+
 struct TVirtualCompositeNodeReadOffloadParams
 {
     IInvokerPtr OffloadInvoker;
     NConcurrency::EWaitForStrategy WaitForStrategy = NConcurrency::EWaitForStrategy::WaitFor;
     i64 BatchSize = 10'000;
+    // Unless empty, called inside the offload thread to set up any necessary context before the actual reading is done.
+    // NB: std::function would've sufficed here but TCallback makes it easier to handle propagating storage correctly.
+    TCallback<std::unique_ptr<TVirtualCompositeNodeReadOffloadGuard>()> CreateReadOffloadGuard;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

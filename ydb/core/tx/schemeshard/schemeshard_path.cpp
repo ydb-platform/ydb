@@ -1,4 +1,6 @@
 #include "schemeshard_path.h"
+
+#include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
@@ -578,6 +580,19 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsSysViewDirectory(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsDirectory() && Path.Base()->Name == NSysView::SysPathName) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a .sys directory"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsRtmrVolume(EStatus status) const {
     if (Failed) {
         return *this;
@@ -672,13 +687,13 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(TPathElement::EPathType expe
     return FailOnExist(TSet<TPathElement::EPathType>{expectedType}, acceptAlreadyExist);
 }
 
-const TPath::TChecker& TPath::TChecker::IsValidLeafName(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsValidLeafName(const NACLib::TUserToken* userToken, EStatus status) const {
     if (Failed) {
         return *this;
     }
 
     TString error;
-    if (Path.IsValidLeafName(error)) {
+    if (Path.IsValidLeafName(userToken, error)) {
         return *this;
     }
 
@@ -946,6 +961,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
     // and we might cause the process to be aborted.
     if (Path.Base()->IsTable()
         || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
+        || Path.Base()->IsPQGroup()
     )  {
         return *this;
     }
@@ -1137,6 +1153,20 @@ const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus statu
     }
 
     return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::IsSysView(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsSysView()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a system view"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
@@ -1575,7 +1605,8 @@ bool TPath::IsUnderMoving() const {
 bool TPath::IsUnderOutgoingIncrementalRestore() const {
     Y_ABORT_UNLESS(IsResolved());
 
-    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore;
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore
+        || Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
 }
 
 TPath& TPath::RiseUntilOlapStore() {
@@ -1782,8 +1813,15 @@ const TString& TPath::LeafName() const {
     return NameParts.back();
 }
 
-bool TPath::IsValidLeafName(TString& explain) const {
+bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explain) const {
     Y_ABORT_UNLESS(!IsEmpty());
+
+    if (!SS->IsSchemeShardConfigured()) {
+        explain += TStringBuilder()
+            << (SS->IsDomainSchemeShard ? "cluster" : "database")
+            << " schema root is not initialized yet";
+        return false;
+    }
 
     const auto& leaf = NameParts.back();
     if (leaf.empty()) {
@@ -1798,18 +1836,25 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
-    if (!SS->IsSchemeShardConfigured()) {
-        explain += "cluster don't have initialized root yet";
-        return false;
-    }
-
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && leaf == NSysView::SysPathName) {
-        explain += TStringBuilder()
-            << "path part '" << NSysView::SysPathName << "' is reserved by the system";
-        return false;
-    }
-
-    if (IsPathPartContainsOnlyDots(leaf)) {
+    if (AppData()->FeatureFlags.GetEnableSystemNamesProtection()) {
+        if (!CheckReservedName(leaf, AppData(), userToken, explain)) {
+            return false;
+        }
+    } else if (leaf == NSysView::SysPathName) {
+        // Compatibility case.
+        // If system names protection is disabled, only `.sys` remains forbidden to create,
+        // preserving behavior that existed before the introduction of system names protection.
+        if (!AppData()->FeatureFlags.GetEnableRealSystemViewPaths()
+            || !CheckReservedName(leaf, AppData(), userToken, explain))
+        {
+            explain += TStringBuilder()
+                << "path part '" << leaf << "', name is reserved by the system: '" << leaf << "'";
+            return false;
+        }
+    } else if (IsPathPartContainsOnlyDots(leaf)) {
+        // Compatibility case.
+        // If system names protection is disabled, only-dots check should be executed explicitly.
+        // Generally only-dots check is covered by the reserved prefix check performed by CheckReservedName().
         explain += TStringBuilder()
             << "is not allowed path part contains only dots '" << leaf << "'";
         return false;

@@ -1,0 +1,2111 @@
+====================BSD-3-Clause====================
+        - Clause 1 of the Modified BSD License
+
+
+====================BSD-3-Clause====================
+        - Clause 2 of the Modified BSD License
+
+
+====================BSD-3-Clause====================
+        your product documentation must include the text of the Modified BSD
+        License (see below.)
+
+
+====================BSD-3-Clause====================
+    - Clause 3 of the Modified BSD License
+
+
+====================BSD-3-Clause====================
+    - IJG License
+    - Modified BSD License
+
+
+====================BSD-3-Clause====================
+  both the terms of the IJG License and the terms of the Modified (3-clause)
+  BSD License apply.
+
+
+====================BSD-3-Clause====================
+%define GOT_SYMBOL  __GLOBAL_OFFSET_TABLE_  ; BSD-style a.out supports PIC
+
+
+====================BSD-3-Clause====================
+- The Modified (3-clause) BSD License, which is listed below
+
+
+====================BSD-3-Clause====================
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+- Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+- Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+- Neither the name of the libjpeg-turbo Project nor the names of its
+  contributors may be used to endorse or promote products derived from this
+  software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS",
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+The Modified (3-clause) BSD License
+
+
+====================BSD-3-Clause====================
+The zlib License could have been used instead of the Modified (3-clause) BSD
+License, and since the IJG License effectively subsumes the distribution
+
+
+====================BSD-3-Clause====================
+libjpeg-turbo is covered by three compatible BSD-style open source licenses.
+
+
+====================BSD-3-Clause====================
+libjpeg-turbo is covered by two compatible BSD-style open source licenses:
+
+
+====================BSD-3-Clause AND BSD-3-Clause====================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ *   this list of conditions and the following disclaimer.
+ * - Redistributions in binary form must reproduce the above copyright notice,
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
+ * - Neither the name of the libjpeg-turbo Project nor the names of its
+ *   contributors may be used to endorse or promote products derived from this
+ *   software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS",
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+
+
+====================COPYRIGHT====================
+   * "How to Optimize for the Pentium Processors", Copyright (c) 1996, 1997 by
+   * Agner Fog.  This code assumes we are on a two's complement machine.
+
+
+====================COPYRIGHT====================
+ * Author:  Ragesh Radhakrishnan <ragesh.r@linaro.org>
+ * Copyright (C) 2014-2016, 2020, D. R. Commander.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Author:  Siarhei Siamashka <siarhei.siamashka@nokia.com>
+ * Copyright (C) 2013-2014, Linaro Limited.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Author:  Siarhei Siamashka <siarhei.siamashka@nokia.com>
+ * Copyright (C) 2014, Siarhei Siamashka.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1994, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2022-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1995, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2016, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2014, MIPS Technologies, Inc., California.
+ * Copyright (C) 2015, 2019, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * Modified 2009 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2017, 2019-2020, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * Modified 2017 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2018, 2021-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009, 2014-2015, 2020, 2022-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009, 2015, 2022-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009-2012, 2015, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2018, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015, 2020, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2017, 2019, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2009-2012, 2015, 2022, 2024, D. R. Commander.
+ * Copyright (C) 2014, MIPS Technologies, Inc., California.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2010, 2015-2016, 2022, 2024, D. R. Commander.
+ * Copyright (C) 2014, MIPS Technologies, Inc., California.
+ * Copyright (C) 2015, Google, Inc.
+ * Copyright (C) 2019-2020, Arm Limited.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009-2011, 2014-2016, 2018-2024, D. R. Commander.
+ * Copyright (C) 2015, Matthieu Darbois.
+ * Copyright (C) 2018, Matthias Räncker.
+ * Copyright (C) 2020, Arm Limited.
+ * Copyright (C) 2022, Felix Hanau.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009-2011, 2016, 2018-2019, 2022, D. R. Commander.
+ * Copyright (C) 2018, Matthias Räncker.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2016, 2018, 2022, 2024, D. R. Commander.
+ * Copyright (C) 2015, Google, Inc.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010-2011, 2015-2016, 2021, D. R. Commander.
+ * Copyright (C) 2018, Matthias Räncker.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modifications:
+ * Copyright (C) 2013, Linaro Limited.
+ * Copyright (C) 2014-2015, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 1997-2009 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009, 2011, 2014-2015, 2018, 2020, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 1997-2009 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015-2017, 2019, 2021-2022, 2024, D. R. Commander.
+ * Copyright (C) 2015, Google, Inc.
+ * Copyright (C) 2021, Alex Richardson.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2002-2009 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009-2011, 2016, 2019, 2022-2024, D. R. Commander.
+ * Copyright (C) 2013, Linaro Limited.
+ * Copyright (C) 2015, Google, Inc.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2003-2010 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2016, 2018, 2022-2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2009 by Bill Allombert, Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015-2017, 2020-2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2011 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2009, 2011-2012, 2014-2015, 2022, 2024, D. R. Commander.
+ * Copyright (C) 2013, Linaro Limited.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2013-2019 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010-2011, 2013-2017, 2019-2020, 2022-2024, D. R. Commander.
+ * Copyright (C) 2015, Google, Inc.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2015-2019 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015, 2017, 2022-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2019 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2021-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009, 2011, 2015, 2022-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009, 2018, 2021, D. R. Commander.
+ * Copyright (C) 2018, Matthias Räncker.
+ * Copyright (C) 2020-2021, Arm Limited.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2016, 2021-2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2019, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1998, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2012, 2015, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1998, Thomas G. Lane.
+ * Modified 2002-2009 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009-2011, 2013-2014, 2016-2017, 2020, 2022-2024,
+             D. R. Commander.
+ * Copyright (C) 2015, Google, Inc.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1998, Thomas G. Lane.
+ * Modified 2003-2008 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009-2011, 2018, 2023-2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1998, Thomas G. Lane.
+ * Modified 2003-2010 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1998, Thomas G. Lane.
+ * Modified 2003-2011 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2013-2014, 2017, 2019-2022, 2024-2025,
+ *           D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-1998, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2013, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2012-2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1992-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2017-2018, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1992-1997, Thomas G. Lane.
+ * It was modified by The libjpeg-turbo Project to include only code and
+ * information relevant to libjpeg-turbo.
+ * For conditions of distribution and use, see the accompanying README.ijg
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * Modified 2002-2010 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2010, 2015, 2022, D. R. Commander.
+ * Copyright (C) 2013, MIPS Technologies, Inc., California.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * Modified 2009-2011 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2011, 2016, 2019, 2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * Modified 2009-2012 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2011, 2014, 2016, 2019, 2022-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * Modified 2009-2012 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2013, 2016, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * Modified 2009-2017 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Modified 2011 by Siarhei Siamashka.
+ * Copyright (C) 2015, 2017-2018, 2021-2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 1999-2006, MIYASAKA Masaru.
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2011, 2014-2015, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2015-2020, 2022-2024, D. R. Commander.
+ * Copyright (C) 2015, Google, Inc.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2016, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2011, 2015, 2020, 2022-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2013, Linaro Limited.
+ * Copyright (C) 2014-2015, 2017, 2019, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2013, Linaro Limited.
+ * Copyright (C) 2014-2015, 2018, 2020, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2022-2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2009, 2011, 2014-2015, 2020, 2022, D. R. Commander.
+ * Copyright (C) 2013, Linaro Limited.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1997, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1997, Thomas G. Lane.
+ * Modified 1997-2009 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2014, 2017, 2021-2023, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1997, Thomas G. Lane.
+ * Modified 2009-2017 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2021, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1997, Thomas G. Lane.
+ * Modified 2019 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2017, 2019, 2021-2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1997, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2010, 2015-2016, 2019-2020, 2022-2024, D. R. Commander.
+ * Copyright (C) 2015, 2020, Google, Inc.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1997, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2020, Google, Inc.
+ * Copyright (C) 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1998, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2016, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1998, Thomas G. Lane.
+ * Modified 2003-2010 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1994-1998, Thomas G. Lane.
+ * Modified 2010 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2014, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1995-1997, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2011, 2015, 2018, 2021-2022, 2024, D. R. Commander.
+ * Copyright (C) 2016, 2018, 2022, Matthieu Darbois.
+ * Copyright (C) 2020, Arm Limited.
+ * Copyright (C) 2021, Alex Richardson.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1995-1997, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015-2016, 2018-2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1995-1997, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2020, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1995-1998, Thomas G. Lane.
+ * Modified 2000-2009 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2020, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1995-2019, Thomas G. Lane, Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2014, 2017, 2019-2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1997-1998, Thomas G. Lane, Todd Newman.
+ * Copyright (C) 2017, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1997-2019, Thomas G. Lane, Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2017, 2021-2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1997-2019, Thomas G. Lane, Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2017, 2021, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1998, Thomas G. Lane.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1999-2006, MIYASAKA Masaru.
+ * For conditions of distribution and use, see copyright notice in jsimdext.inc
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2009-2011, Nokia Corporation and/or its subsidiary(-ies).
+ *                          All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2010, 2020, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2014, 2021, 2024, D. R. Commander.
+ * Copyright (C) 2014, Olle Liljenzin.
+ * Copyright (C) 2020, Arm Limited.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2015, D. R. Commander.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2015-2016, 2018, Matthieu Darbois.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2016, Siarhei Siamashka.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2017-2018, 2022, 2024, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2020, 2022, 2024, D. R. Commander.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2020, 2024, D. R. Commander.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2020, D. R. Commander.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2022, 2024, D. R. Commander.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2022, Matthieu Darbois.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2024, D. R. Commander.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2025, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Copyright (C)2009-2015, 2017, 2020-2024 D. R. Commander.
+ *                                         All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C)2011, 2022 D. R. Commander.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C)2021 Alex Richardson.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2009-2011, 2013-2014, 2016, 2018, 2022-2024, D. R. Commander.
+ * Copyright (C) 2015-2016, 2018, 2022, Matthieu Darbois.
+
+
+====================COPYRIGHT====================
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2009-2011, 2014, 2016, 2018, 2022-2024, D. R. Commander.
+ * Copyright (C) 2015-2016, 2018, 2022, Matthieu Darbois.
+
+
+====================COPYRIGHT====================
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2011, 2014, 2022, D. R. Commander.
+ * Copyright (C) 2015-2016, 2018, 2022, Matthieu Darbois.
+ * Copyright (C) 2020, Arm Limited.
+
+
+====================COPYRIGHT====================
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2011, 2014-2016, 2018, 2020, 2022, D. R. Commander.
+ * Copyright (C) 2013-2014, MIPS Technologies, Inc., California.
+ * Copyright (C) 2014, Linaro Limited.
+ * Copyright (C) 2015-2016, 2018, 2022, Matthieu Darbois.
+ * Copyright (C) 2016-2018, Loongson Technology Corporation Limited, BeiJing.
+ * Copyright (C) 2020, Arm Limited.
+
+
+====================COPYRIGHT====================
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2011, Nokia Corporation and/or its subsidiary(-ies).
+ * Copyright (C) 2009-2011, 2013-2014, 2016, 2018, 2020, 2022, 2024,
+ *           D. R. Commander.
+ * Copyright (C) 2015-2016, 2018, 2022, Matthieu Darbois.
+ * Copyright (C) 2020, Arm Limited.
+
+
+====================COPYRIGHT====================
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2011, Nokia Corporation and/or its subsidiary(-ies).
+ * Copyright (C) 2009-2011, 2013-2014, 2016, 2018, 2022, 2024, D. R. Commander.
+ * Copyright (C) 2015-2016, 2018, 2022, Matthieu Darbois.
+ * Copyright (C) 2019, Google LLC.
+ * Copyright (C) 2020, Arm Limited.
+
+
+====================COPYRIGHT====================
+ * Developed 1997-2009 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015, 2018, 2021-2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Developed 1997-2009 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015, 2018, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * Developed 1997-2015 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015-2020, 2022, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+
+
+====================COPYRIGHT====================
+ * of Feb. 1991.  That file contains the following copyright notice:
+ *    Based on GIFENCODE by David Rowley <mgardi@watdscu.waterloo.edu>.
+ *    Lempel-Ziv compression based on "compress" by Spencer W. Thomas et al.
+ *    Copyright (C) 1989 by Jef Poskanzer.
+ *    Permission to use, copy, modify, and distribute this software and its
+ *    documentation for any purpose and without fee is hereby granted, provided
+ *    that the above copyright notice appear in all copies and that both that
+ *    copyright notice and this permission notice appear in supporting
+ *    documentation.  This software is provided "as is" without express or
+ *    implied warranty.
+
+
+====================COPYRIGHT====================
+ * | Copyright 1990, David Koblas.                                     |
+ * |   Permission to use, copy, modify, and distribute this software   |
+ * |   and its documentation for any purpose and without fee is hereby |
+ * |   granted, provided that the above copyright notice appear in all |
+ * |   copies and that both that copyright notice and this permission  |
+ * |   notice appear in supporting documentation.  This software is    |
+ * |   provided "as is" without express or implied warranty.           |
+
+
+====================COPYRIGHT====================
+#define JCOPYRIGHT1 \
+  "Copyright (C) 2009-2024 D. R. Commander\n" \
+  "Copyright (C) 2015, 2020 Google, Inc.\n" \
+  "Copyright (C) 2019-2020 Arm Limited\n" \
+  "Copyright (C) 2015-2016, 2018 Matthieu Darbois\n" \
+  "Copyright (C) 2011-2016 Siarhei Siamashka\n" \
+  "Copyright (C) 2015 Intel Corporation\n"
+#define JCOPYRIGHT2 \
+  "Copyright (C) 2013-2014 Linaro Limited\n" \
+  "Copyright (C) 2013-2014 MIPS Technologies, Inc.\n" \
+  "Copyright (C) 2009, 2012 Pierre Ossman for Cendio AB\n" \
+  "Copyright (C) 2009-2011 Nokia Corporation and/or its subsidiary(-ies)\n" \
+  "Copyright (C) 1999-2006 MIYASAKA Masaru\n" \
+  "Copyright (C) 1999 Ken Murchison\n" \
+  "Copyright (C) 1991-2020 Thomas G. Lane, Guido Vollbeding\n"
+
+
+====================COPYRIGHT====================
+** Copyright (C) 1988 by Jef Poskanzer.
+
+
+====================COPYRIGHT====================
+; Copyright (C) 2009, 2016, 2024, D. R. Commander.
+; Copyright (C) 2015, Intel Corporation.
+
+
+====================COPYRIGHT====================
+; Copyright (C) 2009-2011, 2014-2016, 2019, 2021, 2023-2024, D. R. Commander.
+; Copyright (C) 2015, Matthieu Darbois.
+; Copyright (C) 2018, Matthias Räncker.
+; Copyright (C) 2023, Aliaksiej Kandracienka.
+
+
+====================COPYRIGHT====================
+; Copyright (C) 2009-2011, 2014-2017, 2019, 2024, D. R. Commander.
+; Copyright (C) 2015, Matthieu Darbois.
+; Copyright (C) 2018, Matthias Räncker.
+
+
+====================COPYRIGHT====================
+; Copyright (C) 2011, 2016, 2024, D. R. Commander.
+; Copyright (C) 2015, Intel Corporation.
+
+
+====================COPYRIGHT====================
+; Copyright (C) 2015, Intel Corporation.
+; Copyright (C) 2016, 2024, D. R. Commander.
+
+
+====================COPYRIGHT====================
+; Copyright (C) 2016, 2018, Matthieu Darbois
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2009, 2016, 2018, 2020, 2024, D. R. Commander.
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2009, 2016, 2018, 2024, D. R. Commander.
+; Copyright (C) 2016, Matthieu Darbois.
+; Copyright (C) 2018, Matthias Räncker.
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2009, 2016, 2020, 2024, D. R. Commander.
+; Copyright (C) 2023, Aliaksiej Kandracienka.
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2010, 2016, 2018-2019, 2024, D. R. Commander.
+; Copyright (C) 2018, Matthieu Darbois.
+; Copyright (C) 2018, Matthias Räncker.
+; Copyright (C) 2023, Aliaksiej Kandracienka.
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2016, 2018, 2024, D. R. Commander.
+; Copyright (C) 2016, Matthieu Darbois.
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2016, 2020, 2024, D. R. Commander.
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2016, D. R. Commander.
+
+
+====================COPYRIGHT====================
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2018, D. R. Commander.
+
+
+====================COPYRIGHT====================
+; Copyright 2009, 2012 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2009, 2012, 2016, 2024, D. R. Commander.
+; Copyright (C) 2015, Intel Corporation.
+; Copyright (C) 2018, Matthias Räncker.
+; Copyright (C) 2023, Aliaksiej Kandracienka.
+
+
+====================COPYRIGHT====================
+; Copyright 2009, 2012 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2012, 2016, 2024, D. R. Commander.
+; Copyright (C) 2015, Intel Corporation.
+
+
+====================COPYRIGHT====================
+Copyright (C)2015 Viktor Szathmáry.  All Rights Reserved.
+
+
+====================COPYRIGHT====================
+Copyright (c) 1991-2024 The libjpeg-turbo Project
+
+====================COPYRIGHT====================
+This software is copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.
+All Rights Reserved except as specified below.
+
+
+====================File: README.ijg====================
+libjpeg-turbo note:  This file has been modified by The libjpeg-turbo Project
+to include only information relevant to libjpeg-turbo, to wordsmith certain
+sections, and to remove impolitic language that existed in the libjpeg v8
+README.  It is included only for reference.  Please see README.md for
+information specific to libjpeg-turbo.
+
+
+The Independent JPEG Group's JPEG software
+==========================================
+
+This distribution contains a release of the Independent JPEG Group's free JPEG
+software.  You are welcome to redistribute this software and to use it for any
+purpose, subject to the conditions under LEGAL ISSUES, below.
+
+This software is the work of Tom Lane, Guido Vollbeding, Philip Gladstone,
+Bill Allombert, Jim Boucher, Lee Crocker, Bob Friesenhahn, Ben Jackson,
+Julian Minguillon, Luis Ortiz, George Phillips, Davide Rossi, Ge' Weijers,
+and other members of the Independent JPEG Group.
+
+IJG is not affiliated with the ISO/IEC JTC1/SC29/WG1 standards committee
+(also known as JPEG, together with ITU-T SG16).
+
+
+DOCUMENTATION ROADMAP
+=====================
+
+This file contains the following sections:
+
+OVERVIEW            General description of JPEG and the IJG software.
+LEGAL ISSUES        Copyright, lack of warranty, terms of distribution.
+REFERENCES          Where to learn more about JPEG.
+ARCHIVE LOCATIONS   Where to find newer versions of this software.
+FILE FORMAT WARS    Software *not* to get.
+TO DO               Plans for future IJG releases.
+
+Other documentation files in the distribution are:
+
+User documentation:
+  doc/usage.txt         Usage instructions for cjpeg, djpeg, jpegtran,
+                        rdjpgcom, and wrjpgcom.
+  doc/*.1               Unix-style man pages for programs (same info as
+                        usage.txt).
+  doc/wizard.txt        Advanced usage instructions for JPEG wizards only.
+  doc/change.log        Version-to-version change highlights.
+Programmer and internal documentation:
+  doc/libjpeg.txt       How to use the JPEG library in your own programs.
+  src/example.c         Sample code for calling the JPEG library.
+  doc/structure.txt     Overview of the JPEG library's internal structure.
+  doc/coderules.txt     Coding style rules --- please read if you contribute
+                        code.
+
+Please read at least usage.txt.  Some information can also be found in the JPEG
+FAQ (Frequently Asked Questions) article.  See ARCHIVE LOCATIONS below to find
+out where to obtain the FAQ article.
+
+If you want to understand how the JPEG code works, we suggest reading one or
+more of the REFERENCES, then looking at the documentation files (in roughly
+the order listed) before diving into the code.
+
+
+OVERVIEW
+========
+
+This package contains C software to implement JPEG image encoding, decoding,
+and transcoding.  JPEG (pronounced "jay-peg") is a standardized compression
+method for full-color and grayscale images.  JPEG's strong suit is compressing
+photographic images or other types of images that have smooth color and
+brightness transitions between neighboring pixels.  Images with sharp lines or
+other abrupt features may not compress well with JPEG, and a higher JPEG
+quality may have to be used to avoid visible compression artifacts with such
+images.
+
+JPEG is normally lossy, meaning that the output pixels are not necessarily
+identical to the input pixels.  However, on photographic content and other
+"smooth" images, very good compression ratios can be obtained with no visible
+compression artifacts, and extremely high compression ratios are possible if
+you are willing to sacrifice image quality (by reducing the "quality" setting
+in the compressor.)
+
+This software implements JPEG baseline, extended-sequential, progressive, and
+lossless compression processes.  Provision is made for supporting all variants
+of these processes, although some uncommon parameter settings aren't
+implemented yet.  We have made no provision for supporting the hierarchical
+processes defined in the standard.
+
+We provide a set of library routines for reading and writing JPEG image files,
+plus two sample applications "cjpeg" and "djpeg", which use the library to
+perform conversion between JPEG and some other popular image file formats.
+The library is intended to be reused in other applications.
+
+In order to support file conversion and viewing software, we have included
+considerable functionality beyond the bare JPEG coding/decoding capability;
+for example, the color quantization modules are not strictly part of JPEG
+decoding, but they are essential for output to colormapped file formats.  These
+extra functions can be compiled out of the library if not required for a
+particular application.
+
+We have also included "jpegtran", a utility for lossless transcoding between
+different JPEG processes, and "rdjpgcom" and "wrjpgcom", two simple
+applications for inserting and extracting textual comments in JFIF files.
+
+The emphasis in designing this software has been on achieving portability and
+flexibility, while also making it fast enough to be useful.  In particular,
+the software is not intended to be read as a tutorial on JPEG.  (See the
+REFERENCES section for introductory material.)  Rather, it is intended to
+be reliable, portable, industrial-strength code.  We do not claim to have
+achieved that goal in every aspect of the software, but we strive for it.
+
+We welcome the use of this software as a component of commercial products.
+No royalty is required, but we do ask for an acknowledgement in product
+documentation, as described under LEGAL ISSUES.
+
+
+LEGAL ISSUES
+============
+
+In plain English:
+
+1. We don't promise that this software works.  (But if you find any bugs,
+   please let us know!)
+2. You can use this software for whatever you want.  You don't have to pay us.
+3. You may not pretend that you wrote this software.  If you use it in a
+   program, you must acknowledge somewhere in your documentation that
+   you've used the IJG code.
+
+In legalese:
+
+The authors make NO WARRANTY or representation, either express or implied,
+with respect to this software, its quality, accuracy, merchantability, or
+fitness for a particular purpose.  This software is provided "AS IS", and you,
+its user, assume the entire risk as to its quality and accuracy.
+
+This software is copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.
+All Rights Reserved except as specified below.
+
+Permission is hereby granted to use, copy, modify, and distribute this
+software (or portions thereof) for any purpose, without fee, subject to these
+conditions:
+(1) If any part of the source code for this software is distributed, then this
+README file must be included, with this copyright and no-warranty notice
+unaltered; and any additions, deletions, or changes to the original files
+must be clearly indicated in accompanying documentation.
+(2) If only executable code is distributed, then the accompanying
+documentation must state that "this software is based in part on the work of
+the Independent JPEG Group".
+(3) Permission for use of this software is granted only if the user accepts
+full responsibility for any undesirable consequences; the authors accept
+NO LIABILITY for damages of any kind.
+
+These conditions apply to any software derived from or based on the IJG code,
+not just to the unmodified library.  If you use our work, you ought to
+acknowledge us.
+
+Permission is NOT granted for the use of any IJG author's name or company name
+in advertising or publicity relating to this software or products derived from
+it.  This software may be referred to only as "the Independent JPEG Group's
+software".
+
+We specifically permit and encourage the use of this software as the basis of
+commercial products, provided that all warranty or liability claims are
+assumed by the product vendor.
+
+
+REFERENCES
+==========
+
+We recommend reading one or more of these references before trying to
+understand the innards of the JPEG software.
+
+The best short technical introduction to the JPEG compression algorithm is
+        Wallace, Gregory K.  "The JPEG Still Picture Compression Standard",
+        Communications of the ACM, April 1991 (vol. 34 no. 4), pp. 30-44.
+(Adjacent articles in that issue discuss MPEG motion picture compression,
+applications of JPEG, and related topics.)  If you don't have the CACM issue
+handy, a PDF file containing a revised version of Wallace's article is
+available at http://www.ijg.org/files/Wallace.JPEG.pdf.  The file (actually
+a preprint for an article that appeared in IEEE Trans. Consumer Electronics)
+omits the sample images that appeared in CACM, but it includes corrections
+and some added material.  Note: the Wallace article is copyright ACM and IEEE,
+and it may not be used for commercial purposes.
+
+A somewhat less technical, more leisurely introduction to JPEG can be found in
+"The Data Compression Book" by Mark Nelson and Jean-loup Gailly, published by
+M&T Books (New York), 2nd ed. 1996, ISBN 1-55851-434-1.  This book provides
+good explanations and example C code for a multitude of compression methods
+including JPEG.  It is an excellent source if you are comfortable reading C
+code but don't know much about data compression in general.  The book's JPEG
+sample code is far from industrial-strength, but when you are ready to look
+at a full implementation, you've got one here...
+
+The best currently available description of JPEG is the textbook "JPEG Still
+Image Data Compression Standard" by William B. Pennebaker and Joan L.
+Mitchell, published by Van Nostrand Reinhold, 1993, ISBN 0-442-01272-1.
+Price US$59.95, 638 pp.  The book includes the complete text of the ISO JPEG
+standards (DIS 10918-1 and draft DIS 10918-2).
+
+The original JPEG standard is divided into two parts, Part 1 being the actual
+specification, while Part 2 covers compliance testing methods.  Part 1 is
+titled "Digital Compression and Coding of Continuous-tone Still Images,
+Part 1: Requirements and guidelines" and has document numbers ISO/IEC IS
+10918-1, ITU-T T.81.  Part 2 is titled "Digital Compression and Coding of
+Continuous-tone Still Images, Part 2: Compliance testing" and has document
+numbers ISO/IEC IS 10918-2, ITU-T T.83.
+
+The JPEG standard does not specify all details of an interchangeable file
+format.  For the omitted details, we follow the "JFIF" conventions, revision
+1.02.  JFIF version 1 has been adopted as ISO/IEC 10918-5 (05/2013) and
+Recommendation ITU-T T.871 (05/2011): Information technology - Digital
+compression and coding of continuous-tone still images: JPEG File Interchange
+Format (JFIF).  It is available as a free download in PDF file format from
+https://www.iso.org/standard/54989.html and http://www.itu.int/rec/T-REC-T.871.
+A PDF file of the older JFIF 1.02 specification is available at
+http://www.w3.org/Graphics/JPEG/jfif3.pdf.
+
+The TIFF 6.0 file format specification can be obtained from
+http://mirrors.ctan.org/graphics/tiff/TIFF6.ps.gz.  The JPEG incorporation
+scheme found in the TIFF 6.0 spec of 3-June-92 has a number of serious
+problems.  IJG does not recommend use of the TIFF 6.0 design (TIFF Compression
+tag 6).  Instead, we recommend the JPEG design proposed by TIFF Technical Note
+#2 (Compression tag 7).  Copies of this Note can be obtained from
+http://www.ijg.org/files/.  It is expected that the next revision
+of the TIFF spec will replace the 6.0 JPEG design with the Note's design.
+Although IJG's own code does not support TIFF/JPEG, the free libtiff library
+uses our library to implement TIFF/JPEG per the Note.
+
+
+ARCHIVE LOCATIONS
+=================
+
+The "official" archive site for this software is www.ijg.org.
+The most recent released version can always be found there in
+directory "files".
+
+The JPEG FAQ (Frequently Asked Questions) article is a source of some
+general information about JPEG.  It is available at
+http://www.faqs.org/faqs/jpeg-faq.
+
+
+FILE FORMAT COMPATIBILITY
+=========================
+
+This software implements ITU T.81 | ISO/IEC 10918 with some extensions from
+ITU T.871 | ISO/IEC 10918-5 (JPEG File Interchange Format-- see REFERENCES).
+Informally, the term "JPEG image" or "JPEG file" most often refers to JFIF or
+a subset thereof, but there are other formats containing the name "JPEG" that
+are incompatible with the original JPEG standard or with JFIF (for instance,
+JPEG 2000 and JPEG XR).  This software therefore does not support these
+formats.  Indeed, one of the original reasons for developing this free software
+was to help force convergence on a common, interoperable format standard for
+JPEG files.
+
+JFIF is a minimal or "low end" representation.  TIFF/JPEG (TIFF revision 6.0 as
+modified by TIFF Technical Note #2) can be used for "high end" applications
+that need to record a lot of additional data about an image.
+
+
+TO DO
+=====
+
+Please send bug reports, offers of help, etc. to jpeg-info@jpegclub.org.
+
+
+====================File: simd/nasm/jsimdext.inc====================
+;
+; jsimdext.inc - common declarations
+;
+; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+; Copyright (C) 2010, 2016, 2018-2019, 2024, D. R. Commander.
+; Copyright (C) 2018, Matthieu Darbois.
+; Copyright (C) 2018, Matthias Räncker.
+; Copyright (C) 2023, Aliaksiej Kandracienka.
+;
+; Based on the x86 SIMD extension for IJG JPEG library - version 1.02
+;
+; Copyright (C) 1999-2006, MIYASAKA Masaru.
+;
+; This software is provided 'as-is', without any express or implied
+; warranty.  In no event will the authors be held liable for any damages
+; arising from the use of this software.
+;
+; Permission is granted to anyone to use this software for any purpose,
+; including commercial applications, and to alter it and redistribute it
+; freely, subject to the following restrictions:
+;
+; 1. The origin of this software must not be misrepresented; you must not
+;    claim that you wrote the original software. If you use this software
+;    in a product, an acknowledgment in the product documentation would be
+;    appreciated but is not required.
+; 2. Altered source versions must be plainly marked as such, and must not be
+;    misrepresented as being the original software.
+; 3. This notice may not be removed or altered from any source distribution.
+
+; ==========================================================================
+;  System-dependent configurations
+
+%ifdef WIN32    ; ----(nasm -fwin32 -DWIN32 ...)--------
+; * Microsoft Visual C++
+; * MinGW (Minimalist GNU for Windows)
+; * CygWin
+; * LCC-Win32
+
+; -- segment definition --
+;
+%ifdef __YASM_VER__
+%define SEG_TEXT   .text  align=32
+%define SEG_CONST  .rdata align=32
+%else
+%define SEG_TEXT   .text  align=32 public use32 class=CODE
+%define SEG_CONST  .rdata align=32 public use32 class=CONST
+%endif
+
+%elifdef WIN64  ; ----(nasm -fwin64 -DWIN64 ...)--------
+; * Microsoft Visual C++
+
+; -- segment definition --
+;
+%ifdef __YASM_VER__
+%define SEG_TEXT    .text  align=32
+%define SEG_CONST   .rdata align=32
+%else
+%define SEG_TEXT    .text  align=32 public use64 class=CODE
+%define SEG_CONST   .rdata align=32 public use64 class=CONST
+%endif
+%define EXTN(name)  name                ; foo() -> foo
+
+%elifdef OBJ32  ; ----(nasm -fobj -DOBJ32 ...)----------
+; * Borland C++ (Win32)
+
+; -- segment definition --
+;
+%define SEG_TEXT   _text align=32 public use32 class=CODE
+%define SEG_CONST  _data align=32 public use32 class=DATA
+
+%elifdef UNIX    ; ----(nasm -felf[64] -DUNIX ...)------------
+; * Linux
+; * *BSD family Unix using elf format
+; * Unix System V, including Solaris x86, UnixWare and SCO Unix
+
+; mark stack as non-executable
+section .note.GNU-stack noalloc noexec nowrite progbits
+
+%ifdef __CET__
+%ifdef __x86_64__
+section .note.gnu.property note alloc noexec align=8
+    dd 0x00000004, 0x00000010, 0x00000005, 0x00554e47
+    dd 0xc0000002, 0x00000004, 0x00000003, 0x00000000
+%endif
+%endif
+
+; -- segment definition --
+;
+%ifdef _x86_64_
+%define SEG_TEXT   .text   progbits align=32
+%define SEG_CONST  .rodata progbits align=32
+%else
+%define SEG_TEXT   .text   progbits alloc exec   nowrite align=32
+%define SEG_CONST  .rodata progbits alloc noexec nowrite align=32
+%endif
+
+; To make the code position-independent, append -DPIC to the commandline
+;
+%define GOT_SYMBOL  _GLOBAL_OFFSET_TABLE_  ; ELF supports PIC
+%define EXTN(name)  name                   ; foo() -> foo
+
+%elifdef AOUT   ; ----(nasm -faoutb/aout -DAOUT ...)----
+; * Older Linux using a.out format  (nasm -f aout -DAOUT ...)
+; * *BSD family Unix using a.out format  (nasm -f aoutb -DAOUT ...)
+
+; -- segment definition --
+;
+%define SEG_TEXT   .text
+%define SEG_CONST  .data
+
+; To make the code position-independent, append -DPIC to the commandline
+;
+%define GOT_SYMBOL  __GLOBAL_OFFSET_TABLE_  ; BSD-style a.out supports PIC
+
+%elifdef MACHO  ; ----(nasm -fmacho -DMACHO ...)--------
+; * NeXTstep/OpenStep/Rhapsody/Darwin/MacOS X (Mach-O format)
+
+; -- segment definition --
+;
+%define SEG_TEXT   .text  ;align=32     ; nasm doesn't accept align=32. why?
+%define SEG_CONST  .rodata align=32
+
+; The generation of position-independent code (PIC) is the default on Darwin.
+;
+%define PIC
+%define GOT_SYMBOL  _MACHO_PIC_         ; Mach-O style code-relative addressing
+
+%else           ; ----(Other case)----------------------
+
+; -- segment definition --
+;
+%define SEG_TEXT   .text
+%define SEG_CONST  .data
+
+%endif          ; ----------------------------------------------
+
+; ==========================================================================
+
+; --------------------------------------------------------------------------
+;  Common types
+;
+%ifdef _x86_64_
+%ifnidn __OUTPUT_FORMAT__, elfx32
+%define POINTER         qword           ; general pointer type
+%define SIZEOF_POINTER  SIZEOF_QWORD    ; sizeof(POINTER)
+%define POINTER_BIT     QWORD_BIT       ; sizeof(POINTER)*BYTE_BIT
+%define resp            resq
+%define dp              dq
+%define raxp            rax
+%define rbxp            rbx
+%define rcxp            rcx
+%define rdxp            rdx
+%define rsip            rsi
+%define rdip            rdi
+%define rbpp            rbp
+%define rspp            rsp
+%define r8p             r8
+%define r9p             r9
+%define r10p            r10
+%define r11p            r11
+%define r12p            r12
+%define r13p            r13
+%define r14p            r14
+%define r15p            r15
+%endif
+%endif
+%ifndef raxp
+%define POINTER         dword           ; general pointer type
+%define SIZEOF_POINTER  SIZEOF_DWORD    ; sizeof(POINTER)
+%define POINTER_BIT     DWORD_BIT       ; sizeof(POINTER)*BYTE_BIT
+%define resp            resd
+%define dp              dd
+; x86_64 ILP32 ABI (x32)
+%define raxp            eax
+%define rbxp            ebx
+%define rcxp            ecx
+%define rdxp            edx
+%define rsip            esi
+%define rdip            edi
+%define rbpp            ebp
+%define rspp            esp
+%define r8p             r8d
+%define r9p             r9d
+%define r10p            r10d
+%define r11p            r11d
+%define r12p            r12d
+%define r13p            r13d
+%define r14p            r14d
+%define r15p            r15d
+%endif
+
+%define INT             dword           ; signed integer type
+%define SIZEOF_INT      SIZEOF_DWORD    ; sizeof(INT)
+%define INT_BIT         DWORD_BIT       ; sizeof(INT)*BYTE_BIT
+
+%define FP32            dword           ; IEEE754 single
+%define SIZEOF_FP32     SIZEOF_DWORD    ; sizeof(FP32)
+%define FP32_BIT        DWORD_BIT       ; sizeof(FP32)*BYTE_BIT
+
+%define MMWORD          qword           ; int64  (MMX register)
+%define SIZEOF_MMWORD   SIZEOF_QWORD    ; sizeof(MMWORD)
+%define MMWORD_BIT      QWORD_BIT       ; sizeof(MMWORD)*BYTE_BIT
+
+; NASM is buggy and doesn't properly handle operand sizes for SSE
+; instructions, so for now we have to define XMMWORD as blank.
+%define XMMWORD                         ; int128 (SSE register)
+%define SIZEOF_XMMWORD  SIZEOF_OWORD    ; sizeof(XMMWORD)
+%define XMMWORD_BIT     OWORD_BIT       ; sizeof(XMMWORD)*BYTE_BIT
+
+%define YMMWORD                         ; int256 (AVX register)
+%define SIZEOF_YMMWORD  SIZEOF_YWORD    ; sizeof(YMMWORD)
+%define YMMWORD_BIT     YWORD_BIT       ; sizeof(YMMWORD)*BYTE_BIT
+
+; Similar hacks for when we load a dword or MMWORD into an xmm# register
+%define XMM_DWORD
+%define XMM_MMWORD
+
+%define SIZEOF_BYTE   1                 ; sizeof(byte)
+%define SIZEOF_WORD   2                 ; sizeof(word)
+%define SIZEOF_DWORD  4                 ; sizeof(dword)
+%define SIZEOF_QWORD  8                 ; sizeof(qword)
+%define SIZEOF_OWORD  16                ; sizeof(oword)
+%define SIZEOF_YWORD  32                ; sizeof(yword)
+
+%define BYTE_BIT      8                 ; CHAR_BIT in C
+%define WORD_BIT      16                ; sizeof(word)*BYTE_BIT
+%define DWORD_BIT     32                ; sizeof(dword)*BYTE_BIT
+%define QWORD_BIT     64                ; sizeof(qword)*BYTE_BIT
+%define OWORD_BIT     128               ; sizeof(oword)*BYTE_BIT
+%define YWORD_BIT     256               ; sizeof(yword)*BYTE_BIT
+
+; --------------------------------------------------------------------------
+;  External Symbol Name
+;
+%ifndef EXTN
+%define EXTN(name)  _ %+ name           ; foo() -> _foo
+%endif
+
+; --------------------------------------------------------------------------
+;  Hidden symbols
+;
+%ifdef UNIX      ; ----(nasm -felf[64] -DUNIX ...)--------
+%define GLOBAL_FUNCTION(name)  global EXTN(name):function hidden
+%define GLOBAL_DATA(name)      global EXTN(name):data hidden
+%elifdef MACHO  ; ----(nasm -fmacho -DMACHO ...)--------
+%ifdef __YASM_VER__
+%define GLOBAL_FUNCTION(name)  global EXTN(name):private_extern
+%define GLOBAL_DATA(name)      global EXTN(name):private_extern
+%else
+%if __NASM_VERSION_ID__ >= 0x020E0000
+%define GLOBAL_FUNCTION(name)  global EXTN(name):private_extern
+%define GLOBAL_DATA(name)      global EXTN(name):private_extern
+%endif
+%endif
+%endif
+
+%ifndef GLOBAL_FUNCTION
+%define GLOBAL_FUNCTION(name)  global EXTN(name)
+%endif
+%ifndef GLOBAL_DATA
+%define GLOBAL_DATA(name)      global EXTN(name)
+%endif
+
+; --------------------------------------------------------------------------
+;  Macros for position-independent code (PIC) support
+;
+%ifndef GOT_SYMBOL
+%undef PIC
+%endif
+
+%ifdef PIC  ; -------------------------------------------
+
+%ifidn GOT_SYMBOL, _MACHO_PIC_  ; --------------------
+
+; At present, nasm doesn't seem to support PIC generation for Mach-O.
+; The PIC support code below is a little tricky.
+
+    SECTION     SEG_CONST
+const_base:
+
+%define GOTOFF(got, sym)  (got) + (sym) - const_base
+
+%imacro GET_GOT 1
+    ; NOTE: this macro destroys ecx resister.
+    call        %%geteip
+    add         ecx, byte (%%ref - $)
+    jmp         short %%adjust
+%%geteip:
+    mov         ecx, POINTER [esp]
+    ret
+%%adjust:
+    push        ebp
+    xor         ebp, ebp                ; ebp = 0
+%ifidni %1, ebx  ; (%1 == ebx)
+    ; db 0x8D,0x9C + jmp near const_base =
+    ;   lea ebx, [ecx+ebp*8+(const_base-%%ref)] ; 8D,9C,E9,(offset32)
+    db          0x8D, 0x9C              ; 8D,9C
+    jmp         near const_base         ; E9,(const_base-%%ref)
+%%ref:
+%else  ; (%1 != ebx)
+    ; db 0x8D,0x8C + jmp near const_base =
+    ;   lea ecx, [ecx+ebp*8+(const_base-%%ref)] ; 8D,8C,E9,(offset32)
+    db          0x8D, 0x8C              ; 8D,8C
+    jmp         near const_base         ; E9,(const_base-%%ref)
+%%ref:
+    mov         %1, ecx
+%endif  ; (%1 == ebx)
+    pop         ebp
+%endmacro
+
+%else     ; GOT_SYMBOL != _MACHO_PIC_ ----------------
+
+%define GOTOFF(got, sym)  (got) + (sym) wrt ..gotoff
+
+%imacro GET_GOT 1
+    extern      GOT_SYMBOL
+    call        %%geteip
+    add         %1, GOT_SYMBOL + $$ - $ wrt ..gotpc
+    jmp         short %%done
+%%geteip:
+    mov         %1, POINTER [esp]
+    ret
+%%done:
+%endmacro
+
+%endif    ; GOT_SYMBOL == _MACHO_PIC_ ----------------
+
+%imacro PUSHPIC 1.nolist
+    push        %1
+%endmacro
+%imacro POPPIC  1.nolist
+    pop         %1
+%endmacro
+%imacro MOVPIC  2.nolist
+    mov         %1, %2
+%endmacro
+
+%else    ; !PIC -----------------------------------------
+
+%define GOTOFF(got, sym)  (sym)
+
+%imacro GET_GOT 1.nolist
+%endmacro
+%imacro PUSHPIC 1.nolist
+%endmacro
+%imacro POPPIC  1.nolist
+%endmacro
+%imacro MOVPIC  2.nolist
+%endmacro
+
+%endif   ;  PIC -----------------------------------------
+
+; --------------------------------------------------------------------------
+;  Align the next instruction on {2,4,8,16,..}-byte boundary.
+;  ".balign n,,m" in GNU as
+;
+%define MSKLE(x, y)  (~(((y) & 0xFFFF) - ((x) & 0xFFFF)) >> 16)
+%define FILLB(b, n)  (($$-(b)) & ((n)-1))
+
+%imacro ALIGNX 1-2.nolist 0xFFFF
+%%bs: \
+  times MSKLE(FILLB(%%bs, %1), %2) & MSKLE(16, FILLB($, %1)) & FILLB($, %1) \
+        db 0x90                                      ; nop
+  times MSKLE(FILLB(%%bs, %1), %2) & FILLB($, %1) / 9 \
+        db 0x8D, 0x9C, 0x23, 0x00, 0x00, 0x00, 0x00  ; lea ebx,[ebx+0x00000000]
+  times MSKLE(FILLB(%%bs, %1), %2) & FILLB($, %1) / 7 \
+        db 0x8D, 0xAC, 0x25, 0x00, 0x00, 0x00, 0x00  ; lea ebp,[ebp+0x00000000]
+  times MSKLE(FILLB(%%bs, %1), %2) & FILLB($, %1) / 6 \
+        db 0x8D, 0xAD, 0x00, 0x00, 0x00, 0x00        ; lea ebp,[ebp+0x00000000]
+  times MSKLE(FILLB(%%bs, %1), %2) & FILLB($, %1) / 4 \
+        db 0x8D, 0x6C, 0x25, 0x00                    ; lea ebp,[ebp+0x00]
+  times MSKLE(FILLB(%%bs, %1), %2) & FILLB($, %1) / 3 \
+        db 0x8D, 0x6D, 0x00                          ; lea ebp,[ebp+0x00]
+  times MSKLE(FILLB(%%bs, %1), %2) & FILLB($, %1) / 2 \
+        db 0x8B, 0xED                                ; mov ebp,ebp
+  times MSKLE(FILLB(%%bs, %1), %2) & FILLB($, %1) / 1 \
+        db 0x90                                      ; nop
+%endmacro
+
+; Align the next data on {2,4,8,16,..}-byte boundary.
+;
+%imacro ALIGNZ 1.nolist
+    align       %1, db 0                ; filling zeros
+%endmacro
+
+%ifdef _x86_64_
+
+%ifdef WIN64
+
+%imacro COLLECT_ARGS 1
+    sub         rsp, SIZEOF_XMMWORD
+    movaps      XMMWORD [rsp], xmm6
+    sub         rsp, SIZEOF_XMMWORD
+    movaps      XMMWORD [rsp], xmm7
+    mov         r10, rcx
+%if %1 > 1
+    mov         r11, rdx
+%endif
+%if %1 > 2
+    push        r12
+    mov         r12, r8
+%endif
+%if %1 > 3
+    push        r13
+    mov         r13, r9
+%endif
+%if %1 > 4
+    push        r14
+    mov         r14, [rbp+48]
+%endif
+%if %1 > 5
+    push        r15
+    mov         r15, [rbp+56]
+%endif
+    push        rsi
+    push        rdi
+%endmacro
+
+%imacro UNCOLLECT_ARGS 1
+    pop         rdi
+    pop         rsi
+%if %1 > 5
+    pop         r15
+%endif
+%if %1 > 4
+    pop         r14
+%endif
+%if %1 > 3
+    pop         r13
+%endif
+%if %1 > 2
+    pop         r12
+%endif
+    movaps      xmm7, XMMWORD [rsp]
+    add         rsp, SIZEOF_XMMWORD
+    movaps      xmm6, XMMWORD [rsp]
+    add         rsp, SIZEOF_XMMWORD
+%endmacro
+
+%imacro PUSH_XMM 1
+    sub         rsp, %1 * SIZEOF_XMMWORD
+    movaps      XMMWORD [rsp+0*SIZEOF_XMMWORD], xmm8
+%if %1 > 1
+    movaps      XMMWORD [rsp+1*SIZEOF_XMMWORD], xmm9
+%endif
+%if %1 > 2
+    movaps      XMMWORD [rsp+2*SIZEOF_XMMWORD], xmm10
+%endif
+%if %1 > 3
+    movaps      XMMWORD [rsp+3*SIZEOF_XMMWORD], xmm11
+%endif
+%endmacro
+
+%imacro POP_XMM 1
+    movaps      xmm8, XMMWORD [rsp+0*SIZEOF_XMMWORD]
+%if %1 > 1
+    movaps      xmm9, XMMWORD [rsp+1*SIZEOF_XMMWORD]
+%endif
+%if %1 > 2
+    movaps      xmm10, XMMWORD [rsp+2*SIZEOF_XMMWORD]
+%endif
+%if %1 > 3
+    movaps      xmm11, XMMWORD [rsp+3*SIZEOF_XMMWORD]
+%endif
+    add         rsp, %1 * SIZEOF_XMMWORD
+%endmacro
+
+%else
+
+%imacro COLLECT_ARGS 1
+    push        r10
+    mov         r10, rdi
+%if %1 > 1
+    push        r11
+    mov         r11, rsi
+%endif
+%if %1 > 2
+    push        r12
+    mov         r12, rdx
+%endif
+%if %1 > 3
+    push        r13
+    mov         r13, rcx
+%endif
+%if %1 > 4
+    push        r14
+    mov         r14, r8
+%endif
+%if %1 > 5
+    push        r15
+    mov         r15, r9
+%endif
+%endmacro
+
+%imacro UNCOLLECT_ARGS 1
+%if %1 > 5
+    pop         r15
+%endif
+%if %1 > 4
+    pop         r14
+%endif
+%if %1 > 3
+    pop         r13
+%endif
+%if %1 > 2
+    pop         r12
+%endif
+%if %1 > 1
+    pop         r11
+%endif
+    pop         r10
+%endmacro
+
+%imacro PUSH_XMM 1
+%endmacro
+
+%imacro POP_XMM 1
+%endmacro
+
+%endif
+
+%endif
+
+%ifdef __CET__
+
+%imacro ENDBR64 0
+    dd 0xfa1e0ff3
+%endmacro
+
+%else
+
+%imacro ENDBR64 0
+%endmacro
+
+%endif
+
+; --------------------------------------------------------------------------
+;  Defines picked up from the C headers
+;
+%include "jsimdcfg.inc"
+
+; --------------------------------------------------------------------------
+
+
+====================IJG====================
+        This software is based in part on the work of the Independent JPEG
+        Group.
+
+
+====================IJG====================
+ * This file is part of the Independent JPEG Group's software.
+ * For conditions of distribution and use, see the accompanying README.ijg
+
+
+====================IJG====================
+ * This file was part of the Independent JPEG Group's software:
+
+
+====================IJG====================
+- The IJG (Independent JPEG Group) License, which is listed in
+
+
+====================IJG====================
+In legalese:
+
+The authors make NO WARRANTY or representation, either express or implied,
+with respect to this software, its quality, accuracy, merchantability, or
+fitness for a particular purpose.  This software is provided "AS IS", and you,
+its user, assume the entire risk as to its quality and accuracy.
+
+This software is copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.
+All Rights Reserved except as specified below.
+
+Permission is hereby granted to use, copy, modify, and distribute this
+software (or portions thereof) for any purpose, without fee, subject to these
+conditions:
+(1) If any part of the source code for this software is distributed, then this
+README file must be included, with this copyright and no-warranty notice
+unaltered; and any additions, deletions, or changes to the original files
+must be clearly indicated in accompanying documentation.
+(2) If only executable code is distributed, then the accompanying
+documentation must state that "this software is based in part on the work of
+the Independent JPEG Group".
+(3) Permission for use of this software is granted only if the user accepts
+full responsibility for any undesirable consequences; the authors accept
+NO LIABILITY for damages of any kind.
+
+These conditions apply to any software derived from or based on the IJG code,
+not just to the unmodified library.  If you use our work, you ought to
+acknowledge us.
+
+Permission is NOT granted for the use of any IJG author's name or company name
+in advertising or publicity relating to this software or products derived from
+it.  This software may be referred to only as "the Independent JPEG Group's
+software".
+
+We specifically permit and encourage the use of this software as the basis of
+commercial products, provided that all warranty or liability claims are
+assumed by the product vendor.
+
+
+====================IJG====================
+LEGAL ISSUES
+============
+
+In plain English:
+
+1. We don't promise that this software works.  (But if you find any bugs,
+   please let us know!)
+2. You can use this software for whatever you want.  You don't have to pay us.
+3. You may not pretend that you wrote this software.  If you use it in a
+   program, you must acknowledge somewhere in your documentation that
+   you've used the IJG code.
+
+
+====================Libpbm====================
+ *    Permission to use, copy, modify, and distribute this software and its
+ *    documentation for any purpose and without fee is hereby granted, provided
+ *    that the above copyright notice appear in all copies and that both that
+ *    copyright notice and this permission notice appear in supporting
+ *    documentation.  This software is provided "as is" without express or
+ *    implied warranty.
+
+
+====================Libpbm====================
+ * |   Permission to use, copy, modify, and distribute this software   |
+ * |   and its documentation for any purpose and without fee is hereby |
+ * |   granted, provided that the above copyright notice appear in all |
+ * |   copies and that both that copyright notice and this permission  |
+ * |   notice appear in supporting documentation.  This software is    |
+ * |   provided "as is" without express or implied warranty.           |
+
+
+====================Libpbm====================
+** Permission to use, copy, modify, and distribute this software and its
+** documentation for any purpose and without fee is hereby granted, provided
+** that the above copyright notice appear in all copies and that both that
+** copyright notice and this permission notice appear in supporting
+** documentation.  This software is provided "as is" without express or
+** implied warranty.
+
+
+====================Zlib====================
+        - Clause 2 of the zlib License
+
+
+====================Zlib====================
+        - Clauses 1 and 3 of the zlib License
+
+
+====================Zlib====================
+    - Modified BSD License
+    - zlib License
+
+
+====================Zlib====================
+  [zlib License](https://opensource.org/licenses/Zlib), but in the context of
+
+
+====================Zlib====================
+  the overall libjpeg API library, the terms of the zlib License are subsumed
+
+
+====================Zlib====================
+ * This software is provided 'as-is', without any express or implied
+ * warranty.  In no event will the authors be held liable for any damages
+ * arising from the use of this software.
+ *
+ * Permission is granted to anyone to use this software for any purpose,
+ * including commercial applications, and to alter it and redistribute it
+ * freely, subject to the following restrictions:
+ *
+ * 1. The origin of this software must not be misrepresented; you must not
+ *    claim that you wrote the original software. If you use this software
+ *    in a product, an acknowledgment in the product documentation would be
+ *    appreciated but is not required.
+ * 2. Altered source versions must be plainly marked as such, and must not be
+ *    misrepresented as being the original software.
+ * 3. This notice may not be removed or altered from any source distribution.
+
+
+====================Zlib====================
+; For conditions of distribution and use, see copyright notice in jsimdext.inc
+
+
+====================Zlib====================
+; This software is provided 'as-is', without any express or implied
+; warranty.  In no event will the authors be held liable for any damages
+; arising from the use of this software.
+;
+; Permission is granted to anyone to use this software for any purpose,
+; including commercial applications, and to alter it and redistribute it
+; freely, subject to the following restrictions:
+;
+; 1. The origin of this software must not be misrepresented; you must not
+;    claim that you wrote the original software. If you use this software
+;    in a product, an acknowledgment in the product documentation would be
+;    appreciated but is not required.
+; 2. Altered source versions must be plainly marked as such, and must not be
+;    misrepresented as being the original software.
+; 3. This notice may not be removed or altered from any source distribution.
+
+
+====================Zlib====================
+The zlib License could have been used instead of the Modified (3-clause) BSD
+
+
+====================Zlib====================
+conditions of the zlib License, this would have effectively placed

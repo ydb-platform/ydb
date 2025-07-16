@@ -34,15 +34,14 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     }
 }
 
-std::vector<TColumnPortionResult> TSubColumnsMerger::DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) {
+TColumnPortionResult TSubColumnsMerger::DoExecute(const TChunkMergeContext& context, TMergingContext& /*mergeContext*/) {
     AFL_VERIFY(ResultColumnStats);
-    auto& mergeChunkContext = mergeContext.GetChunk(context.GetBatchIdx());
     NSubColumns::TMergedBuilder builder(*ResultColumnStats, context, GetSettings(), RemapKeyIndex);
     NColumnShard::TSubColumnsStat columnStats;
     NColumnShard::TSubColumnsStat otherStats;
-    for (ui32 i = 0; i < context.GetRecordsCount(); ++i) {
-        const ui32 sourceIdx = mergeChunkContext.GetIdxArray().Value(i);
-        const ui32 recordIdx = mergeChunkContext.GetRecordIdxArray().Value(i);
+    for (ui32 i = 0; i < context.GetRemapper().GetRecordsCount(); ++i) {
+        const ui32 sourceIdx = context.GetRemapper().GetIdxArray().Value(i);
+        const ui32 recordIdx = context.GetRemapper().GetRecordIdxArray().Value(i);
         const auto startRecord = [&](const ui32 /*sourceRecordIndex*/) {
             builder.StartRecord();
         };

@@ -77,7 +77,8 @@ TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     , Address(info.address())
     , Location(info.location())
     , Expire(info.expire())
-    {}
+    , BridgePileId(info.has_bridge_pile_id() ? std::make_optional(info.bridge_pile_id()) : std::nullopt)
+{}
 
 TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto)
     : TStatus(std::move(status))
@@ -207,6 +208,9 @@ public:
         request.set_fixed_node_id(settings.FixedNodeId_);
         if (!settings.Path_.empty()) {
             request.set_path(TStringType{settings.Path_});
+        }
+        if (!settings.BridgePileName_.empty()) {
+            request.set_bridge_pile_name(TStringType{settings.BridgePileName_});
         }
 
         auto requestLocation = request.mutable_location();

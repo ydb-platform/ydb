@@ -23,6 +23,7 @@ message THostConfigDrive {
 
     // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
     NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
+    uint64 InferPDiskSlotCountFromUnitSize = 7;
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -152,7 +153,7 @@ message TDefineStoragePool {
     string Kind = 8; // kind of storage pool (user-defined)
     uint32 NumGroups = 9; // explicit number of groups to create
     repeated bytes UserId = 10; // allowed users
-    repeated TPDiskFilter PDiskFilter = 11; // matching PDisks
+    repeated TPDiskFilter PDiskFilter = 11; // matching PDisks (disjunction, i.e. multiple filters are logically ORed)
     TExistingGroups ExistingGroups = 12; // existing groups (used while migrating from old-style configuration)
     NActorsInterconnect.TScopeId ScopeId = 13; // scope id for the pool clients
     bool RandomizeGroupMapping = 14; // minimize correlation of groups and drives
@@ -163,6 +164,9 @@ message TDefineStoragePool {
 
     // encryption mode: 0 for none, 1 for the current mode (chacha8)
     uint32 EncryptionMode = 101;
+
+    // this value is only accounted when new groups are added to the pool
+    uint32 DefaultGroupSizeInUnits = 102;
 }
 
 message TReadStoragePool {
@@ -225,6 +229,15 @@ message TSerialManagementStage {
     }
 }
 
+// set by CMS
+message TMaintenanceStatus {
+    enum E {
+        NOT_SET = 0;                        // unset status, default value
+        NO_REQUEST = 1;                     // no active maintenance request
+        LONG_TERM_MAINTENANCE_PLANNED = 2;  // maintence requested, VDisks should be moved asynchronously from PDisk
+    }
+}
+
 message TUpdateDriveStatus {
     THostKey HostKey = 1; // host on which we are looking for the drive
     string Path = 2; // absolute path to the device as enlisted in PDisk configuration
@@ -233,6 +246,7 @@ message TUpdateDriveStatus {
     string Serial = 5; // may be set instead of path and PDiskId to identify PDisk
     uint64 StatusChangeTimestamp = 6; // used only in return of ReadDriveStatus
     EDecommitStatus DecommitStatus = 7;
+    TMaintenanceStatus.E MaintenanceStatus = 8;
 }
 
 message TReadDriveStatus {
@@ -260,6 +274,7 @@ message TReassignGroupDisk {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
     reserved 8;
+    bool OnlyToLessOccupiedPDisk = 9; // when set, reassignment will only commence if new pdisk is less occupied than the old one
 }
 
 message TSanitizeGroup {
@@ -309,6 +324,16 @@ message TMoveGroups {
     uint64 TargetStoragePoolId = 4;
     uint64 TargetStoragePoolGeneration = 5;
     repeated uint32 ExplicitGroupId = 6; // if no groups are provided, then all groups of origin storage pool are moved
+}
+
+message TChangeGroupSizeInUnits {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    repeated uint32 GroupId = 4; // if absent, then all groups in the pool are resized
+    uint32 SizeInUnits = 5;
+
+    // item's generation to prevent concurrent modification
+    uint64 ItemConfigGeneration = 100;
 }
 
 message TAddMigrationPlan {
@@ -408,7 +433,7 @@ message TPDiskLocation {
 message TRestartPDisk {
     oneof PDisk {
         NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-        TPDiskLocation TargetPDiskLocation = 2;   
+        TPDiskLocation TargetPDiskLocation = 2;
     }
 }
 
@@ -458,24 +483,31 @@ message TSetPDiskSpaceMarginPromille {
 }
 
 message TUpdateSettings {
-    // each value may be specified either one time, or zero times; when it is specified, its value is written to State
-    // and applied immediately; when no value specified, setting kept unchanged; if value is specified more than one
-    // time, then last value is applied
-    repeated uint32 DefaultMaxSlots = 1;
-    repeated bool EnableSelfHeal = 2;
-    repeated bool EnableDonorMode = 3;
-    repeated uint64 ScrubPeriodicitySeconds = 4;
-    repeated uint32 PDiskSpaceMarginPromille = 5;
-    repeated uint32 GroupReserveMin = 6;
-    repeated uint32 GroupReservePartPPM = 7;
-    repeated uint32 MaxScrubbedDisksAtOnce = 8;
-    repeated NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
-    repeated bool EnableGroupLayoutSanitizer = 10;
+    message TClusterBalancingSettings {
+        optional bool Enable = 1;
+        optional uint64 IterationIntervalMs = 2;
+        optional uint32 MaxReplicatingPDisks = 3;
+        optional uint32 MaxReplicatingVDisks = 4;
+    }
+
+    // when value is specified, its value is written to State
+    // and applied immediately; when no value specified, setting kept unchanged
+    optional uint32 DefaultMaxSlots = 1;
+    optional bool EnableSelfHeal = 2;
+    optional bool EnableDonorMode = 3;
+    optional uint64 ScrubPeriodicitySeconds = 4;
+    optional uint32 PDiskSpaceMarginPromille = 5;
+    optional uint32 GroupReserveMin = 6;
+    optional uint32 GroupReservePartPPM = 7;
+    optional uint32 MaxScrubbedDisksAtOnce = 8;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
+    optional bool EnableGroupLayoutSanitizer = 10;
     // TODO
-    // repeated TSerialManagementStage.E SerialManagementStage = 11;
-    repeated bool AllowMultipleRealmsOccupation = 12;
-    repeated bool UseSelfHealLocalPolicy = 13;
-    repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
+    // optional TSerialManagementStage.E SerialManagementStage = 11;
+    optional bool AllowMultipleRealmsOccupation = 12;
+    optional bool UseSelfHealLocalPolicy = 13;
+    optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
+    optional TClusterBalancingSettings ClusterBalancingSettings = 15;
 }
 
 message TBoxStoragePoolId {
@@ -567,6 +599,7 @@ message TConfigRequest {
             TSetPDiskReadOnly SetPDiskReadOnly = 49;
             TStopPDisk StopPDisk = 50;
             TGetInterfaceVersion GetInterfaceVersion = 51;
+            TChangeGroupSizeInUnits ChangeGroupSizeInUnits = 52;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -648,6 +681,8 @@ message TBaseConfig {
         string ExpectedSerial = 17;
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
+        TMaintenanceStatus.E MaintenanceStatus = 20;
+        uint64 InferPDiskSlotCountFromUnitSize = 21;
     }
     message TVSlot {
         message TDonorDisk {
@@ -688,6 +723,8 @@ message TBaseConfig {
         TGroupStatus.E OperatingStatus = 8; // group status based on latest VDisk reports only
         TGroupStatus.E ExpectedStatus = 9; // status based not only on operational report, but on PDisk status and plans too
         TVirtualGroupInfo VirtualGroupInfo = 10;
+        uint32 GroupSizeInUnits = 11;
+        bool IsProxyGroup = 12;
     }
     message TNode {
         uint32 NodeId = 1;
@@ -761,6 +798,7 @@ message TConfigResponse {
             kAlready = 9;
             kMayGetDegraded = 10;
             kGroupNotFound = 11;
+            kReassignNotViable = 12;
         }
 
         message TFailParam {

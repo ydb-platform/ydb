@@ -1,0 +1,169 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     libtiff              1087b085d6ed8ae05e8e0da2fd9d523c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libtiff
+        Score           : 98.25
+        Match type      : TEXT
+        Links           : https://fedoraproject.org/wiki/Licensing/libtiff, https://spdx.org/licenses/libtiff
+    Files with this license:
+        tif_luv.c [5:22]
+
+KEEP     BSD-3-Clause         136eef2e91c907bcedb253a3820d035b
+BELONGS ya.make
+    License text:
+        	* port/{getopt.c, strcasecmp.c, strtoul.c}: Update modules from
+        	the NetBSD source tree (the old	4-clause BSD license changed to
+        	the new 3-clause one).
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ChangeLog [14240:14242]
+
+KEEP     MIT                  85545b6051abd36fce0fc9cd8d2d53cc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        tif_hash_set.c [10:26]
+        tif_hash_set.h [12:28]
+
+KEEP     BSLA                 8857e9639c91f42b460d4f3a33b2d1d4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsla
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsla.LICENSE
+    Files with this license:
+        tif_lzw.c [1444:1454]
+
+KEEP     libtiff              a9ebcbf36a981b235e0c3e99fd1fad00
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libtiff
+        Score           : 98.25
+        Match type      : TEXT
+        Links           : https://fedoraproject.org/wiki/Licensing/libtiff, https://spdx.org/licenses/libtiff
+    Files with this license:
+        tif_pixarlog.c [5:22]
+
+KEEP     libtiff              beaf73a8c96d48397cfe40c78d71ff1e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libtiff
+        Score           : 98.68
+        Match type      : NOTICE
+        Links           : https://fedoraproject.org/wiki/Licensing/libtiff, https://spdx.org/licenses/libtiff
+    Files with this license:
+        tif_ojpeg.c [29:37]
+
+KEEP     libtiff              cb289c781ede561c455760d78519a374
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libtiff
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://fedoraproject.org/wiki/Licensing/libtiff, https://spdx.org/licenses/libtiff
+    Files with this license:
+        t4.h [5:22]
+        tif_aux.c [5:22]
+        tif_close.c [5:22]
+        tif_codec.c [5:22]
+        tif_color.c [5:22]
+        tif_compress.c [5:22]
+        tif_dir.c [5:22]
+        tif_dir.h [5:22]
+        tif_dirinfo.c [5:22]
+        tif_dirread.c [5:22]
+        tif_dirwrite.c [5:22]
+        tif_dumpmode.c [5:22]
+        tif_error.c [5:22]
+        tif_extension.c [5:22]
+        tif_fax3.c [5:22]
+        tif_fax3.h [5:22]
+        tif_flush.c [5:22]
+        tif_getimage.c [5:22]
+        tif_jbig.c [5:22]
+        tif_jpeg.c [5:22]
+        tif_lerc.c [5:22]
+        tif_lzma.c [4:21]
+        tif_lzw.c [6:23]
+        tif_next.c [5:22]
+        tif_open.c [5:22]
+        tif_packbits.c [5:22]
+        tif_predict.c [5:22]
+        tif_predict.h [5:22]
+        tif_print.c [5:22]
+        tif_read.c [5:22]
+        tif_stream.cxx [5:22]
+        tif_strip.c [5:22]
+        tif_swab.c [5:22]
+        tif_thunder.c [5:22]
+        tif_tile.c [5:22]
+        tif_unix.c [5:22]
+        tif_version.c [5:22]
+        tif_warning.c [5:22]
+        tif_webp.c [5:22]
+        tif_win32.c [5:22]
+        tif_write.c [5:22]
+        tif_zip.c [5:22]
+        tif_zstd.c [5:22]
+        tiff.h [5:22]
+        tiffio.h [5:22]
+        tiffio.hxx [5:22]
+        tiffiop.h [5:22]
+
+KEEP     libtiff              e4630084e374a313643fc490bf5e1bfc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libtiff
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://fedoraproject.org/wiki/Licensing/libtiff, https://spdx.org/licenses/libtiff
+    Files with this license:
+        LICENSE.md [6:23]
+        README.md [52:69]

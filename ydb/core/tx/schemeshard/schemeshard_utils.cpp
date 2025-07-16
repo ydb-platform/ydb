@@ -1,9 +1,9 @@
-#include <ydb/core/base/table_vector_index.h>
-#include <ydb/core/persqueue/utils.h>
+#include "schemeshard_utils.h"
 
 #include "schemeshard_info_types.h"
 
-#include "schemeshard_utils.h"
+#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/persqueue/utils.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -257,13 +257,18 @@ auto CalcImplTableDescImpl(
 }
 
 auto CalcVectorKmeansTreePostingImplTableDescImpl(
-    const THashSet<TString>& indexKeyColumns,
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const TTableColumns& implTableColumns,
+    const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns = indexDataColumns;
+    for (const auto & keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(TString::Join(NTableVectorKmeansTreeIndex::PostingTable, suffix));
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
@@ -275,15 +280,7 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
         parentColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
-    if (indexKeyColumns.empty()) {
-        FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns.Keys, implTableColumns.Columns, implTableDesc);
-    } else {
-        auto keys = implTableColumns.Keys;
-        auto columns = implTableColumns.Columns;
-        std::erase_if(keys, [&](const auto& key) { return indexKeyColumns.contains(key); });
-        EraseNodesIf(columns, [&](const auto& key) { return indexKeyColumns.contains(key); });
-        FillIndexImplTableColumns(GetColumns(baseTable), keys, columns, implTableDesc);
-    }
+    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -320,7 +317,7 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
 }
 
 void FillIndexTableColumns(
-    const THashMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
+    const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
     std::span<const TString> keys,
     const THashSet<TString>& columns,
     NKikimrSchemeOp::TTableDescription& implTableDesc) {
@@ -384,25 +381,23 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const THashSet<TString>& indexKeyColumns,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const TTableColumns& implTableColumns,
+    const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
-    return CalcVectorKmeansTreePostingImplTableDescImpl(indexKeyColumns, baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
+    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const THashSet<TString>& indexKeyColumns,
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const TTableColumns& implTableColumns,
+    const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
-    return CalcVectorKmeansTreePostingImplTableDescImpl(indexKeyColumns, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
+    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(

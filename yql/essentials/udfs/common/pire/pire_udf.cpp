@@ -43,9 +43,9 @@ namespace {
                 TSourcePosition pos,
                 size_t regexpsCount = 0)
                 : TPireUdfBase(pos)
-                , SurroundMode(surroundMode)
-                , MultiMode(multiMode)
-                , RegexpsCount(regexpsCount)
+                , SurroundMode_(surroundMode)
+                , MultiMode_(multiMode)
+                , RegexpsCount_(regexpsCount)
             {
             }
 
@@ -57,15 +57,15 @@ namespace {
                     new TPireMatch(
                         valueBuilder,
                         args[0],
-                        SurroundMode,
-                        MultiMode,
+                        SurroundMode_,
+                        MultiMode_,
                         Pos_,
-                        RegexpsCount));
+                        RegexpsCount_));
             }
 
-            bool SurroundMode;
-            bool MultiMode;
-            size_t RegexpsCount;
+            bool SurroundMode_;
+            bool MultiMode_;
+            size_t RegexpsCount_;
         };
 
         static const TStringRef& Name(bool surroundMode, bool multiMode) {
@@ -88,9 +88,9 @@ namespace {
             TSourcePosition pos,
             size_t regexpsCount)
             : TPireUdfBase(pos)
-            , MultiMode(multiMode)
-            , RegexpsCount(regexpsCount)
-            , SurroundMode(surroundMode)
+            , MultiMode_(multiMode)
+            , RegexpsCount_(regexpsCount)
+            , SurroundMode_(surroundMode)
         {
             Y_UNUSED(valueBuilder);
             try {
@@ -128,10 +128,10 @@ namespace {
             TUnboxedValue tuple;
             size_t i = 0;
 
-            if (MultiMode) {
-                tuple = valueBuilder->NewArray(RegexpsCount, items);
+            if (MultiMode_) {
+                tuple = valueBuilder->NewArray(RegexpsCount_, items);
 
-                for (i = 0; i < RegexpsCount; ++i) {
+                for (i = 0; i < RegexpsCount_; ++i) {
                     items[i] = TUnboxedValuePod(false);
                 }
             }
@@ -139,8 +139,8 @@ namespace {
             if (args[0]) {
                 const auto input = args[0].AsStringRef();
                 TMatcher matcher(*Fsm_);
-                const bool isMatch = matcher.Match(input.Data(), input.Size(), SurroundMode, SurroundMode).Final();
-                if (MultiMode) {
+                const bool isMatch = matcher.Match(input.Data(), input.Size(), SurroundMode_, SurroundMode_).Final();
+                if (MultiMode_) {
                     if (isMatch) {
                         const auto& matchedRegexps = matcher.MatchedRegexps();
                         size_t matchesCount = matchedRegexps.second - matchedRegexps.first;
@@ -156,7 +156,7 @@ namespace {
                 }
 
             } else {
-                return MultiMode ? tuple : TUnboxedValue(TUnboxedValuePod(false));
+                return MultiMode_ ? tuple : TUnboxedValue(TUnboxedValuePod(false));
             }
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
@@ -164,9 +164,9 @@ namespace {
 
     private:
         TUniquePtr<TFsm> Fsm_;
-        bool MultiMode;
-        size_t RegexpsCount;
-        bool SurroundMode;
+        bool MultiMode_;
+        size_t RegexpsCount_;
+        bool SurroundMode_;
     };
 
     class TPireCapture: public TPireUdfBase {

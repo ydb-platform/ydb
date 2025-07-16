@@ -85,6 +85,7 @@ struct TTestEnvOpts {
     ui32 NRings;
     ui32 RingSize;
     ui32 DataCenterCount;
+    ui32 PileCount;
     TNodeTenantsMap Tenants;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
@@ -92,6 +93,7 @@ struct TTestEnvOpts {
     bool EnableCMSRequestPriorities;
     bool EnableSingleCompositeActionGroup;
     bool EnableDynamicGroups;
+    bool IsBridgeMode;
 
     using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
     TNodeLocationCallback NodeLocationCallback;
@@ -107,6 +109,7 @@ struct TTestEnvOpts {
         , NRings(1)
         , RingSize(nodeCount)
         , DataCenterCount(1)
+        , PileCount(0)
         , Tenants(tenants)
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)
@@ -114,6 +117,7 @@ struct TTestEnvOpts {
         , EnableCMSRequestPriorities(true)
         , EnableSingleCompositeActionGroup(true)
         , EnableDynamicGroups(false)
+        , IsBridgeMode(false)
     {
     }
 
@@ -139,6 +143,12 @@ struct TTestEnvOpts {
 
     TTestEnvOpts& WithDynamicGroups() {
         EnableDynamicGroups = true;
+        return *this;
+    }
+
+    TTestEnvOpts& WithBridgeMode(ui32 pileCount = 2) {
+        IsBridgeMode = true;
+        PileCount = pileCount;
         return *this;
     }
 };

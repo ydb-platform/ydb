@@ -3,6 +3,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/security/util.h>
 
@@ -69,7 +70,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             auto response = Self->LoginProvider.CreateGroup({
                 .Group = defaultGroup.GetName(),
                 .Options = {
-                    .CheckName = false
+                    .StrongCheckName = false
                 }
             });
             if (response.Error) {
@@ -144,7 +145,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
         Self->PersistStoragePools(db, Self->RootPathId(), *newDomain);
-        Self->PersistSchemeLimit(db, Self->RootPathId(), *newDomain);
+        Self->PersistSchemeLimits(db, Self->RootPathId(), *newDomain);
         Self->PersistACL(db, newPath);
 
         Self->InitState = TTenantInitState::Done;
@@ -440,7 +441,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->ApplyAndPersistUserAttrs(db, newPath->PathId);
 
         Self->PersistSubDomain(db, Self->RootPathId(), *subdomain);
-        Self->PersistSchemeLimit(db, Self->RootPathId(), *subdomain);
+        Self->PersistSchemeLimits(db, Self->RootPathId(), *subdomain);
         Self->PersistSubDomainSchemeQuotas(db, Self->RootPathId(), *subdomain);
 
         Self->PersistUpdateNextPathId(db);

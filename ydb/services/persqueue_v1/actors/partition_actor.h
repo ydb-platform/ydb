@@ -76,7 +76,7 @@ public:
                      const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
                      const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
-                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const std::set<NPQ::TPartitionGraph::Node*>& parents,
+                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
                      const std::unordered_set<ui64>& notCommitedToFinishParents);
     ~TPartitionActor();
 
@@ -145,7 +145,7 @@ private:
     void InitLockPartition(const NActors::TActorContext& ctx);
     void InitStartReading(const NActors::TActorContext& ctx);
     void RestartDirectReadSession();
-    void OnDirectReadsRestored();
+    void    OnDirectReadsRestored();
     [[nodiscard]] bool SendNextRestorePrepareOrForget();
     [[nodiscard]] bool SendNextRestorePublishRequest();
     void ResendRecentRequests();
@@ -161,8 +161,9 @@ private:
     NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial) const;
     NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
-                                                                      ui64 directReadId) const;
+                                                                      ui64 directReadId, ui64 sizeEstimate = 0) const;
 
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents() const;
 
 private:
     const TActorId ParentId;
@@ -229,7 +230,7 @@ private:
     std::deque<std::pair<ui64, TCommitInfo>> CommitsInfly; //ReadId, Offset
     std::unordered_map<ui64, std::shared_ptr<TDistributedCommitHelper>> Kqps;
 
-    std::set<NPQ::TPartitionGraph::Node*> Parents;
+    const TTopicHolder::TPtr TopicHolder;
 
     TTopicCounters Counters;
 
@@ -246,6 +247,7 @@ private:
 
     std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReadsToRestore;
     std::set<ui64> DirectReadsToPublish;
+    std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
 
     enum class EDirectReadRestoreStage {

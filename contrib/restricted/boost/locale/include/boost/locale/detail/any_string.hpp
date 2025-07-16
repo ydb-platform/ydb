@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 Alexander Grund
+// Copyright (c) 2023-2025 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -9,7 +9,7 @@
 
 #include <boost/locale/config.hpp>
 #include <boost/assert.hpp>
-#include <boost/utility/string_view.hpp>
+#include <boost/core/detail/string_view.hpp>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -31,7 +31,7 @@ namespace boost { namespace locale { namespace detail {
         };
         template<typename Char>
         struct BOOST_SYMBOL_VISIBLE impl : base {
-            explicit impl(const boost::basic_string_view<Char> value) : s(value) {}
+            explicit impl(const core::basic_string_view<Char> value) : s(value) {}
             impl* clone() const override { return new impl(*this); }
             std::basic_string<Char> s;
         };
@@ -49,7 +49,7 @@ namespace boost { namespace locale { namespace detail {
         }
 
         template<typename Char>
-        void set(const boost::basic_string_view<Char> s)
+        void set(const core::basic_string_view<Char> s)
         {
             BOOST_ASSERT(!s.empty());
             s_.reset(new impl<Char>(s));

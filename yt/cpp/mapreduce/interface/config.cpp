@@ -190,6 +190,30 @@ void TConfig::LoadTimings()
     HostListUpdateInterval = TDuration::Seconds(60);
 }
 
+void TConfig::LoadProxyUrlAliasingRules()
+{
+    TString strConfig = GetEnv("YT_PROXY_URL_ALIASING_CONFIG");
+    if (!strConfig) {
+        return;
+    }
+
+    NYT::TNode nodeConfig;
+
+    try {
+        nodeConfig = NodeFromYsonString(strConfig);
+        Y_ENSURE(nodeConfig.IsMap());
+    } catch (const yexception& exc) {
+        ythrow yexception()
+            << "Failed to parse YT_PROXY_URL_ALIASING_CONFIG (it must be yson map): "
+            << exc;
+    }
+
+    for (const auto& [key, value] : nodeConfig.AsMap()) {
+        Y_ENSURE(value.IsString(), "Proxy url is not string");
+        ProxyUrlAliasingRules.emplace(key, value.AsString());
+    }
+}
+
 void TConfig::Reset()
 {
     Hosts = GetEnv("YT_HOSTS", DefaultHosts);
@@ -198,7 +222,7 @@ void TConfig::Reset()
     ApiVersion = GetEnv("YT_VERSION", "v3");
     LogLevel = GetEnv("YT_LOG_LEVEL", "error");
     LogPath = GetEnv("YT_LOG_PATH");
-    LogUseCore = GetBool("YT_LOG_USE_CORE", false);
+    LogUseCore = GetBool("YT_LOG_USE_CORE", true);
     StructuredLog = GetEnv("YT_STRUCTURED_LOG");
 
     HttpProxyRole = GetEnv("YT_HTTP_PROXY_ROLE");
@@ -219,6 +243,7 @@ void TConfig::Reset()
     LoadToken();
     LoadSpec();
     LoadTimings();
+    LoadProxyUrlAliasingRules();
 
     CacheUploadDeduplicationMode = GetUploadingDeduplicationMode("YT_UPLOAD_DEDUPLICATION", EUploadDeduplicationMode::Host);
     CacheUploadDeduplicationThreshold = 10_MB;

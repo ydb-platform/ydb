@@ -76,13 +76,13 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/json
     library/cpp/disjoint_sets
+    library/cpp/type_info/tz
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
     yql/essentials/ast
     yql/essentials/core/extract_predicate
     yql/essentials/public/langver
     yql/essentials/public/udf
-    yql/essentials/public/udf/tz
     yql/essentials/sql
     yql/essentials/sql/v1
     yql/essentials/sql/v1/lexer/antlr4
@@ -145,7 +145,7 @@ RUN_PROGRAM(
         --output
         ${BINDIR}/yql_yt_op_settings.unused.cpp
         --json-output
-        ${BINDIR}/yql_yt_op_settings.json 
+        ${BINDIR}/yql_yt_op_settings.json
         yql_yt_op_settings.h
     IN yql_yt_op_settings.h
     OUT_NOAUTO ${BINDIR}/yql_yt_op_settings.json

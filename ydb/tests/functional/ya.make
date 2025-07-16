@@ -5,6 +5,7 @@ RECURSE(
     backup
     benchmarks_init
     blobstorage
+    bridge
     canonical
     clickbench
     cms
@@ -24,6 +25,7 @@ RECURSE(
     scheme_tests
     script_execution
     sdk/cpp/sdk_credprovider
+    security
     serializable
     serverless
     sqs

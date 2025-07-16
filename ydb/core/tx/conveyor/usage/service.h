@@ -1,26 +1,33 @@
 #pragma once
 #include "config.h"
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/actor.h>
+
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NConveyor {
 
 class TAsyncTaskExecutor: public TActorBootstrapped<TAsyncTaskExecutor> {
 private:
     const std::shared_ptr<ITask> Task;
+
 public:
     TAsyncTaskExecutor(const std::shared_ptr<ITask>& task)
-        : Task(task)
-    {
-
+        : Task(task) {
     }
 
     void Bootstrap() {
         auto gAway = PassAwayGuard();
         Task->Execute(nullptr, Task);
     }
+};
+
+enum class ESpecialTaskProcesses {
+    Insert = 1,
+    Compaction = 2,
+    Normalizer = 3
 };
 
 template <class TConveyorPolicy>
@@ -35,10 +42,14 @@ private:
         Y_ABORT_UNLESS(TConveyorPolicy::Name.size() == 4);
         return TConveyorPolicy::Name;
     }
+
 public:
     static void AsyncTaskToExecute(const std::shared_ptr<ITask>& task) {
         auto& context = NActors::TActorContext::AsActorContext();
         context.Register(new TAsyncTaskExecutor(task));
+    }
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskProcesses processType) {
+        return SendTaskToExecute(task, (ui64)processType);
     }
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 processId = 0) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
@@ -59,38 +70,26 @@ public:
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
         Register(config);
-        return new TDistributor(config, GetConveyorName(), conveyorSignals);
+        return new TDistributor(config, GetConveyorName(), TConveyorPolicy::EnableProcesses, conveyorSignals);
     }
-    static TProcessGuard StartProcess(const ui64 externalProcessId) {
+    static TProcessGuard StartProcess(const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvRegisterProcess(externalProcessId));
+            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvRegisterProcess(externalProcessId, cpuLimits));
             return TProcessGuard(externalProcessId, MakeServiceId(selfId.NodeId()));
         } else {
             return TProcessGuard(externalProcessId, {});
         }
     }
-
 };
 
 class TScanConveyorPolicy {
 public:
     static const inline TString Name = "Scan";
-};
-
-class TCompConveyorPolicy {
-public:
-    static const inline TString Name = "Comp";
-};
-
-class TInsertConveyorPolicy {
-public:
-    static const inline TString Name = "Isrt";
+    static constexpr bool EnableProcesses = true;
 };
 
 using TScanServiceOperator = TServiceOperatorImpl<TScanConveyorPolicy>;
-using TCompServiceOperator = TServiceOperatorImpl<TCompConveyorPolicy>;
-using TInsertServiceOperator = TServiceOperatorImpl<TInsertConveyorPolicy>;
 
-}
+}   // namespace NKikimr::NConveyor

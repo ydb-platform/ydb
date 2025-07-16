@@ -55,7 +55,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}, nullptr});
+    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}, nullptr, {}, nullptr, nullptr, nullptr});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
                                federatedQuerySetup, nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), {}, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem, nullptr);
 }
@@ -2544,7 +2544,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     Y_UNIT_TEST(SecondaryIndexInsert1) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -5765,6 +5766,227 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(DirectAccessToIndexImplTable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAccessToIndexImplTables(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);        
+        auto db = kikimr.GetTableClient();
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+
+        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(adminSession);
+        const char *tablePath = "/Root/SecondaryKeys";
+        const char *implTablePath = "/Root/SecondaryKeys/Index/indexImplTable";
+
+        // a user which does not have any implicit permissions
+        auto userClient = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("user@builtin"));
+        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
+
+        auto selectTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                SELECT * FROM `%s`;
+            )", tablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto selectImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                SELECT * FROM `%s`;
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto upsertTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPSERT INTO `%s` (Key, Fk, Value) VALUES
+                    (9,    9,    "Payload9");
+            )", tablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };        
+        auto upsertImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPSERT INTO `%s` (Fk, Key) VALUES
+                    (99, 99u);
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto updateImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPDATE `%s` ON (Fk, Key) VALUES (99, 99u);
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto deleteImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                DELETE FROM `%s` WHERE Fk = 99;
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto bulkUpsertImplTable = [&]() {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct()
+                .AddMember("Key").Int32(99)
+                .AddMember("Fk").Int32(99)
+            .EndStruct();
+            builder.EndList();
+            return userClient.BulkUpsert(implTablePath, builder.Build()).ExtractValueSync();
+        };
+
+        // try accessing tables without permissions
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Access denied for user@builtin with access UpdateRow to table",
+                result.GetIssues().ToString()
+            );
+        }
+
+        // grant necessary permission
+        Grant(adminSession, "USE", tablePath, "user@builtin");
+
+        // try accessing tables with permissions
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+
+        // become superuser
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user@builtin");
+        
+        // accessing tables as superuser
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+    }    
 }
 
 }

@@ -89,11 +89,6 @@
 #    define BOOST_LOCALE_NO_SANITIZE(what)
 #endif
 
-#if !defined(__cpp_lib_char8_t) || BOOST_WORKAROUND(BOOST_CLANG_VERSION, < 150000)
-// No std::basic_string<char8_t> or bug in Clang: https://github.com/llvm/llvm-project/issues/55560
-#    define BOOST_LOCALE_NO_CXX20_STRING8
-#endif
-
 /// \endcond
 
 #endif // boost/locale/config.hpp

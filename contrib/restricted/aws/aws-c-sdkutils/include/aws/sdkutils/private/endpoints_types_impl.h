@@ -172,8 +172,23 @@ struct aws_partition_info {
 
     bool is_copy;
     struct aws_string *info;
+
+    struct aws_endpoints_regex *region_regex;
 };
 
+/*
+ * Basic partitions file structure is a list of partitions at top level that has
+ * some metadata associated with it and then each partition has a list of
+ * regions within it, with each region possibly overriding some of that info.
+ * The 2 use cases we need to support is matching region to partition and then
+ * iterating over all partitions and matching regex in partition meta to region name.
+ * To support both cases we have 2 structures:
+ * - base_partitions - list of all partitions. this is a primary owner for partition
+ *   meta data
+ * - region_to_partition_info - mapping from region name to partition. creates
+ *   new meta info if region overrides any meta values, otherwise points to
+ *   partitions copy of meta info (is_copy flag is true)
+ */
 struct aws_partitions_config {
     struct aws_allocator *allocator;
     struct aws_ref_count ref_count;
@@ -182,6 +197,9 @@ struct aws_partitions_config {
 
     /* map of (byte_cur -> aws_partition_info) */
     struct aws_hash_table region_to_partition_info;
+
+    /* map of (byte_cur -> aws_partition_info) */
+    struct aws_hash_table base_partitions;
 
     struct aws_string *version;
 };

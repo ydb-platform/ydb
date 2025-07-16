@@ -36,7 +36,7 @@ bool ConvertContent(
     google::protobuf::Map<TProtoStringType, TProtoStringType>& out,
     TIssues& issues
 ) {
-    const auto externalSourceFactory = NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, NYql::GetAllExternalDataSourceTypes());
+    const auto externalSourceFactory = NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceTypes());
     try {
         const auto source = externalSourceFactory->GetOrCreate(sourceType);
         for (const auto& [key, items] : source->GetParameters(in)) {

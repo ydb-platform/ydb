@@ -1,6 +1,8 @@
 #include "create_table_formatter.h"
+#include "formatters_common.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -8,6 +10,9 @@
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
+
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/yexception.h>
 
@@ -17,6 +22,10 @@ namespace NSysView {
 using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
+
+namespace {
+    const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
+}
 
 void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isPartition, TString del) {
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
@@ -434,14 +443,28 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
-    TString statement = Stream.Str();
-    TString formattedStatement;
+    if (!tableDesc.GetTableIndexes().empty()) {
+        try {
+            for (const auto& indexDesc: tableDesc.GetTableIndexes()) {
+                if (indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                    FormatIndexImplTable(tablePath, indexDesc.GetName(), indexDesc.GetIndexImplTableDescriptions(0));
+                }
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, e.what());
+        }
+    }
+
+    TString createQuery = Stream.Str();
+    TString formattedCreateQuery;
     NYql::TIssues issues;
-    if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
+    if (!NYdb::NDump::Format(createQuery, formattedCreateQuery, issues)) {
         return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
     }
 
-    auto result = TFormatResult(std::move(formattedStatement));
+    auto result = TFormatResult(std::move(formattedCreateQuery));
 
     return result;
 }
@@ -973,6 +996,11 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
+    if (cdcStream.GetSchemaChanges()) {
+        Stream << del << "SCHEMA_CHANGES = TRUE";
+        del = ", ";
+    }
+
     if (cdcStream.HasAwsRegion() && !cdcStream.GetAwsRegion().empty()) {
         Stream << del << "AWS_REGION = \'" << cdcStream.GetAwsRegion() << "\'";
         del = ", ";
@@ -1048,8 +1076,70 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     Stream << ";";
 }
 
+void TCreateTableFormatter::FormatIndexImplTable(const TString& tablePath, const TString& indexName, const NKikimrSchemeOp::TTableDescription& indexImplDesc) {
+    if (!indexImplDesc.HasPartitionConfig() || !indexImplDesc.GetPartitionConfig().HasPartitioningPolicy()) {
+        return;
+    }
 
-TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TColumnTableDescription& tableDesc, bool temporary) {
+    const auto& policy = indexImplDesc.GetPartitionConfig().GetPartitioningPolicy();
+
+    ui32 shardsToCreate = NSchemeShard::TTableInfo::ShardsToCreate(indexImplDesc);
+
+    bool printed = false;
+    if ((policy.HasSizeToSplit() && (policy.GetSizeToSplit() != defaultSizeToSplit)) || policy.HasSplitByLoadSettings()
+            || (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount() && policy.GetMinPartitionsCount() != shardsToCreate)
+            || (policy.HasMaxPartitionsCount() && policy.GetMaxPartitionsCount())) {
+        printed = true;
+    }
+    if (!printed) {
+        return;
+    }
+
+    Stream << "ALTER TABLE ";
+    EscapeName(tablePath, Stream);
+    Stream << " ALTER INDEX ";
+    EscapeName(indexName, Stream);
+
+    Stream << " SET (\n";
+
+    TString del = "";
+    if (policy.HasSizeToSplit()) {
+        if (policy.GetSizeToSplit()) {
+            if (policy.GetSizeToSplit() != defaultSizeToSplit) {
+                Stream << "\tAUTO_PARTITIONING_BY_SIZE = ENABLED,\n";
+                auto partitionBySize = policy.GetSizeToSplit() / (1 << 20);
+                Stream << "\tAUTO_PARTITIONING_PARTITION_SIZE_MB = " << partitionBySize;
+                del = ",\n";
+            }
+        } else {
+            Stream << "\tAUTO_PARTITIONING_BY_SIZE = DISABLED";
+            del = ",\n";
+        }
+    }
+
+    if (policy.HasSplitByLoadSettings()) {
+        if (policy.GetSplitByLoadSettings().GetEnabled()) {
+            Stream << del << "\tAUTO_PARTITIONING_BY_LOAD = ENABLED";
+        } else {
+            Stream << del << "\tAUTO_PARTITIONING_BY_LOAD = DISABLED";
+        }
+        del = ",\n";
+    }
+
+    if (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount() && policy.GetMinPartitionsCount() != shardsToCreate) {
+        Stream << del << "\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << policy.GetMinPartitionsCount();
+        del = ",\n";
+    }
+
+    if (policy.HasMaxPartitionsCount() && policy.GetMaxPartitionsCount()) {
+        Stream << del << "\tAUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << policy.GetMaxPartitionsCount();
+    }
+
+    Stream << "\n);";
+}
+
+
+TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TString& fullPath, const TColumnTableDescription& tableDesc, bool temporary) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
@@ -1085,8 +1175,9 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TCol
     }
     Stream << ",\n";
 
-    if (!schema.GetIndexes().empty()) {
-        return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Indexes are not supported yet for column tables.");
+    std::map<ui32, const TFamilyDescription*> families;
+    for (const auto& family : schema.GetColumnFamilies()) {
+        families[family.GetId()] = &family;
     }
 
     bool isFamilyPrinted = false;
@@ -1119,22 +1210,6 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TCol
     Stream << ")\n";
     Stream << ") ";
 
-    if (schema.HasOptions()) {
-        const auto& options = schema.GetOptions();
-        if (options.GetSchemeNeedActualization()) {
-            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: SCHEME_NEED_ACTUALIZATION");
-        }
-        if (options.HasScanReaderPolicyName() && !options.GetScanReaderPolicyName().empty()) {
-            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: SCAN_READER_POLICY_NAME");
-        }
-        if (options.HasCompactionPlannerConstructor()) {
-            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: COMPACTION_PLANNER");
-        }
-        if (options.HasMetadataManagerConstructor()) {
-            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: METADATA_MEMORY_MANAGER");
-        }
-    }
-
     if (tableDesc.HasSharding()) {
         Format(tableDesc.GetSharding());
     }
@@ -1153,14 +1228,51 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TCol
 
     Stream << "\n);";
 
-    TString statement = Stream.Str();
-    TString formattedStatement;
+    try {
+        for (const auto& column: columns) {
+            const TFamilyDescription* family = nullptr;
+            if (column.second->HasColumnFamilyId()) {
+                family = families.at(column.second->GetColumnFamilyId());
+            }
+
+            FormatAlterColumn(fullPath, *column.second, family);
+        }
+    } catch (const TFormatFail& ex) {
+        return TFormatResult(ex.Status, ex.Error);
+    } catch (const yexception& e) {
+        return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+    }
+
+    if (!schema.GetIndexes().empty()) {
+        try {
+            for (const auto& index : schema.GetIndexes()) {
+                FormatUpsertIndex(fullPath, index, columns);
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
+    if (schema.HasOptions()) {
+        try {
+            FormatUpsertOptions(fullPath, schema.GetOptions());
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
+    TString createQuery = Stream.Str();
+    TString formattedCreateQuery;
     NYql::TIssues issues;
-    if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
+    if (!NYdb::NDump::Format(createQuery, formattedCreateQuery, issues)) {
         return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
     }
 
-    auto result = TFormatResult(std::move(formattedStatement));
+    auto result = TFormatResult(std::move(formattedCreateQuery));
 
     return result;
 }
@@ -1177,78 +1289,66 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
     if (olapColumnDesc.GetNotNull()) {
         Stream << " NOT NULL";
     }
-    if (olapColumnDesc.HasDefaultValue()) {
-        Format(olapColumnDesc.GetDefaultValue());
-    }
 
     if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
     }
-
-    if (olapColumnDesc.HasDataAccessorConstructor()) {
-        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: DATA_ACCESSOR_CONSTRUCTOR");
-    }
-
-    if (olapColumnDesc.HasDictionaryEncoding()) {
-        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: ENCODING.DICTIONARY");
-    }
 }
 
-void TCreateTableFormatter::Format(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue) {
+TString TCreateTableFormatter::ValueToString(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue) {
+    TStringStream stream;
     if (!defaultValue.HasScalar()) {
-        return;
+        return "";
     }
-
-    Stream << " DEFAULT ";
 
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
     const auto& scalar = defaultValue.GetScalar();
     if (scalar.HasBool()) {
         if (scalar.GetBool() == true) {
-            Stream << "true";
+            stream << "true";
         } else {
-            Stream << "false";
+            stream << "false";
         }
     } else if (scalar.HasUint8()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint8, NUdf::TUnboxedValuePod(scalar.GetUint8()));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasUint16()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint16, NUdf::TUnboxedValuePod(scalar.GetUint16()));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasUint32()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint32, NUdf::TUnboxedValuePod(scalar.GetUint32()));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasUint64()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint64, NUdf::TUnboxedValuePod(static_cast<ui64>(scalar.GetUint64())));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasInt8()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int8, NUdf::TUnboxedValuePod(scalar.GetInt8()));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasInt16()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int16, NUdf::TUnboxedValuePod(scalar.GetInt16()));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasInt32()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int32, NUdf::TUnboxedValuePod(scalar.GetInt32()));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasInt64()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int64, NUdf::TUnboxedValuePod(static_cast<i64>(scalar.GetInt64())));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasDouble()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(scalar.GetDouble()));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasFloat()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(scalar.GetFloat()));
         Y_ENSURE(str.HasValue());
-        Stream << TString(str.AsStringRef());
+        stream << TString(str.AsStringRef());
     } else if (scalar.HasTimestamp()) {
         ui64 value = scalar.GetTimestamp().GetValue();
         arrow::TimeUnit::type unit = arrow::TimeUnit::type(scalar.GetTimestamp().GetUnit());
@@ -1265,16 +1365,18 @@ void TCreateTableFormatter::Format(const NKikimrColumnShardColumnDefaults::TColu
                 value /= 1000;
                 break;
         }
-        Stream << "TIMESTAMP(";
+        stream << "TIMESTAMP(";
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp, NUdf::TUnboxedValuePod(value));
         Y_ENSURE(str.HasValue());
-        EscapeString(TString(str.AsStringRef()), Stream);
-        Stream << ")";
+        EscapeString(TString(str.AsStringRef()), stream);
+        stream << ")";
     } else if (scalar.HasString()) {
-        EscapeString(TString(scalar.GetString()), Stream);
+        EscapeString(TString(scalar.GetString()), stream);
     } else {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported type for default value");
     }
+
+    return stream.Str();
 }
 
 void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnTableSharding& sharding) {
@@ -1354,6 +1456,428 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
         default:
             ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported unit");
     }
+}
+
+void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc, const TFamilyDescription* family) {
+    TStringStream paramsStr;
+    TString del = "";
+
+    if (columnDesc.HasDefaultValue()) {
+        auto defaultValue = ValueToString(columnDesc.GetDefaultValue());
+        if (defaultValue) {
+            EscapeName("DEFAULT_VALUE", paramsStr);
+            paramsStr << "=";
+            EscapeValue(defaultValue, paramsStr);
+            del = ", ";
+        }
+    }
+
+    if (columnDesc.HasStorageId() && !columnDesc.GetStorageId().empty()) {
+        paramsStr << del;
+        EscapeName("STORAGE_ID", paramsStr);
+        paramsStr << "=";
+        EscapeValue(columnDesc.GetStorageId(), paramsStr);
+        del = ", ";
+    }
+
+    if (columnDesc.HasDataAccessorConstructor()) {
+        const auto& dataAccessorConstructor = columnDesc.GetDataAccessorConstructor();
+        if (columnDesc.GetDataAccessorConstructor().HasClassName()
+                && !columnDesc.GetDataAccessorConstructor().GetClassName().empty()) {
+            paramsStr << del;
+            EscapeName("DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME", paramsStr);
+            paramsStr << "=";
+            EscapeValue(columnDesc.GetDataAccessorConstructor().GetClassName(), paramsStr);
+            del = ", ";
+            if (dataAccessorConstructor.HasSubColumns()) {
+                const auto& subColumns = dataAccessorConstructor.GetSubColumns();
+                if (subColumns.HasSettings()) {
+                    const auto& settings = subColumns.GetSettings();
+                    if (settings.HasSparsedDetectorKff() && settings.GetSparsedDetectorKff()) {
+                        paramsStr << del;
+                        EscapeName("SPARSED_DETECTOR_KFF", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetSparsedDetectorKff(), paramsStr);
+                        del = ", ";
+                    }
+                    if (settings.HasColumnsLimit() && settings.GetColumnsLimit()) {
+                        paramsStr << del;
+                        EscapeName("COLUMNS_LIMIT", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetColumnsLimit(), paramsStr);
+                        del = ", ";
+                    }
+                    if (settings.HasChunkMemoryLimit() && settings.GetChunkMemoryLimit()) {
+                        paramsStr << del;
+                        EscapeName("MEM_LIMIT_CHUNK", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetChunkMemoryLimit(), paramsStr);
+                        del = ", ";
+                    }
+                    if (settings.HasOthersAllowedFraction() && settings.GetOthersAllowedFraction()) {
+                        paramsStr << del;
+                        EscapeName("OTHERS_ALLOWED_FRACTION", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetOthersAllowedFraction(), paramsStr);
+                        del = ", ";
+                    }
+                    if (settings.HasDataExtractor()) {
+                        const auto& dataExtractor = settings.GetDataExtractor();
+                        if (dataExtractor.HasClassName() && !dataExtractor.GetClassName().empty()) {
+                            paramsStr << del;
+                            EscapeName("DATA_EXTRACTOR_CLASS_NAME", paramsStr);
+                            paramsStr << "=";
+                            EscapeValue(dataExtractor.GetClassName(), paramsStr);
+                            del = ", ";
+                        }
+                        if (dataExtractor.HasJsonScanner()) {
+                            const auto& jsonScanner = dataExtractor.GetJsonScanner();
+                            paramsStr << del;
+                            EscapeName("SCAN_FIRST_LEVEL_ONLY", paramsStr);
+                            paramsStr << "=";
+                            EscapeValue(jsonScanner.GetFirstLevelOnly(), paramsStr);
+                            del = ", ";
+                            paramsStr << del;
+                            EscapeName("FORCE_SIMD_PARSING", paramsStr);
+                            paramsStr << "=";
+                            EscapeValue(jsonScanner.GetForceSIMDJsonParsing(), paramsStr);
+                            del = ", ";
+                        }
+                        if (dataExtractor.HasSIMDJsonScanner()) {
+                            const auto& simdJsonScanner = dataExtractor.GetSIMDJsonScanner();
+                            paramsStr << del;
+                            EscapeName("SCAN_FIRST_LEVEL_ONLY", paramsStr);
+                            paramsStr << "=";
+                            EscapeValue(simdJsonScanner.GetFirstLevelOnly(), paramsStr);
+                            del = ", ";
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (columnDesc.HasDictionaryEncoding()) {
+        paramsStr << del;
+        EscapeName("ENCODING.DICTIONARY.ENABLED", paramsStr);
+        paramsStr << "=";
+        EscapeValue(columnDesc.GetDictionaryEncoding().GetEnabled(), paramsStr);
+        del = ", ";
+    }
+
+    if (columnDesc.HasSerializer()) {
+        const auto& serializer = columnDesc.GetSerializer();
+        if (serializer.HasClassName() && !serializer.GetClassName().empty()) {
+            bool hasDiff = false;
+            if (family && serializer.HasArrowCompression()) {
+                const auto& arrowCompression = serializer.GetArrowCompression();
+                if (arrowCompression.HasCodec() && (!family->HasColumnCodec() || arrowCompression.GetCodec() != family->GetColumnCodec())) {
+                    hasDiff = true;
+                }
+                if (arrowCompression.HasLevel() && (!family->HasColumnCodecLevel() || arrowCompression.GetLevel() != family->GetColumnCodecLevel())) {
+                    hasDiff = true;
+                }
+            }
+            if (hasDiff) {
+                paramsStr << del;
+                EscapeName("SERIALIZER.CLASS_NAME", paramsStr);
+                paramsStr << "=";
+                EscapeValue(serializer.GetClassName(), paramsStr);
+                del = ", ";
+                if (serializer.HasArrowCompression()) {
+                    const auto& arrowCompression = serializer.GetArrowCompression();
+                    if (arrowCompression.HasCodec()) {
+                        paramsStr << del;
+                        EscapeName("COMPRESSION.TYPE", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(NArrow::CompressionToString(arrowCompression.GetCodec()), paramsStr);
+                        del = ", ";
+                    }
+                    if (arrowCompression.HasLevel()) {
+                        paramsStr << del;
+                        EscapeName("COMPRESSION.LEVEL", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(arrowCompression.GetLevel(), paramsStr);
+                        del = ", ";
+                    }
+                }
+            }
+        }
+    }
+
+    TString params = paramsStr.Str();
+    if (params.empty()) {
+        return;
+    }
+
+    Stream << "ALTER OBJECT ";
+    EscapeName(fullPath, Stream);
+    Stream << " (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=";
+    Stream << columnDesc.GetName();
+    Stream << ", ";
+    Stream << params;
+    Stream << ");";
+}
+
+void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const TOlapColumnDescription*>& columns) {
+    Stream << "ALTER OBJECT ";
+    EscapeName(fullPath, Stream);
+    Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+    Stream << indexDesc.GetName();
+    switch (indexDesc.GetImplementationCase()) {
+        case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
+            const auto& bloomFilter = indexDesc.GetBloomFilter();
+            Stream << ", TYPE=BLOOM_FILTER, ";
+            Stream << "FEATURES=";
+
+            NJson::TJsonValue json;
+
+            if (bloomFilter.GetColumnIds().size() != 1) {
+                ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+                    TStringBuilder() << "Unsupported number of columns for BLOOM_FILTER index: " << bloomFilter.GetColumnIds().size());
+            }
+            const auto& columnName = columns.at(bloomFilter.GetColumnIds(0))->GetName();
+            json["column_name"] = columnName;
+
+            if (bloomFilter.HasDataExtractor()) {
+                const auto& dataExtractor = bloomFilter.GetDataExtractor();
+                NJson::TJsonValue jsonDataExtractor;
+                jsonDataExtractor["class_name"] = dataExtractor.GetClassName();
+                if (dataExtractor.HasSubColumn()) {
+                    const auto& subColumn = dataExtractor.GetSubColumn();
+                    if (subColumn.HasSubColumnName()) {
+                        jsonDataExtractor["sub_column_name"] = subColumn.GetSubColumnName();
+                    }
+                }
+                json["data_extractor"] = std::move(jsonDataExtractor);
+            }
+
+            if (bloomFilter.HasBitsStorage()) {
+                const auto& bitsStorage = bloomFilter.GetBitsStorage();
+                if (bitsStorage.HasClassName() && !bitsStorage.GetClassName().empty()) {
+                    json["bits_storage_type"] = bitsStorage.GetClassName();
+                }
+            }
+
+            if (bloomFilter.HasFalsePositiveProbability()) {
+                json["false_positive_probability"] = bloomFilter.GetFalsePositiveProbability();
+            }
+
+            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            break;
+        }
+        case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex: {
+            const auto& maxIndex = indexDesc.GetMaxIndex();
+            Stream << ", TYPE=MAX, ";
+            Stream << "FEATURES=";
+            NJson::TJsonValue json;
+
+            if (maxIndex.HasColumnId()) {
+                const auto& columnName = columns.at(maxIndex.GetColumnId())->GetName();
+                json["column_name"] = columnName;
+            } else {
+                ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+                    TStringBuilder() << "ColumnId have to be in MAX index description");
+            }
+
+            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            break;
+        }
+        case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch: {
+            const auto& countMinSketch = indexDesc.GetCountMinSketch();
+            Stream << ", TYPE=COUNT_MIN_SKETCH, ";
+            Stream << "FEATURES=";
+            NJson::TJsonValue json;
+            NJson::TJsonArray jsonColumnNames;
+            for (const auto& columnId : countMinSketch.GetColumnIds()) {
+                jsonColumnNames.AppendValue(columns.at(columnId)->GetName());
+            }
+            json["column_names"] = std::move(jsonColumnNames);
+
+            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            break;
+        }
+        case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
+            const auto& bloomNGrammFilter = indexDesc.GetBloomNGrammFilter();
+            Stream << ", TYPE=BLOOM_NGRAMM_FILTER, ";
+            Stream << "FEATURES=";
+
+            NJson::TJsonValue json;
+
+            if (bloomNGrammFilter.HasColumnId()) {
+                const auto& columnName = columns.at(bloomNGrammFilter.GetColumnId())->GetName();
+                json["column_name"] = columnName;
+            } else {
+                ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+                    TStringBuilder() << "ColumnId have to be in BLOOM_NGRAMM_FILTER index description");
+            }
+
+            if (bloomNGrammFilter.HasDataExtractor()) {
+                const auto& dataExtractor = bloomNGrammFilter.GetDataExtractor();
+                NJson::TJsonValue jsonDataExtractor;
+                jsonDataExtractor["class_name"] = dataExtractor.GetClassName();
+                if (dataExtractor.HasSubColumn()) {
+                    const auto& subColumn = dataExtractor.GetSubColumn();
+                    if (subColumn.HasSubColumnName()) {
+                        jsonDataExtractor["sub_column_name"] = subColumn.GetSubColumnName();
+                    }
+                }
+                json["data_extractor"] = std::move(jsonDataExtractor);
+            }
+
+            if (bloomNGrammFilter.HasBitsStorage()) {
+                const auto& bitsStorage = bloomNGrammFilter.GetBitsStorage();
+                if (bitsStorage.HasClassName() && !bitsStorage.GetClassName().empty()) {
+                    json["bits_storage_type"] = bitsStorage.GetClassName();
+                }
+            }
+            if (bloomNGrammFilter.HasRecordsCount()) {
+                json["records_count"] = bloomNGrammFilter.GetRecordsCount();
+            }
+            if (bloomNGrammFilter.HasNGrammSize()) {
+                json["ngramm_size"] = bloomNGrammFilter.GetNGrammSize();
+            }
+            if (bloomNGrammFilter.HasFilterSizeBytes()) {
+                json["filter_size_bytes"] = bloomNGrammFilter.GetFilterSizeBytes();
+            }
+            if (bloomNGrammFilter.HasHashesCount()) {
+                json["hashes_count"] = bloomNGrammFilter.GetHashesCount();
+            }
+            if (bloomNGrammFilter.HasCaseSensitive()) {
+                json["case_sensitive"] = bloomNGrammFilter.GetCaseSensitive();
+            }
+
+            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            break;
+        }
+        default: break;
+    }
+    Stream << ");";
+}
+
+void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const NKikimrSchemeOp::TColumnTableSchemeOptions& options) {
+    TStringStream paramsStr;
+    TString del = "";
+
+    if (options.GetSchemeNeedActualization()) {
+        paramsStr << del;
+        EscapeName("SCHEME_NEED_ACTUALIZATION", paramsStr);
+        paramsStr << "=";
+        EscapeValue(options.GetSchemeNeedActualization(), paramsStr);
+        del = ", ";
+    }
+    if (options.HasScanReaderPolicyName() && !options.GetScanReaderPolicyName().empty()) {
+        paramsStr << del;
+        EscapeName("SCAN_READER_POLICY_NAME", paramsStr);
+        paramsStr << "=";
+        EscapeString(options.GetScanReaderPolicyName(), paramsStr);
+        del = ", ";
+    }
+    if (options.HasCompactionPlannerConstructor()) {
+        const auto& compactionPlannerConstructor = options.GetCompactionPlannerConstructor();
+        if (compactionPlannerConstructor.HasClassName() && !compactionPlannerConstructor.GetClassName().empty()) {
+            paramsStr << del;
+            EscapeName("COMPACTION_PLANNER.CLASS_NAME", paramsStr);
+            paramsStr << "=";
+            EscapeString(compactionPlannerConstructor.GetClassName(), paramsStr);
+            del = ", ";
+            switch (compactionPlannerConstructor.GetImplementationCase()) {
+                case NKikimrSchemeOp::TCompactionPlannerConstructorContainer::kLBuckets: {
+                    break;
+                }
+                case NKikimrSchemeOp::TCompactionPlannerConstructorContainer::kSBuckets: {
+                    ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting for s-buckets: COMPACTION_PLANNER.FEATURES");
+                }
+                case NKikimrSchemeOp::TCompactionPlannerConstructorContainer::kLCBuckets: {
+                    const auto& lcBuckets = compactionPlannerConstructor.GetLCBuckets();
+                    if (lcBuckets.GetLevels().empty()) {
+                        break;
+                    }
+                    paramsStr << del;
+                    EscapeName("COMPACTION_PLANNER.FEATURES", paramsStr);
+                    paramsStr << "=";
+                    NJson::TJsonValue json;
+                    json["levels"] = NJson::TJsonArray();
+                    auto& levels = json["levels"];
+                    for (const auto& level: lcBuckets.GetLevels()) {
+                        NJson::TJsonValue jsonLevel;
+                        jsonLevel["class_name"] = level.GetClassName();
+                        switch (level.GetImplementationCase()) {
+                            case NKikimrSchemeOp::TCompactionLevelConstructorContainer::kZeroLevel:{
+                                const auto& zeroLevel = level.GetZeroLevel();
+                                if (zeroLevel.HasPortionsCountAvailable()) {
+                                    jsonLevel["portions_count_available"] = zeroLevel.GetPortionsCountAvailable();
+                                }
+                                if (zeroLevel.HasPortionsLiveDurationSeconds()) {
+                                    jsonLevel["portions_live_duration"] = TDuration::Seconds(zeroLevel.GetPortionsLiveDurationSeconds()).ToString();
+                                }
+                                if (zeroLevel.HasExpectedBlobsSize()) {
+                                    jsonLevel["expected_blobs_size"] = zeroLevel.GetExpectedBlobsSize();
+                                }
+                                if (zeroLevel.HasPortionsCountLimit()) {
+                                    jsonLevel["portions_count_limit"] = zeroLevel.GetPortionsCountLimit();
+                                }
+                                break;
+                            }
+                            case NKikimrSchemeOp::TCompactionLevelConstructorContainer::kOneLayer: {
+                                const auto& oneLayer = level.GetOneLayer();
+                                if (oneLayer.HasBytesLimitFraction()) {
+                                    jsonLevel["bytes_limit_fraction"] = oneLayer.GetBytesLimitFraction();
+                                }
+                                if (oneLayer.HasExpectedPortionSize()) {
+                                    jsonLevel["expected_portion_size"] = oneLayer.GetExpectedPortionSize();
+                                }
+                                break;
+                            }
+                            default:break;
+                        }
+                        levels.AppendValue(std::move(jsonLevel));
+                    }
+                    EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), paramsStr);
+                    del = ", ";
+                    break;
+                }
+                default: break;
+            }
+        }
+    }
+    if (options.HasMetadataManagerConstructor()) {
+        const auto& metadataManagerConstructor = options.GetMetadataManagerConstructor();
+        if (metadataManagerConstructor.HasClassName() && !metadataManagerConstructor.GetClassName().empty()) {
+            paramsStr << del;
+            EscapeName("METADATA_MEMORY_MANAGER.CLASS_NAME", paramsStr);
+            paramsStr << "=";
+            EscapeString(metadataManagerConstructor.GetClassName(), paramsStr);
+            del = ", ";
+        }
+        if (metadataManagerConstructor.HasLocalDB()) {
+            const auto& localDB = metadataManagerConstructor.GetLocalDB();
+            NJson::TJsonValue jsonLocalDB;
+            if (localDB.HasMemoryCacheSize()) {
+                jsonLocalDB["memory_cache_size"] = localDB.GetMemoryCacheSize();
+            }
+            if (localDB.HasFetchOnStart()) {
+                jsonLocalDB["fetch_on_start"] = localDB.GetFetchOnStart();
+            }
+            paramsStr << del;
+            EscapeName("METADATA_MEMORY_MANAGER.FEATURES", paramsStr);
+            paramsStr << "=";
+            EscapeValue(NJson::WriteJson(jsonLocalDB, /*formatOutput*/ false), paramsStr);
+            del = ", ";
+        }
+    }
+
+    TString params = paramsStr.Str();
+    if (params.empty()) {
+        return;
+    }
+
+    Stream << "ALTER OBJECT ";
+    EscapeName(fullPath, Stream);
+    Stream << " (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, ";
+    Stream << params;
+    Stream << ");";
 }
 
 } // NSysView

@@ -19,17 +19,18 @@ public:
     using TScanBase = TScanActorBase<TOwnersScan>;
     using TAuthBase = TAuthScanBase<TOwnersScan>;
 
-    TOwnersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TOwnersScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false, true)
+        : TAuthBase(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken), false, true)
     {
     }
 
 protected:
     void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) override {
         Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
-        
+
         TVector<TCell> cells(::Reserve(Columns.size()));
 
         auto entryPath = CanonizePath(entry.Path);
@@ -61,11 +62,12 @@ protected:
     }
 };
 
-THolder<NActors::IActor> CreateOwnersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+THolder<NActors::IActor> CreateOwnersScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TOwnersScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+    return MakeHolder<TOwnersScan>(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 }

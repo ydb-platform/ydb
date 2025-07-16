@@ -29,6 +29,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -116,9 +117,13 @@ void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, NK
 
 void FillLiteralResult(const IKqpGateway::TExecPhysicalResult& result, IKqpGateway::TExecuteLiteralResult& literalResult) {
     if (result.Success()) {
-        YQL_ENSURE(result.Results.size() == 1);
         literalResult.SetSuccess();
-        literalResult.Result = result.Results[0];
+        if (result.ExpectBinaryResults) {
+            literalResult.BinaryResult = result.BinaryResults[0];
+        } else {
+            YQL_ENSURE(result.Results.size() == 1);
+            literalResult.Result = result.Results[0];
+        }
     } else {
         literalResult.SetStatus(result.Status());
         literalResult.AddIssues(result.Issues());
@@ -136,7 +141,18 @@ void FillPhysicalResult(std::unique_ptr<TEvKqpExecuter::TEvTxResponse>& ev, IKqp
             auto& txResults = ev->GetTxResults();
             result.Results.reserve(txResults.size());
             for(auto& tx : txResults) {
-                result.Results.emplace_back(tx.GetMkql());
+                if (result.ExpectBinaryResults) {
+                    auto [type, uv] = tx.GetUV(params->TypeEnv(), params->HolderFactory());
+                    TStringStream out;
+                    NYson::TYsonWriter writer2((IOutputStream*)&out);
+                    writer2.OnBeginMap();
+                    writer2.OnKeyedItem("Data");
+                    writer2.OnRaw(WriteYsonValue(uv, type));
+                    writer2.OnEndMap();
+                    result.BinaryResults.push_back(out.Str());
+                } else {
+                    result.Results.emplace_back(tx.GetMkql());
+                }
             }
             params->AddTxHolders(std::move(ev->GetTxHolders()));
 
@@ -897,45 +913,9 @@ public:
     }
 
     TFuture<TGenericResult> AlterDatabase(const TString& cluster, const NYql::TAlterDatabaseSettings& settings) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            auto alterDatabasePromise = NewPromise<TGenericResult>();
-
-            auto ev = MakeHolder<TRequest>();
-
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-
-            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
-
-            NKikimrSchemeOp::TModifyScheme* modifyScheme = ev->Record.MutableTransaction()->MutableModifyScheme();
-            modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
-            modifyScheme->SetWorkingDir(dirname);
-            modifyScheme->MutableModifyACL()->SetNewOwner(settings.Owner.value());
-            modifyScheme->MutableModifyACL()->SetName(basename);
-
-            auto condition = modifyScheme->AddApplyIf();
-            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
-            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
-
-            SendSchemeRequest(ev.Release()).Apply(
-                [alterDatabasePromise](const TFuture<TGenericResult>& future) mutable {
-                    alterDatabasePromise.SetValue(future.GetValue());
-                }
-            );
-
-            return alterDatabasePromise.GetFuture();
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> CreateColumnTable(NYql::TKikimrTableMetadataPtr metadata,
@@ -1935,6 +1915,7 @@ public:
 
         auto ev = ::NKikimr::NKqp::ExecuteLiteral(std::move(request), Counters, TActorId{}, MakeIntrusive<TUserRequestContext>());
         TExecPhysicalResult result;
+        result.ExpectBinaryResults = true;
         FillPhysicalResult(ev, result, params, txIndex);
         return result;
     }

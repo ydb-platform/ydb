@@ -9,11 +9,21 @@
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 #include <util/datetime/base.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NLogLevel {
+    inline constexpr std::string_view Fatal = "fatal";
+    inline constexpr std::string_view Error = "error";
+    inline constexpr std::string_view Info = "info";
+    inline constexpr std::string_view Debug = "debug";
+} // namespace NLogLevel
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -102,17 +112,22 @@ struct TConfig
     /// @brief Represents the role involved in RPC proxy configuration.
     TString RpcProxyRole;
 
+    /// @brief Proxy url aliasing rules to be used for connection.
+    ///
+    /// You can pass here "foo" => "fqdn:port" and afterwards use "foo" as handy alias,
+    /// while all connections will be made to "fqdn:port" address.
+    THashMap<TString, TString> ProxyUrlAliasingRules;
+
     ///
     /// For historical reasons mapreduce client uses its own logging system.
     ///
-    /// If this options is set to true library switches to yt/yt/core logging by default.
-    /// But if user calls @ref NYT::SetLogger library switches back to logger provided by user
+    /// Currently library uses yt/yt/core logging by default.
+    /// But if user calls @ref NYT::SetLogger, library switches back to logger provided by user
     /// (except for messages from yt/yt/core).
     ///
-    /// This is temporary option. In future it would be true by default, and then removed.
-    ///
-    /// https://st.yandex-team.ru/YT-23645
-    bool LogUseCore = false;
+    /// TODO: This is a temporary option for emergency fallback.
+    /// Should be removed after eliminating all NYT::SetLogger references.
+    bool LogUseCore = true;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;
@@ -256,6 +271,7 @@ struct TConfig
     void LoadToken();
     void LoadSpec();
     void LoadTimings();
+    void LoadProxyUrlAliasingRules();
 
     void Reset();
 

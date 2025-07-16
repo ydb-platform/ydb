@@ -4,6 +4,31 @@
             "uri": "file://test.test_AsciiChecks_/results.txt"
         }
     ],
+    "test.test[AsciiCmpIgnoreCase]": [
+        {
+            "uri": "file://test.test_AsciiCmpIgnoreCase_/results.txt"
+        }
+    ],
+    "test.test[AsciiCmpIgnoreCase_2025_02]": [
+        {
+            "uri": "file://test.test_AsciiCmpIgnoreCase_2025_02_/extracted"
+        }
+    ],
+    "test.test[AsciiCmpIgnoreCase_AllAlternatives_2025_01]": [
+        {
+            "uri": "file://test.test_AsciiCmpIgnoreCase_AllAlternatives_2025_01_/results.txt"
+        }
+    ],
+    "test.test[AsciiContainsIgnoreCase_2025_01]": [
+        {
+            "uri": "file://test.test_AsciiContainsIgnoreCase_2025_01_/extracted"
+        }
+    ],
+    "test.test[AsciiContainsIgnoreCase_2025_01_scan]": [
+        {
+            "uri": "file://test.test_AsciiContainsIgnoreCase_2025_01_scan_/extracted"
+        }
+    ],
     "test.test[Base32Decode]": [
         {
             "uri": "file://test.test_Base32Decode_/results.txt"
@@ -19,6 +44,11 @@
             "uri": "file://test.test_BlockAsciiChecks_/results.txt"
         }
     ],
+    "test.test[BlockAsciiCmpIgnoreCase]": [
+        {
+            "uri": "file://test.test_BlockAsciiCmpIgnoreCase_/results.txt"
+        }
+    ],
     "test.test[BlockFind]": [
         {
             "uri": "file://test.test_BlockFind_/results.txt"
@@ -32,6 +62,16 @@
     "test.test[BlockReplace]": [
         {
             "uri": "file://test.test_BlockReplace_/results.txt"
+        }
+    ],
+    "test.test[BlockReverseBits]": [
+        {
+            "uri": "file://test.test_BlockReverseBits_/results.txt"
+        }
+    ],
+    "test.test[BlockReverseBytes]": [
+        {
+            "uri": "file://test.test_BlockReverseBytes_/results.txt"
         }
     ],
     "test.test[BlockStreamFormat]": [
@@ -87,6 +127,26 @@
     "test.test[Replace]": [
         {
             "uri": "file://test.test_Replace_/results.txt"
+        }
+    ],
+    "test.test[ReverseBits]": [
+        {
+            "uri": "file://test.test_ReverseBits_/results.txt"
+        }
+    ],
+    "test.test[ReverseBits_2025_01]": [
+        {
+            "uri": "file://test.test_ReverseBits_2025_01_/extracted"
+        }
+    ],
+    "test.test[ReverseBytes]": [
+        {
+            "uri": "file://test.test_ReverseBytes_/results.txt"
+        }
+    ],
+    "test.test[ReverseBytes_2025_01]": [
+        {
+            "uri": "file://test.test_ReverseBytes_2025_01_/extracted"
         }
     ],
     "test.test[Reverse_2025.02]": [

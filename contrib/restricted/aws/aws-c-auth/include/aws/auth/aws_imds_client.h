@@ -12,6 +12,8 @@
 #include <aws/http/connection_manager.h>
 #include <aws/io/retry_strategy.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 typedef void(aws_imds_client_shutdown_completed_fn)(void *user_data);
 
 /**
@@ -47,6 +49,11 @@ struct aws_imds_client_options {
      * Defaults to IMDS_PROTOCOL_V2
      */
     enum aws_imds_protocol_version imds_version;
+
+    /*
+     * If true, fallback from v2 to v1 will be disabled for all cases
+     */
+    bool ec2_metadata_v1_disabled;
 
     /*
      * Table holding all cross-system functional dependencies for an imds client.
@@ -477,5 +484,6 @@ int aws_imds_client_get_instance_info(
     void *user_data);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_AUTH_IMDS_CLIENT_H */

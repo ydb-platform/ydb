@@ -68,6 +68,8 @@ struct aws_auth_http_system_vtable {
     aws_http_stream_release_fn *aws_http_stream_release;
 
     aws_http_connection_close_fn *aws_http_connection_close;
+
+    int (*aws_high_res_clock_get_ticks)(uint64_t *timestamp);
 };
 
 enum aws_parse_credentials_expiration_format {

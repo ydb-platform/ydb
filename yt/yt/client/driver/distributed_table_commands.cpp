@@ -8,7 +8,6 @@
 #include <yt/yt/client/formats/config.h>
 #include <yt/yt/client/formats/parser.h>
 
-#include <yt/yt/client/signature/generator.h>
 #include <yt/yt/client/signature/signature.h>
 #include <yt/yt/client/signature/validator.h>
 
@@ -53,14 +52,8 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = AttachTransaction(context, /*required*/ false);
 
-    auto signatureGenerator = context->GetDriver()->GetSignatureGenerator();
     auto sessionAndCookies = WaitFor(context->GetClient()->StartDistributedWriteSession(Path, Options))
         .ValueOrThrow();
-
-    signatureGenerator->Resign(sessionAndCookies.Session.Underlying());
-    for (const auto& cookie : sessionAndCookies.Cookies) {
-        signatureGenerator->Resign(cookie.Underlying());
-    }
 
     ProduceOutput(context, [sessionAndCookies = std::move(sessionAndCookies)] (IYsonConsumer* consumer) {
         Serialize(sessionAndCookies, consumer);
@@ -169,7 +162,6 @@ void TWriteTableFragmentCommand::DoExecute(ICommandContextPtr context)
         .ThrowOnError();
 
     auto signedWriteResult = tableWriter->GetWriteFragmentResult();
-    context->GetDriver()->GetSignatureGenerator()->Resign(signedWriteResult.Underlying());
 
     ProduceOutput(context, [result = std::move(signedWriteResult)] (IYsonConsumer* consumer) {
         Serialize(

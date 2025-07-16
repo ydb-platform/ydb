@@ -1,6 +1,8 @@
 #include "util.h"
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 
 namespace NYdb::NDump {
 
@@ -21,6 +23,29 @@ TStatus DescribeTable(TTableClient& tableClient, const TString& path, TMaybe<TTa
     };
 
     return tableClient.RetryOperationSync(func, TRetryOperationSettings().Idempotent(true));
+}
+
+TStatus DescribeExternalDataSource(TTableClient& client, const TString& path, Ydb::Table::DescribeExternalDataSourceResult& out) {
+    auto status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
+        if (result.IsSuccess()) {
+            out = TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());
+        }
+        return result;
+    });
+    return status;
+}
+
+TStatus DescribeReplication(NReplication::TReplicationClient& client, const TString& path, TMaybe<NReplication::TReplicationDescription>& out) {
+    out.Clear();
+
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeReplication(path).ExtractValueSync();
+    });
+    if (status.IsSuccess()) {
+        out = status.GetReplicationDescription();
+    }
+    return status;
 }
 
 TDescribePathResult DescribePath(TSchemeClient& schemeClient, const TString& path, const TDescribePathSettings& settings) {

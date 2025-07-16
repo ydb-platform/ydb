@@ -21,6 +21,7 @@ public:
         : TabletId(tabletId)
         , WriteController(writeController)
         , Deadline(deadline) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "actor_created")("tablet_id", tabletId)("debug", writeController->DebugString());
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {

@@ -47,6 +47,10 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Проверяет наличие подстроки в строке.
 
+* `String::AsciiContainsIgnoreCase(string:String?, substring:String) -> Bool`
+* `String::AsciiEqualsIgnoreCase(left:String?, right:String) -> Bool`
+  Проверяют наличие подстроки или полное равенство строк без учета регистра символов - добавлены в версии [2025.02](../../changelog/2025.02.md#string-module)
+
 * `String::Find(string:String{Flags:AutoMap}, String, [Uint64?]) -> Int64` - Устаревшая: используйте встроенную функцию [Find](../../builtins/basic.md#find)
 * `String::ReverseFind(string:String{Flags:AutoMap}, String, [Uint64?]) -> Int64` - Устаревшая: используйте встроенную функцию [RFind](../../builtins/basic.md#rfind)
 * `String::Substring(string:String{Flags:AutoMap}, [Uint64?, Uint64?]) -> String` - Устаревшая: используйте встроенную функцию [Substring](../../builtins/basic.md#substring)
@@ -58,10 +62,12 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Устаревшие функции, к использованию не рекомендуются.
 
-* `String::HasPrefixIgnoreCase(string:String?, prefix:String) -> Bool`
-* `String::StartsWithIgnoreCase(string:String?, prefix:String) -> Bool`
-* `String::HasSuffixIgnoreCase(string:String?, suffix:String) -> Bool`
-* `String::EndsWithIgnoreCase(string:String?, suffix:String) -> Bool`
+* `String::AsciiStartsWithIgnoreCase(string:String?, prefix:String) -> Bool`
+* `String::AsciiEndsWithIgnoreCase(string:String?, suffix:String) -> Bool`
+* `String::HasPrefixIgnoreCase(string:String?, prefix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::StartsWithIgnoreCase(string:String?, prefix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::HasSuffixIgnoreCase(string:String?, suffix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::EndsWithIgnoreCase(string:String?, suffix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
 
   Проверяют наличие префикса или суффикса в строке без учёта региста символов.
 
@@ -109,6 +115,12 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 * `String::RemoveLast(input:String{Flags:AutoMap}, symbols:String) -> String`
 
   Удаляют все/первое/последнее вхождения(е) символа в наборе `symbols` из `input`. Второй аргумент интерпретируется как неупорядоченный набор символов для удаления.
+
+* `String::ReverseBytes(input:String{Flags:AutoMap}) -> String` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+  Разворачивает строку, рассматривая ее как байтовую последовательность.
+
+* `String::ReverseBits(input:String{Flags:AutoMap}) -> String` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+  Разворачивает строку, рассматривая ее как битовую последовательность.
 
 * `String::IsAscii(string:String{Flags:AutoMap}) -> Bool`
 

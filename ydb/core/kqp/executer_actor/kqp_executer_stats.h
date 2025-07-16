@@ -52,7 +52,15 @@ struct TPartitionedStats : public TTimeSeriesStats {
 
     void ResizeByTasks(ui32 taskCount);
     void ResizeByParts(ui32 partCount, ui32 taskCount);
-    void SetNonZero(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+    void SetNonZeroAggSum(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+    void SetNonZeroAggMin(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+    void SetNonZeroAggMax(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+};
+
+enum EPartitionedAggKind {
+    PartitionedAggSum,
+    PartitionedAggMin,
+    PartitionedAggMax,
 };
 
 struct TTimeMultiSeriesStats {
@@ -60,7 +68,7 @@ struct TTimeMultiSeriesStats {
     ui32 TaskCount = 0;
     ui32 PartCount = 0;
 
-    void SetNonZero(TPartitionedStats& stats, ui32 taskIndex, const TString& key, ui64 value, bool recordTimeSeries);
+    void SetNonZero(TPartitionedStats& stats, ui32 taskIndex, const TString& key, ui64 value, bool recordTimeSeries, EPartitionedAggKind aggKind);
 };
 
 struct TExternalStats : public TTimeMultiSeriesStats {
@@ -68,6 +76,9 @@ struct TExternalStats : public TTimeMultiSeriesStats {
     TPartitionedStats ExternalBytes;
     TPartitionedStats FirstMessageMs;
     TPartitionedStats LastMessageMs;
+    TPartitionedStats WaitOutputTimeUs;
+    TPartitionedStats Finished;
+    ui32 PartitionCount = 0;
 
     void Resize(ui32 taskCount);
     void SetHistorySampleCount(ui32 historySampleCount);
@@ -219,6 +230,7 @@ struct TStageExecutionStats {
     TMinStats CurrentWaitInputTimeUs;
     TMinStats CurrentWaitOutputTimeUs;
     ui64 UpdateTimeMs = 0;
+    ui64 MaxFinishTimeMs = 0;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;
@@ -261,13 +273,14 @@ struct TStageExecutionStats {
 };
 
 struct TExternalPartitionStat {
-    ui64 ExternalRows;
-    ui64 ExternalBytes;
-    ui64 FirstMessageMs;
-    ui64 LastMessageMs;
+    ui64 ExternalRows = 0;
+    ui64 ExternalBytes = 0;
+    ui64 FirstMessageMs = 0;
+    ui64 LastMessageMs = 0;
+    bool Finished = false;
     TExternalPartitionStat() = default;
-    TExternalPartitionStat(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs)
-    : ExternalRows(externalRows), ExternalBytes(externalBytes), FirstMessageMs(firstMessageMs), LastMessageMs(lastMessageMs)
+    TExternalPartitionStat(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs, bool finished)
+    : ExternalRows(externalRows), ExternalBytes(externalBytes), FirstMessageMs(firstMessageMs), LastMessageMs(lastMessageMs), Finished(finished)
     {}
 };
 

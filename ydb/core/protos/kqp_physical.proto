@@ -10,6 +10,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/protos/sys_view_types.proto";
 
 message TKqpPhyExternalBinding {
 }
@@ -109,6 +110,7 @@ message TKqpPhyTable {
     EKqpPhyTableKind Kind = 2;
     map<uint32, TKqpPhyColumn> Columns = 3;
     repeated TKqpPhyColumnId KeyColumns = 4;
+    optional NKikimrSysView.TSysViewDescription SysViewInfo = 5;
 }
 
 message TKqpPhyParamValue {
@@ -261,6 +263,8 @@ message TKqpPhyCnHashShuffle {
         THashV1 HashV1 = 2;
         TColumnShardHashV1 ColumnShardHashV1 = 3;
     }
+
+    bool UseSpilling = 4;
 }
 
 message TKqpPhyCnBroadcast {
@@ -304,6 +308,7 @@ message TKqpPhyCnStreamLookup {
     bool KeepRowsOrder = 7;
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
+    bool IsTableImmutable = 10;
 }
 
 message TKqpPhyCnSequencer {
@@ -348,6 +353,7 @@ message TKqpReadRangesSource {
 
     repeated string SkipNullKeys = 8;
     uint64 SequentialInFlightShards = 9;
+    bool IsTableImmutable = 10;
 }
 
 message TKqpExternalSource {
@@ -503,6 +509,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTransfer = 51;
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
+        NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
     }
 }
 
@@ -575,4 +582,9 @@ message TKqpPhyQuery {
     string QueryDiagnostics = 10;
 
     repeated TKqpTableInfo ViewInfos = 11;
+
+    optional bool EnableOltpSink = 12;
+    optional bool EnableOlapSink = 13;
+    optional bool EnableHtapTx = 14;
+    optional bool ForceImmediateEffectsExecution = 15;
 }

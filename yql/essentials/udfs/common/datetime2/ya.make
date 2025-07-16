@@ -1,7 +1,7 @@
 YQL_UDF_CONTRIB(datetime2_udf)
     YQL_ABI_VERSION(
         2
-        40
+        43
         0
     )
     SRCS(
@@ -9,10 +9,11 @@ YQL_UDF_CONTRIB(datetime2_udf)
     )
     PEERDIR(
         util/draft
+        library/cpp/type_info/tz
         yql/essentials/public/udf/arrow
+        yql/essentials/public/langver
         yql/essentials/minikql
         yql/essentials/minikql/datetime
-        yql/essentials/public/udf/tz
     )
     END()
 

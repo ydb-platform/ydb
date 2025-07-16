@@ -60,7 +60,7 @@ NProto::Profile TCMallocProfileToProtoProfile(const tcmalloc::Profile& snapshot)
         periodType->set_unit(sampleType->unit());
     }
 
-    profile.set_period(snapshot.Period());
+    profile.set_period(tcmalloc::MallocExtension::GetProfileSamplingInterval());
 
     auto allocatedSizeId = addString("allocated_size");
     auto requestedSizeId = addString("requested_size");

@@ -1,0 +1,13 @@
+diff --git a/tcmalloc/libc_override.h b/tcmalloc/libc_override.h
+index 424e6ee..9674e9b 100644
+--- a/tcmalloc/libc_override.h
++++ b/tcmalloc/libc_override.h
+@@ -174,7 +174,7 @@ void sdallocx(void* ptr, size_t size, int flags) noexcept
+     TCMALLOC_ALIAS(TCMallocInternalSdallocx);
+ void* realloc(void* ptr, size_t size) TCMALLOC_NOTHROW
+     TCMALLOC_ALIAS(TCMallocInternalRealloc);
+-void* reallocarray(void* ptr, size_t n, size_t size) TCMALLOC_NOTHROW
++void* reallocarray(void* ptr, size_t n, size_t size)
+     TCMALLOC_ALIAS(TCMallocInternalReallocArray);
+ void* calloc(size_t n, size_t size) TCMALLOC_NOTHROW
+     TCMALLOC_ALIAS(TCMallocInternalCalloc);

@@ -26,7 +26,7 @@ Y_UNIT_TEST(RequestHeader) {
     value.Write(writable, 1);
 
     TRequestHeaderData result;
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
     result.Read(readable, 1);
 
     UNIT_ASSERT_EQUAL(result.RequestApiKey, 3);
@@ -45,7 +45,7 @@ Y_UNIT_TEST(ResponseHeader) {
     TKafkaWritable writable(sb);
     value.Write(writable, 0);
 
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
     TResponseHeaderData result;
     result.Read(readable, 0);
 
@@ -63,7 +63,7 @@ Y_UNIT_TEST(ApiVersionsRequest) {
     TKafkaWritable writable(sb);
     value.Write(writable, 3);
 
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
     TApiVersionsRequestData result;
     result.Read(readable, 3);
 
@@ -111,7 +111,7 @@ Y_UNIT_TEST(ApiVersionsResponse) {
     TKafkaWritable writable(sb);
     value.Write(writable, 3);
 
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
     TApiVersionsResponseData result;
     result.Read(readable, 3);
 
@@ -167,7 +167,7 @@ Y_UNIT_TEST(ProduceRequest) {
     value.Write(writable, 3);
 
 
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
     TProduceRequestData result;
     result.Read(readable, 3);
 
@@ -196,12 +196,12 @@ void CheckUnsignedVarint(const std::vector<T>& values)  {
         Cerr << ">>>>> Check value=" << v << Endl << Flush;
         TWritableBuf sb(nullptr, BUFFER_SIZE);
         TKafkaWritable writable(sb);
-        TKafkaReadable readable(sb.GetBuffer());
+        TKafkaReadable readable(sb.GetFrontBuffer());
 
         writable.writeUnsignedVarint(v);
 
-        UNIT_ASSERT_EQUAL_C(sb.Size(), NKafka::NPrivate::SizeOfUnsignedVarint<T>(v),
-            TStringBuilder() << "Size mismatch " << sb.Size() << " != " << NKafka::NPrivate::SizeOfUnsignedVarint<T>(v));
+        UNIT_ASSERT_EQUAL_C(sb.GetFrontBuffer().size(), NKafka::NPrivate::SizeOfUnsignedVarint<T>(v),
+            TStringBuilder() << "Size mismatch " << sb.GetFrontBuffer().size() << " != " << NKafka::NPrivate::SizeOfUnsignedVarint<T>(v));
 
 
         T r = readable.readUnsignedVarint<T>();
@@ -223,12 +223,12 @@ void CheckVarint(const std::vector<T>& values) {
         Cerr << ">>>>> Check value=" << v << Endl << Flush;
         TWritableBuf sb(nullptr, BUFFER_SIZE);
         TKafkaWritable writable(sb);
-        TKafkaReadable readable(sb.GetBuffer());
+        TKafkaReadable readable(sb.GetFrontBuffer());
 
         writable.writeVarint(v);
 
-        UNIT_ASSERT_EQUAL_C(sb.Size(), NKafka::NPrivate::SizeOfVarint<T>(v),
-            TStringBuilder() << "Size mismatch " << sb.Size() << " != " << NKafka::NPrivate::SizeOfVarint<T>(v));
+        UNIT_ASSERT_EQUAL_C(sb.GetFrontBuffer().size(), NKafka::NPrivate::SizeOfVarint<T>(v),
+            TStringBuilder() << "Size mismatch " << sb.GetFrontBuffer().size() << " != " << NKafka::NPrivate::SizeOfVarint<T>(v));
 
         T r = readable.readVarint<T>();
 
@@ -248,7 +248,7 @@ template<class T>
 void CheckVarint_WrongBytes(std::vector<ui8> bytes) {
     TWritableBuf sb(nullptr, BUFFER_SIZE);
     TKafkaWritable writable(sb);
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
 
     writable.write((char*)bytes.data(), bytes.size());
 
@@ -273,7 +273,7 @@ Y_UNIT_TEST(UnsignedVarint32_Deserialize) {
 
     TWritableBuf sb(nullptr, BUFFER_SIZE);
     TKafkaWritable writable(sb);
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
 
     writable.write((char*)bytes.data(), bytes.size());
 
@@ -287,7 +287,7 @@ Y_UNIT_TEST(UnsignedVarint32_Deserialize) {
                                                     \
     TWritableBuf sb(nullptr, BUFFER_SIZE);          \
     TKafkaWritable writable(sb);                    \
-    TKafkaReadable readable(sb.GetBuffer());        \
+    TKafkaReadable readable(sb.GetFrontBuffer());   \
                                                     \
     Y_UNUSED(readable);                             \
     Y_UNUSED(result);                               \
@@ -317,7 +317,7 @@ Y_UNIT_TEST(TKafkaInt8_NotPresentVersion) {
     SIMPLE_HEAD(TKafkaInt8, 37);
 
     NKafka::NPrivate::Write<Meta_TKafkaInt8>(collector, writable, 0, value);
-    UNIT_ASSERT_EQUAL(sb.Size(), (size_t)0); // For version 0 value is not serializable. Stream must be empty
+    UNIT_ASSERT_EQUAL(sb.GetFrontBuffer().size(), (size_t)0); // For version 0 value is not serializable. Stream must be empty
     UNIT_ASSERT_EQUAL(collector.NumTaggedFields, 0u);
 
     NKafka::NPrivate::Read<Meta_TKafkaInt8>(readable, 0, result);
@@ -583,7 +583,7 @@ Y_UNIT_TEST(TRequestHeaderData_reference) {
 
     TWritableBuf sb(nullptr, BUFFER_SIZE);
     TKafkaWritable writable(sb);
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
 
     TRequestHeaderData value;
     value.RequestApiKey = 3;
@@ -593,9 +593,9 @@ Y_UNIT_TEST(TRequestHeaderData_reference) {
 
     value.Write(writable, 2);
 
-    UNIT_ASSERT_EQUAL(sb.Size(), sizeof(reference));
+    UNIT_ASSERT_EQUAL(sb.GetFrontBuffer().size(), sizeof(reference));
     for(size_t i = 0; i < sizeof(reference); ++i) {
-        UNIT_ASSERT_EQUAL(*(sb.Data() + i), reference[i]);
+        UNIT_ASSERT_EQUAL(*(sb.GetFrontBuffer().data() + i), reference[i]);
     }
 
 
@@ -637,9 +637,9 @@ Y_UNIT_TEST(TKafkaFloat64_PresentVersion_NotTaggedVersion) {
     UNIT_ASSERT_EQUAL(collector.NumTaggedFields, 0u);
     UNIT_ASSERT_EQUAL(result, value); // Must read same that write
 
-    UNIT_ASSERT_EQUAL(sb.Size(), sizeof(reference));
+    UNIT_ASSERT_EQUAL(sb.GetFrontBuffer().size(), sizeof(reference));
     for(size_t i = 0; i < sizeof(reference); ++i) {
-        UNIT_ASSERT_EQUAL(*(sb.Data() + i), (char)reference[i]);
+        UNIT_ASSERT_EQUAL(*(sb.GetFrontBuffer().data() + i), (char)reference[i]);
     }
 }
 
@@ -650,7 +650,7 @@ Y_UNIT_TEST(RequestHeader_reference) {
     TWritableBuf sb(nullptr, BUFFER_SIZE);
     sb.write((char*)reference, sizeof(reference));
 
-    TKafkaReadable readable(sb.GetBuffer());
+    TKafkaReadable readable(sb.GetFrontBuffer());
     TRequestHeaderData result;
     result.Read(readable, 1);
 
@@ -743,9 +743,9 @@ Y_UNIT_TEST(ProduceRequestData) {
     header.Write(writable, 2);
     result.Write(writable, 9);
 
-    UNIT_ASSERT_EQUAL(sb.Size(), sizeof(reference));
+    UNIT_ASSERT_EQUAL(sb.GetFrontBuffer().size(), sizeof(reference));
     for(size_t i = 0; i < sizeof(reference); ++i) {
-        UNIT_ASSERT_EQUAL(*(sb.Data() + i), (char)reference[i]);
+        UNIT_ASSERT_EQUAL(*(sb.GetFrontBuffer().data() + i), (char)reference[i]);
     }
 }
 

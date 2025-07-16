@@ -32,6 +32,7 @@
 #include <utility>
 
 #include <functional>
+#include <type_traits>
 
 const TDuration DEFAULT_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(
         NValgrind::PlainOrUnderValgrind(TDuration::Seconds(60), TDuration::Seconds(120)),
@@ -74,6 +75,11 @@ namespace NActors {
             , Hint(hint)
         {
         }
+
+        TEventMailboxId(const TActorId& actorId)
+            : NodeId(actorId.NodeId())
+            , Hint(actorId.Hint())
+        {}
 
         bool operator<(const TEventMailboxId& other) const {
             return (NodeId < other.NodeId) || (NodeId == other.NodeId) && (Hint < other.Hint);
@@ -629,6 +635,33 @@ namespace NActors {
             ICCommonSetupper = std::move(icCommonSetupper);
         }
 
+    public:
+        void SimulateSleep(TDuration duration);
+
+        template<class TCondition>
+        inline void WaitFor(IOutputStream& log, const TString& description, const TCondition& condition, TDuration simTimeout = TDuration::Max()) {
+            if (!condition()) {
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                // Quirk: non-empty FinalEvents enables full simulation
+                options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+
+                log << "... waiting for " << description << Endl;
+                this->DispatchEvents(options, simTimeout);
+
+                Y_ABORT_UNLESS(condition(), "Timeout while waiting for %s", description.c_str());
+                log << "... waiting for " << description << " (done)" << Endl;
+            }
+        }
+
+        template<class TCondition>
+        inline void WaitFor(const TString& description, const TCondition& condition, TDuration simTimeout = TDuration::Max()) {
+            // Using Cerr by default for compatibility with existing tests
+            WaitFor(Cerr, description, condition, simTimeout);
+        }
+
     protected:
         struct TNodeDataBase;
         TNodeDataBase* GetRawNode(ui32 node) const {
@@ -794,6 +827,7 @@ namespace NActors {
         TDispatchContext* CurrentDispatchContext;
         TVector<ui64> TxAllocatorTabletIds;
         bool AllowBreakOnStopCondition = true;
+        TActorId SleepEdgeActor;
         static ui32 NextNodeId;
     };
 
@@ -856,12 +890,13 @@ namespace NActors {
 
     struct IReplyChecker {
         virtual ~IReplyChecker() {}
-        virtual void OnRequest(IEventHandle *request) = 0;
+        virtual bool OnRequest(IEventHandle *request) = 0;
         virtual bool IsWaitingForMoreResponses(IEventHandle *response) = 0;
     };
 
     struct TNoneReplyChecker : IReplyChecker {
-        void OnRequest(IEventHandle*) override {
+        bool OnRequest(IEventHandle*) override {
+            return false;
         }
 
         bool IsWaitingForMoreResponses(IEventHandle*) override {

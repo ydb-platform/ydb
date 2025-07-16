@@ -13,5 +13,8 @@ boost_predef = NixSourceProject(
     copy_sources=[
         "include/boost/",
     ],
+    disable_includes=[
+        "cygwin/version.h",
+    ],
     post_install=post_install,
 )

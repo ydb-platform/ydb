@@ -31,9 +31,6 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
 
 void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TResult& output);
 
-void ConvertYdbParamsToMiniKQLParams(const ::google::protobuf::Map<TString, Ydb::TypedValue>& input,
-    NKikimrMiniKQL::TParams& output);
-
 void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
     google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions> *permissions);
 

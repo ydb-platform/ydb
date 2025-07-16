@@ -1,11 +1,10 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard__op_traits.h"
-
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -76,7 +75,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
     {
         TString msg = "invalid table name: ";
-        if(!baseTablePath.IsValidLeafName(msg)) {
+        if(!baseTablePath.IsValidLeafName(context.UserToken.Get(), msg)) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
         }
     }
@@ -138,7 +137,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         TPath indexPath = baseTablePath.Child(indexName);
         {
             TString msg = "invalid table index name: ";
-            if (!indexPath.IsValidLeafName(msg)) {
+            if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
             }
         }
@@ -165,7 +164,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         TPath sequencePath = baseTablePath.Child(sequenceName);
         {
             TString msg = "invalid sequence name: ";
-            if (!sequencePath.IsValidLeafName(msg)) {
+            if (!sequencePath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
             }
         }
@@ -294,11 +293,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(2);
                 }
             }
-            const THashSet<TString> indexKeyColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
+            const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
             result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(indexKeyColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc)));
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
             if (prefixVectorIndex) {
-                result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(indexKeyColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc)));
+                const THashSet<TString> prefixColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
+                result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc)));
             }
         } else {
             NKikimrSchemeOp::TTableDescription userIndexDesc;

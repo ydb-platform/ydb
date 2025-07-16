@@ -115,8 +115,7 @@
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "Path": "/local/base_explain_script_script/ScriptingTest",
-                                                                "ReadColumns": null,
-                                                                "ReadRanges": [
+                                                                "ReadColumns": [
                                                                     "Key (-\u221e, +\u221e)"
                                                                 ],
                                                                 "ReadRangesPointPrefixLen": "0",
@@ -240,8 +239,7 @@
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/base_explain_script_script/ScriptingTest",
-                                                        "ReadColumns": null,
-                                                        "ReadRanges": [
+                                                        "ReadColumns": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "Scan": "Parallel",
@@ -349,8 +347,7 @@
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "Path": "/local/base_explain_script_script/ScriptingTest",
-                                                                "ReadColumns": null,
-                                                                "ReadRanges": [
+                                                                "ReadColumns": [
                                                                     "Key (-\u221e, +\u221e)"
                                                                 ],
                                                                 "ReadRangesPointPrefixLen": "0",
@@ -474,8 +471,7 @@
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/base_explain_script_script/ScriptingTest",
-                                                        "ReadColumns": null,
-                                                        "ReadRanges": [
+                                                        "ReadColumns": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "Scan": "Parallel",
@@ -520,29 +516,31 @@
                 "Plans": [
                     {
                         "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Replace",
+                                "Path": "/local/base_explain_script_script/ScriptingTest",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_explain_script_script/ScriptingTest"
+                            }
+                        ],
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [],
                                         "Iterator": "[{Key: 3,Value: \"Three\"},{Key: 4,Value: \"Four\"}]",
                                         "Name": "Iterator"
-                                    },
-                                    {
-                                        "Inputs": [],
-                                        "Name": "Replace",
-                                        "Path": "/local/base_explain_script_script/ScriptingTest",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_explain_script_script/ScriptingTest"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_explain_script_script/ScriptingTest"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_explain_script_script/ScriptingTest"
                         ]
                     }
                 ],
@@ -572,29 +570,31 @@
                 "Plans": [
                     {
                         "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Replace",
+                                "Path": "/local/base_explain_script_script/ScriptingTest",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_explain_script_script/ScriptingTest"
+                            }
+                        ],
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [],
                                         "Iterator": "[{Key: 1,Value: \"One\"},{Key: 2,Value: \"Two\"}]",
                                         "Name": "Iterator"
-                                    },
-                                    {
-                                        "Inputs": [],
-                                        "Name": "Replace",
-                                        "Path": "/local/base_explain_script_script/ScriptingTest",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_explain_script_script/ScriptingTest"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_explain_script_script/ScriptingTest"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_explain_script_script/ScriptingTest"
                         ]
                     }
                 ],

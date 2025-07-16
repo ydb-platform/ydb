@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util_fmt_abort.h"
+#include "flat_page_iface.h"
 
 #include <ydb/core/base/logoblob.h>
 #include <ydb/library/actors/util/shared_data.h>
@@ -8,8 +9,10 @@
 namespace NKikimr {
 namespace NPageCollection {
 
+    using TPageId = NTable::NPage::TPageId;
+
     struct TLargeGlobId {
-        /* ... is a piece of some data up to 4GiB placed on a continous
+        /* ... is a piece of some data up to 4GiB placed on a continuous
             series of TLogoBlobs which IDs are differs only in cookie and
             have the single upper chunk bytes limit. All blobs of span have
             the same BS storage group.

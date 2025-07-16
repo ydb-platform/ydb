@@ -1,16 +1,18 @@
 #pragma once
 
-#include <util/generic/string.h>
-#include <util/generic/ptr.h>
-#include <util/generic/set.h>
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__operation_side_effects.h"
+#include "schemeshard_tx_infly.h"
+#include "schemeshard_types.h"
+
+#include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
 
-#include "schemeshard_tx_infly.h"
-#include "schemeshard_types.h"
-#include "schemeshard__operation_side_effects.h"
-#include "schemeshard__operation_memory_changes.h"
-#include "schemeshard__operation_db_changes.h"
+#include <util/generic/ptr.h>
+#include <util/generic/set.h>
+#include <util/generic/string.h>
 
 
 #define SCHEMESHARD_INCOMING_EVENTS(action) \
@@ -102,6 +104,7 @@ private:
     NTabletFlatExecutor::TTransactionContext& Txc;
     bool ProtectDB = false;
     bool DirectAccessGranted = false;
+    NKikimr::NCompat::TSourceLocation FirstGetDbLocation = NKikimr::NCompat::TSourceLocation::current();  // Track where GetDB was first called
 
 public:
     TOperationContext(
@@ -124,11 +127,17 @@ public:
         : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
     {}
 
-    NTable::TDatabase& GetDB() {
+    NTable::TDatabase& GetDB(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current()) {
         Y_VERIFY_S(ProtectDB == false,
                  "there is attempt to write to the DB when it is protected,"
                  " in that case all writes should be done over TStorageChanges"
                  " in order to maintain revert the changes");
+
+        // Store the location of first GetDB call for better error reporting
+        if (!DirectAccessGranted) {
+            FirstGetDbLocation = location;
+        }
+
         DirectAccessGranted = true;
         return GetTxc().DB;
     }
@@ -139,6 +148,10 @@ public:
 
     bool IsUndoChangesSafe() const {
         return !DirectAccessGranted;
+    }
+
+    NKikimr::NCompat::TSourceLocation GetFirstGetDbLocation() const {
+        return FirstGetDbLocation;
     }
 
     class TDbGuard {
@@ -359,8 +372,8 @@ ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, co
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
-    const THashSet<TString>& localSequences = { });
-ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state);
+    const THashSet<TString>& localSequences = { }, TMaybe<TPathElement::EPathState> targetState = {});
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state);
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx);
@@ -435,6 +448,12 @@ ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransactio
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot);
 ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot);
+// Rotate
+TVector<ISubOperation::TPtr> CreateRotateCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateRotateCdcStreamImpl(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateRotateCdcStreamImpl(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateRotateCdcStreamAtTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateRotateCdcStreamAtTable(TOperationId id, TTxState::ETxState state);
 
 /// Continuous Backup
 // Create
@@ -672,9 +691,24 @@ ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransac
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
 // Restore
 TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, TTxState::ETxState state);
+
+// ChangePathState
+TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
 
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+
+// SysView
+// Create
+ISubOperation::TPtr CreateNewSysView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewSysView(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropSysView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropSysView(TOperationId id, TTxState::ETxState state);
 
 }
 }

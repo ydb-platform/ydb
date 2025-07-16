@@ -193,7 +193,7 @@ private:
         reading->SetIsBackgroundProcess(false);
         for (auto&& i : ColumnChunks) {
             if (!!i.GetHeaderRange()) {
-                const TString readBlob = blobs.Extract(*StorageId, *i.GetHeaderRange());
+                const TString readBlob = blobs.ExtractVerified(*StorageId, *i.GetHeaderRange());
                 const TString blob = i.GetSavedBlob() ? (i.GetSavedBlob() + readBlob) : readBlob;
                 const auto fullHeader = NArrow::NAccessor::NSubColumns::TConstructor::GetFullHeaderSize(blob);
                 if (!fullHeader.IsFail() && *fullHeader <= blob.size()) {
@@ -215,11 +215,11 @@ private:
                 }
             } else {
                 if (!!i.GetOthersReadData()) {
-                    i.SetOthersBlob(blobs.Extract(*StorageId, *i.GetOthersReadData()));
+                    i.SetOthersBlob(blobs.ExtractVerified(*StorageId, *i.GetOthersReadData()));
                 }
                 for (auto&& [subColName, chunkData] : i.MutableChunks()) {
                     if (!!chunkData.GetBlobRangeOptional()) {
-                        chunkData.SetBlobData(blobs.Extract(*StorageId, *chunkData.GetBlobRangeOptional()));
+                        chunkData.SetBlobData(blobs.ExtractVerified(*StorageId, *chunkData.GetBlobRangeOptional()));
                     }
                 }
             }
@@ -237,7 +237,7 @@ private:
         reading->SetIsBackgroundProcess(false);
         auto filterPtr = source->GetStageData().GetAppliedFilter();
         const NArrow::TColumnFilter& cFilter = filterPtr ? *filterPtr : NArrow::TColumnFilter::BuildAllowFilter();
-        auto itFilter = cFilter.GetIterator(false, source->GetRecordsCount());
+        auto itFilter = cFilter.GetBegin(false, source->GetRecordsCount());
         bool itFinished = false;
 
         auto accessor = context.GetAccessors().GetAccessorOptional(GetEntityId());

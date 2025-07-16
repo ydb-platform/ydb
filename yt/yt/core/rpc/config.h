@@ -5,6 +5,7 @@
 #include <yt/yt/core/compression/public.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
+#include <yt/yt/core/ytree/polymorphic_yson_struct.h>
 
 #include <yt/yt/core/concurrency/config.h>
 
@@ -150,6 +151,7 @@ struct TMethodConfig
     std::optional<int> ConcurrencyLimit;
     std::optional<i64> ConcurrencyByteLimit;
     std::optional<NLogging::ELogLevel> LogLevel;
+    std::optional<NLogging::ELogLevel> ErrorLogLevel;
     std::optional<TDuration> LoggingSuppressionTimeout;
     NConcurrency::TThroughputThrottlerConfigPtr RequestBytesThrottler;
     NConcurrency::TThroughputThrottlerConfigPtr RequestWeightThrottler;
@@ -421,8 +423,10 @@ struct TDispatcherConfig
     int HeavyPoolSize;
     int CompressionPoolSize;
     TDuration HeavyPoolPollingPeriod;
+    TDuration DefaultRequestTimeout;
 
     bool AlertOnMissingRequestInfo;
+    bool AlertOnUnsetRequestTimeout;
 
     bool SendTracingBaggage;
 
@@ -443,8 +447,10 @@ struct TDispatcherDynamicConfig
     std::optional<int> HeavyPoolSize;
     std::optional<int> CompressionPoolSize;
     std::optional<TDuration> HeavyPoolPollingPeriod;
+    std::optional<TDuration> DefaultRequestTimeout;
 
     std::optional<bool> AlertOnMissingRequestInfo;
+    std::optional<bool> AlertOnUnsetRequestTimeout;
 
     std::optional<bool> SendTracingBaggage;
 
@@ -454,6 +460,108 @@ struct TDispatcherDynamicConfig
 };
 
 DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TServiceMethod
+    : public NYTree::TYsonStructLite
+{
+    std::string Service;
+    std::string Method;
+
+    REGISTER_YSON_STRUCT_LITE(TServiceMethod);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TServiceMethodConfig
+    : public NYTree::TYsonStruct
+{
+    std::string Service;
+    std::string Method;
+
+    int MaxWindow;
+    double WaitingTimeoutFraction;
+
+    REGISTER_YSON_STRUCT(TServiceMethodConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TServiceMethodConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadTrackerConfigBase
+    : public NYTree::TYsonStruct
+{
+    std::vector<TServiceMethod> MethodsToThrottle;
+
+    REGISTER_YSON_STRUCT(TOverloadTrackerConfigBase);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadTrackerMeanWaitTimeConfig
+    : public TOverloadTrackerConfigBase
+{
+    TDuration MeanWaitTimeThreshold;
+
+    REGISTER_YSON_STRUCT(TOverloadTrackerMeanWaitTimeConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TOverloadTrackerMeanWaitTimeConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadTrackerBacklogQueueFillFractionConfig
+    : public TOverloadTrackerConfigBase
+{
+    double BacklogQueueFillFractionThreshold;
+
+    REGISTER_YSON_STRUCT(TOverloadTrackerBacklogQueueFillFractionConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TOverloadTrackerBacklogQueueFillFractionConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(EOverloadTrackerConfigType,
+    (Base)
+    (MeanWaitTime)
+    (BacklogQueueFillFraction)
+);
+
+DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(OverloadTrackerConfig, EOverloadTrackerConfigType, MeanWaitTime,
+    ((Base)                     (TOverloadTrackerConfigBase))
+    ((MeanWaitTime)             (TOverloadTrackerMeanWaitTimeConfig))
+    ((BacklogQueueFillFraction) (TOverloadTrackerBacklogQueueFillFractionConfig))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadControllerConfig
+    : public NYTree::TYsonStruct
+{
+    bool Enabled;
+    THashMap<std::string, TOverloadTrackerConfig> Trackers;
+    std::vector<TServiceMethodConfigPtr> Methods;
+    TDuration LoadAdjustingPeriod;
+
+    REGISTER_YSON_STRUCT(TOverloadControllerConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TOverloadControllerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -10,6 +10,7 @@
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -152,13 +153,14 @@ TStorageProxy::TStorageProxy(
 }
 
 void TStorageProxy::Bootstrap() {
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CredentialsProviderFactory, CreateEntityIdGenerator(CommonConfig.GetIdsPrefix()), YqSharedResources);
+    auto ydbConnectionPtr = NewYdbConnection(Config.GetStorage(), CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver);
+    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(CommonConfig.GetIdsPrefix()), ydbConnectionPtr);
     auto issues = CheckpointStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
     }
 
-    StateStorage = NewYdbStateStorage(Config, CredentialsProviderFactory, YqSharedResources);
+    StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
     issues = StateStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());

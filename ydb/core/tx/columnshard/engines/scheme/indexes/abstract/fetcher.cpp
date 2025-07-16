@@ -13,7 +13,7 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
                 StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         } else {
             TChunkOriginalData originalData(
-                context.GetSource()->GetStageData().GetPortionAccessor().GetPortionInfo().RestoreBlobRange(i->GetBlobRangeVerified()));
+                context.GetSource()->GetStageData().GetPortionAccessor().RestoreBlobRange(i->GetBlobRangeVerified()));
             Fetching.emplace_back(TIndexChunkFetching(
                 StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         }
@@ -23,6 +23,7 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
         auto rangesLocal = i.GetResult().GetRangesToFetch();
         ranges.insert(ranges.end(), rangesLocal.begin(), rangesLocal.end());
     }
+    ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
     if (ranges.size()) {
         std::shared_ptr<IBlobsReadingAction> reading = blobsAction.GetReading(StorageId);
         for (auto&& i : ranges) {
@@ -38,11 +39,15 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
     }
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
     std::vector<TBlobRange> ranges;
-    for (auto&& r : Fetching) {
-        r.FetchFrom(IndexMeta, StorageId, blobs);
-        auto rangesLocal = r.GetResult().GetRangesToFetch();
-        ranges.insert(ranges.end(), rangesLocal.begin(), rangesLocal.end());
+    {
+        auto g = blobs.BuildGuard();
+        for (auto&& r : Fetching) {
+            r.FetchFrom(IndexMeta, StorageId, g);
+            auto rangesLocal = r.GetResult().GetRangesToFetch();
+            ranges.insert(ranges.end(), rangesLocal.begin(), rangesLocal.end());
+        }
     }
+    ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
     if (ranges.size()) {
         auto reading = blobsAction.GetReading(StorageId);
         for (auto&& i : ranges) {

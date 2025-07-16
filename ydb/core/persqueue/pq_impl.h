@@ -94,6 +94,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
+    bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
+    TString RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const;
 
     void HandleDie(const TActorContext& ctx) override;
 
@@ -205,6 +207,8 @@ private:
         TMaybe<ui64> TxId;
         NKikimrLongTxService::TEvLockStatus::EStatus LongTxSubscriptionStatus = NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED;
         bool Deleting = false;
+        bool KafkaTransaction = false;
+        TInstant CreatedAt;
     };
 
     THashMap<TWriteId, TTxWriteInfo> TxWrites;
@@ -359,11 +363,22 @@ private:
     void EndWriteTabletState(const NKikimrClient::TResponse& resp,
                              const TActorContext& ctx);
 
+    void SendProposeTransactionResult(const TActorId& target,
+                                      ui64 txId,
+                                      NKikimrPQ::TEvProposeTransactionResult::EStatus status,
+                                      NKikimrPQ::TError::EKind kind,
+                                      const TString& reason,
+                                      const TActorContext& ctx);
     void SendProposeTransactionAbort(const TActorId& target,
                                      ui64 txId,
                                      NKikimrPQ::TError::EKind kind,
                                      const TString& reason,
                                      const TActorContext& ctx);
+    void SendProposeTransactionOverloaded(const TActorId& target,
+                                          ui64 txId,
+                                          NKikimrPQ::TError::EKind kind,
+                                          const TString& reason,
+                                          const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx);
     void HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> event,
@@ -407,7 +422,7 @@ private:
 
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,
-                    std::unique_ptr<IEventBase> event,
+                    std::unique_ptr<TEvTxProcessing::TEvReadSet> event,
                     const TActorContext& ctx);
 
     void InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
@@ -441,6 +456,7 @@ private:
     TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
 
     void DeleteExpiredTransactions(const TActorContext& ctx);
+    void ScheduleDeleteExpiredKafkaTransactions();
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     void SetTxCounters();

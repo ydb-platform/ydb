@@ -74,7 +74,7 @@ private:
     THashMap<ui32, std::shared_ptr<IKernelFetchLogic>> DataFetchers;
     TFetchingScriptCursor Cursor;
     NBlobOperations::NRead::TCompositeReadBlobs ProvidedBlobs;
-    const NColumnShard::TCounterGuard Guard;
+    NColumnShard::TCounterGuard Guard;
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
@@ -82,7 +82,10 @@ private:
             "status_code", status.GetStatus())("storage_id", storageId);
         NActors::TActorContext::AsActorContext().Send(Source->GetContext()->GetCommonContext()->GetScanActorId(),
             std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for columns: " << range.ToString() << ", error: " << status.GetErrorMessage() << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus()))));
+                TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for columns: " << range.ToString()
+                                                         << ", error: " << status.GetErrorMessage()
+                                                         << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())),
+                std::move(Guard)));
         return false;
     }
 
@@ -105,7 +108,7 @@ private:
     const std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Step;
     const std::shared_ptr<TSpecialReadContext> Context;
-    const NColumnShard::TCounterGuard Guard;
+    NColumnShard::TCounterGuard Guard;
 
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override;

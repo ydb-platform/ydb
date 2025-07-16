@@ -49,7 +49,7 @@ bool BuildParameterValuesAsNodes(const THashMap<TStringBuf, const TTypeAnnotatio
             continue;
         }
 
-        if (!parameterItem && p.second->GetKind() != ETypeAnnotationKind::Optional && p.second->GetKind() != ETypeAnnotationKind::Null) {
+        if (!parameterItem && !p.second->IsOptionalOrNull()) {
             ctx.AddError(TIssue({}, TStringBuilder() << "Missing value for parameter: " << name));
             isOk = false;
             continue;

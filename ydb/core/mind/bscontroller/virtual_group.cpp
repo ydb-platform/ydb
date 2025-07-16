@@ -70,7 +70,7 @@ namespace NKikimr::NBsController {
         auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), 0u, 0u,
             TBlobStorageGroupType::ErasureNone, 0u, NKikimrBlobStorage::TVDiskKind::Default,
             pool.EncryptionMode.GetOrElse(TBlobStorageGroupInfo::EEM_NONE), TBlobStorageGroupInfo::ELCP_INITIAL,
-            TString(), TString(), 0u, 0u, false, false, storagePoolId, 0u, 0u, 0u);
+            TString(), TString(), 0u, 0u, false, false, 0u, std::nullopt, storagePoolId, 0u, 0u, 0u);
 
         // bind group to storage pool
         ++pool.NumGroups;
@@ -524,7 +524,7 @@ namespace NKikimr::NBsController {
 
                 auto descr = item.DomainDescription;
 
-                Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group, TConfigState&) {
+                Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=, this](TGroupInfo& group, TConfigState&) {
                     auto& config = GetConfig(&group);
                     if (hiveId != RootHiveId) {
                         config.SetTenantHiveId(hiveId);

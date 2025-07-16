@@ -1,16 +1,18 @@
 #include "ls_checks.h"
 
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/protos/bind_channel_storage_pool.pb.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+
 #include <ydb/library/login/protos/login.pb.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
-#include <ydb/core/protos/bind_channel_storage_pool.pb.h>
-#include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -479,6 +481,13 @@ void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeBackupCollection);
 }
 
+void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+    const auto& pathDescr = record.GetPathDescription();
+    const auto& selfPath = pathDescr.GetSelf();
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeSysView);
+}
+
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT(record.HasPathDescription());
@@ -788,6 +797,20 @@ TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions) {
     };
 }
 
+TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& domain = record.GetPathDescription().GetDomainDescription();
+        const auto& actual = domain.GetSchemeLimits();
+
+        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+            "scheme limits mismatch, domain with id " << domain.GetDomainKey().GetPathId()
+                << " has limits: " << actual.ShortDebugString().Quote()
+                << ", but expected limits are: " << expected.ShortDebugString().Quote()
+        );
+    };
+}
+
 TCheckFunc FreezeStateEqual(NKikimrSchemeOp::EFreezeState expectedState) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
@@ -944,6 +967,12 @@ TCheckFunc StreamVirtualTimestamps(bool value) {
 TCheckFunc StreamResolvedTimestamps(const TDuration& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetResolvedTimestampsIntervalMs(), value.MilliSeconds());
+    };
+}
+
+TCheckFunc StreamSchemaChanges(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetSchemaChanges(), value);
     };
 }
 
@@ -1465,6 +1494,19 @@ TCheckFunc IncrementalBackup(bool flag) {
         } else {
             UNIT_ASSERT(!attrsMap.contains("__incremental_backup") || attrsMap["__incremental_backup"] == "null");
         }
+    };
+}
+
+TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT(record.HasPathDescription());
+        NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
+
+        UNIT_ASSERT(descr.HasSelf());
+        auto self = descr.GetSelf();
+        UNIT_ASSERT(self.HasCreateFinished());
+        ui32 curPathState = self.GetPathState();
+        UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)pathState);
     };
 }
 

@@ -10,7 +10,7 @@ This library is licensed under the Apache 2.0 License.
 
 ### Building
 
-CMake 3.1+ is required to build.
+CMake 3.9+ is required to build.
 
 `<install-path>` must be an absolute path in the following instructions.
 
@@ -51,3 +51,23 @@ git clone git@github.com:awslabs/aws-c-event-stream.git
 cmake -S aws-c-event-stream -B aws-c-event-stream/build -DCMAKE_INSTALL_PREFIX=<install-path> -DCMAKE_PREFIX_PATH=<install-path>
 cmake --build aws-c-event-stream/build --target install
 ```
+
+## Encoding
+
+Event stream encoding provides bidirectional communication between a client and a server.
+
+Each message consists of two sections: the prelude and the data. The prelude consists of:
+1. The total byte length of the message
+2. The combined byte length of all headers
+
+The data section consists of:
+1. Headers
+2. Payload
+
+Each section ends with a 4-byte big-endian CRC32 checksum. The message checksum is for both the prelude section and the data section.
+
+Total message overhead, including the prelude and both checksums, is 16 bytes.
+
+The following diagram shows the components that make up a message and a header. There are multiple headers per message.
+
+![Encoding Diagram](docs/images/encoding.png)

@@ -158,6 +158,13 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                         meta.TableId = MakeTableId(settings.GetTable());
                         meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+
+                        for (const auto& indexSettings : settings.GetIndexes()) {
+                            meta.IndexMetas.emplace_back();
+                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
+                            meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
+                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                        }
                     }
                 }
             }
@@ -232,85 +239,6 @@ void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTx
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Create result channelId: " << channel.Id
             << " from task: " << originTaskId << " with index: " << outputIdx);
-    }
-}
-
-void BuildMapShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
-    const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc)
-{
-    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
-
-    THashMap<ui64, ui64> shardToTaskMap;
-    for (auto& taskId : stageInfo.Tasks) {
-        auto& task = graph.GetTask(taskId);
-        auto result = shardToTaskMap.insert(std::make_pair(task.Meta.ShardId, taskId));
-        YQL_ENSURE(result.second);
-    }
-
-    for (auto& originTaskId : inputStageInfo.Tasks) {
-        auto& originTask = graph.GetTask(originTaskId);
-
-        auto targetTaskId = shardToTaskMap.FindPtr(originTask.Meta.ShardId);
-        YQL_ENSURE(targetTaskId);
-        auto& targetTask = graph.GetTask(*targetTaskId);
-
-        auto& channel = graph.AddChannel();
-        channel.SrcTask = originTask.Id;
-        channel.SrcOutputIndex = outputIndex;
-        channel.DstTask = targetTask.Id;
-        channel.DstInputIndex = inputIndex;
-        channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
-
-        auto& taskInput = targetTask.Inputs[inputIndex];
-        taskInput.Channels.push_back(channel.Id);
-
-        auto& taskOutput = originTask.Outputs[outputIndex];
-        taskOutput.Type = TTaskOutputType::Map;
-        taskOutput.Channels.push_back(channel.Id);
-
-        logFunc(channel.Id, originTask.Id, targetTask.Id, "MapShard/Map", !channel.InMemory);
-    }
-}
-
-void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
-    const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling,
-    const TChannelLogFunc& logFunc)
-{
-    YQL_ENSURE(stageInfo.Meta.ShardKey);
-    THashMap<ui64, const TKeyDesc::TPartitionInfo*> partitionsMap;
-    for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-        partitionsMap[partition.ShardId] = &partition;
-    }
-
-    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-
-    for (auto& originTaskId : inputStageInfo.Tasks) {
-        auto& originTask = graph.GetTask(originTaskId);
-        auto& taskOutput = originTask.Outputs[outputIndex];
-        taskOutput.Type = TKqpTaskOutputType::ShardRangePartition;
-        taskOutput.KeyColumns = tableInfo->KeyColumns;
-
-        for (auto& targetTaskId : stageInfo.Tasks) {
-            auto& targetTask = graph.GetTask(targetTaskId);
-
-            auto targetPartition = partitionsMap.FindPtr(targetTask.Meta.ShardId);
-            YQL_ENSURE(targetPartition);
-
-            auto& channel = graph.AddChannel();
-            channel.SrcTask = originTask.Id;
-            channel.SrcOutputIndex = outputIndex;
-            channel.DstTask = targetTask.Id;
-            channel.DstInputIndex = inputIndex;
-            channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
-
-            taskOutput.Meta.ShardPartitions.insert(std::make_pair(channel.Id, *targetPartition));
-            taskOutput.Channels.push_back(channel.Id);
-
-            auto& taskInput = targetTask.Inputs[inputIndex];
-            taskInput.Channels.push_back(channel.Id);
-
-            logFunc(channel.Id, originTask.Id, targetTask.Id, "ShuffleShard/ShardRangePartition", !channel.InMemory);
-        }
     }
 }
 
@@ -446,6 +374,11 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     streamLookupTransform.InputType = streamLookup.GetLookupKeysType();
     streamLookupTransform.OutputType = streamLookup.GetResultType();
 
+    if (streamLookup.GetIsTableImmutable()) {
+        settings->SetAllowUseFollowers(true);
+        settings->SetIsTableImmutable(true);
+    }
+
     for (ui32 taskId = 0; taskId < inputStageInfo.Tasks.size(); ++taskId) {
         auto& originTask = graph.GetTask(inputStageInfo.Tasks[taskId]);
         auto& targetTask = graph.GetTask(stageInfo.Tasks[taskId]);
@@ -566,10 +499,11 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                 BuildUnionAllChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
                 break;
             case NKqpProto::TKqpPhyConnection::kHashShuffle: {
-                ui32 hashKind = NHashKind::EUndefined;
+                std::optional<EHashShuffleFuncType> hashKind;
+                auto forceSpilling = input.GetHashShuffle().GetUseSpilling();
                 switch (input.GetHashShuffle().GetHashKindCase()) {
                     case NKqpProto::TKqpPhyCnHashShuffle::kHashV1: {
-                        hashKind = NHashKind::EHashV1;
+                        hashKind = EHashShuffleFuncType::HashV1;
                         break;
                     }
                     case NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1: {
@@ -594,13 +528,15 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                         );
 
                         inputStageInfo.Meta.HashParamsByOutput[outputIdx] = columnShardHashV1Params;
-                        hashKind = NHashKind::EColumnShardHashV1;
+                        hashKind = EHashShuffleFuncType::ColumnShardHashV1;
                         break;
                     }
                     default: {
                         Y_ENSURE(false, "undefined type of hash for shuffle");
                     }
                 }
+
+                Y_ENSURE(hashKind.has_value(), "HashKind wasn't set!");
                 BuildHashShuffleChannels(
                     tasksGraph,
                     stageInfo,
@@ -610,7 +546,8 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                     input.GetHashShuffle().GetKeyColumns(),
                     enableSpilling,
                     log,
-                    hashKind
+                    hashKind.value(),
+                    forceSpilling
                 );
                 break;
             }
@@ -619,13 +556,6 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                 break;
             case NKqpProto::TKqpPhyConnection::kMap:
                 BuildMapChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
-                break;
-            case NKqpProto::TKqpPhyConnection::kMapShard:
-                BuildMapShardChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
-                break;
-            case NKqpProto::TKqpPhyConnection::kShuffleShard:
-                BuildShuffleShardChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx,
-                    enableSpilling, log);
                 break;
             case NKqpProto::TKqpPhyConnection::kMerge: {
                 TVector<TSortColumn> sortColumns;
@@ -1018,6 +948,9 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
         NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
 
         FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
+        if (stageInfo.Meta.TableConstInfo->SysViewInfo) {
+            *protoTaskMeta.MutableTable()->MutableSysViewDescription() = *stageInfo.Meta.TableConstInfo->SysViewInfo;
+        }
 
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
 
@@ -1142,12 +1075,15 @@ void FillOutputDesc(
             }
             hashPartitionDesc.SetPartitionsCount(output.PartitionsCount);
 
-            switch (output.HashKind) {
-                case NHashKind::EHashV1: {
+            Y_ENSURE(output.HashKind.has_value(), "HashKind wasn't set before the FillOutputDesc!");
+
+            switch (output.HashKind.value()) {
+                using enum EHashShuffleFuncType;
+                case HashV1: {
                     hashPartitionDesc.MutableHashV1();
                     break;
                 }
-                case NHashKind::EColumnShardHashV1: {
+                case ColumnShardHashV1: {
                     auto& columnShardHashV1Params = stageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
                     LOG_DEBUG_S(
                         *TlsActivationContext,
@@ -1245,18 +1181,26 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
             inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
             if (Y_LIKELY(input.Meta.SourceSettings)) {
                 enableMetering = true;
-                if (snapshot.IsValid()) {
+                YQL_ENSURE(input.Meta.SourceSettings->HasTable());
+                bool isTableImmutable = input.Meta.SourceSettings->GetIsTableImmutable();
+
+                if (snapshot.IsValid() && !isTableImmutable) {
                     input.Meta.SourceSettings->MutableSnapshot()->SetStep(snapshot.Step);
                     input.Meta.SourceSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
                 }
 
-                if (tasksGraph.GetMeta().UseFollowers) {
-                    input.Meta.SourceSettings->SetUseFollowers(tasksGraph.GetMeta().UseFollowers);
+                if (tasksGraph.GetMeta().UseFollowers || isTableImmutable) {
+                    input.Meta.SourceSettings->SetUseFollowers(tasksGraph.GetMeta().UseFollowers || isTableImmutable);
                 }
 
                 if (serializeAsyncIoSettings) {
                     inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
                 }
+
+                if (isTableImmutable) {
+                    input.Meta.SourceSettings->SetAllowInconsistentReads(true);
+                }
+
             } else {
                 YQL_ENSURE(input.SourceSettings);
                 inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
@@ -1295,21 +1239,25 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
         if (input.Meta.StreamLookupSettings) {
             enableMetering = true;
             YQL_ENSURE(input.Meta.StreamLookupSettings);
-            if (snapshot.IsValid()) {
+            bool isTableImmutable = input.Meta.StreamLookupSettings->GetIsTableImmutable();
+
+            if (snapshot.IsValid() && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
             } else {
-                YQL_ENSURE(tasksGraph.GetMeta().AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
+                YQL_ENSURE(tasksGraph.GetMeta().AllowInconsistentReads || isTableImmutable, "Expected valid snapshot or enabled inconsistent read mode");
                 input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);
             }
 
-            if (lockTxId) {
+            if (lockTxId && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
                 input.Meta.StreamLookupSettings->SetLockNodeId(tasksGraph.GetMeta().LockNodeId);
             }
-            if (tasksGraph.GetMeta().LockMode) {
+
+            if (tasksGraph.GetMeta().LockMode && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->SetLockMode(*tasksGraph.GetMeta().LockMode);
             }
+
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {
             transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);

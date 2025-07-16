@@ -427,6 +427,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                             "Delayed invalidation of tabletId: %" PRIu64
                             " leader: %s by NodeId", tabletId, entry.KnownLeader.ToString().c_str());
+                    if (entry.KnownFollowers.empty()) {
+                        // Avoid resolving preemptively until the next request
+                        DropEntry(tabletId, entry, ctx);
+                        return;
+                    }
                     ResolveRequest(tabletId, ctx);
                     entry.State = TEntry::StProblemResolve;
                     MoveEntryToUnresolved(tabletId, *entryHolder);
@@ -541,6 +546,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             break;
         case TEntry::StNormal:
             if (!msg->Actor || entry.KnownLeader == msg->Actor || entry.KnownLeaderTablet == msg->Actor) {
+                if (entry.KnownFollowers.empty()) {
+                    // Avoid resolving preemptively until the next request
+                    DropEntry(tabletId, entry, ctx);
+                    return;
+                }
                 ResolveRequest(tabletId, ctx);
                 entry.State = TEntry::StProblemResolve;
                 MoveEntryToUnresolved(tabletId, *entryHolder);
@@ -555,11 +565,17 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     }
                 }
             }
-
             break;
+        case TEntry::StFollowerUpdate:
+            if (!msg->Actor || entry.KnownLeader == msg->Actor || entry.KnownLeaderTablet == msg->Actor) {
+                // Reuse previously sent resolve request for StProblemResolve
+                entry.State = TEntry::StProblemResolve;
+                MoveEntryToUnresolved(tabletId, *entryHolder);
+                break;
+            }
+            [[fallthrough]];
         case TEntry::StProblemResolve:
         case TEntry::StProblemPing:
-        case TEntry::StFollowerUpdate:
             for (auto it = entry.KnownFollowers.begin(), end = entry.KnownFollowers.end(); it != end; ++it) {
                 if (it->first == msg->Actor || it->second == msg->Actor) {
                     entry.KnownFollowers.erase(it);
@@ -814,7 +830,7 @@ public:
         , ActorSystem(nullptr)
         , ResolvedTablets(new NCache::T2QCacheConfig())
     {
-        ResolvedTablets.SetOverflowCallback([=](const NCache::ICache<ui64, TAutoPtr<TEntry>>& cache) {
+        ResolvedTablets.SetOverflowCallback([=, this](const NCache::ICache<ui64, TAutoPtr<TEntry>>& cache) {
             return cache.GetUsedSize() >= Config->TabletCacheLimit;
         });
 

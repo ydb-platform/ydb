@@ -59,9 +59,10 @@ namespace NActors {
             poolInfos.push_back(TPoolShortInfo{
                 .PoolId = static_cast<i16>(Config.Basic[poolIds[i]].PoolId),
                 .SharedThreadCount = sharedThreadCount,
-                .ForeignSlots = 0,
+                .ForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount,
                 .InPriorityOrder = true,
-                .PoolName = Config.Basic[poolIds[i]].PoolName
+                .PoolName = Config.Basic[poolIds[i]].PoolName,
+                .ForcedForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount > 0,
             });
         }
         for (ui32 i = 0; i < Config.IO.size(); ++i) {
@@ -105,11 +106,10 @@ namespace NActors {
 
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx].Reset(CreateExecutorPool(excIdx));
-            if (excIdx < Config.PingInfoByPool.size()) {
-                Harmonizer->AddPool(Executors[excIdx].Get(), &Config.PingInfoByPool[excIdx]);
-            } else {
-                Harmonizer->AddPool(Executors[excIdx].Get());
-            }
+            bool ignoreThreads = dynamic_cast<TIOExecutorPool*>(Executors[excIdx].Get());
+            TSelfPingInfo *pingInfo = (excIdx < Config.PingInfoByPool.size()) ? &Config.PingInfoByPool[excIdx] : nullptr;
+            ignoreThreads &= (Shared != nullptr);
+            Harmonizer->AddPool(Executors[excIdx].Get(), pingInfo, ignoreThreads);
         }
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Setup: created");
     }

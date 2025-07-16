@@ -1,17 +1,14 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
-
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for IsAllowedKeyType
-
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/datashard_config.pb.h>
-
-#include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
 
 namespace {
 
@@ -500,7 +497,7 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .PathsLimit()
                     .DirChildrenLimit()
                     .IsValidACL(acl);

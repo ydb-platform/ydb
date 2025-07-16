@@ -60,11 +60,8 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_case.test_plan/CASE_TBL",
                                                         "ReadColumns": [
-                                                            "f",
-                                                            "i"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "i (-\u221e, +\u221e)"
+                                                            "i (-\u221e, +\u221e)",
+                                                            "f"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",

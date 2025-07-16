@@ -6,6 +6,8 @@
 #include "system_attribute_provider.h"
 #include "ypath_client.h"
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
+
 #include <yt/yt/core/yson/attribute_consumer.h>
 
 #include <yt/yt/core/ypath/tokenizer.h>
@@ -1669,6 +1671,8 @@ protected:
         YT_LOG_DEBUG(logMessage);
 
         Timer_.emplace();
+
+        RequestInfoState_ = ERequestInfoState::Flushed;
     }
 
     void LogResponse() override

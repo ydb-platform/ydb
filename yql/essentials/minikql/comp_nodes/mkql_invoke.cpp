@@ -117,13 +117,13 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const std::array<NUdf::TUnboxedValue, 2U> args {{Left->GetValue(compCtx), Right->GetValue(compCtx)}};
+        const std::array<NUdf::TUnboxedValue, 2U> args {{Left_->GetValue(compCtx), Right_->GetValue(compCtx)}};
         return Descriptor.Function(args.data());
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        const std::array<Value*, 2U> args {{GetNodeValue(Left, ctx, block), GetNodeValue(Right, ctx, block)}};
+        const std::array<Value*, 2U> args {{GetNodeValue(Left_, ctx, block), GetNodeValue(Right_, ctx, block)}};
         return reinterpret_cast<TGeneratorPtr>(Descriptor.Generator)(args.data(), ctx, block);
     }
 #endif

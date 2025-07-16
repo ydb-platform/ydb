@@ -3,8 +3,9 @@
 #include "source.h"
 
 #include <ydb/core/formats/arrow/program/collection.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -85,7 +86,8 @@ bool TBaseMergeTask::DoOnAllocated(
         return false;
     }
     AllocationGuard = std::move(guard);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(static_pointer_cast<TBaseMergeTask>(allocation));
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
+        static_pointer_cast<TBaseMergeTask>(allocation), Context->GetCommonContext()->GetConveyorProcessId());
     return true;
 }
 
@@ -132,7 +134,8 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
                 if (!i->GetStageResult().IsEmpty()) {
                     isEmpty = false;
                 }
-                Merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
+                Merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter(),
+                    NArrow::NMerger::TIterationOrder(Context->GetCommonContext()->IsReverse(), 0));
             }
         }
         AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());

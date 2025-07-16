@@ -7,9 +7,9 @@
 #include <aws/common/string.h>
 
 #include <aws/common/json.h>
-#include <aws/common/private/json_impl.h>
+#include <aws/common/private/external_module_impl.h>
 
-#include <aws/common/external/cJSON.h>
+#include "external/cJSON.h"
 
 static struct aws_allocator *s_aws_json_module_allocator = NULL;
 static bool s_aws_json_module_initialized = false;
@@ -18,6 +18,12 @@ struct aws_json_value *aws_json_value_new_string(struct aws_allocator *allocator
     struct aws_string *tmp = aws_string_new_from_cursor(allocator, &string);
     void *ret_val = cJSON_CreateString(aws_string_c_str(tmp));
     aws_string_destroy_secure(tmp);
+    return ret_val;
+}
+
+struct aws_json_value *aws_json_value_new_string_from_c_str(struct aws_allocator *allocator, const char *string) {
+    (void)allocator; /* No need for allocator. It is overriden through hooks. */
+    void *ret_val = cJSON_CreateString(string);
     return ret_val;
 }
 
@@ -78,92 +84,95 @@ int aws_json_value_add_to_object(
     struct aws_byte_cursor key,
     struct aws_json_value *value) {
 
-    int result = AWS_OP_ERR;
     struct aws_string *tmp = aws_string_new_from_cursor(s_aws_json_module_allocator, &key);
+    int result = aws_json_value_add_to_object_c_str(object, aws_string_c_str(tmp), value);
 
-    struct cJSON *cjson = (struct cJSON *)object;
-    if (!cJSON_IsObject(cjson)) {
-        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-        goto done;
-    }
-
-    struct cJSON *cjson_value = (struct cJSON *)value;
-    if (cJSON_IsInvalid(cjson_value)) {
-        result = aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-        goto done;
-    }
-    if (cJSON_HasObjectItem(cjson, aws_string_c_str(tmp))) {
-        goto done;
-    }
-
-    cJSON_AddItemToObject(cjson, aws_string_c_str(tmp), cjson_value);
-    result = AWS_OP_SUCCESS;
-
-done:
     aws_string_destroy_secure(tmp);
     return result;
 }
 
+int aws_json_value_add_to_object_c_str(struct aws_json_value *object, const char *key, struct aws_json_value *value) {
+
+    struct cJSON *cjson = (struct cJSON *)object;
+    if (!cJSON_IsObject(cjson)) {
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+
+    struct cJSON *cjson_value = (struct cJSON *)value;
+    if (cJSON_IsInvalid(cjson_value)) {
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+    if (cJSON_HasObjectItem(cjson, key)) {
+        return AWS_OP_ERR;
+    }
+
+    cJSON_AddItemToObject(cjson, key, cjson_value);
+    return AWS_OP_SUCCESS;
+}
+
 struct aws_json_value *aws_json_value_get_from_object(const struct aws_json_value *object, struct aws_byte_cursor key) {
 
-    void *return_value = NULL;
     struct aws_string *tmp = aws_string_new_from_cursor(s_aws_json_module_allocator, &key);
+    void *return_value = aws_json_value_get_from_object_c_str(object, aws_string_c_str(tmp));
 
+    aws_string_destroy_secure(tmp);
+    return return_value;
+}
+
+struct aws_json_value *aws_json_value_get_from_object_c_str(const struct aws_json_value *object, const char *key) {
     const struct cJSON *cjson = (const struct cJSON *)object;
     if (!cJSON_IsObject(cjson)) {
         aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-        goto done;
+        return NULL;
     }
-    if (!cJSON_HasObjectItem(cjson, aws_string_c_str(tmp))) {
-        goto done;
+    if (!cJSON_HasObjectItem(cjson, key)) {
+        return NULL;
     }
 
-    return_value = (void *)cJSON_GetObjectItem(cjson, aws_string_c_str(tmp));
-
-done:
-    aws_string_destroy_secure(tmp);
-    return return_value;
+    return (void *)cJSON_GetObjectItem(cjson, key);
 }
 
 bool aws_json_value_has_key(const struct aws_json_value *object, struct aws_byte_cursor key) {
 
     struct aws_string *tmp = aws_string_new_from_cursor(s_aws_json_module_allocator, &key);
-    bool result = false;
+    bool result = aws_json_value_has_key_c_str(object, aws_string_c_str(tmp));
 
-    const struct cJSON *cjson = (const struct cJSON *)object;
-    if (!cJSON_IsObject(cjson)) {
-        goto done;
-    }
-    if (!cJSON_HasObjectItem(cjson, aws_string_c_str(tmp))) {
-        goto done;
-    }
-    result = true;
-
-done:
     aws_string_destroy_secure(tmp);
     return result;
 }
 
+bool aws_json_value_has_key_c_str(const struct aws_json_value *object, const char *key) {
+    const struct cJSON *cjson = (const struct cJSON *)object;
+    if (!cJSON_IsObject(cjson)) {
+        return false;
+    }
+    if (!cJSON_HasObjectItem(cjson, key)) {
+        return false;
+    }
+
+    return true;
+}
+
 int aws_json_value_remove_from_object(struct aws_json_value *object, struct aws_byte_cursor key) {
 
-    int result = AWS_OP_ERR;
     struct aws_string *tmp = aws_string_new_from_cursor(s_aws_json_module_allocator, &key);
+    int result = aws_json_value_remove_from_object_c_str(object, aws_string_c_str(tmp));
 
-    struct cJSON *cjson = (struct cJSON *)object;
-    if (!cJSON_IsObject(cjson)) {
-        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-        goto done;
-    }
-    if (!cJSON_HasObjectItem(cjson, aws_string_c_str(tmp))) {
-        goto done;
-    }
-
-    cJSON_DeleteItemFromObject(cjson, aws_string_c_str(tmp));
-    result = AWS_OP_SUCCESS;
-
-done:
     aws_string_destroy_secure(tmp);
     return result;
+}
+
+int aws_json_value_remove_from_object_c_str(struct aws_json_value *object, const char *key) {
+    struct cJSON *cjson = (struct cJSON *)object;
+    if (!cJSON_IsObject(cjson)) {
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+    if (!cJSON_HasObjectItem(cjson, key)) {
+        return AWS_OP_ERR;
+    }
+
+    cJSON_DeleteItemFromObject(cjson, key);
+    return AWS_OP_SUCCESS;
 }
 
 int aws_json_const_iterate_object(
@@ -397,7 +406,7 @@ int aws_byte_buf_append_json_string(const struct aws_json_value *value, struct a
 
     char *tmp = cJSON_PrintUnformatted(cjson);
     if (tmp == NULL) {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 
     // Append the text to the byte buffer
@@ -415,7 +424,7 @@ int aws_byte_buf_append_json_string_formatted(const struct aws_json_value *value
 
     char *tmp = cJSON_Print(cjson);
     if (tmp == NULL) {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 
     // Append the text to the byte buffer

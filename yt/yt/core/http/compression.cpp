@@ -120,7 +120,7 @@ private:
             return;
         }
 
-        if (ContentEncoding_.StartsWith("z-")) {
+        if (ContentEncoding_.starts_with("z-")) {
             Compressor_.reset(new NBlockCodecs::TCodedOutput(
                 this,
                 NBlockCodecs::Codec(ContentEncoding_.substr(2)),
@@ -245,7 +245,7 @@ private:
             return;
         }
 
-        if (ContentEncoding_.StartsWith("z-")) {
+        if (ContentEncoding_.starts_with("z-")) {
             Decompressor_.reset(new NBlockCodecs::TDecodedInput(
                 this,
                 NBlockCodecs::Codec(ContentEncoding_.substr(2))));
@@ -328,7 +328,7 @@ DEFINE_REFCOUNTED_TYPE(TDecompressingInputStream)
 
 bool IsContentEncodingSupported(const TContentEncoding& contentEncoding)
 {
-    if (contentEncoding.StartsWith("z-")) {
+    if (contentEncoding.starts_with("z-")) {
         try {
             NBlockCodecs::Codec(contentEncoding.substr(2));
             return true;
@@ -357,13 +357,13 @@ const std::vector<TContentEncoding>& GetSupportedContentEncodings()
 }
 
 // NB: Does not implement the spec, but a reasonable approximation.
-TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(const TString& clientAcceptEncodingHeader)
+TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(TStringBuf clientAcceptEncodingHeader)
 {
-    auto bestPosition = TString::npos;
+    auto bestPosition = std::string::npos;
     std::optional<TContentEncoding> bestEncoding;
 
-    auto checkCandidate = [&] (const TString& candidate, size_t position) {
-        if (position != TString::npos && (bestPosition == TString::npos || position < bestPosition)) {
+    auto checkCandidate = [&] (const auto& candidate, size_t position) {
+        if (position != std::string::npos && (bestPosition == std::string::npos || position < bestPosition)) {
             bestEncoding = candidate;
             bestPosition = position;
         }

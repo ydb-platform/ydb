@@ -106,6 +106,53 @@ bool IsSystemError(const TError& error)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptor fd) noexcept
+    : FD_(fd)
+{}
+
+TFileDescriptorGuard::~TFileDescriptorGuard()
+{
+    Reset();
+}
+
+TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept
+    : FD_(other.FD_)
+{
+    other.FD_ = -1;
+}
+
+TFileDescriptorGuard& TFileDescriptorGuard::operator = (TFileDescriptorGuard&& other) noexcept
+{
+    if (this != &other) {
+        Reset();
+        FD_ = other.FD_;
+        other.FD_ = -1;
+    }
+    return *this;
+}
+
+TFileDescriptor TFileDescriptorGuard::Get() const noexcept
+{
+    return FD_;
+}
+
+TFileDescriptor TFileDescriptorGuard::Release() noexcept
+{
+    TFileDescriptor fd = FD_;
+    FD_ = -1;
+    return fd;
+}
+
+void TFileDescriptorGuard::Reset() noexcept
+{
+    if (FD_ != -1) {
+        YT_VERIFY(TryClose(FD_, false));
+        FD_ = -1;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 std::optional<int> GetParentPid(int pid)
 {
     TFileInput in(Format("/proc/%v/status", pid));

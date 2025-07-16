@@ -202,6 +202,7 @@ message TDqInputTransformLookupSettings {
     uint64 CacheLimit = 9;
     uint64 CacheTtlSeconds = 10;
     uint64 MaxDelayedRows = 11;
+    bool IsMultiget = 12;
 }
 
 message TDqTask {
@@ -226,4 +227,5 @@ message TDqTask {
     optional bool EnableSpilling = 19;
     optional uint32 ArrayBufferMinFillPercentage = 20;
     optional bool DisableMetering = 22;
+    optional uint64 BufferPageAllocSize = 23;
 }

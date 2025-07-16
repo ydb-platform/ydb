@@ -266,20 +266,22 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     db->PersistRemoveLock(LockId);
 }
 
-void TLockInfo::PersistRanges(ILocksDb* db) {
+bool TLockInfo::PersistRanges(ILocksDb* db) {
     Y_ENSURE(IsPersistent());
+    bool changed = false;
     if (UnpersistedRanges) {
         for (const TPathId& pathId : ReadTables) {
-            PersistAddRange(pathId, ELockRangeFlags::Read, db);
+            changed |= PersistAddRange(pathId, ELockRangeFlags::Read, db);
         }
         for (const TPathId& pathId : WriteTables) {
-            PersistAddRange(pathId, ELockRangeFlags::Write, db);
+            changed |= PersistAddRange(pathId, ELockRangeFlags::Write, db);
         }
         UnpersistedRanges = false;
     }
+    return changed;
 }
 
-void TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, ILocksDb* db) {
+bool TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, ILocksDb* db) {
     Y_ENSURE(IsPersistent());
     Y_ENSURE(db, "Cannot persist ranges without a db");
     // We usually have a single range with flags, so linear search is ok
@@ -290,8 +292,9 @@ void TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, I
             range.Flags |= flags;
             if (range.Flags != prevFlags) {
                 db->PersistRangeFlags(LockId, range.Id, ui64(range.Flags));
+                return true;
             }
-            return;
+            return false;
         }
         maxId = Max(maxId, range.Id);
     }
@@ -300,11 +303,13 @@ void TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, I
     range.TableId = tableId;
     range.Flags = flags;
     db->PersistAddRange(LockId, range.Id, range.TableId, ui64(range.Flags));
+    return true;
 }
 
-void TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
+bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
     Y_ENSURE(this != otherLock, "Lock cannot conflict with itself");
     Y_ENSURE(LockId != otherLock->LockId, "Unexpected conflict between a pair of locks with the same id");
+    bool changed = false;
 
     auto& flags = ConflictLocks[otherLock];
     if (!(flags & ELockConflictFlags::BreakThemOnOurCommit)) {
@@ -315,22 +320,29 @@ void TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
             // Any conflict between persistent locks is also persistent
             Y_ENSURE(db, "Cannot persist conflicts without a db");
             db->PersistAddConflict(LockId, otherLock->LockId);
+            changed = true;
         }
     }
+
+    return changed;
 }
 
-void TLockInfo::AddVolatileDependency(ui64 txId, ILocksDb* db) {
+bool TLockInfo::AddVolatileDependency(ui64 txId, ILocksDb* db) {
     Y_ENSURE(LockId != txId, "Unexpected volatile dependency between a lock and itself");
+    bool changed = false;
 
     if (VolatileDependencies.insert(txId).second && IsPersistent()) {
         Y_ENSURE(db, "Cannot persist dependencies without a db");
         db->PersistAddVolatileDependency(LockId, txId);
+        changed = true;
     }
+    return changed;
 }
 
-void TLockInfo::PersistConflicts(ILocksDb* db) {
+bool TLockInfo::PersistConflicts(ILocksDb* db) {
     Y_ENSURE(IsPersistent());
     Y_ENSURE(db, "Cannot persist conflicts without a db");
+    bool changed = false;
     for (auto& pr : ConflictLocks) {
         TLockInfo* otherLock = pr.first;
         if (!otherLock->IsPersistent()) {
@@ -339,14 +351,18 @@ void TLockInfo::PersistConflicts(ILocksDb* db) {
         }
         if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
             db->PersistAddConflict(LockId, otherLock->LockId);
+            changed = true;
         }
         if (!!(pr.second & ELockConflictFlags::BreakUsOnTheirCommit)) {
             db->PersistAddConflict(otherLock->LockId, LockId);
+            changed = true;
         }
     }
     for (ui64 txId : VolatileDependencies) {
         db->PersistAddVolatileDependency(LockId, txId);
+        changed = true;
     }
+    return changed;
 }
 
 void TLockInfo::CleanupConflicts() {
@@ -480,7 +496,26 @@ void TLockInfo::SetFrozen(ILocksDb* db) {
     Flags |= ELockFlags::Frozen;
     if (db) {
         db->PersistLockFlags(LockId, ui64(Flags & ELockFlags::PersistentMask));
+        AddWaitPersistentCallback(db);
     }
+}
+
+void TLockInfo::AddWaitPersistentCallback(ILocksDb* db) {
+    ++WaitPersistentCounter;
+    db->OnPersistent([lock = TLockInfo::TPtr(this)]() {
+        --lock->WaitPersistentCounter;
+    });
+}
+
+void TLockInfo::AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks) {
+    for (auto& lock : locks) {
+        ++lock->WaitPersistentCounter;
+    }
+    db->OnPersistent([locks = std::move(locks)]() {
+        for (auto& lock : locks) {
+            --lock->WaitPersistentCounter;
+        }
+    });
 }
 
 // TTableLocks
@@ -652,12 +687,18 @@ void TLockLocker::AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTabl
     }
 }
 
-TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
+TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId) const {
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
-        TLockInfo::TPtr lock = it->second;
-        if (!lock->IsBroken(at))
-            return lock;
+        return it->second;
+    }
+    return nullptr;
+}
+
+TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
+    auto lock = GetLock(lockTxId);
+    if (lock && !lock->IsBroken(at)) {
+        return lock;
     }
     return nullptr;
 }
@@ -756,7 +797,7 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
         return nullptr;
     }
 
-    TLockInfo::TPtr lock(new TLockInfo(this, lockId, lockNodeId));
+    TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, lockId, lockNodeId);
     Y_ENSURE(!lock->IsPersistent());
     Locks[lockId] = lock;
     if (lockNodeId) {
@@ -769,7 +810,7 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
 TLockInfo::TPtr TLockLocker::AddLock(const ILocksDb::TLockRow& row) {
     Y_ENSURE(Locks.find(row.LockId) == Locks.end());
 
-    TLockInfo::TPtr lock(new TLockInfo(this, row));
+    TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, row);
     Y_ENSURE(lock->IsPersistent());
     Locks[row.LockId] = lock;
     if (row.LockNodeId) {
@@ -787,7 +828,7 @@ TLockInfo::TPtr TLockLocker::RestoreInMemoryLock(const ILocksDb::TLockRow& row) 
             // Since this lock is missing its commit must have failed
             return nullptr;
         }
-        TLockInfo::TPtr lock(new TLockInfo(this, row));
+        TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, row);
         Locks[row.LockId] = lock;
         if (row.LockNodeId) {
             PendingSubscribeLocks.emplace_back(row.LockId, row.LockNodeId);
@@ -1069,17 +1110,30 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
             counter = lock->GetCounter();
             Update->Lock = lock;
 
+            bool waitPersistent = false;
+            TVector<TLockInfo::TPtr> waitPersistentMore;
+
             if (lock->IsPersistent()) {
-                lock->PersistRanges(Db);
+                if (lock->PersistRanges(Db)) {
+                    waitPersistent = true;
+                }
             }
             for (auto& readConflictLock : Update->ReadConflictLocks) {
-                readConflictLock.AddConflict(lock.Get(), Db);
+                if (readConflictLock.AddConflict(lock.Get(), Db)) {
+                    waitPersistent = true;
+                    waitPersistentMore.emplace_back(&readConflictLock);
+                }
             }
             for (auto& writeConflictLock : Update->WriteConflictLocks) {
-                lock->AddConflict(&writeConflictLock, Db);
+                if (lock->AddConflict(&writeConflictLock, Db)) {
+                    waitPersistent = true;
+                    waitPersistentMore.emplace_back(&writeConflictLock);
+                }
             }
             for (ui64 txId : Update->VolatileDependencies) {
-                lock->AddVolatileDependency(txId, Db);
+                if (lock->AddVolatileDependency(txId, Db)) {
+                    waitPersistent = true;
+                }
             }
 
             if (lock->GetWriteTables() && !lock->IsPersistent()) {
@@ -1087,6 +1141,17 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 lock->PersistLock(Db);
                 // Persistent locks cannot expire
                 Locker.ExpireQueue.Remove(lock.Get());
+                // Make sure it tracks persistence progress
+                waitPersistent = true;
+            }
+
+            if (waitPersistent) {
+                if (waitPersistentMore.empty()) {
+                    lock->AddWaitPersistentCallback(Db);
+                } else {
+                    waitPersistentMore.push_back(lock);
+                    TLockInfo::AddWaitPersistentCallback(Db, std::move(waitPersistentMore));
+                }
             }
         }
     }

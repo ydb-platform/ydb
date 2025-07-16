@@ -117,7 +117,7 @@ public:
 
     TDistribution GetDistribution(const bool verbose = false);
 
-    void GetVolumes(ui64& rawBytes, ui64& bytes, const bool verbose = false, const std::vector<TString> columnNames = {});
+    void GetVolumes(ui64& rawBytes, ui64& bytes, ui64& portionsCount, const bool verbose = false, const std::vector<TString> columnNames = {});
 
     void GetStats(std::vector<NJson::TJsonValue>& stats, const bool verbose = false);
 

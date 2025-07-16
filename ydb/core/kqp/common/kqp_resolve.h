@@ -33,6 +33,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     TVector<TString> KeyColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ETableKind TableKind = ETableKind::Unknown;
+    TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
     THashMap<TString, std::pair<TString, NYql::TKikimrPathId>> Sequences;
     THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
     bool IsBuildInProgress = false;
@@ -118,6 +119,10 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
                 return;
             default:
                 YQL_ENSURE(false, "Unexpected phy table kind: " << (i64) phyTable.GetKind());
+        }
+
+        if (phyTable.HasSysViewInfo()) {
+            SysViewInfo = phyTable.GetSysViewInfo();
         }
 
         for (const auto& [_, phyColumn] : phyTable.GetColumns()) {
@@ -233,7 +238,7 @@ private:
     THashMap<TTableId, TTable> TablesById;
 };
 
-NUdf::TUnboxedValue MakeDefaultValueByType(const NKikimr::NMiniKQL::TType* type);
+NUdf::TUnboxedValue MakeDefaultValueByType(NKikimr::NMiniKQL::TType* type);
 
 TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues);

@@ -1,5 +1,4 @@
 #include "kqp_read_actor.h"
-#include "kqp_compute_scheduler.h"
 
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
@@ -806,22 +805,11 @@ public:
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
 
-        BatchOperationReadColumns.clear();
-
-        auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
-        for (size_t i = 0; i < columnsSize; ++i) {
-            const auto& column = Settings->GetColumns()[i];
+        for (const auto& column : Settings->GetColumns()) {
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
-
-                if (Settings->GetIsBatch()) {
-                    NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetType(), column.GetTypeInfo());
-                    BatchOperationReadColumns.emplace_back(column.GetId(), typeInfo, column.GetIsPrimary());
-                }
             }
         }
-
-        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() >= KeyColumnTypes.size());
 
         if (CollectDuplicateStats) {
             for (const auto& column : DuplicateCheckExtraColumns) {
@@ -1044,18 +1032,22 @@ public:
             BrokenLocks.push_back(lock);
         }
 
+        if (UseFollowers) {
+            YQL_ENSURE(Locks.empty());
+        }
+
         CA_LOG_D("Taken " << Locks.size() << " locks");
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         Reads[id].RegisterMessage(*ev->Get());
 
-        if (Settings->GetIsBatch()) {
-            SetBatchOperationMaxRow(ev->Get());
+        if (Settings->GetIsBatch() && ev->Get()->GetRowsCount() > 0) {
+            SerializedEndRow = TSerializedCellVec{ev->Get()->GetCells(ev->Get()->GetRowsCount() - 1)};
         }
 
-
         ReceivedRowCount += ev->Get()->GetRowsCount();
+
         CA_LOG_D(TStringBuilder() << "new data for read #" << id
             << " seqno = " << ev->Get()->Record.GetSeqNo()
             << " finished = " << ev->Get()->Record.GetFinished());
@@ -1503,22 +1495,17 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
-        if (Settings->GetIsBatch() && !BatchOperationMaxRow.empty()) {
-            std::vector<TCell> keyRow;
-            for (size_t i = 0; i < BatchOperationReadColumns.size(); ++i) {
-                if (const auto& column = BatchOperationReadColumns[i]; column.IsPrimary) {
-                    keyRow.push_back(BatchOperationMaxRow[i]);
-                    resultInfo.AddBatchOperationKeyIds(column.Id);
+
+        if (Settings->GetIsBatch() && SerializedEndRow) {
+            for (const auto& column : Settings->GetColumns()) {
+                if (!IsSystemColumn(column.GetId())) {
+                    resultInfo.AddEndRowColumnIds(column.GetId());
                 }
             }
 
-            if (!keyRow.empty()) {
-                YQL_ENSURE(keyRow.size() == KeyColumnTypes.size());
-
-                TConstArrayRef<TCell> keyRef(keyRow);
-                resultInfo.SetBatchOperationMaxKey(TSerializedCellVec::Serialize(keyRef));
-            }
+            resultInfo.SetSerializedEndRow(SerializedEndRow.ReleaseBuffer());
         }
+
         result.PackFrom(resultInfo);
         return result;
     }
@@ -1565,13 +1552,6 @@ private:
                 }
                 DuplicateCheckColumnRemap.push_back(positions[column.Tag]);
             }
-        }
-    }
-
-    void SetBatchOperationMaxRow(TEvDataShard::TEvReadResult* ev) {
-        if (ev->GetRowsCount() > 0) {
-            auto cells = ev->GetCells(ev->GetRowsCount() - 1);
-            BatchOperationMaxRow = TOwnedCellVec::Make(cells);
         }
     }
 
@@ -1652,8 +1632,7 @@ private:
         bool IsPrimary = false;
     };
 
-    TVector<TReadColumnInfo> BatchOperationReadColumns;
-    TOwnedCellVec BatchOperationMaxRow;
+    TSerializedCellVec SerializedEndRow; // For BATCH operations only
 };
 
 

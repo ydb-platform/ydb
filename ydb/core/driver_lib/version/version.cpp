@@ -156,16 +156,21 @@ TStored TCompatibilityInfo::MakeStored(TComponentId componentId) const {
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // YDB versions are compared alphabetically, much like strings,
-// but instead of chars there are 4 componets: Year, Major, Minor and Hotfix
+// but instead of chars there are 5 componets:
+// Year, Major, Minor, Patch and Hotfix
 // Each of the version's components can be absent
 // If one is, than all the following components are also considered to be 'absent'
+// Patch component was introduced in a 25.1 Major update, so we don't have specific
+// rules to compare versions with and without Patch, all versions without Patch (<=24.4)
+// are < than versions with Patch (>=25.1)
 // Absent component is equal to any other, including other absent
 // 
 // Some examples:
-// 22.1.1.1 < 22.1.2.0
-// 22.2.1.0 > 22.1._._
-// 23.1._._ == 23.1.1.0
-//
+// 25.1.1.1.1 < 26.1.2.1.0
+// 22.2.1.0.1 > 22.1._._._
+// 23.1._._._ == 23.1.1.0.1
+// 
+
 // Function returns -1 if left < right, 0 if left == right, 1 if left > right
 i32 CompareVersions(const NKikimrConfig::TYdbVersion& left, const NKikimrConfig::TYdbVersion& right) {
     if (!left.HasYear() || !right.HasYear()) {
@@ -195,6 +200,17 @@ i32 CompareVersions(const NKikimrConfig::TYdbVersion& left, const NKikimrConfig:
         return 1;
     }
 
+    if (left.HasPatch() ^ right.HasPatch()) {
+        // one version has Patch component, other doesn't
+        return 0;
+    } else if (left.HasPatch() && right.HasPatch()) {
+        if (left.GetPatch() < right.GetPatch()) {
+            return -1; 
+        } else if (left.GetPatch() > right.GetPatch()) {
+            return 1;
+        }
+    }
+
     if (!left.HasHotfix() || !right.HasHotfix()) {
         return 0;
     }
@@ -208,6 +224,7 @@ i32 CompareVersions(const NKikimrConfig::TYdbVersion& left, const NKikimrConfig:
 }
 
 bool IsVersionComplete(const NKikimrConfig::TYdbVersion& version) {
+    // Patch component was introduced later, so version can be complete without it
     return version.HasYear() && version.HasMajor() && version.HasMinor() && version.HasHotfix();
 }
 
@@ -424,6 +441,18 @@ std::optional<NKikimrConfig::TYdbVersion> ParseVersionFromTag(TString tag, TStri
     parts.pop_front();
     version.SetMinor(minor);
 
+    // parse Patch number
+    // We don't need to parse versions without Patch component, since this
+    // code only present in newer trunks and stables >=25.1, where Patch is
+    // already introduced, and only used to parse local 
+    ui32 patch;
+    if (!TryIntFromString<10, ui32>(parts.front(), patch)) {
+        // example: stable-25-1-1-prestablle == 25.1.1
+        return version;
+    }
+    parts.pop_front();
+    version.SetPatch(patch);
+
     // parse Hotfix
     ui32 hotfix;
     if (parts.empty()) {
@@ -509,9 +538,9 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
 
     TString tag = GetTagString();
     for (TString delim : {"-", "."}) {
-        auto tryParse = ParseVersionFromTag(tag, delim);
+        std::optional<NKikimrConfig::TYdbVersion> tryParse = ParseVersionFromTag(tag, delim);
         if (tryParse) {
-            auto versionFromTag = *tryParse;
+            NKikimrConfig::TYdbVersion versionFromTag = *tryParse;
             auto version = current.MutableVersion();
             if (version->HasYear()) {
                 Y_ABORT_UNLESS(version->GetYear() == versionFromTag.GetYear());
@@ -530,6 +559,14 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
                     Y_ABORT_UNLESS(version->GetMinor() == versionFromTag.GetMinor());
                 } else {
                     version->SetMinor(versionFromTag.GetMinor());
+                }
+            }
+
+            if (versionFromTag.HasPatch()) {
+                if (version->HasPatch()) {
+                    Y_ABORT_UNLESS(version->GetPatch() == versionFromTag.GetPatch());
+                } else {
+                    version->SetPatch(versionFromTag.GetPatch());
                 }
             }
 
@@ -658,6 +695,13 @@ void PrintVersion(IOutputStream& out, const NKikimrConfig::TYdbVersion& version,
         out << version.GetYear() << '-' << version.GetMajor();
         if (version.HasMinor()) {
             out << "-" << version.GetMinor();
+        } else if (printSuffix) {
+            out << "-*";
+            return;
+        }
+
+        if (version.HasPatch()) {
+            out << "-" << version.GetPatch();
         } else if (printSuffix) {
             out << "-*";
             return;

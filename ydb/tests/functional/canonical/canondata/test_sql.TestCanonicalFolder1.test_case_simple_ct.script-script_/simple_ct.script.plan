@@ -11,29 +11,31 @@
                 "Plans": [
                     {
                         "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Upsert",
+                                "Path": "/local/base_simple_ct_script_script/Questions",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_simple_ct_script_script/Questions"
+                            }
+                        ],
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [],
                                         "Iterator": "[{idx: 1,text: \"to do or not to do\"}]",
                                         "Name": "Iterator"
-                                    },
-                                    {
-                                        "Inputs": [],
-                                        "Name": "Upsert",
-                                        "Path": "/local/base_simple_ct_script_script/Questions",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_simple_ct_script_script/Questions"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_simple_ct_script_script/Questions"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_simple_ct_script_script/Questions"
                         ]
                     }
                 ],

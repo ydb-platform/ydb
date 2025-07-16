@@ -109,6 +109,7 @@ message GlobalUniqueIndex {
 message GlobalVectorKMeansTreeIndex {
     GlobalIndexSettings level_table_settings = 1;
     GlobalIndexSettings posting_table_settings = 2;
+    GlobalIndexSettings prefix_table_settings = 4;
     KMeansTreeSettings vector_settings = 3;
 }
 
@@ -232,6 +233,8 @@ message Changefeed {
     google.protobuf.Duration resolved_timestamps_interval = 9;
     // Partitioning settings of underlying topic.
     Topic.PartitioningSettings topic_partitioning_settings = 10;
+    // Emit schema change events or not
+    bool schema_changes = 11;
 }
 
 message ChangefeedDescription {
@@ -273,6 +276,8 @@ message ChangefeedDescription {
     google.protobuf.Duration resolved_timestamps_interval = 8;
     // Progress of initial scan. If unspecified, initial scan was not launched.
     InitialScanProgress initial_scan_progress = 9;
+    // State of emitting of schema change events
+    bool schema_changes = 10;
 }
 
 message StoragePool {

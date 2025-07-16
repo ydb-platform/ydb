@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2025 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -240,11 +241,11 @@ namespace boost { namespace locale {
             /// Convert \a text to UTF
             ///
             /// \throws conversion_error: Conversion failed
-            string_type convert(const boost::string_view& text) const { return impl_->convert(text); }
+            string_type convert(const core::string_view text) const { return impl_->convert(text); }
             /// Convert \a text to UTF
             ///
             /// \throws conversion_error: Conversion failed
-            string_type operator()(const boost::string_view& text) const { return convert(text); }
+            string_type operator()(const core::string_view text) const { return convert(text); }
         };
 
         /// Converter class to decode an UTF string and encode it using a local encoding
@@ -254,7 +255,7 @@ namespace boost { namespace locale {
 
         public:
             using char_type = CharType;
-            using stringview_type = boost::basic_string_view<CharType>;
+            using stringview_type = core::basic_string_view<CharType>;
 
             /// Create an instance to convert UTF text to text encoded with \a charset according to policy \a how
             ///
@@ -298,11 +299,11 @@ namespace boost { namespace locale {
             /// Convert \a text
             ///
             /// \throws conversion_error: Conversion failed
-            std::string convert(const boost::string_view& text) const { return impl_->convert(text); }
+            std::string convert(const core::string_view text) const { return impl_->convert(text); }
             /// Convert \a text
             ///
             /// \throws conversion_error: Conversion failed
-            std::string operator()(const boost::string_view& text) const { return convert(text); }
+            std::string operator()(const core::string_view text) const { return convert(text); }
         };
     } // namespace conv
 }}    // namespace boost::locale

@@ -158,8 +158,9 @@ struct aws_s3_paginated_operation *aws_s3_paginated_operation_new(
         aws_mem_calloc(allocator, 1, sizeof(struct aws_s3_paginated_operation));
     operation->allocator = allocator;
 
-    operation->result_xml_node_name = aws_string_new_from_cursor(allocator, params->result_xml_node_name);
-    operation->continuation_xml_node_name = aws_string_new_from_cursor(allocator, params->continuation_token_node_name);
+    operation->result_xml_node_name = aws_string_new_from_cursor(allocator, &params->result_xml_node_name);
+    operation->continuation_xml_node_name =
+        aws_string_new_from_cursor(allocator, &params->continuation_token_node_name);
 
     operation->next_http_message = params->next_message;
     operation->on_result_node_encountered = params->on_result_node_encountered_fn;
@@ -247,54 +248,53 @@ struct parser_wrapper {
     bool has_more_results;
 };
 
-static bool s_on_result_node_encountered(struct aws_xml_parser *parser, struct aws_xml_node *node, void *user_data) {
+static int s_on_result_node_encountered(struct aws_xml_node *node, void *user_data) {
 
     struct parser_wrapper *wrapper = user_data;
 
-    struct aws_byte_cursor node_name;
-    aws_xml_node_get_name(node, &node_name);
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
 
     struct aws_byte_cursor continuation_name_val =
         aws_byte_cursor_from_string(wrapper->operation->continuation_xml_node_name);
     if (aws_byte_cursor_eq_ignore_case(&node_name, &continuation_name_val)) {
         struct aws_byte_cursor continuation_token_cur;
-        bool ret_val = aws_xml_node_as_body(parser, node, &continuation_token_cur) == AWS_OP_SUCCESS;
-
-        if (ret_val) {
-            wrapper->next_continuation_token =
-                aws_string_new_from_cursor(wrapper->operation->allocator, &continuation_token_cur);
+        if (aws_xml_node_as_body(node, &continuation_token_cur) != AWS_OP_SUCCESS) {
+            return AWS_OP_ERR;
         }
 
-        return ret_val;
+        wrapper->next_continuation_token =
+            aws_string_new_from_cursor(wrapper->operation->allocator, &continuation_token_cur);
+
+        return AWS_OP_SUCCESS;
     }
 
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "IsTruncated")) {
         struct aws_byte_cursor truncated_cur;
-        bool ret_val = aws_xml_node_as_body(parser, node, &truncated_cur) == AWS_OP_SUCCESS;
-
-        if (ret_val) {
-            if (aws_byte_cursor_eq_c_str_ignore_case(&truncated_cur, "true")) {
-                wrapper->has_more_results = true;
-            }
+        if (aws_xml_node_as_body(node, &truncated_cur) != AWS_OP_SUCCESS) {
+            return AWS_OP_ERR;
         }
 
-        return ret_val;
+        if (aws_byte_cursor_eq_c_str_ignore_case(&truncated_cur, "true")) {
+            wrapper->has_more_results = true;
+        }
+
+        return AWS_OP_SUCCESS;
     }
 
-    return wrapper->operation->on_result_node_encountered(parser, node, wrapper->operation->user_data);
+    return wrapper->operation->on_result_node_encountered(node, wrapper->operation->user_data);
 }
 
-static bool s_on_root_node_encountered(struct aws_xml_parser *parser, struct aws_xml_node *node, void *user_data) {
+static int s_on_root_node_encountered(struct aws_xml_node *node, void *user_data) {
     struct parser_wrapper *wrapper = user_data;
 
-    struct aws_byte_cursor node_name;
-    aws_xml_node_get_name(node, &node_name);
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
     struct aws_byte_cursor result_name_val = aws_byte_cursor_from_string(wrapper->operation->result_xml_node_name);
     if (aws_byte_cursor_eq_ignore_case(&node_name, &result_name_val)) {
-        return aws_xml_node_traverse(parser, node, s_on_result_node_encountered, wrapper);
+        return aws_xml_node_traverse(node, s_on_result_node_encountered, wrapper);
     }
 
-    return false;
+    /* root element not what we expected */
+    return aws_raise_error(AWS_ERROR_INVALID_XML);
 }
 
 static void s_on_request_finished(
@@ -355,25 +355,26 @@ int aws_s3_paginated_operation_on_response(
     struct aws_string **continuation_token_out,
     bool *has_more_results_out) {
 
-    struct aws_xml_parser_options parser_options = {
-        .doc = *response_body,
-        .max_depth = 16U,
-    };
-
     struct parser_wrapper wrapper = {.operation = operation};
 
     /* we've got a full xml document now and the request succeeded, parse the document and fire all the callbacks
      * for each object and prefix. All of that happens in these three lines. */
-    struct aws_xml_parser *parser = aws_xml_parser_new(operation->allocator, &parser_options);
-    int error_code = aws_xml_parser_parse(parser, s_on_root_node_encountered, &wrapper);
-    aws_xml_parser_destroy(parser);
-
-    if (error_code == AWS_OP_SUCCESS) {
-        *continuation_token_out = wrapper.next_continuation_token;
-        *has_more_results_out = wrapper.has_more_results;
+    struct aws_xml_parser_options parser_options = {
+        .doc = *response_body,
+        .max_depth = 16U,
+        .on_root_encountered = s_on_root_node_encountered,
+        .user_data = &wrapper,
+    };
+    if (aws_xml_parse(operation->allocator, &parser_options) != AWS_OP_SUCCESS) {
+        aws_string_destroy(wrapper.next_continuation_token);
+        *continuation_token_out = NULL;
+        *has_more_results_out = false;
+        return AWS_OP_ERR;
     }
 
-    return error_code;
+    *continuation_token_out = wrapper.next_continuation_token;
+    *has_more_results_out = wrapper.has_more_results;
+    return AWS_OP_SUCCESS;
 }
 
 int aws_s3_construct_next_paginated_request_http_message(

@@ -76,6 +76,13 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(ESimpleLogicalValueType, ui32,
     ((Datetime64)  (0x1011))
     ((Timestamp64) (0x1012))
     ((Interval64)  (0x1013))
+
+    ((TzDate)        (0x1014))
+    ((TzDatetime)    (0x1015))
+    ((TzTimestamp)   (0x1016))
+    ((TzDate32)      (0x1017))
+    ((TzDatetime64)  (0x1018))
+    ((TzTimestamp64) (0x1019))
 );
 
 //! Debug printers for Gtest unittests.
@@ -228,6 +235,14 @@ inline constexpr EValueType GetPhysicalType(ESimpleLogicalValueType type)
         case ESimpleLogicalValueType::Timestamp64:
         case ESimpleLogicalValueType::Interval64:
             return EValueType::Int64;
+
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return EValueType::String;
 
         default:
             YT_ABORT();

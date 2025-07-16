@@ -57,7 +57,7 @@ struct alloc_tracer {
 };
 
 /* number of frames to skip in call stacks (s_alloc_tracer_track, and the vtable function) */
-#define FRAMES_TO_SKIP 2
+enum { FRAMES_TO_SKIP = 2 };
 
 static void *s_trace_mem_acquire(struct aws_allocator *allocator, size_t size);
 static void s_trace_mem_release(struct aws_allocator *allocator, void *ptr);
@@ -131,29 +131,43 @@ static void s_alloc_tracer_track(struct alloc_tracer *tracer, void *ptr, size_t 
     aws_high_res_clock_get_ticks(&alloc->time);
 
     if (tracer->level == AWS_MEMTRACE_STACKS) {
-        /* capture stack frames, skip 2 for this function and the allocation vtable function */
+        /* capture stack frames,
+         * skip 2 for this function and the allocation vtable function if we have a full stack trace
+         * and otherwise just capture what ever stack trace we got
+         */
         AWS_VARIABLE_LENGTH_ARRAY(void *, stack_frames, (FRAMES_TO_SKIP + tracer->frames_per_stack));
         size_t stack_depth = aws_backtrace(stack_frames, FRAMES_TO_SKIP + tracer->frames_per_stack);
-        if (stack_depth) {
-            /* hash the stack pointers */
-            struct aws_byte_cursor stack_cursor =
-                aws_byte_cursor_from_array(stack_frames, stack_depth * sizeof(void *));
-            uint64_t stack_id = aws_hash_byte_cursor_ptr(&stack_cursor);
-            alloc->stack = stack_id; /* associate the stack with the alloc */
+        AWS_FATAL_ASSERT(stack_depth > 0);
 
-            aws_mutex_lock(&tracer->mutex);
-            struct aws_hash_element *item = NULL;
-            int was_created = 0;
-            AWS_FATAL_ASSERT(
-                AWS_OP_SUCCESS ==
-                aws_hash_table_create(&tracer->stacks, (void *)(uintptr_t)stack_id, &item, &was_created));
-            /* If this is a new stack, save it to the hash */
-            if (was_created) {
-                struct stack_trace *stack = aws_mem_calloc(
-                    aws_default_allocator(),
-                    1,
-                    sizeof(struct stack_trace) + (sizeof(void *) * tracer->frames_per_stack));
-                AWS_FATAL_ASSERT(stack);
+        /* hash the stack pointers */
+        struct aws_byte_cursor stack_cursor = aws_byte_cursor_from_array(stack_frames, stack_depth * sizeof(void *));
+        uint64_t stack_id = aws_hash_byte_cursor_ptr(&stack_cursor);
+        alloc->stack = stack_id; /* associate the stack with the alloc */
+
+        aws_mutex_lock(&tracer->mutex);
+        struct aws_hash_element *item = NULL;
+        int was_created = 0;
+        AWS_FATAL_ASSERT(
+            AWS_OP_SUCCESS == aws_hash_table_create(&tracer->stacks, (void *)(uintptr_t)stack_id, &item, &was_created));
+        /* If this is a new stack, save it to the hash */
+        if (was_created) {
+            struct stack_trace *stack = aws_mem_calloc(
+                aws_default_allocator(), 1, sizeof(struct stack_trace) + (sizeof(void *) * tracer->frames_per_stack));
+            AWS_FATAL_ASSERT(stack);
+            /**
+             * Optimizations can affect the number of frames we get and in pathological cases we can
+             * get fewer than FRAMES_TO_SKIP frames, but always at least 1 because code has to start somewhere.
+             * (looking at you gcc with -O3 on aarch64)
+             * With optimizations on we cannot trust the stack trace too much.
+             * Memtracer makes an assumption that stack trace will be available in all cases if stack trace api
+             * works. So in the pathological case of stack_depth <= FRAMES_TO_SKIP lets record all the frames we
+             * have, to at least have an anchor for where allocation is comming from, however inaccurate it is.
+             */
+            if (stack_depth <= FRAMES_TO_SKIP) {
+                memcpy((void **)&stack->frames[0], &stack_frames[0], (stack_depth) * sizeof(void *));
+                stack->depth = stack_depth;
+                item->value = stack;
+            } else {
                 memcpy(
                     (void **)&stack->frames[0],
                     &stack_frames[FRAMES_TO_SKIP],
@@ -161,8 +175,9 @@ static void s_alloc_tracer_track(struct alloc_tracer *tracer, void *ptr, size_t 
                 stack->depth = stack_depth - FRAMES_TO_SKIP;
                 item->value = stack;
             }
-            aws_mutex_unlock(&tracer->mutex);
         }
+
+        aws_mutex_unlock(&tracer->mutex);
     }
 
     aws_mutex_lock(&tracer->mutex);
@@ -438,11 +453,18 @@ static void s_trace_mem_release(struct aws_allocator *allocator, void *ptr) {
 static void *s_trace_mem_realloc(struct aws_allocator *allocator, void *old_ptr, size_t old_size, size_t new_size) {
     struct alloc_tracer *tracer = allocator->impl;
     void *new_ptr = old_ptr;
-    if (aws_mem_realloc(tracer->traced_allocator, &new_ptr, old_size, new_size)) {
-        return NULL;
-    }
 
+    /*
+     * Careful with the ordering of state clean up here.
+     * Tracer keeps a hash table (alloc ptr as key) of meta info about each allocation.
+     * To avoid race conditions during realloc state update needs to be done in
+     * following order to avoid race conditions:
+     * - remove meta info (other threads cant reuse that key, cause ptr is still valid )
+     * - realloc (cant fail, ptr might remain the same)
+     * - add meta info for reallocated mem
+     */
     s_alloc_tracer_untrack(tracer, old_ptr);
+    aws_mem_realloc(tracer->traced_allocator, &new_ptr, old_size, new_size);
     s_alloc_tracer_track(tracer, new_ptr, new_size);
 
     return new_ptr;

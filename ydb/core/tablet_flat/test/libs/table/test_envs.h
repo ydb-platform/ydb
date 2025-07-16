@@ -304,7 +304,7 @@ namespace NTest {
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
                     if (room < partStore->Store->GetGroupCount()) {
                         NPage::TGroupId groupId(room);
-                        partGroupQueues.push_back(Settle(partStore, room, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId)));
+                        partGroupQueues.push_back(Settle(partStore, room, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId, partStore->Slices)));
                     } else if (room == partStore->Store->GetOuterRoom()) {
                         partGroupQueues.push_back(Settle(partStore, room, MakeOuter(partStore)));
                     } else if (room == partStore->Store->GetExternRoom()) {

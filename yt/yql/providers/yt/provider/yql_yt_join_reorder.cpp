@@ -89,15 +89,15 @@ public:
 
         switch (State->Types->CostBasedOptimizer) {
         case ECostBasedOptimizerType::PG:
-            if (linkSettings.HasForceSortedMerge || linkSettings.HasHints) {
+            if (linkSettings.HasForceSortedMerge || linkSettings.HasCBOUnsupportedHints) {
                 YQL_CLOG(ERROR, ProviderYt) << "PG CBO does not support link settings";
                 return Root;
             }
             opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerPG(*providerCtx, Ctx, {.Logger = log});
             break;
         case ECostBasedOptimizerType::Native:
-            if (linkSettings.HasHints) {
-                YQL_CLOG(ERROR, ProviderYt) << "Native CBO does not suppor link hints";
+            if (linkSettings.HasCBOUnsupportedHints) {
+                YQL_CLOG(ERROR, ProviderYt) << "Native CBO does not support link hints";
                 return Root;
             }
             opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerNative(*providerCtx, Ctx, {.MaxDPhypDPTableSize = 100000});
@@ -159,10 +159,12 @@ public:
         const TVector<NDq::TJoinColumn>& rightKeys,
         const EJoinKind joinType,
         const EJoinAlgoType joinAlgo,
+        const bool leftAny,
+        const bool rightAny,
         TYtJoinNodeOp* originalOp)
         : TJoinOptimizerNode(left, right, leftKeys, rightKeys, joinType, joinAlgo,
-            originalOp ? originalOp->LinkSettings.LeftHints.contains("any") : false,
-            originalOp ? originalOp->LinkSettings.RightHints.contains("any") : false,
+            leftAny,
+            rightAny,
             originalOp != nullptr)
         , OriginalOp(originalOp)
     { }
@@ -274,11 +276,28 @@ private:
 
         bool nonReorderable = op->LinkSettings.ForceSortedMerge;
         LinkSettings.HasForceSortedMerge = LinkSettings.HasForceSortedMerge || op->LinkSettings.ForceSortedMerge;
-        LinkSettings.HasHints = LinkSettings.HasHints || !op->LinkSettings.LeftHints.empty() || !op->LinkSettings.RightHints.empty();
+
+        bool leftAny = op->LinkSettings.LeftHints.contains("any");
+        if (op->LinkSettings.LeftHints.size() > 1 || op->LinkSettings.LeftHints.size() == 1 && !leftAny) {
+            LinkSettings.HasCBOUnsupportedHints = true;
+        }
+
+        bool rightAny = op->LinkSettings.RightHints.contains("any");
+        if (op->LinkSettings.RightHints.size() > 1 || op->LinkSettings.RightHints.size() == 1 && !rightAny) {
+            LinkSettings.HasCBOUnsupportedHints = true;
+        }
 
         return std::make_shared<TYtJoinOptimizerNode>(
-            left, right, leftKeys, rightKeys, joinKind, EJoinAlgoType::GraceJoin, nonReorderable ? op : nullptr
-            );
+            left,
+            right,
+            leftKeys,
+            rightKeys,
+            joinKind,
+            EJoinAlgoType::GraceJoin,
+            leftAny,
+            rightAny,
+            nonReorderable ? op : nullptr
+        );
     }
 
     std::shared_ptr<IBaseOptimizerNode> OnLeaf(TYtJoinNodeLeaf* leaf, TRelSizeInfo sizeInfo) {
@@ -455,6 +474,12 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TVec
             ret = MakeIntrusive<TYtJoinNodeOp>();
             ret->JoinKind = ctx.NewAtom(pos, ConvertToJoinString(op->JoinType));
             ret->LinkSettings.JoinAlgo = op->JoinAlgo;
+            if (op->LeftAny) {
+                ret->LinkSettings.LeftHints.insert("any");
+            }
+            if (op->RightAny) {
+                ret->LinkSettings.RightHints.insert("any");
+            }
             TVector<TExprNodePtr> leftLabel, rightLabel;
             leftLabel.reserve(op->LeftJoinKeys.size() * 2);
             rightLabel.reserve(op->RightJoinKeys.size() * 2);

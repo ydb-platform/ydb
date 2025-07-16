@@ -1,7 +1,7 @@
 #pragma once
 
-#include "schemeshard_types.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_types.h"
 
 #include <ydb/core/base/table_index.h>
 
@@ -63,18 +63,16 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const THashSet<TString>& indexKeyColumns,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const TTableColumns& implTableColumns,
+    const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix = {});
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const THashSet<TString>& indexKeyColumns,
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const TTableColumns& implTableColumns,
+    const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix = {});
 
@@ -97,7 +95,7 @@ TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
 void FillIndexTableColumns(
-    const THashMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
+    const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
     std::span<const TString> keys,
     const THashSet<TString>& columns,
     NKikimrSchemeOp::TTableDescription& implTableDesc);

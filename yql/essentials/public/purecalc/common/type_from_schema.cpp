@@ -21,10 +21,8 @@ namespace {
                     const auto* expectedItem = expected->GetItems()[*expectedIndex]->GetItemType();
 
                     auto arg = ctx.NewArgument(TPositionHandle(), "arg");
-                    auto fieldConversionStatus = TrySilentConvertTo(arg, *gotItem, *expectedItem, ctx);
+                    auto fieldConversionStatus = TryConvertTo(arg, *gotItem, *expectedItem, ctx, {}, true);
                     if (fieldConversionStatus.Level == IGraphTransformer::TStatus::Error) {
-                        REPORT("Item " << TString{gotNamedItem->GetName()}.Quote() << " expected to be " <<
-                               *expectedItem << ", but got " << *gotItem);
                         status = false;
                     }
                 } else {

@@ -32,22 +32,24 @@ class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase
     TKqpOptimizeContext& KqpCtx;
     TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
 
+    THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;
+
     public:
-        TKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, 
-            const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) : 
-            TDqStatisticsTransformerBase(&typeCtx, pctx, *kqpCtx->GetOptimizerHints().CardinalityHints),
+        TKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
+            const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) :
+            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetOptimizerHints()),
             Config(config),
             KqpCtx(*kqpCtx) {}
 
         // Main method of the transformer
         IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
-        
+
     private:
         bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) final;
         bool AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) final;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx);
 }
 }

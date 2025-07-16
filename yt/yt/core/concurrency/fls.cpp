@@ -79,7 +79,6 @@ void TFls::Set(int index, TCookie cookie)
 
 TFls* SwapCurrentFls(TFls* newFls)
 {
-
     return std::exchange(NDetail::CurrentFls(), newFls);
 }
 

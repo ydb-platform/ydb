@@ -383,6 +383,7 @@ public:
                     do {
                         auto nextImplTable = implTable->Next;
                         auto& desc = SessionCtx->Tables().GetOrAddTable(implTable->Cluster, SessionCtx->GetDatabase(), implTable->Name);
+                        SessionCtx->Tables().AddIndexImplTableToMainTableMapping(tablePath, implTable->Name);
                         desc.Metadata = std::move(implTable);
                         desc.Load(ctx, sysColumnsEnabled);
                         implTable = std::move(nextImplTable);
@@ -467,11 +468,11 @@ protected:
     {
         YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
 
-        if (!Dispatcher->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+        if (!GetDispatcher()->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
             return false;
         }
 
-        if (Dispatcher->IsRuntime(name)) {
+        if (GetDispatcher()->IsRuntime(name)) {
             bool pragmaAllowed = false;
 
             switch (SessionCtx->Query().Type) {

@@ -1,7 +1,8 @@
 #include "schemeshard_impl.h"
+
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -140,17 +141,29 @@ TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui
     auto loIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.1, fnValueLess);
     auto hiIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.9, fnValueLess);
 
-    auto fnCmp = [&keyColumnTypes, prefixSize] (const auto& bucket1, const auto& bucket2) {
-        return CompareTypedCellVectors(bucket1.first.GetCells().data(), bucket2.first.GetCells().data(),
-                                       keyColumnTypes.data(),
-                                       std::min(bucket1.first.GetCells().size(), prefixSize), std::min(bucket2.first.GetCells().size(), prefixSize));
+    // compare histogram entries by key prefixes
+    auto comparePrefix = [&keyColumnTypes] (const auto& entry1, const auto& entry2, const size_t prefixSize) {
+        const auto& key1cells = entry1.first.GetCells();
+        const auto clampedSize1 = std::min(key1cells.size(), prefixSize);
+
+        const auto& key2cells = entry2.first.GetCells();
+        const auto clampedSize2 = std::min(key2cells.size(), prefixSize);
+
+        int cmp = CompareTypedCellVectors(key1cells.data(), key2cells.data(), keyColumnTypes.data(), std::min(clampedSize1, clampedSize2));
+        if (cmp == 0 && clampedSize1 != clampedSize2) {
+            // smaller key prefix is filled with +inf => always bigger
+            cmp = (clampedSize1 < clampedSize2) ? +1 : -1;
+        }
+        return cmp;
     };
 
     // Check if half key is no equal to low and high keys
-    if (fnCmp(*halfIt, *loIt) == 0)
+    if (comparePrefix(*halfIt, *loIt, prefixSize) == 0) {
         return TSerializedCellVec();
-    if (fnCmp(*halfIt, *hiIt) == 0)
+    }
+    if (comparePrefix(*halfIt, *hiIt, prefixSize) == 0) {
         return TSerializedCellVec();
+    }
 
     // Build split key by leaving the prefix and extending it with NULLs
     TVector<TCell> splitKey(halfIt->first.GetCells().begin(), halfIt->first.GetCells().end());
@@ -170,10 +183,17 @@ TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram
         keysHist.emplace_back(std::make_pair(TSerializedCellVec(bucket.GetKey()), bucket.GetValue()));
     }
 
-    auto fnCmp = [&keyColumnTypes] (const auto& key1, const auto& key2) {
-        return CompareTypedCellVectors(key1.first.GetCells().data(), key2.first.GetCells().data(),
-                                       keyColumnTypes.data(),
-                                       key1.first.GetCells().size(), key2.first.GetCells().size());
+    // compare histogram entries by keys
+    auto fnCmp = [&keyColumnTypes] (const auto& entry1, const auto& entry2) {
+        const auto& key1cells = entry1.first.GetCells();
+        const auto& key2cells = entry2.first.GetCells();
+        const auto minKeySize = std::min(key1cells.size(), key2cells.size());
+        int cmp = CompareTypedCellVectors(key1cells.data(), key2cells.data(), keyColumnTypes.data(), minKeySize);
+        if (cmp == 0 && key1cells.size() != key2cells.size()) {
+            // smaller key is filled with +inf => always bigger
+            cmp = (key1cells.size() < key2cells.size()) ? +1 : -1;
+        }
+        return cmp;
     };
 
     Sort(keysHist, [&fnCmp] (const auto& key1, const auto& key2) { return fnCmp(key1, key2) < 0; });

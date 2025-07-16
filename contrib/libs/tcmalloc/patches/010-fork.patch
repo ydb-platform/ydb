@@ -1,0 +1,400 @@
+diff --git a/tcmalloc/central_freelist.h b/tcmalloc/central_freelist.h
+index 9fdcd83..90181e5 100644
+--- a/tcmalloc/central_freelist.h
++++ b/tcmalloc/central_freelist.h
+@@ -131,6 +131,14 @@ class CentralFreeList {
+   size_t NumSpansInList(int n) ABSL_LOCKS_EXCLUDED(lock_);
+   SpanStats GetSpanStats() const;
+ 
++  void AcquireInternalLocks() {
++    lock_.Lock();
++  }
++
++  void ReleaseInternalLocks() {
++    lock_.Unlock();
++  }
++
+   // Reports span utilization and lifetime histogram stats.
+   void PrintSpanUtilStats(Printer& out);
+   void PrintSpanLifetimeStats(Printer& out);
+diff --git a/tcmalloc/cpu_cache.h b/tcmalloc/cpu_cache.h
+index 164e06f..b9a6bd6 100644
+--- a/tcmalloc/cpu_cache.h
++++ b/tcmalloc/cpu_cache.h
+@@ -487,6 +487,9 @@ class CpuCache {
+   void Print(Printer& out) const;
+   void PrintInPbtxt(PbtxtRegion& region) const;
+ 
++  void AcquireInternalLocks();
++  void ReleaseInternalLocks();
++
+   const Forwarder& forwarder() const { return forwarder_; }
+ 
+   Forwarder& forwarder() { return forwarder_; }
+@@ -2635,6 +2638,22 @@ inline void CpuCache<Forwarder>::PrintInPbtxt(PbtxtRegion& region) const {
+       dynamic_slab_info_.madvise_failed_bytes.load(std::memory_order_relaxed));
+ }
+ 
++template<class Forwarder>
++inline void CpuCache<Forwarder>::AcquireInternalLocks() {
++  int ncpus = absl::base_internal::NumCPUs();
++  for (int cpu = 0; cpu < ncpus; ++cpu) {
++    resize_[cpu].lock.Lock();
++  }
++}
++
++template<class Forwarder>
++inline void CpuCache<Forwarder>::ReleaseInternalLocks() {
++  int ncpus = absl::base_internal::NumCPUs();
++  for (int cpu = 0; cpu < ncpus; ++cpu) {
++    resize_[cpu].lock.Unlock();
++  }
++}
++
+ template <class Forwarder>
+ inline void CpuCache<Forwarder>::PerClassResizeInfo::Init() {
+   state_.store(0, std::memory_order_relaxed);
+diff --git a/tcmalloc/guarded_page_allocator.cc b/tcmalloc/guarded_page_allocator.cc
+index 8acfdc4..9e2a54a 100644
+--- a/tcmalloc/guarded_page_allocator.cc
++++ b/tcmalloc/guarded_page_allocator.cc
+@@ -92,6 +92,14 @@ void GuardedPageAllocator::Reset() {
+   stacktrace_filter_.DecayAll();
+ }
+ 
++void GuardedPageAllocator::AcquireInternalLocks() {
++  guarded_page_lock_.Lock();
++}
++
++void GuardedPageAllocator::ReleaseInternalLocks() {
++  guarded_page_lock_.Unlock();
++}
++
+ GuardedAllocWithStatus GuardedPageAllocator::TrySample(
+     size_t size, size_t alignment, Length num_pages,
+     const StackTrace& stack_trace) {
+diff --git a/tcmalloc/guarded_page_allocator.h b/tcmalloc/guarded_page_allocator.h
+index 4330ab7..8bd5c9a 100644
+--- a/tcmalloc/guarded_page_allocator.h
++++ b/tcmalloc/guarded_page_allocator.h
+@@ -114,6 +114,10 @@ class GuardedPageAllocator {
+   // and avoiding use-after-destruction issues for static/global instances.
+   void Destroy();
+ 
++  void AcquireInternalLocks() ABSL_LOCKS_EXCLUDED(guarded_page_lock_);
++  void ReleaseInternalLocks() ABSL_LOCKS_EXCLUDED(guarded_page_lock_);
++
++
+   // If this allocation can be guarded, and if it's time to do a guarded sample,
+   // returns an instance of GuardedAllocWithStatus, that includes guarded
+   // allocation Span and guarded status. Otherwise, returns nullptr and the
+diff --git a/tcmalloc/internal/sampled_allocation_recorder.h b/tcmalloc/internal/sampled_allocation_recorder.h
+index a3ef3cc..8e1ec85 100644
+--- a/tcmalloc/internal/sampled_allocation_recorder.h
++++ b/tcmalloc/internal/sampled_allocation_recorder.h
+@@ -92,6 +92,9 @@ class SampleRecorder {
+   // Iterates over all the registered samples.
+   void Iterate(const absl::FunctionRef<void(const T& sample)>& f);
+ 
++  void AcquireInternalLocks();
++  void ReleaseInternalLocks();
++
+  private:
+   void PushNew(T* sample);
+   void PushDead(T* sample);
+@@ -240,7 +243,17 @@ void SampleRecorder<T, Allocator>::Iterate(
+   }
+ }
+ 
+-}  // namespace tcmalloc_internal
++template <typename T, typename Allocator>
++void SampleRecorder<T, Allocator>::AcquireInternalLocks() {
++  graveyard_.lock.Lock();
++}
++
++template <typename T, typename Allocator>
++void SampleRecorder<T, Allocator>::ReleaseInternalLocks() {
++  graveyard_.lock.Unlock();
++}
++
++} // namespace tcmalloc_internal
+ }  // namespace tcmalloc
+ GOOGLE_MALLOC_SECTION_END
+ 
+diff --git a/tcmalloc/internal_malloc_extension.h b/tcmalloc/internal_malloc_extension.h
+index 2f8b329..190d742 100644
+--- a/tcmalloc/internal_malloc_extension.h
++++ b/tcmalloc/internal_malloc_extension.h
+@@ -154,6 +154,9 @@ ABSL_ATTRIBUTE_WEAK int64_t
+ MallocExtension_Internal_GetMaxTotalThreadCacheBytes();
+ ABSL_ATTRIBUTE_WEAK void MallocExtension_Internal_SetMaxTotalThreadCacheBytes(
+     int64_t value);
++
++ABSL_ATTRIBUTE_WEAK void
++MallocExtension_EnableForkSupport();
+ }
+ 
+ #endif
+diff --git a/tcmalloc/malloc_extension.cc b/tcmalloc/malloc_extension.cc
+index 1475faa..cee8ba3 100644
+--- a/tcmalloc/malloc_extension.cc
++++ b/tcmalloc/malloc_extension.cc
+@@ -796,6 +796,14 @@ void MallocExtension::SetBackgroundReleaseRate(BytesPerSecond rate) {
+ #endif
+ }
+ 
++void MallocExtension::EnableForkSupport() {
++#if ABSL_INTERNAL_HAVE_WEAK_MALLOCEXTENSION_STUBS
++  if (&MallocExtension_EnableForkSupport != nullptr) {
++    MallocExtension_EnableForkSupport();
++  }
++#endif
++}
++
+ }  // namespace tcmalloc
+ 
+ // Default implementation just returns size. The expectation is that
+diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
+index 403520e..36fd433 100644
+--- a/tcmalloc/malloc_extension.h
++++ b/tcmalloc/malloc_extension.h
+@@ -660,6 +660,10 @@ class MallocExtension final {
+   // Specifies the release rate from the page heap.  ProcessBackgroundActions
+   // must be called for this to be operative.
+   static void SetBackgroundReleaseRate(BytesPerSecond rate);
++
++  // Enables fork support.
++  // Allocator will continue to function correctly in the child, after calling fork().
++  static void EnableForkSupport();
+ };
+ 
+ }  // namespace tcmalloc
+diff --git a/tcmalloc/static_vars.cc b/tcmalloc/static_vars.cc
+index aaacbbb..464b49a 100644
+--- a/tcmalloc/static_vars.cc
++++ b/tcmalloc/static_vars.cc
+@@ -123,6 +123,7 @@ ABSL_CONST_INIT MetadataObjectAllocator<StackTraceTable::LinkedSample>
+     Static::linked_sample_allocator_{arena_};
+ ABSL_CONST_INIT std::atomic<bool> Static::inited_{false};
+ ABSL_CONST_INIT std::atomic<bool> Static::cpu_cache_active_{false};
++ABSL_CONST_INIT bool Static::fork_support_enabled_ = false;
+ ABSL_CONST_INIT Static::PageAllocatorStorage Static::page_allocator_;
+ ABSL_CONST_INIT PageMap Static::pagemap_;
+ ABSL_CONST_INIT GuardedPageAllocator Static::guardedpage_allocator_;
+@@ -235,6 +236,14 @@ ABSL_ATTRIBUTE_COLD ABSL_ATTRIBUTE_NOINLINE void Static::SlowInitIfNecessary() {
+     guardedpage_allocator_.Init(/*max_allocated_pages=*/64,
+                                 /*total_pages=*/128);
+     inited_.store(true, std::memory_order_release);
++
++    // TODO: this is called with inited_ = true, so it looks like a race condition
++    pageheap_lock.Unlock();
++    pthread_atfork(
++      TCMallocPreFork,
++      TCMallocPostFork,
++      TCMallocPostFork);
++    pageheap_lock.Lock();
+   }
+ }
+ 
+diff --git a/tcmalloc/static_vars.h b/tcmalloc/static_vars.h
+index af1c14b..58f706c 100644
+--- a/tcmalloc/static_vars.h
++++ b/tcmalloc/static_vars.h
+@@ -72,6 +72,9 @@ enum class SizeClassConfiguration {
+ 
+ bool tcmalloc_big_span();
+ 
++void TCMallocPreFork();
++void TCMallocPostFork();
++
+ class Static final {
+  public:
+   constexpr Static() = default;
+@@ -172,6 +175,13 @@ class Static final {
+     cpu_cache_active_.store(true, std::memory_order_release);
+   }
+ 
++  static bool ForkSupportEnabled() {
++    return fork_support_enabled_;
++  }
++  static void EnableForkSupport() {
++    fork_support_enabled_ = true;
++  }
++
+   static bool ABSL_ATTRIBUTE_ALWAYS_INLINE HaveHooks() {
+     return false;
+   }
+@@ -215,6 +225,7 @@ class Static final {
+       linked_sample_allocator_;
+   ABSL_CONST_INIT static std::atomic<bool> inited_;
+   ABSL_CONST_INIT static std::atomic<bool> cpu_cache_active_;
++  ABSL_CONST_INIT static bool fork_support_enabled_;
+   ABSL_CONST_INIT static PeakHeapTracker peak_heap_tracker_;
+   ABSL_CONST_INIT static NumaTopology<kNumaPartitions, kNumBaseClasses>
+       numa_topology_;
+diff --git a/tcmalloc/system-alloc.h b/tcmalloc/system-alloc.h
+index 84280cf..06392e2 100644
+--- a/tcmalloc/system-alloc.h
++++ b/tcmalloc/system-alloc.h
+@@ -142,6 +142,13 @@ class SystemAllocator {
+   [[nodiscard]] void* MmapAligned(size_t size, size_t alignment, MemoryTag tag)
+       ABSL_LOCKS_EXCLUDED(spinlock_);
+ 
++  void AcquireInternalLocks() {
++    spinlock_.Lock();
++  }
++  void ReleaseInternalLocks() {
++    spinlock_.Unlock();
++  }
++
+  private:
+   const Topology& topology_;
+ 
+diff --git a/tcmalloc/tcmalloc.cc b/tcmalloc/tcmalloc.cc
+index 062d257..846ab86 100644
+--- a/tcmalloc/tcmalloc.cc
++++ b/tcmalloc/tcmalloc.cc
+@@ -117,6 +117,7 @@
+ #include "tcmalloc/tcmalloc_policy.h"
+ #include "tcmalloc/thread_cache.h"
+ #include "tcmalloc/transfer_cache.h"
++#include "thread_cache.h"
+ 
+ #if defined(TCMALLOC_HAVE_STRUCT_MALLINFO) || \
+     defined(TCMALLOC_HAVE_STRUCT_MALLINFO2)
+@@ -338,6 +339,44 @@ extern "C" size_t MallocExtension_Internal_ReleaseMemoryToSystem(
+                           /*reason=*/PageReleaseReason::kReleaseMemoryToSystem);
+ }
+ 
++extern "C" void MallocExtension_EnableForkSupport() {
++  Static::EnableForkSupport();
++}
++
++void TCMallocPreFork() {
++  if (!Static::ForkSupportEnabled()) {
++    return;
++  }
++
++  if (Static::CpuCacheActive()) {
++    Static::cpu_cache().AcquireInternalLocks();
++  }
++  Static::transfer_cache().AcquireInternalLocks();
++  Static::guardedpage_allocator().AcquireInternalLocks();
++  release_lock.Lock();
++  pageheap_lock.Lock();
++  Static::system_allocator().AcquireInternalLocks();
++  ThreadCache::AcquireInternalLocks();
++  Static::sampled_allocation_recorder().AcquireInternalLocks();
++}
++
++void TCMallocPostFork() {
++  if (!Static::ForkSupportEnabled()) {
++    return;
++  }
++  Static::system_allocator().ReleaseInternalLocks();
++  pageheap_lock.Unlock();
++  Static::guardedpage_allocator().ReleaseInternalLocks();
++  release_lock.Unlock();
++  Static::transfer_cache().ReleaseInternalLocks();
++  if (Static::CpuCacheActive()) {
++    Static::cpu_cache().ReleaseInternalLocks();
++  }
++  ThreadCache::ReleaseInternalLocks();
++  Static::sampled_allocation_recorder().ReleaseInternalLocks();
++}
++
++
+ // nallocx slow path.
+ // Moved to a separate function because size_class_with_alignment is not inlined
+ // which would cause nallocx to become non-leaf function with stack frame and
+diff --git a/tcmalloc/tcmalloc.h b/tcmalloc/tcmalloc.h
+index b908aff..c877168 100644
+--- a/tcmalloc/tcmalloc.h
++++ b/tcmalloc/tcmalloc.h
+@@ -158,6 +158,9 @@ ABSL_ATTRIBUTE_UNUSED void TCMallocInternalDeleteArrayAlignedNothrow(
+     ABSL_ATTRIBUTE_SECTION(google_malloc);
+ #endif
+ 
++void TCMallocInternalAcquireLocks();
++void TCMallocInternalReleaseLocks();
++
+ }  // extern "C"
+ 
+ #endif  // TCMALLOC_TCMALLOC_H_
+diff --git a/tcmalloc/thread_cache.cc b/tcmalloc/thread_cache.cc
+index 0a6f038..ff50665 100644
+--- a/tcmalloc/thread_cache.cc
++++ b/tcmalloc/thread_cache.cc
+@@ -424,6 +424,14 @@ void ThreadCache::set_overall_thread_cache_size(size_t new_size) {
+   RecomputePerThreadCacheSize();
+ }
+ 
++void ThreadCache::AcquireInternalLocks() {
++  threadcache_lock_.Lock();
++}
++
++void ThreadCache::ReleaseInternalLocks() {
++  threadcache_lock_.Unlock();
++}
++
+ }  // namespace tcmalloc_internal
+ }  // namespace tcmalloc
+ GOOGLE_MALLOC_SECTION_END
+diff --git a/tcmalloc/thread_cache.h b/tcmalloc/thread_cache.h
+index 2b94ac7..8ae5e76 100644
+--- a/tcmalloc/thread_cache.h
++++ b/tcmalloc/thread_cache.h
+@@ -70,6 +70,9 @@ class ABSL_CACHELINE_ALIGNED ThreadCache {
+     return overall_thread_cache_size_.load(std::memory_order_relaxed);
+   }
+ 
++  static void AcquireInternalLocks();
++  static void ReleaseInternalLocks();
++
+  private:
+   // We inherit rather than include the list as a data structure to reduce
+   // compiler padding.  Without inheritance, the compiler pads the list
+diff --git a/tcmalloc/transfer_cache.h b/tcmalloc/transfer_cache.h
+index b2b29d5..5af6dc8 100644
+--- a/tcmalloc/transfer_cache.h
++++ b/tcmalloc/transfer_cache.h
+@@ -415,6 +415,18 @@ class TransferCacheManager : public StaticForwarder {
+ 
+   void Init() { InitCaches(); }
+ 
++  void AcquireInternalLocks() {
++    for (int i = 0; i < kNumClasses; ++i) {
++      cache_[i].tc.AcquireInternalLocks();
++    }
++  }
++
++  void ReleaseInternalLocks() {
++    for (int i = 0; i < kNumClasses; ++i) {
++      cache_[i].tc.ReleaseInternalLocks();
++    }
++  }
++
+   void InsertRange(int size_class, absl::Span<void *> batch) {
+     cache_[size_class].tc.InsertRange(size_class, batch);
+   }
+diff --git a/tcmalloc/transfer_cache_internals.h b/tcmalloc/transfer_cache_internals.h
+index 2a3bd4c..d8f1031 100644
+--- a/tcmalloc/transfer_cache_internals.h
++++ b/tcmalloc/transfer_cache_internals.h
+@@ -205,6 +205,16 @@ class TransferCache {
+     return freelist().RemoveRange(batch);
+   }
+ 
++  void AcquireInternalLocks() {
++    lock_.Lock();
++    freelist().AcquireInternalLocks();
++  }
++
++  void ReleaseInternalLocks() {
++    lock_.Unlock();
++    freelist().ReleaseInternalLocks();
++  }
++
+   // We record the lowest value of info.used in a low water mark since the last
+   // call to TryPlunder. We plunder all those objects to the freelist, as the
+   // objects not used within a full cycle are unlikely to be used again.

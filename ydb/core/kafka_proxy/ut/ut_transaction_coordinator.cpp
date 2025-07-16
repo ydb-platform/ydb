@@ -1,5 +1,6 @@
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/fwd.h>
@@ -23,7 +24,7 @@ namespace {
                 Ctx->Prepare();
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
-                ActorId = Ctx->Runtime->Register(new NKafka::TKafkaTransactionsCoordinator());
+                ActorId = Ctx->Runtime->Register(new NKafka::TTransactionsCoordinator());
             }
 
             void TearDown(NUnitTest::TTestContext&) override  {
@@ -31,7 +32,7 @@ namespace {
             }
 
             THolder<NKafka::TEvKafka::TEvSaveTxnProducerResponse> SaveTxnProducer(const TString& txnId, i64 producerId, i16 producerEpoch) {
-                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TEvKafka::TProducerInstanceId{producerId, producerEpoch});
+                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TProducerInstanceId{producerId, producerEpoch}, 5000);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
                 UNIT_ASSERT(response != nullptr);
@@ -84,7 +85,7 @@ namespace {
             }
     };
 
-    Y_UNIT_TEST_SUITE_F(KafkaTransactionCoordinatorActor, TFixture) {
+    Y_UNIT_TEST_SUITE_F(TransactionCoordinatorActor, TFixture) {
         Y_UNIT_TEST(OnProducerInitializedEvent_ShouldRespondOkIfTxnProducerWasNotFound) {
             auto response = SaveTxnProducer("my-tn-producer-1", 123, 0);
 
@@ -171,7 +172,7 @@ namespace {
                 if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
                     // there will be two events TEvEndTxnRequest:
                     // first: the one we dispatch in this test
-                    // second: event forwarded by TKafkaTransactionCoordinatorActor
+                    // second: event forwarded by TTransactionCoordinatorActor
                     if (eventCounter == 1) {
                         UNIT_ASSERT_VALUES_EQUAL(event->Request->TransactionalId, txnId);
                         UNIT_ASSERT_VALUES_EQUAL(event->Request->ProducerId, producerId);
@@ -210,8 +211,8 @@ namespace {
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
                 if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
                     // There will be four events TEvEndTxnRequest. We need only two of them 
-                    // with recipient not equal to our TKafkaTransactionCoordinatorActor id. 
-                    // Those are event sent from TKafkaTransactionCoordinatorActor to TKafkaTransactionActor
+                    // with recipient not equal to our TTransactionCoordinatorActor id. 
+                    // Those are event sent from TTransactionCoordinatorActor to TTransactionActor
                     if (input->Recipient != ActorId) {
                         if (eventCounter == 0) {
                             txnActorId = input->Recipient;
@@ -229,6 +230,39 @@ namespace {
 
             SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
             SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+        }
+
+        Y_UNIT_TEST(OnSecondInitProducerId_ShouldSendPoisonPillToTxnActor) {
+            // send valid message
+            ui64 correlationId = 123;
+            TString txnId = "my-tx-id";
+            i64 producerId = 1;
+            i16 producerEpoch = 0;
+            SaveTxnProducer(txnId, producerId, producerEpoch);
+            bool seenEvent = false;
+            TActorId txnActorId;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                    txnActorId = input->Recipient;
+                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                    UNIT_ASSERT_VALUES_EQUAL(txnActorId, input->Recipient);
+                    seenEvent = true;
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            // first request registers actor
+            SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
+            // request to save producer with newer epoch should trigger poison pill to current txn actor
+            SaveTxnProducer(txnId, producerId, producerEpoch + 1);
 
             TDispatchOptions options;
             options.CustomFinalCondition = [&seenEvent]() {

@@ -139,7 +139,9 @@ public:
         }
 
         auto config = loadEpoch ? State_->Configuration->GetSettingsVer(settingsVer) : State_->Configuration->Snapshot();
-        opts.Config(config).ReadOnly(State_->Types->IsReadOnly).Epoch(loadEpoch);
+        opts.Config(config)
+            .ReadOnly(State_->Types->IsReadOnly || State_->Types->EngineType == EEngineType::Ytflow)
+            .Epoch(loadEpoch);
 
         auto future = State_->Gateway->GetTableInfo(std::move(opts));
         auto loadCtx = LoadCtx;
@@ -268,7 +270,7 @@ public:
                 tableDesc.Stat = stat;
                 if (HasReadIntents(tableDesc.Intents)) {
                     const auto& securityTagsSet = tableDesc.Stat->SecurityTags;
-                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration);
+                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration, cluster);
                     if (!securityTagsSet.empty() && tmpFolder.empty()) {
                         TStringBuilder msg;
                         msg << "Table " << cluster << "." << tableName

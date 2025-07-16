@@ -16,6 +16,8 @@ public:
         , Event(resolvedEv->Get()->Request)
         , ScopeId(resolvedEv->Get()->ScopeId)
         , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
+        , BridgePileId(resolvedEv->Get()->BridgePileId)
+        , ResolveError(std::move(resolvedEv->Get()->Error))
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
@@ -84,6 +86,10 @@ public:
 
         Response = new TEvNodeBroker::TEvRegistrationResponse;
 
+        if (ResolveError) {
+            return Error(TStatus::WRONG_REQUEST, TStringBuilder() << ResolveError << " for " << host << ':' << port, ctx);
+        }
+
         if (rec.HasPath() && ScopeId == NActors::TScopeId()) {
             return Error(TStatus::ERROR,
                          TStringBuilder() << "Failed to resolve the database by its path. Perhaps the database " << rec.GetPath() << " does not exist",
@@ -118,6 +124,8 @@ public:
                 Self->Dirty.UpdateLocation(node, loc);
                 Self->Dirty.DbAddNode(node, txc);
                 SetLocation = true;
+            } else if (node.BridgePileId != node.BridgePileId) {
+                return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
@@ -162,6 +170,7 @@ public:
             Node->Expire = expire;
             Node->Version = Self->Dirty.Epoch.Version + 1;
             Node->State = ENodeState::Active;
+            Node->BridgePileId = BridgePileId;
 
             if (Self->EnableStableNodeNames) {
                 Node->ServicedSubDomain = ServicedSubDomain;
@@ -222,16 +231,20 @@ public:
             Self->Committed.UpdateEpochVersion();
             Self->AddNodeToEpochCache(node);
             Self->AddNodeToUpdateNodesLog(node);
+            Self->ScheduleProcessSubscribersQueue(ctx);
         }
 
         Reply(ctx);
-        Self->SendUpdateNodes(ctx);
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:
     TEvNodeBroker::TEvRegistrationRequest::TPtr Event;
     const NActors::TScopeId ScopeId;
     const TSubDomainKey ServicedSubDomain;
+    const std::optional<TBridgePileId> BridgePileId;
+    TString ResolveError;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;

@@ -4,13 +4,6 @@ SRCS(
     ansi.cpp
     format.cpp
     grammar.cpp
-    local.cpp
-    parser_call_stack.cpp
-    token.cpp
-)
-
-ADDINCL(
-    yql/essentials/sql/v1/complete
 )
 
 PEERDIR(
@@ -20,7 +13,12 @@ PEERDIR(
     yql/essentials/parser/lexer_common
     yql/essentials/sql/settings
     yql/essentials/sql/v1/lexer
+    yql/essentials/sql/v1/lexer/regex
     yql/essentials/sql/v1/reflect
+    yql/essentials/sql/v1/complete/antlr4
+    yql/essentials/sql/v1/complete/core
+    yql/essentials/sql/v1/complete/text
+    contrib/libs/re2
 )
 
 END()

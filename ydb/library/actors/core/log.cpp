@@ -220,7 +220,7 @@ namespace NActors {
                     }
                 }
                 TABLEBODY() {
-                    for (EComponent i = Settings->MinVal; i < Settings->MaxVal; i++) {
+                    for (EComponent i = Settings->MinVal; i <= Settings->MaxVal; i++) {
                         auto name = Settings->ComponentName(i);
                         if (!*name)
                             continue;
@@ -497,7 +497,7 @@ namespace NActors {
                           << Settings->ComponentName(component) << " "
                           << PriorityToString(priority);
 
-                if (fileName) {
+                if (fileName && Settings->LogSourceLocation) {
                     logRecord << ": " << fileName << ":" << lineNumber;
                 }
                 logRecord << ": " << formatted;

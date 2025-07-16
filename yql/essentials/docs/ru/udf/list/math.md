@@ -148,15 +148,15 @@ SELECT Math::Rem(-1, 7);        -- -1
 
 #### Список функций
 
-* `Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards negative infinity
-* `Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards nearest representable value
-* `Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards zero
-* `Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards positive infinity
-* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>`
+* `Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону отрицательной бесконечности
+* `Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону ближайшего представимого значения
+* `Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону нуля
+* `Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону положительной бесконечности
+* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>` &mdash; округление до ближайшего целого значения
 
-Функция `Math::NearbyInt` округляет первый аргумент до целого числа в соответсвии с режимом, заданным вторым аргументом.
+Функция `Math::NearbyInt` округляет первый аргумент до целого числа в соответствии с режимом, заданным вторым аргументом.
 
-Если результат выходит за пределы 64-битного целого числа, возращается NULL.
+Если результат выходит за пределы 64-битного целого числа, возвращается NULL.
 
 #### Примеры
 

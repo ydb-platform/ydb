@@ -4,7 +4,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
-from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_items, equal_to
+from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_items, equal_to, empty
 import enum
 import logging
 import os
@@ -1319,7 +1319,7 @@ class BaseTestClusterBackupInFiles(object):
             storage_pool_units_count={
                 'hdd': 1
             },
-            timeout_seconds=100,
+            timeout_seconds=240,
             token=cls.cluster.config.default_clusteradmin
         )
 
@@ -1527,7 +1527,7 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
                 "--endpoint", f"grpc://localhost:{cls.restore_cluster.nodes[1].grpc_port}",
             ]
             + command
-            + ["--input", backup_files_dir, "-w", "60s"]
+            + ["--input", backup_files_dir, "-w", "240s"]
             + additional_args,
             env={"YDB_TOKEN": token}
         )
@@ -1621,3 +1621,139 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
         self.restore_driver.wait(timeout=10)
 
         self.restore_database_backup(input="database_backup")
+
+
+class TestRestoreReplaceOption(BaseTestBackupInFiles):
+    def ydb_cli(self, args):
+        yatest.common.execute(
+            [
+                backup_bin(),
+                "-vvv",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+            ]
+            + args
+        )
+
+    def try_ydb_cli(self, args):
+        try:
+            result = self.ydb_cli(args)
+            return True, result.std_out.decode("utf-8")
+
+        except yatest.common.process.ExecutionError as exception:
+            return False, exception.execution_result.std_err.decode("utf-8")
+
+    def delete_some_rows(self, session, table):
+        session.transaction().execute(
+            f"""
+            DELETE FROM `{table}` WHERE id == 2;
+            """,
+            commit_tx=True,
+        )
+
+    def test_table_replacement(self):
+        session = self.driver.table_client.session().create()
+
+        create_table_with_data(session, "table")
+
+        # Backup the table
+        backup_files_dir = output_path(self.test_name, "test_table_replacement", "backup_files_dir")
+        self.ydb_cli(["tools", "dump", "--path", ".", "--output", backup_files_dir])
+        assert_that(os.listdir(backup_files_dir), is_(["table"]))
+
+        # Restore the table
+        assert_that(
+            self.try_ydb_cli(
+                ["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--dry-run"]
+            )[0],
+            is_(False),
+        )
+        assert_that(
+            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
+            is_not(has_items("restoration")),
+        )
+        self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir])
+        assert_that(
+            is_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
+            is_(True),
+        )
+
+        # Replace the table
+        self.delete_some_rows(session, "/Root/restoration/point/table")
+        self.ydb_cli(
+            ["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace", "--dry-run"]
+        )
+        assert_that(
+            is_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
+            is_(False),
+        )
+        self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace"])
+        assert_that(
+            is_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
+            is_(True),
+        )
+
+        # Drop the folder
+        self.ydb_cli(["scheme", "rmdir", "--force", "--recursive", "./restoration/point"])
+
+        # Replace a non-existent table with the --verify-existence option turned on
+        assert_that(
+            self.try_ydb_cli(
+                [
+                    "tools",
+                    "restore",
+                    "--path", "./restoration/point",
+                    "--input", backup_files_dir,
+                    "--replace",
+                    "--verify-existence",
+                    "--dry-run",
+                ]
+            )[0],
+            is_(False),
+        )
+        assert_that(
+            self.try_ydb_cli(
+                [
+                    "tools",
+                    "restore",
+                    "--path", "./restoration/point",
+                    "--input", backup_files_dir,
+                    "--replace",
+                    "--verify-existence",
+                ]
+            )[0],
+            is_(False),
+        )
+
+        assert_that(
+            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
+            contains_inanyorder("table", "restoration", ".metadata", ".sys"),
+        )
+        assert_that(
+            [child.name for child in self.driver.scheme_client.list_directory("/Root/restoration").children],
+            empty()
+        )
+
+        # Replace a non-existent table
+        assert_that(
+            self.try_ydb_cli(
+                [
+                    "tools",
+                    "restore",
+                    "--path", "./restoration/point",
+                    "--input", backup_files_dir,
+                    "--replace",
+                    "--dry-run",
+                ]
+            )[0],
+            is_(False),
+        )
+        assert_that(
+            [child.name for child in self.driver.scheme_client.list_directory("/Root/restoration").children],
+            empty()
+        )
+        self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace"])
+        assert_that(
+            is_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
+            is_(True),
+        )

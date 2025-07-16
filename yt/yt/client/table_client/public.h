@@ -160,7 +160,7 @@ DEFINE_ENUM(ECompatOptimizeFor,
     ((Scan)    (1))
 );
 
-DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, int,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
     ((Lookup)  (0))
     ((Scan)    (1))
 );
@@ -200,6 +200,7 @@ YT_DEFINE_ERROR_ENUM(
     ((StringLikeValueLengthLimitExceeded)(326))
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
+    ((UnableToSynchronizeReplicationCard)(329))
 );
 
 DEFINE_ENUM(EControlAttribute,
@@ -465,6 +466,15 @@ using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedVal
 
 struct TVersionedReadOptions;
 struct TVersionedWriteOptions;
+
+template <ESimpleLogicalValueType type>
+struct TUnderlyingTzTypeImpl;
+
+template <ESimpleLogicalValueType type>
+struct TUnderlyingTimestampIntegerTypeImpl;
+
+template <ESimpleLogicalValueType type>
+using TUnderlyingTimestampIntegerType = TUnderlyingTimestampIntegerTypeImpl<type>::TValue;
 
 ////////////////////////////////////////////////////////////////////////////////
 

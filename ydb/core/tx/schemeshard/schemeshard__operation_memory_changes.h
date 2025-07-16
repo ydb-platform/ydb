@@ -1,11 +1,13 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_path_element.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/stack.h>
+
+#include <optional>
 
 namespace NKikimr::NSchemeShard {
 
@@ -61,6 +63,12 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
     TStack<TBackupCollectionState> BackupCollections;
 
+    using TSysViewState = std::pair<TPathId, TSysViewInfo::TPtr>;
+    TStack<TSysViewState> SysViews;
+
+    using TLongIncrementalRestoreOpState = std::pair<TOperationId, std::optional<NKikimrSchemeOp::TLongIncrementalRestoreOp>>;
+    TStack<TLongIncrementalRestoreOpState> LongIncrementalRestoreOps;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -101,6 +109,12 @@ public:
     void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabNewSysView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSysView(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
+    void GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
 
     void UnDo(TSchemeShard* ss);
 };

@@ -1,12 +1,15 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
-#include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
 
+#include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 
+#include <yql/essentials/public/langver/yql_langver.h>
+
 #include <util/datetime/base.h>
+
+#include <concepts>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -132,11 +135,15 @@ const auto UsecondsInMinute = 60000000ll;
 const auto UsecondsInSecond = 1000000ll;
 const auto UsecondsInMilliseconds = 1000ll;
 
-template <const char* TFuncName, typename TResult, typename TWResult, ui32 ScaleAfterSeconds>
+template <
+    const char* TFuncName,
+    std::integral TResult,
+    std::integral TSignedResult,
+    std::integral TWResult,
+    ui32 ScaleAfterSeconds>
 class TToUnits {
 public:
     typedef bool TTypeAwareMarker;
-    using TSignedResult = typename std::make_signed<TResult>::type;
 
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
@@ -673,7 +680,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
     }
 
     inline bool ValidateTimezoneId(ui16 timezoneId) {
-        const auto& zones = NUdf::GetTimezones();
+        const auto& zones = NTi::GetTimezones();
         return timezoneId < zones.size() && !zones[timezoneId].empty();
     }
 
@@ -1616,10 +1623,10 @@ TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxed
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
             Y_UNUSED(valueBuilder);
             auto timezoneId = GetTimezoneId<TMResourceName>(item);
-            if (timezoneId >= NUdf::GetTimezones().size()) {
+            if (timezoneId >= NTi::GetTimezones().size()) {
                 sink(TBlockItem{});
             } else {
-                sink(TBlockItem{NUdf::GetTimezones()[timezoneId]});
+                sink(TBlockItem{NTi::GetTimezones()[timezoneId]});
             }
         }
     };
@@ -1627,7 +1634,7 @@ TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxed
 template<const char* TResourceName>
 TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedValuePod& arg) {
     const ui16 tzId = GetTimezoneId<TResourceName>(arg);
-    const auto& tzNames = NUdf::GetTimezones();
+    const auto& tzNames = NTi::GetTimezones();
     if (tzId >= tzNames.size()) {
         return TUnboxedValuePod();
     }
@@ -1849,6 +1856,11 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
                                                                                          \
     END_SIMPLE_ARROW_UDF(T##name, (TFromConverterKernel<argType, retType, usecMultiplier>::Do))
 
+#define DATETIME_FROM_CONVERTER_UDF_N(space, name, retType, argType, usecMultiplier)    \
+    namespace N##space {                                                                \
+        DATETIME_FROM_CONVERTER_UDF(name, retType, argType, usecMultiplier);            \
+    }
+
     DATETIME_FROM_CONVERTER_UDF(FromSeconds, TTimestamp, ui32, UsecondsInSecond);
     DATETIME_FROM_CONVERTER_UDF(FromMilliseconds, TTimestamp, ui64, UsecondsInMilliseconds);
     DATETIME_FROM_CONVERTER_UDF(FromMicroseconds, TTimestamp, ui64, 1);
@@ -1860,7 +1872,8 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
     DATETIME_FROM_CONVERTER_UDF(IntervalFromDays, TInterval, i32, UsecondsInDay);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromHours, TInterval, i32, UsecondsInHour);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMinutes, TInterval, i32, UsecondsInMinute);
-    DATETIME_FROM_CONVERTER_UDF(IntervalFromSeconds, TInterval, i32, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF_N(Legacy, IntervalFromSeconds, TInterval, i32, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF_N(Actual, IntervalFromSeconds, TInterval, i64, UsecondsInSecond);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMilliseconds, TInterval, i64, UsecondsInMilliseconds);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMicroseconds, TInterval, i64, 1);
 
@@ -2934,7 +2947,7 @@ private:
                     case 'Z':
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                             const auto timezoneId = GetTimezoneId<TM64ResourceName>(value);
-                            const auto tzName = NUdf::GetTimezones()[timezoneId];
+                            const auto tzName = NTi::GetTimezones()[timezoneId];
                             std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
                             return tzName.size();
                         });
@@ -2991,7 +3004,8 @@ private:
                         break;
                     }
                     default:
-                        ythrow yexception() << "invalid format character: " << *ptr;
+                        throw yexception() << "character '" << *ptr << "' is not a valid format specifier."
+                                           << "\nSee documentation for valid format characters";
                     }
 
                     dataStart = ptr + 1U;
@@ -3101,13 +3115,13 @@ private:
         std::vector<std::function<bool(std::string_view::const_iterator& it, size_t, TUnboxedValuePod&, const IDateBuilder&)>> Scanners_;
 
         struct TDataScanner {
-            const std::string_view Data_;
+            const std::string_view Data;
 
             bool operator()(std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod&, const IDateBuilder&) const {
-                if (limit < Data_.size() || !std::equal(Data_.begin(), Data_.end(), it)) {
+                if (limit < Data.size() || !std::equal(Data.begin(), Data.end(), it)) {
                     return false;
                 }
-                std::advance(it, Data_.size());
+                std::advance(it, Data.size());
                 return true;
             }
         };
@@ -3183,14 +3197,37 @@ private:
                             }
                             SetYear<TMResourceName>(result, year);
                         } else {
-                            static constexpr size_t size = 6;
                             i64 year = 0LL;
                             i64 negative = 1LL;
+                            if (limit == 0) {
+                                // Year must take at least 1 byte.
+                                return false;
+                            }
                             if (*it == '-') {
                                 negative = -1LL;
                                 it++;
+                                limit--;
                             }
-                            if (!ParseNDigits<size, true>::Do(it, year) || !ValidateYear<TM64ResourceName>(negative * year)) {
+                            auto parseDigits = [&]() {
+                                switch (limit) {
+                                    case 0:
+                                        // Year number must take at least 1 byte.
+                                        return false;
+                                    case 1:
+                                        return ParseNDigits<1, true>::Do(it, year);
+                                    case 2:
+                                        return ParseNDigits<2, true>::Do(it, year);
+                                    case 3:
+                                        return ParseNDigits<3, true>::Do(it, year);
+                                    case 4:
+                                        return ParseNDigits<4, true>::Do(it, year);
+                                    case 5:
+                                        return ParseNDigits<5, true>::Do(it, year);
+                                    default:
+                                        return ParseNDigits<6, true>::Do(it, year);
+                                }
+                            };
+                            if (!parseDigits() || !ValidateYear<TM64ResourceName>(negative * year)) {
                                 return false;
                             }
                             SetYear<TM64ResourceName>(result, negative * year);
@@ -3435,7 +3472,12 @@ private:
         TIntervalFromDays,
         TIntervalFromHours,
         TIntervalFromMinutes,
-        TIntervalFromSeconds,
+
+        TLangVerForked<
+            NYql::MakeLangVersion(2025, 03),
+            NLegacy::TIntervalFromSeconds,
+            NActual::TIntervalFromSeconds>,
+
         TIntervalFromMilliseconds,
         TIntervalFromMicroseconds,
 
@@ -3481,9 +3523,13 @@ private:
         TBoundaryOfInterval<EndOfUDF, SimpleDatetimeToIntervalUdf<TMResourceName, EndOf<TTMStorage>>,
                                       SimpleDatetimeToIntervalUdf<TM64ResourceName, EndOf<TTM64Storage>>>,
 
-        TToUnits<ToSecondsUDF, ui32, i64, 1>,
-        TToUnits<ToMillisecondsUDF, ui64, i64, 1000>,
-        TToUnits<ToMicrosecondsUDF, ui64, i64, 1000000>,
+        TLangVerForked<
+            NYql::MakeLangVersion(2025, 03),
+            TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i32, /* TWResult = */ i64, 1>,
+            TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i64, /* TWResult = */ i64, 1>>,
+
+        TToUnits<ToMillisecondsUDF, /* TResult = */ ui64, /* TSignedResult = */ i64, /* TWResult = */ i64, 1000>,
+        TToUnits<ToMicrosecondsUDF, /* TResult = */ ui64, /* TSignedResult = */ i64, /* TWResult = */ i64, 1000000>,
 
         TFormat,
         TParse<ParseUDF, TMResourceName>,

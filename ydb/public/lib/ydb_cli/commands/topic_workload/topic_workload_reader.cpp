@@ -8,7 +8,7 @@
 
 using namespace NYdb::NConsoleClient;
 
-void TTopicWorkloadReader::RetryableReaderLoop(TTopicWorkloadReaderParams& params) {
+void TTopicWorkloadReader::RetryableReaderLoop(const TTopicWorkloadReaderParams& params) {
     const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
 
     while (!*params.ErrorFlag && Now() < endTime) {
@@ -20,7 +20,7 @@ void TTopicWorkloadReader::RetryableReaderLoop(TTopicWorkloadReaderParams& param
     }
 }
 
-void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInstant endTime) {
+void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, TInstant endTime) {
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(params.Driver);
     std::optional<TTransactionSupport> txSupport;
 
@@ -35,8 +35,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
 
         if (!std::any_of(consumers.begin(), consumers.end(), [consumerName](const auto& consumer) { return consumer.GetConsumerName() == consumerName; }))
         {
-            WRITE_LOG(params.Log, ELogPriority::TLOG_EMERG, TStringBuilder() << "Topic '" << params.TopicName << "' doesn't have a consumer '" << consumerName << "'. Run command 'workload init' with parameter '--consumers'.");
-            exit(EXIT_FAILURE);
+            throw yexception() << "Topic '" << params.TopicName << "' doesn't have a consumer '" << consumerName << "'. Run command 'workload init' with parameter '--consumers'.";
         }
         settings.ConsumerName(consumerName).AppendTopics(std::string{params.TopicName});
     } else {
@@ -148,7 +147,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
 }
 
 std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> TTopicWorkloadReader::GetEvents(NYdb::NTopic::IReadSession& readSession,
-                                                                                     TTopicWorkloadReaderParams& params,
+                                                                                     const TTopicWorkloadReaderParams& params,
                                                                                      std::optional<TTransactionSupport>& txSupport)
 {
     TVector<NYdb::NTopic::TReadSessionEvent::TEvent> events;
@@ -169,7 +168,7 @@ std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> TTopicWorkloadReader::GetEv
     return readSession.GetEvents(settings);
 }
 
-void TTopicWorkloadReader::TryCommitTx(TTopicWorkloadReaderParams& params,
+void TTopicWorkloadReader::TryCommitTx(const TTopicWorkloadReaderParams& params,
                                        std::optional<TTransactionSupport>& txSupport,
                                        TInstant& commitTime,
                                        TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents)
@@ -186,7 +185,7 @@ void TTopicWorkloadReader::TryCommitTx(TTopicWorkloadReaderParams& params,
     commitTime += TDuration::MilliSeconds(params.CommitPeriodMs);
 }
 
-void TTopicWorkloadReader::TryCommitTableChanges(TTopicWorkloadReaderParams& params,
+void TTopicWorkloadReader::TryCommitTableChanges(const TTopicWorkloadReaderParams& params,
                                                  std::optional<TTransactionSupport>& txSupport)
 {
     if (txSupport->Rows.empty()) {

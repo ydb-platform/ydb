@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: allure-python-commons
-Version: 2.14.0
+Version: 2.14.3
 Summary: Contains the API for end users as well as helper functions and classes to build Allure adapters for Python test frameworks
 Home-page: https://allurereport.org/
 Author: Qameta Software Inc., Stanislav Seliverstov

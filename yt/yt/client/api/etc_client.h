@@ -45,7 +45,7 @@ struct TCheckClusterLivenessOptions
     //! Checks secondary master cells generic availability.
     bool CheckSecondaryMasterCells = false;
     //! Unless null checks tablet cell bundle health.
-    std::optional<TString> CheckTabletCellBundle;
+    std::optional<std::string> CheckTabletCellBundle;
 
     bool IsCheckTrivial() const;
 

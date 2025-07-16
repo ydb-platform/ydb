@@ -13,7 +13,7 @@ The following authentication modes are supported:
 * [Anonymous](#anonymous) authentication.
 * Authentication by [username and password](#static-credentials).
 * [LDAP](#ldap-auth-provider) authentication.
-* [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management](https://cloud.yandex.com/en/docs/iam/).
+* [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management](https://yandex.cloud/en/docs/iam/).
 
 ## Anonymous authentication {#anonymous}
 

@@ -125,7 +125,7 @@ public:
     const TVector<TYtError>& InnerErrors() const;
 
     /// Parse error from json string.
-    void ParseFrom(const TString& jsonError);
+    void ParseFrom(TStringBuf jsonError);
 
     /// Collect error codes from entire error tree.
     TSet<int> GetAllErrorCodes() const;

@@ -92,20 +92,22 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (state.IsInvalid()) {
+        if (state.IsFinish()) {
+            return EFetchResult::Finish;
+        } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
-        if (const auto value = static_cast<TState&>(*state.AsBoxed()).FetchRecord(); value.IsFinish())
+        if (const auto value = static_cast<TState&>(*state.AsBoxed()).FetchRecord(); value.IsFinish()) {
+            state = NUdf::TUnboxedValue::MakeFinish();
             return EFetchResult::Finish;
-        else if (value.IsYield())
+        } else if (value.IsYield())
             return EFetchResult::Yield;
         else {
             const auto elements = value.GetElements();
             for (ui32 i = 0U; i < Width; ++i)
                 if (const auto out = *output++)
                     *out = elements[i];
-
         }
 
         return EFetchResult::One;
@@ -133,47 +135,78 @@ public:
 
         const auto placeholder = new AllocaInst(pointerType, 0U, "paceholder", &ctx.Func->getEntryBlock().back());
 
+        const auto finish = BasicBlock::Create(context, "finish", ctx.Func);
+        const auto checkValid = BasicBlock::Create(context, "checkValid", ctx.Func);
+        const auto gotFinish = BasicBlock::Create(context, "gotFinish", ctx.Func);
+        const auto checkYield = BasicBlock::Create(context, "checkYield", ctx.Func);
+        const auto returnYield = BasicBlock::Create(context, "returnYield", ctx.Func);
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
-        block = make;
+        const auto result = PHINode::Create(statusType, 3U, "result", done);
 
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(static_cast<const TDqYtReadWrapperBase<T, IS>*>(this))), structPtrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TDqYtReadWrapperBase<T, IS>::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
-        BranchInst::Create(main, block);
+        BranchInst::Create(finish, checkValid, IsFinish(statePtr, block, context), block);
+        { // if state.IsFinish()
+            block = finish;
+            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+            BranchInst::Create(done, block);
+        }
+        { // else
+            block = checkValid;
+            // if state.IsInvalid()
+            BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
+        }
+        {
+            block = make;
 
-        block = main;
+            const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(static_cast<const TDqYtReadWrapperBase<T, IS>*>(this))), structPtrType, "self", block);
+            const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TDqYtReadWrapperBase<T, IS>::MakeState>());
+            const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
+            const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+            CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+            BranchInst::Create(main, block);
+        }
+        {
+            block = main;
 
-        const auto state = new LoadInst(valueType, statePtr, "state", block);
-        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
-        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+            const auto state = new LoadInst(valueType, statePtr, "state", block);
+            const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+            const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FetchRecord>());
-        const auto funcType = FunctionType::get(valueType, { statePtrType }, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
-        const auto fetch = CallInst::Create(funcType, funcPtr, { stateArg }, "fetch", block);
+            const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FetchRecord>());
+            const auto funcType = FunctionType::get(valueType, { statePtrType }, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
+            const auto fetch = CallInst::Create(funcType, funcPtr, { stateArg }, "fetch", block);
 
-        const auto result = PHINode::Create(statusType, 2U, "result", done);
-        const auto special = SelectInst::Create(IsYield(fetch, block, context), ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), "special", block);
-        result->addIncoming(special, block);
+            BranchInst::Create(gotFinish, checkYield, IsFinish(fetch, block, context), block);
+            block = checkYield;
+            BranchInst::Create(returnYield, good, IsYield(fetch, block, context), block);
+            {
+                block = good;
 
-        BranchInst::Create(done, good, IsSpecial(fetch, block, context), block);
+                const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(pointerType, fetch, ctx.Codegen, block);
+                new StoreInst(elements, placeholder, block);
 
-        block = good;
+                result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
 
-        const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(pointerType, fetch, ctx.Codegen, block);
-        new StoreInst(elements, placeholder, block);
-
-        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
-
-        BranchInst::Create(done, block);
-
+                BranchInst::Create(done, block);
+            }
+        }
+        {
+            block = returnYield;
+            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
+            BranchInst::Create(done, block);
+        }
+        {
+            block = gotFinish;
+            // state = MakeFinish()
+            UnRefBoxed(statePtr, ctx, block);
+            new StoreInst(GetFinish(context), statePtr, block);
+            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+            BranchInst::Create(done, block);
+        }
         block = done;
 
         ICodegeneratorInlineWideNode::TGettersList getters;

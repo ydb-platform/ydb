@@ -171,6 +171,9 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "   AuthorizedByCertificate: " << (node.AuthorizedByCertificate ? "true" : "false") << Endl
                     << "   ServicedSubDomain: " << node.ServicedSubDomain << Endl
                     << "   SlotIndex: " << node.SlotIndex << Endl;
+                if (node.BridgePileId) {
+                    str << "   BridgePileId: " << *node.BridgePileId << Endl;
+                }
             }
             str << Endl;
 
@@ -457,6 +460,14 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
     }
 }
 
+void TNodeBroker::ScheduleProcessSubscribersQueue(const TActorContext &ctx)
+{
+    if (!ScheduledProcessSubscribersQueue && !SubscribersQueue.Empty()) {
+        ctx.Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+        ScheduledProcessSubscribersQueue = true;
+    }
+}
+
 void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
                                NKikimrNodeBroker::TNodeInfo &info) const
 {
@@ -468,6 +479,9 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetExpire(node.Expire.GetValue());
     node.Location.Serialize(info.MutableLocation(), false);
     FillNodeName(node.SlotIndex, info);
+    if (const auto& id = node.BridgePileId) {
+        id->CopyToProto(&info, &NKikimrNodeBroker::TNodeInfo::SetBridgePileId);
+    }
 }
 
 void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
@@ -699,26 +713,17 @@ void TNodeBroker::SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase
     ctx.Send(ev.Release());
 }
 
-void TNodeBroker::SendUpdateNodes(const TActorContext &ctx)
-{
-    if (SentVersion >= Committed.Epoch.Version) {
-        return;
-    }
 
-    for (const auto& [_, subscriber] : Subscribers) {
-        SendUpdateNodes(subscriber, SentVersion, ctx);
-    }
-    SentVersion = Committed.Epoch.Version;
-}
-
-void TNodeBroker::SendUpdateNodes(const TSubscriberInfo &subscriber, ui64 version, const TActorContext &ctx)
+void TNodeBroker::SendUpdateNodes(TSubscriberInfo &subscriber, const TActorContext &ctx)
 {
+    SubscribersQueue.Remove(&subscriber);
+
     NKikimrNodeBroker::TUpdateNodes record;
     record.SetSeqNo(subscriber.SeqNo);
     Committed.Epoch.Serialize(*record.MutableEpoch());
     auto response = MakeHolder<TEvNodeBroker::TEvUpdateNodes>(record);
 
-    auto it = std::lower_bound(UpdateNodesLogVersions.begin(), UpdateNodesLogVersions.end(), version + 1);
+    auto it = std::lower_bound(UpdateNodesLogVersions.begin(), UpdateNodesLogVersions.end(), subscriber.SentVersion + 1);
     if (it != UpdateNodesLogVersions.begin()) {
         response->PreSerializedData = UpdateNodesLog.substr(std::prev(it)->CacheEndOffset);
     } else {
@@ -727,23 +732,32 @@ void TNodeBroker::SendUpdateNodes(const TSubscriberInfo &subscriber, ui64 versio
 
     TabletCounters->Percentile()[COUNTER_UPDATE_NODES_BYTES].IncrementFor(response->GetCachedByteSize());
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
-                "Send TEvUpdateNodes v" << version << " -> v" << Committed.Epoch.Version
+                "Send TEvUpdateNodes v" << subscriber.SentVersion << " -> v" << Committed.Epoch.Version
                 << " to " << subscriber.Id);
     SendToSubscriber(subscriber, response.Release(), ctx);
+
+    subscriber.SentVersion = Committed.Epoch.Version;
+    SubscribersQueue.PushBack(&subscriber);
 }
 
 TNodeBroker::TSubscriberInfo& TNodeBroker::AddSubscriber(TActorId subscriberId,
                                                          TActorId pipeServerId,
                                                          ui64 seqNo,
+                                                         ui64 version,
                                                          const TActorContext &ctx)
 {
     LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                 "New subscriber " << subscriberId
                 << ", seqNo: " << seqNo
+                << ", version: " << version
                 << ", server pipe id: " << pipeServerId);
 
     auto& pipeServer = PipeServers.at(pipeServerId);
-    auto res = Subscribers.emplace(subscriberId, TSubscriberInfo(subscriberId, seqNo, &pipeServer));
+    auto res = Subscribers.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(subscriberId),
+        std::forward_as_tuple(subscriberId, seqNo, version, &pipeServer)
+    );
     Y_ENSURE(res.second, "Subscription already exists for " << subscriberId);
     pipeServer.Subscribers.insert(subscriberId);
     return res.first->second;
@@ -760,6 +774,7 @@ void TNodeBroker::RemoveSubscriber(TActorId subscriber, const TActorContext &ctx
                 << ", server pipe id: " << it->second.PipeServerInfo->Id);
 
     it->second.PipeServerInfo->Subscribers.erase(subscriber);
+    SubscribersQueue.Remove(&it->second);
     Subscribers.erase(it);
 }
 
@@ -769,6 +784,13 @@ bool TNodeBroker::HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) co
         return it->second.SeqNo < newSeqNo;
     }
     return false;
+}
+
+void TNodeBroker::UpdateCommittedStateCounters() {
+    TabletCounters->Simple()[COUNTER_ACTIVE_NODES].Set(Committed.Nodes.size());
+    TabletCounters->Simple()[COUNTER_EXPIRED_NODES].Set(Committed.ExpiredNodes.size());
+    TabletCounters->Simple()[COUNTER_REMOVED_NODES].Set(Committed.RemovedNodes.size());
+    TabletCounters->Simple()[COUNTER_EPOCH_VERSION].Set(Committed.Epoch.Version);
 }
 
 void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
@@ -844,7 +866,8 @@ void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
                 << " expire=" << node.ExpirationString()
                 << " servicedsubdomain=" << node.ServicedSubDomain
                 << " slotindex=" << node.SlotIndex
-                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
+                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false")
+                << " bridgePileId=" << (node.BridgePileId ? TString(TStringBuilder() << *node.BridgePileId) : "<none>"));
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -865,6 +888,11 @@ void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
         .Update<T::Location>(node.Location.GetSerializedLocation())
         .Update<T::ServicedSubDomain>(node.ServicedSubDomain)
         .Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
+
+    if (node.BridgePileId) {
+        db.Table<T>().Key(node.NodeId)
+            .Update<T::BridgePileId>(node.BridgePileId->GetRawId());
+    }
 
     if (node.SlotIndex.has_value()) {
         db.Table<T>().Key(node.NodeId)
@@ -1098,6 +1126,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset,
             }
             info.AuthorizedByCertificate = nodesRowset.template GetValue<Schema::Nodes::AuthorizedByCertificate>();
             info.State = expire > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
+            if (nodesRowset.template HaveValue<Schema::Nodes::BridgePileId>()) {
+                info.BridgePileId.emplace(TBridgePileId::FromValue(nodesRowset.template GetValue<Schema::Nodes::BridgePileId>()));
+            }
             AddNode(info);
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -1483,6 +1514,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         TActorId ReplyTo;
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
+        std::optional<TBridgePileId> BridgePileId;
+        TString Error;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1498,6 +1531,27 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             Become(&TThis::StateFunc);
 
             auto& record = Ev->Get()->Record;
+
+            if (record.HasBridgePileName()) {
+                if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
+                    const TString& name = record.GetBridgePileName();
+                    const auto& bridge = *AppData()->BridgeConfig;
+                    const auto& piles = bridge.GetPiles();
+                    for (int i = 0; i < piles.size(); ++i) {
+                        if (piles[i].GetName() == name) {
+                            BridgePileId.emplace(TBridgePileId::FromValue(i));
+                            break;
+                        }
+                    }
+                    if (!BridgePileId) {
+                        Error = TStringBuilder() << "Incorrect bridge pile name " << name;
+                    }
+                } else {
+                    Error = "Bridge pile specified while bridge mode is disabled";
+                }
+            } else if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
+                Error = "Bridge pile not specified while bridge mode is enabled";
+            }
 
             if (record.HasPath()) {
                 auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -1548,7 +1602,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": scope id# " << ScopeIdToString(ScopeId)
                 << ": serviced subdomain# " << ServicedSubDomain);
 
-            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain));
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, BridgePileId,
+                std::move(Error)));
             Die(ctx);
         }
 
@@ -1607,13 +1662,15 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
     TabletCounters->Cumulative()[COUNTER_SUBSCRIBE_NODES_REQUESTS].Increment(1);
 
     auto seqNo = ev->Get()->Record.GetSeqNo();
+    auto version = ev->Get()->Record.GetCachedVersion();
+
     if (HasOutdatedSubscription(ev->Sender, seqNo)) {
         RemoveSubscriber(ev->Sender, ctx);
     }
 
     if (!Subscribers.contains(ev->Sender)) {
-        const auto& subscriber = AddSubscriber(ev->Sender, ev->Recipient, seqNo, ctx);
-        SendUpdateNodes(subscriber, ev->Get()->Record.GetCachedVersion(), ctx);
+        auto& subscriber = AddSubscriber(ev->Sender, ev->Recipient, seqNo, version, ctx);
+        SendUpdateNodes(subscriber, ctx);
     }
 }
 
@@ -1622,13 +1679,22 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
 {
     TabletCounters->Cumulative()[COUNTER_SYNC_NODES_REQUESTS].Increment(1);
 
-    if (auto it = Subscribers.find(ev->Sender); it != Subscribers.end()) {
-        if (it->second.SeqNo == ev->Get()->Record.GetSeqNo()) {
-            auto response = MakeHolder<TEvNodeBroker::TEvSyncNodesResponse>();
-            response->Record.SetSeqNo(it->second.SeqNo);
-            SendToSubscriber(it->second, response.Release(), ev->Cookie, ctx);
-        }
+    auto it = Subscribers.find(ev->Sender);
+    if (it == Subscribers.end()) {
+        return;
     }
+
+    if (it->second.SeqNo != ev->Get()->Record.GetSeqNo()) {
+        return;
+    }
+
+    if (it->second.SentVersion < Committed.Epoch.Version) {
+        SendUpdateNodes(it->second, ctx);
+    }
+
+    auto response = MakeHolder<TEvNodeBroker::TEvSyncNodesResponse>();
+    response->Record.SetSeqNo(it->second.SeqNo);
+    SendToSubscriber(it->second, response.Release(), ev->Cookie, ctx);
 }
 
 void TNodeBroker::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev)
@@ -1668,6 +1734,18 @@ void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
     Execute(CreateTxRegisterNode(ev), ctx);
 }
 
+void TNodeBroker::Handle(TEvPrivate::TEvProcessSubscribersQueue::TPtr &, const TActorContext &ctx)
+{
+    ScheduledProcessSubscribersQueue = false;
+    if (!SubscribersQueue.Empty()) {
+        auto& subscriber = *SubscribersQueue.Front();
+        if (subscriber.SentVersion < Committed.Epoch.Version) {
+            SendUpdateNodes(subscriber, ctx);
+            ScheduleProcessSubscribersQueue(ctx);
+        }
+    }
+}
+
 TNodeBroker::TState::TState(TNodeBroker* self)
         : Self(self)
 {}
@@ -1699,6 +1777,9 @@ TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, c
     , ServicedSubDomain(schema.GetServicedSubDomain())
     , State(state)
     , Version(version)
+    , BridgePileId(schema.HasBridgePileId()
+        ? std::make_optional(TBridgePileId::FromProto(&schema, &TNodeInfoSchema::GetBridgePileId))
+        : std::nullopt)
 {}
 
 TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version)
@@ -1722,7 +1803,8 @@ bool TNodeBroker::TNodeInfo::EqualExceptVersion(const TNodeInfo &other) const
         && AuthorizedByCertificate == other.AuthorizedByCertificate
         && SlotIndex == other.SlotIndex
         && ServicedSubDomain == other.ServicedSubDomain
-        && State == other.State;
+        && State == other.State
+        && BridgePileId == other.BridgePileId;
 }
 
 TString TNodeBroker::TNodeInfo::IdString() const
@@ -1750,6 +1832,7 @@ TString TNodeBroker::TNodeInfo::ToString() const
         << ", Expire: " << ExpirationString()
         << ", Location: " << Location.ToString()
         << ", AuthorizedByCertificate: " << AuthorizedByCertificate
+        << ", BridgePileId: " << (BridgePileId ? TString(TStringBuilder() << *BridgePileId) : "<none>")
         << ", SlotIndex: " << SlotIndex
         << ", ServicedSubDomain: " << ServicedSubDomain
     << " }";
@@ -1770,6 +1853,9 @@ TNodeInfoSchema TNodeBroker::TNodeInfo::SerializeToSchema() const {
         serialized.SetSlotIndex(*SlotIndex);
     }
     serialized.SetAuthorizedByCertificate(AuthorizedByCertificate);
+    if (BridgePileId) {
+        BridgePileId->CopyToProto(&serialized, &TNodeInfoSchema::SetBridgePileId);
+    }
     return serialized;
 }
 

@@ -1,5 +1,7 @@
 #include "ut_helpers/ut_backup_restore_common.h"
 
+#include <ydb/public/api/protos/ydb_import.pb.h>
+
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -7,10 +9,10 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -20,12 +22,11 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
-#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <library/cpp/string_utils/quote/quote.h>
+#include <library/cpp/testing/hook/hook.h>
 
 #include <contrib/libs/double-conversion/double-conversion/ieee.h>
 #include <contrib/libs/zstd/include/zstd.h>
-#include <library/cpp/string_utils/quote/quote.h>
-#include <library/cpp/testing/hook/hook.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
@@ -41,6 +42,8 @@ using namespace NKikimr::NWrappers::NTestHelpers;
 using namespace NKikimr;
 using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
+
+using namespace NKikimr::Tests;
 
 namespace {
 
@@ -183,6 +186,7 @@ namespace {
         TDataWithChecksum Permissions;
         TImportChangefeed Changefeed;
         TVector<TTestData> Data;
+        TDataWithChecksum Topic;
 
         TTestDataWithScheme() = default;
 
@@ -309,6 +313,9 @@ namespace {
             result.Changefeed.Changefeed = typedScheme.Scheme;
             result.Changefeed.Topic = typedScheme.Attributes.GetTopicDescription();
             break;
+        case EPathTypePersQueueGroup:
+            result.Topic = typedScheme.Scheme;
+            break;
         default:
             UNIT_FAIL("cannot create sample test data for the scheme object type: " << typedScheme.Type);
             return {};
@@ -357,6 +364,14 @@ namespace {
                 }
                 break;
             }
+            case EPathTypePersQueueGroup: {
+                auto topicKey = prefix + "/create_topic.pb";
+                result.emplace(topicKey, item.Topic);
+                if (withChecksum) {
+                    result.emplace(NBackup::ChecksumKey(topicKey), item.Topic.Checksum);
+                }
+                break;
+            }
             default:
                 UNIT_FAIL("cannot determine key for the scheme object type: " << item.Type);
                 return {};
@@ -387,41 +402,11 @@ namespace {
         return ConvertTestData({{"", data}});
     }
 
-    NKikimrMiniKQL::TResult ReadTableImpl(TTestActorRuntime& runtime, ui64 tabletId, const TString& query) {
-        NKikimrMiniKQL::TResult result;
-
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, query, result, error);
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-
-        return result;
-    }
-
     struct TReadKeyDesc {
         TString Name;
         TString Type;
         TString Atom;
     };
-
-    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
-            const TString& table = "Table",
-            const TReadKeyDesc& keyDesc = {"key", "Utf8", "\"\""},
-            const TVector<TString>& columns = {"key", "value"},
-            const TString& rangeFlags = "") {
-
-        const auto rangeFmt = Sprintf("'%s (%s '%s)", keyDesc.Name.data(), keyDesc.Type.data(), keyDesc.Atom.data());
-        const auto columnsFmt = "'" + JoinSeq(" '", columns);
-
-        return ReadTableImpl(runtime, tabletId, Sprintf(R"(
-            (
-                (let range '(%s '(%s (Void) )))
-                (let columns '(%s) )
-                (let result (SelectRange '__user__%s range columns '()))
-                (return (AsList (SetResult 'Result result) ))
-            )
-        )", rangeFlags.c_str(), rangeFmt.data(), columnsFmt.data(), table.data()));
-    }
 
     using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
 
@@ -506,7 +491,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -588,7 +573,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
 
         const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
@@ -618,11 +603,11 @@ value {
         )", {a, b});
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(a.YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(b.YsonStr, content);
         }
     }
@@ -640,7 +625,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -656,7 +641,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data}, batchSize);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -738,7 +723,7 @@ value {
         UNIT_ASSERT_VALUES_EQUAL(result->GetRowsProcessed(), 2);
 
         env.TestWaitNotification(runtime, txId);
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -780,7 +765,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data}, batchSize);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -875,7 +860,7 @@ value {
             KeyColumnNames: ["key"]
         )_", {data}, data.Data.size() + 1);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"}, {
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {
             "key",
             "int32_value",
             "uint32_value",
@@ -1397,7 +1382,7 @@ value {
                     << R"(["valueA"])" // value
                 << "];"
             << "];\%false]]]";
-            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
         {
@@ -1407,7 +1392,7 @@ value {
                     << R"(["valueB"])" // value
                 << "];"
             << "];\%false]]]";
-            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
     }
@@ -1554,12 +1539,12 @@ value {
                     << R"(["valueB"])" // value
                 << "];"
             << "];\%false]]]";
-            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
         {
             auto expectedJson = "[[[[];\%false]]]";
-            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
     }
@@ -1747,8 +1732,6 @@ value {
                 << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
             << "]];\%false]]]";
 
-            const TReadKeyDesc readKeyDesc = {"key", "Uint64", "0"};
-
             const TVector<TString> readColumns = {
                 "key",
                 "int32_value",
@@ -1777,10 +1760,10 @@ value {
                 "uuid_value",
             };
 
-            auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", readKeyDesc, readColumns);
+            auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, readColumns);
             NKqp::CompareYson(expectedJson, contentOriginalTable);
 
-            auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, commonPrefix ? "Table" : "Restored", readKeyDesc, readColumns);
+            auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, commonPrefix ? "Table" : "Restored", {"key"}, readColumns);
             NKqp::CompareYson(expectedJson, contentRestoredTable);
         }
     }
@@ -2133,7 +2116,7 @@ value {
                     << R"(["valueA"])" // value
                 << "];"
             << "];\%false]]]";
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key", "Uint32", "0"});
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key"}, {"key", "value"});
             NKqp::CompareYson(expectedJson, content);
         }
     }
@@ -2390,7 +2373,7 @@ value {
         UNIT_ASSERT(requests > expected);
         UNIT_ASSERT_VALUES_EQUAL(responses, expected);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2409,7 +2392,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data}, batchSize);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2435,7 +2418,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2453,7 +2436,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"});
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2476,11 +2459,11 @@ value {
         )", {a, b});
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(a.YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(b.YsonStr, content);
         }
     }
@@ -2498,7 +2481,7 @@ value {
             KeyColumnNames: ["key"]
         )", {data});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2600,7 +2583,7 @@ value {
         TestCancelTxTable(runtime, ++txId, restoreTxId);
         env.TestWaitNotification(runtime, {restoreTxId, txId});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
@@ -2666,7 +2649,7 @@ value {
         runtime.Send(progress.Release(), 0, true);
         env.TestWaitNotification(runtime, {restoreTxId, txId});
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 }
@@ -2728,7 +2711,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2758,11 +2741,11 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(a.YsonStr, content);
                 }
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(b.YsonStr, content);
                 }
             }
@@ -2810,11 +2793,11 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(a.YsonStr, content);
                 }
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(b.YsonStr, content);
                 }
             }
@@ -2840,7 +2823,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2865,7 +2848,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2891,7 +2874,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2917,7 +2900,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2943,7 +2926,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"});
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
                 NKqp::CompareYson(data.YsonStr, content);
             }
         });
@@ -2973,11 +2956,11 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(a.YsonStr, content);
                 }
                 {
-                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+                    auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
                     NKqp::CompareYson(b.YsonStr, content);
                 }
             }
@@ -3060,6 +3043,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             )", TStringBuf(serverless ? "/MyRoot/Shared" : dbName).RNextTok('/').data()));
             env.TestWaitNotification(runtime, id);
 
+            const auto describeResult = DescribePath(runtime, serverless ? "/MyRoot/Shared" : dbName);
+            const auto subDomainPathId = describeResult.GetPathId();
+
             TestAlterExtSubDomain(runtime, ++id, "/MyRoot", Sprintf(R"(
                 PlanResolution: 50
                 Coordinators: 1
@@ -3089,9 +3075,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     Name: "%s"
                     ResourcesDomainKey {
                         SchemeShard: %lu
-                        PathId: 2
+                        PathId: %lu
                     }
-                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard), attrs);
+                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard, subDomainPathId), attrs);
                 env.TestWaitNotification(runtime, id);
 
                 TestAlterExtSubDomain(runtime, ++id, "/MyRoot", Sprintf(R"(
@@ -3177,7 +3163,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )");
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.Data[0].YsonStr, content);
     }
 
@@ -3214,11 +3200,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(data.Data[0].YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(data.Data[1].YsonStr, content);
         }
     }
@@ -3262,13 +3248,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0);
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(data.Data[0].YsonStr, content);
         }
 
         for (ui32 i = 0; i < indexes; ++i) {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1 + i,
-                "indexImplTable", {"value", "Utf8", "\"\""}, {"value", "key"}, "'ExcFrom");
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1 + i, "indexImplTable", {"value"}, {"value", "key"}, "'ExcFrom ");
             NKqp::CompareYson(data.Data[0].YsonStr, content);
         }
     }
@@ -3328,11 +3313,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "TableA");
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "TableA", {"key"}, {"key", "value"});
             NKqp::CompareYson(a.Data[0].YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "TableB");
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "TableB", {"key"}, {"key", "value"});
             NKqp::CompareYson(b.Data[0].YsonStr, content);
         }
     }
@@ -3365,7 +3350,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )");
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.Data[0].YsonStr, content);
     }
 
@@ -3417,7 +3402,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const TString expectedBillRecord = R"({"usage":{"start":0,"quantity":50,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"281474976725758-72075186233409549-2-72075186233409549-4","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
 
         UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 1);
-        UNIT_ASSERT_NO_DIFF(billRecords[0], expectedBillRecord + "\n");
+        MeteringDataEqual(billRecords[0], expectedBillRecord);
     }
 
     Y_UNIT_TEST(ShouldNotWriteBillRecordOnCommonDb) {
@@ -5533,7 +5518,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
@@ -5639,6 +5624,170 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::PathsInsideDomain(5),
             NLs::ShardsInsideDomain(7)
         });
+    }
+
+    Y_UNIT_TEST(TopicImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        const auto data = GenerateTestData(
+            {
+                EPathTypePersQueueGroup,
+                R"(partitioning_settings {
+  min_active_partitions: 1
+  max_active_partitions: 1
+  auto_partitioning_settings {
+    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+    partition_write_speed {
+      stabilization_window {
+        seconds: 300
+      }
+      up_utilization_percent: 80
+      down_utilization_percent: 20
+    }
+  }
+}
+retention_period {
+  seconds: 64800
+}
+supported_codecs {
+}
+partition_write_speed_bytes_per_second: 1048576
+partition_write_burst_bytes: 1048576
+consumers {
+  name: "consumer1"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
+}
+consumers {
+  name: "consumer2"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
+}
+)"});
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+
+        bucketContent.emplace("/Topic", data);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "/Topic"
+                destination_path: "/MyRoot/Topic"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {
+            NLs::PathExist,
+        });
+    }
+
+    Y_UNIT_TEST(TopicExportImport) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+              Name: "Topic"
+              TotalGroupCount: 2
+              PartitionPerTablet: 1
+              PQTabletConfig {
+                  PartitionConfig {
+                      LifetimeSeconds: 10
+                  }
+              }
+          )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Topic"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(UnknownSchemeObjectImport) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TS3Mock s3Mock({
+            {"/unknown_key", "unknown_scheme_object"},
+            {"/metadata.json", R"({"version": 0})"}
+        }, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Unknown"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+                        .GetResponse().GetEntry().GetIssues();
+        UNIT_ASSERT(!issues.empty());
+        UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
     }
 }
 
@@ -6157,5 +6306,61 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             )"
         );
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
+        ShouldSucceed({{"",
+            {
+                EPathTypePersQueueGroup,
+                R"(partitioning_settings {
+  min_active_partitions: 1
+  max_active_partitions: 1
+  auto_partitioning_settings {
+    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+    partition_write_speed {
+      stabilization_window {
+        seconds: 300
+      }
+      up_utilization_percent: 80
+      down_utilization_percent: 20
+    }
+  }
+}
+retention_period {
+  seconds: 64800
+}
+supported_codecs {
+}
+partition_write_speed_bytes_per_second: 1048576
+partition_write_burst_bytes: 1048576
+consumers {
+  name: "consumer1"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
+}
+consumers {
+  name: "consumer2"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
+}
+)"}
+        }}, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: ""
+                        destination_path: "/MyRoot/Topic"
+                    }
+                }
+            )");
     }
 }

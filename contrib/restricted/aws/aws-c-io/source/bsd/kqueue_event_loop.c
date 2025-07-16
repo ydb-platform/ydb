@@ -7,6 +7,7 @@
 
 #include <aws/io/logging.h>
 
+#include <aws/cal/cal.h>
 #include <aws/common/atomics.h>
 #include <aws/common/clock.h>
 #include <aws/common/mutex.h>
@@ -821,6 +822,12 @@ static int aws_event_loop_listen_for_io_events(int kq_fd, struct kevent kevents[
     return kevent(kq_fd, NULL /*changelist*/, 0 /*nchanges*/, kevents /*eventlist*/, MAX_EVENTS /*nevents*/, timeout);
 }
 
+static void s_aws_kqueue_cleanup_aws_lc_thread_local_state(void *user_data) {
+    (void)user_data;
+
+    aws_cal_thread_clean_up();
+}
+
 static void aws_event_loop_thread(void *user_data) {
     struct aws_event_loop *event_loop = user_data;
     AWS_LOGF_INFO(AWS_LS_IO_EVENT_LOOP, "id=%p: main loop started", (void *)event_loop);
@@ -851,6 +858,8 @@ static void aws_event_loop_thread(void *user_data) {
         (void *)event_loop,
         DEFAULT_TIMEOUT_SEC,
         MAX_EVENTS);
+
+    aws_thread_current_at_exit(s_aws_kqueue_cleanup_aws_lc_thread_local_state, NULL);
 
     while (impl->thread_data.state == EVENT_THREAD_STATE_RUNNING) {
         int num_io_handle_events = 0;

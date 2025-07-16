@@ -100,7 +100,7 @@ namespace boost { namespace locale { namespace boundary {
 
     typedef boundary_point<std::string::const_iterator> sboundary_point;   ///< convenience typedef
     typedef boundary_point<std::wstring::const_iterator> wsboundary_point; ///< convenience typedef
-#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+#ifdef __cpp_lib_char8_t
     typedef boundary_point<std::u8string::const_iterator> u8sboundary_point; ///< convenience typedef
 #endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T

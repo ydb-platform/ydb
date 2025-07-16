@@ -98,6 +98,7 @@ public:
         AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
+        AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
@@ -142,14 +143,20 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildWideReadTable(node, ctx, *Types);
+        TExprBase output = KqpBuildWideReadTable(node, ctx, *GetTypes());
         DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteLength(node, ctx, *Types);
+        TExprBase output = DqPeepholeRewriteLength(node, ctx, *GetTypes());
         DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteBlockHashJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteBlockHashJoin(node, ctx);
+        DumpAppliedRule("RewriteBlockHashJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -308,33 +315,6 @@ bool CanPropagateWideBlockThroughChannel(
     }
 
     return true;
-}
-
-TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
-    IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
-    bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts)
-{
-    TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts);
-    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config);
-    TPeepholeSettings peepholeSettings;
-    peepholeSettings.CommonConfig = &kqpPeephole;
-    peepholeSettings.FinalConfig = &kqpPeepholeFinal;
-    peepholeSettings.WithFinalStageRules = withFinalStageRules;
-    peepholeSettings.WithNonDeterministicRules = false;
-
-    bool hasNonDeterministicFunctions;
-    auto status = PeepHoleOptimizeNode(program.Ptr(), newProgram, ctx, typesCtx, &typeAnnTransformer,
-        hasNonDeterministicFunctions, peepholeSettings);
-    if (status == TStatus::Error) {
-        return status;
-    }
-
-    if (!allowNonDeterministicFunctions && hasNonDeterministicFunctions) {
-        ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Unexpected non-deterministic functions in KQP program"));
-        return TStatus::Error;
-    }
-
-    return status;
 }
 
 TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprContext& ctx,
@@ -622,6 +602,33 @@ private:
 };
 
 } // anonymous namespace
+
+TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
+    IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
+    bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts)
+{
+    TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts);
+    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config);
+    TPeepholeSettings peepholeSettings;
+    peepholeSettings.CommonConfig = &kqpPeephole;
+    peepholeSettings.FinalConfig = &kqpPeepholeFinal;
+    peepholeSettings.WithFinalStageRules = withFinalStageRules;
+    peepholeSettings.WithNonDeterministicRules = false;
+
+    bool hasNonDeterministicFunctions;
+    auto status = PeepHoleOptimizeNode(program.Ptr(), newProgram, ctx, typesCtx, &typeAnnTransformer,
+        hasNonDeterministicFunctions, peepholeSettings);
+    if (status == TStatus::Error) {
+        return status;
+    }
+
+    if (!allowNonDeterministicFunctions && hasNonDeterministicFunctions) {
+        ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Unexpected non-deterministic functions in KQP program"));
+        return TStatus::Error;
+    }
+
+    return status;
+}
 
 TAutoPtr<IGraphTransformer> CreateKqpTxPeepholeTransformer(
     NYql::IGraphTransformer* typeAnnTransformer,

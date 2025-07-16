@@ -10,8 +10,6 @@
 
 namespace NYql::NFmr {
 
-
-
 struct TFmrWriterSettings {
     ui64 ChunkSize = 1024 * 1024;
     ui64 MaxInflightChunks = 1;
@@ -20,6 +18,8 @@ struct TFmrWriterSettings {
 
 class TFmrTableDataServiceWriter: public NYT::TRawTableWriter {
 public:
+    using TPtr = TIntrusivePtr<TFmrTableDataServiceWriter>;
+
     TFmrTableDataServiceWriter(
         const TString& tableId,
         const TString& partId,
@@ -27,7 +27,7 @@ public:
         const TFmrWriterSettings& settings = TFmrWriterSettings()
     );
 
-    TTableStats GetStats();
+    TTableChunkStats GetStats();
 
     void NotifyRowEnd() override;
 
@@ -44,7 +44,7 @@ private:
     const TString PartId_;
     ITableDataService::TPtr TableDataService_;
     ui64 DataWeight_ = 0;
-    ui64 Rows_ = 0;
+    ui64 CurrentChunkRows_ = 0;
 
     TBuffer TableContent_;
     const ui64 ChunkSize_; // size at which we push to table data service
@@ -52,6 +52,7 @@ private:
     const ui64 MaxRowWeight_;
 
     ui64 ChunkCount_ = 0;
+    std::vector<TChunkStats> PartIdChunkStats_;
 
     struct TFmrWriterState {
         ui64 CurInflightChunks = 0;

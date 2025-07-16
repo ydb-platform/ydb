@@ -1,10 +1,10 @@
 #include "export_reboots_common.h"
 
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-#include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/core/protos/msgbus_kv.pb.h>
 
 using namespace NKikimrSchemeOp;
 
@@ -19,6 +19,7 @@ void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NK
         {EPathTypeTable, &TestSimpleCreateTable},
         {EPathTypeView, &TestCreateView},
         {EPathTypeCdcStream, &TestCreateCdcStream},
+        {EPathTypePersQueueGroup, &TestCreatePQGroup}
     };
 
     auto it = functions.find(pathType);

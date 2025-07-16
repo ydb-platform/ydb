@@ -240,7 +240,6 @@ BELONGS ya.make
         include/boost/config/detail/select_compiler_config.hpp [3:5]
         include/boost/config/detail/select_stdlib_config.hpp [3:6]
         include/boost/config/platform/bsd.hpp [1:5]
-        include/boost/config/platform/cygwin.hpp [1:3]
         include/boost/config/platform/hpux.hpp [1:7]
         include/boost/config/platform/irix.hpp [1:4]
         include/boost/config/platform/linux.hpp [1:4]

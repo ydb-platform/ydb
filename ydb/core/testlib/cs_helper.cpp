@@ -17,49 +17,42 @@
 
 namespace NKikimr::Tests::NCS {
 
-void THelperSchemaless::CreateTestOlapStore(TActorId sender, TString scheme) {
-    NKikimrSchemeOp::TColumnStoreDescription store;
-    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &store));
-
+void THelperSchemaless::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme) {
     auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
-    auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
-    op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
-    op->SetWorkingDir(ROOT_PATH);
-    op->MutableCreateColumnStore()->CopyFrom(store);
-
+    *request->Record.MutableTransaction()->MutableModifyScheme() = modifyScheme;
+    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
     Server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
     auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-    Cerr << ev->Get()->Record.DebugString() << Endl;
     auto status = ev->Get()->Record.GetStatus();
     ui64 txId = ev->Get()->Record.GetTxId();
     UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
     WaitForSchemeOperation(sender, txId);
 }
 
-void THelperSchemaless::CreateTestOlapTable(TActorId sender, TString storeOrDirName, TString scheme) {
+void THelperSchemaless::CreateTestOlapStore(TString scheme) {
+    NKikimrSchemeOp::TColumnStoreDescription store;
+    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &store));
+    NKikimrSchemeOp::TModifyScheme op;
+    op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
+    op.SetWorkingDir(ROOT_PATH);
+    op.MutableCreateColumnStore()->CopyFrom(store);
+    ExecuteModifyScheme(op);
+}
+
+void THelperSchemaless::CreateTestOlapTable(TString storeOrDirName, TString scheme) {
     NKikimrSchemeOp::TColumnTableDescription table;
     UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &table));
-    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
-    request->Record.SetExecTimeoutPeriod(Max<ui64>());
-
     TString workingDir = ROOT_PATH;
     if (!storeOrDirName.empty()) {
         workingDir += "/" + storeOrDirName;
     }
 
-    auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
-    op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
-    op->SetWorkingDir(workingDir);
-    op->MutableCreateColumnTable()->CopyFrom(table);
-
-    Server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
-    auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-    ui64 txId = ev->Get()->Record.GetTxId();
-    auto status = ev->Get()->Record.GetStatus();
-    Cerr << ev->Get()->Record.DebugString() << Endl;
-    UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
-    WaitForSchemeOperation(sender, txId);
+    NKikimrSchemeOp::TModifyScheme op;
+    op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+    op.SetWorkingDir(workingDir);
+    op.MutableCreateColumnTable()->CopyFrom(table);
+    ExecuteModifyScheme(op);
 }
 
 void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus) const {
@@ -106,7 +99,6 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBeg
     SendDataViaActorSystem(testTable, batch);
 }
 
-//
 
 std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -182,6 +174,29 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
 
 }
 
+void THelper::SetForcedCompaction(const TString& storeName) {
+    //In some tests we expect, that a compaction will start immidiately
+    //For now, we use l-bucket optimizer for this purpose
+    //In the future it should be replaced with lc-bucket or more sophisticated compaction optimizer planner
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    NKikimrSchemeOp::TModifyScheme modyfySchemeOp;
+    modyfySchemeOp.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore);
+    modyfySchemeOp.SetWorkingDir(ROOT_PATH);
+    NKikimrSchemeOp::TAlterColumnStore* alterColumnStore = modyfySchemeOp.MutableAlterColumnStore();
+    alterColumnStore->SetName(storeName);
+    auto schemaPreset = alterColumnStore->AddAlterSchemaPresets();
+    schemaPreset->SetName("default");
+    auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
+    schemaOptions->SetSchemeNeedActualization(false);
+    auto plannerConstructot =schemaOptions->MutableCompactionPlannerConstructor();
+    plannerConstructot->SetClassName("l-buckets");
+    *plannerConstructot->MutableLBuckets() = NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer{};
+
+    ExecuteModifyScheme(modyfySchemeOp);
+}
+
+
 TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;
     sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";
@@ -200,8 +215,7 @@ TString THelper::GetTestTableSchema() const {
 }
 
 void THelper::CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector<TString> tableNames /*= "olapTable"*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
-    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-    CreateTestOlapStore(sender, Sprintf(R"(
+    CreateTestOlapStore(Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             SchemaPresets {
@@ -215,7 +229,7 @@ void THelper::CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector
     const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
 
     for (const TString& tableName : tableNames) {
-        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        TBase::CreateTestOlapTable(storeName, Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             Sharding {
@@ -232,12 +246,10 @@ void THelper::CreateOlapTablesWithStore(TVector<TString> tableNames /*= {"olapTa
 }
 
 void THelper::CreateSchemaOlapTables(const TString tableSchema, TVector<TString> tableNames, ui32 tableShardsCount) {
-    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-
     const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
 
     for (const TString& tableName : tableNames) {
-        TBase::CreateTestOlapTable(sender, "", Sprintf(R"(
+        TBase::CreateTestOlapTable("", Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             Sharding {

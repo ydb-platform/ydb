@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/formats/arrow/validation/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/yassert.h>
@@ -12,8 +13,61 @@ extern "C" {
 namespace NKikimr::NArrow {
 
 template <typename TType>
-struct TTypeWrapper {
+class TTypeWrapper {
+private:
+    template <typename T, bool IsCType>
+    struct ValueTypeSelector {
+        using type = typename arrow::TypeTraits<T>::CType;
+    };
+
+    template <typename T>
+    struct ValueTypeSelector<T, false> {
+        using type = arrow::util::string_view;
+    };
+
+public:
     using T = TType;
+    static constexpr bool IsCType = arrow::has_c_type<T>() && !std::is_same_v<arrow::HalfFloatType, T>;
+    static constexpr bool IsStringView = arrow::has_string_view<T>();
+    static_assert(!IsCType || !IsStringView);
+    static constexpr bool IsAppropriate = IsCType || IsStringView;
+    static constexpr bool IsIndexType() {
+        return std::is_same_v<arrow::UInt32Type, T> || std::is_same_v<arrow::UInt16Type, T> || std::is_same_v<arrow::UInt8Type, T>;
+    }
+    using ValueType = ValueTypeSelector<T, IsCType>::type;
+    using TArray = typename arrow::TypeTraits<T>::ArrayType;
+    using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+
+    template <class TExt>
+    static TBuilder* CastBuilder(TExt* builder) {
+        return static_cast<TBuilder*>(builder);
+    }
+
+    template <class TExt>
+    static const TArray* CastArray(const TExt* arr) {
+        return static_cast<const TArray*>(arr);
+    }
+
+    template <class TExt>
+    static TArray* CastArray(TExt* arr) {
+        return static_cast<TArray*>(arr);
+    }
+
+    template <class TExt>
+    static std::shared_ptr<TArray> CastArray(const std::shared_ptr<TExt>& arr) {
+        return std::static_pointer_cast<TArray>(arr);
+    }
+
+    ValueType GetValue(const TArray& arr, const ui32 index) const {
+        if constexpr (IsCType) {
+            return arr.Value(index);
+        }
+        if constexpr (IsStringView) {
+            return arr.GetView(index);
+        }
+        Y_FAIL();
+        return ValueType{};
+    }
 };
 
 template <class TResult, TResult defaultValue, typename TFunc, bool EnableNull = false>

@@ -90,6 +90,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
     NKikimrConfig::TImmediateControlsConfig Controls;
+    TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
 
     TKikimrSettings()
     {
@@ -133,6 +134,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
         return *this;
     }
+    TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
 };
 
 class TKikimrRunner {
@@ -280,28 +282,6 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
     }
 }
 
-inline constexpr TStringBuf IndexSubtypeSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "USING vector_kmeans_tree";
-    }
-}
-
-inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)";
-    }
-}
-
 TString ReformatYson(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
@@ -379,6 +359,8 @@ void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateT
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user);
+
 THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp op);
 
@@ -392,6 +374,8 @@ TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, cons
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
 int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName);
+
+void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected);
 
 void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed = false);
 
@@ -430,6 +414,8 @@ public:
     }
 
     void CreateDatabase(const TString& databaseName);
+    Tests::TServer& GetServer() const;
+    Tests::TClient& GetClient() const;
 
 private:
     TPortManager PortManager;
@@ -445,6 +431,8 @@ private:
 
     TEnvSettings EnvSettings;
 };
+
+void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TString& name);
 
 } // namespace NKqp
 } // namespace NKikimr

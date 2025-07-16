@@ -4,6 +4,8 @@
 
 **Векторный поиск**, также известный как [поиск ближайшего соседа](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN), представляет собой задачу оптимизации, в которой необходимо найти ближайший вектор (или множество векторов) в данном наборе данных относительно заданного вектора запроса. Близость между векторами определяется с помощью метрик расстояния или сходства.
 
+Одним из распространённых подходов, особенно при работе с большими наборами данных, является приближённый поиск ближайших соседей (ANN search), который позволяет получать более быстрые результаты за счёт возможной потери точности.
+
 Векторный поиск активно используется в следующих областях:
 
 * рекомендательные системы;
@@ -24,13 +26,13 @@
 
 ## Точный векторный поиск {#vector-search-exact}
 
-{% include [vector_search_exact.md](_includes/vector_search_exact.md) %}
+{% include [vector_search_exact.md](../yql/reference/_includes/vector_search_exact.md) %}
 
 Подробнее о [точном векторном поиске](../yql/reference/udf/list/knn.md#exact-vector-search-examples).
 
 ## Приближенный векторный поиск без индекса {#vector-search-approximate}
 
-{% include [vector_search_approximate.md](_includes/vector_search_approximate.md) %}
+{% include [vector_search_approximate.md](../yql/reference/_includes/vector_search_approximate.md) %}
 
 Подробнее о [приближенном векторном поиске без индекса](../yql/reference/udf/list/knn.md#approximate-vector-search-examples).
 

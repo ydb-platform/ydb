@@ -13,7 +13,7 @@ class TSqlQuery: public TSqlTranslation {
 public:
     TSqlQuery(TContext& ctx, NSQLTranslation::ESqlMode mode, bool topLevel)
         : TSqlTranslation(ctx, mode)
-        , TopLevel(topLevel)
+        , TopLevel_(topLevel)
     {
     }
 
@@ -62,7 +62,7 @@ private:
         humanStatementName.clear();
         const auto& descr = AltDescription(node);
         TVector<TString> parts;
-        if (!Ctx.Settings.Antlr4Parser) {
+        if (!Ctx_.Settings.Antlr4Parser) {
             const auto pos = descr.find(": ");
             Y_DEBUG_ABORT_UNLESS(pos != TString::npos);
             Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);
@@ -81,7 +81,7 @@ private:
         }
     }
 
-    const bool TopLevel;
+    const bool TopLevel_;
 };
 
 void EnumeratePragmas(std::function<void(std::string_view)> callback);

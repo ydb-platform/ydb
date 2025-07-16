@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-#define MAX_BUFFER_SIZE (2048)
+enum { MAX_BUFFER_SIZE = 2048 };
 
 int aws_run_command_result_init(struct aws_allocator *allocator, struct aws_run_command_result *result) {
     if (!allocator || !result) {

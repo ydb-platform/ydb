@@ -594,7 +594,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     ctx.Send(ctx.SelfID, new TEvents::TEvWakeup());
     ctx.Send(Tablet, new TEvPQ::TEvInitComplete(Partition));
-
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,

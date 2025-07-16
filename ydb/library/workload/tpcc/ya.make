@@ -10,6 +10,7 @@ SRCS(
     import_tui.cpp
     log_backend.cpp
     logs_scroller.cpp
+    path_checker.cpp
     runner.cpp
     runner_tui.cpp
     scroller.cpp

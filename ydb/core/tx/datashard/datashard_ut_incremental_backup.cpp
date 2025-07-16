@@ -1410,6 +1410,97 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         }
     }
 
+    Y_UNIT_TEST(E2EMultipleBackupRestoreCycles) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        // Step 1: Initial data
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+                (1, 100), (2, 200), (3, 300), (4, 400), (5, 500)
+              ;
+        )");
+
+        // Step 2: Create backup collection and full backup
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `TestCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
+
+        ExecSQL(server, edgeActor, R"(BACKUP `TestCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        // Step 3: Modify data and first incremental backup
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (2, 2000), (6, 6000);
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )");
+
+        ExecSQL(server, edgeActor, R"(BACKUP `TestCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        // Step 4: Modify data and second incremental backup
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (3, 3000), (7, 7000);
+            DELETE FROM `/Root/Table` WHERE key = 4;
+        )");
+
+        ExecSQL(server, edgeActor, R"(BACKUP `TestCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        // Step 5: Modify data and third incremental backup
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (5, 5000), (8, 8000);
+            DELETE FROM `/Root/Table` WHERE key = 2;
+        )");
+
+        ExecSQL(server, edgeActor, R"(BACKUP `TestCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        // Step 6: Capture expected state before restore
+        auto expectedState = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/Table` ORDER BY key
+        )");
+
+        // Step 7: Drop table and restore
+        ExecSQL(server, edgeActor, R"(DROP TABLE `/Root/Table`;)", false);
+        ExecSQL(server, edgeActor, R"(RESTORE `TestCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        // Step 8: Verify final result
+        auto actualState = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/Table` ORDER BY key
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedState, actualState);
+
+        // Verify specific expected values after all operations
+        UNIT_ASSERT_VALUES_EQUAL(actualState,
+            "{ items { uint32_value: 3 } items { uint32_value: 3000 } }, "
+            "{ items { uint32_value: 5 } items { uint32_value: 5000 } }, "
+            "{ items { uint32_value: 6 } items { uint32_value: 6000 } }, "
+            "{ items { uint32_value: 7 } items { uint32_value: 7000 } }, "
+            "{ items { uint32_value: 8 } items { uint32_value: 8000 } }"
+        );
+    }
+
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)
 
 } // NKikimr

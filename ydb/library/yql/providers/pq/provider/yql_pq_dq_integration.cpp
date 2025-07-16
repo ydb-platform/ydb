@@ -126,7 +126,7 @@ public:
         return Build<TPqInsert>(ctx, write.Pos())
             .World(write.World())
             .DataSink(write.DataSink())
-            .Target(write.Topic())
+            .Topic(write.Topic())
             .Input(write.Input())
             .Done().Ptr();
     }

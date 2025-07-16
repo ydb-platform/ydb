@@ -131,8 +131,7 @@ public:
             .Input<TCoRemoveSystemMembers>()
                 .Input(node->Child(3))
                 .Build()
-            //.Mode(settings.Mode.Cast())
-            .Mode().Value("append").Build()
+            .Mode(settings.Mode.Cast())
             .Settings(settings.Other)
             .Done().Ptr();
     }

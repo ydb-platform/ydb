@@ -126,34 +126,26 @@ public:
     }
 
     TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx,  IOptimizationContext& /*optCtx*/, const TGetParents& getParents) const {
-        YQL_CLOG(INFO, ProviderPq) << "TPqPhysicalOptProposalTransformer::PqInsert " ;
         auto insert = node.Cast<TPqInsert>();
-
-
-        //auto write = node.Cast<TPqWriteTopic>();
-        if (!TDqCnUnionAll::Match(insert.Input().Raw())) { // => this code is not for RTMR mode.
-            YQL_CLOG(INFO, ProviderPq) << "PqInsert !Match " ;
+        if (!TDqCnUnionAll::Match(insert.Input().Raw())) {
             return node;
         }
 
-        const auto& topicNode = insert.Target();
+        const auto& topicNode = insert.Topic();
         const TString cluster(topicNode.Cluster().Value());
 
         const TParentsMap* parentsMap = getParents();
         auto dqUnion = insert.Input().Cast<TDqCnUnionAll>();
         if (!NDq::IsSingleConsumerConnection(dqUnion, *parentsMap)) {
-            YQL_CLOG(INFO, ProviderPq) << "PqWriteTopic777 !IsSingleConsumerConnection " ;
             return node;
         }
 
-        // const auto* topicMeta = State_->FindTopicMeta(topicNode);
-        // if (!topicMeta) {
-        //     ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), TStringBuilder() << "Unknown topic `" << topicNode.Cluster().StringValue() << "`.`"
-        //                         << topicNode.Path().StringValue() << "`"));
-        //     YQL_CLOG(INFO, ProviderPq) << "PqWriteTopic777 !FindTopicMeta " ;
-
-        //     return nullptr;
-        // }
+        const auto* topicMeta = State_->FindTopicMeta(topicNode);
+        if (!topicMeta) {
+            ctx.AddError(TIssue(ctx.GetPosition(insert.Pos()), TStringBuilder() << "Unknown topic `" << topicNode.Cluster().StringValue() << "`.`"
+                                << topicNode.Path().StringValue() << "`"));
+            return nullptr;
+        }
 
         YQL_CLOG(INFO, ProviderPq) << "Optimize PqWriteTopic `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`";
 
@@ -182,13 +174,6 @@ public:
             .Outputs(outputsBuilder.Done())
             .Done();
         return dqStageWithSink;
-        // auto dqQueryBuilder = Build<TDqQuery>(ctx, insert.Pos());
-        // dqQueryBuilder.World(insert.World());
-        // dqQueryBuilder.SinkStages().Add(dqStageWithSink).Build();
-
-        // optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
-
-        // return dqQueryBuilder.Done();
     }
 
 private:

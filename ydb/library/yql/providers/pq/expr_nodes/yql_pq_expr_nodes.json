@@ -130,7 +130,7 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TPqDataSink"},
-                {"Index": 2, "Name": "Target", "Type": "TPqTopic"},
+                {"Index": 2, "Name": "Topic", "Type": "TPqTopic"},
                 {"Index": 3, "Name": "Input", "Type": "TExprBase"}
             ]
         },

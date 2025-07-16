@@ -151,7 +151,7 @@ public:
             return true;
         }
 
-        if (record.GetIncludeStats()) {
+        if (record.GetIncludeStats() && !Replication->GetConfig().HasTransferSpecific()) {
             for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
                 auto* target = Replication->FindTarget(tid);
                 if (!target) {

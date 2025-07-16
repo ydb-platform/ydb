@@ -133,9 +133,7 @@ private:
         )
         {
             TStringBuilder queryBuilder;
-            ui64 createdAt = std::chrono::time_point_cast<std::chrono::milliseconds>
-                                      (std::chrono::high_resolution_clock::now())
-                                      .time_since_epoch().count();
+            auto createdAt = TInstant::Now().MilliSeconds();
 
             queryBuilder
                 << "UPSERT INTO" << "`" << FullTablePath
@@ -322,7 +320,7 @@ Y_UNIT_TEST_SUITE(ProtoTests) {
         event.OriginalId = 1234567890;
         event.Id = "e-" + eventType + "-0001";
         event.Type = eventType;
-        event.CreatedAt_ms = 1710000000000;
+        event.CreatedAt = TInstant::Now();
         event.CloudId = "cloud-12345";
         event.FolderId = "folder-67890";
         event.ResourceId = queueName;
@@ -362,7 +360,7 @@ Y_UNIT_TEST_SUITE(ProtoTests) {
 
         UNIT_ASSERT_EQUAL(ev.event_metadata().event_id(), evInfo.Id);
         UNIT_ASSERT_EQUAL(ev.event_metadata().event_type(), "yandex.cloud.events.ymq." + eventType);
-        UNIT_ASSERT_EQUAL(static_cast<ui64>(ev.event_metadata().created_at().seconds()), evInfo.CreatedAt_ms);
+        UNIT_ASSERT_EQUAL(static_cast<ui64>(ev.event_metadata().created_at().seconds()), evInfo.CreatedAt.Seconds());
         UNIT_ASSERT_EQUAL(ev.event_metadata().cloud_id(), evInfo.CloudId);
         UNIT_ASSERT_EQUAL(ev.event_metadata().folder_id(), evInfo.FolderId);
 

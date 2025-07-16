@@ -1,6 +1,7 @@
 #include "cloud_events.h"
 
 #include <ydb/core/audit/audit_log.h>
+#include <google/protobuf/util/time_util.h>
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
@@ -38,10 +39,8 @@ namespace NCloudEvents {
     void TFiller<TProtoEvent>::FillEventMetadata() {
         Ev.mutable_event_metadata()->set_event_id(EventInfo.Id);
         Ev.mutable_event_metadata()->set_event_type(TString("yandex.cloud.events.ymq.") + EventInfo.Type);
-        auto seconds = EventInfo.CreatedAt_ms / 1'000;
-        auto nanos = EventInfo.CreatedAt_ms % 1'000 * 1'000'000;
-        Ev.mutable_event_metadata()->mutable_created_at()->set_seconds(seconds);
-        Ev.mutable_event_metadata()->mutable_created_at()->set_nanos(nanos);
+        const auto createdAt_proto = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(EventInfo.CreatedAt.MilliSeconds());
+        *Ev.mutable_event_metadata()->mutable_created_at() = createdAt_proto;
         Ev.mutable_event_metadata()->set_cloud_id(EventInfo.CloudId);
         Ev.mutable_event_metadata()->set_folder_id(EventInfo.FolderId);
     }
@@ -90,14 +89,28 @@ namespace NCloudEvents {
         FillDetails();
     }
 
+    template class TFiller<TCreateQueueEvent>;
+    template class TFiller<TUpdateQueueEvent>;
+    template class TFiller<TDeleteQueueEvent>;
+
     template<typename TProtoEvent>
     void TAuditSender::SendProto(const TProtoEvent& ev, IEventsWriterWrapper::TPtr writer) {
         if (writer) {
             TString jsonEv;
             google::protobuf::util::JsonPrintOptions printOpts;
             printOpts.preserve_proto_field_names = true;
-            google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
+            auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
+            Y_ASSERT(status.ok());
             writer->Write(jsonEv);
+        } else {
+            TString jsonEv;
+            google::protobuf::util::JsonPrintOptions printOpts;
+            printOpts.preserve_proto_field_names = true;
+            auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
+            std::cerr << "==================================================================" << std::endl;
+            std::cerr << "status.ok() = " << status.ok() << std::endl;
+            std::cerr << jsonEv << std::endl;
+            std::cerr << "==================================================================" << std::endl;
         }
     }
 
@@ -135,7 +148,7 @@ namespace NCloudEvents {
             AUDIT_PART("masked_token", (!evInfo.MaskedToken.empty() ? evInfo.MaskedToken : emptyValue))
             AUDIT_PART("auth_type", (!evInfo.AuthType.empty() ? evInfo.AuthType : emptyValue))
             AUDIT_PART("permission", evInfo.Permission)
-            AUDIT_PART("created_at", ::ToString(evInfo.CreatedAt_ms))
+            AUDIT_PART("created_at", evInfo.CreatedAt.ToString())
             AUDIT_PART("cloud_id", (!evInfo.CloudId.empty() ? evInfo.CloudId : emptyValue))
             AUDIT_PART("folder_id", (!evInfo.FolderId.empty() ? evInfo.FolderId : emptyValue))
             AUDIT_PART("resource_id", (!evInfo.ResourceId.empty() ? evInfo.ResourceId : emptyValue))
@@ -273,7 +286,7 @@ namespace NCloudEvents {
             param.AddListItem()
                 .BeginStruct()
                 .AddMember("CreatedAt")
-                    .Uint64(cloudEv.CreatedAt_ms)
+                    .Uint64(cloudEv.CreatedAt.MilliSeconds())
                 .AddMember("Id")
                     .Uint64(cloudEv.OriginalId)
                 .EndStruct();
@@ -322,14 +335,14 @@ namespace NCloudEvents {
         Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(response.GetYdbResults(0));
 
-        auto convertId = [](ui64 id, const TString& type, ui64 CreatedAt_ms) -> TString {
-            return TStringBuilder() << id << "$" << type << "$" << CreatedAt_ms;
+        auto convertId = [](ui64 id, const TString& type, TInstant CreatedAt) -> TString {
+            return TStringBuilder() << id << "$" << type << "$" << CreatedAt.ToString();
         };
 
         while (parser.TryNextRow()) {
             auto& cloudEvent = result.emplace_back();
 
-            cloudEvent.CreatedAt_ms = *parser.ColumnParser(0).GetOptionalUint64();
+            cloudEvent.CreatedAt = TInstant::MilliSeconds(*parser.ColumnParser(0).GetOptionalUint64());
             cloudEvent.OriginalId = *parser.ColumnParser(1).GetOptionalUint64();
             cloudEvent.QueueName = *parser.ColumnParser(2).GetOptionalUtf8();
             cloudEvent.Type = *parser.ColumnParser(3).GetOptionalUtf8();
@@ -342,8 +355,8 @@ namespace NCloudEvents {
                 cloudEvent.Permission = "ymq.queues.delete";
             }
 
-            cloudEvent.IdempotencyId = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt_ms);
-            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, TInstant::Now().MilliSeconds());
+            cloudEvent.IdempotencyId = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
+            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, TInstant::Now());
 
             cloudEvent.CloudId = *parser.ColumnParser(4).GetOptionalUtf8();
             cloudEvent.FolderId = *parser.ColumnParser(5).GetOptionalUtf8();

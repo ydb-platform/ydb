@@ -36,7 +36,9 @@ namespace NCloudEvents {
         ui64 OriginalId;
         TString Id;
         TString Type;
-        ui64 CreatedAt_ms;
+
+        TInstant CreatedAt;
+
         TString CloudId;
         TString FolderId;
         TString ResourceId;

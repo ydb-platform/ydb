@@ -162,7 +162,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == 13) {
-        if (GetPortion()->IsRemovedFor(GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())) {
+        if (Portion->IsRemovedFor(GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())) {
             return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(0), recordsCount));
         } else {
             return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(1), recordsCount));
@@ -198,7 +198,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         const auto& records = GetStageData().GetPortionAccessor().GetRecordsVerified();
         for (auto it = records.begin(); it != records.end();) {
-            auto accessor = OriginalData->ExtractAccessorOptional(it->GetEntityId());
+            auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(it->GetEntityId()) : nullptr;
             const ui32 entityId = it->GetEntityId();
             if (!accessor) {
                 while (it != records.end() && it->GetEntityId() == entityId) {
@@ -295,11 +295,11 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
 
 void TSourceData::DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     if (columnId == 16) {
-        AFL_VERIFY(OriginalData);
         auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-            NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
             if (auto fetcher = MutableStageData().ExtractFetcherOptional(i.GetEntityId())) {
+                AFL_VERIFY(OriginalData);
+                NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
                 fetcher->OnDataCollected(fetchContext);
             }
         }

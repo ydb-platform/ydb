@@ -58,7 +58,7 @@ void BaseCheckWarehouseTable(TQueryClient& client, const TString& path, int expe
                  << ", whCount=" << rowCount;
             std::exit(1);
         }
-    } catch (std::exception& e) {
+    } catch (const std::exception& e) {
         Cerr << "Failed to count/min/max warehouses in " << fullPath << ": " << e.what() << Endl;
         std::exit(1);
     }

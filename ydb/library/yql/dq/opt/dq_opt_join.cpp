@@ -1509,7 +1509,6 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                 attr = TString(exprItem->Child(1)->Content());
             }
 
-            Cout << i << " " << joinKeys.size() << Endl;
             TString column;
             if (contains(attr)) {
                 column = std::move(attr);

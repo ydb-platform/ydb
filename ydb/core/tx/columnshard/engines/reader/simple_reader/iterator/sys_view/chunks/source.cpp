@@ -277,7 +277,7 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
 }
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetchData(
-    const NArrow::NSSA::TProcessorContext& context, const NArrow::NSSA::IDataSource::TDataAddress& addr) {
+    const NArrow::NSSA::TProcessorContext& /*context*/, const NArrow::NSSA::IDataSource::TDataAddress& addr) {
     if (addr.GetColumnId() == 16) {
         THashSet<ui32> entityIds;
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {

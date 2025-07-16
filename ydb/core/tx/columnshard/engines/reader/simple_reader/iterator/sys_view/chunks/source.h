@@ -21,12 +21,10 @@ private:
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
-        AFL_VERIFY(Accessors.size());
         return 0;
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& /*columnsIds*/) const override {
-        AFL_VERIFY(Accessors.size());
         return 0;
     }
 

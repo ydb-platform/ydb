@@ -22,6 +22,8 @@ namespace NKikimr {
     class TPDiskCtx;
     class TLocalRecoveryInfo;
 
+    class THugeBlobLayoutChecker;
+
     ////////////////////////////////////////////////////////////////////////////
     // TLocalRecoveryContext
     ////////////////////////////////////////////////////////////////////////////
@@ -65,6 +67,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // CreateRecoveryLogReplayer
     ////////////////////////////////////////////////////////////////////////////
-    IActor* CreateRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx);
+    IActor* CreateRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx,
+        THugeBlobLayoutChecker&& hugeBlobLayoutChecker);
 
 } // NKikimr

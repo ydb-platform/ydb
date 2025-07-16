@@ -1,6 +1,9 @@
 #pragma once
 
 #include "defs.h"
+
+#include "huge_blob_checker.h"
+
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
@@ -502,9 +505,11 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     struct THullIndexLoaded : public TEventLocal<THullIndexLoaded, TEvBlobStorage::EvHullIndexLoaded> {
         EHullDbType Type;
+        THugeBlobLayoutChecker HugeBlobLayoutChecker;
 
-        THullIndexLoaded(EHullDbType type)
+        THullIndexLoaded(EHullDbType type, THugeBlobLayoutChecker&& hugeBlobLayoutChecker)
             : Type(type)
+            , HugeBlobLayoutChecker(std::move(hugeBlobLayoutChecker))
         {}
     };
 
@@ -522,12 +527,16 @@ namespace NKikimr {
         typedef ::NKikimr::TLevelSlice<TKey, TMemRec> TLevelSlice;
         typedef typename TLevelSlice::TSstIterator TSstIterator;
 
+        static constexpr bool IsLogoBlob = std::is_same_v<TKey, TKeyLogoBlob>;
+
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
         TIntrusivePtr<TLevelIndex> LevelIndex;
         TActorId Recipient;
         TSstIterator It;
         TActiveActors ActiveActors;
+
+        THugeBlobLayoutChecker HugeBlobLayoutChecker;
 
         friend class TActorBootstrapped<TThis>;
 
@@ -542,7 +551,7 @@ namespace NKikimr {
             } else {
                 // Done
                 LevelIndex->LoadCompleted();
-                ctx.Send(Recipient, new THullIndexLoaded(type));
+                ctx.Send(Recipient, new THullIndexLoaded(type, std::move(HugeBlobLayoutChecker)));
                 TThis::Die(ctx);
             }
         }
@@ -555,7 +564,48 @@ namespace NKikimr {
 
         void Handle(typename THullSegLoaded::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
-            Process(ctx);
+            if constexpr (IsLogoBlob) {
+                if (It.Valid()) {
+                    // we have more work to so -- start new level segment loader and process this segment after
+                    Process(ctx);
+                    ProcessHugeBlobs(*ev->Get()->LevelSegment);
+                } else {
+                    // this is last segment, so we process it first
+                    ProcessHugeBlobs(*ev->Get()->LevelSegment);
+                    Process(ctx);
+                }
+            } else {
+                Process(ctx);
+            }
+        }
+
+        void ProcessHugeBlobs(const NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>& seg) {
+            NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator iter(&seg);
+            TDiskDataExtractor extr;
+            for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
+                iter.GetDiskData(&extr);
+                if (extr.BlobType == TBlobType::HugeBlob || extr.BlobType == TBlobType::ManyHugeBlobs) {
+                    const TLogoBlobID id = iter.GetCurKey().LogoBlobID();
+
+                    struct {
+                        TMemRecLogoBlob MemRec;
+                        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart* /*outbound*/,
+                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/, const void* /*sst*/) {
+                            MemRec = memRec;
+                        }
+                    } merger;
+                    iter.PutToMerger(&merger);
+
+                    const auto local = merger.MemRec.GetLocalParts(VCtx->Top->GType);
+                    ui8 partIdx = local.FirstPosition();
+                    for (const TDiskPart *part = extr.Begin; part != extr.End; ++part) {
+                        if (!part->Empty()) {
+                            HugeBlobLayoutChecker.AddHugeBlob(TLogoBlobID(id, partIdx + 1), *part);
+                        }
+                        partIdx = local.NextPosition(partIdx);
+                    }
+                }
+            }
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {

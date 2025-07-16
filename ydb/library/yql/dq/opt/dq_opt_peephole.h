@@ -13,9 +13,11 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
 NNodes::TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteMapJoinWithMapCore(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteBlockHashJoin(const NNodes::TExprBase& node, TExprContext& ctx);
+NNodes::TExprBase DqPeepholeRewriteBlockHashJoinCore(const NNodes::TExprBase& node, TExprContext& ctx, bool useBlockHashJoin);
 NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeDropUnusedInputs(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
 
 } // namespace NYql::NDq
+

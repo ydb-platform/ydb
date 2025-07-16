@@ -3,12 +3,14 @@
 #include "dictionary_codec.h"
 #include "private.h"
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <library/cpp/yt/system/exit.h>
 
+#include <library/cpp/yt/memory/blob.h>
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
+
+#include <util/system/unaligned_mem.h>
 
 #include <contrib/libs/zstd/lib/zstd_errors.h>
 #define ZSTD_STATIC_LINKING_ONLY
@@ -20,7 +22,7 @@ namespace NYT::NCompression::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = CompressionLogger;
+constinit const auto Logger = CompressionLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -191,6 +193,50 @@ void ZstdDecompress(TSource* source, TBlob* output)
             << TErrorAttribute("expected_size", outputSize)
             << TErrorAttribute("actual_size", decompressedSize);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// ZstdSyncTagPrefix + 64-bit offset
+static_assert(ZstdSyncTagPrefixSize + sizeof(ui64) == ZstdSyncTagSize);
+
+EZstdFrameType DetectZstdFrameType(TRef buffer)
+{
+    YT_VERIFY(buffer.Size() >= ZstdFrameSignatureSize);
+    auto signatureStr = TStringBuf(buffer.begin(), ZstdFrameSignatureSize);
+    if (signatureStr == ZstdSyncFrameSignature) {
+        return EZstdFrameType::Sync;
+    }
+    if (signatureStr == ZstdDataFrameSignature) {
+        return EZstdFrameType::Data;
+    }
+    return EZstdFrameType::Unknown;
+}
+
+std::optional<i64> FindLastZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset)
+{
+    std::optional<i64> result;
+    auto currentBufferStr = TStringBuf(buffer.data(), buffer.size());
+    while (true) {
+        size_t tagPos = currentBufferStr.find(ZstdSyncTagPrefix);
+        if (tagPos == TStringBuf::npos) {
+            break;
+        }
+
+        const char* tag = currentBufferStr.data() + tagPos;
+        if (currentBufferStr.end() - tag < ZstdSyncTagSize) {
+            break;
+        }
+
+        ui64 tagOffset = ReadUnaligned<ui64>(tag + ZstdSyncTagPrefix.size());
+        ui64 tagOffsetExpected = bufferStartOffset + (tag - buffer.data());
+        if (tagOffset == tagOffsetExpected) {
+            result = tagOffset;
+        }
+
+        currentBufferStr.remove_prefix(tagPos + ZstdSyncTagPrefix.size());
+    }
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

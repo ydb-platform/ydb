@@ -461,7 +461,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         return TStatus::Error;
     }
 
-    if (!isStreamLookup && !EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) ? 4 : 3, ctx)) {
+    if (!isStreamLookup && !EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -560,8 +560,8 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     YQL_ENSURE(structType);
 
     ui32 keyColumnsCount = 0;
-    if (TKqlLookupIndexBase::Match(node.Get())) {
-        auto index = node->Child(TKqlLookupIndexBase::idx_Index);
+    if (TKqlStreamLookupIndex::Match(node.Get())) {
+        auto index = node->Child(TKqlStreamLookupIndex::idx_Index);
         if (!EnsureAtom(*index, ctx)) {
             return TStatus::Error;
         }
@@ -1097,6 +1097,67 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
     return false;
 }
 
+TStatus AnnotateOlapProjection(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* olapOperation = node->Child(TKqpOlapProjection::idx_OlapOperation);
+    // Exptecting that type annotation is supported for olap operation.
+    if (!olapOperation->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    node->SetTypeAnn(olapOperation->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOlapProjections(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* input = node->Child(TKqpOlapProjections::idx_Input);
+    const TTypeAnnotationNode* inputType;
+    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &inputType)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureStructType(input->Pos(), *inputType, ctx)) {
+        return TStatus::Error;
+    }
+
+    // For each `Projection` we want to replace a type annotation for column
+    // which associated with a `Projection`.
+    // For example: JsonDocumnet -> JsonValue.
+    THashMap<TString, const TTypeAnnotationNode*> projectionsTypes;
+    const auto* projections = node->Child(TKqpOlapProjections::idx_Projections);
+    for (const auto& expr : TExprBase(projections).Cast<TExprList>()) {
+        auto projection = TExprBase(expr).Cast<TKqpOlapProjection>();
+        const auto* projectionTypeAnn = projection.Ptr()->GetTypeAnn();
+        // Expecting annotation for projection.
+        if (!projectionTypeAnn) {
+            return TStatus::Repeat;
+        }
+        projectionsTypes.emplace(TString(projection.ColumnName()), projectionTypeAnn);
+    }
+
+    TVector<const TItemExprType*> newItemTypes;
+    const auto* originalStructType = inputType->Cast<TStructExprType>();
+    for (const auto* originalItemType : originalStructType->GetItems()) {
+        const auto& itemName = originalItemType->GetName();
+        if (projectionsTypes.contains(itemName)) {
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(itemName, projectionsTypes[itemName]));
+        } else {
+            newItemTypes.push_back(originalItemType);
+        }
+    }
+
+    // Create a final type (Flow(Struct{items}))
+    node->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TStructExprType>(newItemTypes)));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -1121,69 +1182,67 @@ TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOlapApplyColumnArg(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2U, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto& row = node->Head();
+    if (!EnsureType(row, ctx)) {
+        return TStatus::Error;
+    }
+    const auto& rowType = row.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureStructType(row.Pos(), *rowType, ctx)) {
+        return TStatus::Error;
+    }
+    const auto& rowStructType = rowType->Cast<TStructExprType>();
+
+
+    if (!EnsureAtom(node->Tail(), ctx)) {
+        return TStatus::Error;
+    }
+    const auto& columnName = node->Tail().Content();
+    if (const auto& columnType = rowStructType->FindItemType(columnName)) {
+        node->SetTypeAnn(columnType);
+        return TStatus::Ok;
+    } else {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Tail().Pos()),
+            TStringBuilder() << "Missed column: " << columnName
+        ));
+        return TStatus::Error;
+    }
+}
+
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 4U, ctx)) {
+    if (!EnsureArgsCount(*node, 3U, ctx)) {
         return TStatus::Error;
     }
 
-    const auto type = node->Child(TKqpOlapApply::idx_Type);
-    if (!EnsureType(*type, ctx)) {
+    TExprList args = TExprList(node->Child(TKqpOlapApply::idx_Args));
+    std::vector<const NYql::TTypeAnnotationNode*> argTypes;
+
+    for(const auto& arg: args) {
+        argTypes.push_back(arg.Ref().GetTypeAnn());
+    }
+
+    auto& lambda = node->ChildRef(TKqpOlapApply::idx_Lambda);
+    if (!EnsureLambda(*lambda, ctx)) {
         return TStatus::Error;
     }
 
-    const auto argsType = type->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-    if (!EnsureStructType(type->Pos(), *argsType, ctx)) {
+    if (!UpdateLambdaAllArgumentsTypes(lambda, argTypes, ctx)) {
         return TStatus::Error;
     }
 
-    const auto columns = node->Child(TKqpOlapApply::idx_Columns);
-    if (!EnsureTupleOfAtoms(*columns, ctx)) {
-        return TStatus::Error;
-    }
-
-    const auto structType = argsType->Cast<TStructExprType>();
-    std::vector<const NYql::TTypeAnnotationNode*> argsTypes(columns->ChildrenSize());
-
-    for (auto i = 0U; i < argsTypes.size(); ++i) {
-        if (const auto argType = structType->FindItemType(columns->Child(i)->Content()))
-            argsTypes[i] = argType;
-        else {
-            ctx.AddError(TIssue(ctx.GetPosition(columns->Child(i)->Pos()),
-                TStringBuilder() << "Missed column: " << columns->Child(i)->Content()
-            ));
-            return TStatus::Error;
-        }
-    }
-
-    TExprList parameters = TExprList(node->Child(TKqpOlapApply::idx_Parameters));
-
-    for(auto expr: parameters) {
-        if (!EnsureArgsCount(*expr.Ptr(), 2U, ctx)) {
-            return TStatus::Error;
-        }
-
-        TCoParameter param = TMaybeNode<TCoParameter>(expr.Ptr()).Cast();
-        const auto& paramType = expr.Ptr()->Child(TCoParameter::idx_Type);
-        if (!EnsureType(*paramType, ctx)) {
-            return TStatus::Error;
-        }
-
-        argsTypes.push_back(paramType->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
-    }
-
-    if (!EnsureLambda(node->Tail(), ctx)) {
-        return TStatus::Error;
-    }
-
-    if (!UpdateLambdaAllArgumentsTypes(node->TailRef(), argsTypes, ctx)) {
-        return TStatus::Error;
-    }
-
-    if (!node->Tail().GetTypeAnn()) {
+    if (!lambda->GetTypeAnn()) {
         return TStatus::Repeat;
     }
 
-    node->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+    if (!EnsureAtom(*node->Child(TKqpOlapApply::idx_KernelName), ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(lambda->GetTypeAnn());
     return TStatus::Ok;
 }
 
@@ -1432,14 +1491,20 @@ TStatus AnnotateKqpPhysicalTx(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx) {
+TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx, bool enableRBO) {
     if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 
-    // TODO: ???
-
-    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    // We need to infer the type of physical query for RBO at this time
+    if (enableRBO) {
+        TKqpPhysicalQuery query(node);
+        auto type = query.Results().Item(0).Ptr()->GetTypeAnn();
+        node->SetTypeAnn(type);
+    }
+    else {
+        node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    }
     return TStatus::Ok;
 }
 
@@ -2156,8 +2221,20 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOlapUnaryLogicOperator(input, ctx);
             }
 
+            if (TKqpOlapProjection::Match(input.Get())) {
+                return AnnotateOlapProjection(input, ctx);
+            }
+
+            if (TKqpOlapProjections::Match(input.Get())) {
+                return AnnotateOlapProjections(input, ctx);
+            }
+
             if (TKqpOlapFilter::Match(input.Get())) {
                 return AnnotateOlapFilter(input, ctx);
+            }
+
+            if (TKqpOlapApplyColumnArg::Match(input.Get())) {
+                return AnnotateOlapApplyColumnArg(input, ctx);
             }
 
             if (TKqpOlapApply::Match(input.Get())) {
@@ -2205,7 +2282,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
             }
 
             if (TKqpPhysicalQuery::Match(input.Get())) {
-                return AnnotateKqpPhysicalQuery(input, ctx);
+                return AnnotateKqpPhysicalQuery(input, ctx, config->EnableNewRBO);
             }
 
             if (TKqpEffects::Match(input.Get())) {

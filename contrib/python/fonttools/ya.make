@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.57.0)
+VERSION(4.58.4)
 
 LICENSE(MIT)
 
@@ -192,6 +192,7 @@ PY_SRCS(
     fontTools/ttLib/tables/G_P_K_G_.py
     fontTools/ttLib/tables/G_P_O_S_.py
     fontTools/ttLib/tables/G_S_U_B_.py
+    fontTools/ttLib/tables/G_V_A_R_.py
     fontTools/ttLib/tables/G__l_a_t.py
     fontTools/ttLib/tables/G__l_o_c.py
     fontTools/ttLib/tables/H_V_A_R_.py
@@ -289,6 +290,7 @@ PY_SRCS(
     fontTools/ufoLib/validators.py
     fontTools/unicode.py
     fontTools/unicodedata/Blocks.py
+    fontTools/unicodedata/Mirrored.py
     fontTools/unicodedata/OTTags.py
     fontTools/unicodedata/ScriptExtensions.py
     fontTools/unicodedata/Scripts.py
@@ -323,6 +325,7 @@ PY_SRCS(
     fontTools/varLib/stat.py
     fontTools/varLib/varStore.py
     fontTools/voltLib/__init__.py
+    fontTools/voltLib/__main__.py
     fontTools/voltLib/ast.py
     fontTools/voltLib/error.py
     fontTools/voltLib/lexer.py

@@ -77,7 +77,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Top",
+                                                                        "Node Type": "Limit",
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [
@@ -86,34 +86,18 @@
                                                                                     }
                                                                                 ],
                                                                                 "Limit": "1001",
-                                                                                "Name": "Top",
-                                                                                "TopBy": "[row.column0,row.column1]"
+                                                                                "Name": "Limit"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "UnionAll",
+                                                                                "Node Type": "Merge",
                                                                                 "PlanNodeId": 3,
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Top",
-                                                                                        "Operators": [
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "ExternalPlanNodeId": 1
-                                                                                                    },
-                                                                                                    {
-                                                                                                        "ExternalPlanNodeId": 1
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Limit": "1001",
-                                                                                                "Name": "Top",
-                                                                                                "TopBy": "[row.column0,row.column1]"
-                                                                                            }
-                                                                                        ],
+                                                                                        "Node Type": "Stage",
                                                                                         "PlanNodeId": 2,
                                                                                         "Plans": [
                                                                                             {
@@ -124,10 +108,6 @@
                                                                                                         "Name": "TableFullScan",
                                                                                                         "Path": "/Root/postgres_select.test_plan/int8_tbl",
                                                                                                         "ReadColumns": [
-                                                                                                            "q1",
-                                                                                                            "q2"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
                                                                                                             "q1 (-\u221e, +\u221e)",
                                                                                                             "q2 (-\u221e, +\u221e)"
                                                                                                         ],
@@ -143,6 +123,10 @@
                                                                                             }
                                                                                         ]
                                                                                     }
+                                                                                ],
+                                                                                "SortColumns": [
+                                                                                    "column0 (Asc)",
+                                                                                    "column1 (Asc)"
                                                                                 ]
                                                                             }
                                                                         ]

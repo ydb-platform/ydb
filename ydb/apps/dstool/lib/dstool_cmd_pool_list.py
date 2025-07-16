@@ -75,6 +75,7 @@ def do(args):
         'PoolId',
         'ErasureSpecies',
         'Kind',
+        'DefaultGroupSizeInUnits',
         'VDiskKind',
         'Groups_TOTAL',
         'Groups_UNKNOWN',
@@ -103,6 +104,7 @@ def do(args):
         'PoolName',
         'ErasureSpecies',
         'Kind',
+        'DefaultGroupSizeInUnits',
         'Groups_TOTAL',
         'VDisks_TOTAL',
     ]
@@ -180,6 +182,7 @@ def do(args):
         row['PoolName'] = sp.Name
         row['ErasureSpecies'] = sp.ErasureSpecies
         row['Kind'] = sp.Kind
+        row['DefaultGroupSizeInUnits'] = sp.DefaultGroupSizeInUnits
         row['VDiskKind'] = sp.VDiskKind
         row['ItemConfigGeneration'] = sp.ItemConfigGeneration
 

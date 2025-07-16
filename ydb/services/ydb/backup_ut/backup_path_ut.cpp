@@ -828,4 +828,47 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             checkTableData("/Root/RecursiveFolderProcessing/dir1/dir2/Table2", 3);
         }
     }
+
+    Y_UNIT_TEST(ChecksumsForSchemaMappingFiles) {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/RecursiveFolderProcessing/dir1/dir2", "Prefix");
+            settings
+                .Compression("zstd");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table2/metadata.json",
+                "/test_bucket/Prefix/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/Table2/scheme.pb",
+                "/test_bucket/Prefix/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table2/data_00.csv.zst",
+                "/test_bucket/Prefix/Table2/data_00.csv.sha256",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestoredPath");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ModifyChecksumAndCheckThatImportFails({
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table2/data_00.csv.sha256",
+            }, importSettings);
+        }
+    }
 }

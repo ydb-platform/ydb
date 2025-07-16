@@ -1,6 +1,8 @@
 #include "schemeshard_export_uploaders.h"
 
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 using namespace NActors;
@@ -53,16 +55,17 @@ private:
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions
+    bool enablePermissions, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
-    Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions);
+    Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions, iv);
     return new TSchemeUploaderFallback(schemeShard, exportId, itemIdx);
 }
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
-    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata
+    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
+    bool enableChecksums
 ) {
-    Y_UNUSED(settings, exportMetadata);
+    Y_UNUSED(settings, exportMetadata, enableChecksums);
     return new TExportMetadataUploaderFallback(schemeShard, exportId);
 }
 

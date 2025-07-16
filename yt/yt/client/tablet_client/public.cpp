@@ -10,14 +10,14 @@ const TStoreId NullStoreId;
 const TPartitionId NullPartitionId;
 const THunkStorageId NullHunkStorageId;
 
-const TString TReplicationLogTable::ChangeTypeColumnName("change_type");
-const TString TReplicationLogTable::KeyColumnNamePrefix("key:");
-const TString TReplicationLogTable::ValueColumnNamePrefix("value:");
-const TString TReplicationLogTable::FlagsColumnNamePrefix("flags:");
+const std::string TReplicationLogTable::ChangeTypeColumnName("change_type");
+const std::string TReplicationLogTable::KeyColumnNamePrefix("key:");
+const std::string TReplicationLogTable::ValueColumnNamePrefix("value:");
+const std::string TReplicationLogTable::FlagsColumnNamePrefix("flags:");
 
-const TString TUnversionedUpdateSchema::ChangeTypeColumnName("$change_type");
-const TString TUnversionedUpdateSchema::ValueColumnNamePrefix("$value:");
-const TString TUnversionedUpdateSchema::FlagsColumnNamePrefix("$flags:");
+const std::string TUnversionedUpdateSchema::ChangeTypeColumnName("$change_type");
+const std::string TUnversionedUpdateSchema::ValueColumnNamePrefix("$value:");
+const std::string TUnversionedUpdateSchema::FlagsColumnNamePrefix("$flags:");
 
 ////////////////////////////////////////////////////////////////////////////////
 

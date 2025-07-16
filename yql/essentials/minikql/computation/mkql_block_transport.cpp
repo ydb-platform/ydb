@@ -1,6 +1,7 @@
 #include "mkql_block_transport.h"
 #include "mkql_block_builder.h"
 
+#include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
@@ -13,7 +14,7 @@ namespace {
 using NYql::TChunkedBuffer;
 
 TChunkedBuffer MakeChunkedBufferAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
-    MKQLArrowUntrack(owner->data(), owner->capacity());
+    MKQLArrowUntrack(owner->data());
     return TChunkedBuffer(TStringBuf{data, size}, owner);
 }
 
@@ -27,10 +28,6 @@ public:
 private:
     const std::shared_ptr<const void> Owner_;
 };
-
-std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
-    return std::make_shared<arrow::Buffer>(nullptr, 0);
-}
 
 bool HasArrrowAlignment(const void* buf) {
     return AlignUp(buf, NYql::NUdf::ArrowMemoryAlignment) == buf;
@@ -377,7 +374,7 @@ private:
             trimmedOffsetBufferData[i] = offsetData[i] - offsetData[0];
         }
 
-        MKQLArrowUntrack(data.buffers[1]->data(), data.buffers[1]->capacity());
+        MKQLArrowUntrack(data.buffers[1]->data());
         dst.Append(MakeChunkedBufferAndUntrack(std::move(trimmedOffsetBuffer), reinterpret_cast<const char*>(trimmedOffsetBufferData), offsetsSize));
 
         const char* mainData = reinterpret_cast<const char*>(data.buffers[2]->data() + offsetData[0]);

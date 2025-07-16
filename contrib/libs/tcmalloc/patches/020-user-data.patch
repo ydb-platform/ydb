@@ -11,25 +11,26 @@ index 2af67c8..023263a 100644
    // How many allocations does this sample represent, given the sampling
    // frequency (weight) and its size.
 diff --git a/tcmalloc/internal/logging.cc b/tcmalloc/internal/logging.cc
-index 1cd8d18..a53c26a 100644
+index 1cd8d18..13aa0e1 100644
 --- a/tcmalloc/internal/logging.cc
 +++ b/tcmalloc/internal/logging.cc
-@@ -43,6 +43,10 @@ GOOGLE_MALLOC_SECTION_BEGIN
+@@ -43,6 +43,11 @@ GOOGLE_MALLOC_SECTION_BEGIN
  namespace tcmalloc {
  namespace tcmalloc_internal {
  
 +ABSL_CONST_INIT SampleUserDataSupport::CreateSampleUserDataCallback* SampleUserDataSupport::create_sample_user_data_callback_ = nullptr;
 +ABSL_CONST_INIT SampleUserDataSupport::CopySampleUserDataCallback* SampleUserDataSupport::copy_sample_user_data_callback_ = nullptr;
 +ABSL_CONST_INIT SampleUserDataSupport::DestroySampleUserDataCallback* SampleUserDataSupport::destroy_sample_user_data_callback_ = nullptr;
++ABSL_CONST_INIT SampleUserDataSupport::ComputeSampleUserDataHashCallback* SampleUserDataSupport::compute_sample_user_data_hash_callback_ = nullptr;
 +
  // Variables for storing crash output.  Allocated statically since we
  // may not be able to heap-allocate while crashing.
  ABSL_CONST_INIT static absl::base_internal::SpinLock crash_lock(
 diff --git a/tcmalloc/internal/logging.h b/tcmalloc/internal/logging.h
-index 2a5c761..f2ecc1d 100644
+index 2a5c761..23b3f2a 100644
 --- a/tcmalloc/internal/logging.h
 +++ b/tcmalloc/internal/logging.h
-@@ -51,6 +51,87 @@ GOOGLE_MALLOC_SECTION_BEGIN
+@@ -51,6 +51,109 @@ GOOGLE_MALLOC_SECTION_BEGIN
  namespace tcmalloc {
  namespace tcmalloc_internal {
  
@@ -38,11 +39,16 @@ index 2a5c761..f2ecc1d 100644
 +  using CreateSampleUserDataCallback = void*();
 +  using CopySampleUserDataCallback = void*(void*);
 +  using DestroySampleUserDataCallback = void(void*);
++  using ComputeSampleUserDataHashCallback = size_t(void*);
 +
 +  class UserData {
 +  public:
 +    static UserData Make() {
 +      return UserData{CreateSampleUserData()};
++    }
++    // must be matched with preceding Release
++    static void DestroyRaw(void* ptr) {
++      DestroySampleUserData(ptr);
 +    }
 +
 +    constexpr UserData() noexcept : ptr_(nullptr) {}
@@ -75,7 +81,12 @@ index 2a5c761..f2ecc1d 100644
 +      DestroySampleUserData(ptr_);
 +    }
 +
-+    void* Get() const { return ptr_; }
++    // should be paired with subsequent DestroyRaw
++    void* Release() && {
++      void* p = ptr_;
++      ptr_ = nullptr;
++      return p;
++    }
 +  private:
 +    UserData(void* ptr) noexcept : ptr_(ptr) {}
 +  private:
@@ -84,11 +95,21 @@ index 2a5c761..f2ecc1d 100644
 +
 +  static void Enable(CreateSampleUserDataCallback create,
 +                     CopySampleUserDataCallback copy,
-+                     DestroySampleUserDataCallback destroy) {
++                     DestroySampleUserDataCallback destroy,
++                     ComputeSampleUserDataHashCallback compute_hash) {
 +    create_sample_user_data_callback_ = create;
 +    copy_sample_user_data_callback_ = copy;
 +    destroy_sample_user_data_callback_ = destroy;
++    compute_sample_user_data_hash_callback_ = compute_hash;
 +  }
++
++  static size_t ComputeSampleUserDataHash(void* ptr) noexcept {
++    if (compute_sample_user_data_hash_callback_ != nullptr) {
++      return compute_sample_user_data_hash_callback_(ptr);
++    }
++    return 0;
++  }
++
 +private:
 +  static void* CreateSampleUserData() {
 +    if (create_sample_user_data_callback_ != nullptr) {
@@ -109,15 +130,17 @@ index 2a5c761..f2ecc1d 100644
 +      destroy_sample_user_data_callback_(ptr);
 +    }
 +  }
++
 +  ABSL_CONST_INIT static CreateSampleUserDataCallback* create_sample_user_data_callback_;
 +  ABSL_CONST_INIT static CopySampleUserDataCallback* copy_sample_user_data_callback_;
 +  ABSL_CONST_INIT static DestroySampleUserDataCallback* destroy_sample_user_data_callback_;
++  ABSL_CONST_INIT static ComputeSampleUserDataHashCallback* compute_sample_user_data_hash_callback_;
 +};
 +
  static constexpr int kMaxStackDepth = 64;
  
  // An opaque handle type used to identify allocations.
-@@ -84,6 +165,8 @@ struct StackTrace {
+@@ -84,6 +187,8 @@ struct StackTrace {
    // between the previous sample and this one
    size_t weight;
  
@@ -125,6 +148,23 @@ index 2a5c761..f2ecc1d 100644
 +
    // Timestamp of allocation.
    absl::Time allocation_time;
+ 
+diff --git a/tcmalloc/internal/profile_builder.cc b/tcmalloc/internal/profile_builder.cc
+index a74e3c7..5887249 100644
+--- a/tcmalloc/internal/profile_builder.cc
++++ b/tcmalloc/internal/profile_builder.cc
+@@ -128,10 +128,11 @@ struct SampleEqWithSubFields {
+ 
+ struct SampleHashWithSubFields {
+   size_t operator()(const Profile::Sample& s) const {
++    size_t user_data_hash = SampleUserDataSupport::ComputeSampleUserDataHash(s.user_data);
+     return absl::HashOf(
+         absl::MakeConstSpan(s.stack, s.depth), s.depth, s.requested_size,
+         s.requested_alignment, s.requested_size_returning, s.allocated_size,
+-        s.access_hint, s.access_allocated, s.guarded_status, s.type);
++        s.access_hint, s.access_allocated, s.guarded_status, s.type, user_data_hash);
+   }
+ };
  
 diff --git a/tcmalloc/internal/sampled_allocation_recorder.h b/tcmalloc/internal/sampled_allocation_recorder.h
 index 8e1ec85..7f9818f 100644
@@ -139,10 +179,10 @@ index 8e1ec85..7f9818f 100644
    AllocationGuardSpinLockHolder graveyard_lock(&graveyard_.lock);
    AllocationGuardSpinLockHolder sample_lock(&sample->lock);
 diff --git a/tcmalloc/internal_malloc_extension.h b/tcmalloc/internal_malloc_extension.h
-index 190d742..dc0c0e0 100644
+index 190d742..0a93995 100644
 --- a/tcmalloc/internal_malloc_extension.h
 +++ b/tcmalloc/internal_malloc_extension.h
-@@ -157,6 +157,12 @@ ABSL_ATTRIBUTE_WEAK void MallocExtension_Internal_SetMaxTotalThreadCacheBytes(
+@@ -157,6 +157,13 @@ ABSL_ATTRIBUTE_WEAK void MallocExtension_Internal_SetMaxTotalThreadCacheBytes(
  
  ABSL_ATTRIBUTE_WEAK void
  MallocExtension_EnableForkSupport();
@@ -151,38 +191,51 @@ index 190d742..dc0c0e0 100644
 +MallocExtension_SetSampleUserDataCallbacks(
 +    tcmalloc::MallocExtension::CreateSampleUserDataCallback create,
 +    tcmalloc::MallocExtension::CopySampleUserDataCallback copy,
-+    tcmalloc::MallocExtension::DestroySampleUserDataCallback destroy);
++    tcmalloc::MallocExtension::DestroySampleUserDataCallback destroy,
++    tcmalloc::MallocExtension::ComputeSampleUserDataHashCallback compute_hash);
  }
  
  #endif
 diff --git a/tcmalloc/malloc_extension.cc b/tcmalloc/malloc_extension.cc
-index cee8ba3..b7ca15a 100644
+index cee8ba3..47008d0 100644
 --- a/tcmalloc/malloc_extension.cc
 +++ b/tcmalloc/malloc_extension.cc
-@@ -804,6 +804,21 @@ void MallocExtension::EnableForkSupport() {
+@@ -804,6 +804,33 @@ void MallocExtension::EnableForkSupport() {
  #endif
  }
  
 +void MallocExtension::SetSampleUserDataCallbacks(
 +    CreateSampleUserDataCallback create,
 +    CopySampleUserDataCallback copy,
-+    DestroySampleUserDataCallback destroy) {
++    DestroySampleUserDataCallback destroy,
++    ComputeSampleUserDataHashCallback compute_hash) {
 +#if ABSL_INTERNAL_HAVE_WEAK_MALLOCEXTENSION_STUBS
 +  if (&MallocExtension_SetSampleUserDataCallbacks != nullptr) {
-+    MallocExtension_SetSampleUserDataCallbacks(create, copy, destroy);
++    MallocExtension_SetSampleUserDataCallbacks(create, copy, destroy, compute_hash);
 +  }
 +#else
 +  (void)create;
 +  (void)copy;
 +  (void)destroy;
++  (void)compute_hash;
 +#endif
++}
++
++void MallocExtension::SetSampleUserDataCallbacks(
++  CreateSampleUserDataCallback create,
++  CopySampleUserDataCallback copy,
++  DestroySampleUserDataCallback destroy) {
++    SetSampleUserDataCallbacks(create, copy, destroy, [](void* ptr) -> size_t {
++      (void) ptr;
++      return 0;
++    });
 +}
 +
  }  // namespace tcmalloc
  
  // Default implementation just returns size. The expectation is that
 diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
-index 36fd433..702baa8 100644
+index 36fd433..644731b 100644
 --- a/tcmalloc/malloc_extension.h
 +++ b/tcmalloc/malloc_extension.h
 @@ -214,6 +214,8 @@ class Profile final {
@@ -194,7 +247,7 @@ index 36fd433..702baa8 100644
      // The following vars are used by the lifetime (deallocation) profiler.
      uint64_t profile_id;
  
-@@ -664,6 +666,16 @@ class MallocExtension final {
+@@ -664,6 +666,24 @@ class MallocExtension final {
    // Enables fork support.
    // Allocator will continue to function correctly in the child, after calling fork().
    static void EnableForkSupport();
@@ -202,8 +255,16 @@ index 36fd433..702baa8 100644
 +  using CreateSampleUserDataCallback = void*();
 +  using CopySampleUserDataCallback = void*(void*);
 +  using DestroySampleUserDataCallback = void(void*);
++  using ComputeSampleUserDataHashCallback = size_t(void*);
 +
 +  // Sets callbacks for lifetime control of custom user data attached to allocation samples
++  static void SetSampleUserDataCallbacks(
++    CreateSampleUserDataCallback create,
++    CopySampleUserDataCallback copy,
++    DestroySampleUserDataCallback destroy,
++    ComputeSampleUserDataHashCallback compute_hash);
++
++  // Temporary compat shim. Use 4-argument overload instead.
 +  static void SetSampleUserDataCallbacks(
 +    CreateSampleUserDataCallback create,
 +    CopySampleUserDataCallback copy,
@@ -212,19 +273,27 @@ index 36fd433..702baa8 100644
  
  }  // namespace tcmalloc
 diff --git a/tcmalloc/stack_trace_table.cc b/tcmalloc/stack_trace_table.cc
-index cf57148..2de1a25 100644
+index cf57148..c6b6867 100644
 --- a/tcmalloc/stack_trace_table.cc
 +++ b/tcmalloc/stack_trace_table.cc
-@@ -88,6 +88,7 @@ void StackTraceTable::AddTrace(double sample_weight, const StackTrace& t) {
+@@ -39,6 +39,7 @@ StackTraceTable::StackTraceTable(ProfileType type)
+ StackTraceTable::~StackTraceTable() {
+   LinkedSample* cur = all_;
+   while (cur != nullptr) {
++    SampleUserDataSupport::UserData::DestroyRaw(cur->sample.user_data);
+     LinkedSample* next = cur->next;
+     tc_globals.linked_sample_allocator().Delete(cur);
+     cur = next;
+@@ -88,6 +89,7 @@ void StackTraceTable::AddTrace(double sample_weight, const StackTrace& t) {
    s->sample.span_start_address = t.span_start_address;
    s->sample.guarded_status = t.guarded_status;
    s->sample.type = t.allocation_type;
-+  s->sample.user_data = t.user_data.Get();
++  s->sample.user_data = SampleUserDataSupport::UserData{t.user_data}.Release();
  
    static_assert(kMaxStackDepth <= Profile::Sample::kMaxStackDepth,
                  "Profile stack size smaller than internal stack sizes");
 diff --git a/tcmalloc/static_vars.h b/tcmalloc/static_vars.h
-index 58f706c..010ceed 100644
+index 58f706c..1a5b0aa 100644
 --- a/tcmalloc/static_vars.h
 +++ b/tcmalloc/static_vars.h
 @@ -26,6 +26,7 @@
@@ -235,7 +304,7 @@ index 58f706c..010ceed 100644
  #include "tcmalloc/allocation_sample.h"
  #include "tcmalloc/arena.h"
  #include "tcmalloc/central_freelist.h"
-@@ -182,6 +183,14 @@ class Static final {
+@@ -182,6 +183,15 @@ class Static final {
      fork_support_enabled_ = true;
    }
  
@@ -243,26 +312,28 @@ index 58f706c..010ceed 100644
 +  static void SetSampleUserDataCallbacks(
 +      SampleUserDataSupport::CreateSampleUserDataCallback create,
 +      SampleUserDataSupport::CopySampleUserDataCallback copy,
-+      SampleUserDataSupport::DestroySampleUserDataCallback destroy) {
-+    SampleUserDataSupport::Enable(create, copy, destroy);
++      SampleUserDataSupport::DestroySampleUserDataCallback destroy,
++      SampleUserDataSupport::ComputeSampleUserDataHashCallback compute_hash) {
++    SampleUserDataSupport::Enable(create, copy, destroy, compute_hash);
 +  }
 +
    static bool ABSL_ATTRIBUTE_ALWAYS_INLINE HaveHooks() {
      return false;
    }
 diff --git a/tcmalloc/tcmalloc.cc b/tcmalloc/tcmalloc.cc
-index 846ab86..d4d4169 100644
+index 846ab86..33119df 100644
 --- a/tcmalloc/tcmalloc.cc
 +++ b/tcmalloc/tcmalloc.cc
-@@ -376,6 +376,12 @@ void TCMallocPostFork() {
+@@ -376,6 +376,13 @@ void TCMallocPostFork() {
    Static::sampled_allocation_recorder().ReleaseInternalLocks();
  }
  
 +extern "C" void MallocExtension_SetSampleUserDataCallbacks(
 +    MallocExtension::CreateSampleUserDataCallback create,
 +    MallocExtension::CopySampleUserDataCallback copy,
-+    MallocExtension::DestroySampleUserDataCallback destroy) {
-+  Static::SetSampleUserDataCallbacks(create, copy, destroy);
++    MallocExtension::DestroySampleUserDataCallback destroy,
++    MallocExtension::ComputeSampleUserDataHashCallback compute_hash) {
++  Static::SetSampleUserDataCallbacks(create, copy, destroy, compute_hash);
 +}
  
  // nallocx slow path.

@@ -10,7 +10,7 @@
 
 namespace NSQLComplete {
 
-    NJson::TJsonValue LoadJsonResource(const TStringBuf filename) {
+    NJson::TJsonValue LoadJsonResource(TStringBuf filename) {
         TString text;
         Y_ENSURE(NResource::FindExact(filename, &text));
         return NJson::ReadJsonFastTree(text);

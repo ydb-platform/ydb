@@ -28,7 +28,8 @@ TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    AFL_VERIFY(!!id)("column_name", name)("names", JoinSeq(",", ColumnIdxSortedByName));
+    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))(
+        "names", JoinSeq(",", GetColumnNames()));
     return *id;
 }
 
@@ -76,6 +77,14 @@ std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) co
     out.reserve(ids.size());
     for (ui32 id : ids) {
         out.push_back(GetColumnName(id));
+    }
+    return out;
+}
+
+std::vector<TString> TIndexInfo::GetColumnNames() const {
+    std::vector<TString> out;
+    for (auto&& i : ColumnFeatures) {
+        out.push_back(i->GetColumnName());
     }
     return out;
 }
@@ -328,9 +337,9 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
     return out;
 }
 
-std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
+std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const ui64 presetId, const NKikimrSchemeOp::TColumnTableSchema& schema,
     const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    TIndexInfo result;
+    TIndexInfo result(presetId);
     if (!result.DeserializeFromProto(schema, operators, cache)) {
         return std::nullopt;
     }
@@ -342,6 +351,11 @@ std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TCol
     TSchemaDiffView diffView;
     diffView.DeserializeFromProto(diff).Validate();
     return TIndexInfo(prevSchema, diffView, operators, cache);
+}
+
+std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const TSchemaDiffView& diff, const TIndexInfo& prevSchema,
+    const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    return TIndexInfo(prevSchema, diff, operators, cache);
 }
 
 std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
@@ -522,7 +536,8 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexV
 }
 
 TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
-    const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    const std::shared_ptr<TSchemaObjectsCache>& cache)
+    : PresetId(original.PresetId) {
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {
@@ -644,8 +659,8 @@ void TIndexInfo::Validate() const {
     }
 }
 
-TIndexInfo TIndexInfo::BuildDefault() {
-    TIndexInfo result;
+TIndexInfo TIndexInfo::BuildDefault(const ui64 presetId) {
+    TIndexInfo result(presetId);
     result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
     result.MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
     return result;

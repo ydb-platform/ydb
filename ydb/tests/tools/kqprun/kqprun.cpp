@@ -54,6 +54,7 @@ struct TExecutionOptions {
     std::vector<TString> PoolIds;
     std::vector<TString> UserSIDs;
     std::vector<TDuration> Timeouts;
+    std::vector<std::optional<TVector<NACLib::TSID>>> GroupSIDs;
     ui64 ResultsRowsLimit = 0;
 
     const TString DefaultTraceId = "kqprun";
@@ -117,7 +118,8 @@ struct TExecutionOptions {
             .Database = GetValue(index, Databases, TString()),
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
             .QueryId = queryId,
-            .Params = Params
+            .Params = Params,
+            .GroupSIDs = GetValue<std::optional<TVector<NACLib::TSID>>>(index, GroupSIDs, std::nullopt)
         };
     }
 
@@ -149,6 +151,7 @@ private:
         checker(PoolIds.size(), "pool ids");
         checker(UserSIDs.size(), "user SIDs");
         checker(Timeouts.size(), "timeouts");
+        checker(GroupSIDs.size(), "group SIDs");
         checker(runnerOptions.ScriptQueryAstOutputs.size(), "ast output files");
         checker(runnerOptions.ScriptQueryPlanOutputs.size(), "plan output files");
         checker(runnerOptions.ScriptQueryTimelineFiles.size(), "timeline files");
@@ -707,6 +710,13 @@ protected:
             .RequiredArgument("user-SID")
             .EmplaceTo(&ExecutionOptions.UserSIDs);
 
+        options.AddLongOption("group", "User group SIDs (should be split by ',') -p queries")
+            .RequiredArgument("SIDs")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                ExecutionOptions.GroupSIDs.emplace_back(TVector<NACLib::TSID>());
+                StringSplitter(option->CurValOrDef()).Split(',').SkipEmpty().Collect(&(*ExecutionOptions.GroupSIDs.back()));
+            });
+
         options.AddLongOption("pool", "Workload manager pool in which queries will be executed")
             .RequiredArgument("pool-id")
             .EmplaceTo(&ExecutionOptions.PoolIds);
@@ -738,6 +748,16 @@ protected:
                     ythrow yexception() << "Number of nodes less than one";
                 }
                 return nodeCount;
+            });
+
+        options.AddLongOption("dc-count", "Number of data centers")
+            .RequiredArgument("uint")
+            .DefaultValue(1)
+            .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.DcCount, [](ui32 dcCount) {
+                if (dcCount < 1) {
+                    ythrow yexception() << "Number of data centers less than one";
+                }
+                return dcCount;
             });
 
         options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")

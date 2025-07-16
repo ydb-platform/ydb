@@ -2050,6 +2050,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
 
+        // only have local on dynamic nodes
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(0)), sender, new TEvents::TEvPoisonPill()));
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(1)), sender, new TEvents::TEvPoisonPill()));
+
         server.SetupDynamicLocalService(2, "Root");
         server.StartPQTablets(1);
         server.DestroyDynamicLocalService(2);
@@ -2112,6 +2116,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
         TActorId sender = runtime->AllocateEdgeActor();
 
+        // only have local on dynamic nodes
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(0)), sender, new TEvents::TEvPoisonPill()));
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(1)), sender, new TEvents::TEvPoisonPill()));
+
 
         server.SetupDynamicLocalService(2, "Root");
         server.StartPQTablets(1, true);
@@ -2126,6 +2134,53 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         Cerr << result.ShortDebugString();
 
         UNIT_ASSERT(HasTabletIssue(result));
+    }
+
+    Y_UNIT_TEST(TestStoppedTabletIsNotDead) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
+
+        // kill local so that tablet cannot start
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(0)), sender, new TEvents::TEvPoisonPill()));
+
+        ui64 tabletId = server.StartPQTablets(1, false).front();
+        runtime->DispatchEvents({}, TDuration::MilliSeconds(50));
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        {
+            TAutoPtr<IEventHandle> handle;
+            runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+            auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+            Cerr << result.ShortDebugString() << Endl;
+
+            UNIT_ASSERT(HasTabletIssue(result));
+        }
+
+        runtime->SendToPipe(72057594037968897, sender, new TEvHive::TEvStopTablet(tabletId, sender), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<TEvHive::TEvStopTabletResult>(handle);
+
+        {
+            TAutoPtr<IEventHandle> handle;
+            runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+            auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+            Cerr << result.ShortDebugString() << Endl;
+
+            UNIT_ASSERT(!HasTabletIssue(result));
+        }
     }
 
     void SendHealthCheckConfigUpdate(TTestActorRuntime &runtime, const TActorId& sender, const NKikimrConfig::THealthCheckConfig &cfg) {
@@ -2461,6 +2516,41 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+    }
+
+    Y_UNIT_TEST(CLusterNotBootstrapped) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+        config->MutableSelfManagementConfig()->SetEnabled(true);
+
+        auto observer = runtime.AddObserver<TEvNodeWardenStorageConfig>([&](TEvNodeWardenStorageConfig::TPtr& ev) {
+            ev->Get()->Config = config;
+        });
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Database = "/Root";
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        Ctest << result.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
+        UNIT_ASSERT(std::ranges::any_of(result.issue_log(), [](auto&& issue) { return issue.message() == "Cluster is not bootstrapped"; }));
     }
 }
 }

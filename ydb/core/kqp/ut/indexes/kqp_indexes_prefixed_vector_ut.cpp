@@ -26,11 +26,20 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
-    std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, const TString& query) {
+    std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, const TString& query, bool covered = false) {
         {
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
                 "Failed to explain: `" << query << "` with " << result.GetIssues().ToString());
+
+            if (covered) {
+                // Check that the query doesn't use main table
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT(ValidatePlanNodeIds(plan));
+                auto mainTableAccess = CountPlanNodesByKv(plan, "Table", "TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(mainTableAccess, 0);
+            }
         }
         {
             auto result = session.ExecuteDataQuery(query,
@@ -53,7 +62,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    void DoPositiveQueriesVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery) {
+    void DoPositiveQueriesVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery, bool covered = false) {
         auto toStr = [](const auto& rs) -> TString {
             TStringBuilder b;
             for (const auto& r : rs) {
@@ -66,7 +75,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         UNIT_ASSERT_EQUAL_C(mainResults.size(), 3, toStr(mainResults));
         UNIT_ASSERT_C(std::unique(mainResults.begin(), mainResults.end()) == mainResults.end(), toStr(mainResults));
 
-        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery);
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery, covered);
         absl::c_sort(indexResults);
         UNIT_ASSERT_EQUAL_C(indexResults.size(), 3, toStr(indexResults));
         UNIT_ASSERT_C(std::unique(indexResults.begin(), indexResults.end()) == indexResults.end(), toStr(indexResults));
@@ -79,13 +88,17 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         std::string_view function,
         std::string_view direction,
         std::string_view left,
-        std::string_view right) {
+        std::string_view right,
+        bool covered = false) {
         constexpr std::string_view init = 
             "$target = \"\x67\x68\x03\";\n"
             "$user = \"user_b\";";
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
         {
+            // TODO(vitaliff): Exclude index-covered WHERE fields from KqpReadTableRanges.
+            // Currently even if we SELECT only pk, emb, data WHERE user=xxx we also get `user`
+            // in SELECT columns and thus it's required to add it to covered columns.
             const TString plainQuery(Q1_(std::format(R"({}
                 SELECT * FROM `/Root/TestTable`
                 WHERE user = $user
@@ -100,7 +113,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 ORDER BY {} {}
                 LIMIT 3;
             )", init, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, covered);
         }
         // metric in result
         {
@@ -117,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 ORDER BY {} {}
                 LIMIT 3;
             )", init, metric, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, covered);
         }
         // metric as result
         // TODO(mbkkt) fix this behavior too
@@ -136,30 +149,31 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 ORDER BY m {}
                 LIMIT 3;
             )", init, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery);
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, covered);
         }
     }
 
     void DoPositiveQueriesPrefixedVectorIndexOrderBy(
         TSession& session,
         std::string_view function,
-        std::string_view direction) {
+        std::string_view direction,
+        bool covered = false) {
         // target is left, member is right
-        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, function, direction, "$target", "emb");
+        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, function, direction, "$target", "emb", covered);
         // target is right, member is left
-        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, function, direction, "emb", "$target");
+        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, function, direction, "emb", "$target", covered);
     }
 
-    void DoPositiveQueriesPrefixedVectorIndexOrderByCosine(TSession& session) {
+    void DoPositiveQueriesPrefixedVectorIndexOrderByCosine(TSession& session, bool covered = false) {
         // distance, default direction
-        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, "CosineDistance", "");
+        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, "CosineDistance", "", covered);
         // distance, asc direction
-        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, "CosineDistance", "ASC");
+        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, "CosineDistance", "ASC", covered);
         // similarity, desc direction
-        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
+        DoPositiveQueriesPrefixedVectorIndexOrderBy(session, "CosineSimilarity", "DESC", covered);
     }
 
-    TSession DoCreateTableForPrefixedVectorIndex(TTableClient& db, bool nullable) {
+    TSession DoCreateTableForPrefixedVectorIndex(TTableClient& db, bool nullable, bool suffixPk = false) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
@@ -177,14 +191,25 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                     .AddNonNullableColumn("emb", EPrimitiveType::String)
                     .AddNonNullableColumn("data", EPrimitiveType::String);
             }
-            tableBuilder.SetPrimaryKeyColumns({"pk"});
+            if (suffixPk) {
+                tableBuilder.SetPrimaryKeyColumns({"pk", "user"});
+            } else {
+                tableBuilder.SetPrimaryKeyColumns({"pk"});
+            }
             tableBuilder.BeginPartitioningSettings()
                 .SetMinPartitionsCount(3)
-            .EndPartitioningSettings();
-            auto partitions = TExplicitPartitions{}
-                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(40).EndTuple().Build())
-                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(60).EndTuple().Build());
-            tableBuilder.SetPartitionAtKeys(partitions);
+                .EndPartitioningSettings();
+            if (suffixPk) {
+                auto partitions = TExplicitPartitions{}
+                    .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(40).AddElement().OptionalString("").EndTuple().Build())
+                    .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(60).AddElement().OptionalString("").EndTuple().Build());
+                tableBuilder.SetPartitionAtKeys(partitions);
+            } else {
+                auto partitions = TExplicitPartitions{}
+                    .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(40).EndTuple().Build())
+                    .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(60).EndTuple().Build());
+                tableBuilder.SetPartitionAtKeys(partitions);
+            }
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -406,6 +431,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                           .ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            // FIXME: result does not return failure/issues when index is created but fails to be filled with data
         }
         {
             auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
@@ -423,6 +449,106 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST_TWIN(PrefixedVectorIndexOrderByCosineDistanceWithCover, Nullable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, Nullable);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (user, emb) COVER (user, emb, data)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            std::vector<std::string> indexKeyColumns{"user", "emb"};
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
+            std::vector<std::string> indexDataColumns{"user", "emb", "data"};
+            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, true /*covered*/);
+    }
+
+    Y_UNIT_TEST_QUAD(CosineDistanceWithPkPrefix, Nullable, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+
+        auto session = DoCreateTableForPrefixedVectorIndex(db, Nullable, true);
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (user, emb) %s
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )", (Covered ? "COVER (emb, data)" : ""))));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            std::vector<std::string> indexKeyColumns{"user", "emb"};
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
+            std::vector<std::string> indexDataColumns;
+            if (Covered) {
+                indexDataColumns = {"emb", "data"};
+            }
+            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, Covered);
     }
 
 }

@@ -385,7 +385,7 @@ public:
 
 }; // TTxCdcStreamScanProgress
 
-class TCdcStreamScan: public IActorCallback, public IScan {
+class TCdcStreamScan: public IActorCallback, public IActorExceptionHandler, public IScan {
     using TStats = TCdcStreamScanManager::TStats;
 
     struct TDataShardId {
@@ -511,8 +511,9 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
-        if (abort != EAbort::None) {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        // TODO: https://github.com/ydb-platform/ydb/issues/18806
+        if (status != EStatus::Done) {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
         } else {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE);
@@ -520,6 +521,14 @@ public:
 
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
 private:

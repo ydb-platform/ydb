@@ -71,7 +71,6 @@ public:
         AddHandler(1, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
 
         AddHandler(2, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
-        AddHandler(2, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
         AddHandler(2, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
         AddHandler(2, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
         AddHandler(2, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
@@ -165,13 +164,16 @@ protected:
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleElimination);
         auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
-        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPhypDPTableSize, ctx, enableShuffleElimination));
+        auto stats = TypesCtx.GetStats(node.Raw());
+        TTableAliasMap* tableAliases = stats? stats->TableAliases.Get(): nullptr;
+        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPhypDPTableSize, ctx, enableShuffleElimination, TypesCtx.OrderingsFSM, tableAliases));
         TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));
             },
             KqpCtx.EquiJoinsCount,
-            KqpCtx.GetOptimizerHints()
+            KqpCtx.GetOptimizerHints(),
+            enableShuffleElimination
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;

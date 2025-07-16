@@ -19,7 +19,7 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/utils/log/context.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <library/cpp/yson/node/node.h>
@@ -163,6 +163,7 @@ public:
     bool DisableAnonymousClusterAccess_;
     bool Hidden = false;
     IMetricsRegistryPtr Metrics;
+    TOperationProgress::EOpBlockStatus BlockStatus = TOperationProgress::EOpBlockStatus::None;
 };
 
 
@@ -228,6 +229,19 @@ public:
         }
         auto progress = TOperationProgress(TString(YtProviderName), *publicId,
             TOperationProgress::EState::InProgress, stage);
+        Session_->ProgressWriter_(progress);
+    }
+
+    void ReportNodeBlockStatus() const {
+        auto publicId = Options_.PublicId();
+        if (!publicId) {
+            return;
+        }
+
+        YQL_CLOG(INFO, ProviderYt) << "Reporting " << BlockStatus << " block status for node #" << *publicId;
+        auto progress = TOperationProgress(TString(YtProviderName), *publicId,
+            TOperationProgress::EState::InProgress);
+        progress.BlockStatus = BlockStatus;
         Session_->ProgressWriter_(progress);
     }
 

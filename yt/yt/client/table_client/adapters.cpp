@@ -21,7 +21,7 @@ using NProfiling::TWallTimer;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = TableClientLogger;
+constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -225,7 +225,7 @@ void PipeReaderToWriterByBatches(
     try {
         TPeriodicYielder yielder(TDuration::Seconds(1));
 
-        while (auto batch = reader->Read(options)) {
+        for (bool isFirstBatch = true; auto batch = reader->Read(options); isFirstBatch = false) {
             yielder.TryYield();
 
             if (batch->IsEmpty()) {
@@ -251,7 +251,7 @@ void PipeReaderToWriterByBatches(
                     .ThrowOnError();
             }
 
-            if (optionsUpdater) {
+            if (optionsUpdater && !isFirstBatch) {
                 options.MaxRowsPerRead = rowsRead;
                 optionsUpdater(&options, timer.GetElapsedTime());
             }

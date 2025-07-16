@@ -1,0 +1,10 @@
+items:
+  - name: Typical OLAP scenarios
+    href: scenarios.md
+  - name: Optimizing analytical queries
+    href: optimizing.md
+  - name: Dataset import
+    href: datasets/index.md
+    include:
+      mode: link
+      path: datasets/toc_p.yaml

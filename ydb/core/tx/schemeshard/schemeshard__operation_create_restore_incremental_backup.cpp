@@ -1,41 +1,16 @@
-#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_base.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-
-#include "schemeshard_utils.h"  // for TransactionTemplate
-
 #include "schemeshard__operation_create_cdc_stream.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_states.h"
+#include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
-
-void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(workingDirPath.PathString(),
-        NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
-    outTx.SetFailOnExist(false);
-    outTx.SetInternal(true);
-    auto cfg = outTx.MutableLockConfig();
-    cfg->SetName(tablePath.LeafName());
-
-    result.push_back(CreateLock(NextPartId(opId, result), outTx));
-}
-
-void DoDropLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(workingDirPath.PathString(),
-        NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
-    outTx.SetFailOnExist(true);
-    outTx.SetInternal(true);
-    auto cfg = outTx.MutableLockConfig();
-    cfg->SetName(tablePath.LeafName());
-    outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
-
-    result.push_back(DropLock(NextPartId(opId, result), outTx));
-}
 
 namespace NIncrRestore {
 
@@ -68,8 +43,8 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& op = *tx.MutableCreateIncrementalRestoreSrc();
-        op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(LoopStep));
-        op.SetSrcTablePath(RestoreOp.GetSrcTablePaths(LoopStep));
+        op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(0));
+        op.SetSrcTablePath(RestoreOp.GetSrcTablePaths(0));
         pathId.ToProto(op.MutableDstPathId());
         op.SetDstTablePath(RestoreOp.GetDstTablePath());
     }
@@ -77,11 +52,9 @@ protected:
 public:
     explicit TConfigurePartsAtTable(
             TOperationId id,
-            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp,
-            ui64 loopStep)
+            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp)
         : OperationId(id)
         , RestoreOp(restoreOp)
-        , LoopStep(loopStep)
     {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed op# " << restoreOp.DebugString());
         IgnoreMessages(DebugHint(), {});
@@ -135,7 +108,6 @@ public:
 private:
     const TOperationId OperationId;
     const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
-    const ui64 LoopStep;
 }; // TConfigurePartsAtTable
 
 class TProposeAtTable : public TSubOperationState {
@@ -262,8 +234,6 @@ public:
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
-        Y_ABORT_UNLESS(txState->LoopStep == RestoreOp.SrcPathIdsSize());
-        Y_ABORT_UNLESS(txState->TargetPathId == TPathId::FromProto(RestoreOp.GetSrcPathIds(RestoreOp.SrcPathIdsSize() - 1)));
 
         for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
             context.OnComplete.ReleasePathState(OperationId, TPathId::FromProto(pathId), TPathElement::EPathState::EPathStateNoChanges);
@@ -278,56 +248,10 @@ private:
     const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
 };
 
-class TCopyTableBarrier: public TSubOperationState {
-private:
-    TOperationId OperationId;
+class TNewRestoreFromAtTable : public TSubOperationWithContext {
+    using TSubOperationWithContext::SelectStateFunc;
+    using TSubOperationWithContext::NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NIncrRestoreState::TCopyTableBarrier"
-                << " operationId: " << OperationId;
-    }
-
-public:
-    TCopyTableBarrier(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvPrivate::TEvOperationPlan::EventType,
-        });
-    }
-
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
-                               << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet# " << ssId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
-        return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << "ProgressState, operation type "
-                            << TTxState::TypeName(txState->TxType));
-
-        context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
-        return false;
-    }
-};
-
-class TNewRestoreFromAtTable : public TSubOperation {
     static TTxState::ETxState InitialState() {
         return TTxState::ConfigureParts;
     }
@@ -336,11 +260,7 @@ class TNewRestoreFromAtTable : public TSubOperation {
         Y_ABORT("unreachable");
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState /* state */) override {
-        Y_ABORT("unreachable");
-    }
-
-    TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const {
+    TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext&) const {
         switch (state) {
         case TTxState::Waiting:
             return TTxState::CopyTableBarrier;
@@ -351,15 +271,6 @@ class TNewRestoreFromAtTable : public TSubOperation {
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts: {
-            auto* txState = context.SS->FindTx(OperationId);
-            Y_ABORT_UNLESS(txState);
-            ++(txState->LoopStep);
-            if (txState->LoopStep < Transaction.GetRestoreMultipleIncrementalBackups().SrcPathIdsSize()) {
-                txState->TargetPathId = TPathId::FromProto(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopStep));
-                txState->TxShardsListFinalized = false;
-                // TODO preserve TxState
-                return TTxState::ConfigureParts;
-            }
             return TTxState::Done;
         }
         default:
@@ -367,20 +278,16 @@ class TNewRestoreFromAtTable : public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext&) override {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CopyTableBarrier:
-            return MakeHolder<NIncrRestore::TCopyTableBarrier>(OperationId);
-        case TTxState::ConfigureParts: {
-            auto* txState = context.SS->FindTx(OperationId);
-            Y_ABORT_UNLESS(txState);
-            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups(), txState->LoopStep);
-        }
+            return MakeHolder<TWaitCopyTableBarrier>(OperationId, "NIncrRestoreState", TTxState::ConfigureParts);
+        case TTxState::ConfigureParts:
+            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
         case TTxState::Propose:
             return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
         case TTxState::ProposedWaitParts:
-            // TODO: check the right next state always choosen
             return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
             return MakeHolder<NIncrRestore::TDone>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
@@ -389,24 +296,30 @@ class TNewRestoreFromAtTable : public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        auto state = NextState(GetState(), context);
-        SetState(state, context);
-
-        if (state != TTxState::Invalid) {
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
     explicit TNewRestoreFromAtTable(TOperationId id, const TTxTransaction& tx)
-        : TSubOperation(id, tx)
+        : TSubOperationWithContext(id, tx)
     {
     }
 
     explicit TNewRestoreFromAtTable(TOperationId id, TTxState::ETxState state)
-        : TSubOperation(id, state)
+        : TSubOperationWithContext(id, state)
     {
+    }
+
+    void StateDone(TOperationContext& context) override {
+        if (GetState() == TTxState::Done) {
+            return;
+        }
+        
+        TTxState::ETxState nextState;
+        nextState = NextState(GetState(), context);
+        
+        SetState(nextState, context);
+        
+        if (nextState != TTxState::Invalid) {
+            context.OnComplete.ActivateTx(OperationId);
+        }
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {

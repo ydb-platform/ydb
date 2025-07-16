@@ -7,6 +7,7 @@
 
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/minikql/compact_hash.h>
+#include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -565,7 +566,7 @@ class TTypeHolder: public TComputationValue<TTypeHolder> {
 public:
     TTypeHolder(TMemoryUsageInfo* memInfo, TType* type)
         : TComputationValue(memInfo)
-        , Type(type)
+        , Type_(type)
     {}
 
     NUdf::TStringRef GetResourceTag() const override {
@@ -573,11 +574,11 @@ public:
     }
 
     void* GetResource() override {
-        return Type;
+        return Type_;
     }
 
 private:
-    TType* const Type;
+    TType* const Type_;
 };
 
 class TArrowBlock: public TComputationValue<TArrowBlock> {
@@ -586,6 +587,7 @@ public:
         : TComputationValue(memInfo)
         , Datum_(std::move(datum))
     {
+        VALIDATE_DATUM_ARROW_BLOCK_CONSTRUCTOR(Datum_);
     }
 
     inline static const TArrowBlock& From(const NUdf::TUnboxedValuePod& value) {
@@ -615,9 +617,9 @@ class TTypeOperationsRegistry {
     using TValuePtr = typename IFace::TPtr;
 public:
     IFace* FindOrEmplace(TType& type) const {
-        const TString serializedType = SerializeNode(&type, NodeStack);
-        auto it = Registry.find(serializedType);
-        if (it == Registry.end()) {
+        const TString serializedType = SerializeNode(&type, NodeStack_);
+        auto it = Registry_.find(serializedType);
+        if (it == Registry_.end()) {
             TValuePtr ptr;
             if constexpr (std::is_same_v<IFace, NUdf::IHash>) {
                 ptr = MakeHashImpl(&type);
@@ -629,14 +631,14 @@ public:
                 static_assert(TDependentFalse<IFace>, "unexpected type");
             }
             auto p = std::make_pair(std::move(serializedType), std::move(ptr));
-            it = Registry.insert(std::move(p)).first;
+            it = Registry_.insert(std::move(p)).first;
         }
         return it->second.Get();
     }
 
 private:
-    mutable std::vector<TNode*> NodeStack;
-    mutable THashMap<TString, TValuePtr> Registry;
+    mutable std::vector<TNode*> NodeStack_;
+    mutable THashMap<TString, TValuePtr> Registry_;
 };
 
 class TDirectArrayHolderInplace : public TComputationValue<TDirectArrayHolderInplace> {
@@ -652,22 +654,22 @@ public:
 
     TDirectArrayHolderInplace(TMemoryUsageInfo* memInfo, ui64 size)
         : TComputationValue(memInfo)
-        , Size(size)
+        , Size_(size)
     {
-        MKQL_ENSURE(Size > 0U, "Can't create empty array holder.");
-        MKQL_MEM_TAKE(GetMemInfo(), GetPtr(), Size * sizeof(NUdf::TUnboxedValue));
-        std::memset(GetPtr(), 0, Size * sizeof(NUdf::TUnboxedValue));
+        MKQL_ENSURE(Size_ > 0U, "Can't create empty array holder.");
+        MKQL_MEM_TAKE(GetMemInfo(), GetPtr(), Size_ * sizeof(NUdf::TUnboxedValue));
+        std::memset(GetPtr(), 0, Size_ * sizeof(NUdf::TUnboxedValue));
     }
 
     ~TDirectArrayHolderInplace() {
-        for (ui64 i = 0U; i < Size; ++i) {
+        for (ui64 i = 0U; i < Size_; ++i) {
             (GetPtr() + i)->~TUnboxedValue();
         }
-        MKQL_MEM_RETURN(GetMemInfo(), GetPtr(), Size * sizeof(NUdf::TUnboxedValue));
+        MKQL_MEM_RETURN(GetMemInfo(), GetPtr(), Size_ * sizeof(NUdf::TUnboxedValue));
     }
 
     ui64 GetSize() const {
-        return Size;
+        return Size_;
     }
 
     NUdf::TUnboxedValue* GetPtr() const {
@@ -678,51 +680,51 @@ private:
     class TIterator : public TTemporaryComputationValue<TIterator> {
     public:
         TIterator(const TDirectArrayHolderInplace* parent)
-            : TTemporaryComputationValue(parent->GetMemInfo()), Parent(const_cast<TDirectArrayHolderInplace*>(parent))
+            : TTemporaryComputationValue(parent->GetMemInfo()), Parent_(const_cast<TDirectArrayHolderInplace*>(parent))
         {}
 
     private:
         bool Skip() final {
-            return ++Current < Parent->GetSize();
+            return ++Current_ < Parent_->GetSize();
         }
 
         bool Next(NUdf::TUnboxedValue& value) final {
             if (!Skip())
                 return false;
-            value = Parent->GetPtr()[Current];
+            value = Parent_->GetPtr()[Current_];
             return true;
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
             if (!Next(payload))
                 return false;
-            key = NUdf::TUnboxedValuePod(Current);
+            key = NUdf::TUnboxedValuePod(Current_);
             return true;
         }
 
-        const NUdf::TRefCountedPtr<TDirectArrayHolderInplace> Parent;
-        ui64 Current = Max<ui64>();
+        const NUdf::TRefCountedPtr<TDirectArrayHolderInplace> Parent_;
+        ui64 Current_ = Max<ui64>();
     };
 
     class TKeysIterator : public TTemporaryComputationValue<TKeysIterator> {
     public:
         TKeysIterator(const TDirectArrayHolderInplace& parent)
-            : TTemporaryComputationValue(parent.GetMemInfo()), Size(parent.GetSize())
+            : TTemporaryComputationValue(parent.GetMemInfo()), Size_(parent.GetSize())
         {}
     private:
         bool Skip() final {
-            return ++Current < Size;
+            return ++Current_ < Size_;
         }
 
         bool Next(NUdf::TUnboxedValue& key) final {
             if (!Skip())
                 return false;
-            key = NUdf::TUnboxedValuePod(Current);
+            key = NUdf::TUnboxedValuePod(Current_);
             return true;
         }
 
-        const ui64 Size;
-        ui64 Current = Max<ui64>();
+        const ui64 Size_;
+        ui64 Current_ = Max<ui64>();
     };
 
     bool HasListItems() const final {
@@ -738,15 +740,15 @@ private:
     }
 
     ui64 GetListLength() const final {
-        return Size;
+        return Size_;
     }
 
     ui64 GetDictLength() const final {
-        return Size;
+        return Size_;
     }
 
     ui64 GetEstimatedListLength() const final {
-        return Size;
+        return Size_;
     }
 
     NUdf::TUnboxedValue GetListIterator() const final {
@@ -766,12 +768,12 @@ private:
     }
 
     NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const final {
-        if (1U >= Size)
+        if (1U >= Size_)
             return const_cast<TDirectArrayHolderInplace*>(this);
 
         NUdf::TUnboxedValue* items = nullptr;
-        auto result = builder.NewArray(Size, items);
-        std::reverse_copy(GetPtr(), GetPtr() + Size, items);
+        auto result = builder.NewArray(Size_, items);
+        std::reverse_copy(GetPtr(), GetPtr() + Size_, items);
         return result.Release().AsBoxed();
     }
 
@@ -779,10 +781,10 @@ private:
         if (!count)
             return const_cast<TDirectArrayHolderInplace*>(this);
 
-        if (count >= Size)
+        if (count >= Size_)
             return builder.NewEmptyList().Release().AsBoxed();
 
-        const auto newSize = Size - count;
+        const auto newSize = Size_ - count;
         NUdf::TUnboxedValue* items = nullptr;
         auto result = builder.NewArray(newSize, items);
         std::copy_n(GetPtr() + count, newSize, items);
@@ -793,7 +795,7 @@ private:
         if (!count)
             return builder.NewEmptyList().Release().AsBoxed();
 
-        if (count >= Size)
+        if (count >= Size_)
             return const_cast<TDirectArrayHolderInplace*>(this);
 
         const auto newSize = count;
@@ -808,16 +810,16 @@ private:
     }
 
     bool Contains(const NUdf::TUnboxedValuePod& key) const final {
-        return key.Get<ui64>() < Size;
+        return key.Get<ui64>() < Size_;
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const final {
         const auto index = key.Get<ui64>();
-        return index < Size ? GetPtr()[index].MakeOptional() : NUdf::TUnboxedValuePod();
+        return index < Size_ ? GetPtr()[index].MakeOptional() : NUdf::TUnboxedValuePod();
     }
 
     NUdf::TUnboxedValue GetElement(ui32 index) const final {
-        Y_DEBUG_ABORT_UNLESS(index < Size);
+        Y_DEBUG_ABORT_UNLESS(index < Size_);
         return GetPtr()[index];
     }
 
@@ -829,7 +831,7 @@ private:
         return true;
     }
 
-    const ui64 Size;
+    const ui64 Size_;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -847,7 +849,7 @@ public:
 
     template <typename T, typename... TArgs>
     NUdf::TUnboxedValuePod Create(TArgs&&... args) const {
-        return NUdf::TUnboxedValuePod(AllocateOn<T>(CurrentAllocState, &MemInfo, std::forward<TArgs>(args)...));
+        return NUdf::TUnboxedValuePod(AllocateOn<T>(CurrentAllocState_, &MemInfo_, std::forward<TArgs>(args)...));
     }
 
     NUdf::TUnboxedValuePod CreateTypeHolder(TType* type) const;
@@ -988,27 +990,27 @@ public:
     NUdf::TUnboxedValuePod CloneArray(const NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& itemsPtr) const;
 
     TMemoryUsageInfo& GetMemInfo() const {
-        return MemInfo;
+        return MemInfo_;
     }
 
     NUdf::TUnboxedValuePod GetEmptyContainerLazy() const;
 
     void CleanupModulesOnTerminate() const {
-        if (FunctionRegistry) {
-            FunctionRegistry->CleanupModulesOnTerminate();
+        if (FunctionRegistry_) {
+            FunctionRegistry_->CleanupModulesOnTerminate();
         }
     }
 
     TAlignedPagePool& GetPagePool() const {
-        return *CurrentAllocState;
+        return *CurrentAllocState_;
     }
 
     ui64 GetMemoryUsed() const {
-        return CurrentAllocState->GetUsed();
+        return CurrentAllocState_->GetUsed();
     }
 
     const IFunctionRegistry* GetFunctionRegistry() const {
-        return FunctionRegistry;
+        return FunctionRegistry_;
     }
 
     template<bool FromStreams>
@@ -1016,14 +1018,14 @@ public:
     NUdf::TUnboxedValuePod ExtendStream(NUdf::TUnboxedValue* data, ui64 size) const;
 
 private:
-    TAllocState* const CurrentAllocState;
-    TMemoryUsageInfo& MemInfo;
-    const IFunctionRegistry* const FunctionRegistry;
-    mutable TMaybe<NUdf::TUnboxedValue> EmptyContainer;
+    TAllocState* const CurrentAllocState_;
+    TMemoryUsageInfo& MemInfo_;
+    const IFunctionRegistry* const FunctionRegistry_;
+    mutable TMaybe<NUdf::TUnboxedValue> EmptyContainer_;
 
-    mutable TTypeOperationsRegistry<NUdf::IHash> HashRegistry;
-    mutable TTypeOperationsRegistry<NUdf::IEquate> EquateRegistry;
-    mutable TTypeOperationsRegistry<NUdf::ICompare> CompareRegistry;
+    mutable TTypeOperationsRegistry<NUdf::IHash> HashRegistry_;
+    mutable TTypeOperationsRegistry<NUdf::IEquate> EquateRegistry_;
+    mutable TTypeOperationsRegistry<NUdf::ICompare> CompareRegistry_;
 };
 
 constexpr const ui32 STEP_FOR_RSS_CHECK = 100U;
@@ -1052,40 +1054,40 @@ public:
     TKeyTypeContanerHelper(const TType* type) {
         bool encoded;
         bool useIHash;
-        GetDictionaryKeyTypes(type, KeyTypes, IsTuple, encoded, useIHash);
+        GetDictionaryKeyTypes(type, KeyTypes_, IsTuple_, encoded, useIHash);
         if (useIHash || encoded) {
             if constexpr(SupportEqual) {
-                Equate = MakeEquateImpl(type);
+                Equate_ = MakeEquateImpl(type);
             }
             if constexpr(SupportHash) {
-                Hash = MakeHashImpl(type);
+                Hash_ = MakeHashImpl(type);
             }
             if constexpr(SupportLess) {
-                Compare = MakeCompareImpl(type);
+                Compare_ = MakeCompareImpl(type);
             }
         }
     }
 public: //unavailable getters may be eliminated at compile time, but it'd make code much less readable
     TValueEqual GetValueEqual() const{
         Y_ABORT_UNLESS(SupportEqual);
-        return TValueEqual(KeyTypes, IsTuple, Equate.Get());
+        return TValueEqual(KeyTypes_, IsTuple_, Equate_.Get());
     }
     TValueHasher GetValueHash() const{
         Y_ABORT_UNLESS(SupportHash);
-        return TValueHasher(KeyTypes, IsTuple, Hash.Get());
+        return TValueHasher(KeyTypes_, IsTuple_, Hash_.Get());
     }
     TValueLess GetValueLess() const{
         Y_ABORT_UNLESS(SupportLess);
-        return TValueLess(KeyTypes, IsTuple , Compare.Get());
+        return TValueLess(KeyTypes_, IsTuple_ , Compare_.Get());
     }
 private:
-    TKeyTypes KeyTypes;
-    bool IsTuple = false;
+    TKeyTypes KeyTypes_;
+    bool IsTuple_ = false;
 
     //unsused pointers may be eliminated at compile time, but it'd make code much less readable
-    NUdf::IEquate::TPtr Equate;
-    NUdf::IHash::TPtr Hash;
-    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate_;
+    NUdf::IHash::TPtr Hash_;
+    NUdf::ICompare::TPtr Compare_;
 };
 
 class TPlainContainerCache {
@@ -1100,21 +1102,21 @@ public:
     NUdf::TUnboxedValuePod NewArray(const THolderFactory& factory, ui64 size, NUdf::TUnboxedValue*& items);
 
 private:
-    std::array<NUdf::TUnboxedValue, 2> Cached;
-    std::array<NUdf::TUnboxedValue*, 2> CachedItems;
-    ui8 CacheIndex = 0U;
+    std::array<NUdf::TUnboxedValue, 2> Cached_;
+    std::array<NUdf::TUnboxedValue*, 2> CachedItems_;
+    ui8 CacheIndex_ = 0U;
 };
 
 template<class TObject>
 class TMutableObjectOverBoxedValue {
 public:
     TMutableObjectOverBoxedValue(TComputationMutables& mutables)
-        : ObjectIndex(mutables.CurValueIndex++)
+        : ObjectIndex_(mutables.CurValueIndex++)
     {}
 
     template <typename... Args>
     TObject& RefMutableObject(TComputationContext& ctx, Args&&... args) const {
-        auto& unboxed = ctx.MutableValues[ObjectIndex];
+        auto& unboxed = ctx.MutableValues[ObjectIndex_];
         if (!unboxed.HasValue()) {
             unboxed = ctx.HolderFactory.Create<TObject>(std::forward<Args>(args)...);
         }
@@ -1122,7 +1124,7 @@ public:
         return *static_cast<TObject*>(boxed.Get());
     }
 private:
-    const ui32 ObjectIndex;
+    const ui32 ObjectIndex_;
 };
 
 } // namespace NMiniKQL

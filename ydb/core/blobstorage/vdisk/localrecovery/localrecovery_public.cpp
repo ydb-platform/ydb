@@ -506,6 +506,7 @@ namespace NKikimr {
                 Y_VERIFY_S(LocRecCtx->VCtx && LocRecCtx->VCtx->Top, LocRecCtx->VCtx->VDiskLogPrefix);
                 auto hullCtx = MakeIntrusive<THullCtx>(
                         LocRecCtx->VCtx,
+                        Config,
                         ui32(LocRecCtx->PDiskCtx->Dsk->ChunkSize),
                         ui32(LocRecCtx->PDiskCtx->Dsk->PrefetchSizeBytes),
                         Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
@@ -515,10 +516,6 @@ namespace NKikimr {
                         Config->HullSstSizeInChunksFresh,
                         Config->HullSstSizeInChunksLevel,
                         Config->HullCompFreeSpaceThreshold,
-                        Config->FreshCompMaxInFlightWrites,
-                        Config->FreshCompMaxInFlightReads,
-                        Config->HullCompMaxInFlightWrites,
-                        Config->HullCompMaxInFlightReads,
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
@@ -600,7 +597,8 @@ namespace NKikimr {
 
         void SendYardInit(const TActorContext &ctx, TDuration yardInitDelay) {
             auto ev = std::make_unique<NPDisk::TEvYardInit>(Config->BaseInfo.InitOwnerRound, SelfVDiskId,
-                Config->BaseInfo.PDiskGuid, SkeletonId, SkeletonFrontId, Config->BaseInfo.VDiskSlotId);
+                Config->BaseInfo.PDiskGuid, SkeletonId, SkeletonFrontId,
+                Config->BaseInfo.VDiskSlotId, Config->GroupSizeInUnits);
             auto handle = std::make_unique<IEventHandle>(Config->BaseInfo.PDiskActorID, SelfId(), ev.release(),
                 IEventHandle::FlagTrackDelivery);
             if (yardInitDelay != TDuration::Zero()) {

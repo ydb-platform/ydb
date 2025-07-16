@@ -257,6 +257,23 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         setup.GetRuntime().SimulateSleep(TDuration::Zero());
     }
 
+    Y_UNIT_TEST(ReconnectsWithKesusAfterSeveralRetries) {
+        TKesusProxyTestSetup setup;
+        auto* pipeMock = setup.GetPipeFactory().ExpectTabletPipeCreation(true);
+        EXPECT_CALL(*pipeMock, OnPoisonPill());
+
+        for (ui32 i = 1; i <= NQuoter::KesusReconnectLimit; ++i) {
+            setup.SendNotConnected(pipeMock);
+            setup.WaitConnected();
+        }
+
+        setup.SendDestroyed(pipeMock);
+        setup.WaitPipesCreated(1 /* initial */ + NQuoter::KesusReconnectLimit + 1 /* last */);
+
+        // Dispatch some events to let poison pill reach the mock
+        setup.GetRuntime().SimulateSleep(TDuration::Zero());
+    }
+
     Y_UNIT_TEST(RejectsNotCanonizedResourceName) {
         TKesusProxyTestSetup setup;
 

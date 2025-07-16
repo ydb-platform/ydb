@@ -34,6 +34,7 @@ public:
         Self->Keeper.Clear();
         Self->Domains.clear();
         Self->BlockedOwners.clear();
+        Self->BridgePiles.clear();
 
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
@@ -57,6 +58,7 @@ public:
             auto categoryRowset = db.Table<Schema::TabletCategory>().Select();
             auto availabilityRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
             auto operationsRowset = db.Table<Schema::OperationsLog>().Select();
+            auto bridgePileRowset = db.Table<Schema::BridgePile>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -73,7 +75,8 @@ public:
                     || !configRowset.IsReady()
                     || !categoryRowset.IsReady()
                     || !availabilityRowset.IsReady()
-                    || !operationsRowset.IsReady())
+                    || !operationsRowset.IsReady()
+                    || !bridgePileRowset.IsReady())
                 return false;
         }
 
@@ -304,6 +307,26 @@ public:
         }
 
         {
+            size_t numPiles = 0;
+            auto bridgePileRowset = db.Table<Schema::BridgePile>().Select();
+            if (!bridgePileRowset.IsReady()) {
+                return false;
+            }
+            while (!bridgePileRowset.EndOfSet()) {
+                ++numPiles;
+                TBridgePileId pileId = TBridgePileId::FromValue(bridgePileRowset.GetValue<Schema::BridgePile::Id>());
+                auto& pileInfo = Self->GetPile(pileId);
+                pileInfo.State = bridgePileRowset.GetValue<Schema::BridgePile::State>();
+                pileInfo.IsPrimary = bridgePileRowset.GetValue<Schema::BridgePile::IsPrimary>();
+                pileInfo.IsPromoted = bridgePileRowset.GetValue<Schema::BridgePile::IsPromoted>();
+                if (!bridgePileRowset.Next()) {
+                    return false;
+                }
+            }
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numPiles << " bridge piles");
+        }
+
+        {
             size_t numNodes = 0;
             auto nodeRowset = db.Table<Schema::Node>().Range().Select();
             if (!nodeRowset.IsReady())
@@ -326,6 +349,9 @@ public:
                     // That was not persisted to avoid issues with downgrades
                     node.Down = true;
                 }
+                if (node.Down) {
+                    Self->UpdateCounterNodesDown(+1);
+                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -334,6 +360,7 @@ public:
                     }
                 }
                 node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
+                node.BridgePileId = TBridgePileId::FromValue(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
@@ -608,7 +635,8 @@ public:
 
                     if (followerGroup.RequireAllDataCenters && !followerGroup.FollowerCountPerDataCenter) {
                         followerGroup.FollowerCountPerDataCenter = true;
-                        followerGroup.SetFollowerCount((followerGroup.GetRawFollowerCount() - 1) / Self->DataCenters.size() + 1);
+                        auto dataCenters = Self->DataCenters.size() ? Self->DataCenters.size() : 3ull;
+                        followerGroup.SetFollowerCount((followerGroup.GetRawFollowerCount() + dataCenters - 1) / dataCenters); // round up
                     }
                 } else {
                     ++numMissingTablets;
@@ -734,6 +762,7 @@ public:
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
+                        leaderOrFollower->UsageImpact = metricsRowset.GetValueOrDefault<Schema::Metrics::UsageImpact>();
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
                     }
@@ -887,6 +916,10 @@ public:
             if (!dcInfo.IsRegistered()) {
                 Self->Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dcId));
             }
+        }
+
+        if (Self->BridgeInfo) {
+            Self->UpdatePiles();
         }
 
         Self->ProcessPendingStopTablet();

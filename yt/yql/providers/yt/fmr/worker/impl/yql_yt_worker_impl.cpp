@@ -1,6 +1,7 @@
 #include <library/cpp/threading/future/wait/wait.h>
 #include <thread>
 #include <util/system/mutex.h>
+#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_worker_impl.h"
 
@@ -22,9 +23,9 @@ public:
         StopWorker_(false),
         RandomProvider_(settings.RandomProvider),
         WorkerId_(settings.WorkerId),
-        VolatileId_(GetGuidAsString(RandomProvider_->GenGuid())),
         TimeToSleepBetweenRequests_(settings.TimeToSleepBetweenRequests)
 {
+    GenerateVolatileId();
 }
 
     ~TFmrWorker() {
@@ -50,15 +51,26 @@ public:
                     }
                 }
 
+                ui64 maxParallelJobCount = JobFactory_->GetMaxParallelJobCount();
+                YQL_ENSURE(maxParallelJobCount >= WorkerState_->TaskStatuses.size());
+                ui64 availableSlots = maxParallelJobCount - WorkerState_->TaskStatuses.size();
                 auto heartbeatRequest = THeartbeatRequest(
                     WorkerId_,
                     VolatileId_,
-                    taskStates
+                    taskStates,
+                    availableSlots
                 );
                 auto heartbeatResponseFuture = Coordinator_->SendHeartbeatResponse(heartbeatRequest);
                 auto heartbeatResponse = heartbeatResponseFuture.GetValueSync();
+
+                if (heartbeatResponse.NeedToRestart) {
+                    Restart();
+                    continue;
+                }
+
                 std::vector<TTask::TPtr> tasksToRun = heartbeatResponse.TasksToRun;
                 std::unordered_set<TString> taskToDeleteIds = heartbeatResponse.TaskToDeleteIds;
+                YQL_ENSURE(tasksToRun.size() <= availableSlots);
 
                 with_lock(WorkerState_->Mutex) {
                     for (auto task: tasksToRun) {
@@ -96,15 +108,47 @@ public:
 
     void Stop() override {
         with_lock(WorkerState_->Mutex) {
-            for (auto& taskInfo: TasksCancelStatus_) {
-                taskInfo.second->store(true);
-            }
+            StopJobFactoryTasks();
             StopWorker_ = true;
         }
         JobFactory_->Stop();
         if (MainThread_.joinable()) {
             MainThread_.join();
         }
+    }
+
+private:
+    void Restart() {
+        YQL_CLOG(INFO, FastMapReduce) << "Worker with id " << WorkerId_ << " is assumed dead by coordinator, restarting";
+        JobFactory_->Stop();
+        with_lock(WorkerState_->Mutex) {
+            StopJobFactoryTasks();
+            ClearState();
+            GenerateVolatileId();
+        }
+        JobFactory_->Start();
+    }
+
+    void StopMainThread() {
+        if (MainThread_.joinable()) {
+            MainThread_.join();
+        }
+    }
+
+    void StopJobFactoryTasks() {
+        for (auto& taskInfo: TasksCancelStatus_) {
+            taskInfo.second->store(true);
+        }
+    }
+
+    void ClearState() {
+        TasksCancelStatus_.clear();
+        WorkerState_->TaskStatuses.clear();
+    }
+
+    void GenerateVolatileId() {
+        VolatileId_ = GetGuidAsString(RandomProvider_->GenGuid());
+        YQL_CLOG(INFO, FastMapReduce) << "Setting volatile id " << VolatileId_ << " for worker with id " << WorkerId_;
     }
 
 private:
@@ -116,7 +160,7 @@ private:
     std::atomic<bool> StopWorker_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const ui32 WorkerId_;
-    const TString VolatileId_;
+    TString VolatileId_;
     std::thread MainThread_;
     const TDuration TimeToSleepBetweenRequests_;
 };

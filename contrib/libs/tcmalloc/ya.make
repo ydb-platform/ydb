@@ -33,6 +33,7 @@ IF (NOT DLL_FOR)
         no_percpu_cache
         numa_256k
         numa_large_pages
+        profile_marshaller
         small_but_slow
         tcmalloc/internal
     )

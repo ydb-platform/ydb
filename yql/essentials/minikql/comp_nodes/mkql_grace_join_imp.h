@@ -10,6 +10,50 @@ namespace NKikimr {
 namespace NMiniKQL {
 namespace GraceJoin {
 
+// Determines whether the right input can be safely skipped when the left input is empty.
+// For certain join kinds, the result will always be empty if the left side is empty,
+// regardless of the content of the right side. In such cases, it's safe to avoid reading the right input entirely.
+constexpr bool ShouldSkipRightIfLeftEmpty(EJoinKind kind) {
+    switch (kind) {
+        case EJoinKind::Inner:
+        case EJoinKind::LeftOnly:
+        case EJoinKind::LeftSemi:
+        case EJoinKind::RightSemi:
+            return true;
+        case EJoinKind::RightOnly:
+        case EJoinKind::Left:
+        case EJoinKind::Right:
+        case EJoinKind::Exclusion:
+        case EJoinKind::Full:
+        case EJoinKind::SemiMask:
+        case EJoinKind::SemiSide:
+        case EJoinKind::Cross:
+            return false;
+    }
+}
+
+// Determines whether the left input can be safely skipped when the right input is empty.
+// For certain join kinds, the result will always be empty if the right side is empty,
+// regardless of the content of the left side. In such cases, it's safe to avoid reading the left input entirely.
+constexpr bool ShouldSkipLeftIfRightEmpty(EJoinKind kind) {
+    switch (kind) {
+        case EJoinKind::Inner:
+        case EJoinKind::RightOnly:
+        case EJoinKind::RightSemi:
+        case EJoinKind::LeftSemi:
+            return true;
+        case EJoinKind::Min:
+        case EJoinKind::Left:
+        case EJoinKind::Right:
+        case EJoinKind::Exclusion:
+        case EJoinKind::Full:
+        case EJoinKind::SemiMask:
+        case EJoinKind::SemiSide:
+        case EJoinKind::Cross:
+            return false;
+    }
+}
+
 class TTableBucketSpiller;
 #define GRACEJOIN_DEBUG NUdf::ELogLevel::Debug
 #define GRACEJOIN_TRACE NUdf::ELogLevel::Trace

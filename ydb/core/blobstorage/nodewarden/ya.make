@@ -6,18 +6,25 @@ SRCS(
     distconf.cpp
     distconf.h
     distconf_binding.cpp
+    distconf_bridge.cpp
+    distconf_cache.cpp
+    distconf_connectivity.cpp
     distconf_console.cpp
     distconf_dynamic.cpp
     distconf_generate.cpp
     distconf_fsm.cpp
     distconf_invoke.h
+    distconf_invoke_bridge.cpp
     distconf_invoke_common.cpp
     distconf_invoke_state_storage.cpp
     distconf_invoke_static_group.cpp
     distconf_invoke_storage_config.cpp
     distconf_mon.cpp
     distconf_persistent_storage.cpp
+    distconf_quorum.h
     distconf_scatter_gather.cpp
+    distconf_selfheal.h
+    distconf_selfheal.cpp
     distconf_validate.cpp
     node_warden.h
     node_warden_cache.cpp
@@ -41,8 +48,10 @@ PEERDIR(
     library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/blob_depot/agent
+    ydb/core/blobstorage/bridge/syncer
     ydb/core/blobstorage/common
     ydb/core/blobstorage/crypto
+    ydb/core/blobstorage/dsproxy/bridge
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
     ydb/core/control/lib

@@ -56,7 +56,7 @@ public:
     }
 
 private:
-    const TString Address_;
+    const std::string Address_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 };
 

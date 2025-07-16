@@ -2,8 +2,11 @@
 import ydb
 import os
 import threading
+import logging
 
 ydb.interceptor.monkey_patch_event_handler()
+
+logger = logging.getLogger(__name__)
 
 
 class YdbClient:
@@ -30,6 +33,11 @@ class YdbClient:
             self.session_pool.execute_with_retries(f"DROP TABLE `{path_to_table}`")
         else:
             self.session_pool.retry_operation_sync(lambda session: session.drop_table(path_to_table))
+
+    def replace_index(self, table, src, dst):
+        self.driver.table_client.alter_table(path=table, rename_indexes=[
+            ydb.RenameIndexItem(source_name=src, destination_name=dst, replace_destination=True)
+        ])
 
     def describe(self, path):
         try:
@@ -87,7 +95,7 @@ class WorkloadBase:
             try:
                 f()
             except Exception as e:
-                print(f"FATAL: {e}")
+                logger.exception(f"FATAL: {e}")
                 os._exit(1)
 
         for f in funcs:

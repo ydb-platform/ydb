@@ -12,7 +12,7 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<IClusterDiscovery>;
 
-        virtual ~IClusterDiscovery() = default;
+        ~IClusterDiscovery() override = default;
         virtual NThreading::TFuture<TClusterList> Query() const = 0;
     };
 

@@ -1,7 +1,7 @@
 Init tables ...
 --!syntax_v1
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/customer` (
+CREATE TABLE `/Root/db/tpch/s1/customer` (
     c_acctbal Double,
     c_address Utf8,
     c_comment Utf8,
@@ -18,7 +18,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
+CREATE TABLE `/Root/db/tpch/s1/lineitem` (
     l_comment Utf8,
     l_commitdate Date32,
     l_discount Double,
@@ -43,7 +43,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/nation` (
+CREATE TABLE `/Root/db/tpch/s1/nation` (
     n_comment Utf8,
     n_name Utf8,
     n_nationkey Int32,
@@ -56,7 +56,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/orders` (
+CREATE TABLE `/Root/db/tpch/s1/orders` (
     o_clerk Utf8,
     o_comment Utf8,
     o_custkey Int64,
@@ -74,7 +74,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/part` (
+CREATE TABLE `/Root/db/tpch/s1/part` (
     p_brand Utf8,
     p_comment Utf8,
     p_container Utf8,
@@ -92,7 +92,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
+CREATE TABLE `/Root/db/tpch/s1/partsupp` (
     ps_availqty Int32,
     ps_comment Utf8,
     ps_partkey Int64,
@@ -106,7 +106,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/region` (
+CREATE TABLE `/Root/db/tpch/s1/region` (
     r_comment Utf8,
     r_name Utf8,
     r_regionkey Int32,
@@ -118,7 +118,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/supplier` (
+CREATE TABLE `/Root/db/tpch/s1/supplier` (
     s_acctbal Double,
     s_address Utf8,
     s_comment Utf8,

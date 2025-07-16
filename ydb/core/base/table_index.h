@@ -12,6 +12,14 @@
 #include <span>
 #include <string_view>
 
+namespace NKikimrTxDataShard {
+    class TEvReshuffleKMeansRequest;
+    class TEvRecomputeKMeansRequest;
+    class TEvRecomputeKMeansResponse;
+    class TEvSampleKResponse;
+    class TEvValidateUniqueIndexResponse;
+}
+
 namespace NKikimr {
 
 inline constexpr const char* SYSTEM_COLUMN_PREFIX = "__ydb_";
@@ -38,9 +46,18 @@ bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 
 using TClusterId = ui64;
-
 inline constexpr auto ClusterIdType = Ydb::Type::UINT64;
 inline constexpr const char* ClusterIdTypeName = "Uint64";
+
+void EnsureNoPostingParentFlag(TClusterId parent);
+
+TClusterId SetPostingParentFlag(TClusterId parent);
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record);
 
 }
 }

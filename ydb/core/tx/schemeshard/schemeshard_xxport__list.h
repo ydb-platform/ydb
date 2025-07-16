@@ -1,7 +1,7 @@
 #pragma once
 
-#include "schemeshard_xxport__tx_base.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <util/string/cast.h>
 
@@ -67,7 +67,7 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
         while (it != container.begin() && size < pageSize) {
             --it;
             if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
-                Self->FromXxportInfo(*resp.MutableEntries()->Add(), it->second);
+                Self->FromXxportInfo(*resp.MutableEntries()->Add(), *it->second);
                 ++size;
             }
         }

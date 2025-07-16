@@ -623,7 +623,8 @@ public:
     std::unordered_map<TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo*> VDisksByVSlotId;
     std::unordered_map<TPDiskId, const NKikimrWhiteboard::TPDiskStateInfo*> PDisksByPDiskId;
 
-    TFieldsType FieldsRequired;
+    TFieldsType FieldsRequested; // fields that were requested by user
+    TFieldsType FieldsRequired; // fields that are required to calculate the response
     TFieldsType FieldsAvailable;
     const TFieldsType FieldsAll = TFieldsType().set();
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
@@ -847,6 +848,7 @@ public:
             NeedSort = false;
             NeedLimit = false;
         }
+        FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
                 auto itDependentFields = DependentFields.find(static_cast<EGroupFields>(field));
@@ -2079,69 +2081,71 @@ public:
                 if (group->GroupGeneration) {
                     jsonGroup.SetGroupGeneration(group->GroupGeneration);
                 }
-                if (FieldsAvailable.test(+EGroupFields::PoolName)) {
+                if (FieldsAvailable.test(+EGroupFields::PoolName) && FieldsRequested.test(+EGroupFields::PoolName)) {
                     jsonGroup.SetPoolName(group->PoolName);
                 }
-                std::vector<const TVDisk*> vdisks;
-                vdisks.resize(group->VDisks.size());
-                for (size_t idx = 0; idx < group->VDisks.size(); ++idx) {
-                    vdisks[idx] = &group->VDisks[idx];
+                if (FieldsRequested.test(+EGroupFields::VDisk)) {
+                    std::vector<const TVDisk*> vdisks;
+                    vdisks.resize(group->VDisks.size());
+                    for (size_t idx = 0; idx < group->VDisks.size(); ++idx) {
+                        vdisks[idx] = &group->VDisks[idx];
+                    }
+                    std::sort(vdisks.begin(), vdisks.end(), [](const TVDisk* a, const TVDisk* b) {
+                        return a->VDiskId < b->VDiskId;
+                    });
+                    for (const TVDisk* vdisk : vdisks) {
+                        RenderVDisk(*jsonGroup.AddVDisks(), *vdisk);
+                    }
                 }
-                std::sort(vdisks.begin(), vdisks.end(), [](const TVDisk* a, const TVDisk* b) {
-                    return a->VDiskId < b->VDiskId;
-                });
-                for (const TVDisk* vdisk : vdisks) {
-                    RenderVDisk(*jsonGroup.AddVDisks(), *vdisk);
-                }
-                if (FieldsAvailable.test(+EGroupFields::Encryption)) {
+                if (FieldsAvailable.test(+EGroupFields::Encryption) && FieldsRequested.test(+EGroupFields::Encryption)) {
                     jsonGroup.SetEncryption(group->EncryptionMode);
                 }
                 if (group->Overall != NKikimrViewer::Grey) {
                     jsonGroup.SetOverall(group->Overall);
                 }
-                if (group->DiskSpace != NKikimrViewer::Grey) {
+                if (group->DiskSpace != NKikimrViewer::Grey && FieldsRequested.test(+EGroupFields::Usage)) {
                     jsonGroup.SetDiskSpace(group->DiskSpace);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Kind)) {
+                if (FieldsAvailable.test(+EGroupFields::Kind) && FieldsRequested.test(+EGroupFields::Kind)) {
                     jsonGroup.SetKind(group->Kind);
                 }
-                if (FieldsAvailable.test(+EGroupFields::MediaType)) {
+                if (FieldsAvailable.test(+EGroupFields::MediaType) && FieldsRequested.test(+EGroupFields::MediaType)) {
                     jsonGroup.SetMediaType(group->MediaType);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Erasure)) {
+                if (FieldsAvailable.test(+EGroupFields::Erasure) && FieldsRequested.test(+EGroupFields::Erasure)) {
                     jsonGroup.SetErasureSpecies(group->Erasure);
                 }
-                if (FieldsAvailable.test(+EGroupFields::AllocationUnits)) {
+                if (FieldsAvailable.test(+EGroupFields::AllocationUnits) && FieldsRequested.test(+EGroupFields::AllocationUnits)) {
                     jsonGroup.SetAllocationUnits(group->AllocationUnits);
                 }
-                if (FieldsAvailable.test(+EGroupFields::State)) {
+                if (FieldsAvailable.test(+EGroupFields::State) && FieldsRequested.test(+EGroupFields::State)) {
                     jsonGroup.SetState(group->State);
                 }
-                if (FieldsAvailable.test(+EGroupFields::MissingDisks)) {
+                if (FieldsAvailable.test(+EGroupFields::MissingDisks) && FieldsRequested.test(+EGroupFields::MissingDisks)) {
                     jsonGroup.SetMissingDisks(group->MissingDisks);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Used)) {
+                if (FieldsAvailable.test(+EGroupFields::Used) && FieldsRequested.test(+EGroupFields::Used)) {
                     jsonGroup.SetUsed(group->Used);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Limit)) {
+                if (FieldsAvailable.test(+EGroupFields::Limit) && FieldsRequested.test(+EGroupFields::Limit)) {
                     jsonGroup.SetLimit(group->Limit);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Read)) {
+                if (FieldsAvailable.test(+EGroupFields::Read) && FieldsRequested.test(+EGroupFields::Read)) {
                     jsonGroup.SetRead(group->Read);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Write)) {
+                if (FieldsAvailable.test(+EGroupFields::Write) && FieldsRequested.test(+EGroupFields::Write)) {
                     jsonGroup.SetWrite(group->Write);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Usage)) {
+                if (FieldsAvailable.test(+EGroupFields::Usage) && FieldsRequested.test(+EGroupFields::Usage)) {
                     jsonGroup.SetUsage(group->Usage);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Available)) {
+                if (FieldsAvailable.test(+EGroupFields::Available) && FieldsRequested.test(+EGroupFields::Available)) {
                     jsonGroup.SetAvailable(group->Available);
                 }
-                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage)) {
+                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage) && FieldsRequested.test(+EGroupFields::DiskSpaceUsage)) {
                     jsonGroup.SetDiskSpaceUsage(group->DiskSpaceUsage);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Latency)) {
+                if (FieldsAvailable.test(+EGroupFields::Latency) && FieldsRequested.test(+EGroupFields::Latency)) {
                     jsonGroup.SetLatencyPutTabletLog(group->PutTabletLogLatency);
                     jsonGroup.SetLatencyPutUserData(group->PutUserDataLatency);
                     jsonGroup.SetLatencyGetFast(group->GetFastLatency);
@@ -2190,8 +2194,14 @@ public:
             get:
                 tags:
                   - storage
-                summary: Storage groups
-                description: Information about storage groups
+                summary: Gets information about storage and groups.
+                description: >
+                    It can get groups of storage groups or all storage groups.
+                    It's always better to get groups of storage groups first, then get all storage groups in a group.
+                    To get list of groups of storage groups we call it with `group` parameter first,
+                    then we call it with `filter_group` and `filter_group_by` parameters to get content of a group.
+                    For example, to get groups of storage groups we call it with `group=State` parameter,
+                    then we call it with `filter_group_by=State` and `filter_group=ok` parameters.
                 parameters:
                   - name: database
                     in: query
@@ -2218,56 +2228,14 @@ public:
                     description: group id
                     required: false
                     type: integer
-                  - name: need_groups
-                    in: query
-                    description: return groups information
-                    required: false
-                    type: boolean
-                    default: true
-                  - name: need_disks
-                    in: query
-                    description: return disks information
-                    required: false
-                    type: boolean
-                    default: true
-                  - name: with
-                    in: query
-                    description: >
-                        filter groups by missing or space:
-                          * `missing`
-                          * `space`
-                    required: false
-                    type: string
                   - name: filter
                     description: filter to search for in group ids and pool names
-                    required: false
-                    type: string
-                  - name: filter_group_by
-                    in: query
-                    description: >
-                        filter group by:
-                          * `GroupId`
-                          * `Erasure`
-                          * `Usage`
-                          * `DiskSpaceUsage`
-                          * `PoolName`
-                          * `Kind`
-                          * `Encryption`
-                          * `MediaType`
-                          * `MissingDisks`
-                          * `State`
-                          * `Latency`
-                    required: false
-                    type: string
-                  - name: filter_group
-                    in: query
-                    description: content for filter group by
                     required: false
                     type: string
                   - name: sort
                     in: query
                     description: >
-                        sort by:
+                        sort storage groups by:
                           * `PoolName`
                           * `Kind`
                           * `MediaType`
@@ -2291,7 +2259,8 @@ public:
                   - name: group
                     in: query
                     description: >
-                        group by:
+                        returns groups of storage groups with number of storage groups in every group.
+                        grouping by:
                           * `GroupId`
                           * `Erasure`
                           * `Usage`
@@ -2303,6 +2272,29 @@ public:
                           * `MissingDisks`
                           * `State`
                           * `Latency`
+                    required: false
+                    type: string
+                  - name: filter_group_by
+                    in: query
+                    description: >
+                        returns conent of a group of storage groups, expects to have filter_group parameter.
+                        grouping by:
+                          * `GroupId`
+                          * `Erasure`
+                          * `Usage`
+                          * `DiskSpaceUsage`
+                          * `PoolName`
+                          * `Kind`
+                          * `Encryption`
+                          * `MediaType`
+                          * `MissingDisks`
+                          * `State`
+                          * `Latency`
+                    required: false
+                    type: string
+                  - name: filter_group
+                    in: query
+                    description: name of a group of storage groups, used for filter_group_by
                     required: false
                     type: string
                   - name: fields_required
@@ -2333,12 +2325,12 @@ public:
                     type: string
                   - name: offset
                     in: query
-                    description: skip N nodes
+                    description: skip N nodes, used together with limit to implement paging
                     required: false
                     type: integer
                   - name: limit
                     in: query
-                    description: limit to N nodes
+                    description: limit result to N nodes, used together with offset to implement paging
                     required: false
                     type: integer
                   - name: timeout
@@ -2378,8 +2370,8 @@ public:
             " * `ok` - group is okay\n"
             " * `starting:n` - group is okay, but n disks are starting\n"
             " * `replicating:n` - group is okay, all disks are available, but n disks are replicating\n"
-            " * `degraded:n(m, m...)` - group is okay, but n fail realms are not available (with m fail domains)\n"
-            " * `dead:n` - group is not okay, n fail realms are not available\n";
+            " * `degraded:n(m, m...)` - group is okay, but n data centers / racks are not available (with m devices)\n"
+            " * `dead:n` - group is not okay, n data centers / racks are not available\n";
         storageGroupProperties["Kind"]["description"] = "kind of the disks in this group (specified by the user)";
         storageGroupProperties["MediaType"]["description"] = "actual physical media type of the disks in this group";
         storageGroupProperties["MissingDisks"]["description"] = "number of disks missing";

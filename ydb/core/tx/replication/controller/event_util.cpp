@@ -18,7 +18,8 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         target.GetStreamPath(),
         target.GetStreamConsumerName(),
         target.GetDstPathId(),
-        replication->GetConfig().GetTransferSpecific().GetBatching());
+        replication->GetConfig().GetTransferSpecific().GetBatching(),
+        replication->GetDatabase());
 }
 
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
@@ -31,7 +32,8 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const TString& srcStreamPath,
         const TString& srcStreamConsumerName,
         const TPathId& dstPathId,
-        const NKikimrReplication::TBatchingSettings& batchingSettings)
+        const NKikimrReplication::TBatchingSettings& batchingSettings,
+        const TString& database)
 {
     auto ev = MakeHolder<TEvService::TEvRunWorker>();
     auto& record = ev->Record;
@@ -40,6 +42,8 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     worker.SetReplicationId(replicationId);
     worker.SetTargetId(targetId);
     worker.SetWorkerId(workerId);
+
+    record.MutableCommand()->SetDatabase(database);
 
     auto& readerSettings = *record.MutableCommand()->MutableRemoteTopicReader();
     readerSettings.MutableConnectionParams()->CopyFrom(connectionParams);

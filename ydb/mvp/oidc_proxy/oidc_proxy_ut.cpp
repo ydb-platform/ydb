@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/testlib/service_mocks/session_service_mock.h>
+#include <ydb/library/testlib/service_mocks/profile_service_mock.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <library/cpp/json/json_reader.h>
@@ -1397,5 +1398,353 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT(headers.Has("Location"));
         TStringBuf location = headers.Get("Location");
         UNIT_ASSERT_STRINGS_EQUAL(location, protectedPage);
+    }
+
+    void OpenIdConnectStreamingRequestResponseTest(NMvp::EAccessServiceType profile) {
+        // This test verifies the handling of HTTP streaming responses using chunked transfer encoding
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+        runtime.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+
+        const TString allowedProxyHost = "stream.test.net";
+        const TString iamToken = "streaming_iam_token";
+
+        TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .ClientSecret = "0123456789abcdef",
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AccessServiceType = profile
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedAccessTokens.insert(iamToken);
+
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/stream-data HTTP/1.1\r\n"
+                                "Host: oidcproxy.net\r\n"
+                                "Authorization: Bearer " + iamToken + "\r\n\r\n");
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        TAutoPtr<IEventHandle> handle;
+
+        // Verify request is forwarded correctly
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/stream-data");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer " + iamToken);
+
+        // Set up a streaming response with multiple chunks using multipart/form-data
+        const TString boundary = "boundary";
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                         "Connection: keep-alive\r\n"
+                                         "Transfer-Encoding: chunked\r\n"
+                                         "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n\r\n");
+
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        // First chunk with multipart boundary and headers
+        auto chunk1 = new NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk(incomingResponse);
+        chunk1->Data = "--" + boundary + "\r\n"
+                        "Content-Type: application/json\r\n\r\n"
+                        "{\"part\": \"1\"}";
+        runtime.Send(new IEventHandle(handle->Sender, edge, chunk1));
+
+        // Second chunk with multipart boundary and headers
+        auto chunk2 = new NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk(incomingResponse);
+        chunk2->Data = "--" + boundary + "\r\n"
+                        "Content-Type: application/json\r\n\r\n"
+                        "{\"part\": \"2\"}";
+        runtime.Send(new IEventHandle(handle->Sender, edge, chunk2));
+
+        // Third chunk with multipart boundary and headers
+        auto chunk3 = new NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk(incomingResponse);
+        chunk3->Data = "--" + boundary + "--\r\n";
+        runtime.Send(new IEventHandle(handle->Sender, edge, chunk3));
+
+        // End of multipart message and chunked response
+        auto chunk4 = new NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk(incomingResponse);
+        chunk4->EndOfData = true;
+        runtime.Send(new IEventHandle(handle->Sender, edge, chunk4));
+
+        auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
+        UNIT_ASSERT_VALUES_EQUAL(outgoingResponseEv->Response->IsDone(), false);
+
+        auto outgoingResponseChunk1 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseChunk1->DataChunk->AsString(), "3b\r\n--" + boundary + "\r\n"
+                                                            "Content-Type: application/json\r\n\r\n"
+                                                            "{\"part\": \"1\"}\r\n");
+
+        auto outgoingResponseChunk2 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseChunk2->DataChunk->AsString(), "3b\r\n--" + boundary + "\r\n"
+                                                            "Content-Type: application/json\r\n\r\n"
+                                                            "{\"part\": \"2\"}\r\n");
+
+        auto outgoingResponseChunk3 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseChunk3->DataChunk->AsString(), "e\r\n--" + boundary + "--\r\n\r\n");
+
+        auto outgoingResponseChunk4 = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(outgoingResponseChunk4->DataChunk->EndOfData, true);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectStreamingRequestResponseYandex) {
+        OpenIdConnectStreamingRequestResponseTest(NMvp::yandex_v2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectStreamingRequestResponseNebius) {
+        OpenIdConnectStreamingRequestResponseTest(NMvp::nebius_v1);
+    }
+
+    struct TWhoamiContext {
+        static constexpr TStringBuf VIEWER_USER_ACCOUNT_ID = "(viewer) user-account";
+        static constexpr TStringBuf VIEWER_SERVICE_ACCOUNT_ID = "(viewer) service-account";
+
+        TString Token;
+        TString AuthHeader;
+        TString WhoamiResponse;
+        TString ExpectedStatus;
+        NMvp::EAccessServiceType AccessServiceType = NMvp::nebius_v1;
+        bool YdbTimeout = false;
+
+        TWhoamiContext(TStringBuf token, TString whoamiResponse, TStringBuf expectedStatus)
+            : Token(token)
+            , AuthHeader(TStringBuilder() << "Bearer " << token)
+            , WhoamiResponse(std::move(whoamiResponse))
+            , ExpectedStatus(expectedStatus)
+        {}
+
+        static TString MakeHttpResponse(
+            TStringBuf status,
+            TStringBuf body,
+            TStringBuf contentType = "text/plain",
+            std::initializer_list<std::pair<TStringBuf, TStringBuf>> extraHeaders = {})
+        {
+            TStringBuilder response;
+            response << "HTTP/1.1 " << status << "\r\n"
+                     << "Connection: close\r\n"
+                     << "Content-Type: " << contentType << "\r\n"
+                     << "Access-Control-Allow-Origin: *\r\n"
+                     << "Access-Control-Allow-Credentials: true\r\n"
+                     << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                     << "Access-Control-Allow-Headers: Authorization, Content-Type\r\n";
+            for (const auto& [key, value] : extraHeaders) {
+                response << key << ": " << value << "\r\n";
+            }
+            response << "Content-Length: " << body.length() << "\r\n\r\n"
+                    << body;
+            return response;
+        }
+
+        static TString GetViewerResponse200() {
+            TStringBuilder body;
+            body << "{\"UserSID\":\"" << VIEWER_USER_ACCOUNT_ID
+                << "\",\"OriginalUserToken\":\"" << TProfileServiceMock::VALID_USER_TOKEN << "\"}";
+            return MakeHttpResponse("200 OK", body, "application/json");
+        }
+
+        static TString GetViewerResponseService200() {
+            TStringBuilder body;
+            body << "{\"UserSID\":\"" << VIEWER_SERVICE_ACCOUNT_ID
+                << "\",\"OriginalUserToken\":\"" << TProfileServiceMock::VALID_SERVICE_TOKEN << "\"}";
+            return MakeHttpResponse("200 OK", body, "application/json");
+        }
+
+        static TString GetViewerResponse403() {
+            return MakeHttpResponse("403 Forbidden", "Forbidden");
+        }
+
+        static TString GetViewerResponse307() {
+            return MakeHttpResponse("307 Temporary Redirect", "", "text/plain", {{"Location", "/viewer/whoami"}});
+        }
+    };
+
+    NJson::TJsonValue OidcWhoamiExtendedInfoTest(const TWhoamiContext& context) {
+        TPortManager tp;
+        ui16 profilePort = tp.GetPort(8766);
+
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        const TString allowedProxyHost = "ydb.viewer.page";
+
+        TOpenIdConnectSettings settings {
+            .ClientId = "test-client",
+            .AllowedProxyHosts = {allowedProxyHost},
+            .WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort),
+            .AccessServiceType = context.AccessServiceType
+        };
+
+        auto profileMock = std::make_unique<TProfileServiceMock>();
+        auto grpcServer = CreateProfileServiceMock(profileMock.get(), settings.WhoamiExtendedInfoEndpoint);
+
+        // oidc extends whoami
+        const TString url = "/" + allowedProxyHost + "/viewer/whoami";
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/viewer/whoami HTTP/1.1\r\n"
+                                "Host: oidcproxy.net\r\n"
+                                "Authorization: Bearer " + context.Token + "\r\n");
+
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+
+        // oidc requests viewer whoami
+        TAutoPtr<IEventHandle> handle;
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Method, "GET");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/viewer/whoami");
+
+        if (context.YdbTimeout) {
+            runtime.Send(new IEventHandle(handle->Sender, edge, new NActors::TEvents::TEvWakeup()));
+        } else {
+            // viewer returns response to oidc
+            NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+            EatWholeString(incomingResponse, context.WhoamiResponse);
+            runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+        }
+
+        // oidc final response
+        auto* outgoing = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+
+        UNIT_ASSERT(outgoing != nullptr);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoing->Response->Status, context.ExpectedStatus);
+
+        NJson::TJsonValue json;
+        NHttp::THeaders headers(outgoing->Response->Headers);
+
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Methods"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Origin"));
+        if (!outgoing->Response->Status.StartsWith("3") && outgoing->Response->Status != "404") {
+            UNIT_ASSERT(headers.Has("Content-Type"));
+            UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Content-Type").NextTok(';'), "application/json");
+            UNIT_ASSERT(!outgoing->Response->Body.empty());
+            UNIT_ASSERT(NJson::ReadJsonTree(outgoing->Response->Body, &json));
+        }
+        return json;
+    }
+
+    Y_UNIT_TEST(OidcWhoami200) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            TWhoamiContext(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200(), "200"));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    Y_UNIT_TEST(OidcWhoamiServiceAccount200) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            TWhoamiContext(TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponseService200(), "200"));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_SERVICE_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_SERVICE_TOKEN);
+        UNIT_ASSERT(json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    Y_UNIT_TEST(OidcWhoamiBadIam200) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            TWhoamiContext(TProfileServiceMock::BAD_TOKEN, TWhoamiContext::GetViewerResponse200(), "200"));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Ydb"));
+        UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Iam"));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Iam"]["ResponseStatus"], "401");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Iam"]["ResponseMessage"], "Invalid or missing token");
+    }
+
+    Y_UNIT_TEST(OidcWhoamiBadYdb200) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            TWhoamiContext(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse403(), "200"));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TProfileServiceMock::USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseMessage"], "Forbidden");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseBody"], "Forbidden");
+        UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Iam"));
+    }
+
+    Y_UNIT_TEST(OidcWhoamiBadYdbServiceAccount200) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            TWhoamiContext(TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponse403(), "200"));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TProfileServiceMock::SERVICE_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_SERVICE_TOKEN);
+        UNIT_ASSERT(json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseMessage"], "Forbidden");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseBody"], "Forbidden");
+        UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Iam"));
+    }
+
+    Y_UNIT_TEST(OidcWhoamiNoInfo500) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            TWhoamiContext(TProfileServiceMock::BAD_TOKEN, TWhoamiContext::GetViewerResponse403(), "500"));
+
+        UNIT_ASSERT(!json.Has(USER_SID));
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Iam"));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Iam"]["ResponseStatus"], "401");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Iam"]["ResponseMessage"], "Invalid or missing token");
+        UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Iam"));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseMessage"], "Forbidden");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseBody"], "Forbidden");
+    }
+
+    Y_UNIT_TEST(OidcWhoamiForward307) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            TWhoamiContext(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse307(), "307"));
+        UNIT_ASSERT(!json.Has(USER_SID));
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    Y_UNIT_TEST(OidcYdbTimeout200) {
+        TWhoamiContext ctx(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200(), "200");
+        ctx.YdbTimeout = true;
+        auto json = OidcWhoamiExtendedInfoTest(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TProfileServiceMock::USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ClientError"], "Timeout while waiting info");
+        UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Iam"));
+    }
+
+    Y_UNIT_TEST(OidcYandexIgnoresWhoamiExtention) {
+        TWhoamiContext ctx(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200(), "200");
+        ctx.AccessServiceType = NMvp::yandex_v2;
+        auto json = OidcWhoamiExtendedInfoTest(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
     }
 }

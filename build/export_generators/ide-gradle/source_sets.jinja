@@ -1,77 +1,119 @@
-{#- empty string #}
-sourceSets {
-    main {
-        java.srcDir("src/main/java")
-        resources.srcDir("src/main/resources")
-
-{%- set target_jar_source_set = target.jar_source_set|reject('startsWith', 'src/main/java:')|unique -%}
-{%- if target_jar_source_set|length -%}
-{%-     for source_set in target_jar_source_set -%}
-{%-         set srcdir_glob = split(source_set, ':') -%}
-{%-         set srcdir = srcdir_glob[0] %}
-        java.srcDir({{ PatchRoots(srcdir) }})
-{%-     endfor -%}
-{%- endif %}
-
-{%- set target_jar_resource_set = target.jar_resource_set|reject('startsWith', 'src/main/resources:')|unique -%}
-{%- if target_jar_resource_set|length -%}
-{%-     for resource_set in target_jar_resource_set -%}
-{%-         set resdir_glob = split(resource_set, ':') -%}
-{%-         set resdir = resdir_glob[0] %}
-        resources.srcDir({{ PatchRoots(resdir) }})
-{%-     endfor -%}
-{%- endif -%}
-
-{%- if proto_template %}
-        java.srcDir("$buildDir/generated/source/proto/main/java")
-{%-     if target.proto_grpc %}
-        java.srcDir("$buildDir/generated/source/proto/main/grpc")
-{%-     endif %}
-{%- endif %}
-    }
-
-    test {
-        java.srcDir("src/test/java")
-        resources.srcDir("src/test/resources")
-
-{%- if proto_template %}
-        java.srcDir("$buildDir/generated/source/proto/test/java")
-{%-     if target.proto_grpc %}
-        java.srcDir("$buildDir/generated/source/proto/test/grpc")
+{%- macro SomeSet(some_set, module, reldir = "") -%}
+{%-     set dir = some_set.dir -%}
+{%-     if (reldir != "") and (dir[0] != "/") -%}
+{#-         Relative path in tests #}
+{%-         set dir = reldir + dir -%}
 {%-     endif -%}
-{%- elif extra_targets|length -%}
+{%-     if some_set.globs|join('')|replace('*', '') != some_set.globs|join('') %}
+        {{ module }}.srcDir({{ PatchRoots(dir) }})
+{%-     else -%}
+{#- TODO Use single source file from each glob
+{%-         for glob in some_set.globs %}
+        {{ module }}.include({{ PatchRoots(dir, false, false, "/" + glob) }})
+{%-         endfor -%}
+#}
+        {{ module }}.srcDir({{ PatchRoots(dir) }})
+{%-     endif -%}
+{%- endmacro %}
+
+sourceSets {
+{%- set target_jar_source_set = target.jar_source_set|unique -%}
+{%- set target_jar_resource_set = target.jar_resource_set|unique -%}
+{%- if target_jar_source_set|length or target_jar_resource_set|length or target.source_sets|length or target.resource_sets|length or proto_template %}
+    main {
+{#- DEPRECATED vvvvvvvvvvvvvvvv -#}
+{%-     if target_jar_source_set|length and not(target.source_sets|length) -%}
+{%-         for source_set in target_jar_source_set -%}
+{%-             set srcdir_glob = split(source_set, ':') -%}
+{%-             set srcdir = srcdir_glob[0] %}
+        java.srcDir({{ PatchRoots(srcdir) }})
+{%-         endfor -%}
+{%-     endif -%}
+
+{%-     if target_jar_resource_set|length and not(target.resource_sets|length) -%}
+{%-         for resource_set in target_jar_resource_set -%}
+{%-             set resdir_glob = split(resource_set, ':') -%}
+{%-             set resdir = resdir_glob[0] %}
+        resources.srcDir({{ PatchRoots(resdir) }})
+{%-         endfor -%}
+{%-     endif -%}
+{#- DEPRECATED ^^^^^^^^^^^^^^^^ -#}
+
+{%-     if target.source_sets|length -%}
+{%-         for source_set in target.source_sets -%}
+{{ SomeSet(source_set, "java") }}
+{%-         endfor -%}
+{%-     endif -%}
+
+{%-     if target.resource_sets|length -%}
+{%-         for resource_set in target.resource_sets -%}
+{{ SomeSet(resource_set, "resources") }}
+{%-         endfor -%}
+{%-     endif -%}
+
+{%-     if proto_template and symlinks_to_generated %}
+        java.srcDir("generated/source/proto/main/java")
+{%-         if target.proto_grpc %}
+        java.srcDir("generated/source/proto/main/grpc")
+{%-         endif -%}
+{%-     elif proto_template %}
+        java.srcDir("$buildDir/generated/source/proto/main/java")
+{%-         if target.proto_grpc %}
+        java.srcDir("$buildDir/generated/source/proto/main/grpc")
+{%-         endif -%}
+{%-     endif %}
+    }
+{%  endif -%}
+
+{%- if not proto_template -%}
+{%-     if extra_targets|length %}
+    test {
 {%-     for extra_target in extra_targets -%}
 {%-         set reldir = "" -%}
 {%-         if extra_target.test_reldir -%}
 {%-             set reldir = extra_target.test_reldir + "/" -%}
 {%-         endif -%}
-{%-         for source_set in extra_target.jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':', 2) -%}
-{%-             if srcdir_glob[0][0] == "/" -%}
-{#-                 Absolute path in glob -#}
-{%-                 set srcdir = srcdir_glob[0] -%}
-{%-             else -%}
-{%-                 set srcdir = reldir + srcdir_glob[0] -%}
-{%-             endif -%}
-{%-             if srcdir != "src/test/java" %}
+{#- DEPRECATED vvvvvvvvvvvvvvvv -#}
+{%-         if extra_target.jar_source_set|length and not(extra_target.source_sets|length) -%}
+{%-             for source_set in extra_target.jar_source_set|unique -%}
+{%-                 set srcdir_glob = split(source_set, ':', 2) -%}
+{%-                 if srcdir_glob[0][0] == "/" -%}
+{#-                     Absolute path in glob -#}
+{%-                     set srcdir = srcdir_glob[0] -%}
+{%-                 else -%}
+{%-                     set srcdir = reldir + srcdir_glob[0] -%}
+{%-                 endif %}
         java.srcDir({{ PatchRoots(srcdir) }})
-{%-             endif -%}
-{%-         endfor -%}
-{%-         for resource_set in extra_target.jar_resource_set -%}
-{%-             set resdir_glob = split(resource_set, ':', 2) -%}
-{%-             if resdir_glob[0][0] == "/" -%}
-{#-                 Absolute path in glob -#}
-{%-                 set srcdir = resdir_glob[0] -%}
-{%-             else -%}
-{%-                 set resdir = reldir + resdir_glob[0] -%}
-{%-             endif -%}
-{%-             if resdir != "src/test/resources" %}
+{%-             endfor -%}
+{%-         endif -%}
+{%-         if extra_target.jar_resource_set|length and not(extra_target.resource_sets|length) -%}
+{%-             for resource_set in extra_target.jar_resource_set|unique -%}
+{%-                 set resdir_glob = split(resource_set, ':', 2) -%}
+{%-                 if resdir_glob[0][0] == "/" -%}
+{#-                     Absolute path in glob -#}
+{%-                     set resdir = resdir_glob[0] -%}
+{%-                 else -%}
+{%-                     set resdir = reldir + resdir_glob[0] -%}
+{%-                 endif %}
         resources.srcDir({{ PatchRoots(resdir) }})
-{%-             endif -%}
+{%-             endfor -%}
+{%-         endif -%}
+{#- DEPRECATED ^^^^^^^^^^^^^^^^ -#}
+{%-         for source_set in extra_target.source_sets -%}
+{{ SomeSet(source_set, "java", reldir) }}
 {%-         endfor -%}
-{%-     endfor -%}
-{%- endif %}
+{%-         for resource_set in extra_target.resource_sets -%}
+{{ SomeSet(resource_set, "resources", reldir) }}
+{%-         endfor -%}
+{%-     endfor %}
     }
+{%      else %}
+    test {
+        java.exclude("**/*")
+        resources.exclude("**/*")
+    }
+{%      endif -%}
+{%- endif -%}
 }
 
 tasks.withType<Jar>() {

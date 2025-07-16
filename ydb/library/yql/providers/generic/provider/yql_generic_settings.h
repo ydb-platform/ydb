@@ -10,8 +10,12 @@ namespace NYql {
     struct TGenericSettings {
         using TConstPtr = std::shared_ptr<const TGenericSettings>;
 
-        NCommon::TConfSetting<bool, false> UsePredicatePushdown;
-        NCommon::TConfSetting<TString, false> DateTimeFormat;
+    private:
+        static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+    public:
+
+        NCommon::TConfSetting<bool, Static> UsePredicatePushdown;
+        NCommon::TConfSetting<TString, Static> DateTimeFormat;
 
         struct TDefault {
             static constexpr bool UsePredicatePushdown = false;
@@ -38,6 +42,7 @@ namespace NYql {
         TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
 
     public:
+        TDuration DescribeTableTimeout; 
         THashMap<TString, TString> Tokens;
         THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
         THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name

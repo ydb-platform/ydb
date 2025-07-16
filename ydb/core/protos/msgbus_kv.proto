@@ -61,10 +61,12 @@ message TKeyValueRequest {
         optional bytes KeyToCache = 5; // used in PQ
         optional ETactic Tactic = 6 [default = MAX_THROUGHPUT]; // mandatory, used for non-inline puts only
         repeated EStorageChannel AutoselectChannel = 7; // when filled, channel is selected automatically from this set
+        optional uint64 CreationUnixTime = 9;
     }
     message TCmdRename {
         optional bytes OldKey = 1; // mandatory
         optional bytes NewKey = 2; // mandatory
+        optional uint64 CreationUnixTime = 3;
     }
     message TCmdCopyRange {
         optional TKeyRange Range = 1; // optional; if not set, whole database is copied
@@ -151,6 +153,7 @@ message TKeyValueResponse {
             uint32 PayloadId = 4;
         }
         optional string Message = 3;
+        optional uint64 CreationUnixTime = 5;
     }
     message TReadRangeResult {
         // may contain partial (truncated) result if Status == OVERRUN

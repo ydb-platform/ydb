@@ -1782,6 +1782,21 @@ void CancelAddIndex(Tests::TServer::TPtr server, const TString& dbName, ui64 bui
     UNIT_ASSERT_EQUAL(resp->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
 }
 
+ui64 AsyncMoveIndex(
+        Tests::TServer::TPtr server,
+        const TString& tablePath,
+        const TString& srcIndexName,
+        const TString& dstIndexName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpMoveIndex);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableMoveIndex();
+    desc.SetTablePath(tablePath);
+    desc.SetSrcPath(srcIndexName);
+    desc.SetDstPath(dstIndexName);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
 ui64 AsyncAlterDropIndex(
         Tests::TServer::TPtr server,
         const TString& workingDir,
@@ -1811,6 +1826,7 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetMode(streamDesc.Mode);
     desc.MutableStreamDescription()->SetFormat(streamDesc.Format);
     desc.MutableStreamDescription()->SetVirtualTimestamps(streamDesc.VirtualTimestamps);
+    desc.MutableStreamDescription()->SetSchemaChanges(streamDesc.SchemaChanges);
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }
@@ -1876,12 +1892,14 @@ ui64 AsyncAlterDropReplicationConfig(
 ui64 AsyncCreateContinuousBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& tableName)
+        const TString& tableName,
+        const TString& streamName)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateContinuousBackup, workingDir);
 
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateContinuousBackup();
     desc.SetTableName(tableName);
+    desc.MutableContinuousBackupDescription()->SetStreamName(streamName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
@@ -1890,7 +1908,8 @@ ui64 AsyncAlterTakeIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
         const TString& srcTableName,
-        const TString& dstTableName)
+        const TString& dstTableName,
+        const TString& dstStreamName)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup, workingDir);
 
@@ -1898,6 +1917,7 @@ ui64 AsyncAlterTakeIncrementalBackup(
     desc.SetTableName(srcTableName);
     auto& incBackup = *desc.MutableTakeIncrementalBackup();
     incBackup.SetDstPath(dstTableName);
+    incBackup.SetDstStreamPath(dstStreamName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
@@ -2109,11 +2129,28 @@ void AddValueToCells(ui64 value, const TString& columnType, TVector<TCell>& cell
     if (columnType == "Uint64") {
         cells.emplace_back(TCell((const char*)&value, sizeof(ui64)));
     } else if (columnType == "Uint32") {
-        ui32 value32 = (ui32)value;
+        ui32 value32 = static_cast<ui32>(value);
         cells.emplace_back(TCell((const char*)&value32, sizeof(ui32)));
+    } else if (columnType == "Uint16") {
+        ui16 value16 = static_cast<ui16>(value);
+        cells.emplace_back(TCell((const char*)&value16, sizeof(ui16)));
+    } else if (columnType == "Uint8") {
+        ui8 value8 = static_cast<ui8>(value);
+        cells.emplace_back(TCell((const char*)&value8, sizeof(ui8)));
+    } else if (columnType == "Int64") {
+        i64 value64 = static_cast<i64>(value);
+        cells.push_back(TCell::Make(value64));
     } else if (columnType == "Int32") {
-        i32 value32 = (i32)value;
+        i32 value32 = static_cast<i32>(value);
         cells.push_back(TCell::Make(value32));
+    } else if (columnType == "Int16") {
+        i16 value16 = static_cast<i16>(value);
+        cells.push_back(TCell::Make(value16));
+    } else if (columnType == "Int8") {
+        i8 value8 = static_cast<i8>(value);
+        cells.push_back(TCell::Make(value8));
+    } else if (columnType == "Double") {
+        cells.emplace_back(TCell((const char*)&value, sizeof(double)));
     } else if (columnType == "Utf8") {
         stringValues.emplace_back(Sprintf("String_%" PRIu64, value));
         cells.emplace_back(TCell(stringValues.back().c_str(), stringValues.back().size()));
@@ -2156,7 +2193,7 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<u
     return evWrite;
 }
 
-std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells) {
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumns) {
     UNIT_ASSERT((cells.size() % columnIds.size()) == 0);
 
     TSerializedCellMatrix matrix(cells, cells.size() / columnIds.size(), columnIds.size());
@@ -2166,7 +2203,7 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<u
         ? std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(*txId, txMode)
         : std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txMode);
     ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-    evWrite->AddOperation(operationType, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+    evWrite->AddOperation(operationType, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC, defaultFilledColumns);
 
     return evWrite;
 }
@@ -2232,7 +2269,6 @@ NKikimrDataEvents::TEvWriteResult UpsertOneKeyValue(TTestActorRuntime& runtime, 
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 
-
 NKikimrDataEvents::TEvWriteResult Replace(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
     auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, columns, rowCount);
@@ -2248,6 +2284,36 @@ NKikimrDataEvents::TEvWriteResult Delete(TTestActorRuntime& runtime, TActorId se
 NKikimrDataEvents::TEvWriteResult Insert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
     auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT, tableId, columns, rowCount);
+    return Write(runtime, sender, shardId, std::move(request), expectedStatus);
+}
+
+NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request));
+}
+
+NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request), expectedStatus);
+}
+
+NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request));
+}
+
+NKikimrDataEvents::TEvWriteResult UpsertWithDefaultValues(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumnCount)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, cells, defaultFilledColumnCount);
+    return Write(runtime, sender, shardId, std::move(request));
+}
+
+NKikimrDataEvents::TEvWriteResult UpsertWithDefaultValues(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumnCount, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, cells, defaultFilledColumnCount);
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 

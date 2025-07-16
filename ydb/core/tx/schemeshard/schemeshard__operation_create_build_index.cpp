@@ -1,11 +1,10 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-
+#include "schemeshard__operation_part.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/table_vector_index.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
 namespace NKikimr::NSchemeShard {
@@ -61,7 +60,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         // TODO(mbkkt) less than necessary for vector index
         checks
-            .IsValidLeafName()
+            .IsValidLeafName(context.UserToken.Get())
             .PathsLimit(2) // index and impl-table
             .DirChildrenLimit();
 
@@ -141,11 +140,12 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
             }
         }
-        const THashSet<TString> indexKeyColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
+        const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
         result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(indexKeyColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
         if (prefixVectorIndex) {
-            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(indexKeyColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
+            const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
+            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
         }
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;

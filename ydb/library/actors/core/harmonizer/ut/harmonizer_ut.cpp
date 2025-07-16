@@ -422,9 +422,6 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
                     for (auto& pool : params) {
                         stats.emplace_back(harmonizer->GetPoolStats(pool.PoolId));
                     }
-                    for (ui32 poolIdx = 0; poolIdx < params.size(); ++poolIdx) {
-                        UNIT_ASSERT_VALUES_EQUAL(stats[poolIdx].PotentialMaxThreadCount, std::min<i16>(mockPools[poolIdx]->ThreadCount + localBudget, params[poolIdx].MaxFullThreadCount));
-                    }
                 }
             }
         }

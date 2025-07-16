@@ -2,11 +2,10 @@
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 
 using namespace NKikimr;
@@ -69,6 +68,60 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
     }
 
     Y_UNIT_TEST(CreateTablePrefix) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "vectors"
+              Columns { Name: "id" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "prefix" Type: "String" }
+              KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+              Name: "idx_vector"
+              KeyColumnNames: ["prefix", "embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector"),
+            { NLs::PathExist,
+              NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+              NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+              NLs::IndexKeys({"prefix", "embedding"}),
+              NLs::IndexDataColumns({}),
+              NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                                          Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                                          1024,
+                                          4,
+                                          5
+                                          ),
+            });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPrefixTable"),
+            { NLs::PathExist,
+              NLs::CheckColumns(PrefixTable, {"prefix", IdColumn}, {}, {"prefix", IdColumn}, true) });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
+            { NLs::PathExist,
+              NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
+            { NLs::PathExist,
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id"}, {}, {ParentColumn, "id"}, true) });
+
+
+        TVector<ui64> dropTxIds;
+        TestDropTable(runtime, dropTxIds.emplace_back(++txId), "/MyRoot", "vectors");
+        env.TestWaitNotification(runtime, dropTxIds);
+    }
+
+    Y_UNIT_TEST(CreateTablePrefixCovering) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -274,9 +327,9 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
         }
       }
       {
-        NTableIndex::TTableColumns implTableColumns = {{"data2", "data1"}, {}};
-        auto desc = CalcVectorKmeansTreePostingImplTableDesc({}, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
-        std::string_view expected[] = {ParentColumn, "data1", "data2"};
+        THashSet<TString> indexDataColumns = {"data2", "data1"};
+        auto desc = NTableIndex::CalcVectorKmeansTreePostingImplTableDesc(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, "something");
+        std::string_view expected[] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, "data1", "data2"};
         for (size_t i = 0; auto& column : desc.GetColumns()) {
           UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
           ++i;

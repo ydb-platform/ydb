@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import enum
 import sys
-import matplotlib.dates as mdates
 import argparse
 from datetime import datetime, timezone
-from matplotlib.patches import Rectangle
-from matplotlib.collections import PatchCollection
+from matplotlib import dates, patches, collections
+from importlib import metadata
+from packaging import version
+
 import json
 
 
@@ -53,18 +54,18 @@ class Portion:
     def __repr__(self):
         return f"pk:[{self.PkMin}..{self.PkMax}], plan_step:[{self.PlanStepMin}..{self.PlanStepMax}]"
 
-    def ToRectangle(self, levelColors) -> Rectangle:
+    def ToRectangle(self, levelColors) -> patches.Rectangle:
         if self.Pk0Type == FirstPkColumnType.Integer:
             x0 = self.PkMin
             dx = self.PkMax - self.PkMin
         elif self.Pk0Type == FirstPkColumnType.Timestamp:
-            x0 = mdates.date2num(self.PkMin)
-            dx = mdates.date2num(self.PkMax) - mdates.date2num(self.PkMin)
+            x0 = dates.date2num(self.PkMin)
+            dx = dates.date2num(self.PkMax) - dates.date2num(self.PkMin)
         else:
             raise Exception("Unsupported PK column type")
-        y0 = mdates.date2num(self.PlanStepMin)
-        dy = mdates.date2num(self.PlanStepMax) - mdates.date2num(self.PlanStepMin)
-        return Rectangle(
+        y0 = dates.date2num(self.PlanStepMin)
+        dy = dates.date2num(self.PlanStepMax) - dates.date2num(self.PlanStepMin)
+        return patches.Rectangle(
             (x0, y0),
             dx,
             dy,
@@ -107,35 +108,66 @@ def ParsePortionStatFile(path: str, pk0type: FirstPkColumnType) -> Portions:
 
 
 def GetLevelColours(maxLevel):
-    levelColors = {l: 'blue' for l in range(portions.MaxCompactionLevel + 1)}
+    levelColors = {level: 'blue' for level in range(portions.MaxCompactionLevel + 1)}
     levelColors[maxLevel] = 'green'
     levelColors[0] = 'red'
     return levelColors
 
-def GetIntersections(portions):
-    points = []
-    for p in portions:
-        points.append((p.PkMin, 1))
-        points.append((p.PkMax, -1))
 
-    points.sort(key=lambda p: p[0])
-    
-    intersections = []
+def GenerateIntersectionData(ranges):
+    points = []
+    for minPk, maxPk in ranges:
+        points.append((minPk, 1))
+        points.append((maxPk, -1))
+
+    points.sort(key=lambda p: (p[0], -p[1]))
+
+    cur = points[0][1]
     prevPk = points[0][0]
-    cur = 0
+    prevClosed = False
+    lastUsedPk = prevPk
+    for (pk, delta) in points[1:]:
+        if pk != prevPk:
+            if cur > 1:
+                yield (lastUsedPk, pk - lastUsedPk, cur - 1)
+            lastUsedPk = pk
+        elif delta < 0 and not prevClosed:
+            lastUsedPk = pk
+            if isinstance(lastUsedPk, int):
+                lastUsedPk += 1
+            if cur > 1:
+                yield (prevPk, lastUsedPk - prevPk, cur - 1)
+        cur += delta
+        prevPk = pk
+        prevClosed = delta < 0
+
+
+assert list(GenerateIntersectionData([(1, 10), (3, 3), (3, 8), (9, 15), (20, 25), (23, 30)])) == [(3, 1, 2), (4, 4, 1), (9, 1, 1), (23, 2, 1)]
+
+
+def GetIntersections(portions):
+    intersections = []
     maxIntersections = 0
-    for p in points[1:]:
-        cur += p[1]
-        maxIntersections = max(maxIntersections, cur)
-        r = Rectangle(
-            (prevPk, 0),
-            p[0]-prevPk, cur,
+    for pk, width, n in GenerateIntersectionData((p.PkMin, p.PkMax) for p in portions):
+        r = patches.Rectangle(
+            (pk, 0),
+            width, n,
             linestyle="dashed",
             linewidth=1,
         )
         intersections.append(r)
-        prevPk = p[0]
+        maxIntersections = max(maxIntersections, n)
     return intersections, maxIntersections
+
+
+def get_interactive_backends():
+    print(f"matplotlib version: {metadata.version("matplotlib")}")
+    if version.Version(metadata.version("matplotlib")) < version.Version("3.9"):
+        from matplotlib import rcsetup
+        return rcsetup.interactive_bk
+    else:
+        from matplotlib import backends
+        return backends.backend_registry.list_builtin(backends.BackendFilter.INTERACTIVE)
 
 
 if __name__ == '__main__':
@@ -149,6 +181,14 @@ To get portion info for a table, use ydb cli:
     args = parser.parse_args()
     inputFile = args.input_file
     pk0Type = FirstPkColumnType[args.type]
+
+    if args.output_file is None:
+        if plt.get_backend() not in get_interactive_backends():
+            print("""No interactive rendering backend is available. Only output to file mode can be used(--output-file).
+Or you can run this script in some environment with installed interactive backend, i.e venv
+""")
+            sys.exit(1)
+
     print(f"Loading file: {inputFile}...")
     portions = ParsePortionStatFile(inputFile, pk0Type)
     print(f"Loading file: {inputFile}... completed, {len(portions.Portions)} portions")
@@ -160,10 +200,10 @@ To get portion info for a table, use ydb cli:
     for i in [0, 1]:
         ax[i].set_xlabel("pk")
         if pk0Type == FirstPkColumnType.Timestamp:
-            ax[i].xaxis.set_major_locator(mdates.AutoDateLocator())
-            ax[i].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-            xMin = mdates.date2num(portions.PkMin)
-            xMax = mdates.date2num(portions.PkMax)
+            ax[i].xaxis.set_major_locator(dates.AutoDateLocator())
+            ax[i].xaxis.set_major_formatter(dates.DateFormatter('%Y-%m-%d'))
+            xMin = dates.date2num(portions.PkMin)
+            xMax = dates.date2num(portions.PkMax)
         elif pk0Type == FirstPkColumnType.Integer:
             xMin = portions.PkMin
             xMax = portions.PkMax
@@ -172,22 +212,20 @@ To get portion info for a table, use ydb cli:
         dx = xMax - xMin
         ax[i].set_xlim(xMin - 0.05 * dx, xMax + 0.05 * dx)
 
-
     ax[0].set_title("Column table portions")
-    ax[0].add_collection(PatchCollection(rectangles, match_original=True))
-
+    ax[0].add_collection(collections.PatchCollection(rectangles, match_original=True))
 
     ax[0].set_ylabel("plan_step")
-    ax[0].yaxis.set_major_locator(mdates.AutoDateLocator())
-    ax[0].yaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S\n'))
-    yMin = mdates.date2num(portions.PlanStepMin)
-    yMax = mdates.date2num(portions.PlanStepMax)
+    ax[0].yaxis.set_major_locator(dates.AutoDateLocator())
+    ax[0].yaxis.set_major_formatter(dates.DateFormatter('%Y-%m-%d %H:%M:%S\n'))
+    yMin = dates.date2num(portions.PlanStepMin)
+    yMax = dates.date2num(portions.PlanStepMax)
     dy = yMax - yMin
     ax[0].set_ylim(yMin - 0.05 * dy, yMax + 0.05 * dy)
 
     intersections, maxIntersections = GetIntersections(portions.Portions)
     ax[1].set_title("Portion intersections")
-    ax[1].add_collection(PatchCollection(intersections, match_original=True))
+    ax[1].add_collection(collections.PatchCollection(intersections, match_original=True))
 
     ax[1].set_ylabel("intersection")
     ax[1].set_ylim(0, maxIntersections * 1.1 + 1)

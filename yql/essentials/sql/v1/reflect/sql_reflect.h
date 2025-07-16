@@ -13,7 +13,8 @@ namespace NSQLReflect {
         TVector<TString> OtherNames;
         THashMap<TString, TString> BlockByName;
 
-        static const TStringBuf KeywordBlock(const TStringBuf name);
+        static const TStringBuf KeywordBlockByName(const TStringBuf name);
+        static const TString KeywordNameByBlock(const TStringBuf block);
     };
 
     TLexerGrammar LoadLexerGrammar();

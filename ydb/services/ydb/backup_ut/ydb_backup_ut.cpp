@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
@@ -355,7 +356,7 @@ using TBackupFunction = std::function<void(void)>;
 using TRestoreFunction = std::function<void(void)>;
 
 void TestTableContentIsPreserved(
-    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings = {}
 ) {
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             CREATE TABLE `%s` (
@@ -384,10 +385,12 @@ void TestTableContentIsPreserved(
 
     backup();
 
-    ExecuteDataDefinitionQuery(session, Sprintf(R"(
-            DROP TABLE `%s`;
-        )", table
-    ));
+    if (!restorationSettings.Replace_) {
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+    }
 
     restore();
     CompareResults(GetTableContent(session, table), originalContent);
@@ -721,7 +724,7 @@ void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupF
 }
 
 void TestViewOutputIsPreserved(
-    const char* view, NQuery::TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+    const char* view, NQuery::TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings = {}
 ) {
     constexpr const char* viewQuery = R"(
         SELECT 1 AS Key
@@ -739,11 +742,13 @@ void TestViewOutputIsPreserved(
 
     backup();
 
-    ExecuteQuery(session, Sprintf(R"(
-                DROP VIEW `%s`;
-            )", view
-        ), true
-    );
+    if (!restorationSettings.Replace_) {
+        ExecuteQuery(session, Sprintf(R"(
+                    DROP VIEW `%s`;
+                )", view
+            ), true
+        );
+    }
 
     restore();
     CompareResults(GetTableContent(session, view), originalContent);
@@ -938,7 +943,7 @@ void TestChangefeedAndTopicDescriptionsIsPreserved(
 
 void TestTopicSettingsArePreserved(
     const char* topic, NQuery::TSession& session, NTopic::TTopicClient& topicClient,
-    TBackupFunction&& backup, TRestoreFunction&& restore
+    TBackupFunction&& backup, TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings = {}
 ) {
     constexpr int minPartitions = 2;
     constexpr int maxPartitions = 5;
@@ -979,10 +984,12 @@ void TestTopicSettingsArePreserved(
 
     backup();
 
-    ExecuteQuery(session, Sprintf(R"(
-            DROP TOPIC `%s`;
-        )", topic
-    ), true);
+    if (!restorationSettings.Replace_) {
+        ExecuteQuery(session, Sprintf(R"(
+                DROP TOPIC `%s`;
+            )", topic
+        ), true);
+    }
 
     restore();
     checkDescription(DescribeTopic(topicClient, topic), DEBUG_HINT);
@@ -1010,7 +1017,8 @@ void TestCoordinationNodeSettingsArePreserved(
     const std::string& path,
     NCoordination::TClient& nodeClient,
     TBackupFunction&& backup,
-    TRestoreFunction&& restore
+    TRestoreFunction&& restore,
+    const NDump::TRestoreSettings& restorationSettings = {}
 ) {
     const auto settings = NCoordination::TCreateNodeSettings()
         .SelfCheckPeriod(TDuration::Seconds(2))
@@ -1032,7 +1040,9 @@ void TestCoordinationNodeSettingsArePreserved(
 
     backup();
 
-    DropCoordinationNode(nodeClient, path);
+    if (!restorationSettings.Replace_) {
+        DropCoordinationNode(nodeClient, path);
+    }
 
     restore();
     checkDescription(DescribeCoordinationNode(nodeClient, path), DEBUG_HINT);
@@ -1147,7 +1157,8 @@ void TestReplicationSettingsArePreserved(
         TReplicationClient& client,
         TBackupFunction&& backup,
         TRestoreFunction&& restore,
-        bool useSecret)
+        bool useSecret,
+        const NDump::TRestoreSettings& restorationSettings = {})
 {
     if (useSecret) {
         ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
@@ -1186,7 +1197,9 @@ void TestReplicationSettingsArePreserved(
     WaitReplicationInit(client, "/Root/replication");
     checkDescription();
     backup();
-    ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
+    if (!restorationSettings.Replace_) {
+        ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
+    }
     restore();
     WaitReplicationInit(client, "/Root/replication");
     checkDescription();
@@ -1199,7 +1212,7 @@ Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession
 }
 
 void TestExternalDataSourceSettingsArePreserved(
-    const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore
+    const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings = {}
 ) {
     ExecuteQuery(querySession, Sprintf(R"(
                 CREATE EXTERNAL DATA SOURCE `%s` WITH (
@@ -1214,11 +1227,13 @@ void TestExternalDataSourceSettingsArePreserved(
 
     backup();
 
-    ExecuteQuery(querySession, Sprintf(R"(
-                DROP EXTERNAL DATA SOURCE `%s`;
-            )", path
-        ), true
-    );
+    if (!restorationSettings.Replace_) {
+        ExecuteQuery(querySession, Sprintf(R"(
+                    DROP EXTERNAL DATA SOURCE `%s`;
+                )", path
+            ), true
+        );
+    }
 
     restore();
     UNIT_ASSERT_VALUES_EQUAL(
@@ -1234,7 +1249,7 @@ Ydb::Table::DescribeExternalTableResult DescribeExternalTable(TSession& session,
 }
 
 void TestExternalTableSettingsArePreserved(
-    const char* path, const char* externalDataSource, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore
+    const char* path, const char* externalDataSource, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings = {}
 ) {
     ExecuteQuery(querySession, Sprintf(R"(
                 CREATE EXTERNAL DATA SOURCE `%s` WITH (
@@ -1259,12 +1274,14 @@ void TestExternalTableSettingsArePreserved(
 
     backup();
 
-    ExecuteQuery(querySession, Sprintf(R"(
-                DROP EXTERNAL TABLE `%s`;
-                DROP EXTERNAL DATA SOURCE `%s`;
-            )", path, externalDataSource
-        ), true
-    );
+    if (!restorationSettings.Replace_) {
+        ExecuteQuery(querySession, Sprintf(R"(
+                    DROP EXTERNAL TABLE `%s`;
+                    DROP EXTERNAL DATA SOURCE `%s`;
+                )", path, externalDataSource
+            ), true
+        );
+    }
 
     restore();
     UNIT_ASSERT_VALUES_EQUAL(
@@ -1478,10 +1495,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         };
     }
 
-    auto CreateRestoreLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root") {
+    auto CreateRestoreLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root", const NDump::TRestoreSettings& settings = NDump::TRestoreSettings()) {
         return [=, &driver]() {
             NDump::TClient backupClient(driver);
-            const auto result = backupClient.Restore(fsPath, dbPath);
+            const auto result = backupClient.Restore(fsPath, dbPath, settings);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
     }
@@ -2197,6 +2214,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 break; // other projects
             default:
                 UNIT_FAIL("Client backup/restore were not implemented for this scheme object");
+                // please don't forget to add:
+                // - a dedicated TestReplaceRestoreOption test
         }
     }
 
@@ -2215,6 +2234,163 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             default:
                 UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
+    }
+
+    Y_UNIT_TEST(TestReplaceRestoreOption) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
+
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_DEBUG);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::EPriority::PRI_DEBUG);
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TReplicationClient replicationClient(driver);
+        NCoordination::TClient nodeClient(driver);
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        auto cleanup = [&pathToBackup, &driver] {
+            TVector<TFsPath> children;
+            pathToBackup.List(children);
+            for (auto& i : children) {
+                i.ForceDelete();
+            }
+
+            const auto settings = NConsoleClient::TRemoveDirectoryRecursiveSettings().RemoveSelf(false);
+            RemoveDirectoryRecursive(driver, "/Root", settings);
+        };
+
+        constexpr const char* table = "/Root/table";
+        constexpr const char* topic = "/Root/topic";
+        constexpr const char* view = "/Root/view";
+        constexpr const char* externalTable = "/Root/externalTable";
+        constexpr const char* externalDataSource = "/Root/externalDataSource";
+        const std::string kesus = "/Root/kesus";
+
+        const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
+
+        cleanup();
+        TestTableContentIsPreserved(table, tableSession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings
+        );
+
+        cleanup();
+        TestTopicSettingsArePreserved(topic, querySession, topicClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings
+        );
+
+        cleanup();
+        TestViewOutputIsPreserved(view, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings
+        );
+
+        cleanup();
+        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings
+        );
+
+        cleanup();
+        TestExternalTableSettingsArePreserved(externalTable, externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings
+        );
+
+        cleanup();
+        TestCoordinationNodeSettingsArePreserved(kesus, nodeClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings
+        );
+
+        cleanup();
+        TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true, restorationSettings
+        );
+    }
+
+    Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
+
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TReplicationClient replicationClient(driver);
+        NCoordination::TClient nodeClient(driver);
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        auto cleanup = [&pathToBackup, &driver] {
+            TVector<TFsPath> children;
+            pathToBackup.List(children);
+            for (auto& i : children) {
+                i.ForceDelete();
+            }
+
+            const auto settings = NConsoleClient::TRemoveDirectoryRecursiveSettings().RemoveSelf(false);
+            RemoveDirectoryRecursive(driver, "/Root", settings);
+        };
+
+        constexpr const char* table = "/Root/table";
+        constexpr const char* topic = "/Root/topic";
+        constexpr const char* view = "/Root/view";
+        constexpr const char* externalTable = "/Root/externalTable";
+        constexpr const char* externalDataSource = "/Root/externalDataSource";
+        const std::string kesus = "/Root/kesus";
+
+        const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
+
+        cleanup();
+        TestTableContentIsPreserved(table, tableSession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestTopicSettingsArePreserved(topic, querySession, topicClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestViewOutputIsPreserved(view, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestExternalTableSettingsArePreserved(externalTable, externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestCoordinationNodeSettingsArePreserved(kesus, nodeClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true
+        );
     }
 
     Y_UNIT_TEST(PrefixedVectorIndex) {
@@ -2292,6 +2468,36 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                     UNIT_ASSERT(!child.IsDirectory());
                 }
             }
+        }
+    }
+
+    Y_UNIT_TEST(SkipEmptyDirsOnRestore) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        pathToBackup.Child("empty").MkDir();
+        auto dir = pathToBackup.Child("with_one_file");
+        dir.MkDir();
+        dir.Child("file").Touch();
+        pathToBackup.Child("with_one_dir").Child("empty").MkDirs();
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Restore(pathToBackup, "/Root");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TSchemeClient schemeClient(driver);
+        {
+            auto [entries, status] = NConsoleClient::RecursiveList(schemeClient, "/Root", {}, false);
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(entries.size(), 2, JoinSeq(", ", entries));
+            Sort(entries, [](const auto& lhs, const auto& rhs) {
+                return lhs.Name < rhs.Name;
+            });
+            UNIT_ASSERT_STRINGS_EQUAL_C(entries[0].Name, "/Root/with_one_dir", entries[0]);
+            UNIT_ASSERT_STRINGS_EQUAL_C(entries[1].Name, "/Root/with_one_file", entries[1]);
         }
     }
 

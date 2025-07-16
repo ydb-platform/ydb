@@ -125,47 +125,47 @@ namespace NKikimr {
 
             struct TIterator {
                 TIterator()
-                    : Owner_(nullptr)
-                    , Position_(nullptr)
+                    : Owner(nullptr)
+                    , Position(nullptr)
                 {}
 
                 TIterator(const TListRepresentation& owner)
-                    : Owner_(&owner)
-                    , Position_(owner.Begin_)
+                    : Owner(&owner)
+                    , Position(owner.Begin_)
                 {
                 }
 
                 TIterator(const TIterator& other)
-                    : Owner_(other.Owner_)
-                    , Position_(other.Position_)
+                    : Owner(other.Owner)
+                    , Position(other.Position)
                 {}
 
                 TIterator& operator=(const TIterator& other)
                 {
-                    Owner_ = other.Owner_;
-                    Position_ = other.Position_;
+                    Owner = other.Owner;
+                    Position = other.Position;
                     return *this;
                 }
 
                 bool AtEnd() const {
-                    return Position_ == Owner_->End_;
+                    return Position == Owner->End_;
                 }
 
                 const T& Current() const {
-                    return *Position_;
+                    return *Position;
                 }
 
                 // use with care, list may be shared
                 T& MutableCurrent() {
-                    return *Position_;
+                    return *Position;
                 }
 
                 void Next() {
-                    Position_++;
+                    Position++;
                 }
 
-                const TListRepresentation* Owner_;
-                T* Position_;
+                const TListRepresentation* Owner;
+                T* Position;
             };
 
             struct TReverseIterator {
@@ -182,8 +182,8 @@ namespace NKikimr {
                 }
 
                 TReverseIterator(const TIterator& other)
-                    : Owner_(other.Owner_)
-                    , Position_(other.Position_)
+                    : Owner_(other.Owner)
+                    , Position_(other.Position)
                 {
                 }
 

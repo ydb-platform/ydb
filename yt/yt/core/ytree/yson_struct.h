@@ -68,17 +68,29 @@ public:
         INodePtr node,
         bool postprocess = true,
         bool setDefaults = true,
-        const NYPath::TYPath& path = {});
+        const std::function<NYPath::TYPath()>& pathGetter = {});
 
     void Load(
         NYson::TYsonPullParserCursor* cursor,
         bool postprocess = true,
         bool setDefaults = true,
-        const NYPath::TYPath& path = {});
+        const std::function<NYPath::TYPath()>& pathGetter = {});
+
+    void Load(
+        INodePtr node,
+        bool postprocess,
+        bool setDefaults,
+        const NYPath::TYPath& path);
+
+    void Load(
+        NYson::TYsonPullParserCursor* cursor,
+        bool postprocess,
+        bool setDefaults,
+        const NYPath::TYPath& path);
 
     void Load(IInputStream* input);
 
-    void Postprocess(const NYPath::TYPath& path = {});
+    void Postprocess(const std::function<NYPath::TYPath()>& pathGetter = {});
 
     void SetDefaults();
 
@@ -120,6 +132,9 @@ public:
     bool IsEqual(const TYsonStructBase& rhs) const;
 
     const IYsonStructMeta* GetMeta() const;
+
+protected:
+    void MarkUnrecognized(const std::string& key, const IMapNodePtr& node);
 
 private:
     template <class TValue>
@@ -241,7 +256,7 @@ concept CYsonStructLoadableFieldFor =
         S source,
         bool postprocess,
         bool setDefaults,
-        const NYPath::TYPath& path,
+        const std::function<NYPath::TYPath()>& pathGetter,
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
     {
         // For YsonStruct.
@@ -249,7 +264,7 @@ concept CYsonStructLoadableFieldFor =
             source,
             postprocess,
             setDefaults,
-            path,
+            pathGetter,
             recursiveUnrecognizedStrategy);
     };
 

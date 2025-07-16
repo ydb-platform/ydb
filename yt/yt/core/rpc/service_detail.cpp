@@ -114,7 +114,7 @@ THandlerInvocationOptions THandlerInvocationOptions::SetResponseCodec(NCompressi
 ////////////////////////////////////////////////////////////////////////////////
 
 TServiceBase::TMethodDescriptor::TMethodDescriptor(
-    TString method,
+    std::string method,
     TLiteHandler liteHandler,
     THeavyHandler heavyHandler)
     : Method(std::move(method))
@@ -377,7 +377,8 @@ public:
     {
         if (!Replied_) {
             // Prevent alerting.
-            RequestInfoSet_ = true;
+            SuppressMissingRequestInfoCheck();
+
             if (CanceledList_.IsFired()) {
                 if (TimedOutLatch_) {
                     Reply(TError(NYT::EErrorCode::Timeout, "Request timed out"));
@@ -1134,6 +1135,8 @@ private:
             }
         }
         YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
+
+        RequestInfoState_ = ERequestInfoState::Flushed;
     }
 
     void LogResponse() override
@@ -1853,7 +1856,7 @@ void TServiceBase::ReplyError(TError error, TIncomingRequest&& incomingRequest)
     YT_UNUSED_FUTURE(incomingRequest.ReplyBus->Send(errorMessage));
 }
 
-void TServiceBase::OnMethodError(TError* /*error*/, const TString& /*method*/)
+void TServiceBase::OnMethodError(TError* /*error*/, const std::string& /*method*/)
 { }
 
 void TServiceBase::OnRequestAuthenticated(
@@ -2531,7 +2534,7 @@ void TServiceBase::OnDiscoverRequestReplyDelayReached(TCtxDiscoverPtr context)
     }
 }
 
-TString TServiceBase::GetDiscoverRequestPayload(const TCtxDiscoverPtr& context)
+std::string TServiceBase::GetDiscoverRequestPayload(const TCtxDiscoverPtr& context)
 {
     auto request = context->Request();
     request.set_reply_delay(0);
@@ -2796,11 +2799,11 @@ bool TServiceBase::IsUp(const TCtxDiscoverPtr& /*context*/)
 void TServiceBase::EnrichDiscoverResponse(TRspDiscover* /*response*/)
 { }
 
-std::vector<TString> TServiceBase::SuggestAddresses()
+std::vector<std::string> TServiceBase::SuggestAddresses()
 {
     YT_ASSERT_THREAD_AFFINITY_ANY();
 
-    return std::vector<TString>();
+    return std::vector<std::string>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

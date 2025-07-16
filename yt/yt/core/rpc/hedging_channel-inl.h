@@ -9,7 +9,7 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TString BackupFailedKey("backup_failed");
+static const std::string BackupFailedKey("backup_failed");
 
 template <class T>
 bool IsBackup(const TErrorOr<TIntrusivePtr<T>>& responseOrError)

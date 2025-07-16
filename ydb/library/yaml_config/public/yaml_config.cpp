@@ -359,17 +359,21 @@ TDocumentConfig Resolve(
     res.first.Resolve();
 
     auto rootMap = res.first.Root().Map();
-    auto config = rootMap.at("config");
-    if (rootMap.Has("selector_config")) {
-        auto selectorConfig = rootMap.at("selector_config").Sequence();
+    auto config = res.first.Root();
 
-        for (auto it = selectorConfig.begin(); it != selectorConfig.end(); ++it) {
-            auto selectorMap = it->Map();
-            auto desc = selectorMap.at("description").Scalar();
-            auto selectorNode = selectorMap.at("selector");
-            auto selector = ParseSelector(selectorNode);
-            if (Fit(selector, labels)) {
-                Apply(config, selectorMap.at("config"));
+    if (rootMap.Has("config")) {
+        config = rootMap.at("config");
+        if (rootMap.Has("selector_config")) {
+            auto selectorConfig = rootMap.at("selector_config").Sequence();
+
+            for (auto it = selectorConfig.begin(); it != selectorConfig.end(); ++it) {
+                auto selectorMap = it->Map();
+                auto desc = selectorMap.at("description").Scalar();
+                auto selectorNode = selectorMap.at("selector");
+                auto selector = ParseSelector(selectorNode);
+                if (Fit(selector, labels)) {
+                    Apply(config, selectorMap.at("config"));
+                }
             }
         }
     }

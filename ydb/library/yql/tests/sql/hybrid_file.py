@@ -77,6 +77,13 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                         '%(hybrid_result_name)s table:\n %(hybrid_table_yson)s\n\n' \
                         '%(yqlrun_result_name)s table:\n %(yqlrun_table_yson)s\n' % locals()
 
+                    yqlrun_table_attr = yqlrun_tables_res[table].attr
+                    dq_table_attr = tables_res[table].attr
+                    assert yqlrun_table_attr == dq_table_attr, \
+                        'OUT_TABLE_ATTR_DIFFER: %(table)s\n' \
+                        '%(dq_result_name)s table attrs:\n %(dq_table_attr)s\n\n' \
+                        '%(yqlrun_result_name)s table attrs:\n %(yqlrun_table_attr)s\n' % locals()
+
     else:
         assert False, "Unexpected test mode %(what)s"
 

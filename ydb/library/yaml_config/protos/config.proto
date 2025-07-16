@@ -73,6 +73,13 @@ message TExtendedHostConfigDrive {
 
     optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6 [(NMarkers.CopyTo) = "THostConfigDrive"];
     optional uint64 ExpectedSlotCount = 7;
+    optional uint32 SlotSizeInUnits = 8;
+    optional uint64 InferPDiskSlotCountFromUnitSize = 9 [(NMarkers.CopyTo) = "THostConfigDrive"];
+}
+
+message TInferPDiskSlotCountFromUnitSize {
+    optional uint64 Rot = 1;
+    optional uint64 Ssd = 2; // Implies both ssd and nvme
 }
 
 message THosts {
@@ -87,6 +94,7 @@ message THosts {
     optional string Address = 9;
     optional string Name = 10;
     repeated TExtendedHostConfigDrive Drive = 11;
+    optional string BridgePileName = 12;
 }
 
 message TTls {
@@ -139,6 +147,8 @@ message TExtendedDefineHostConfig {
     repeated string Ssd = 6 [(NMarkers.CopyTo) = "TDefineHostConfig"];
     repeated string Nvme = 7 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 
+    optional TInferPDiskSlotCountFromUnitSize InferPDiskSlotCountFromUnitSize = 8;
+
     optional uint64 ItemConfigGeneration = 100 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 }
 
@@ -157,6 +167,7 @@ message TEphemeralInputFields {
     optional TTls Tls = 8;
     optional FailDomainKind FailDomainType = 9 [default = Rack];
     optional TDomainsConfig.TSecurityConfig SecurityConfig = 10;
+    repeated TDomainsConfig.TStoragePoolType StoragePoolTypes = 11;
 
     enum FailDomainKind {
         Rack = 0;

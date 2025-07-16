@@ -28,6 +28,18 @@ private:
     YDB_ACCESSOR(i64, MaxPortionSize, DefaultMaxPortionSize);
 
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{";
+        sb << "max_bs=" << MaxBlobSize << ";";
+        sb << "min_bs=" << MinBlobSize << ";";
+        sb << "bs_tlrn=" << BlobSizeTolerance << ";";
+        sb << "min_rc=" << MinRecordsCount << ";";
+        sb << "max_ps=" << MaxPortionSize << ";";
+        sb << "}";
+        return sb;
+    }
+
     ui64 GetExpectedBlobPage() const {
         return ((ui64)512) << 10;
     }

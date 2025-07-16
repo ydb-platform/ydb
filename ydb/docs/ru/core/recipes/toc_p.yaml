@@ -12,3 +12,13 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
+- name: Для аналитиков
+  href: ../olap/index.md
+  include:
+    mode: link
+    path: ../olap/toc_p.yaml
+- name: AI
+  href: vector-search/index.md
+  include:
+    mode: link
+    path: vector-search/toc_p.yaml

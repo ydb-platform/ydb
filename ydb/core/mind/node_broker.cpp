@@ -171,6 +171,9 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "   AuthorizedByCertificate: " << (node.AuthorizedByCertificate ? "true" : "false") << Endl
                     << "   ServicedSubDomain: " << node.ServicedSubDomain << Endl
                     << "   SlotIndex: " << node.SlotIndex << Endl;
+                if (node.BridgePileId) {
+                    str << "   BridgePileId: " << *node.BridgePileId << Endl;
+                }
             }
             str << Endl;
 
@@ -459,7 +462,10 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
 
 void TNodeBroker::ScheduleProcessSubscribersQueue(const TActorContext &ctx)
 {
-    ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+    if (!ScheduledProcessSubscribersQueue && !SubscribersQueue.Empty()) {
+        ctx.Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+        ScheduledProcessSubscribersQueue = true;
+    }
 }
 
 void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
@@ -473,6 +479,9 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetExpire(node.Expire.GetValue());
     node.Location.Serialize(info.MutableLocation(), false);
     FillNodeName(node.SlotIndex, info);
+    if (const auto& id = node.BridgePileId) {
+        id->CopyToProto(&info, &NKikimrNodeBroker::TNodeInfo::SetBridgePileId);
+    }
 }
 
 void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
@@ -777,6 +786,13 @@ bool TNodeBroker::HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) co
     return false;
 }
 
+void TNodeBroker::UpdateCommittedStateCounters() {
+    TabletCounters->Simple()[COUNTER_ACTIVE_NODES].Set(Committed.Nodes.size());
+    TabletCounters->Simple()[COUNTER_EXPIRED_NODES].Set(Committed.ExpiredNodes.size());
+    TabletCounters->Simple()[COUNTER_REMOVED_NODES].Set(Committed.RemovedNodes.size());
+    TabletCounters->Simple()[COUNTER_EPOCH_VERSION].Set(Committed.Epoch.Version);
+}
+
 void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
 {
     Config = config;
@@ -850,7 +866,8 @@ void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
                 << " expire=" << node.ExpirationString()
                 << " servicedsubdomain=" << node.ServicedSubDomain
                 << " slotindex=" << node.SlotIndex
-                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
+                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false")
+                << " bridgePileId=" << (node.BridgePileId ? TString(TStringBuilder() << *node.BridgePileId) : "<none>"));
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -871,6 +888,11 @@ void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
         .Update<T::Location>(node.Location.GetSerializedLocation())
         .Update<T::ServicedSubDomain>(node.ServicedSubDomain)
         .Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
+
+    if (node.BridgePileId) {
+        db.Table<T>().Key(node.NodeId)
+            .Update<T::BridgePileId>(node.BridgePileId->GetRawId());
+    }
 
     if (node.SlotIndex.has_value()) {
         db.Table<T>().Key(node.NodeId)
@@ -1104,6 +1126,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset,
             }
             info.AuthorizedByCertificate = nodesRowset.template GetValue<Schema::Nodes::AuthorizedByCertificate>();
             info.State = expire > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
+            if (nodesRowset.template HaveValue<Schema::Nodes::BridgePileId>()) {
+                info.BridgePileId.emplace(TBridgePileId::FromValue(nodesRowset.template GetValue<Schema::Nodes::BridgePileId>()));
+            }
             AddNode(info);
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -1489,6 +1514,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         TActorId ReplyTo;
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
+        std::optional<TBridgePileId> BridgePileId;
+        TString Error;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1504,6 +1531,27 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             Become(&TThis::StateFunc);
 
             auto& record = Ev->Get()->Record;
+
+            if (record.HasBridgePileName()) {
+                if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
+                    const TString& name = record.GetBridgePileName();
+                    const auto& bridge = *AppData()->BridgeConfig;
+                    const auto& piles = bridge.GetPiles();
+                    for (int i = 0; i < piles.size(); ++i) {
+                        if (piles[i].GetName() == name) {
+                            BridgePileId.emplace(TBridgePileId::FromValue(i));
+                            break;
+                        }
+                    }
+                    if (!BridgePileId) {
+                        Error = TStringBuilder() << "Incorrect bridge pile name " << name;
+                    }
+                } else {
+                    Error = "Bridge pile specified while bridge mode is disabled";
+                }
+            } else if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
+                Error = "Bridge pile not specified while bridge mode is enabled";
+            }
 
             if (record.HasPath()) {
                 auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -1554,7 +1602,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": scope id# " << ScopeIdToString(ScopeId)
                 << ": serviced subdomain# " << ServicedSubDomain);
 
-            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain));
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, BridgePileId,
+                std::move(Error)));
             Die(ctx);
         }
 
@@ -1687,19 +1736,14 @@ void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
 
 void TNodeBroker::Handle(TEvPrivate::TEvProcessSubscribersQueue::TPtr &, const TActorContext &ctx)
 {
-    constexpr size_t MAX_BATCH_SIZE = 1000;
-
-    size_t batchSize = 0;
-    while (batchSize < SubscribersQueue.Size() && batchSize < MAX_BATCH_SIZE) {
+    ScheduledProcessSubscribersQueue = false;
+    if (!SubscribersQueue.Empty()) {
         auto& subscriber = *SubscribersQueue.Front();
-        if (subscriber.SentVersion >= Committed.Epoch.Version) {
-            break;
+        if (subscriber.SentVersion < Committed.Epoch.Version) {
+            SendUpdateNodes(subscriber, ctx);
+            ScheduleProcessSubscribersQueue(ctx);
         }
-        SendUpdateNodes(subscriber, ctx);
-        ++batchSize;
     }
-
-    ScheduleProcessSubscribersQueue(ctx);
 }
 
 TNodeBroker::TState::TState(TNodeBroker* self)
@@ -1733,6 +1777,9 @@ TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, c
     , ServicedSubDomain(schema.GetServicedSubDomain())
     , State(state)
     , Version(version)
+    , BridgePileId(schema.HasBridgePileId()
+        ? std::make_optional(TBridgePileId::FromProto(&schema, &TNodeInfoSchema::GetBridgePileId))
+        : std::nullopt)
 {}
 
 TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version)
@@ -1756,7 +1803,8 @@ bool TNodeBroker::TNodeInfo::EqualExceptVersion(const TNodeInfo &other) const
         && AuthorizedByCertificate == other.AuthorizedByCertificate
         && SlotIndex == other.SlotIndex
         && ServicedSubDomain == other.ServicedSubDomain
-        && State == other.State;
+        && State == other.State
+        && BridgePileId == other.BridgePileId;
 }
 
 TString TNodeBroker::TNodeInfo::IdString() const
@@ -1784,6 +1832,7 @@ TString TNodeBroker::TNodeInfo::ToString() const
         << ", Expire: " << ExpirationString()
         << ", Location: " << Location.ToString()
         << ", AuthorizedByCertificate: " << AuthorizedByCertificate
+        << ", BridgePileId: " << (BridgePileId ? TString(TStringBuilder() << *BridgePileId) : "<none>")
         << ", SlotIndex: " << SlotIndex
         << ", ServicedSubDomain: " << ServicedSubDomain
     << " }";
@@ -1804,6 +1853,9 @@ TNodeInfoSchema TNodeBroker::TNodeInfo::SerializeToSchema() const {
         serialized.SetSlotIndex(*SlotIndex);
     }
     serialized.SetAuthorizedByCertificate(AuthorizedByCertificate);
+    if (BridgePileId) {
+        BridgePileId->CopyToProto(&serialized, &TNodeInfoSchema::SetBridgePileId);
+    }
     return serialized;
 }
 

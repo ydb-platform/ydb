@@ -2281,6 +2281,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 29,
+                "ColumnName": "ColumnTableColumnsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -2334,12 +2339,98 @@
                 "ColumnId": 11,
                 "ColumnName": "ServerlessComputeResourcesMode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "DepthLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "PathsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "ChildrenLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "ShardsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "PathShardsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "TableColumnsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "TableColumnNameLengthLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "TableKeyColumnsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "TableIndicesLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "AclByteSizeLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "ConsistentCopyingTargetsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "PathElementLength",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "ExtraPathSymbolsAllowed",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 25,
+                "ColumnName": "PQPartitionsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 26,
+                "ColumnName": "TableCdcStreamsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "ExportsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "ImportsLimit",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     3,
@@ -2350,7 +2441,24 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19,
+                    20,
+                    21,
+                    22,
+                    23,
+                    24,
+                    25,
+                    26,
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5135,6 +5243,16 @@
                 "ColumnId": 43,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 44,
+                "ColumnName": "CpuTimeUsBilled",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 45,
+                "ColumnName": "CpuTimeUsProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5183,7 +5301,9 @@
                     40,
                     41,
                     42,
-                    43
+                    43,
+                    44,
+                    45
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5476,6 +5596,11 @@
                 "ColumnId": 12,
                 "ColumnName": "ReadBytesProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "CpuTimeUsProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5493,7 +5618,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6894,6 +7020,11 @@
                 "ColumnId": 9,
                 "ColumnName": "ResolvedTimestampsIntervalMs",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "SchemaChanges",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6908,7 +7039,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6981,6 +7113,11 @@
                 "ColumnId": 9,
                 "ColumnName": "ResolvedTimestampsIntervalMs",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "SchemaChanges",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6995,7 +7132,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8234,6 +8372,11 @@
                 "ColumnId": 8,
                 "ColumnName": "TableSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "Round",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -8247,7 +8390,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8494,6 +8638,113 @@
                     1,
                     2,
                     3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 120,
+        "TableName": "IncrementalRestoreOperations",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Operation",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 121,
+        "TableName": "KMeansTreeClusters",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Row",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Size",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Data",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "OldSize",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

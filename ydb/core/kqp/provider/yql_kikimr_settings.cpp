@@ -67,6 +67,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpYqlCombinerMemoryLimit).Lower(0ULL).Upper(1_GB);
 
     REGISTER_SETTING(*this, KqpPushOlapProcess);
+    REGISTER_SETTING(*this, KqpForceImmediateEffectsExecution);
 
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);
@@ -82,6 +83,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
+    REGISTER_SETTING(*this, OptEnableOlapPushdownAggregate);
+    REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
@@ -89,6 +92,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
@@ -108,7 +112,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 
-    IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED;
     BlockChannelsMode = NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR;
 }
 
@@ -152,6 +155,10 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
     return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
 }
 
+bool TKikimrSettings::HasOptEnableOlapPushdownAggregate() const {
+    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) != EOptionalFlag::Disabled;
+}
+
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
     return GetOptionalFlagValue(OptEnableOlapProvideComputeSharding.Get()) == EOptionalFlag::Enabled;
 }
@@ -191,6 +198,10 @@ void TKikimrConfiguration::SetDefaultEnabledSpillingNodes(const TString& node) {
 
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
     return EnableSpillingNodes.Get().GetOrElse(DefaultEnableSpillingNodes);
+}
+
+bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
 }
 
 }

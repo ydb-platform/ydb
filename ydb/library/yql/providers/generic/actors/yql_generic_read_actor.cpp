@@ -55,7 +55,7 @@ namespace NYql::NDq {
             , TokenProvider_(std::move(tokenProvider))
             , Partitions_(std::move(partitions))
             , HolderFactory_(holderFactory)
-            , Source_(source)
+            , Source_(std::move(source))
         {
             IngressStats_.Level = statsLevel;
         }

@@ -4,6 +4,8 @@
 #include <library/cpp/resource/resource.h>
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
+#include <util/random/entropy.h>
+#include <util/random/mersenne.h>
 #include <util/random/normal.h>
 #include <util/random/random.h>
 #include <util/string/split.h>
@@ -78,6 +80,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TLogGenerator::GetSupportedWorkl
     result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk_upsert", "Bulk upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::Select), "select", "Select some agregated queries");
+    result.emplace_back(static_cast<int>(EType::Delete), "delete", "Delete random rows from table near current ts");
     return result;
 }
 
@@ -221,6 +224,81 @@ TQueryInfoList TLogGenerator::Select() const {
     return result;
 }
 
+TQueryInfoList TLogGenerator::Delete(TVector<TRow>&& rows) const {
+    std::stringstream ss;
+
+    NYdb::TParamsBuilder paramsBuilder;
+
+    ss << "--!syntax_v1" << std::endl;
+
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        ss << "DECLARE $log_id_" << row << " AS Utf8;" << std::endl;
+        ss << "DECLARE $timestamp_" << row << " AS Timestamp;" << std::endl;
+        ss << "DECLARE $level_" << row << " AS Int32;" << std::endl;
+        ss << "DECLARE $service_name_" << row << " AS Utf8;" << std::endl;
+        ss << "DECLARE $component_" << row << " AS Utf8?;" << std::endl;
+        ss << "DECLARE $message_" << row << " AS Utf8;" << std::endl;
+        ss << "DECLARE $request_id_" << row << " AS Utf8?;" << std::endl;
+        ss << "DECLARE $metadata_" << row << " AS JsonDocument?;" << std::endl;
+        ss << "DECLARE $ingested_at_" << row << " AS Timestamp?;" << std::endl;
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            ss << "DECLARE $c" << i << "_" << row << " AS " << (i < Params.IntColumnsCnt ? "Uint64" : "Utf8");
+            if (i >= Params.KeyColumnsCnt) {
+                ss << "?";
+            }
+            ss << ";" << std::endl;
+        }
+
+        const auto& r = rows[row];
+
+        paramsBuilder.AddParam("$log_id_" + ToString(row)).Utf8(r.LogId).Build();
+        paramsBuilder.AddParam("$timestamp_" + ToString(row)).Timestamp(r.Ts).Build();
+        paramsBuilder.AddParam("$level_" + ToString(row)).Int32(r.Level).Build();
+        paramsBuilder.AddParam("$service_name_" + ToString(row)).Utf8(r.ServiceName).Build();
+        paramsBuilder.AddParam("$component_" + ToString(row)).OptionalUtf8(!r.Component.empty() ? std::optional<std::string>(r.Component) : std::optional<std::string>()).Build();
+        paramsBuilder.AddParam("$message_" + ToString(row)).Utf8(r.Message).Build();
+        paramsBuilder.AddParam("$request_id_" + ToString(row)).OptionalUtf8(!r.RequestId.empty() ? std::optional<std::string>(r.RequestId) : std::optional<std::string>()).Build();
+        paramsBuilder.AddParam("$metadata_" + ToString(row)).OptionalJsonDocument(!r.Metadata.empty() ? std::optional<std::string>(r.Metadata) : std::optional<std::string>()).Build();
+        paramsBuilder.AddParam("$ingested_at_" + ToString(row)).OptionalTimestamp(r.IngestedAt != TInstant::Zero() ? std::optional<TInstant>(r.IngestedAt) : std::optional<TInstant>()).Build();
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            auto& p = paramsBuilder.AddParam(TStringBuilder() << "$c" << i << "_" << row);
+            if (i < Params.IntColumnsCnt) {
+                const auto value = r.Ints[i];
+                if (i < Params.KeyColumnsCnt) {
+                    p.Uint64(value);
+                } else {
+                    p.OptionalUint64(value ? std::optional<ui64>(value) : std::optional<ui64>());
+                }
+            } else {
+                const auto& value = r.Strings[i - Params.IntColumnsCnt];
+                if (i < Params.KeyColumnsCnt) {
+                    p.Utf8(value);
+                } else {
+                    p.OptionalUtf8(value ? std::optional<std::string>(value) : std::optional<std::string>());
+                }
+            }
+            p.Build();
+        }
+    }
+
+    ss << " DELETE FROM `" << Params.TableName << "` WHERE (log_id, timestamp, level, service_name, component, message, request_id, metadata, ingested_at";
+    for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+        ss << ", c" << i;
+    }
+    ss << ") IN " ;
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        ss << "($log_id_" << row << ", $timestamp_" << row << ", $level_" << row << ", $service_name_" << row << ", $component_" << row << ", $message_" << row << ", $request_id_" << row << ", $metadata_" << row << ", $ingested_at_" << row;
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            ss << ", $c" << i << "_" << row;
+        }
+        ss << ")";
+        if (row + 1 < Params.RowsCnt) {
+            ss << ", ";
+        }
+    }
+    return TQueryInfoList(1, TQueryInfo(ss.str(), paramsBuilder.Build()));
+}
+
 TQueryInfoList TLogGenerator::GetInitialData() {
     TQueryInfoList res;
     return res;
@@ -252,9 +330,18 @@ class TRandomLogGenerator {
         return result.str();
     }
 
+    TInstant UniformInstant(ui64 from, ui64 to) const {
+        TMersenne<ui64> rnd(Seed());
+        return TInstant::Seconds(rnd.Uniform(from, to));
+    }
+
     TInstant RandomInstant() const {
         auto result = TInstant::Now() - TDuration::Seconds(Params.TimestampSubtract);
-        i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., Params.TimestampStandardDeviationMinutes);
+        ui64 timestampStandardDeviationMinutes = 0;
+        if (Params.TimestampStandardDeviationMinutes.Defined()) {
+            timestampStandardDeviationMinutes = *Params.TimestampStandardDeviationMinutes;
+        }
+        i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., timestampStandardDeviationMinutes);
         if (millisecondsDiff >= 0) { // TDuration::MilliSeconds can't be negative for some reason...
             result += TDuration::MilliSeconds(millisecondsDiff);
         } else {
@@ -279,7 +366,7 @@ public:
         for (size_t row = 0; row < count; ++row) {
             result.emplace_back();
             result.back().LogId = CreateGuidAsString().c_str();
-            result.back().Ts = RandomInstant();
+            result.back().Ts = !!Params.TimestampDateFrom && !!Params.TimestampDateTo ? UniformInstant(*Params.TimestampDateFrom, *Params.TimestampDateTo) : RandomInstant();
             result.back().Level = RandomNumber<ui32>(10);
             result.back().ServiceName = RandomWord(false);
             result.back().Component = RandomWord(true);
@@ -355,9 +442,88 @@ TQueryInfoList TLogGenerator::GetWorkload(int type) {
             return Upsert(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
         case EType::BulkUpsert:
             return BulkUpsert(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
+        case EType::Delete:
+            return Delete(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
         case EType::Select:
             return Select();
     }
+}
+
+void TLogWorkloadParams::ConfigureOptsColumns(NLastGetopt::TOpts& opts) {
+    opts.AddLongOption("len", "String len")
+        .DefaultValue(StringLen).StoreResult(&StringLen);
+    opts.AddLongOption("int-cols", "Number of int columns")
+        .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
+    opts.AddLongOption("str-cols", "Number of string columns")
+        .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
+    opts.AddLongOption("key-cols", "Number of key columns")
+        .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
+}
+
+void TLogWorkloadParams::ConfigureOptsFillData(NLastGetopt::TOpts& opts) {
+    ConfigureOptsColumns(opts);
+    opts.AddLongOption("rows", "Number of rows to upsert")
+        .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
+    opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
+        .StoreResult(&TimestampStandardDeviationMinutes);
+    opts.AddLongOption("date-from", "Left boundary of the interval to generate "
+        "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-to' "
+        "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
+        .StoreResult(&TimestampDateFrom);
+    opts.AddLongOption("date-to", "Right boundary of the interval to generate "
+        "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-from' "
+        "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
+        .StoreResult(&TimestampDateTo);
+    opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
+        .DefaultValue(0).StoreResult(&TimestampSubtract);
+    opts.AddLongOption("null-percent", "Percent of nulls in generated data")
+        .DefaultValue(NullPercent).StoreResult(&NullPercent);
+}
+
+void TLogWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
+    bool timestampDevPassed = !!TimestampStandardDeviationMinutes;
+    const bool dateFromPassed = !!TimestampDateFrom;
+    const bool dateToPassed = !!TimestampDateTo;
+
+    switch (commandType) {
+        case TWorkloadParams::ECommandType::Init:
+            break;
+        case TWorkloadParams::ECommandType::Run:
+            switch (static_cast<TLogGenerator::EType>(workloadType)) {
+                case TLogGenerator::EType::Insert:
+                case TLogGenerator::EType::Upsert:
+                case TLogGenerator::EType::BulkUpsert:
+                    if (!timestampDevPassed && !dateFromPassed && !dateToPassed) {
+                        timestampDevPassed = true;
+                        TimestampStandardDeviationMinutes = 0;
+                    }
+
+                    if (timestampDevPassed && (dateFromPassed || dateToPassed)) {
+                        throw yexception() << "The `timestamp_deviation` and `date-from`, `date-to` are mutually exclusive and shouldn't be provided at once";
+                    }
+
+                    if ((dateFromPassed && !dateToPassed) || (!dateFromPassed && dateToPassed)) {
+                        throw yexception() << "The `date-from` and `date-to` parameters must be provided together to specify the interval for uniform PK generation";
+                    }
+
+                    if (dateFromPassed && dateToPassed && *TimestampDateFrom >= *TimestampDateTo) {
+                        throw yexception() << "Invalid interval [`date-from`, `date-to`)";
+                    }
+                    
+                    break;
+                case TLogGenerator::EType::Select:
+                case TLogGenerator::EType::Delete:
+                    break;
+            }
+            break;
+        case TWorkloadParams::ECommandType::Clean:
+            break;
+        case TWorkloadParams::ECommandType::Root:
+            break;
+        case TWorkloadParams::ECommandType::Import:
+          break;
+    }
+    return;
 }
 
 void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
@@ -379,14 +545,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
             .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
         opts.AddLongOption("auto-partition", "Enable auto partitioning by load.")
             .DefaultValue(PartitionsByLoad).StoreResult(&PartitionsByLoad);
-        opts.AddLongOption("len", "String len")
-            .DefaultValue(StringLen).StoreResult(&StringLen);
-        opts.AddLongOption("int-cols", "Number of int columns")
-            .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
-        opts.AddLongOption("str-cols", "Number of string columns")
-            .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
-        opts.AddLongOption("key-cols", "Number of key columns")
-            .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
+        ConfigureOptsColumns(opts);
         opts.AddLongOption("ttl", "TTL for timestamp column in minutes")
             .DefaultValue(TimestampTtlMinutes).StoreResult(&TimestampTtlMinutes);
         opts.AddLongOption("store", "Storage type."
@@ -408,42 +567,15 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
         case TLogGenerator::EType::Insert:
         case TLogGenerator::EType::Upsert:
         case TLogGenerator::EType::BulkUpsert:
-            opts.AddLongOption("len", "String len")
-                .DefaultValue(StringLen).StoreResult(&StringLen);
-            opts.AddLongOption("int-cols", "Number of int columns")
-                .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
-            opts.AddLongOption("str-cols", "Number of string columns")
-                .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
-            opts.AddLongOption("key-cols", "Number of key columns")
-                .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
-            opts.AddLongOption("rows", "Number of rows to upsert")
-                .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
-            opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-                .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
-            opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
-                .DefaultValue(0).StoreResult(&TimestampSubtract);
-            opts.AddLongOption("null-percent", "Percent of nulls in generated data")
-                .DefaultValue(NullPercent).StoreResult(&NullPercent);
+        case TLogGenerator::EType::Delete:
+            ConfigureOptsFillData(opts);
             break;
         case TLogGenerator::EType::Select:
         break;
         }
         break;
     case TWorkloadParams::ECommandType::Import:
-        opts.AddLongOption("len", "String len")
-            .DefaultValue(StringLen).StoreResult(&StringLen);
-        opts.AddLongOption("int-cols", "Number of int columns")
-            .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
-        opts.AddLongOption("str-cols", "Number of string columns")
-            .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
-        opts.AddLongOption("key-cols", "Number of key columns")
-            .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
-        opts.AddLongOption("rows", "Number of rows to upsert")
-            .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
-        opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-            .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
-        opts.AddLongOption("null-percent", "Percent of nulls in generated data")
-            .DefaultValue(NullPercent).StoreResult(&NullPercent);
+        ConfigureOptsFillData(opts);
         break;
     default:
         break;

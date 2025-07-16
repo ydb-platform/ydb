@@ -350,18 +350,18 @@ void DropDups(TExprNode::TListType& children) {
     }
 }
 
-void StripLikely(TExprNodeList& args, TNodeOnNodeOwnedMap& likelyArgs) {
+void StripNoPush(TExprNodeList& args, TNodeOnNodeOwnedMap& noPushArgs) {
     for (auto& arg : args) {
-        if (arg->IsCallable("Likely")) {
-            likelyArgs[arg->Child(0)] = arg;
+        if (IsNoPush(*arg)) {
+            noPushArgs[arg->Child(0)] = arg;
             arg = arg->HeadPtr();
         }
     }
 }
 
-void UnstripLikely(TExprNodeList& args, const TNodeOnNodeOwnedMap& likelyArgs) {
+void UnstripNoPush(TExprNodeList& args, const TNodeOnNodeOwnedMap& noPushArgs) {
     for (auto& arg : args) {
-        if (auto it = likelyArgs.find(arg.Get()); it != likelyArgs.end()) {
+        if (auto it = noPushArgs.find(arg.Get()); it != noPushArgs.end()) {
             arg = it->second;
         }
     }
@@ -369,11 +369,11 @@ void UnstripLikely(TExprNodeList& args, const TNodeOnNodeOwnedMap& likelyArgs) {
 
 TExprNode::TPtr OptimizeDups(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto children = node->ChildrenList();
-    TNodeOnNodeOwnedMap likelyArgs;
-    StripLikely(children, likelyArgs);
+    TNodeOnNodeOwnedMap noPushArgs;
+    StripNoPush(children, noPushArgs);
     DropDups(children);
     if (children.size() < node->ChildrenSize()) {
-        UnstripLikely(children, likelyArgs);
+        UnstripNoPush(children, noPushArgs);
         YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->ChildrenSize() - children.size() << " dups";
         return 1U == children.size() ? children.front() : ctx.ChangeChildren(*node, std::move(children));
     }
@@ -517,7 +517,7 @@ bool AllOrNoneOr(const TExprNodeList& children) {
 }
 
 TExprNodeList GetOrAndChildren(TExprNode::TPtr node, bool visitOr) {
-    if (node->IsCallable("Likely")) {
+    if (IsNoPush(*node)) {
         node = node->HeadPtr();
     }
     if (visitOr && node->IsCallable("Or") || !visitOr && node->IsCallable("And")) {
@@ -573,8 +573,8 @@ TVector<TVector<size_t>> SplitToNonIntersectingGroups(const TExprNodeList& child
 TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(node->IsCallable("And"));
     TExprNodeList children = node->ChildrenList();
-    TNodeOnNodeOwnedMap likelyPreds;
-    StripLikely(children, likelyPreds);
+    TNodeOnNodeOwnedMap noPushPreds;
+    StripNoPush(children, noPushPreds);
     if (AllOrNoneOr(children)) {
         return node;
     }
@@ -608,7 +608,7 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
                 newChildren.push_back(children[i]);
             }
         }
-        UnstripLikely(newChildren, likelyPreds);
+        UnstripNoPush(newChildren, noPushPreds);
         bool addJust = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional &&
             AllOf(newChildren, [](const auto& node) {
                 YQL_ENSURE(node->GetTypeAnn());
@@ -661,7 +661,7 @@ TExprNode::TPtr ApplyOrAbsorption(const TExprNode::TPtr& node, TExprContext& ctx
         for (auto& idx : andIndexes) {
             TExprNodeList andChildren = children[idx]->ChildrenList();
             bool haveCommonFactor = AnyOf(andChildren, [&](TExprNode::TPtr child) {
-                if (child->IsCallable("Likely")) {
+                if (IsNoPush(*child)) {
                     child = child->HeadPtr();
                 }
                 TExprNodeList orList = GetOrChildren(child);
@@ -714,13 +714,13 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
             }
             TExprNodeList commonPreds = children[group.front()]->ChildrenList();
 
-            TNodeOnNodeOwnedMap likelyPreds;
-            StripLikely(commonPreds, likelyPreds);
+            TNodeOnNodeOwnedMap noPushPreds;
+            StripNoPush(commonPreds, noPushPreds);
 
             Sort(commonPreds, ptrComparator);
             for (size_t i = 1; i < group.size() && !commonPreds.empty(); ++i) {
                 TExprNodeList curr = children[group[i]]->ChildrenList();
-                StripLikely(curr, likelyPreds);
+                StripNoPush(curr, noPushPreds);
                 Sort(curr, ptrComparator);
 
                 TExprNodeList intersected;
@@ -735,7 +735,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
                 for (const auto& c : commonPreds) {
                     commonSet.insert(c.Get());
                 }
-                UnstripLikely(commonPreds, likelyPreds);
+                UnstripNoPush(commonPreds, noPushPreds);
                 // stabilize common predicate order
                 Sort(commonPreds, [](const auto& l, const auto& r) { return CompareNodes(*l, *r) < 0; });
 
@@ -743,13 +743,15 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
                 for (auto& idx : group) {
                     auto childAnd = children[idx];
                     TExprNodeList preds = childAnd->ChildrenList();
-                    EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(p->IsCallable("Likely") ? p->Child(0) : p.Get()); });
+                    EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(IsNoPush(*p) ? p->Child(0) : p.Get()); });
                     if (!preds.empty()) {
                         newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
                     }
                 }
-                auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
-                commonPreds.push_back(restPreds);
+                if (!newGroup.empty()) {
+                    auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
+                    commonPreds.push_back(restPreds);
+                }
                 newChildren.push_back(ctx.NewCallable(node->Pos(), "And", std::move(commonPreds)));
             } else {
                 for (auto& idx : group) {
@@ -772,13 +774,13 @@ TExprNode::TPtr OptimizeOr(const TExprNode::TPtr& node, TExprContext& ctx, TOpti
         return opt;
     }
 
-    TNodeOnNodeOwnedMap likelyPreds;
+    TNodeOnNodeOwnedMap noPushPreds;
     TExprNodeList children = node->ChildrenList();
-    StripLikely(children, likelyPreds);
-    if (!likelyPreds.empty()) {
+    StripNoPush(children, noPushPreds);
+    if (!noPushPreds.empty()) {
         // Likely(A) OR B -> Likely(A OR B)
-        YQL_CLOG(DEBUG, Core) << "Or with Likely argument";
-        return ctx.NewCallable(node->Pos(), "Likely", { ctx.ChangeChildren(*node, std::move(children)) });
+        YQL_CLOG(DEBUG, Core) << "Or with NoPush argument";
+        return ctx.NewCallable(node->Pos(), "NoPush", { ctx.ChangeChildren(*node, std::move(children)) });
     }
 
     if (IsExtractCommonPredicatesFromLogicalOpsEnabled(optCtx)) {

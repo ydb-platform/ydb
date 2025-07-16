@@ -155,6 +155,17 @@ namespace NKikimr::NStorage {
         config->SetFingerprint(digest.data(), digest.size());
     }
 
+    void TDistributedConfigKeeper::UpdateBridgeFingerprint(NKikimrBridge::TClusterState *state) {
+        state->ClearFingerprint();
+
+        TString s;
+        const bool success = state->SerializeToString(&s);
+        Y_ABORT_UNLESS(success);
+
+        auto digest = NOpenSsl::NSha1::Calc(s.data(), s.size());
+        state->SetFingerprint(digest.data(), digest.size());
+    }
+
     bool TDistributedConfigKeeper::CheckFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
         return CalculateFingerprint(config) == config.GetFingerprint();
     }
@@ -274,17 +285,17 @@ namespace NKikimr::NStorage {
             for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                 if (m.HasCommittedStorageConfig()) {
                     const auto& config = m.GetCommittedStorageConfig();
-                    if (InitialConfig.GetGeneration() < config.GetGeneration()) {
-                        InitialConfig.CopyFrom(config);
-                    } else if (InitialConfig.GetGeneration() && InitialConfig.GetGeneration() == config.GetGeneration() &&
-                            InitialConfig.GetFingerprint() != config.GetFingerprint()) {
+                    if (InitialConfig->GetGeneration() < config.GetGeneration()) {
+                        InitialConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
+                    } else if (InitialConfig->GetGeneration() && InitialConfig->GetGeneration() == config.GetGeneration() &&
+                            InitialConfig->GetFingerprint() != config.GetFingerprint()) {
                         // TODO: error
                     }
                 }
                 if (m.HasProposedStorageConfig()) {
                     const auto& proposed = m.GetProposedStorageConfig();
                     // TODO: more checks
-                    if (InitialConfig.GetGeneration() < proposed.GetGeneration() && (
+                    if (InitialConfig->GetGeneration() < proposed.GetGeneration() && (
                             !ProposedStorageConfig || ProposedStorageConfig->GetGeneration() < proposed.GetGeneration())) {
                         ProposedStorageConfig.emplace(proposed);
                     }
@@ -293,8 +304,8 @@ namespace NKikimr::NStorage {
 
             // generate new list of drives to acquire
             std::vector<TString> drivesToRead;
-            if (BaseConfig.GetSelfManagementConfig().GetEnabled()) {
-                EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+            if (BaseConfig->GetSelfManagementConfig().GetEnabled()) {
+                EnumerateConfigDrives(*InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
                     drivesToRead.push_back(drive.GetPath());
                 });
                 std::sort(drivesToRead.begin(), drivesToRead.end());
@@ -304,9 +315,9 @@ namespace NKikimr::NStorage {
                 DrivesToRead = std::move(drivesToRead);
                 ReadConfig();
             } else {
-                ApplyStorageConfig(InitialConfig);
+                ApplyStorageConfig(*InitialConfig);
                 Y_ABORT_UNLESS(DirectBoundNodes.empty()); // ensure we don't have to spread this config
-                InitialConfig.Clear();
+                InitialConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
                 StorageConfigLoaded = true;
             }
         }

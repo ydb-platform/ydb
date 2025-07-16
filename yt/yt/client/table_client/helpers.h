@@ -132,6 +132,18 @@ void FromUnversionedValue(NNet::TIP6Address* value, TUnversionedValue unversione
 void ToUnversionedValue(TUnversionedValue* unversionedValue, const TError& value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
 void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue);
 
+template <NYTree::CYsonStructDerived T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+template <NYTree::CYsonStructDerived T>
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue);
+
 template <class T>
     requires TEnumTraits<T>::IsEnum
 void ToUnversionedValue(
@@ -232,6 +244,33 @@ auto ToUnversionedValues(
     const TRowBufferPtr& rowBuffer,
     Ts&&... values)
 -> std::array<TUnversionedValue, sizeof...(Ts)>;
+
+/////////////////////////////////////////////////////////////////////////////////
+
+// NB(apachee): FromUnversionedValue can handle unversioned composite value, but ToUnversionedValue always returns unversioned any value,
+// to produce unversioned composite values these helpers were introduced.
+
+template <class T>
+TUnversionedValue ToUnversionedCompositeValue(
+    T&& value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+
+template <class T>
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    const std::optional<T>& value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    NYson::TYsonStringBuf value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -395,6 +434,10 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(TUnversionedVal
 bool GetBit(TRef bitmap, i64 index);
 
 void SetBit(TMutableRef bitmap, i64 index, bool value);
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::string EscapeCAndSingleQuotes(TStringBuf str);
 
 ////////////////////////////////////////////////////////////////////////////////
 

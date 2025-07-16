@@ -15,7 +15,6 @@ class TestCompatibility(RestartToAnotherVersionFixture):
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(
             extra_feature_flags={
-                "suppress_compatibility_check": True,
                 # "enable_table_datetime64": True # uncomment for 64 datetime in tpc-h/tpc-ds
                 },
             column_shard_config={
@@ -89,8 +88,12 @@ class TestCompatibility(RestartToAnotherVersionFixture):
         upsert_and_check_sum(self, iteration_count=2, start_index=100)
         assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, 'Expected 500 rows: update 100-200 rows and added 300 rows'
 
-    @pytest.mark.parametrize("store_type", ["row", "column"])
-    def test_tpch1(self, store_type):
+    @pytest.mark.parametrize("store_type, date_args", [
+        pytest.param("row",    ["--datetime"], id="row"),
+        pytest.param("column", ["--datetime"], id="column"),
+        pytest.param("column", []            , id="column-date64")
+    ])
+    def test_tpch1(self, store_type, date_args):
         result_json_path = os.path.join(yatest.common.test_output_path(), "result.json")
         query_output_path = os.path.join(yatest.common.test_output_path(), "query_output.json")
         init_command = [
@@ -105,9 +108,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "tpch",
             "init",
             "--store={}".format(store_type),
-            "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
             "--partition-size=25",
-        ]
+        ] + date_args  # use 32 bit dates instead of 64 (not supported in 24-4)]
+
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",

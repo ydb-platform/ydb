@@ -184,6 +184,7 @@ public:
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     void Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev);
     void Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev);
+    void Handle(TEvConsole::TEvGetNodeConfigurationVersionRequest::TPtr &ev);
 
     void ReplyMonJson(TActorId mailbox);
 
@@ -233,9 +234,8 @@ public:
             IgnoreFunc(TEvConsole::TEvGetNodeConfigResponse);
             // Pretend we got this
             hFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFuncTraced(TEvConsole::TEvGetNodeConfigurationVersionRequest, Handle);
         default:
-            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
     }
@@ -1269,6 +1269,24 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &
     resp->set_config(StartupConfigYaml);
 
     Send(ev->Sender, Response.Release());
+}
+
+void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeConfigurationVersionRequest::TPtr &ev) {
+    TString versionString = "unknown";
+    if (Labels.contains("configuration_version")) {
+        const TString& versionLabel = Labels.at("configuration_version");
+        if (versionLabel == "v1" || versionLabel == "v2") {
+            versionString = versionLabel;
+        } else {
+             BLOG_W("Unexpected value for 'configuration_version' label: " << versionLabel << ". Reporting 'unknown'.");
+        }
+    }
+
+    auto response = std::make_unique<TEvConsole::TEvGetNodeConfigurationVersionResponse>();
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+    response->Record.SetVersion(versionString);
+
+    Send(ev->Sender, response.release());
 }
 
 IActor *CreateConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo) {

@@ -66,15 +66,21 @@ public:
             TEvResolvedRegistrationRequest(
                     TEvNodeBroker::TEvRegistrationRequest::TPtr request,
                     NActors::TScopeId scopeId,
-                    TSubDomainKey servicedSubDomain)
+                    TSubDomainKey servicedSubDomain,
+                    std::optional<TBridgePileId> bridgePileId,
+                    TString error)
                 : Request(request)
                 , ScopeId(scopeId)
                 , ServicedSubDomain(servicedSubDomain)
+                , BridgePileId(bridgePileId)
+                , Error(std::move(error))
             {}
 
             TEvNodeBroker::TEvRegistrationRequest::TPtr Request;
             NActors::TScopeId ScopeId;
             TSubDomainKey ServicedSubDomain;
+            std::optional<TBridgePileId> BridgePileId;
+            TString Error;
         };
 
         struct TEvProcessSubscribersQueue : public TEventLocal<TEvProcessSubscribersQueue, EvProcessSubscribersQueue> {};
@@ -138,6 +144,7 @@ private:
         TSubDomainKey ServicedSubDomain;
         ENodeState State = ENodeState::Removed;
         ui64 Version = 0;
+        std::optional<TBridgePileId> BridgePileId;
     };
 
     // State changes to apply while moving to the next epoch.
@@ -298,6 +305,8 @@ private:
     void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
     bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
 
+    void UpdateCommittedStateCounters();
+
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
@@ -350,6 +359,7 @@ private:
     THashMap<TActorId, TPipeServerInfo> PipeServers;
     THashMap<TActorId, TSubscriberInfo> Subscribers;
     TIntrusiveList<TSubscriberInfo> SubscribersQueue; // sorted by version
+    bool ScheduledProcessSubscribersQueue = false;
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;

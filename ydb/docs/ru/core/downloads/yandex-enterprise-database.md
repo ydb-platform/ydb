@@ -31,34 +31,50 @@
 || **Версия** | **Дата выпуска** | **Скачать** | **Контрольные суммы** | **Список изменений** ||
 || **v24.3** |  |  |  |  ||
 || v.24.3.13.11 | 06.03.2024 |
+
 - [Дистрибутив](https://binaries.ясубд.рф/release/24.3.13.11/yasubd-24.3.13.11-linux-amd64.tar.xz)
 - [Отладочные символы](https://binaries.ясубд.рф/release/24.3.13.11/yasubd-24.3.13.11-linux-amd64-debug.tar.xz)
+
 |
+
 - [К дистрибутиву](https://binaries.ясубд.рф/release/24.3.13.11/checksums.txt)
 - [К отладочным символам](https://binaries.ясубд.рф/release/24.3.13.11/checksums.debug.txt)
+
 | - ||
 || v.24.3.13.10 | 24.12.2024 |
+
 - [Дистрибутив](https://binaries.ясубд.рф/release/24.3.13.10/yasubd-24.3.13.10-linux-amd64.tar.xz)
 - [Отладочные символы](https://binaries.ясубд.рф/release/24.3.13.10/yasubd-24.3.13.10-linux-amd64-debug.tar.xz)
+
 |
+
 - [К дистрибутиву](https://binaries.ясубд.рф/release/24.3.13.10/checksums.txt)
 - [К отладочным символам](https://binaries.ясубд.рф/release/24.3.13.10/checksums.debug.txt)
+
 | [См. список](../changelog-server.md#24-3) ||
 || **v24.2** |  |  |  |  ||
 || v.24.2.7.1 | 20.08.2024 |
+
 - [Дистрибутив](https://binaries.ясубд.рф/release/24.2.7.1/yasubd-24.2.7.1-linux-amd64.tar.xz)
 - [Отладочные символы](https://binaries.ясубд.рф/release/24.2.7.1/yasubd-24.2.7.1-linux-amd64-debug.tar.xz)
+
 |
+
 - [К дистрибутиву](https://binaries.ясубд.рф/release/24.2.7.1/checksums.txt)
 - [К отладочным символам](https://binaries.ясубд.рф/release/24.2.7.1/checksums.debug.txt)
+
 | [См. список](../changelog-server.md#24-2) ||
 || **v24.1** |  |  |  |  ||
 || v.24.1.18.1 | 28.06.2024 |
+
 - [Дистрибутив](https://binaries.ясубд.рф/release/24.1.18.1/yasubd-24.1.18.1-linux-amd64.tar.xz)
 - [Отладочные символы](https://binaries.ясубд.рф/release/24.1.18.1/yasubd-24.1.18.1-linux-amd64-debug.tar.xz)
+
 |
+
 - [К дистрибутиву](https://binaries.ясубд.рф/release/24.1.18.1/checksums.txt)
 - [К отладочным символам](https://binaries.ясубд.рф/release/24.1.18.1/checksums.debug.txt)
+
 | [См. список](../changelog-server.md#24-1) ||
 || **v23.4** |  |  |  |  ||
 || v.23.4.11.1 | 15.05.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.4.11.1/yasubd-23.4.11.1-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.4.11.1/checksums.txt) | [См. список](../changelog-server.md#23-4) ||

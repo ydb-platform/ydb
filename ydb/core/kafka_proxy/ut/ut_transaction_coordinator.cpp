@@ -1,5 +1,6 @@
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/fwd.h>
@@ -31,7 +32,7 @@ namespace {
             }
 
             THolder<NKafka::TEvKafka::TEvSaveTxnProducerResponse> SaveTxnProducer(const TString& txnId, i64 producerId, i16 producerEpoch) {
-                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TEvKafka::TProducerInstanceId{producerId, producerEpoch});
+                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TProducerInstanceId{producerId, producerEpoch}, 5000);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
                 UNIT_ASSERT(response != nullptr);

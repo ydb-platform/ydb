@@ -3,6 +3,7 @@
 #include "config.h"
 #include "events.h"
 
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/limiter/grouped_memory/service/actor.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -13,6 +14,7 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 template <class TMemoryLimiterPolicy>
 class TServiceOperatorImpl {
 private:
+    TAtomicCounter LastProcessId = 0;
     TConfig ServiceConfig = TConfig::BuildDisabledConfig();
     std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TStageFeatures> DefaultStageFeatures =
@@ -29,6 +31,10 @@ private:
         return TMemoryLimiterPolicy::Name;
     }
 
+    static NMemory::EMemoryConsumerKind GetConsumerKind() {
+        return TMemoryLimiterPolicy::ConsumerKind;
+    }
+
 public:
     static std::shared_ptr<TStageFeatures> BuildStageFeatures(const TString& name, const ui64 limit) {
         if (!IsEnabled()) {
@@ -36,7 +42,7 @@ public:
         } else {
             AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
             return std::make_shared<TStageFeatures>(
-                name, limit, Max<ui64>(), Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
+                name, limit, std::nullopt, Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
         }
     }
 
@@ -45,20 +51,18 @@ public:
         return Singleton<TSelf>()->DefaultStageFeatures;
     }
 
-    static std::shared_ptr<TGroupGuard> BuildGroupGuard(const ui64 processId, const ui32 scopeId) {
-        static TAtomicCounter counter = 0;
+    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const std::vector<std::shared_ptr<TStageFeatures>>& stages)
+        requires(!TMemoryLimiterPolicy::ExternalProcessIdAllocation)
+    {
+        ui64 processId = Singleton<TSelf>()->LastProcessId.Inc();
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
-        return std::make_shared<TGroupGuard>(MakeServiceId(selfId.NodeId()), processId, scopeId, counter.Inc());
+        return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId, stages);
     }
 
-    static std::shared_ptr<TScopeGuard> BuildScopeGuard(const ui64 processId, const ui32 scopeId) {
-        auto& context = NActors::TActorContext::AsActorContext();
-        const NActors::TActorId& selfId = context.SelfID;
-        return std::make_shared<TScopeGuard>(MakeServiceId(selfId.NodeId()), processId, scopeId);
-    }
-
-    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
+    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages)
+        requires(TMemoryLimiterPolicy::ExternalProcessIdAllocation)
+    {
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId, stages);
@@ -89,15 +93,26 @@ public:
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals) {
         Register(config, signals);
-        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), Singleton<TSelf>()->Counters, Singleton<TSelf>()->DefaultStageFeatures);
+        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), Singleton<TSelf>()->Counters, Singleton<TSelf>()->DefaultStageFeatures, GetConsumerKind());
     }
 };
 
 class TScanMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Scan";
+    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ScanGroupedMemoryLimiter;
+    static constexpr bool ExternalProcessIdAllocation = true;
 };
 
 using TScanMemoryLimiterOperator = TServiceOperatorImpl<TScanMemoryLimiterPolicy>;
+
+class TCompMemoryLimiterPolicy {
+public:
+    static const inline TString Name = "Comp";
+    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::CompGroupedMemoryLimiter;
+    static constexpr bool ExternalProcessIdAllocation = false;
+};
+
+using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy>;
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

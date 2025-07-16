@@ -59,7 +59,7 @@ public:
         : NGenerated::TCoWorldBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
 
     TCoWorld DoBuild() {
-        auto node = this->Ctx.NewWorld(this->Pos);
+        auto node = this->Ctx_.NewWorld(this->Pos_);
         return TCoWorld(node);
     }
 };
@@ -74,18 +74,18 @@ public:
         : NGenerated::TCoArgumentBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
 
     TNodeBuilder<TParent, TCoArgument>& Name(const TStringBuf& value) {
-        this->NameHolder = this->Ctx.AppendString(value);
+        this->NameHolder_ = this->Ctx_.AppendString(value);
         return *this;
     }
 
     TCoArgument DoBuild() {
-        YQL_ENSURE(!NameHolder.empty());
-        auto node = this->Ctx.NewArgument(this->Pos, NameHolder);
+        YQL_ENSURE(!NameHolder_.empty());
+        auto node = this->Ctx_.NewArgument(this->Pos_, NameHolder_);
         return TCoArgument(node);
     }
 
 private:
-    TStringBuf NameHolder;
+    TStringBuf NameHolder_;
 };
 
 template<typename TParent>
@@ -98,19 +98,19 @@ public:
         : NGenerated::TCoAtomBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
 
     TNodeBuilder<TParent, TCoAtom>& Value(const TStringBuf& value, ui32 flags = TNodeFlags::ArbitraryContent) {
-        this->ValueHolder = this->Ctx.AppendString(value);
-        this->Flags = flags;
+        this->ValueHolder_ = this->Ctx_.AppendString(value);
+        this->Flags_ = flags;
         return *this;
     }
 
     TNodeBuilder<TParent, TCoAtom>& Value(i64 value) {
         return value >= 0 && value <= i64(std::numeric_limits<ui32>::max()) ?
-            Value(this->Ctx.GetIndexAsString(ui32(value)), TNodeFlags::Default) :
+            Value(this->Ctx_.GetIndexAsString(ui32(value)), TNodeFlags::Default) :
             Value(ToString(value), TNodeFlags::Default);
     }
 
     TCoAtom DoBuild() {
-        auto node = this->Ctx.NewAtom(this->Pos, ValueHolder, this->Flags);
+        auto node = this->Ctx_.NewAtom(this->Pos_, ValueHolder_, this->Flags_);
         return TCoAtom(node);
     }
 
@@ -119,19 +119,19 @@ public:
     }
 
     TParent& Build(const TStringBuf& value, ui32 flags = TNodeFlags::ArbitraryContent) {
-        this->ValueHolder = this->Ctx.AppendString(value);
-        this->Flags = flags;
+        this->ValueHolder_ = this->Ctx_.AppendString(value);
+        this->Flags_ = flags;
         return this->Build();
     }
 
     TParent& Build(i64 value) {
         return value >= 0 && value <= i64(std::numeric_limits<ui32>::max()) ?
-            Build(this->Ctx.GetIndexAsString(ui32(value)), TNodeFlags::Default) :
+            Build(this->Ctx_.GetIndexAsString(ui32(value)), TNodeFlags::Default) :
             Build(ToString(value), TNodeFlags::Default);
     }
 private:
-    TStringBuf ValueHolder;
-    ui32 Flags = TNodeFlags::ArbitraryContent;
+    TStringBuf ValueHolder_;
+    ui32 Flags_ = TNodeFlags::ArbitraryContent;
 };
 
 template<typename TParent>
@@ -149,13 +149,13 @@ public:
 
             return getArgFunc(argName);
         })
-        , ArgsMap(argsStore)
+        , ArgsMap_(argsStore)
         {}
 
     TNodeBuilder<TParent, TCoLambda>& Args(const TCoArgument& node) {
         Y_DEBUG_ABORT_UNLESS(!this->ArgsHolder.IsValid());
 
-        auto argsNode = this->Ctx.NewArguments(this->Pos, { node.Ptr() });
+        auto argsNode = this->Ctx_.NewArguments(this->Pos_, { node.Ptr() });
         this->ArgsHolder = TCoArguments(argsNode);
 
         return *this;
@@ -174,14 +174,14 @@ public:
 
         TExprNode::TListType argNodes;
         for (auto name : list) {
-            auto argName = this->Ctx.AppendString(name);
-            auto argNode = this->Ctx.NewArgument(this->Pos, argName);
+            auto argName = this->Ctx_.AppendString(name);
+            auto argNode = this->Ctx_.NewArgument(this->Pos_, argName);
             argNodes.push_back(argNode);
 
-            ArgsMap->emplace(argName, TExprBase(argNode));
+            ArgsMap_->emplace(argName, TExprBase(argNode));
         }
 
-        auto argsNode = this->Ctx.NewArguments(this->Pos, std::move(argNodes));
+        auto argsNode = this->Ctx_.NewArguments(this->Pos_, std::move(argNodes));
         this->ArgsHolder = TCoArguments(argsNode);
         return *this;
     }
@@ -195,7 +195,7 @@ public:
             argNodes.push_back(arg.Ptr());
         }
 
-        auto argsNode = this->Ctx.NewArguments(this->Pos, std::move(argNodes));
+        auto argsNode = this->Ctx_.NewArguments(this->Pos_, std::move(argNodes));
         this->ArgsHolder = TCoArguments(argsNode);
         return *this;
     }
@@ -204,19 +204,19 @@ public:
     {
         Y_DEBUG_ABORT_UNLESS(!this->ArgsHolder.IsValid());
 
-        auto argsNode = this->Ctx.NewArguments(this->Pos, TExprNode::TListType(list));
+        auto argsNode = this->Ctx_.NewArguments(this->Pos_, TExprNode::TListType(list));
         this->ArgsHolder = TCoArguments(argsNode);
         return *this;
     }
 
     TCoLambda DoBuild() {
-        auto node = this->Ctx.NewLambda(this->Pos, this->ArgsHolder.Cast().Ptr(), this->BodyHolder.Cast().Ptr());
+        auto node = this->Ctx_.NewLambda(this->Pos_, this->ArgsHolder.Cast().Ptr(), this->BodyHolder.Cast().Ptr());
 
         return TCoLambda(node);
     }
 
 private:
-    std::shared_ptr<TMap<TStringBuf, TExprBase>> ArgsMap;
+    std::shared_ptr<TMap<TStringBuf, TExprBase>> ArgsMap_;
 };
 
 class TExprApplier : public TExprBase {
@@ -259,11 +259,11 @@ public:
 
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc(buildFunc) {}
+        , BuildFunc_(buildFunc) {}
 
     TParent& Build() {
-        YQL_ENSURE(Body);
-        return BuildFunc(TExprApplier(Body.Cast().Ptr()));
+        YQL_ENSURE(Body_);
+        return BuildFunc_(TExprApplier(Body_.Cast().Ptr()));
     }
 
     typename TParent::ResultType Done() {
@@ -272,24 +272,24 @@ public:
     }
 
     TNodeBuilder<TParent, TExprApplier>& Apply(TCoLambda lambda) {
-        YQL_ENSURE(!Body);
+        YQL_ENSURE(!Body_);
 
-        Body = lambda.Body();
-        Args = lambda.Args();
+        Body_ = lambda.Body();
+        Args_ = lambda.Args();
 
         return *this;
     }
 
     TNodeBuilder<TParent, TExprApplier>& Apply(TExprBase node) {
-        YQL_ENSURE(!Body);
+        YQL_ENSURE(!Body_);
 
-        Body = node;
+        Body_ = node;
 
         return *this;
     }
 
     TNodeBuilder<TParent, TExprApplier>& With(TExprBase from, TExprBase to) {
-        YQL_ENSURE(Body);
+        YQL_ENSURE(Body_);
 
         DoApply(from, to);
 
@@ -297,76 +297,76 @@ public:
     }
 
     TNodeBuilder<TParent, TExprApplier>& With(ui32 argIndex, TExprBase to) {
-        YQL_ENSURE(Body);
-        YQL_ENSURE(Args);
+        YQL_ENSURE(Body_);
+        YQL_ENSURE(Args_);
 
-        DoApply(Args.Cast().Arg(argIndex), to);
+        DoApply(Args_.Cast().Arg(argIndex), to);
         return *this;
     }
 
     TNodeBuilder<TParent, TExprApplier>& With(ui32 argIndex, const TStringBuf& argName) {
-        YQL_ENSURE(Body);
-        YQL_ENSURE(Args);
+        YQL_ENSURE(Body_);
+        YQL_ENSURE(Args_);
 
-        DoApply(Args.Cast().Arg(argIndex), GetArgFunc(argName));
+        DoApply(Args_.Cast().Arg(argIndex), GetArgFunc_(argName));
 
         return *this;
     }
 
     TNodeBuilder<TParent, TExprApplier>& With(TExprBase from, const TStringBuf& argName) {
-        YQL_ENSURE(Body);
+        YQL_ENSURE(Body_);
 
-        DoApply(from, GetArgFunc(argName));
+        DoApply(from, GetArgFunc_(argName));
 
         return *this;
     }
 
     template<typename TNode>
     TNodeBuilder<TNodeBuilder<TParent, TExprApplier>, TNode> With(ui32 argIndex) {
-        YQL_ENSURE(Body);
-        YQL_ENSURE(Args);
+        YQL_ENSURE(Body_);
+        YQL_ENSURE(Args_);
 
         auto buildFunc = [argIndex, this] (const TNode& node) mutable -> TNodeBuilder<TParent, TExprApplier>& {
-            DoApply(Args.Cast().Arg(argIndex), node);
+            DoApply(Args_.Cast().Arg(argIndex), node);
             return *this;
         };
 
-        return TNodeBuilder<TNodeBuilder<TParent, TExprApplier>, TNode>(this->Ctx, this->Pos,
-            buildFunc, GetArgFunc);
+        return TNodeBuilder<TNodeBuilder<TParent, TExprApplier>, TNode>(this->Ctx_, this->Pos_,
+            buildFunc, GetArgFunc_);
     }
 
     template<typename TNode>
     TNodeBuilder<TNodeBuilder<TParent, TExprApplier>, TNode> With(TExprBase from) {
-        YQL_ENSURE(Body);
+        YQL_ENSURE(Body_);
 
         auto buildFunc = [from, this] (const TNode& node) mutable -> TNodeBuilder<TParent, TExprApplier>& {
             DoApply(from, node);
             return *this;
         };
 
-        return TNodeBuilder<TNodeBuilder<TParent, TExprApplier>, TNode>(this->Ctx, this->Pos,
-            buildFunc, GetArgFunc);
+        return TNodeBuilder<TNodeBuilder<TParent, TExprApplier>, TNode>(this->Ctx_, this->Pos_,
+            buildFunc, GetArgFunc_);
     }
 
 private:
     void DoApply(TExprBase applyFrom, TExprBase applyTo) {
-        TExprNodeBuilder builder(this->Pos, this->Ctx, [this] (const TStringBuf& argName) {
-            return GetArgFunc(argName).Ptr();
+        TExprNodeBuilder builder(this->Pos_, this->Ctx_, [this] (const TStringBuf& argName) {
+            return GetArgFunc_(argName).Ptr();
         });
 
-        auto args = Args.IsValid() ? Args.Cast().Ptr() : nullptr;
+        auto args = Args_.IsValid() ? Args_.Cast().Ptr() : nullptr;
 
-        Body = builder
-            .ApplyPartial(std::move(args), Body.Cast().Ptr())
+        Body_ = builder
+            .ApplyPartial(std::move(args), Body_.Cast().Ptr())
             .WithNode(applyFrom.Ref(), applyTo.Ptr())
             .Seal().Build();
     }
 
 private:
-    BuildFuncType BuildFunc;
+    BuildFuncType BuildFunc_;
 
-    TMaybeNode<TExprBase> Body;
-    TMaybeNode<TCoArguments> Args;
+    TMaybeNode<TExprBase> Body_;
+    TMaybeNode<TCoArguments> Args_;
 };
 
 } // namespace NNodes

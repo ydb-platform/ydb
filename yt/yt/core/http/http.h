@@ -208,7 +208,7 @@ private:
         TCompactVector<std::string, 1> Values;
     };
 
-    THashMap<TString, TEntry, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> NameToEntry_;
+    THashMap<std::string, TEntry, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> NameToEntry_;
 };
 
 DEFINE_REFCOUNTED_TYPE(THeaders)

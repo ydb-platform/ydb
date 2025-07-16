@@ -14,8 +14,4 @@ EXCLUDE_TAGS(
 
 SRC(profile.proto)
 
-ADDINCL(
-    GLOBAL contrib/libs/tcmalloc
-)
-
 END()

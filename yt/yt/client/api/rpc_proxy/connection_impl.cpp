@@ -62,18 +62,24 @@ THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const TString& env
     return ConvertTo<THashMap<std::string, std::string>>(TYsonString(envConfig));
 }
 
-void ApplyProxyUrlAliasingRules(std::string& url, const std::optional<THashMap<std::string, std::string>>& proxyUrlAliasingRules)
+void ApplyProxyUrlAliasingRules(std::string& url, const THashMap<std::string, std::string>& proxyUrlAliasingRules)
 {
     static const auto rulesFromEnv = ParseProxyUrlAliasingRules(GetEnv("YT_PROXY_URL_ALIASING_CONFIG"));
 
-    const auto& rules = proxyUrlAliasingRules.value_or(rulesFromEnv);
+    auto lookup = [&](const auto& rules) {
+        if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
+            url = ruleIt->second;
+        }
+    };
 
-    if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
-        url = ruleIt->second;
+    if (proxyUrlAliasingRules) {
+        lookup(proxyUrlAliasingRules);
+    } else if (rulesFromEnv) {
+        lookup(rulesFromEnv);
     }
 }
 
-std::string NormalizeHttpProxyUrl(std::string url, const std::optional<THashMap<std::string, std::string>>& proxyUrlAliasingRules)
+std::string NormalizeHttpProxyUrl(std::string url, const THashMap<std::string, std::string>& proxyUrlAliasingRules)
 {
     ApplyProxyUrlAliasingRules(url, proxyUrlAliasingRules);
 
@@ -352,13 +358,15 @@ void TConnection::ClearMetadataCaches()
 void TConnection::Terminate()
 {
     YT_LOG_DEBUG("Terminating connection");
-    Terminated_ = true;
+    if (Terminated_.exchange(true)) {
+        return;
+    }
     ChannelPool_->Terminate(TError("Connection terminated"));
 }
 
 bool TConnection::IsTerminated() const
 {
-    return Terminated_;
+    return Terminated_.load();
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()
@@ -395,8 +403,10 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
                     .OptionalItem("network_name", Config_->ProxyNetworkName)
                 .EndMap().ToString());
 
-        auto url = NormalizeHttpProxyUrl(*Config_->ClusterUrl) + "/api/v4/discover_proxies";
-        auto client = IsProxyUrlSecure(*Config_->ClusterUrl)
+        auto url = NormalizeHttpProxyUrl(
+            *Config_->ClusterUrl,
+            Config_->ProxyUrlAliasingRules) + "/api/v4/discover_proxies";
+        auto client = IsProxyUrlSecure(url)
             ? NHttps::CreateClient(Config_->HttpsClient, std::move(poller))
             : NHttp::CreateClient(Config_->HttpClient, std::move(poller));
         // TODO(babenko): switch to std::string

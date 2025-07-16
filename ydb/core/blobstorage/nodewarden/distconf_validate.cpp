@@ -101,7 +101,7 @@ namespace NKikimr::NStorage {
                     return "sudden group ErasureSpecies change";
                 } else if (group.RingsSize() != currentGroup.RingsSize()) {
                     return "sudden group geometry change";
-                } else if (group.GetRings(0).FailDomainsSize() != currentGroup.GetRings(0).FailDomainsSize()) {
+                } else if (group.RingsSize() && group.GetRings(0).FailDomainsSize() != currentGroup.GetRings(0).FailDomainsSize()) {
                     return "sudden group geometry change";
                 }
                 groupInfo.erase(it);
@@ -274,6 +274,14 @@ namespace NKikimr::NStorage {
                 return "GroupID field missing";
             } else if (!group.HasGroupGeneration()) {
                 return "GroupGeneration field missing";
+            } else if (group.BridgeGroupIdsSize()) {
+                // TODO(alexvru): validate against bridged configuration
+                //if (!Cfg->BridgeConfig) {
+                //    return "bridged group with bridge mode disabled";
+                //} else if (group.BridgeGroupIdsSize() != Cfg->BridgeConfig->PileSize()) {
+                //    return "incorrect number of subgroups in bridged group";
+                //}
+                continue;
             } else if (!group.HasErasureSpecies()) {
                 return "ErasureSpecies field missing";
             }

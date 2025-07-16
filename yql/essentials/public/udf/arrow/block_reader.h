@@ -341,24 +341,24 @@ template<bool Nullable>
 class TTupleBlockReader final : public TTupleBlockReaderBase<Nullable, TTupleBlockReader<Nullable>> {
 public:
     TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
-        : Children(std::move(children))
-        , Items(Children.size())
+        : Children_(std::move(children))
+        , Items_(Children_.size())
     {}
 
     TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Items[i] = Children[i]->GetItem(*data.child_data[i], index);
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            Items_[i] = Children_[i]->GetItem(*data.child_data[i], index);
         }
 
-        return TBlockItem(Items.data());
+        return TBlockItem(Items_.data());
     }
 
     TBlockItem GetChildrenScalarItems(const arrow::StructScalar& structScalar) {
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Items[i] = Children[i]->GetScalarItem(*structScalar.value[i]);
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            Items_[i] = Children_[i]->GetScalarItem(*structScalar.value[i]);
         }
 
-        return TBlockItem(Items.data());
+        return TBlockItem(Items_.data());
     }
 
     size_t GetDataWeightImpl(const TBlockItem& item) const {
@@ -374,8 +374,8 @@ public:
             items = item.GetElements();
         }
 
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            size += Children[i]->GetDataWeight(items[i]);
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            size += Children_[i]->GetDataWeight(items[i]);
         }
 
         return size;
@@ -383,8 +383,8 @@ public:
 
     size_t GetChildrenDataWeight(const arrow::ArrayData& data) const {
         size_t size = 0;
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            size += Children[i]->GetDataWeight(*data.child_data[i]);
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            size += Children_[i]->GetDataWeight(*data.child_data[i]);
         }
 
         return size;
@@ -392,35 +392,35 @@ public:
 
     size_t GetChildrenDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const {
         size_t size = 0;
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            size += Children[i]->GetSliceDataWeight(*data.child_data[i], offset, length);
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            size += Children_[i]->GetSliceDataWeight(*data.child_data[i], offset, length);
         }
         return size;
     }
 
     size_t GetChildrenDefaultDataWeight() const {
         size_t size = 0;
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            size += Children[i]->GetDefaultValueWeight();
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            size += Children_[i]->GetDefaultValueWeight();
         }
         return size;
     }
 
     void SaveChildrenItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Children[i]->SaveItem(*data.child_data[i], index, out);
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            Children_[i]->SaveItem(*data.child_data[i], index, out);
         }
     }
 
     void SaveChildrenScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Children[i]->SaveScalarItem(*structScalar.value[i], out);
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            Children_[i]->SaveScalarItem(*structScalar.value[i], out);
         }
     }
 
 private:
-    const TVector<std::unique_ptr<IBlockReader>> Children;
-    TVector<TBlockItem> Items;
+    const TVector<std::unique_ptr<IBlockReader>> Children_;
+    TVector<TBlockItem> Items_;
 };
 
 template<typename TTzDate, bool Nullable>
@@ -541,7 +541,7 @@ public:
 class TExternalOptionalBlockReader final : public TBlockReaderBase {
 public:
     TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
-        : Inner(std::move(inner))
+        : Inner_(std::move(inner))
     {}
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
@@ -549,7 +549,7 @@ public:
             return {};
         }
 
-        return Inner->GetItem(*data.child_data.front(), index).MakeOptional();
+        return Inner_->GetItem(*data.child_data.front(), index).MakeOptional();
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
@@ -558,26 +558,26 @@ public:
         }
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-        return Inner->GetScalarItem(*structScalar.value.front()).MakeOptional();
+        return Inner_->GetScalarItem(*structScalar.value.front()).MakeOptional();
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
-        return GetBitmaskDataWeight(data.length) + Inner->GetDataWeight(*data.child_data.front());
+        return GetBitmaskDataWeight(data.length) + Inner_->GetDataWeight(*data.child_data.front());
     }
 
     ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
-        return GetBitmaskDataWeight(length) + Inner->GetSliceDataWeight(*data.child_data.front(), offset, length);
+        return GetBitmaskDataWeight(length) + Inner_->GetSliceDataWeight(*data.child_data.front(), offset, length);
     }
 
     ui64 GetDataWeight(TBlockItem item) const final {
         if (!item) {
             return GetDefaultValueWeight();
         }
-        return 1 + Inner->GetDataWeight(item.GetOptionalValue());
+        return 1 + Inner_->GetDataWeight(item.GetOptionalValue());
     }
 
     ui64 GetDefaultValueWeight() const final {
-        return 1 + Inner->GetDefaultValueWeight();
+        return 1 + Inner_->GetDefaultValueWeight();
     }
 
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
@@ -586,7 +586,7 @@ public:
         }
         out.PushChar(1);
 
-        Inner->SaveItem(*data.child_data.front(), index, out);
+        Inner_->SaveItem(*data.child_data.front(), index, out);
     }
 
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
@@ -596,11 +596,11 @@ public:
         out.PushChar(1);
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-        Inner->SaveScalarItem(*structScalar.value.front(), out);
+        Inner_->SaveScalarItem(*structScalar.value.front(), out);
     }
 
 private:
-    const std::unique_ptr<IBlockReader> Inner;
+    const std::unique_ptr<IBlockReader> Inner_;
 };
 
 struct TReaderTraits {

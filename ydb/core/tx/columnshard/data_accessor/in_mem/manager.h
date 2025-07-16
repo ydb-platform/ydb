@@ -6,7 +6,6 @@
 namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
 class TManager: public IMetadataMemoryManager {
 private:
-    virtual std::unique_ptr<IGranuleDataAccessor> DoBuildCollector(const TInternalPathId pathId) override;
 
     virtual std::shared_ptr<ITxReader> DoBuildLoader(
         const TVersionedIndex& versionedIndex, TGranuleMeta* granule, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;

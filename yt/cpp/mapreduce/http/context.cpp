@@ -15,7 +15,8 @@ bool operator==(const TClientContext& lhs, const TClientContext& rhs)
            lhs.TvmOnly == rhs.TvmOnly &&
            lhs.ProxyAddress == rhs.ProxyAddress &&
            lhs.RpcProxyRole == rhs.RpcProxyRole &&
-           lhs.UseProxyUnixDomainSocket == rhs.UseProxyUnixDomainSocket;
+           lhs.JobProxySocketPath == rhs.JobProxySocketPath &&
+           lhs.MultiproxyTargetCluster == rhs.MultiproxyTargetCluster;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

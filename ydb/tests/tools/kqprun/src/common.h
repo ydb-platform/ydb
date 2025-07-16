@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
@@ -33,6 +34,7 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
         Max
     };
 
+    ui32 DcCount = 1;
     std::map<TString, TStorageMeta::TTenant> Tenants;
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
@@ -86,6 +88,7 @@ struct TRequestOptions {
     TDuration Timeout;
     size_t QueryId = 0;
     std::unordered_map<TString, Ydb::TypedValue> Params;
+    std::optional<TVector<NACLib::TSID>> GroupSIDs = std::nullopt;
 };
 
 }  // namespace NKqpRun

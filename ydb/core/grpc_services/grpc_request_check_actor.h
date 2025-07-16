@@ -39,11 +39,14 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
     }
 }
 
-inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev, const TVector<std::pair<TString, TString>>& rootAttributes) {
+inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
     const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
     const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
-    const bool needClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
-                                AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0;
+    const bool needClusterAccessResourceCheck =
+                                AppData()->DomainsConfig.GetSecurityConfig().DatabaseAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().AdministrationAllowedSIDsSize() > 0;
 
     if (!isBearerToken || !useAccessService || !needClusterAccessResourceCheck) {
         return {};
@@ -56,7 +59,25 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAnd
             {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
         };
         return entries;
-    } else if (accessServiceType == "Nebius_v1") {
+    } else {
+        return {};
+    }
+}
+
+inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForClusterAccessCheck(const TVector<std::pair<TString, TString>>& rootAttributes) {
+    const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
+    const bool needClusterAccessResourceCheck =
+                                AppData()->DomainsConfig.GetSecurityConfig().DatabaseAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().AdministrationAllowedSIDsSize() > 0;
+
+    if (!useAccessService || !needClusterAccessResourceCheck) {
+        return {};
+    }
+
+    const TString& accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
+    if (accessServiceType == "Nebius_v1") {
         static const auto permissions = NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({
             "ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"
         });
@@ -68,7 +89,7 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAnd
             return {};
         }
         return {
-            {permissions, {{"gizmo_id", it->second}}}
+            {permissions, {{"folder_id", it->second}}}
         };
     } else {
         return {};
@@ -124,9 +145,12 @@ public:
         }
 
         if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
-            const auto& e = GetEntriesForAuthAndCheckRequest(Request_, rootAttributes);
-            entries.insert(entries.end(), e.begin(), e.end());
+            TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> authCheckRequestEntries = GetEntriesForAuthAndCheckRequest(Request_);
+            entries.insert(entries.end(), authCheckRequestEntries.begin(), authCheckRequestEntries.end());
         }
+
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> clusterAccessCheckEntries = GetEntriesForClusterAccessCheck(rootAttributes);
+        entries.insert(entries.end(), clusterAccessCheckEntries.begin(), clusterAccessCheckEntries.end());
 
         if (!entries.empty()) {
             SetEntries(entries);

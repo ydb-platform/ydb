@@ -150,6 +150,13 @@ void TGetJobStderrCommand::Register(TRegistrar registrar)
             return command->Options.Offset;
         })
         .Optional(/*init*/ true);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EJobStderrType>>(
+        "type",
+        [] (TThis* command) -> auto& {
+            return command->Options.Type;
+        })
+        .Optional(/*init*/ true);
 }
 
 bool TGetJobStderrCommand::HasResponseParameters() const
@@ -178,32 +185,32 @@ void TGetJobTraceCommand::Register(TRegistrar registrar)
 {
     registrar.ParameterWithUniversalAccessor<std::optional<TJobId>>(
         "job_id",
-        [] (TThis* command) -> auto& {return command->Options.JobId; })
+        [] (TThis* command) -> auto& { return command->Options.JobId; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<TJobTraceId>>(
         "trace_id",
-        [] (TThis* command) -> auto& {return command->Options.TraceId; })
+        [] (TThis* command) -> auto& { return command->Options.TraceId; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
         "from_event_index",
-        [] (TThis* command) -> auto& {return command->Options.FromEventIndex; })
+        [] (TThis* command) -> auto& { return command->Options.FromEventIndex; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
         "to_event_index",
-        [] (TThis* command) -> auto& {return command->Options.ToEventIndex; })
+        [] (TThis* command) -> auto& { return command->Options.ToEventIndex; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
         "from_time",
-        [] (TThis* command) -> auto& {return command->Options.FromTime; })
+        [] (TThis* command) -> auto& { return command->Options.FromTime; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
         "to_time",
-        [] (TThis* command) -> auto& {return command->Options.ToTime; })
+        [] (TThis* command) -> auto& { return command->Options.ToTime; })
         .Optional(/*init*/ false);
 }
 
@@ -233,6 +240,30 @@ void TGetJobFailContextCommand::DoExecute(ICommandContextPtr context)
     auto output = context->Request().OutputStream;
     WaitFor(output->Write(result))
         .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TListOperationEventsCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<EOperationEventType>>(
+        "event_type",
+        [] (TThis* command) -> auto& {return command->Options.EventType; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "limit",
+        [] (TThis* command) -> auto& {return command->Options.Limit; })
+        .Optional(/*init*/ false);
+}
+
+void TListOperationEventsCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->ListOperationEvents(OperationIdOrAlias, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .List(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -267,7 +298,7 @@ void TListOperationsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "user",
         [] (TThis* command) -> auto& {
             return command->Options.UserFilter;
@@ -450,34 +481,34 @@ void TListJobsCommand::Register(TRegistrar registrar)
 {
     registrar.ParameterWithUniversalAccessor<std::optional<EJobType>>(
         "type",
-        [] (TThis* command) -> auto& {return command->Options.Type; })
+        [] (TThis* command) -> auto& { return command->Options.Type; })
         .Alias("job_type")
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<EJobState>>(
         "state",
-        [] (TThis* command) -> auto& {return command->Options.State; })
+        [] (TThis* command) -> auto& { return command->Options.State; })
         .Alias("job_state")
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "address",
-        [] (TThis* command) -> auto& {return command->Options.Address; })
+        [] (TThis* command) -> auto& { return command->Options.Address; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
         "with_stderr",
-        [] (TThis* command) -> auto& {return command->Options.WithStderr; })
+        [] (TThis* command) -> auto& { return command->Options.WithStderr; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
         "with_spec",
-        [] (TThis* command) -> auto& {return command->Options.WithSpec; })
+        [] (TThis* command) -> auto& { return command->Options.WithSpec; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
         "with_fail_context",
-        [] (TThis* command) -> auto& {return command->Options.WithFailContext; })
+        [] (TThis* command) -> auto& { return command->Options.WithFailContext; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<bool>>(

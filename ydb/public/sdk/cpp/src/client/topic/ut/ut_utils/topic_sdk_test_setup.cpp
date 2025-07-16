@@ -1,72 +1,45 @@
 #include "topic_sdk_test_setup.h"
 
-using namespace NYdb;
-using namespace NYdb::NTopic;
-using namespace NYdb::NTopic::NTests;
 
-TTopicSdkTestSetup::TTopicSdkTestSetup(const TString& testCaseName, const NKikimr::Tests::TServerSettings& settings, bool createTopic)
-    : Database("/Root")
-    , Server(settings, false)
+using namespace std::chrono_literals;
+
+namespace NYdb::inline Dev::NTopic::NTests {
+
+TTopicSdkTestSetup::TTopicSdkTestSetup(const std::string& testCaseName, const NKikimr::Tests::TServerSettings& settings, bool createTopic)
+    : Database_("/Root")
+    , Server_(settings, false)
 {
-    Log.SetFormatter([testCaseName](ELogPriority priority, TStringBuf message) {
+    Log_.SetFormatter([testCaseName](ELogPriority priority, TStringBuf message) {
         return TStringBuilder() << TInstant::Now() << " :" << testCaseName << " " << priority << ": " << message << Endl;
     });
 
-    Server.StartServer(true, GetDatabase());
+    Server_.StartServer(true, GetDatabase());
 
-    Log << "TTopicSdkTestSetup started";
+    Log_ << "TTopicSdkTestSetup started";
 
     if (createTopic) {
         CreateTopic();
-        Log << "Topic created";
+        Log_ << "Topic created";
     }
 }
 
-void TTopicSdkTestSetup::CreateTopicWithAutoscale(const std::string& path, const std::string& consumer, size_t partitionCount, size_t maxPartitionCount) {
-    CreateTopic(path, consumer, partitionCount, maxPartitionCount);
+void TTopicSdkTestSetup::CreateTopicWithAutoscale(const std::string& name,
+                                                  const std::string& consumer,
+                                                  std::size_t partitionCount,
+                                                  std::size_t maxPartitionCount) {
+    CreateTopic(name, consumer, partitionCount, maxPartitionCount);
 }
 
-void TTopicSdkTestSetup::CreateTopic(const std::string& path, const std::string& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount)
+void TTopicSdkTestSetup::CreateTopic(const std::string& name, const std::string& consumer,
+                                     std::size_t partitionCount, std::optional<std::size_t> maxPartitionCount,
+                                     const TDuration retention, bool important)
 {
-    TTopicClient client(MakeDriver());
+    ITopicTestSetup::CreateTopic(name, consumer, partitionCount, maxPartitionCount, retention, important);
 
-    TCreateTopicSettings topics;
-    topics
-        .BeginConfigurePartitioningSettings()
-        .MinActivePartitions(partitionCount)
-        .MaxActivePartitions(maxPartitionCount.value_or(partitionCount));
-
-    if (maxPartitionCount.has_value() && maxPartitionCount.value() > partitionCount) {
-        topics
-            .BeginConfigurePartitioningSettings()
-            .BeginConfigureAutoPartitioningSettings()
-            .Strategy(EAutoPartitioningStrategy::ScaleUp);
-    }
-
-    TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
-    topics.AppendConsumers(consumers);
-
-    auto status = client.CreateTopic(path, topics).GetValueSync();
-    UNIT_ASSERT(status.IsSuccess());
-
-    Server.WaitInit(TString{path});
+    Server_.WaitInit(GetTopicPath());
 }
 
-TTopicDescription TTopicSdkTestSetup::DescribeTopic(const std::string& path)
-{
-    TTopicClient client(MakeDriver());
-
-    TDescribeTopicSettings settings;
-    settings.IncludeStats(true);
-    settings.IncludeLocation(true);
-
-    auto status = client.DescribeTopic(path, settings).GetValueSync();
-    UNIT_ASSERT(status.IsSuccess());
-
-    return status.GetTopicDescription();
-}
-
-TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& path, const std::string& consumer)
+TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& name, const std::string& consumer)
 {
     TTopicClient client(MakeDriver());
 
@@ -74,17 +47,19 @@ TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& pat
     settings.IncludeStats(true);
     settings.IncludeLocation(true);
 
-    auto status = client.DescribeConsumer(path, consumer, settings).GetValueSync();
+    auto status = client.DescribeConsumer(GetTopicPath(name), GetConsumerName(consumer), settings).GetValueSync();
     UNIT_ASSERT(status.IsSuccess());
 
     return status.GetConsumerDescription();
 }
 
-void TTopicSdkTestSetup::Write(const std::string& message, ui32 partitionId, const std::optional<std::string> producer, std::optional<ui64> seqNo) {
+void TTopicSdkTestSetup::Write(const std::string& message, std::uint32_t partitionId,
+                               const std::optional<std::string> producer,
+                               std::optional<std::uint64_t> seqNo) {
     TTopicClient client(MakeDriver());
 
     TWriteSessionSettings settings;
-    settings.Path(TEST_TOPIC);
+    settings.Path(GetTopicPath());
     settings.PartitionId(partitionId);
     settings.DeduplicationEnabled(producer.has_value());
     if (producer) {
@@ -98,7 +73,7 @@ void TTopicSdkTestSetup::Write(const std::string& message, ui32 partitionId, con
     session->Close(TDuration::Seconds(5));
 }
 
-TTopicSdkTestSetup::ReadResult TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer,
+TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer,
     std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler,
     std::optional<size_t> partition, const TDuration timeout) {
     TTopicClient client(MakeDriver());
@@ -108,16 +83,16 @@ TTopicSdkTestSetup::ReadResult TTopicSdkTestSetup::Read(const std::string& topic
         topicSettings.AppendPartitionIds(partition.value());
     }
 
-    auto settins = TReadSessionSettings()
+    auto settings = TReadSessionSettings()
         .AutoPartitioningSupport(true)
         .AppendTopics(topicSettings)
         .ConsumerName(consumer);
 
-    auto reader = client.CreateReadSession(settins);
+    auto reader = client.CreateReadSession(settings);
 
     TInstant deadlineTime = TInstant::Now() + timeout;
 
-    ReadResult result;
+    TReadResult result;
     result.Reader = reader;
 
     bool continueFlag = true;
@@ -152,7 +127,7 @@ TTopicSdkTestSetup::ReadResult TTopicSdkTestSetup::Read(const std::string& topic
             }
         }
 
-        Sleep(TDuration::MilliSeconds(250));
+        std::this_thread::sleep_for(250ms);
     }
 
     result.Timeout = continueFlag;
@@ -168,32 +143,40 @@ TStatus TTopicSdkTestSetup::Commit(const std::string& path, const std::string& c
 }
 
 
-TString TTopicSdkTestSetup::GetEndpoint() const {
-    return "localhost:" + ToString(Server.GrpcPort);
+std::string TTopicSdkTestSetup::GetEndpoint() const {
+    return "localhost:" + std::to_string(Server_.GrpcPort);
 }
 
-TString TTopicSdkTestSetup::GetTopicPath(const TString& name) const {
-    return GetTopicParent() + "/" + name;
+std::string TTopicSdkTestSetup::GetDatabase() const {
+    return Database_;
 }
 
-TString TTopicSdkTestSetup::GetTopicParent() const {
-    return GetDatabase();
+std::string TTopicSdkTestSetup::GetFullTopicPath() const {
+    return GetDatabase() + "/" + GetTopicPath();
 }
 
-TString TTopicSdkTestSetup::GetDatabase() const {
-    return Database;
+std::vector<std::uint32_t> TTopicSdkTestSetup::GetNodeIds() {
+    std::vector<std::uint32_t> nodeIds;
+    for (std::uint32_t i = 0; i < Server_.GetRuntime()->GetNodeCount(); ++i) {
+        nodeIds.push_back(Server_.GetRuntime()->GetNodeId(i));
+    }
+    return nodeIds;
+}
+
+std::uint16_t TTopicSdkTestSetup::GetPort() const {
+    return Server_.GrpcPort;
 }
 
 ::NPersQueue::TTestServer& TTopicSdkTestSetup::GetServer() {
-    return Server;
+    return Server_;
 }
 
 NActors::TTestActorRuntime& TTopicSdkTestSetup::GetRuntime() {
-    return *Server.CleverServer->GetRuntime();
+    return *Server_.CleverServer->GetRuntime();
 }
 
 TLog& TTopicSdkTestSetup::GetLog() {
-    return Log;
+    return Log_;
 }
 
 TDriverConfig TTopicSdkTestSetup::MakeDriverConfig() const
@@ -227,15 +210,6 @@ NKikimr::Tests::TServerSettings TTopicSdkTestSetup::MakeServerSettings()
     return settings;
 }
 
-TDriver TTopicSdkTestSetup::MakeDriver() const {
-    return MakeDriver(MakeDriverConfig());
-}
-
-TDriver TTopicSdkTestSetup::MakeDriver(const TDriverConfig& config) const
-{
-    return TDriver(config);
-}
-
 TTopicClient TTopicSdkTestSetup::MakeClient() const
 {
     return TTopicClient(MakeDriver());
@@ -245,4 +219,6 @@ NYdb::NTable::TTableClient TTopicSdkTestSetup::MakeTableClient() const
 {
     return NYdb::NTable::TTableClient(MakeDriver(), NYdb::NTable::TClientSettings()
             .UseQueryCache(false));
+}
+
 }

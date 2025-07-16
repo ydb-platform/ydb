@@ -4,9 +4,9 @@ PY3_PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(1.9.3)
+VERSION(1.9.4)
 
-ORIGINAL_SOURCE(https://github.com/google/benchmark/archive/v1.9.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/benchmark/archive/v1.9.4.tar.gz)
 
 LICENSE(Apache-2.0)
 

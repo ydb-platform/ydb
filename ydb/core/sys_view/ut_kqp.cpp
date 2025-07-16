@@ -425,7 +425,7 @@ private:
         TResultSetParser parser(resultSet);
         UNIT_ASSERT(parser.TryNextRow());
 
-        TString statement = "";
+        TString createQuery = "";
 
         for (const auto& column : columnsMeta) {
             TValueParser parserValue(parser.GetValue(column.Name));
@@ -437,15 +437,15 @@ private:
             } else if (column.Name == "PathType") {
                 auto actualType = to_upper(TString(value));
                 UNIT_ASSERT_VALUES_EQUAL(actualType, type);
-            } else if (column.Name == "Statement") {
-                statement = value;
+            } else if (column.Name == "CreateQuery") {
+                createQuery = value;
             } else {
                 UNIT_FAIL("Invalid column name: " << column.Name);
             }
         }
-        UNIT_ASSERT(statement);
+        UNIT_ASSERT(createQuery);
 
-        return statement;
+        return createQuery;
     }
 
     std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
@@ -648,7 +648,16 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(PartitionStatsOneSchemeShard) {
         TTestEnv env;
-        CreateTenantsAndTables(env, false);
+        CreateTenantsAndTables(env, true);
+        auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Table0");
+        const auto table0PathId = describeResult.GetPathId();
+
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Tenant1/Table1");
+        const auto table1PathId = describeResult.GetPathId();
+
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Tenant2/Table2");
+        const auto table2PathId = describeResult.GetPathId();
+
         TTableClient client(env.GetDriver());
         {
             auto it = client.StreamExecuteScanQuery(R"(
@@ -657,9 +666,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-            NKqp::CompareYson(R"([
-                [[4u];[0u];["/Root/Table0"]]
-            ])", NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Table0"]]
+            ])", table0PathId), NKqp::StreamResultToYson(it));
         }
         {
             auto it = client.StreamExecuteScanQuery(R"(
@@ -668,9 +677,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-            NKqp::CompareYson(R"([
-                [[9u];[0u];["/Root/Tenant1/Table1"]]
-            ])", NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Tenant1/Table1"]]
+            ])", table1PathId), NKqp::StreamResultToYson(it));
         }
         {
             auto it = client.StreamExecuteScanQuery(R"(
@@ -679,15 +688,23 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-            NKqp::CompareYson(R"([
-                [[10u];[0u];["/Root/Tenant2/Table2"]]
-            ])", NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Tenant2/Table2"]]
+            ])", table2PathId), NKqp::StreamResultToYson(it));
         }
     }
 
     Y_UNIT_TEST(PartitionStatsOneSchemeShardDataQuery) {
         TTestEnv env;
-        CreateTenantsAndTables(env, false);
+        CreateTenantsAndTables(env, true);
+        auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Table0");
+        const auto table0PathId = describeResult.GetPathId();
+
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Tenant1/Table1");
+        const auto table1PathId = describeResult.GetPathId();
+
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Tenant2/Table2");
+        const auto table2PathId = describeResult.GetPathId();
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
 
@@ -699,9 +716,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            NKqp::CompareYson(R"([
-                [[4u];[0u];["/Root/Table0"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Table0"]]
+            ])", table0PathId), FormatResultSetYson(result.GetResultSet(0)));
         }
         {
             auto result = session.ExecuteDataQuery(R"(
@@ -709,9 +726,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT(result.IsSuccess());
-            NKqp::CompareYson(R"([
-                [[9u];[0u];["/Root/Tenant1/Table1"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Tenant1/Table1"]]
+            ])", table1PathId), FormatResultSetYson(result.GetResultSet(0)));
         }
         {
             auto result = session.ExecuteDataQuery(R"(
@@ -719,9 +736,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT(result.IsSuccess());
-            NKqp::CompareYson(R"([
-                [[10u];[0u];["/Root/Tenant2/Table2"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Tenant2/Table2"]]
+            ])", table2PathId), FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -1739,6 +1756,27 @@ ALTER TABLE `test_show_create`
 
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
+                Key String,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` String,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
@@ -2022,6 +2060,208 @@ ALTER TABLE `test_show_create`
 ALTER TABLE `test_show_create`
     ALTER INDEX `Index3` SET (AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3500)
 ;
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumnAlterColumn) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                Col3 Uint32,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `ENCODING.DICTIONARY.ENABLED`=`true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Col1` Uint64 NOT NULL,
+    `Col2` JsonDocument,
+    `Col3` Uint32,
+    PRIMARY KEY (`Col1`)
+)
+PARTITION BY HASH (`Col1`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`, `SERIALIZER.CLASS_NAME` = `ARROW_SERIALIZER`, `COMPRESSION.TYPE` = `zstd`, `COMPRESSION.LEVEL` = `4`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumnUpsertOptions) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                `COMPACTION_PLANNER.FEATURES`=`{"levels" : [{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2},
+                                {"class_name" : "Zero"}]}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
+                    `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Col1` Uint64 NOT NULL,
+    `Col2` JsonDocument,
+    PRIMARY KEY (`Col1`)
+)
+PARTITION BY HASH (`Col1`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumnUpsertIndex) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 Uint32 NOT NULL,
+                Col3 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=count_min_sketch_index, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Col2']}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col3", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
+                           "records_count" : 1024, "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
+            ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
+                    FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
+            ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_index, TYPE=MAX, FEATURES=`{"column_name": "Col2"}`);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Col1` Uint64 NOT NULL,
+    `Col2` Uint32 NOT NULL,
+    `Col3` JsonDocument,
+    PRIMARY KEY (`Col1`)
+)
+PARTITION BY HASH (`Col1`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"bits_storage_type":"SIMPLE_STRING","records_count":1024,"case_sensitive":false,"ngramm_size":3,"filter_size_bytes":4096,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"\\\"b.c.d\\\""},"hashes_count":2,"column_name":"Col3"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"BITSET","column_name":"Col2"}`);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumnAlterObject) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 Uint32 NOT NULL,
+                Col3 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=count_min_sketch_index, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Col2']}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
+                           "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "a"}}`);
+            ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01}`);
+            ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_index, TYPE=MAX, FEATURES=`{"column_name": "Col2"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                `COMPACTION_PLANNER.FEATURES`=`{"levels" : [{"class_name" : "Zero", "portions_live_duration" : "180s", "expected_blobs_size" : 2048000},
+                               {"class_name" : "Zero", "expected_blobs_size" : 2048000}, {"class_name" : "Zero"}]}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
+                    `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `ENCODING.DICTIONARY.ENABLED`=`true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DEFAULT_VALUE`=`100`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`lz4`);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Col1` Uint64 NOT NULL,
+    `Col2` Uint32 NOT NULL,
+    `Col3` JsonDocument,
+    PRIMARY KEY (`Col1`)
+)
+PARTITION BY HASH (`Col1`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DEFAULT_VALUE` = `100`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`, `SERIALIZER.CLASS_NAME` = `ARROW_SERIALIZER`, `COMPRESSION.TYPE` = `lz4`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"bits_storage_type":"SIMPLE_STRING","records_count":1024,"case_sensitive":true,"ngramm_size":3,"filter_size_bytes":4096,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"a"},"hashes_count":2,"column_name":"Col2"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"SIMPLE_STRING","column_name":"Col2"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_live_duration":"180.000000s","class_name":"Zero","expected_blobs_size":2048000},{"class_name":"Zero","expected_blobs_size":2048000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
 )"
         );
     }
@@ -2434,6 +2674,8 @@ ALTER TABLE `test_show_create`
 
         TTestEnv env;
         CreateRootTable(env);
+        const auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Table0");
+        const auto tablePathId = describeResult.GetPathId();
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -2504,7 +2746,7 @@ ALTER TABLE `test_show_create`
         check.Uint64(72057594046644480ull); // OwnerId
         check.Uint64(0u); // PartIdx
         check.String("/Root/Table0"); // Path
-        check.Uint64(2u); // PathId
+        check.Uint64(tablePathId); // PathId
         check.Uint64(0u); // RangeReadRows
         check.Uint64(0u); // RangeReads
         check.Uint64(1u); // RowCount
@@ -2752,7 +2994,9 @@ ALTER TABLE `test_show_create`
                     PutTabletLogLatency,
                     PutUserDataLatency,
                     StoragePoolId,
-                    LayoutCorrect
+                    LayoutCorrect,
+                    OperatingStatus,
+                    ExpectedStatus
                 FROM `/Root/.sys/ds_groups` WHERE GroupId >= 0x80000000;
             )").GetValueSync();
 
@@ -2768,7 +3012,7 @@ ALTER TABLE `test_show_create`
             }
         }
 
-        TYsonFieldChecker check(ysonString, 13);
+        TYsonFieldChecker check(ysonString, 15);
 
         check.Uint64(0u); // AllocatedSize
         check.Uint64GreaterOrEquals(0u); // AvailableSize
@@ -2783,6 +3027,8 @@ ALTER TABLE `test_show_create`
         check.Null(); // PutUserDataLatency
         check.Uint64(2u); // StoragePoolId
         check.Bool(true); // LayoutCorrect
+        check.String("DISINTEGRATED"); // OperatingStatus
+        check.String("DISINTEGRATED"); // ExpectedStatus
     }
 
     Y_UNIT_TEST(StoragePoolsFields) {
@@ -3298,8 +3544,8 @@ ALTER TABLE `test_show_create`
         check.Uint64(0); // IndexSize
     }
 
-    Y_UNIT_TEST(Describe) {
-        TTestEnv env;
+    Y_UNIT_TEST_TWIN(Describe, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
         CreateRootTable(env);
 
         TTableClient client(env.GetDriver());
@@ -3336,7 +3582,12 @@ ALTER TABLE `test_show_create`
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
+
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
+            }
         }
         {
             auto result = schemeClient.ListDirectory("/Root/.sys/partition_stats").GetValueSync();
@@ -3344,12 +3595,23 @@ ALTER TABLE `test_show_create`
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
+            }
         }
     }
 
-    Y_UNIT_TEST(SystemViewFailOps) {
-        TTestEnv env;
+    Y_UNIT_TEST_TWIN(SystemViewFailOps, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+
+        // Make AdministrationAllowedSIDs non-empty to deny anonymous user cluster admin privilege.
+        // All requests here are made anonymously, effectively making all requests run with admin rights.
+        // That can cause side effects, especially when dealing with system reserved names.
+        // Using an authorized non-admin user helps avoid these side effects.
+        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("thou-shalt-not-pass");
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -3406,10 +3668,13 @@ ALTER TABLE `test_show_create`
         }
 
         TSchemeClient schemeClient(env.GetDriver());
-
         {
             auto result = schemeClient.MakeDirectory("/Root/.sys").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            }
             result.GetIssues().PrintTo(Cerr);
         }
         {
@@ -3424,20 +3689,28 @@ ALTER TABLE `test_show_create`
         }
         {
             auto result = schemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            }
             result.GetIssues().PrintTo(Cerr);
         }
         {
             TModifyPermissionsSettings settings;
             auto result = schemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            if (EnableRealSystemViewPaths) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            }
             result.GetIssues().PrintTo(Cerr);
         }
     }
 
-    Y_UNIT_TEST(DescribeSystemFolder) {
-        TTestEnv env;
-        CreateTenantsAndTables(env, false);
+    Y_UNIT_TEST_TWIN(DescribeSystemFolder, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+        CreateTenantsAndTables(env, true);
 
         TSchemeClient schemeClient(env.GetDriver());
         {
@@ -3449,25 +3722,27 @@ ALTER TABLE `test_show_create`
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
+            SortBy(children, [](const auto& entry) { return entry.Name; });
             UNIT_ASSERT_VALUES_EQUAL(children.size(), 5);
             UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, ".metadata");
-            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, "Table0");
-            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Tenant1");
-            UNIT_ASSERT_STRINGS_EQUAL(children[3].Name, "Tenant2");
-            UNIT_ASSERT_STRINGS_EQUAL(children[4].Name, ".sys");
+            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, ".sys");
+            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Table0");
+            UNIT_ASSERT_STRINGS_EQUAL(children[3].Name, "Tenant1");
+            UNIT_ASSERT_STRINGS_EQUAL(children[4].Name, "Tenant2");
         }
         {
             auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             auto entry = result.GetEntry();
-            UNIT_ASSERT_VALUES_EQUAL(entry.Name, "Tenant1");
+            UNIT_ASSERT_VALUES_EQUAL(entry.Name, "Root/Tenant1");
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SubDomain);
 
             auto children = result.GetChildren();
+            SortBy(children, [](const auto& entry) { return entry.Name; });
             UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
-            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, "Table1");
-            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, ".sys");
+            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, ".sys");
+            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, "Table1");
         }
         {
             auto result = schemeClient.ListDirectory("/Root/.sys").GetValueSync();
@@ -3483,7 +3758,11 @@ ALTER TABLE `test_show_create`
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
+                if (EnableRealSystemViewPaths) {
+                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
+                }
             }
             UNIT_ASSERT(names.contains("partition_stats"));
         }
@@ -3502,7 +3781,11 @@ ALTER TABLE `test_show_create`
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
+                if (EnableRealSystemViewPaths) {
+                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
+                }
             }
             UNIT_ASSERT(names.contains("partition_stats"));
         }
@@ -5187,8 +5470,8 @@ ALTER TABLE `test_show_create`
         }
     }
 
-    Y_UNIT_TEST(AuthOwners) {
-        TTestEnv env;
+    Y_UNIT_TEST_TWIN(AuthOwners, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
@@ -5224,18 +5507,65 @@ ALTER TABLE `test_show_create`
                 FROM `Root/.sys/auth_owners`
             )").GetValueSync();
 
-            auto expected = R"([
-                [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                [["/Root/Dir1"];["user1"]];
-                [["/Root/Dir1/SubDir1"];["user1"]];
-                [["/Root/Table0"];["root@builtin"]];
-            ])";
+            TString expectedYson;
+            if (EnableRealSystemViewPaths) {
+                expectedYson = R"([
+                    [["/Root"];["root@builtin"]];
+                    [["/Root/.metadata"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                    [["/Root/.sys"];["metadata@system"]];[["/Root/.sys/auth_effective_permissions"];["metadata@system"]];
+                    [["/Root/.sys/auth_group_members"];["metadata@system"]];
+                    [["/Root/.sys/auth_groups"];["metadata@system"]];
+                    [["/Root/.sys/auth_owners"];["metadata@system"]];
+                    [["/Root/.sys/auth_permissions"];["metadata@system"]];
+                    [["/Root/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/.sys/ds_groups"];["metadata@system"]];
+                    [["/Root/.sys/ds_pdisks"];["metadata@system"]];
+                    [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
+                    [["/Root/.sys/ds_storage_stats"];["metadata@system"]];
+                    [["/Root/.sys/ds_vslots"];["metadata@system"]];
+                    [["/Root/.sys/hive_tablets"];["metadata@system"]];
+                    [["/Root/.sys/nodes"];["metadata@system"]];
+                    [["/Root/.sys/partition_stats"];["metadata@system"]];
+                    [["/Root/.sys/pg_class"];["metadata@system"]];
+                    [["/Root/.sys/pg_tables"];["metadata@system"]];
+                    [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/query_sessions"];["metadata@system"]];
+                    [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
+                    [["/Root/.sys/resource_pools"];["metadata@system"]];
+                    [["/Root/.sys/tables"];["metadata@system"]];
+                    [["/Root/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_partitions_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_partitions_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                    [["/Root/Dir1"];["user1"]];
+                    [["/Root/Dir1/SubDir1"];["user1"]];
+                    [["/Root/Table0"];["root@builtin"]];
+                ])";
+            } else {
+                expectedYson = R"([
+                    [["/Root"];["root@builtin"]];
+                    [["/Root/.metadata"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                    [["/Root/Dir1"];["user1"]];
+                    [["/Root/Dir1/SubDir1"];["user1"]];
+                    [["/Root/Table0"];["root@builtin"]];
+                ])";
+            }
 
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
 
         {
@@ -5244,14 +5574,50 @@ ALTER TABLE `test_show_create`
                 FROM `Root/Tenant1/.sys/auth_owners`
             )").GetValueSync();
 
-            auto expected = R"([
-                [["/Root/Tenant1"];["root@builtin"]];
-                [["/Root/Tenant1/Dir2"];["user2"]];
-                [["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
-                [["/Root/Tenant1/Table1"];["root@builtin"]];
-            ])";
+            TString expectedYson;
+            if (EnableRealSystemViewPaths) {
+                expectedYson = R"([[["/Root/Tenant1"];["root@builtin"]];
+                    [["/Root/Tenant1/.sys"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/auth_effective_permissions"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/auth_group_members"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/auth_groups"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/auth_owners"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/auth_permissions"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/nodes"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/partition_stats"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/pg_class"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/pg_tables"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/query_metrics_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/query_sessions"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/resource_pool_classifiers"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/resource_pools"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/tables"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_partitions_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_partitions_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant1/Dir2"];["user2"]];[["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
+                    [["/Root/Tenant1/Table1"];["root@builtin"]];
+                ])";
+            } else {
+                expectedYson = R"([
+                    [["/Root/Tenant1"];["root@builtin"]];
+                    [["/Root/Tenant1/Dir2"];["user2"]];
+                    [["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
+                    [["/Root/Tenant1/Table1"];["root@builtin"]];
+                ])";
+            }
 
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
 
         {
@@ -5260,18 +5626,60 @@ ALTER TABLE `test_show_create`
                 FROM `Root/Tenant2/.sys/auth_owners`
             )").GetValueSync();
 
-            auto expected = R"([
-                [["/Root/Tenant2"];["root@builtin"]];
-                [["/Root/Tenant2/Dir3"];["user3"]];
-                [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
-                [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
-                [["/Root/Tenant2/Dir4"];["user4"]];
-                [["/Root/Tenant2/Dir4/SubDir45"];["root@builtin"]];
-                [["/Root/Tenant2/Dir4/SubDir46"];["user4"]];
-                [["/Root/Tenant2/Table2"];["root@builtin"]];
-            ])";
+            TString expectedYson;
+            if (EnableRealSystemViewPaths) {
+                expectedYson = R"([
+                    [["/Root/Tenant2"];["root@builtin"]];
+                    [["/Root/Tenant2/.sys"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/auth_effective_permissions"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/auth_group_members"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/auth_groups"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/auth_owners"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/auth_permissions"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/nodes"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/partition_stats"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/pg_class"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/pg_tables"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/query_metrics_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/query_sessions"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/resource_pool_classifiers"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/resource_pools"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/tables"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_partitions_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_partitions_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                    [["/Root/Tenant2/Dir3"];["user3"]];
+                    [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
+                    [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
+                    [["/Root/Tenant2/Dir4"];["user4"]];
+                    [["/Root/Tenant2/Dir4/SubDir45"];["root@builtin"]];
+                    [["/Root/Tenant2/Dir4/SubDir46"];["user4"]];
+                    [["/Root/Tenant2/Table2"];["root@builtin"]];
+                ])";
+            } else {
+                expectedYson = R"([
+                    [["/Root/Tenant2"];["root@builtin"]];
+                    [["/Root/Tenant2/Dir3"];["user3"]];
+                    [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
+                    [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
+                    [["/Root/Tenant2/Dir4"];["user4"]];
+                    [["/Root/Tenant2/Dir4/SubDir45"];["root@builtin"]];
+                    [["/Root/Tenant2/Dir4/SubDir46"];["user4"]];
+                    [["/Root/Tenant2/Table2"];["root@builtin"]];
+                ])";
+            }
 
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
     }
 
@@ -5296,14 +5704,12 @@ ALTER TABLE `test_show_create`
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `Root/.sys/auth_owners`
+                WHERE Path NOT LIKE "%/.sys%"    -- not list system entries
+                AND Path NOT LIKE "%/.metadata%"
             )").GetValueSync();
 
             auto expected = R"([
                 [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
                 [["/Root/Dir1"];["user1rootadmin"]];
                 [["/Root/Dir2"];["root@builtin"]];
                 [["/Root/Table0"];["root@builtin"]]
@@ -5325,14 +5731,12 @@ ALTER TABLE `test_show_create`
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
                     FROM `Root/.sys/auth_owners`
+                    WHERE Path NOT LIKE "%/.sys%"    -- not list system entries
+                    AND Path NOT LIKE "%/.metadata%"
                 )").GetValueSync();
 
                 auto expected = R"([
                     [["/Root"];["root@builtin"]];
-                    [["/Root/.metadata"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
                     [["/Root/Dir1"];["user1rootadmin"]];
                     [["/Root/Dir2"];["root@builtin"]];
                     [["/Root/Table0"];["root@builtin"]]
@@ -5344,6 +5748,8 @@ ALTER TABLE `test_show_create`
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
                     FROM `Root/Tenant1/.sys/auth_owners`
+                    WHERE Path NOT LIKE "%/.sys%"    -- not list system entries
+                    AND Path NOT LIKE "%/.metadata%"
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -5373,14 +5779,12 @@ ALTER TABLE `test_show_create`
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `Root/.sys/auth_owners`
+                WHERE Path NOT LIKE "%/.sys%"    -- not list system entries
+                AND Path NOT LIKE "%/.metadata%"
             )").GetValueSync();
 
             auto expected = R"([
                 [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
                 [["/Root/Dir1"];["user1rootadmin"]];
                 [["/Root/Table0"];["root@builtin"]]
             ])";
@@ -5409,14 +5813,12 @@ ALTER TABLE `test_show_create`
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
             FROM `Root/.sys/auth_owners`
+            WHERE Path NOT LIKE "%/.sys%"    -- not list system dirs and files
+            AND Path NOT LIKE "%/.metadata%"
         )").GetValueSync();
 
         auto expected = R"([
             [["/Root"];["root@builtin"]];
-            [["/Root/.metadata"];["metadata@system"]];
-            [["/Root/.metadata/workload_manager"];["metadata@system"]];
-            [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-            [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
             [["/Root/Dir"];["root@builtin"]];
             [["/Root/Dir/SubDir"];["root@builtin"]];
             [["/Root/Dir1"];["root@builtin"]];
@@ -5435,8 +5837,8 @@ ALTER TABLE `test_show_create`
         NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(AuthOwners_TableRange) {
-        TTestEnv env;
+    Y_UNIT_TEST_TWIN(AuthOwners_TableRange, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
@@ -5469,47 +5871,106 @@ ALTER TABLE `test_show_create`
                 FROM `Root/.sys/auth_owners`
             )").GetValueSync();
 
-            auto expected = R"([
-                [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                [["/Root/Dir0"];["root@builtin"]];
-                [["/Root/Dir0/SubDir0"];["root@builtin"]];
-                [["/Root/Dir0/SubDir1"];["root@builtin"]];
-                [["/Root/Dir0/SubDir2"];["root@builtin"]];
-                [["/Root/Dir1"];["root@builtin"]];
-                [["/Root/Dir1/SubDir0"];["user0"]];
-                [["/Root/Dir1/SubDir1"];["user1"]];
-                [["/Root/Dir1/SubDir2"];["user2"]];
-                [["/Root/Dir2"];["root@builtin"]];
-                [["/Root/Dir2/SubDir0"];["root@builtin"]];
-                [["/Root/Dir2/SubDir1"];["root@builtin"]];
-                [["/Root/Dir2/SubDir2"];["root@builtin"]];
-                [["/Root/Dir3"];["root@builtin"]];
-                [["/Root/Dir3/SubDir0"];["root@builtin"]];
-                [["/Root/Dir3/SubDir1"];["root@builtin"]];
-                [["/Root/Dir3/SubDir2"];["root@builtin"]];
-                [["/Root/Table0"];["root@builtin"]];
-            ])";
+            TString expectedYson;
+            if (EnableRealSystemViewPaths) {
+                expectedYson = R"([
+                    [["/Root"];["root@builtin"]];
+                    [["/Root/.metadata"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                    [["/Root/.sys"];["metadata@system"]];[["/Root/.sys/auth_effective_permissions"];["metadata@system"]];
+                    [["/Root/.sys/auth_group_members"];["metadata@system"]];
+                    [["/Root/.sys/auth_groups"];["metadata@system"]];
+                    [["/Root/.sys/auth_owners"];["metadata@system"]];
+                    [["/Root/.sys/auth_permissions"];["metadata@system"]];
+                    [["/Root/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/.sys/ds_groups"];["metadata@system"]];
+                    [["/Root/.sys/ds_pdisks"];["metadata@system"]];
+                    [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
+                    [["/Root/.sys/ds_storage_stats"];["metadata@system"]];
+                    [["/Root/.sys/ds_vslots"];["metadata@system"]];
+                    [["/Root/.sys/hive_tablets"];["metadata@system"]];
+                    [["/Root/.sys/nodes"];["metadata@system"]];
+                    [["/Root/.sys/partition_stats"];["metadata@system"]];
+                    [["/Root/.sys/pg_class"];["metadata@system"]];
+                    [["/Root/.sys/pg_tables"];["metadata@system"]];
+                    [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/query_sessions"];["metadata@system"]];
+                    [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
+                    [["/Root/.sys/resource_pools"];["metadata@system"]];
+                    [["/Root/.sys/tables"];["metadata@system"]];
+                    [["/Root/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_partitions_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_partitions_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
+                    [["/Root/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                    [["/Root/Dir0"];["root@builtin"]];
+                    [["/Root/Dir0/SubDir0"];["root@builtin"]];
+                    [["/Root/Dir0/SubDir1"];["root@builtin"]];
+                    [["/Root/Dir0/SubDir2"];["root@builtin"]];
+                    [["/Root/Dir1"];["root@builtin"]];
+                    [["/Root/Dir1/SubDir0"];["user0"]];
+                    [["/Root/Dir1/SubDir1"];["user1"]];
+                    [["/Root/Dir1/SubDir2"];["user2"]];
+                    [["/Root/Dir2"];["root@builtin"]];
+                    [["/Root/Dir2/SubDir0"];["root@builtin"]];
+                    [["/Root/Dir2/SubDir1"];["root@builtin"]];
+                    [["/Root/Dir2/SubDir2"];["root@builtin"]];
+                    [["/Root/Dir3"];["root@builtin"]];
+                    [["/Root/Dir3/SubDir0"];["root@builtin"]];
+                    [["/Root/Dir3/SubDir1"];["root@builtin"]];
+                    [["/Root/Dir3/SubDir2"];["root@builtin"]];
+                    [["/Root/Table0"];["root@builtin"]];
+                ])";
+            } else {
+                expectedYson = R"([
+                    [["/Root"];["root@builtin"]];
+                    [["/Root/.metadata"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                    [["/Root/Dir0"];["root@builtin"]];
+                    [["/Root/Dir0/SubDir0"];["root@builtin"]];
+                    [["/Root/Dir0/SubDir1"];["root@builtin"]];
+                    [["/Root/Dir0/SubDir2"];["root@builtin"]];
+                    [["/Root/Dir1"];["root@builtin"]];
+                    [["/Root/Dir1/SubDir0"];["user0"]];
+                    [["/Root/Dir1/SubDir1"];["user1"]];
+                    [["/Root/Dir1/SubDir2"];["user2"]];
+                    [["/Root/Dir2"];["root@builtin"]];
+                    [["/Root/Dir2/SubDir0"];["root@builtin"]];
+                    [["/Root/Dir2/SubDir1"];["root@builtin"]];
+                    [["/Root/Dir2/SubDir2"];["root@builtin"]];
+                    [["/Root/Dir3"];["root@builtin"]];
+                    [["/Root/Dir3/SubDir0"];["root@builtin"]];
+                    [["/Root/Dir3/SubDir1"];["root@builtin"]];
+                    [["/Root/Dir3/SubDir2"];["root@builtin"]];
+                    [["/Root/Table0"];["root@builtin"]];
+                ])";
+            }
 
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
 
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `Root/.sys/auth_owners`
-                WHERE Path >= "/A" AND Path <= "/Z"
+                WHERE Path NOT LIKE "%/.sys%"    -- not list system entries
+                AND Path NOT LIKE "%/.metadata%"
+                AND Path >= "/A" AND Path <= "/Z"
             )").GetValueSync();
 
             auto expected = R"([
                 [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
                 [["/Root/Dir0"];["root@builtin"]];
                 [["/Root/Dir0/SubDir0"];["root@builtin"]];
                 [["/Root/Dir0/SubDir1"];["root@builtin"]];
@@ -6046,8 +6507,8 @@ ALTER TABLE `test_show_create`
         NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(AuthEffectivePermissions) {
-        TTestEnv env;
+    Y_UNIT_TEST_TWIN(AuthEffectivePermissions, EnableRealSystemViewPaths) {
+        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
@@ -6076,21 +6537,72 @@ ALTER TABLE `test_show_create`
                 FROM `Root/.sys/auth_effective_permissions`
             )").GetValueSync();
 
-            auto expected = R"([
-                [["/Root"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
-                [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
-                [["/Root/Table0"];["ydb.generic.use"];["user1"]]
-            ])";
+            TString expectedYson;
+            if (EnableRealSystemViewPaths) {
+                expectedYson = R"([
+                    [["/Root"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.metadata"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/auth_effective_permissions"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/auth_group_members"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/auth_groups"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/ds_groups"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/ds_pdisks"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/ds_storage_pools"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/ds_storage_stats"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/ds_vslots"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/hive_tablets"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/nodes"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/pg_class"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/pg_tables"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/resource_pools"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/tables"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_partitions_by_tli_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_partitions_by_tli_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_partitions_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_partitions_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_queries_by_duration_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_queries_by_duration_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_queries_by_request_units_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/top_queries_by_request_units_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Table0"];["ydb.generic.use"];["user1"]];
+                ])";
+            } else {
+                expectedYson = R"([
+                    [["/Root"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.metadata"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Table0"];["ydb.generic.use"];["user1"]];
+                ])";
+            }
 
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
 
         {
@@ -6099,14 +6611,52 @@ ALTER TABLE `test_show_create`
                 FROM `Root/Tenant1/.sys/auth_effective_permissions`
             )").GetValueSync();
 
-            auto expected = R"([
-                [["/Root/Tenant1"];["ydb.generic.use"];["user1"]];
-                [["/Root/Tenant1/Dir2"];["ydb.generic.use"];["user1"]];
-                [["/Root/Tenant1/Dir2"];["ydb.granular.select_row"];["user2"]];
-                [["/Root/Tenant1/Table1"];["ydb.generic.use"];["user1"]]
-            ])";
+            TString expectedYson;
+            if (EnableRealSystemViewPaths) {
+                expectedYson = R"([
+                    [["/Root/Tenant1"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/auth_effective_permissions"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/auth_group_members"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/auth_groups"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/nodes"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/pg_class"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/pg_tables"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/resource_pools"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/tables"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_partitions_by_tli_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_partitions_by_tli_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_partitions_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_partitions_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_duration_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_duration_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_request_units_one_hour"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/top_queries_by_request_units_one_minute"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/Dir2"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/Dir2"];["ydb.granular.select_row"];["user2"]];
+                    [["/Root/Tenant1/Table1"];["ydb.generic.use"];["user1"]];
+                ])";
+            } else {
+                expectedYson = R"([
+                    [["/Root/Tenant1"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/Dir2"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/Dir2"];["ydb.granular.select_row"];["user2"]];
+                    [["/Root/Tenant1/Table1"];["ydb.generic.use"];["user1"]];
+                ])";
+            }
 
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
     }
 

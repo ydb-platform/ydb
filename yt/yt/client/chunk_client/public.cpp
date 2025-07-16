@@ -13,10 +13,10 @@ const TChunkViewId NullChunkViewId = NObjectClient::NullObjectId;
 const TChunkListId NullChunkListId = NObjectClient::NullObjectId;
 const TChunkTreeId NullChunkTreeId = NObjectClient::NullObjectId;
 
-const TString DefaultStoreAccountName("sys");
-const TString DefaultStoreMediumName("default");
-const TString DefaultCacheMediumName("cache");
-const TString DefaultSlotsMediumName("default");
+const std::string DefaultStoreAccountName("sys");
+const std::string DefaultStoreMediumName("default");
+const std::string DefaultCacheMediumName("cache");
+const std::string DefaultSlotsMediumName("default");
 
 ////////////////////////////////////////////////////////////////////////////////
 

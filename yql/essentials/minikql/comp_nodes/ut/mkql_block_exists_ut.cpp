@@ -2,11 +2,20 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+
+template <typename T, typename U>
+void TestScalarExistsKernel(T operand, U expected) {
+    TBlockHelper().TestKernel(operand, expected,
+                              [](TSetup<false>& setup, TRuntimeNode node) {
+                                  return setup.PgmBuilder->BlockExists(node);
+                              });
+}
 
 void DoBlockExistsOffset(size_t length, size_t offset) {
     TSetup<false> setup;
@@ -107,6 +116,11 @@ Y_UNIT_TEST(ExistsWithOffset) {
     for (size_t offset = 0; offset < length; offset++) {
         DoBlockExistsOffset(length, offset);
     }
+}
+
+Y_UNIT_TEST(ScalarExists) {
+    TestScalarExistsKernel(TMaybe<ui32>(), false);
+    TestScalarExistsKernel(TMaybe<ui32>(6), true);
 }
 
 } // Y_UNIT_TEST_SUITE

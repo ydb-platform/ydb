@@ -1,11 +1,7 @@
 LIBRARY()
 
 SRCS(
-    abstract.cpp
-    zero_level.cpp
-    common_level.cpp
     GLOBAL optimizer.cpp
-    counters.cpp
 )
 
 PEERDIR(
@@ -13,6 +9,8 @@ PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/engines/changes/abstract
+    ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level
+    ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector
 )
 
 END()

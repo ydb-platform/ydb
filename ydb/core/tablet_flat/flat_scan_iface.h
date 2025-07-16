@@ -26,7 +26,7 @@ namespace NTable {
         Feed method may return EScan::Reset indicating that current range is
         completed and next one should be set up in Seek method.
 
-        IScan may express its desire of futher IDriver env behaviour
+        IScan may express its desire of further IDriver env behaviour
         with EScan codes where applicable.
 
         At the end IDriver calls Finish() once requesting a product. After
@@ -60,22 +60,28 @@ namespace NTable {
      */
 
     enum class EScan {
-        Feed    = 0,    /* Feed rows from current iterator state    */
-        Sleep   = 1,    /* Suspend execution until explicit resume  */
-        Reset   = 3,    /* Reconfigure iterator with new settings   */
-        Final   = 8,    /* Impl. isn't needed in more rows or seeks */
+        Feed = 0, // Feed rows from current iterator state
+        Sleep = 1, // Suspend execution until explicit resume
+        Reset = 3, // Reconfigure iterator with new settings
+        Final = 8, // Impl. isn't needed in more rows or seeks
     };
 
-    enum class EAbort {
-        None    = 0,    /* Regular process termination              */
-        Lost    = 1,    /* Owner entity is lost, no way for product */
-        Term    = 2,    /* Explicit process termination by owner    */
-        Host    = 3,    /* Terminated due to execution env. error   */
+    enum class EStatus {
+        Done = 0, // Regular process termination
+        Lost = 1, // Owner entity is lost, no way for product
+        Term = 2, // Explicit process termination by owner
+        StorageError = 3, // Some blob has been failed to load
+        Exception = 4, // Unhandled exception has happened, it may be accessed with `std::current_exception()`
     };
 
     class IDriver {
     public:
         virtual void Touch(EScan) = 0;
+
+        // Stops scan and calls IScan::Finish(const std::exception&)
+        virtual void Throw(const std::exception& exc) = 0;
+
+        virtual ui64 GetTotalCpuTimeUs() const = 0;
     };
 
 
@@ -87,7 +93,7 @@ namespace NTable {
         using TLead = NTable::TLead;
         using TSpent = NTable::TSpent;
         using EScan = NTable::EScan;
-        using EAbort = NTable::EAbort;
+        using EStatus = NTable::EStatus;
 
         struct TConf {
             TConf() = default;
@@ -116,7 +122,10 @@ namespace NTable {
         virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) = 0;
         virtual EScan Seek(TLead&, ui64 seq) = 0;
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) = 0;
-        virtual TAutoPtr<IDestructable> Finish(EAbort) = 0;
+        virtual TAutoPtr<IDestructable> Finish(const std::exception&) {
+            return Finish(EStatus::Exception);
+        }
+        virtual TAutoPtr<IDestructable> Finish(EStatus) = 0;
         virtual void Describe(IOutputStream&) const = 0;
 
         /**

@@ -791,6 +791,19 @@ void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    NYson::TYsonStringBuf value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    YT_VERIFY(value.GetType() == EYsonType::Node);
+    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedCompositeValue(value.AsStringBuf(), id, flags));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ProtobufToUnversionedValueImpl(
     TUnversionedValue* unversionedValue,
     const Message& value,
@@ -1152,7 +1165,7 @@ void UnversionedValueToListImpl(
 
 void MapToUnversionedValueImpl(
     TUnversionedValue* unversionedValue,
-    const std::function<bool(TString*, TUnversionedValue*)> producer,
+    const std::function<bool(std::string*, TUnversionedValue*)> producer,
     const TRowBufferPtr& rowBuffer,
     int id,
     EValueFlags flags)
@@ -1162,7 +1175,7 @@ void MapToUnversionedValueImpl(
     NYT::NYson::TYsonWriter writer(&outputStream);
     writer.OnBeginMap();
 
-    TString itemKey;
+    std::string itemKey;
     TUnversionedValue itemValue;
     while (true) {
         if (!producer(&itemKey, &itemValue)) {
@@ -1292,10 +1305,10 @@ void UnversionedValueToMapImpl(
         }
 
     private:
-        const std::function<google::protobuf::Message*(TString)> Appender_;
+        const std::function<google::protobuf::Message*(std::string)> Appender_;
         const TProtobufMessageType* const Type_;
 
-        std::optional<TString> Key_;
+        std::optional<std::string> Key_;
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
@@ -1315,7 +1328,7 @@ void UnversionedValueToMapImpl(
         {
             FlushElement();
             WireBytes_.clear();
-            Key_ = TString(key);
+            Key_ = std::string(key);
             Underlying_ = CreateProtobufWriter(&OutputStream_, Type_);
         }
 
@@ -1683,6 +1696,31 @@ void SetBit(TMutableRef bitmap, i64 index, bool value)
     } else {
         byte &= ~mask;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::string EscapeCAndSingleQuotes(TStringBuf str)
+{
+    auto escaped = TString();
+    escaped.reserve(str.size() * 2);
+
+    EscapeC(str, escaped);
+
+    auto size = escaped.size();
+    auto newSize = size + std::count(escaped.cbegin(), escaped.cend(), '\'');
+
+    escaped.resize(newSize);
+
+    auto rit = escaped.rbegin();
+    std::for_each(rit + (newSize - size), escaped.rend(), [&] (char character) {
+        *rit++ = character;
+        if (character == '\'') {
+            *rit++ = '\\';
+        }
+    });
+
+    return escaped;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

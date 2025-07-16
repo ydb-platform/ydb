@@ -1724,18 +1724,6 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         YQL_CLOG(INFO, ProviderYt) << strategyName << " assumes unique keys for the small table";
     }
 
-    ui64 partCount = 1;
-    ui64 partRows = settings.RightRows;
-    if ((settings.RightSize > 0) && useShards) {
-        partCount = (settings.RightMemSize + settings.MapJoinLimit - 1) / settings.MapJoinLimit;
-        partRows = (settings.RightRows + partCount - 1) / partCount;
-    }
-
-    if (partCount > 1) {
-        YQL_ENSURE(!isLookupJoin);
-        YQL_CLOG(INFO, ProviderYt) << strategyName << " sharded into " << partCount << " parts, each " << partRows << " rows";
-    }
-
     auto leftKeyColumns = settings.SwapTables ? op.RightLabel : op.LeftLabel;
     auto rightKeyColumns = settings.SwapTables ? op.LeftLabel : op.RightLabel;
     auto joinTree = ctx.NewList(pos, {
@@ -1774,6 +1762,28 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         if (!outItemType) {
             return false;
         }
+    }
+
+    if (useBlocks) {
+        for (auto& [_, columnType] : columnTypes) {
+            if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
+                useBlocks = false;
+                YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
+                break;
+            }
+        }
+    }
+
+    ui64 partCount = 1;
+    ui64 partRows = settings.RightRows;
+    if ((settings.RightSize > 0) && useShards) {
+        partCount = std::min(((useBlocks ? settings.RightMemSizeUsingBlocks : settings.RightMemSize) + settings.MapJoinLimit - 1) / settings.MapJoinLimit, settings.RightRows);
+        partRows = (settings.RightRows + partCount - 1) / partCount;
+    }
+
+    if (partCount > 1) {
+        YQL_ENSURE(!isLookupJoin);
+        YQL_CLOG(INFO, ProviderYt) << strategyName << " sharded into " << partCount << " parts, each " << partRows << " rows";
     }
 
     auto mainPaths = MakeUnorderedSection(leftLeaf.Section, ctx).Paths();
@@ -2113,16 +2123,6 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                     rightOutputColumns.push_back(newName);
                     rightOutputColumnSources.emplace(newName, memberName);
                     AddJoinRemappedColumn(pos, lookupArg, joinedOutNodes, memberName, newName, ctx);
-                }
-            }
-        }
-
-        if (useBlocks) {
-            for (auto& [_, columnType] : columnTypes) {
-                if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
-                    useBlocks = false;
-                    YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
-                    break;
                 }
             }
         }
@@ -5212,6 +5212,9 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
     if (!HasSetting(*joinSettings, "cbo_passed") && op.CostBasedOptPassed) {
         joinSettings = AddSetting(*joinSettings, joinSettings->Pos(), "cbo_passed", {}, ctx);
     }
+    if (sections.size() < equiJoin.Input().Size()) {
+        joinSettings = RemoveSetting(*joinSettings, "prune_keys_added", ctx);
+    }
 
     auto outItemType = GetSequenceItemType(equiJoin.Pos(),
                                            equiJoin.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1],
@@ -5239,6 +5242,19 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
     children.reserve(children.size() + premaps.size());
     std::transform(premaps.cbegin(), premaps.cend(), std::back_inserter(children), std::bind(&TExprBase::Ptr, std::placeholders::_1));
     return TExprBase(ctx.ChangeChildren(join.Ref(), std::move(children)));
+}
+
+bool AreJoinInputsReady(const TYtEquiJoin& equiJoin) {
+    for (auto section: equiJoin.Input()) {
+        for (auto path: section.Paths()) {
+            TYtPathInfo pathInfo(path);
+            if (!pathInfo.Table->Stat) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 }

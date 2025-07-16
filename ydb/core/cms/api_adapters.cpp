@@ -234,6 +234,10 @@ class TListClusterNodes: public TAdapterActor<
         } else {
             out.mutable_storage();
         }
+
+        if (in.PileId.Defined()) {
+            out.set_pile_id(*in.PileId);
+        }
     }
 
 public:

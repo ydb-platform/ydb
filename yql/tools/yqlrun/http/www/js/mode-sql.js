@@ -6,37 +6,10 @@ var TextHighlightRules = require("./text_highlight_rules").TextHighlightRules;
 
 var SqlHighlightRules = function() {
 
-    var keywords = (
-        "abort|action|all|and|as|asc|ast|attach|auth|avg|begin|between|case|cli|update|clusters|columns|compile|cross|cube|default|define|in|" +
-        "delete|desc|describe|distinct|discard|do|drop|else|end|exclusion|explain|fields|file|from|full|join|get|if|for|evaluate|" +
-        "group|by|grouping|having|help|history|inner|insert|into|is|join|left|limitmeta|" +
-        "not|null|offset|on|only|open|operations|optimize|or|order|by|parallel|parse|pragma|preview|process|" +
-        "progress|put|queries|query|quickstart|reduce|remove|replace|into|restart|result|results|right|join|rollup|run|running|" +
-        "schema|scheme|select|semi|set|sets|show|status|stream|subquery|table|tables|then|union|use|using|validate|values|version|when|where|limit|" +
-        "with|yamr|yt|null|revert|ignore|upsert|erase|presort|assume|any|without|window|partition|rows|range|groups|" +
-        "unbounded|following|preceding|current|row|sample|tablesample|flatten|view|bernoulli|system|repeatable|over|return"
-    );
-
-    var builtinConstants = (
-        "true|false"
-    );
-
-    var builtinFunctions = (
-        "avg|cast|coalesce|likely|random|randomnumber|filecontent|filepath|length|max|median|count|count_if|" +
-        "grouping|min|percentile|sum|min_by|max_by|min_of|max_of|stddev|variance|" +
-        "stddev_sample|stddev_population|variance_sample|variance_population|" +
-        "bool_and|bool_or|bit_and|bit_or|bit_xor|some|list|unique"
-    );
-
-    var dataTypes = (
-        "string|byte|double|float|int32|uint32|int64|uint64|bool"
-    );
-
     var keywordMapper = this.createKeywordMapper({
-        "keyword.operator": builtinFunctions,
-        "keyword": keywords,
-        "constant.language": builtinConstants,
-        "storage.type": dataTypes
+        "keyword.operator": window.sql.builtinFunctions.join("|"),
+        "keyword": window.sql.keywords.join("|"),
+        "storage.type": window.sql.types.join("|")
     }, "identifier", true);
 
     this.$rules = {

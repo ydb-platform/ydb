@@ -1,0 +1,1 @@
+{"error": true, "stderr": "Terminating due to uncaught exception REDACTED    what() -> \"ydb/library/yaml_config/yaml_config_parser.cpp:898: Erasure species is not specified for storage pool type, id 0\"\n of type TWithBackTrace<yexception>\n"}

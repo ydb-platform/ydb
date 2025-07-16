@@ -103,7 +103,7 @@ public:
     }
 
     IChannelPtr CreateChannel(
-        const std::optional<TString>& address = {},
+        const std::optional<std::string>& address = {},
         THashMap<std::string, NYTree::INodePtr> grpcArguments = {})
     {
         return TImpl::CreateChannel(
@@ -243,7 +243,7 @@ public:
  * openssl x509 -in server.csr -req -days 10000 -out server_cert.pem -CA root_cert.pem -CAkey root_key.pem -CAcreateserial
  * openssl x509 -in client.csr -req -days 10000 -out client_cert.pem -CA root_cert.pem -CAkey root_key.pem -CAserial root_cert.srl
  */
-inline TString RootCert(
+inline std::string RootCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIID9DCCAtygAwIBAgIJAJLU9fgmNTujMA0GCSqGSIb3DQEBCwUAMFkxCzAJBgNV\n"
     "BAYTAlJVMRMwEQYDVQQIEwpTb21lLVN0YXRlMSEwHwYDVQQKExhJbnRlcm5ldCBX\n"
@@ -269,7 +269,7 @@ inline TString RootCert(
     "I2TYYgHjI3I=\n"
     "-----END CERTIFICATE-----\n");
 
-inline TString ClientKey(
+inline std::string ClientKey(
     "-----BEGIN RSA PRIVATE KEY-----\n"
     "MIIEpAIBAAKCAQEArZpqucOdMlwZyyTWq+Sz3EGXpAX/4nMpH7s/05d9O4tm0MsK\n"
     "QUhUXRzt3VzOfMOb4cXAVwovHxiQ7NZIFBdmeyCHlT0HVkaqC76Tgi53scUMVKtE\n"
@@ -298,7 +298,7 @@ inline TString ClientKey(
     "OY4A1p2EvY8/L6PmPXAURfsE8RTL0y4ww/7mPJTQXsteTawAPDdVKQ==\n"
     "-----END RSA PRIVATE KEY-----\n");
 
-inline TString ClientCert(
+inline std::string ClientCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIIDLjCCAhYCCQCZd28+0jJVLTANBgkqhkiG9w0BAQUFADBZMQswCQYDVQQGEwJS\n"
     "VTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50ZXJuZXQgV2lkZ2l0\n"
@@ -320,7 +320,7 @@ inline TString ClientCert(
     "3SA=\n"
     "-----END CERTIFICATE-----\n");
 
-inline TString ServerKey(
+inline std::string ServerKey(
     "-----BEGIN RSA PRIVATE KEY-----\n"
     "MIIEowIBAAKCAQEAzbAyEJFSmPNJ3pLNNSWQVF53Ltof1Wc4JIfvNazl41LjNyuO\n"
     "SQV7+6GVFMIybBBoeWQ58hVJ/d8KxFBf6XIV6uGH9WtN38hWrxR6UEGkHxpUSfvg\n"
@@ -349,7 +349,7 @@ inline TString ServerKey(
     "CyxY8hFTw3FSk+UYdAAm5qYabGY1DiuvyD1yVAX9aWjAHdbP3H5O\n"
     "-----END RSA PRIVATE KEY-----\n");
 
-inline TString ServerCert(
+inline std::string ServerCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIIDLjCCAhYCCQCZd28+0jJVLDANBgkqhkiG9w0BAQUFADBZMQswCQYDVQQGEwJS\n"
     "VTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50ZXJuZXQgV2lkZ2l0\n"
@@ -499,10 +499,12 @@ public:
     {
         static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");
         auto credentials = New<NHttps::TClientCredentialsConfig>();
+        credentials->CertificateAuthority = New<NCrypto::TPemBlobConfig>();
+        credentials->CertificateAuthority->Value = RootCert;
         credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
         credentials->PrivateKey->Value = ClientKey;
-        credentials->CertChain = New<NCrypto::TPemBlobConfig>();
-        credentials->CertChain->Value = ClientCert;
+        credentials->CertificateChain = New<NCrypto::TPemBlobConfig>();
+        credentials->CertificateChain->Value = ClientCert;
         return NHttp::CreateHttpChannel(address, poller, EnableSsl, credentials);
     }
 
@@ -521,8 +523,8 @@ public:
             config->Credentials = New<NHttps::TServerCredentialsConfig>();
             config->Credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
             config->Credentials->PrivateKey->Value = ServerKey;
-            config->Credentials->CertChain = New<NCrypto::TPemBlobConfig>();
-            config->Credentials->CertChain->Value = ServerCert;
+            config->Credentials->CertificateChain = New<NCrypto::TPemBlobConfig>();
+            config->Credentials->CertificateChain->Value = ServerCert;
             httpServer = NYT::NHttps::CreateServer(config, 4);
         } else {
             httpServer = NYT::NHttp::CreateServer(config, 4);

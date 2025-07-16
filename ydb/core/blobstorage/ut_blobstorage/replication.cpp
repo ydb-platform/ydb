@@ -5,7 +5,7 @@
 #include <util/system/info.h>
 #include <util/stream/null.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
 #define SINGLE_THREAD 1
 
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(ReplicationSpace) {
                 .GroupId = groupId,
                 .TotalSize = dataSize,
                 .BlobSize = blobSize,
-                .DelayBetweenPuts = TDuration::Seconds(1),
+                .DelayBetweenBatches = TDuration::Seconds(1),
                 .Erasure = erasure,
                 .CookieStrategy = TTestCtxBase::TDataProfile::ECookieStrategy::WithSamePlacement,
             });

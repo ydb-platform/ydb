@@ -79,6 +79,12 @@ message THandshakeRequest {
     optional bytes CompatibilityInfo = 22;
 
     optional bytes HandshakeId = 23;
+
+    message TKeyValuePair {
+        optional string Key = 1;
+        optional bytes Value = 2;
+    }
+    repeated TKeyValuePair Params = 26; // extra params for connection validation
 }
 
 message THandshakeSuccess {
@@ -106,12 +112,24 @@ message THandshakeSuccess {
     optional bool UseXdcShuffle = 17;
 
     optional bytes CompatibilityInfo = 15;
+
+    message TKeyValuePair {
+        optional string Key = 1;
+        optional bytes Value = 2;
+    }
+    repeated TKeyValuePair Params = 18; // extra params for connection validation
 }
 
 message THandshakeReply {
     optional THandshakeSuccess Success = 1;
     optional string ErrorExplaination = 2;
     optional bool CookieCheckResult = 3;
+
+    message TKeyValuePair {
+        optional string Key = 1;
+        optional bytes Value = 2;
+    }
+    repeated TKeyValuePair Params = 4;
 }
 
 message TEvLoadMessage {

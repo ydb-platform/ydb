@@ -46,7 +46,7 @@ Using ``pip``
 Using ``mamba`` or ``conda``
 ****************************
 
-1. Using ``mamba`` (https://github.com/conda-forge/miniforge#mambaforge) or ``conda`` (https://github.com/conda-forge/miniforge)
+1. Using ``mamba`` (https://github.com/conda-forge/miniforge) or ``conda`` (https://github.com/conda-forge/miniforge)
  
 2. Run::
 

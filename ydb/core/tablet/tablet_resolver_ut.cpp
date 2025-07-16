@@ -64,11 +64,10 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
 
         void HandleLookup(TEvStateStorage::TEvInfo::TPtr& ev) {
             auto* msg = ev->Get();
-            Y_ABORT_UNLESS(msg->SignatureSz);
-            SignatureSz = msg->SignatureSz;
-            Signature.Reset(msg->Signature.Release());
+            Y_ABORT_UNLESS(msg->Signature.Size());
+            Signature = msg->Signature;
 
-            Send(ProxyId, new TEvStateStorage::TEvUpdate(TabletId, 0, Leader, LeaderTablet, Generation, 0, Signature.Get(), SignatureSz, TEvStateStorage::TProxyOptions::SigSync));
+            Send(ProxyId, new TEvStateStorage::TEvUpdate(TabletId, 0, Leader, LeaderTablet, Generation, 0, Signature, TEvStateStorage::TProxyOptions::SigSync));
             Become(&TThis::StateUpdate);
         }
 
@@ -91,8 +90,7 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
         const TActorId LeaderTablet;
         TActorId ProxyId;
 
-        ui32 SignatureSz = 0;
-        TArrayHolder<ui64> Signature;
+        TEvStateStorage::TSignature Signature;
     };
 
     void DoRegisterTabletInfo(TTestBasicRuntime& runtime, ui64 tabletId, ui32 gen, TActorId leader, TActorId leaderTablet) {

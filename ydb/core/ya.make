@@ -56,6 +56,7 @@ RECURSE(
     tablet
     tablet_flat
     test_tablet
+    transfer
     tracing
     tx
     util

@@ -1,7 +1,38 @@
 #include "ut_helpers.h"
 
+#include <ydb/core/base/statestorage_impl.h>
+
 namespace NKikimr {
 namespace NSchemeBoard {
+
+void SetupMinimalRuntime(TTestActorRuntime& runtime, const TStateStorageSetupper& setupStateStorage) {
+    for (ui32 i : xrange(runtime.GetNodeCount())) {
+        setupStateStorage(runtime, i);
+    }
+    runtime.Initialize(TAppPrepare().Unwrap());
+}
+
+TIntrusiveConstPtr<TStateStorageInfo> GetStateStorageInfo(TTestActorRuntime& runtime) {
+    const TActorId recipient = MakeStateStorageProxyID();
+    const TActorId edge = runtime.AllocateEdgeActor();
+    runtime.Send(recipient, edge, new TEvStateStorage::TEvListSchemeBoard(false));
+
+    auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT(result->Get()->Info);
+
+    return result->Get()->Info;
+}
+
+TEvStateStorage::TEvResolveReplicasList::TPtr ResolveReplicas(TTestActorRuntime& runtime, const TString& path) {
+    const TActorId recipient = MakeStateStorageProxyID();
+    const TActorId edge = runtime.AllocateEdgeActor();
+    runtime.Send(recipient, edge, new TEvStateStorage::TEvResolveSchemeBoard(path));
+
+    auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+    UNIT_ASSERT(result);
+    return result;
+}
 
 NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe(
     const TString& path,

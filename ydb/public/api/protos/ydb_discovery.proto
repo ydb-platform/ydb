@@ -83,6 +83,7 @@ message NodeInfo {
     optional string address = 5;
     optional NodeLocation location = 6;
     optional uint64 expire = 7;
+    optional uint32 bridge_pile_id = 8;
 }
 
 message NodeRegistrationRequest {
@@ -94,6 +95,7 @@ message NodeRegistrationRequest {
     optional string domain_path = 6;
     optional bool fixed_node_id = 7;
     optional string path = 8;
+    optional string bridge_pile_name = 9;
 }
 
 message NodeRegistrationResult {

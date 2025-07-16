@@ -22,7 +22,7 @@ static constexpr auto LowPrecisionQuantumUsLog2 = 10; // ~1 ms
 
 static constexpr auto LateWarningThreshold = TDuration::Seconds(1);
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

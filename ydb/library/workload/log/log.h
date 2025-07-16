@@ -23,7 +23,9 @@ public:
     ui64 StrColumnsCnt = 0;
     ui64 IntColumnsCnt = 0;
     ui64 KeyColumnsCnt = 0;
-    ui64 TimestampStandardDeviationMinutes = 0;
+    TMaybe<ui64> TimestampStandardDeviationMinutes;
+    TMaybe<ui64> TimestampDateFrom;
+    TMaybe<ui64> TimestampDateTo;
     ui64 TimestampTtlMinutes = 0;
     ui64 TimestampSubtract = 0;
     ui64 RowsCnt = 1;
@@ -34,6 +36,11 @@ public:
 
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
+
+    void Validate(const ECommandType commandType, int workloadType) override;
+private:
+    void ConfigureOptsFillData(NLastGetopt::TOpts& opts);
+    void ConfigureOptsColumns(NLastGetopt::TOpts& opts);
 };
 
 class TLogGenerator final: public TWorkloadQueryGeneratorBase<TLogWorkloadParams> {
@@ -69,6 +76,7 @@ public:
         Upsert,
         BulkUpsert,
         Select,
+        Delete
     };
 
 private:
@@ -77,6 +85,7 @@ private:
     TQueryInfoList Upsert(TVector<TRow>&& rows) const;
     TQueryInfoList BulkUpsert(TVector<TRow>&& rows) const;
     TQueryInfoList Select() const;
+    TQueryInfoList Delete(TVector<TRow>&& rows) const;
 };
 
 } // namespace NLog

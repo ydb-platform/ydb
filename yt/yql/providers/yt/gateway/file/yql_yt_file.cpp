@@ -1129,10 +1129,10 @@ public:
     }
 
     TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) override {
-        const TString tmpFolder = GetTablesTmpFolder(*options.Config());
         auto res = TGetTablePartitionsResult();
         TVector<NYT::TRichYPath> paths;
         for (const auto& pathInfo: options.Paths()) {
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), pathInfo->Table->Cluster);
             const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, options.SessionId());
             NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
             pathInfo->FillRichYPath(richYtPath);  // n.b. throws exception, if there is no RowSpec (we assume it is always there)

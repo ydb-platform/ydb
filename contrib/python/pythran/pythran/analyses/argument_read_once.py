@@ -4,24 +4,32 @@ from pythran.analyses.aliases import Aliases
 from pythran.analyses.global_declarations import GlobalDeclarations
 from pythran.passmanager import ModuleAnalysis
 from pythran.tables import MODULES
+from pythran.intrinsic import defaultlist
 import pythran.intrinsic as intrinsic
 
 import gast as ast
 from functools import reduce
 
 
-class ArgumentReadOnce(ModuleAnalysis):
+def recursive_weight(function, index, predecessors):
+    # TODO : Find out why it happens in some cases
+    if len(function.read_effects) <= index:
+        return 0
+    if function.read_effects[index] == -1:
+        # In case of recursive/cyclic calls
+        cycle = function in predecessors
+        predecessors.add(function)
+        if cycle:
+            function.read_effects[index] = 2 * function.dependencies(
+                ArgumentReadOnceHelper.Context(function, index,
+                                         predecessors, False))
+        else:
+            function.read_effects[index] = function.dependencies(
+                ArgumentReadOnceHelper.Context(function, index,
+                                         predecessors, True))
+    return function.read_effects[index]
 
-    """
-    Counts the usages of each argument of each function.
-
-    Attributes
-    ----------
-    result : {FunctionEffects}
-        Number of use for each argument of each function.
-    node_to_functioneffect : {???: ???}
-        FunctionDef ast node to function effect binding.
-    """
+class ArgumentReadOnceHelper(ModuleAnalysis[Aliases, GlobalDeclarations]):
 
     class FunctionEffects(object):
         def __init__(self, node):
@@ -30,9 +38,15 @@ class ArgumentReadOnce(ModuleAnalysis):
             if isinstance(node, ast.FunctionDef):
                 self.read_effects = [-1] * len(node.args.args)
             elif isinstance(node, intrinsic.Intrinsic):
-                self.read_effects = [
-                    1 if isinstance(x, intrinsic.ReadOnceEffect)
-                    else 2 for x in node.argument_effects]
+                def tocode(x):
+                    return 1 if isinstance(x, intrinsic.ReadOnceEffect) else 2
+
+                isdefaultlist = isinstance(node.argument_effects, defaultlist)
+                container = node.argument_effects.content if isdefaultlist else node.argument_effects
+                self.read_effects = [tocode(x) for x in container]
+                if isdefaultlist:
+                    default = lambda: tocode(node.argument_effects.default())
+                    self.read_effects = defaultlist(self.read_effects, default=default)
             elif isinstance(node, ast.alias):
                 self.read_effects = []
             else:
@@ -51,11 +65,12 @@ class ArgumentReadOnce(ModuleAnalysis):
             self.path = path
             self.global_dependencies = global_dependencies
 
+    ResultType = set
+
     def __init__(self):
         """ Basic initialiser for class attributes. """
-        self.result = set()
+        super().__init__()
         self.node_to_functioneffect = dict()
-        super(ArgumentReadOnce, self).__init__(Aliases, GlobalDeclarations)
 
     def prepare(self, node):
         """
@@ -64,10 +79,10 @@ class ArgumentReadOnce(ModuleAnalysis):
         Initialisation done for Pythonic functions and default values set for
         user defined functions.
         """
-        super(ArgumentReadOnce, self).prepare(node)
+        super(ArgumentReadOnceHelper, self).prepare(node)
         # global functions init
         for n in self.global_declarations.values():
-            fe = ArgumentReadOnce.FunctionEffects(n)
+            fe = ArgumentReadOnceHelper.FunctionEffects(n)
             self.node_to_functioneffect[n] = fe
             self.result.add(fe)
 
@@ -78,7 +93,7 @@ class ArgumentReadOnce(ModuleAnalysis):
                 if isinstance(intr, dict):  # Submodule case
                     save_effect(intr)
                 else:
-                    fe = ArgumentReadOnce.FunctionEffects(intr)
+                    fe = ArgumentReadOnceHelper.FunctionEffects(intr)
                     self.node_to_functioneffect[intr] = fe
                     self.result.add(fe)
                     if isinstance(intr, intrinsic.Class):  # Class case
@@ -86,32 +101,6 @@ class ArgumentReadOnce(ModuleAnalysis):
 
         for module in MODULES.values():
             save_effect(module)
-
-    def run(self, node):
-        result = super(ArgumentReadOnce, self).run(node)
-        for fun in result:
-            for i in range(len(fun.read_effects)):
-                self.recursive_weight(fun, i, set())
-        self.result = {f.func: f.read_effects for f in result}
-        return self.result
-
-    def recursive_weight(self, function, index, predecessors):
-        # TODO : Find out why it happens in some cases
-        if len(function.read_effects) <= index:
-            return 0
-        if function.read_effects[index] == -1:
-            # In case of recursive/cyclic calls
-            cycle = function in predecessors
-            predecessors.add(function)
-            if cycle:
-                function.read_effects[index] = 2 * function.dependencies(
-                    ArgumentReadOnce.Context(function, index,
-                                             predecessors, False))
-            else:
-                function.read_effects[index] = function.dependencies(
-                    ArgumentReadOnce.Context(function, index,
-                                             predecessors, True))
-        return function.read_effects[index]
 
     def argument_index(self, node):
         while isinstance(node, ast.Subscript):
@@ -219,8 +208,7 @@ class ArgumentReadOnce(ModuleAnalysis):
         def merger(ctx):
             base = l0(ctx)
             if (ctx.index in index_corres) and ctx.global_dependencies:
-                rec = self.recursive_weight(func, index_corres[ctx.index],
-                                            ctx.path)
+                rec = recursive_weight(func, index_corres[ctx.index], ctx.path)
             else:
                 rec = 0
             return base + rec
@@ -236,3 +224,26 @@ class ArgumentReadOnce(ModuleAnalysis):
         dep = self.generic_visit(node)
         local = self.local_effect(node.iter, 1)
         return lambda ctx: dep(ctx) + local(ctx)
+
+class ArgumentReadOnce(ModuleAnalysis[ArgumentReadOnceHelper]):
+
+    """
+    Counts the usages of each argument of each function.
+
+    Attributes
+    ----------
+    result : {FunctionEffects}
+        Number of use for each argument of each function.
+    node_to_functioneffect : {???: ???}
+        FunctionDef ast node to function effect binding.
+    """
+
+    ResultType = set
+
+
+    def visit_Module(self, node):
+        result = self.argument_read_once_helper
+        for fun in result:
+            for i in range(len(fun.read_effects)):
+                recursive_weight(fun, i, set())
+        self.result = {f.func: f.read_effects for f in result}

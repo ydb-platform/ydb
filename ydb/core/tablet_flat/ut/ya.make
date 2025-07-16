@@ -26,6 +26,7 @@ SRCS(
     shared_cache_s3fifo_ut.cpp
     shared_cache_clock_pro_ut.cpp
     shared_cache_switchable_ut.cpp
+    shared_cache_tiered_ut.cpp
     shared_handle_ut.cpp
     ut_btree_index_nodes.cpp
     ut_btree_index_iter_charge.cpp
@@ -37,7 +38,6 @@ SRCS(
     ut_comp_gen.cpp
     ut_compaction.cpp
     ut_compaction_multi.cpp
-    ut_data_cleanup.cpp
     ut_datetime.cpp
     ut_decimal.cpp    
     ut_charge.cpp
@@ -55,6 +55,7 @@ SRCS(
     ut_shared_sausagecache_actor.cpp
     ut_slice.cpp
     ut_slice_loader.cpp
+    ut_vacuum.cpp
     ut_versions.cpp
 )
 

@@ -1,9 +1,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
-#include <yt/yql/providers/yt/fmr/yt_service/impl/yql_yt_yt_service_impl.h>
+#include <yt/yql/providers/yt/fmr/yt_job_service/mock/yql_yt_job_service_mock.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
-#include <yt/yql/providers/yt/fmr/yt_service/mock/yql_yt_yt_service_mock.h>
 
 using namespace NYql::NFmr;
 
@@ -12,13 +12,15 @@ Y_UNIT_TEST_SUITE(ParseRecordTests) {
         TString inputYsonContent = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                                    "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n";
         TYtTableRef testYtTable = TYtTableRef{.Path = "test_path", .Cluster = "hahn"};
-        std::unordered_map<TYtTableRef, TString> inputTables{{testYtTable, inputYsonContent}};
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), inputYsonContent}};
+
         std::unordered_map<TYtTableRef, TString> outputTables;
 
-        auto ytService = MakeMockYtService(inputTables, outputTables);
+        auto ytJobService = MakeMockYtJobService(inputTables, outputTables);
 
-        auto reader = ytService->MakeReader(testYtTable, TClusterConnection());
-        auto writer = ytService->MakeWriter(testYtTable, TClusterConnection());
+        auto reader = ytJobService->MakeReader(richPath);
+        auto writer = ytJobService->MakeWriter(testYtTable, TClusterConnection());
         auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
         ParseRecords(reader, writer, 1, 10, cancelFlag);
         writer->Flush();

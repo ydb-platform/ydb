@@ -1,6 +1,11 @@
 #include "grammar.h"
 
+#include <yql/essentials/sql/v1/lexer/regex/regex.h>
 #include <yql/essentials/sql/v1/reflect/sql_reflect.h>
+
+#include <contrib/libs/re2/re2/re2.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NSQLComplete {
 
@@ -11,6 +16,7 @@ namespace NSQLComplete {
             , AllTokens_(ComputeAllTokens())
             , KeywordTokens_(ComputeKeywordTokens(grammar))
             , PunctuationTokens_(ComputePunctuationTokens(grammar))
+            , IdPlainRegex_(ComputeIdPlainRegex(grammar))
         {
         }
 
@@ -32,6 +38,28 @@ namespace NSQLComplete {
 
         const std::string& SymbolizedRule(TRuleId rule) const override {
             return Parser_->getRuleNames().at(rule);
+        }
+
+        TTokenId GetTokenId(std::string_view symbolized) const override {
+            TTokenId type = Parser_->getTokenType(symbolized);
+            Y_ENSURE(type != antlr4::Token::INVALID_TYPE, "Not found " << symbolized);
+            return type;
+        }
+
+        TRuleId GetRuleId(std::string_view symbolized) const override {
+            TRuleId index = Parser_->getRuleIndex(std::string(symbolized));
+            if (index == INVALID_INDEX) {
+                ythrow yexception() << "Rule \"" << symbolized << "\" not found";
+            }
+            return index;
+        }
+
+        const std::vector<std::string>& GetAllRules() const override {
+            return Parser_->getRuleNames();
+        }
+
+        bool IsPlainIdentifier(TStringBuf content) const override {
+            return RE2::FullMatch(content, IdPlainRegex_);
         }
 
     private:
@@ -76,10 +104,23 @@ namespace NSQLComplete {
             return punctuationTokens;
         }
 
+        static TString ComputeIdPlainRegex(const NSQLReflect::TLexerGrammar& grammar) {
+            TVector<std::tuple<TString, TString>> regexes =
+                NSQLTranslationV1::MakeRegexByOtherName(grammar, /* ansi = */ false);
+
+            std::tuple<TString, TString>* regex = FindIfPtr(regexes, [&](const auto& x) {
+                return std::get<0>(x) == "ID_PLAIN";
+            });
+
+            Y_ENSURE(regex, "ID_PLAIN regex not found");
+            return std::get<1>(*regex);
+        }
+
         const THolder<antlr4::Parser> Parser_;
         const std::unordered_set<TTokenId> AllTokens_;
         const std::unordered_set<TTokenId> KeywordTokens_;
         const std::unordered_set<TTokenId> PunctuationTokens_;
+        const RE2 IdPlainRegex_;
     };
 
     const ISqlGrammar& GetSqlGrammar() {

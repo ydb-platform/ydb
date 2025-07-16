@@ -26,6 +26,11 @@ bool IsRenameOrApplyFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExpr
 bool IsPassthroughFlatMap(const NNodes::TCoFlatMapBase& flatmap, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember = false);
 bool IsPassthroughLambda(const NNodes::TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember = false);
 bool IsTablePropsDependent(const TExprNode& node);
+bool IsNoPush(const TExprNode& node);
+
+bool IsAlreadyDistinct(const TExprNode& node, const THashSet<TString>& columns);
+bool IsOrdered(const TExprNode& node, const THashSet<TString>& columns);
+TExprNode::TPtr MakePruneKeysExtractorLambda(const TExprNode& node, const THashSet<TString>& columns, TExprContext& ctx);
 
 bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType);
 
@@ -93,6 +98,8 @@ inline void ExtractSimpleKeys(const TExprNode& keySelectorLambda, TVector<TStrin
     ExtractSimpleKeys(keySelectorLambda.Child(1), keySelectorLambda.Child(0)->Child(0), columns);
 }
 
+TSet<TStringBuf> GetFilteredMembers(const NNodes::TCoFilterNullMembersBase& node);
+
 TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, const TExprNode::TPtr& value, TExprContext& ctx);
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx);
@@ -152,12 +159,14 @@ bool HasDependsOn(const TExprNode::TPtr& node, const TExprNode::TPtr& arg);
 TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);
 TExprNode::TPtr MakeSortByConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx);
+TExprNode::TPtr KeepUniqueDistinct(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx);
 bool HasMissingWorlds(const TExprNode::TPtr& node, const TExprNode& src, const TTypeAnnotationContext& types);
 TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& types);
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler);
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler,
+    bool withOptionals = false);
 
 template<bool Ordered = false>
 std::optional<TPartOfConstraintBase::TPathType> GetPathToKey(const TExprNode& body, const TExprNode& arg);
@@ -194,5 +203,14 @@ bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
 extern const char KeepWorldOptName[];
 
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
+
+template<typename C>
+TExprNode::TPtr MakeAtomList(TPositionHandle pos, const C& container, TExprContext& ctx) {
+    TExprNodeList atoms;
+    for (auto& atom : container) {
+        atoms.push_back(ctx.NewAtom(pos, atom));
+    }
+    return ctx.NewList(pos, std::move(atoms));
+}
 
 }

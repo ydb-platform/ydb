@@ -16,6 +16,13 @@ Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,Long
 
 По умолчанию UTF-8 режим включается автоматически, если регулярное выражение является валидной строкой в кодировке UTF-8, но не является валидной ASCII-строкой. Вручную настройками библиотеки re2 можно управлять с помощью передачи результата функции `Re2::Options` вторым аргументом другим функциям модуля, рядом с регулярным выражением.
 
+{% note info "Примечание" %}
+
+Все регулярные выражения, переданные в функции, должны быть валидными. Иначе ваш запрос может упасть.
+Начиная с версии [2025.03](../../changelog/2025.03.md#re2-module) такой запрос гарантированно завершится с ошибкой.
+
+{% endnote %}
+
 {% note warning %}
 
 Все обратные слеши в регулярных выражениях (если они записаны в строке с кавычками) нужно удваивать, так как стандартные строковые литералы в SQL рассматриваются как С-escaped строки. Также можно записывать регулярное выражение в форме raw строки `@@regexp@@` — в этом случае удвоение слешей не требуется.
@@ -88,7 +95,7 @@ SELECT
 | CaseSensitive:Bool?                                                                                                                                                                                                                     | true     | match is case-sensitive (regexp can override with (?i) unless in posix_syntax mode) |
 | DotNl:Bool?                                                                                                                                                                                                                             | false    | let `.` match `\n` (default )                                                       |
 | Literal:Bool?                                                                                                                                                                                                                           | false    | interpret string as literal, not regexp                                             |
-| LogErrors:Bool?                                                                                                                                                                                                                         | true     | log syntax and execution errors to ERROR                                            |
+| LogErrors:Bool?                                                                                                                                                                                                                         | true     | this option is ignored                                                              |
 | LongestMatch:Bool?                                                                                                                                                                                                                      | false    | search for longest match, not first match                                           |
 | MaxMem:Uint64?                                                                                                                                                                                                                          | -        | (see below)  approx. max memory footprint of RE2                                    |
 | NeverCapture:Bool?                                                                                                                                                                                                                      | false    | parse all parens as non-capturing                                                   |

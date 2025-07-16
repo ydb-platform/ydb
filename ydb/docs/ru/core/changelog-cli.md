@@ -1,5 +1,68 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.22.1 {#2-22-1}
+
+Дата выхода 17 июня 2025. Для обновления до версии **2.22.1** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой сертификат не читался из файла, если путь к файлу указан в [профиле](./reference/ydb-cli/profile/index.md) в поле `ca-file`.
+* Исправлена ошибка, из-за которой [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload clickbench import files` в состоянии отображали количество строк вместо количества байт.
+
+## Версия 2.22.0 {#2-22-0}
+
+Дата выхода 4 июня 2025. Для обновления до версии **2.22.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+* Добавлено автодополнение имён схемных объектов в интерактивном режиме.
+* Расширены возможности команды `{{ ydb-cli }} workload query`: добавлены команды `{{ ydb-cli }} workload query init`, `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload query clean` и изменена команда `{{ ydb-cli }} workload query run`. Пользуясь ими можно инициализировать таблицы, заполнить их данными, провести нагрузочное тестирование и очистить данные за собой.
+* В [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload clickbench run`, `{{ ydb-cli }} workload tpch run`, `{{ ydb-cli }} workload tpcds run` добавлена опция `--threads`, позволяющая указывать количество потоков для отправки запросов.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/index.md#list) `{{ ydb-cli }} admin cluster config version` для отображения версии конфигурации (V1/V2) на узлах.
+
+### Изменения с потерей обратной совместимости
+
+* Из команд [`{{ ydb-cli }} workload * run`](./reference/ydb-cli/commands/workload) удалена опция `--executor`. Теперь всегда используется исполнитель `generic`.
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой команды [`{{ ydb-cli }} workload * clean`](./reference/ydb-cli/commands/workload) удаляли все содержимое целевой директории, а не только таблицы, созданные командой init.
+
+## Версия 2.21.0 {#2-21-0}
+
+Дата выхода 22 мая 2024. Для обновления до версии **2.21.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+* Добавлен [глобальный параметр](./reference/ydb-cli/commands/global-options.md) `--no-discovery`, позволяющий пропустить процесс discovery и подключиться напрямую к указанному пользователем эндпоинту.
+* Добавлены новые опции для команд нагрузочного тестирования:
+  * Добавлена опция `--scale` в [команды](./reference/ydb-cli/workload-tpch.md) `{{ ydb-cli }} workload tpch init` и `{{ ydb-cli }} workload tpcds init` для установки процента размера данных и нагрузки относительно максимальной нагрузки.
+  * Добавлена опция `--retries` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` для указания максимального количества повторов каждого запроса.
+  * Добавлена опция `--partition-size` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` для установки максимального размера партиции в мегабайтах для строчных таблиц.
+  * Добавлены параметры диапазона дат (`--date-to`, `--date-from`) в операции `{{ ydb-cli }} workload log run` для поддержки равномерного распределения первичных ключей.
+* Улучшена функциональность резервного копирования и восстановления:
+  * Добавлены опции `--replace` и `--verify-existence` в [команду](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) `{{ ydb-cli }} tools restore` для управления удалением существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
+  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: {% if feature_async_replication %}[таблицы-реплики](./concepts/async-replication.md){% else %}таблицы-реплики{% endif %} у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
+* Изменения, повышающие удобство использования CLI:
+  * Вывод подробной справки (`-hh`) теперь показывает всё дерево подкоманд.
+  * Добавлена автоматическая вставка парных скобок в интерактивном режиме `{{ ydb-cli }}`.
+  * Добавлена поддержка файлов с BOM (Byte Order Mark) в [командах](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file`.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Улучшена команда `{{ ydb-cli }} debug latency`:
+  * Добавлен параметр `--min-inflight` для установки минимального количества одновременных запросов (по умолчанию: 1).
+  * Добавлена опция `--percentile` для указания пользовательских процентилей задержки.
+  * Вывод команды расширен дополнительными измерениями GRPC ping.
+
+### Исправления ошибок
+
+* [Команда](./reference/ydb-cli/operation-get.md) `{{ ydb-cli }} operation get` теперь корректно отображает операции, которые ещё находятся в процессе выполнения.
+* Исправлены ошибки в [команде](./reference/ydb-cli/commands/dir.md#rmdir) `{{ ydb-cli }} scheme rmdir`:
+  * Исправлена ошибка, из-за которой команда пыталась удалить поддомены.
+  * Исправлен порядок удаления: внешние таблицы теперь удаляются перед источниками данных из-за возможных зависимостей между ними.
+  * Добавлена поддержка coordination nodes при рекурсивном удалении.
+* Исправлен код возврата команды `{{ ydb-cli }} workload * run --check-canonical` при несовпадении результатов с каноническими.
+* Исправлена проблема, когда CLI пытался читать параметры из stdin даже при отсутствии данных.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Исправлена ошибка авторизации при выполнении [команды](./reference/ydb-cli/export-import/tools-restore.md#db) `{{ ydb-cli }} admin database restore` при наличии нескольких учетных записей администраторов базы данных в восстанавливаемой резервной копии.
+
 ## Версия 2.20.0 {#2-20-0}
 
 Дата выхода 5 марта 2024. Для обновления до версии **2.20.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
@@ -19,7 +82,7 @@
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/generate.md) `{{ ydb-cli }} admin cluster config generate` для генерации файла [конфигурации V2](./devops/configuration-management/configuration-v2/index.md) из [файла конфигурации V1](./devops/configuration-management/configuration-v2/index.md).
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены [команда](./reference/ydb-cli/export-import/tools-dump#cluster) `{{ ydb-cli }} admin cluster dump` и [команда](./reference/ydb-cli/export-import/tools-restore#cluster) `{{ ydb-cli }} admin cluster restore` для создания дампа кластера. Дамп кластера содержит список баз данных с метаданными, пользователей и группы, но не содержит схемные объекты.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены команды `{{ ydb-cli }} admin database dump` и `{{ ydb-cli }} admin database restore` для создания дампа базы данных. Такой дамп содержит метаданные базы данных, схемные объекты, данные в них, пользователей и группы.
-* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb admin cluster config fetch` добавлены новые опции `--dedicated-storage-section` и `--dedicated-cluster-section`, позволяющие получать части конфигурации для кластера и хранилища отдельно.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} admin cluster config fetch` добавлены новые опции `--dedicated-storage-section` и `--dedicated-cluster-section`, позволяющие получать части конфигурации для кластера и хранилища отдельно.
 
 ### Исправления ошибок
 
@@ -34,7 +97,7 @@
 
 ### Функциональность
 
-* Добавлена поддержка [потоков изменений (changefeeds)](./concepts/cdc.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
+* Добавлена поддержка [потоков изменений (changefeeds)](./concepts/glossary.md#changefeed) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
 * Добавлена рекомендация с текстом `CREATE TABLE` при схемной ошибке во время выполнения [команды](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file csv`.
 * Добавлен вывод статистики для текущего процесса при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload`.
 * Добавлен текст запроса к сообщению, если запрос завершился ошибкой при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload run`.

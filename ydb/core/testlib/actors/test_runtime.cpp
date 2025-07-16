@@ -76,6 +76,14 @@ namespace NActors {
         Initialize();
     }
 
+    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends)
+        : TPortManager(false)
+        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
+        , AuditLogBackends(std::move(auditLogBackends))
+    {
+        Initialize();
+    }
+
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount)
         : TPortManager(false)
         , TTestActorRuntimeBase{nodeCount, dataCenterCount}
@@ -113,7 +121,25 @@ namespace NActors {
         AppDataInit_.push_back(std::move(callback));
     }
 
+    void TTestActorRuntime::AddAuditLogStuff() {
+        for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+            AddLocalService(
+                NKikimr::NAudit::MakeAuditServiceID(),
+                TActorSetupCmd(
+                    NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)).Release(),
+                    TMailboxType::HTSwap,
+                    0
+                ),
+                nodeIndex
+            );
+        }
+    }
+
     void TTestActorRuntime::Initialize(TEgg egg) {
+        if (AuditLogBackends) {
+            AddAuditLogStuff();
+        }
+
         IsInitialized = true;
 
         Opaque = std::move(egg.Opaque);
@@ -291,14 +317,6 @@ namespace NActors {
         }
 
         return true;
-    }
-
-    void TTestActorRuntime::SimulateSleep(TDuration duration) {
-        if (!SleepEdgeActor) {
-            SleepEdgeActor = AllocateEdgeActor();
-        }
-        Schedule(new IEventHandle(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
-        GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
     }
 
     void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie, NWilson::TTraceId traceId) {

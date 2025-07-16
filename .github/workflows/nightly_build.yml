@@ -9,7 +9,9 @@ on:
         type: boolean
         required: false
         default: true
-
+  push:
+    tags:
+      - '[0-9]**'
 jobs:
   determine_branches:
     runs-on: ubuntu-latest
@@ -18,8 +20,8 @@ jobs:
     steps:
       - id: set-branches
         run: |
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.use_default_branches }}" == "true" ]]; then
-            echo "branches=['main', 'stable-25-1', 'stable-24-4', 'stable-25-1-1', 'stable-25-1-analytics']" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" == "schedule" || ("${{ inputs.use_default_branches }}" == "true"  && "${{ github.ref_type }}" != "tag") ]]; then
+            echo "branches=['main', 'stable-25-1', 'stable-24-4', 'stable-25-1-1', 'stable-25-1-analytics', 'stable-25-1-2', 'stable-25-1-3', 'prestable-25-2', 'prestable-25-3']" >> $GITHUB_OUTPUT
           else
             echo "branches=['${{ github.ref_name }}']" >> $GITHUB_OUTPUT
           fi
@@ -51,8 +53,9 @@ jobs:
         increment: false
         run_tests: false
         put_build_results_to_cache: false
-        secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',
-          secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
+        additional_ya_make_args: "-DDEBUGINFO_LINES_ONLY" # we don't need full symbols in CI checks
+        secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}"}}',
+          secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.TESTMO_URL, vars.TESTMO_PROJECT_ID ) }}
     - name: Setup s3cmd

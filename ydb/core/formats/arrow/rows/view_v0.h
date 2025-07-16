@@ -17,7 +17,7 @@ private:
     class TIterator {
     private:
         TStringBuf Values;
-        const std::shared_ptr<arrow::Schema> Schema;
+        const std::vector<std::shared_ptr<arrow::Field>>& Schema;
         ui32 FieldIndex = 0;
         bool IsFinishedFlag = false;
         bool StartedFlag = false;
@@ -29,7 +29,7 @@ private:
     public:
         TIterator(const TStringBuf values, const std::shared_ptr<arrow::Schema>& schema)
             : Values(values)
-            , Schema(schema) {
+            , Schema(schema->fields()) {
         }
 
         [[nodiscard]] TConclusionStatus Start() {
@@ -45,7 +45,7 @@ private:
         }
 
         bool IsFinished() const {
-            return IsFinishedFlag || FieldIndex == (ui32)Schema->num_fields();
+            return IsFinishedFlag || FieldIndex == (ui32)Schema.size();
         }
 
         template <class TActor>
@@ -59,7 +59,7 @@ private:
                 }
             };
 
-            IsFinishedFlag = NArrow::SwitchType(Schema->field(FieldIndex)->type()->id(), predScan);
+            IsFinishedFlag = NArrow::SwitchType(Schema[FieldIndex]->type()->id(), predScan);
             return !IsFinishedFlag;
         }
 
@@ -68,7 +68,7 @@ private:
             if (!!CurrentValue) {
                 Values.Skip(CurrentValue->size());
             }
-            if (++FieldIndex == (ui32)Schema->num_fields()) {
+            if (++FieldIndex == (ui32)Schema.size()) {
                 IsFinishedFlag = true;
                 return TConclusionStatus::Success();
             }
@@ -123,6 +123,39 @@ public:
     }
 
     static TString BuildString(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex);
+
+    class TWriter {
+    private:
+        TString Data;
+    public:
+        TWriter(const ui32 reserveSize = 0) {
+            Data.reserve(reserveSize + sizeof(ui8));
+            const ui8 ver = 0;
+            Data.append((const char*)&ver, sizeof(ui8));
+        }
+        template <class T>
+        void Append(const T& value, const bool nullable = true) {
+            static_assert(std::is_integral_v<T>);
+            if constexpr (std::is_integral_v<T>) {
+                if (nullable) {
+                    const ui8 byte = 1;
+                    Data.append((const char*)&byte, sizeof(ui8));
+                }
+                Data.append((const char*)&value, sizeof(T));
+            }
+        }
+
+        void Append(const char* value, const ui32 size, const bool nullable = true) {
+            if (nullable) {
+                const ui8 byte = 1;
+                Data.append((const char*)&byte, sizeof(ui8));
+            }
+            Data.append(value, size);
+        }
+        TString Finish() {
+            return std::move(Data);
+        }
+    };
 
     [[nodiscard]] TConclusionStatus AddToBuilders(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const std::shared_ptr<arrow::Schema>& schema) const;

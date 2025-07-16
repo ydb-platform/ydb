@@ -32,7 +32,7 @@ The `SELECT` query result is calculated as follows:
 * Evaluate expressions in `SELECT`.
 * Assign names set by aliases to expressions in `SELECT`.
 * Apply top-level [DISTINCT](distinct.md) to the resulting columns.
-* Execute similarly every subquery inside [UNION ALL](union.md#union-all), combine them (see [PRAGMA AnsiOrderByLimitInUnionAll](../pragma.md#pragmas)).
+* Execute similarly every subquery inside [UNION ALL](union.md#union-all).
 * Perform sorting with [ORDER BY](order_by.md).
 * Apply [OFFSET and LIMIT](limit_offset.md) to the result.
 

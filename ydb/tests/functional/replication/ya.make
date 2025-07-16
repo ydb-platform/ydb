@@ -17,7 +17,6 @@ PEERDIR(
 
 SRCS(
     replication.cpp
-    transfer.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

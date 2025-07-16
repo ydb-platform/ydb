@@ -15,7 +15,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString User_;
+    std::string User_;
 
     TString CurrentPasswordSha256_;
     TString NewPasswordSha256_;
@@ -34,7 +34,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString User_;
+    std::string User_;
 
     TString PasswordSha256_;
 
@@ -52,7 +52,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString User_;
+    std::string User_;
 
     TString PasswordSha256_;
     TString TokenSha256_;
@@ -71,7 +71,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString User_;
+    std::string User_;
 
     TString PasswordSha256_;
 

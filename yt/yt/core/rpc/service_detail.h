@@ -569,7 +569,7 @@ protected:
     {
         // Defaults.
         TMethodDescriptor(
-            TString method,
+            std::string method,
             TLiteHandler liteHandler,
             THeavyHandler heavyHandler);
 
@@ -588,7 +588,7 @@ protected:
         TInvokerProvider InvokerProvider;
 
         //! Service method name.
-        TString Method;
+        std::string Method;
 
         //! A handler that will serve lite requests.
         TLiteHandler LiteHandler;
@@ -765,9 +765,9 @@ protected:
         NProfiling::TCounter RequestQueueByteSizeLimitErrorCounter;
         NProfiling::TCounter UnauthenticatedRequestCounter;
 
-        std::atomic<NLogging::ELogLevel> LogLevel = {};
-        std::atomic<NLogging::ELogLevel> ErrorLogLevel = {};
-        std::atomic<TDuration> LoggingSuppressionTimeout = {};
+        std::atomic<NLogging::ELogLevel> LogLevel;
+        std::atomic<NLogging::ELogLevel> ErrorLogLevel;
+        std::atomic<TDuration> LoggingSuppressionTimeout;
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
         using TOwningPerformanceCountersKey = std::tuple<std::string, TRequestQueue*>;
@@ -892,7 +892,7 @@ protected:
      *  \note
      *  Thread affinity: any
      */
-    virtual std::vector<TString> SuggestAddresses();
+    virtual std::vector<std::string> SuggestAddresses();
 
     //! Part of #DoConfigure
     //! #DoConfigure configures already registered methods.
@@ -911,7 +911,7 @@ protected:
 protected:
     virtual void OnMethodError(
         TError* error,
-        const TString& method);
+        const std::string& method);
 
 private:
     friend class TRequestQueue;
@@ -1086,7 +1086,7 @@ private:
 
     void OnDiscoverRequestReplyDelayReached(TCtxDiscoverPtr context);
 
-    static TString GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
+    static std::string GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
 
     void OnServiceLivenessCheck();
 };

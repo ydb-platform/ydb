@@ -47,6 +47,8 @@ struct IClientRequest
 
     virtual bool IsAttachmentCompressionEnabled() const = 0;
 
+    virtual bool HasAttachments() const = 0;
+
     virtual bool IsStreamingEnabled() const = 0;
 
     virtual const TStreamingParameters& ClientAttachmentsStreamingParameters() const = 0;
@@ -63,6 +65,8 @@ struct IClientRequest
     virtual std::string GetService() const = 0;
     virtual std::string GetMethod() const = 0;
 
+    virtual const std::string& GetRequestInfo() const = 0;
+
     virtual void DeclareClientFeature(int featureId) = 0;
     virtual void RequireServerFeature(int featureId) = 0;
 
@@ -72,7 +76,7 @@ struct IClientRequest
     virtual const std::string& GetUserTag() const = 0;
     virtual void SetUserTag(const std::string& tag) = 0;
 
-    virtual void SetUserAgent(const TString& userAgent) = 0;
+    virtual void SetUserAgent(const std::string& userAgent) = 0;
 
     virtual bool GetRetry() const = 0;
     virtual void SetRetry(bool value) = 0;
@@ -158,6 +162,8 @@ public:
 
     bool IsAttachmentCompressionEnabled() const override;
 
+    bool HasAttachments() const override;
+
     bool IsStreamingEnabled() const override;
 
     const TStreamingParameters& ClientAttachmentsStreamingParameters() const override;
@@ -174,6 +180,11 @@ public:
     std::string GetService() const override;
     std::string GetMethod() const override;
 
+    template <class... TArgs>
+    void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
+
+    const std::string& GetRequestInfo() const override;
+
     using NRpc::IClientRequest::DeclareClientFeature;
     using NRpc::IClientRequest::RequireServerFeature;
 
@@ -186,7 +197,7 @@ public:
     const std::string& GetUserTag() const override;
     void SetUserTag(const std::string& tag) override;
 
-    void SetUserAgent(const TString& userAgent) override;
+    void SetUserAgent(const std::string& userAgent) override;
 
     bool GetRetry() const override;
     void SetRetry(bool value) override;
@@ -246,10 +257,13 @@ private:
     TAttachmentsOutputStreamPtr RequestAttachmentsStream_;
     TAttachmentsInputStreamPtr ResponseAttachmentsStream_;
 
-    TString User_;
-    TString UserTag_;
+    std::string User_;
+    std::string UserTag_;
+    std::string RequestInfo_;
 
     TWeakPtr<IClientRequestControl> RequestControl_;
+
+    void SetRawRequestInfo(std::string requestInfo);
 
     void OnPullRequestAttachmentsStream();
     void OnRequestStreamingPayloadAcked(int sequenceNumber, const TError& error);
@@ -337,7 +351,7 @@ public:
     //! Returns address of the response sender, as it was provided by the channel configuration (FQDN, IP address, etc).
     //! Empty if it is not supported by the underlying RPC stack or the OK response has not been received yet.
     //! Note: complex channels choose destination dynamically (hedging, roaming), so the address is not known beforehand.
-    const TString& GetAddress() const;
+    const std::string& GetAddress() const;
 
     const NProto::TResponseHeader& Header() const;
 
@@ -350,7 +364,7 @@ protected:
     const TClientContextPtr ClientContext_;
 
     using EState = EClientResponseState;
-    std::atomic<EState> State_ = {EState::Sent};
+    std::atomic<EState> State_ = EState::Sent;
 
 
     explicit TClientResponse(TClientContextPtr clientContext);
@@ -371,7 +385,7 @@ protected:
     const IInvokerPtr& GetInvoker();
 
 private:
-    TString Address_;
+    std::string Address_;
     NProto::TResponseHeader Header_;
     TSharedRefArray ResponseMessage_;
 

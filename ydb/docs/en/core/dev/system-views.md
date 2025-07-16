@@ -21,38 +21,38 @@ Cumulative metrics (`RowReads`, `RowUpdate`, `LockAcquired`, etc.) store accumul
 
 Table structure:
 
-Column | Description | Data type | Instant/Cumulative
---- | --- | --- | ---
-`OwnerId` | ID of the SchemeShard table.<br/>Key: `0`. | `Uint64` | Instant
-`PathId` | ID of the SchemeShard path.<br/>Key: `1`. | `Uint64` | Instant
-`PartIdx` | Partition sequence number.<br/>Key: `2`. | `Uint64` | Instant
-`FollowerId` | ID of the partition tablet [follower](../concepts/glossary.md#tablet-follower). A value of 0 means the leader.<br/>Key: `3`.| `Uint32` | Instant
-`DataSize` | Approximate partition size in bytes. | `Uint64` | Instant
-`RowCount` | Approximate number of rows. | `Uint64` | Instant
-`IndexSize` | Partition index size in bytes. | `Uint64` | Instant
-`CPUCores` | Instantaneous value of the load on the partition (the share of the CPU core time spent by the actor of the partition). | `Double` | Instant
-`TabletId` | ID of the partition tablet. | `Uint64` | Instant
-`Path` | Full path to the table. | `Utf8` | Instant
-`NodeId` | ID of the partition node. | `Uint32` | Instant
-`StartTime` | Last time of the launch of the partition tablet. | `Timestamp` | Instant
-`AccessTime` | Last time of reading from the partition. | `Timestamp` | Instant
-`UpdateTime` | Last time of writing to the partition. | `Timestamp` | Instant
-`RowReads` | Number of point reads. | `Uint64` | Cumulative
-`RowUpdates` | Number of rows written. | `Uint64` | Cumulative
-`RowDeletes` | Number of rows deleted. | `Uint64` | Cumulative
-`RangeReads` | Number of range reads. | `Uint64` | Cumulative
-`RangeReadRows` | Number of rows read in ranges. | `Uint64` | Cumulative
-`InFlightTxCount` | Number of in-flight transactions. | `Uint64` | Instant
-`ImmediateTxCompleted` | Number of completed [single-shard transactions](../concepts/glossary.md#transactions). | `Uint32` | Cumulative
-`CoordinatedTxCompleted` | Number of completed [distributed transactions](../concepts/glossary.md#transactions). | `Uint64` | Cumulative
-`TxRejectedByOverload` | Number of transactions cancelled due to [overload](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative
-`TxRejectedByOutOfStorage` | Number of transactions cancelled due to lack of storage space. | `Uint64` | Cumulative
-`LastTtlRunTime` | Launch time of the last TTL erasure procedure | `Timestamp` | Instant
-`LastTtlRowsProcessed` | Number of rows checked during the last TTL erasure procedure | `Uint64` | Instant
-`LastTtlRowsErased` | Number of rows deleted during the last TTL erasure procedure | `Uint64` | Instant
-`LocksAcquired` | Number of [locks](../contributor/datashard-locks-and-change-visibility.md) acquired. | `Uint64` | Cumulative
-`LocksWholeShard` | The number of ["whole shard" locks](../contributor/datashard-locks-and-change-visibility.md#limitations) taken. | `Uint64` | Cumulative
-`LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#high-level-overview). | `Uint64` | Cumulative
+| Column | Description | Data type | Instant/Cumulative |
+| --- | --- | --- | --- |
+| `OwnerId` | ID of the SchemeShard table.<br/>Key: `0`. | `Uint64` | Instant |
+| `PathId` | ID of the SchemeShard path.<br/>Key: `1`. | `Uint64` | Instant |
+| `PartIdx` | Partition sequence number.<br/>Key: `2`. | `Uint64` | Instant |
+| `FollowerId` | ID of the partition tablet [follower](../concepts/glossary.md#tablet-follower). A value of 0 means the leader.<br/>Key: `3`.| `Uint32` | Instant |
+| `DataSize` | Approximate partition size in bytes. | `Uint64` | Instant |
+| `RowCount` | Approximate number of rows. | `Uint64` | Instant |
+| `IndexSize` | Partition index size in bytes. | `Uint64` | Instant |
+| `CPUCores` | Instantaneous value of the load on the partition (the share of the CPU core time spent by the actor of the partition). | `Double` | Instant |
+| `TabletId` | ID of the partition tablet. | `Uint64` | Instant |
+| `Path` | Full path to the table. | `Utf8` | Instant |
+| `NodeId` | ID of the partition node. | `Uint32` | Instant |
+| `StartTime` | Last time of the launch of the partition tablet. | `Timestamp` | Instant |
+| `AccessTime` | Last time of reading from the partition. | `Timestamp` | Instant |
+| `UpdateTime` | Last time of writing to the partition. | `Timestamp` | Instant |
+| `RowReads` | Number of point reads. | `Uint64` | Cumulative |
+| `RowUpdates` | Number of rows written. | `Uint64` | Cumulative |
+| `RowDeletes` | Number of rows deleted. | `Uint64` | Cumulative |
+| `RangeReads` | Number of range reads. | `Uint64` | Cumulative |
+| `RangeReadRows` | Number of rows read in ranges. | `Uint64` | Cumulative |
+| `InFlightTxCount` | Number of in-flight transactions. | `Uint64` | Instant |
+| `ImmediateTxCompleted` | Number of completed [single-shard transactions](../concepts/glossary.md#transactions). | `Uint32` | Cumulative |
+| `CoordinatedTxCompleted` | Number of completed [distributed transactions](../concepts/glossary.md#transactions). | `Uint64` | Cumulative |
+| `TxRejectedByOverload` | Number of transactions cancelled due to [overload](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative |
+| `TxRejectedByOutOfStorage` | Number of transactions cancelled due to lack of storage space. | `Uint64` | Cumulative |
+| `LastTtlRunTime` | Launch time of the last TTL erasure procedure | `Timestamp` | Instant |
+| `LastTtlRowsProcessed` | Number of rows checked during the last TTL erasure procedure | `Uint64` | Instant |
+| `LastTtlRowsErased` | Number of rows deleted during the last TTL erasure procedure | `Uint64` | Instant |
+| `LocksAcquired` | Number of [locks](../contributor/datashard-locks-and-change-visibility.md) acquired. | `Uint64` | Cumulative |
+| `LocksWholeShard` | The number of ["whole shard" locks](../contributor/datashard-locks-and-change-visibility.md#limitations) taken. | `Uint64` | Cumulative |
+| `LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#high-level-overview). | `Uint64` | Cumulative |
 
 ### Example queries {#partitions-examples}
 
@@ -371,7 +371,9 @@ WHERE IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-
 ORDER BY IntervalEnd desc, LocksBroken desc
 ```
 
-## Auth users, groups, permissions {#auth}
+## Users, groups, and access rights {#auth}
+
+The following system views contain information about users, access groups, user membership in groups, and access rights granted to groups or directly to users.
 
 ### Auth users {#users}
 
@@ -385,11 +387,11 @@ Table structure:
 |--------|-------------|
 | `Sid` | [SID](../concepts/glossary.md#sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
-| `IsLockedOut` | Automatically locked out due to exceeding failed login attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
+| `IsLockedOut` | Indicates that the user has been automatically deactivated due to exceeding the threshold for unsuccessful authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
-| `LastSuccessfulAttemptAt` | Timestamp of the last successful login attempt.<br />Type: `Timestamp`. |
-| `LastFailedAttemptAt` | Timestamp of the last failed login attempt.<br />Type: `Timestamp`. |
-| `FailedAttemptCount` | Number of failed login attempts.<br />Type: `Uint32`. |
+| `LastSuccessfulAttemptAt` | Timestamp of the last successful authentication attempt.<br />Type: `Timestamp`. |
+| `LastFailedAttemptAt` | Timestamp of the last failed authentication attempt.<br />Type: `Timestamp`. |
+| `FailedAttemptCount` | Number of failed authentication attempts.<br />Type: `Uint32`. |
 | `PasswordHash` | JSON string containing password hash, salt, and hash algorithm.<br />Type: `Utf8`. |
 
 ### Auth groups
@@ -415,18 +417,18 @@ Table structure:
 | Column | Description |
 |--------|-------------|
 | `GroupSid` | SID of the group.<br />Type: `Utf8`.<br />Key: `0`. |
-| `MemberSid` | SID of the group member.<br />Type: `Utf8`.<br />Key: `1`. |
+| `MemberSid` | SID of the group member. This can be either the SID of a user or the SID of a group.<br />Type: `Utf8`.<br />Key: `1`. |
 
 ### Auth permissions
 
 The auth permissions views list assigned [access rights](../concepts/glossary.md#access-right).
 
-Contains two views:
+There are two views:
 
 * `auth_permissions`: Directly assigned access rights.
 * `auth_effective_permissions`: Effective access rights, accounting for [inheritance](../concepts/glossary.md#access-right-inheritance).
 
-A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
+In this view, the user sees only those [access objects](../concepts/glossary.md#access-object) for which they have the `ydb.granular.describe_schema` permission.
 
 Table structure:
 
@@ -438,7 +440,7 @@ Table structure:
 
 #### Example queries {#auth-permissions-examples}
 
-All the directly assigned permissions for the table located at the path `my_table`:
+Retrieving explicitly granted permissions on the access object, a table named `my_table`:
 
 ```yql
 SELECT *
@@ -446,7 +448,7 @@ FROM `.sys/auth_permissions`
 WHERE Path = "my_table"
 ```
 
-All the effective permissions for the table located at the path `my_table`, including inherited permissions:
+Retrieving effective permissions on the access object, a table named `my_table`:
 
 ```yql
 SELECT *
@@ -454,7 +456,7 @@ FROM `.sys/auth_effective_permissions`
 WHERE Path = "my_table"
 ```
 
-All permissions directly assigned to the user identified as `user3`:
+Retrieving the permissions granted to the user `user3`:
 
 ```yql
 SELECT *
@@ -466,7 +468,7 @@ WHERE Sid = "user3"
 
 The `auth_owners` view lists details of [access objects](../concepts/glossary.md#access-object) [ownership](../concepts/glossary.md#access-owner).
 
-A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
+In this view, the user sees only those [access objects](../concepts/glossary.md#access-object) for which they have the `ydb.granular.describe_schema` permission.
 
 Table structure:
 

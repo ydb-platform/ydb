@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -11,7 +12,7 @@ void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSu
     Source->MutableStageData().AddBlobs(Source->DecodeBlobAddresses(ExtractBlobsData()));
     AFL_VERIFY(Step.Next());
     auto task = std::make_shared<TStepAction>(Source, std::move(Step), Context->GetCommonContext()->GetScanActorId(), false);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task, Context->GetCommonContext()->GetConveyorProcessId());
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, Context->GetCommonContext()->GetConveyorProcessId());
 }
 
 bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
@@ -19,9 +20,12 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
         "scan_actor_id", Context->GetCommonContext()->GetScanActorId())("status", status.GetErrorMessage())("status_code", status.GetStatus())(
         "storage_id", storageId);
-    NActors::TActorContext::AsActorContext().Send(
-        Context->GetCommonContext()->GetScanActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                                                           TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for data: " << range.ToString() << ", error: " << status.GetErrorMessage() << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus()))));
+    NActors::TActorContext::AsActorContext().Send(Context->GetCommonContext()->GetScanActorId(),
+        std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+            TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for data: " << range.ToString()
+                                                     << ", error: " << status.GetErrorMessage()
+                                                     << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())),
+            std::move(Guard)));
     return false;
 }
 
@@ -55,7 +59,7 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
             Source->MutableStageData().AddFetcher(i.second);
         }
         auto task = std::make_shared<TStepAction>(Source, std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
     } else {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("cf_next"));
         std::shared_ptr<TColumnsFetcherTask> nextReadTask = std::make_shared<TColumnsFetcherTask>(

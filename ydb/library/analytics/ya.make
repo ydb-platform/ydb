@@ -9,7 +9,3 @@ SRCS(
 )
 
 END()
-
-RECURSE(
-    protos
-)

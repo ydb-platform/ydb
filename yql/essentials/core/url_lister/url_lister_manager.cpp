@@ -15,27 +15,27 @@ public:
     TUrlListerManager(
         TVector<IUrlListerPtr> urlListers
     )
-        : UrlListers(std::move(urlListers))
+        : UrlListers_(std::move(urlListers))
     {
     }
 
 public:
     TVector<TUrlListEntry> ListUrl(const TString& url, const TString& tokenName) const override {
-        auto urlWithoutParameters = SubstParameters(url, Parameters, nullptr);
+        auto urlWithoutParameters = SubstParameters(url, Parameters_, nullptr);
         auto preprocessedUrl = urlWithoutParameters;
 
         TString alias;
-        if (UrlPreprocessing) {
-            std::tie(preprocessedUrl, alias) = UrlPreprocessing->Preprocess(urlWithoutParameters);
+        if (UrlPreprocessing_) {
+            std::tie(preprocessedUrl, alias) = UrlPreprocessing_->Preprocess(urlWithoutParameters);
         }
 
         TMaybe<TString> token;
         if (tokenName) {
-            if (!Credentials) {
+            if (!Credentials_) {
                 ythrow yexception() << "Missing credentials";
             }
 
-            auto credential = Credentials->FindCredential(tokenName);
+            auto credential = Credentials_->FindCredential(tokenName);
             if (!credential) {
                 ythrow yexception() << "Unknown token name: " << tokenName;
             }
@@ -43,15 +43,15 @@ public:
             token = credential->Content;
         }
 
-        if (!token && alias && Credentials) {
-            if (auto credential = Credentials->FindCredential("default_" + alias)) {
+        if (!token && alias && Credentials_) {
+            if (auto credential = Credentials_->FindCredential("default_" + alias)) {
                 token = credential->Content;
             }
         }
 
         token = token.OrElse("");
 
-        for (const auto& urlLister: UrlListers) {
+        for (const auto& urlLister: UrlListers_) {
             if (urlLister->Accept(preprocessedUrl)) {
                 return urlLister->ListUrl(preprocessedUrl, *token);
             }
@@ -62,36 +62,36 @@ public:
 
 public:
     IUrlListerManagerPtr Clone() const override {
-        auto clone = MakeUrlListerManager(UrlListers);
+        auto clone = MakeUrlListerManager(UrlListers_);
 
-        clone->SetCredentials(Credentials);
-        clone->SetUrlPreprocessing(UrlPreprocessing);
+        clone->SetCredentials(Credentials_);
+        clone->SetUrlPreprocessing(UrlPreprocessing_);
 
-        if (Parameters) {
-            clone->SetParameters(*Parameters);
+        if (Parameters_) {
+            clone->SetParameters(*Parameters_);
         }
 
         return clone;
     }
 
     void SetCredentials(TCredentials::TPtr credentials) override {
-        Credentials = std::move(credentials);
+        Credentials_ = std::move(credentials);
     }
 
     void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing) override {
-        UrlPreprocessing = std::move(urlPreprocessing);
+        UrlPreprocessing_ = std::move(urlPreprocessing);
     }
 
     void SetParameters(const NYT::TNode& parameters) override {
-        Parameters = parameters;
+        Parameters_ = parameters;
     }
 
 private:
-    TVector<IUrlListerPtr> UrlListers;
+    TVector<IUrlListerPtr> UrlListers_;
 
-    TCredentials::TPtr Credentials;
-    IUrlPreprocessing::TPtr UrlPreprocessing;
-    TMaybe<NYT::TNode> Parameters;
+    TCredentials::TPtr Credentials_;
+    IUrlPreprocessing::TPtr UrlPreprocessing_;
+    TMaybe<NYT::TNode> Parameters_;
 };
 
 }

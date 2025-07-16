@@ -64,7 +64,7 @@ ITypeErasedYsonStructFieldPtr CreateTypeErasedYsonStructField(TYsonStructField<T
 
 struct TLoadParameterOptions
 {
-    NYPath::TYPath Path;
+    std::function<NYPath::TYPath()> PathGetter;
     std::optional<EUnrecognizedStrategy> RecursiveUnrecognizedRecursively;
 };
 
@@ -91,7 +91,7 @@ struct IYsonStructParameter
 
     virtual void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 
-    virtual void PostprocessParameter(const TYsonStructBase* self, const NYPath::TYPath& path) const = 0;
+    virtual void PostprocessParameter(const TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const = 0;
 
     virtual void SetDefaultsInitialized(TYsonStructBase* self) = 0;
 
@@ -122,7 +122,7 @@ struct IYsonStructMeta
     virtual const std::vector<std::pair<std::string, IYsonStructParameterPtr>>& GetParameterSortedList() const = 0;
     virtual void SetDefaultsOfInitializedStruct(TYsonStructBase* target) const = 0;
     virtual const THashSet<std::string>& GetRegisteredKeys() const = 0;
-    virtual void PostprocessStruct(TYsonStructBase* target, const TYPath& path) const = 0;
+    virtual void PostprocessStruct(TYsonStructBase* target, const std::function<NYPath::TYPath()>& pathGetter) const = 0;
     virtual IYsonStructParameterPtr GetParameter(const std::string& keyOrAlias) const = 0;
     virtual void LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const = 0;
 
@@ -131,14 +131,14 @@ struct IYsonStructMeta
         INodePtr node,
         bool postprocess,
         bool setDefaults,
-        const TYPath& path) const = 0;
+        const std::function<NYPath::TYPath()>& pathGetter) const = 0;
 
     virtual void LoadStruct(
         TYsonStructBase* target,
         NYson::TYsonPullParserCursor* cursor,
         bool postprocess,
         bool setDefaults,
-        const TYPath& path) const = 0;
+        const std::function<NYPath::TYPath()>& pathGetter) const = 0;
 
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* target) const = 0;
 
@@ -171,21 +171,21 @@ public:
     IYsonStructParameterPtr GetParameter(const std::string& keyOrAlias) const override;
     void LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const override;
 
-    void PostprocessStruct(TYsonStructBase* target, const TYPath& path) const override;
+    void PostprocessStruct(TYsonStructBase* target, const std::function<NYPath::TYPath()>& pathGetter) const override;
 
     void LoadStruct(
         TYsonStructBase* target,
         INodePtr node,
         bool postprocess,
         bool setDefaults,
-        const TYPath& path) const override;
+        const std::function<NYPath::TYPath()>& pathGetter) const override;
 
     void LoadStruct(
         TYsonStructBase* target,
         NYson::TYsonPullParserCursor* cursor,
         bool postprocess,
         bool setDefaults,
-        const TYPath& path) const override;
+        const std::function<NYPath::TYPath()>& pathGetter) const override;
 
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* target) const override;
 
@@ -293,7 +293,7 @@ public:
         const TLoadParameterOptions& options,
         const std::function<void()>& validate) override;
 
-    void PostprocessParameter(const TYsonStructBase* self, const NYPath::TYPath& path) const override;
+    void PostprocessParameter(const TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const override;
     void SetDefaultsInitialized(TYsonStructBase* self) override;
     void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
     bool CanOmitValue(const TYsonStructBase* self) const override;

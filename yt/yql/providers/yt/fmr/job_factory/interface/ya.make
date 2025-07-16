@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/threading/future
     yql/essentials/utils
+    yt/yql/providers/yt/fmr/request_options
 )
 
 YQL_LAST_ABI_VERSION()

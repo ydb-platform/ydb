@@ -13,7 +13,6 @@ namespace NSQLHighlight {
     using NSQLTranslationV1::IGenericLexer;
     using NSQLTranslationV1::TGenericLexerGrammar;
     using NSQLTranslationV1::TGenericToken;
-    using NSQLTranslationV1::TTokenRule;
 
     THashMap<EUnitKind, TString> NamesByUnitKind = [] {
         THashMap<EUnitKind, TString> names;
@@ -51,20 +50,16 @@ namespace NSQLHighlight {
                 patterns = unit.PatternsANSI.Get();
             }
 
+            const auto& name = NamesByUnitKind.at(unit.Kind);
+
             if (unit.Kind == EUnitKind::Comment && ansi) {
                 Y_ENSURE(unit.Patterns.size() == 1);
-                const auto& pattern = unit.Patterns[0];
-                grammar.emplace_back(TTokenRule{
-                    .TokenName = NamesByUnitKind.at(unit.Kind),
-                    .Match = ANSICommentMatcher(Compile(pattern)),
-                });
+                auto matcher = Compile(name, unit.Patterns[0]);
+                grammar.emplace_back(ANSICommentMatcher(name, std::move(matcher)));
             }
 
             for (const auto& pattern : *patterns) {
-                grammar.emplace_back(TTokenRule{
-                    .TokenName = NamesByUnitKind.at(unit.Kind),
-                    .Match = Compile(pattern),
-                });
+                grammar.emplace_back(Compile(name, pattern));
             }
         }
         return grammar;

@@ -156,6 +156,114 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(PredicatePushdownLeftJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+	            b String,
+                c Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+	            b String,
+                c Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            SELECT t1.a FROM t1 left join t2 on t1.a = t2.a where t2.b = 'some_string';
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            SELECT t1.a FROM t1 left join t2 on t1.a = t2.a where t2.b IS NULL;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(LeftJoinToKqpOpJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+	            b String,
+                c Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+	            b String,
+                c Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t3` (
+                a Int64 NOT NULL,
+	            b String,
+                c Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t4` (
+                a Int64 NOT NULL,
+	            b String,
+                c Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            SELECT t1.a FROM t1 left join t2 on t1.a = t2.a where t2.b = 'some_string';
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            SELECT t1.a FROM t1 left join t2 on t1.a = t2.a left join t3 on t2.a = t3.a where t2.b = 'some_string';
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            SELECT t1.a FROM t1 left join t2 on t1.a = t2.a left join t3 on t2.a = t3.a left join t4 on t3.a = t4.a and t4.c = t2.c and t1.c = t4.c where t2.b = 'some_string';
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(JoinFilter) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -175,6 +283,7 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 	            lastname	String,
                 primary key(id)	
             );
+
         )").GetValueSync();
 
         db = kikimr.GetTableClient();

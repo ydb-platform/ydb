@@ -78,9 +78,13 @@ public:
         if (const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>()) {
             const auto soSourceSettings = maybeSettings.Cast();
             if (!soSourceSettings.Selectors().StringValue().empty()) {
-                for (size_t i = 0; i < settings.MaxPartitions; ++i) {
+                ui64 totalMetricsCount;
+                YQL_ENSURE(TryFromString(soSourceSettings.TotalMetricsCount().StringValue(), totalMetricsCount));
+
+                for (size_t i = 0; i < std::min<ui64>(settings.MaxPartitions, totalMetricsCount); ++i) {
                     partitions.push_back(TStringBuilder() << "partition" << i);
                 }
+
                 return 0;
             }
         }
@@ -255,6 +259,7 @@ public:
                     .DownsamplingAggregation<TCoAtom>().Build(downsamplingAggregation ? *downsamplingAggregation : "")
                     .DownsamplingFill<TCoAtom>().Build(downsamplingFill ? *downsamplingFill : "")
                     .DownsamplingGridSec<TCoUint32>().Literal().Build(ToString(downsamplingGridSec ? *downsamplingGridSec : 0)).Build()
+                    .TotalMetricsCount(soReadObject.TotalMetricsCount())
                     .Build()
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
                 .RowType(soReadObject.RowType())
@@ -344,24 +349,28 @@ public:
         auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(10000);
         sourceSettings.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
 
-        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(250);
+        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(125);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
         auto solomonClientDefaultReplica = solomonConfig->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
         sourceSettings.insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
 
-        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(1000);
+        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
-        if (!source.HasProgram()) {
+        if (!selectors.empty()) {
+            ui64 totalMetricsCount;
+            YQL_ENSURE(TryFromString(settings.TotalMetricsCount(), totalMetricsCount));
+
             auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
             auto credentialsProvider = providerFactory->CreateProvider();
             
             NDq::TDqSolomonReadParams readParams{ .Source = source };
 
+            YQL_ENSURE(NActors::TlsActivationContext);
             auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                 NDq::CreateSolomonMetricsQueueActor(
-                    maxTasksPerStage,
+                    std::min<ui64>(maxTasksPerStage, totalMetricsCount),
                     readParams,
                     credentialsProvider
                 ),

@@ -92,7 +92,7 @@ namespace NCommon {
 
 bool TSettingDispatcher::IsRuntime(const TString& name) {
     auto normalizedName = NormalizeName(name);
-    if (auto handler = Handlers.Value(normalizedName, TSettingHandler::TPtr())) {
+    if (auto handler = Handlers_.Value(normalizedName, TSettingHandler::TPtr())) {
         return handler->IsRuntime();
     }
     return false;
@@ -100,9 +100,9 @@ bool TSettingDispatcher::IsRuntime(const TString& name) {
 
 bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, const TMaybe<TString>& value, EStage stage, const TErrorCallback& errorCallback) {
     auto normalizedName = NormalizeName(name);
-    if (auto handler = Handlers.Value(normalizedName, TSettingHandler::TPtr())) {
+    if (auto handler = Handlers_.Value(normalizedName, TSettingHandler::TPtr())) {
         if (cluster != ALL_CLUSTERS) {
-            if (!handler->IsRuntime()) {
+            if (!handler->IsPerCluster()) {
                 return errorCallback(TStringBuilder() << "Static setting " << name.Quote() << " cannot be set for specific cluster", true);
             }
             if (!ValidClusters.contains(cluster)) {
@@ -142,7 +142,7 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
         }
 
         TStringBuilder nearHandlerMsg;
-        for (auto& item: Handlers) {
+        for (auto& item: Handlers_) {
             if (NLevenshtein::Distance(normalizedName, item.first) < DefaultMistypeDistance) {
                 nearHandlerMsg << ", did you mean " << item.second->GetDisplayName().Quote() << '?';
                 break;
@@ -153,21 +153,27 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
 }
 
 void TSettingDispatcher::FreezeDefaults() {
-    for (auto& item: Handlers) {
+    for (auto& item: Handlers_) {
         item.second->FreezeDefault();
     }
 }
 
 void TSettingDispatcher::Restore() {
-    for (auto& item: Handlers) {
+    for (auto& item: Handlers_) {
         item.second->Restore(ALL_CLUSTERS);
     }
 }
 
 void TSettingDispatcher::Enumerate(std::function<void(std::string_view)> callback) {
-    for (const auto& name : Names) {
-        callback(name);
+    for (const auto& name : Names_) {
+        if (!Handlers_.at(NormalizeName(name))->IsDeprecated()) {
+            callback(name);
+        }
     }
+}
+
+const THashSet<TString>& TSettingDispatcher::GetValidClusters() const {
+    return ValidClusters;
 }
 
 TSettingDispatcher::TErrorCallback TSettingDispatcher::GetDefaultErrorCallback() {

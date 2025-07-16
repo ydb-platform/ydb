@@ -57,7 +57,7 @@ def do_custom_error_check(res, sql_query):
         err_string = custom_error.group(1).strip()
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
     log('Custom error: ' + err_string)
-    assert err_string in res.std_err, '"' + err_string + '" is not found'
+    assert err_string in res.std_err, '"' + err_string + '" is not found in "' + res.std_err + "'"
 
 
 def get_gateway_cfg_suffix():
@@ -171,7 +171,7 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
         src_file = file_path or yqlrun_file
         if src_file is None:
             # nonexistent table, will be output for query
-            content = ''
+            content = b''
             exists = False
         else:
             if os.path.exists(src_file):
@@ -183,8 +183,10 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
                 src_file = src_file_alternative
                 yqlrun_file, src_file_alternative = src_file_alternative, yqlrun_file
             else:
-                content = ''
+                content = b''
                 exists = False
+    elif isinstance(content, six.text_type):
+        content = content.encode('utf-8')
 
     file_path = os.path.join(res_dir, name + '.txt')
     new_yqlrun_file = os.path.join(res_dir, name + '.yqlrun.txt')
@@ -503,6 +505,14 @@ def get_langver(cfg):
     return None
 
 
+def get_envs(cfg):
+    envs = dict()
+    for item in cfg:
+        if item[0] == 'env':
+            envs[item[1]] = item[2]
+    return envs
+
+
 def is_skip_forceblocks(cfg):
     for item in cfg:
         if item[0] == 'skip_forceblocks':
@@ -802,7 +812,10 @@ def get_udfs_path(extra_paths=None):
 
 
 def get_test_prefix():
-    return 'yql_tmp_' + hashlib.md5(yatest.common.context.test_name).hexdigest()
+    test_name = yatest.common.context.test_name
+    if isinstance(test_name, six.text_type):
+        test_name = test_name.encode('utf-8')
+    return 'yql_tmp_' + hashlib.md5(test_name).hexdigest()
 
 
 def normalize_plan_ids(plan, no_detailed=False):

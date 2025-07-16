@@ -142,4 +142,34 @@ const TLogicalTypePtr& TTaggedLogicalType::GetElement() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define XX(cppType, ytType)                                                                 \
+    template <>                                                                             \
+    struct TUnderlyingTimestampIntegerTypeImpl<ESimpleLogicalValueType::ytType>             \
+    {                                                                                       \
+        using TValue = cppType;                                                             \
+    };                                                                                      \
+                                                                                            \
+    template <>                                                                             \
+    struct TUnderlyingTzTypeImpl<ESimpleLogicalValueType::Tz##ytType>                       \
+    {                                                                                       \
+        static constexpr ESimpleLogicalValueType TValue = ESimpleLogicalValueType::ytType;  \
+    };
+
+    XX(ui16, Date)
+    XX(ui32, Datetime)
+    XX(ui64, Timestamp)
+    XX(i32, Date32)
+    XX(i64, Datetime64)
+    XX(i64, Timestamp64)
+
+#undef XX
+
+template<ESimpleLogicalValueType type>
+constexpr ESimpleLogicalValueType GetUnderlyingDateType()
+{
+    return TUnderlyingTzTypeImpl<type>::TValue;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTableClient

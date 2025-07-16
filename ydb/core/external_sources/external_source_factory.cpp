@@ -17,8 +17,10 @@ namespace {
 struct TExternalSourceFactory : public IExternalSourceFactory {
     TExternalSourceFactory(
         const TMap<TString, IExternalSource::TPtr>& sources,
+        bool allExternalDataSourcesAreAvailable,
         const std::set<TString>& availableExternalDataSources)
         : Sources(sources)
+        , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
         , AvailableExternalDataSources(availableExternalDataSources)
     {}
 
@@ -27,7 +29,7 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         if (it == Sources.end()) {
             throw TExternalSourceException() << "External source with type " << type << " was not found";
         }
-        if (!AvailableExternalDataSources.contains(type)) {
+        if (!AllExternalDataSourcesAreAvailable && !AvailableExternalDataSources.contains(type)) {
             throw TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
         }
         return it->second;
@@ -35,6 +37,7 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
 
 private:
     const TMap<TString, IExternalSource::TPtr> Sources;
+    bool AllExternalDataSourcesAreAvailable;
     const std::set<TString> AvailableExternalDataSources;
 };
 
@@ -90,6 +93,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
                                                          bool enableInfer,
                                                          bool allowLocalFiles,
+                                                         bool allExternalDataSourcesAreAvailable,
                                                          const std::set<TString>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
@@ -111,7 +115,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC", "SERVICE_ACCOUNT"}, {"database_name", "use_tls", "database_id"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN"}, {"database_name", "use_tls", "database_id"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),
@@ -135,7 +139,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Solomon),
-            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::Iceberg),
@@ -152,8 +156,17 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::MongoDB),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls", "reading_mode", "unexpected_type_display_mode", "unsupported_type_display_mode"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::OpenSearch),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(YdbTopicsType),
+            CreateExternalDataSource(TString{NYql::PqProviderName}, {"NONE", "BASIC", "TOKEN"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         }
     },
+    allExternalDataSourcesAreAvailable,
     availableExternalDataSources); 
 }
 

@@ -34,41 +34,46 @@ License
 Distributed under the [Boost Software License, Version 1.0](https://boost.org/LICENSE_1_0.txt).
 
 ====================COPYRIGHT====================
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 
 
 ====================COPYRIGHT====================
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 // Copyright (c) 2022 Denis Mikhailov
 
 
 ====================COPYRIGHT====================
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 // Copyright (c) 2023 Denis Mikhailov
 
 
 ====================COPYRIGHT====================
 // Copyright (c) 2017-2018 Alexandr Poltavsky, Antony Polukhin.
-// Copyright (c) 2019-2023 Antony Polukhin.
+// Copyright (c) 2019-2025 Antony Polukhin.
 
 
 ====================COPYRIGHT====================
 // Copyright (c) 2017-2018 Chris Beck
-// Copyright (c) 2019-2023 Antony Polukhin
+// Copyright (c) 2019-2025 Antony Polukhin
 
 
 ====================COPYRIGHT====================
 // Copyright (c) 2018 Adam Butcher, Antony Polukhin
-// Copyright (c) 2019-2023 Antony Polukhin
+// Copyright (c) 2019-2025 Antony Polukhin
 
 
 ====================COPYRIGHT====================
 // Copyright (c) 2018 Sergei Fedorov
-// Copyright (c) 2019-2023 Antony Polukhin
+// Copyright (c) 2019-2025 Antony Polukhin
 
 
 ====================COPYRIGHT====================
 // Copyright (c) 2023 Bela Schaum, X-Ryl669, Denis Mikhailov.
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2023 Bela Schaum, X-Ryl669, Denis Mikhailov.
+// Copyright (c) 2024-2025 Antony Polukhin
 
 
 ====================File: LICENSE_1_0.txt====================

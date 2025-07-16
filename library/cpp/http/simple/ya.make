@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    library/cpp/cache
     library/cpp/http/io
     library/cpp/openssl/io
     library/cpp/string_utils/url

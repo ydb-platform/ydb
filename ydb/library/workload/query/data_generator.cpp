@@ -10,16 +10,13 @@ namespace NYdbWorkload {
 namespace NQuery {
 
     TQueryWorkloadDataInitializer::TQueryWorkloadDataInitializer(const TQueryWorkloadParams& params)
-        : TWorkloadDataInitializerBase("dir", "Upload external dataset from directory", params)
+        : TWorkloadDataInitializerBase("", "Upload data from directory", params)
     {}
 
     void TQueryWorkloadDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
         TWorkloadDataInitializerBase::ConfigureOpts(opts);
-        opts.AddLongOption('i', "input",
-            "Directory with dataset. Must contain subdir for every table. "
-            "Now supported zipped and unzipped csv and tsv files. "
-            "For better perfomanse you may split it to some parts for parrallel upload."
-            ).StoreResult(&DataPath);
+        opts.AddLongOption("suite-path", "Path to suite directory. See \"ydb workload query\" command description for more information.")
+            .RequiredArgument("PATH").StoreResult(&SuitePath);
         opts.AddLongOption("tables", "Commaseparated list of tables for generate. Empty means all tables.")
             .Handler1T<TStringBuf>([this](TStringBuf arg) {
                 TablesForUpload.clear();
@@ -29,9 +26,10 @@ namespace NQuery {
 
     TBulkDataGeneratorList TQueryWorkloadDataInitializer::DoGetBulkInitialData() {
         auto tables = TablesForUpload;
+        const auto dataPath = SuitePath / "import";
         if (tables.empty()) {
             TVector<TFsPath> tablePaths;
-            DataPath.List(tablePaths);
+            dataPath.List(tablePaths);
             for (const auto& t: tablePaths) {
                 if (t.IsDirectory()) {
                     tables.emplace(t.GetName());
@@ -40,7 +38,7 @@ namespace NQuery {
         }
         TBulkDataGeneratorList gens;
         for (const auto& table: tables) {
-            const auto path = DataPath / table;
+            const auto path = dataPath / table;
             if (!path.Exists()) {
                 throw yexception() << "Data for table " << table << " not found";
             }

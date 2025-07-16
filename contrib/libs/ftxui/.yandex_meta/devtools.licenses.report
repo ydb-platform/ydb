@@ -1,0 +1,237 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     CC-BY-3.0 AND MIT    563237d11bdd0adf26ab44cfb87e9eb0
+BELONGS ya.make
+    License text:
+          <a href="http://opensource.org/licenses/MIT"><img src="https://img.shields.io/github/license/arthursonzogni/FTXUI?color=black"></img></a>
+    Scancode info:
+        Original SPDX id: CC-BY-3.0
+        Score           : 19.35
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/licenses/by/3.0/, http://creativecommons.org/licenses/by/3.0/legalcode, https://spdx.org/licenses/CC-BY-3.0
+    Files with this license:
+        README.md [5:5]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 19.35
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [5:5]
+
+KEEP     MIT                  58c44e43474457ea5d8a7dc9ed7c0b76
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: src/ftxui/component/input.cpp at line 3, src/ftxui/dom/flexbox.cpp at line 3, src/ftxui/dom/flexbox_helper.cpp at line 3
+    License text:
+        // Use of this source code is governed by the MIT license that can be found in
+        // the LICENSE file.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/ftxui/component/input.cpp [2:3]
+        src/ftxui/dom/flexbox.cpp [2:3]
+        src/ftxui/dom/flexbox_helper.cpp [2:3]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5:21]
+
+KEEP     WTFPL                65d02264780d55f1b746f9954631cefd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: WTFPL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://sam.zoy.org/wtfpl/, http://sam.zoy.org/wtfpl/COPYING, https://spdx.org/licenses/WTFPL
+    Files with this license:
+        src/ftxui/component/animation.cpp [22:26]
+
+KEEP     MIT                  87cbaeea422588c24f4fc7dc9f7422b1
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: src/ftxui/dom/box_helper.hpp at line 3
+    License text:
+        // Use of this source code is governed by the MIT license that can be found in
+        // the LICENSE file.line.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/ftxui/dom/box_helper.hpp [2:3]
+
+KEEP     MIT                  8c6b397cbef46628bea401075e15b1d5
+BELONGS ya.make
+    License text:
+        The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [1:1]
+
+KEEP     MIT                  e45ac9ead97064977228638d2932ed62
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: include/ftxui/component/animation.hpp at line 3, include/ftxui/component/captured_mouse.hpp at line 3, include/ftxui/component/component.hpp at line 3, include/ftxui/component/component_base.hpp at line 3, include/ftxui/component/component_options.hpp at line 3, include/ftxui/component/event.hpp at line 3, include/ftxui/component/loop.hpp at line 3, include/ftxui/component/mouse.hpp at line 3, include/ftxui/component/receiver.hpp at line 3, include/ftxui/component/screen_interactive.hpp at line 3, include/ftxui/component/task.hpp at line 3, include/ftxui/dom/canvas.hpp at line 3, include/ftxui/dom/deprecated.hpp at line 3, include/ftxui/dom/direction.hpp at line 3, include/ftxui/dom/elements.hpp at line 3, include/ftxui/dom/flexbox_config.hpp at line 3, include/ftxui/dom/linear_gradient.hpp at line 3, include/ftxui/dom/node.hpp at line 3, include/ftxui/dom/requirement.hpp at line 3, include/ftxui/dom/selection.hpp at line 3, include/ftxui/dom/table.hpp at line 3, include/ftxui/dom/take_any_args.hpp at line 3, include/ftxui/screen/box.hpp at line 3, include/ftxui/screen/color.hpp at line 3, include/ftxui/screen/color_info.hpp at line 3, include/ftxui/screen/deprecated.hpp at line 3, include/ftxui/screen/image.hpp at line 3, include/ftxui/screen/pixel.hpp at line 3, include/ftxui/screen/screen.hpp at line 3, include/ftxui/screen/string.hpp at line 3, include/ftxui/screen/terminal.hpp at line 3, include/ftxui/util/autoreset.hpp at line 3, include/ftxui/util/ref.hpp at line 3, src/ftxui/component/button.cpp at line 3, src/ftxui/component/catch_event.cpp at line 3, src/ftxui/component/checkbox.cpp at line 3, src/ftxui/component/collapsible.cpp at line 3, src/ftxui/component/component.cpp at line 3, src/ftxui/component/component_options.cpp at line 3, src/ftxui/component/container.cpp at line 3, src/ftxui/component/dropdown.cpp at line 3, src/ftxui/component/event.cpp at line 3, src/ftxui/component/hoverable.cpp at line 3, src/ftxui/component/loop.cpp at line 3, src/ftxui/component/maybe.cpp at line 3, src/ftxui/component/menu.cpp at line 3, src/ftxui/component/modal.cpp at line 3, src/ftxui/component/radiobox.cpp at line 3, src/ftxui/component/renderer.cpp at line 3, src/ftxui/component/resizable_split.cpp at line 3, src/ftxui/component/screen_interactive.cpp at line 3, src/ftxui/component/slider.cpp at line 3, src/ftxui/component/terminal_input_parser.cpp at line 3, src/ftxui/component/terminal_input_parser.hpp at line 3, src/ftxui/component/util.cpp at line 3, src/ftxui/component/window.cpp at line 3, src/ftxui/dom/automerge.cpp at line 3, src/ftxui/dom/blink.cpp at line 3, src/ftxui/dom/bold.cpp at line 3, src/ftxui/dom/border.cpp at line 3, src/ftxui/dom/box_helper.cpp at line 3, src/ftxui/dom/canvas.cpp at line 3, src/ftxui/dom/clear_under.cpp at line 3, src/ftxui/dom/color.cpp at line 3, src/ftxui/dom/composite_decorator.cpp at line 3, src/ftxui/dom/dbox.cpp at line 3, src/ftxui/dom/dim.cpp at line 3, src/ftxui/dom/flex.cpp at line 3, src/ftxui/dom/flexbox_config.cpp at line 3, src/ftxui/dom/flexbox_helper.hpp at line 3, src/ftxui/dom/focus.cpp at line 3, src/ftxui/dom/frame.cpp at line 3, src/ftxui/dom/gauge.cpp at line 3, src/ftxui/dom/graph.cpp at line 3, src/ftxui/dom/gridbox.cpp at line 3, src/ftxui/dom/hbox.cpp at line 3, src/ftxui/dom/hyperlink.cpp at line 3, src/ftxui/dom/inverted.cpp at line 3, src/ftxui/dom/italic.cpp at line 3, src/ftxui/dom/linear_gradient.cpp at line 3, src/ftxui/dom/node.cpp at line 3, src/ftxui/dom/node_decorator.cpp at line 3, src/ftxui/dom/node_decorator.hpp at line 3, src/ftxui/dom/paragraph.cpp at line 3, src/ftxui/dom/reflect.cpp at line 3, src/ftxui/dom/scroll_indicator.cpp at line 3, src/ftxui/dom/selection.cpp at line 3, src/ftxui/dom/selection_style.cpp at line 3, src/ftxui/dom/separator.cpp at line 3, src/ftxui/dom/size.cpp at line 3, src/ftxui/dom/spinner.cpp at line 3, src/ftxui/dom/strikethrough.cpp at line 3, src/ftxui/dom/table.cpp at line 3, src/ftxui/dom/text.cpp at line 3, src/ftxui/dom/underlined.cpp at line 3, src/ftxui/dom/underlined_double.cpp at line 3, src/ftxui/dom/util.cpp at line 3, src/ftxui/dom/vbox.cpp at line 3, src/ftxui/screen/box.cpp at line 3, src/ftxui/screen/color.cpp at line 3, src/ftxui/screen/color_info.cpp at line 3, src/ftxui/screen/image.cpp at line 3, src/ftxui/screen/screen.cpp at line 3, src/ftxui/screen/string.cpp at line 3, src/ftxui/screen/string_internal.hpp at line 3, src/ftxui/screen/terminal.cpp at line 3, src/ftxui/screen/util.hpp at line 3
+    License text:
+        // Use of this source code is governed by the MIT license that can be found in
+        // the LICENSE file.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/ftxui/component/animation.hpp [2:3]
+        include/ftxui/component/captured_mouse.hpp [2:3]
+        include/ftxui/component/component.hpp [2:3]
+        include/ftxui/component/component_base.hpp [2:3]
+        include/ftxui/component/component_options.hpp [2:3]
+        include/ftxui/component/event.hpp [2:3]
+        include/ftxui/component/loop.hpp [2:3]
+        include/ftxui/component/mouse.hpp [2:3]
+        include/ftxui/component/receiver.hpp [2:3]
+        include/ftxui/component/screen_interactive.hpp [2:3]
+        include/ftxui/component/task.hpp [2:3]
+        include/ftxui/dom/canvas.hpp [2:3]
+        include/ftxui/dom/deprecated.hpp [2:3]
+        include/ftxui/dom/direction.hpp [2:3]
+        include/ftxui/dom/elements.hpp [2:3]
+        include/ftxui/dom/flexbox_config.hpp [2:3]
+        include/ftxui/dom/linear_gradient.hpp [2:3]
+        include/ftxui/dom/node.hpp [2:3]
+        include/ftxui/dom/requirement.hpp [2:3]
+        include/ftxui/dom/selection.hpp [2:3]
+        include/ftxui/dom/table.hpp [2:3]
+        include/ftxui/dom/take_any_args.hpp [2:3]
+        include/ftxui/screen/box.hpp [2:3]
+        include/ftxui/screen/color.hpp [2:3]
+        include/ftxui/screen/color_info.hpp [2:3]
+        include/ftxui/screen/deprecated.hpp [2:3]
+        include/ftxui/screen/image.hpp [2:3]
+        include/ftxui/screen/pixel.hpp [2:3]
+        include/ftxui/screen/screen.hpp [2:3]
+        include/ftxui/screen/string.hpp [2:3]
+        include/ftxui/screen/terminal.hpp [2:3]
+        include/ftxui/util/autoreset.hpp [2:3]
+        include/ftxui/util/ref.hpp [2:3]
+        src/ftxui/component/button.cpp [2:3]
+        src/ftxui/component/catch_event.cpp [2:3]
+        src/ftxui/component/checkbox.cpp [2:3]
+        src/ftxui/component/collapsible.cpp [2:3]
+        src/ftxui/component/component.cpp [2:3]
+        src/ftxui/component/component_options.cpp [2:3]
+        src/ftxui/component/container.cpp [2:3]
+        src/ftxui/component/dropdown.cpp [2:3]
+        src/ftxui/component/event.cpp [2:3]
+        src/ftxui/component/hoverable.cpp [2:3]
+        src/ftxui/component/loop.cpp [2:3]
+        src/ftxui/component/maybe.cpp [2:3]
+        src/ftxui/component/menu.cpp [2:3]
+        src/ftxui/component/modal.cpp [2:3]
+        src/ftxui/component/radiobox.cpp [2:3]
+        src/ftxui/component/renderer.cpp [2:3]
+        src/ftxui/component/resizable_split.cpp [2:3]
+        src/ftxui/component/screen_interactive.cpp [2:3]
+        src/ftxui/component/slider.cpp [2:3]
+        src/ftxui/component/terminal_input_parser.cpp [2:3]
+        src/ftxui/component/terminal_input_parser.hpp [2:3]
+        src/ftxui/component/util.cpp [2:3]
+        src/ftxui/component/window.cpp [2:3]
+        src/ftxui/dom/automerge.cpp [2:3]
+        src/ftxui/dom/blink.cpp [2:3]
+        src/ftxui/dom/bold.cpp [2:3]
+        src/ftxui/dom/border.cpp [2:3]
+        src/ftxui/dom/box_helper.cpp [2:3]
+        src/ftxui/dom/canvas.cpp [2:3]
+        src/ftxui/dom/clear_under.cpp [2:3]
+        src/ftxui/dom/color.cpp [2:3]
+        src/ftxui/dom/composite_decorator.cpp [2:3]
+        src/ftxui/dom/dbox.cpp [2:3]
+        src/ftxui/dom/dim.cpp [2:3]
+        src/ftxui/dom/flex.cpp [2:3]
+        src/ftxui/dom/flexbox_config.cpp [2:3]
+        src/ftxui/dom/flexbox_helper.hpp [2:3]
+        src/ftxui/dom/focus.cpp [2:3]
+        src/ftxui/dom/frame.cpp [2:3]
+        src/ftxui/dom/gauge.cpp [2:3]
+        src/ftxui/dom/graph.cpp [2:3]
+        src/ftxui/dom/gridbox.cpp [2:3]
+        src/ftxui/dom/hbox.cpp [2:3]
+        src/ftxui/dom/hyperlink.cpp [2:3]
+        src/ftxui/dom/inverted.cpp [2:3]
+        src/ftxui/dom/italic.cpp [2:3]
+        src/ftxui/dom/linear_gradient.cpp [2:3]
+        src/ftxui/dom/node.cpp [2:3]
+        src/ftxui/dom/node_decorator.cpp [2:3]
+        src/ftxui/dom/node_decorator.hpp [2:3]
+        src/ftxui/dom/paragraph.cpp [2:3]
+        src/ftxui/dom/reflect.cpp [2:3]
+        src/ftxui/dom/scroll_indicator.cpp [2:3]
+        src/ftxui/dom/selection.cpp [2:3]
+        src/ftxui/dom/selection_style.cpp [2:3]
+        src/ftxui/dom/separator.cpp [2:3]
+        src/ftxui/dom/size.cpp [2:3]
+        src/ftxui/dom/spinner.cpp [2:3]
+        src/ftxui/dom/strikethrough.cpp [2:3]
+        src/ftxui/dom/table.cpp [2:3]
+        src/ftxui/dom/text.cpp [2:3]
+        src/ftxui/dom/underlined.cpp [2:3]
+        src/ftxui/dom/underlined_double.cpp [2:3]
+        src/ftxui/dom/util.cpp [2:3]
+        src/ftxui/dom/vbox.cpp [2:3]
+        src/ftxui/screen/box.cpp [2:3]
+        src/ftxui/screen/color.cpp [2:3]
+        src/ftxui/screen/color_info.cpp [2:3]
+        src/ftxui/screen/image.cpp [2:3]
+        src/ftxui/screen/screen.cpp [2:3]
+        src/ftxui/screen/string.cpp [2:3]
+        src/ftxui/screen/string_internal.hpp [2:3]
+        src/ftxui/screen/terminal.cpp [2:3]
+        src/ftxui/screen/util.hpp [2:3]

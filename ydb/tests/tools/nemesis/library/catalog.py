@@ -58,6 +58,10 @@ def basic_kikimr_nemesis_list(
                 ssh_username=ssh_username
             )
         )
+        if is_bridge_cluster(cluster):
+            harmful_nemesis_list.extend(bridge_pile_nemesis_list(cluster))
+        else:
+            harmful_nemesis_list.extend(datacenter_nemesis_list(cluster))
 
     light_nemesis_list = []
     light_nemesis_list.extend([
@@ -99,11 +103,6 @@ def basic_kikimr_nemesis_list(
         return nemesis_list
     nemesis_list.extend(light_nemesis_list)
     nemesis_list.extend(harmful_nemesis_list)
-
-    if is_bridge_cluster(cluster):
-        nemesis_list.extend(bridge_pile_nemesis_list(cluster))
-    else:
-        nemesis_list.extend(datacenter_nemesis_list(cluster))
 
     return nemesis_list
 

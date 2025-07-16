@@ -70,11 +70,6 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         self._bridge_pile_cycle = self._create_bridge_pile_cycle()
         self._bridge_clients = self._create_bridge_clients()
 
-    def next_schedule(self):
-        if self._current_pile_id is not None:
-            return next(self._interval_schedule)
-        return super(AbstractBridgePileNemesis, self).next_schedule()
-
     def inject_fault(self):
         if self.extract_fault():
             return
@@ -142,17 +137,12 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             self.logger.error("Could not find another pile for bridge operations")
             raise
         
-        self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].get_cluster_state_result())
-        is_current_primary = self._bridge_clients[another_pile_id].is_primary_pile(self._current_pile_id)
-        if is_current_primary:
-            self.logger.info("OPERATION: failover_scenario (%d -> %d)", self._current_pile_id, another_pile_id)
-            result = self._bridge_clients[another_pile_id].failover_scenario(self._current_pile_id, another_pile_id)
-        else:
-            self.logger.info("OPERATION: switchover_scenario (%d)", self._current_pile_id)
-            result = self._bridge_clients[another_pile_id].switchover_scenario(self._current_pile_id)
+        self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
+        self.logger.info("OPERATION: failover (pile_id=%d)", self._current_pile_id)
+        result = self._bridge_clients[another_pile_id].failover(self._current_pile_id)
 
         if not result:
-            raise Exception("Failed to manage bridge state")
+            raise Exception("Failed to failover pile %d", self._current_pile_id)
         
         self.logger.info("Bridge state managed successfully")
 
@@ -196,16 +186,16 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             self.logger.error("Could not find another pile for bridge restoration operations")
             raise
         
-        self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].get_cluster_state_result())
-        self.logger.info("OPERATION: restore_scenario for pile %d", self._current_pile_id)
-        result = self._bridge_clients[another_pile_id].restore_scenario(self._current_pile_id, another_pile_id)
+        self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
+        self.logger.info("OPERATION: rejoin for pile %d", self._current_pile_id)
+        result = self._bridge_clients[another_pile_id].rejoin(self._current_pile_id)
         if not result:
-            raise Exception("Failed to restore pile %d", self._current_pile_id)
+            raise Exception("Failed to rejoin pile %d", self._current_pile_id)
 
         self.logger.info("Bridge state restored successfully")
 
 class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
-    def __init__(self, cluster, schedule=(0, 60), duration=60):
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(BridgePileStopNodesNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 
@@ -280,7 +270,7 @@ class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
 
 
 class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
-    def __init__(self, cluster, schedule=(0, 60), duration=60):
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(BridgePileIptablesBlockPortsNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 
@@ -356,7 +346,7 @@ class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
 
 
 class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
-    def __init__(self, cluster, schedule=(0, 60), duration=60):
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(BridgePileRouteUnreachableNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 

@@ -1840,6 +1840,71 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(OlapPushDownBug) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/test_db_bug` (
+            Db Utf8 not null,
+            Suite Utf8 not null,
+            RunTs Timestamp not null,
+            Version Utf8,
+            Report Utf8,
+            YdbSumMeans Double,
+            YdbSumMax Double,
+            YdbSumMin Double,
+            SumImportWithCompactionTime Float,
+            SumCompactedBytes Float,
+            SumWrittenBytes Float,
+            GrossTime Float,
+            SuccessCount Uint64,
+            FailCount Uint64,
+            AvgImportSpeed Double,
+            AvgCpuCores Double,
+            AvgCpuTime Double,
+            Begin TimeStamp,
+            End TimeStamp,
+            DiffTests String,
+            FailTests String,
+            PRIMARY KEY (RunTs, Db, Suite)
+        ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        std::vector<std::string> queries = {
+        R"(SELECT DISTINCT `t1`.`Suite` AS `res_0` FROM ( SELECT    AvgCpuCores,  AvgCpuTime,    AvgImportSpeed,    Begin,   Db,    DiffTests,    End,    FailCount,   FailTests,    GrossTime,    Report,    RunTs,    SuccessCount,    Suite,   SumCompactedBytes,   SumImportWithCompactionTime,   SumWrittenBytes,    Version,    YdbSumMax,    YdbSumMeans,    YdbSumMin FROM `/Root/test_db_bug`) AS `t1` WHERE CASE WHEN String::Contains(`t1`.`Db`, 'sas-daily') THEN 'sas_small_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'sas-perf') THEN 'sas_big_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'sas') THEN 'sas_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla-acceptance') THEN 'vla_small_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla-perf') THEN 'vla_big_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla4-8154') THEN 'vla_8154_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla4-8161') THEN 'vla_8161_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla') THEN 'vla_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END ELSE 'new_db_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END END IN ('vla_big_column') AND Unicode::ReplaceAll(CAST(`t1`.`Version` AS UTF8), coalesce(CAST(Unicode::Substring(CAST(`t1`.`Version` AS UTF8), Unicode::GetLength(CAST(`t1`.`Version` AS UTF8)) - 8) AS UTF8), ''), coalesce(CAST('' AS UTF8), '')) IN ('main') AND CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END IN ('column') AND `t1`.`RunTs` BETWEEN DateTime::MakeDatetime(DateTime::ParseIso8601('2025-07-12T00:00:00')) AND DateTime::MakeDatetime(DateTime::ParseIso8601('2025-07-15T23:59:59.999000')) ORDER BY `res_0` ASC LIMIT 1000;)",
+        R"(SELECT `res_0`, sum(CASE WHEN (`t1`.`AvgImportSpeed` > 0) THEN `t1`.`AvgImportSpeed` WHEN (`t1`.`GrossTime` > 0) THEN `t1`.`GrossTime` ELSE `t1`.`YdbSumMeans` END) AS `res_1`, `res_2`, sum(CAST(`t1`.`YdbSumMeans` AS BIGINT)) AS `res_3` 
+FROM (SELECT AvgCpuCores, AvgCpuTime, AvgImportSpeed, Begin, Db, DiffTests, End, FailCount, FailTests, GrossTime, Report, RunTs, SuccessCount, Suite, SumCompactedBytes, SumImportWithCompactionTime, SumWrittenBytes, Version, YdbSumMax, YdbSumMeans, YdbSumMin
+FROM `/Root/test_db_bug`) AS `t1`  WHERE `t1`.`Suite` IN ('Tpcds100') AND Unicode::ReplaceAll(CAST(`t1`.`Version` AS UTF8), coalesce(CAST(Unicode::Substring(CAST(`t1`.`Version` AS UTF8), Unicode::GetLength(CAST(`t1`.`Version` AS UTF8)) - 8) AS UTF8), ''), coalesce(CAST('' AS UTF8), '')) IN ('main') AND CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END IN ('column') AND `t1`.`RunTs` BETWEEN DateTime::MakeDatetime(DateTime::ParseIso8601('2025-07-02T00:00:00')) AND DateTime::MakeDatetime(DateTime::ParseIso8601('2025-07-15T23:59:59.999000')) GROUP BY CAST(CAST(DateTime::MakeDatetime(`t1`.`RunTs` + DateTime::IntervalFromHours(3)) AS DATE) AS UTF8) || ' ' || CAST(DateTime::GetHour(DateTime::MakeDatetime(`t1`.`RunTs` + DateTime::IntervalFromHours(3))) AS UTF8) || ':' || CAST(DateTime::GetMinute(DateTime::MakeDatetime(`t1`.`RunTs` + DateTime::IntervalFromHours(3))) AS UTF8) || ' <a target=_blank href=\"' || `t1`.`Report` || '\">' || CASE WHEN String::StartsWith(`t1`.`Version`, 'main.') THEN Unicode::Substring(CAST(`t1`.`Version` AS UTF8), 6 - 1) WHEN String::StartsWith(`t1`.`Version`, 'stable-') THEN 'stable.' || ListHead(ListSkip(Unicode::SplitToList(CAST(`t1`.`Version` AS UTF8), '.'), 2 - 1)) ELSE `t1`.`Version` END || '</a>' AS `res_0`, CASE WHEN String::Contains(`t1`.`Db`, 'sas-daily') THEN 'sas_small_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'sas-perf') THEN 'sas_big_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'sas') THEN 'sas_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla-acceptance') THEN 'vla_small_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla-perf') THEN 'vla_big_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla4-8154') THEN 'vla_8154_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla4-8161') THEN 'vla_8161_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END WHEN String::Contains(`t1`.`Db`, 'vla') THEN 'vla_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END ELSE 'new_db_' || CASE WHEN String::Contains(`t1`.`Db`, 'load') THEN 'column' WHEN String::Contains(`t1`.`Db`, '/s3') THEN 's3' WHEN String::Contains(`t1`.`Db`, '/row') THEN 'row' ELSE 'other' END END || ':' || CASE WHEN (`t1`.`FailCount` > 0) THEN 'with errors' WHEN (`t1`.`FailCount` + `t1`.`SuccessCount` < CAST(CASE WHEN String::StartsWith(`t1`.`Suite`, 'Clickbench') THEN 44 WHEN String::StartsWith(`t1`.`Suite`, 'Tpch') THEN 23 WHEN String::StartsWith(`t1`.`Suite`, 'Tpcds') THEN 100 WHEN String::StartsWith(`t1`.`Suite`, 'ExternalA1') THEN 6 WHEN String::StartsWith(`t1`.`Suite`, 'ExternalX1') THEN 10 WHEN String::StartsWith(`t1`.`Suite`, 'ExternalM1') THEN 2 WHEN String::StartsWith(`t1`.`Suite`, 'ExternalB1') THEN 7 WHEN String::StartsWith(`t1`.`Suite`, 'ImportFileCsv') THEN 2 ELSE 1 END AS INTEGER) - CAST(1 AS INTEGER)) THEN 'in_progress' ELSE 'finished' END AS `res_2`
+ LIMIT 1000001)"};
+
+        for (const auto &query : queries) {
+          auto queryClient = kikimr.GetQueryClient();
+          auto result = queryClient.GetSession().GetValueSync();
+          NStatusHelpers::ThrowOnError(result);
+          auto session2 = result.GetSession();
+          auto resultQuery =
+              session2
+                  .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                NYdb::NQuery::TExecuteQuerySettings().ExecMode(
+                                    NQuery::EExecMode::Explain))
+                  .ExtractValueSync();
+          UNIT_ASSERT_VALUES_EQUAL(resultQuery.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
     // Unit tests for datetime pushdowns in scan query
     Y_UNIT_TEST(PredicatePushdown_Datetime_SQ) {
         auto settings = TKikimrSettings()

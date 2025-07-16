@@ -619,25 +619,43 @@ private:
         return StartedPartitions.empty();
     }
 
-    TSerializedCellVec GetMinCellVecKey(TVector<TSerializedCellVec>&& rows, TVector<ui32>&& rowColumnIds) const {
-        YQL_ENSURE(rowColumnIds.empty() || KeyIds.size() <= rowColumnIds.size());
-
-        // Sometimes SchemeCache and KqpReadActor return keys in the different order, so we need to reorder the second ones
-        std::transform(rows.begin(), rows.end(), rows.begin(), [&](TSerializedCellVec& key) {
-            TVector<TCell> newKey;
-            newKey.reserve(KeyIds.size());
-
-            for (auto keyId : KeyIds) {
-                auto it = std::find(rowColumnIds.begin(), rowColumnIds.end(), keyId);
-                if (it != rowColumnIds.end()) {
-                    newKey.emplace_back(key.GetCells()[it - rowColumnIds.begin()]);
-                } else {
-                    YQL_ENSURE(false, "KeyId " << keyId << " not found in readKeyIds");
-                }
+    bool IsColumnsNeedReorder(const TVector<ui32>& rowColumnIds) {
+        if (KeyColumnIdToPos.empty()) {
+            for (size_t i = 0; i < rowColumnIds.size(); ++i) {
+                KeyColumnIdToPos[rowColumnIds[i]] = i;
             }
+        }
 
-            return TSerializedCellVec(std::move(newKey));
-        });
+        for (size_t i = 0; i < KeyIds.size(); ++i) {
+            auto it = KeyColumnIdToPos.find(KeyIds[i]);
+            YQL_ENSURE(it != KeyColumnIdToPos.end());
+
+            if (it->second != i) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    TSerializedCellVec GetMinCellVecKey(TVector<TSerializedCellVec>&& rows, TVector<ui32>&& rowColumnIds) {
+        if (!rowColumnIds.empty() && IsColumnsNeedReorder(rowColumnIds)) {
+            std::transform(rows.begin(), rows.end(), rows.begin(), [&](TSerializedCellVec& key) {
+                TVector<TCell> newKey;
+                newKey.reserve(KeyIds.size());
+
+                for (auto keyId : KeyIds) {
+                    auto it = std::find(rowColumnIds.begin(), rowColumnIds.end(), keyId);
+                    if (it != rowColumnIds.end()) {
+                        newKey.emplace_back(key.GetCells()[it - rowColumnIds.begin()]);
+                    } else {
+                        YQL_ENSURE(false, "KeyId " << keyId << " not found in readKeyIds");
+                    }
+                }
+
+                return TSerializedCellVec(std::move(newKey));
+            });
+        }
 
         TSerializedCellVec result;
 
@@ -706,6 +724,7 @@ private:
 
     TVector<ui32> KeyIds;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    THashMap<ui32, size_t> KeyColumnIdToPos;
 
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> TablePartitioning;
     THashMap<TPartitionIndex, TBatchPartitionInfo::TPtr> StartedPartitions;

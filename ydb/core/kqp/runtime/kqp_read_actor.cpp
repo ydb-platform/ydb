@@ -808,18 +808,20 @@ public:
         BatchOperationReadColumns.clear();
 
         auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
+        size_t notSystemColumnsIndex = 0;
         for (size_t i = 0; i < columnsSize; ++i) {
             const auto& column = Settings->GetColumns()[i];
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
 
                 if (Settings->GetIsBatch() && column.GetIsPrimary()) {
-                    BatchOperationReadColumns.emplace_back(i, column.GetId());
+                    BatchOperationReadColumns.emplace_back(notSystemColumnsIndex, column.GetId());
                 }
+                notSystemColumnsIndex++;
             }
         }
 
-        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() >= KeyColumnTypes.size());
+        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() == KeyColumnTypes.size());
 
         if (CollectDuplicateStats) {
             for (const auto& column : DuplicateCheckExtraColumns) {

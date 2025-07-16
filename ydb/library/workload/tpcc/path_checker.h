@@ -18,6 +18,6 @@ void CheckPathForImport(
 void CheckPathForRun(
     const NConsoleClient::TClientCommand::TConfig& connectionConfig,
     const TString& path,
-    int exptectedWhCount) noexcept;
+    int expectedWhCount) noexcept;
 
 } // namespace NYdb::NTPCC

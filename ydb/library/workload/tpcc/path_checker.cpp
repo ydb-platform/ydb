@@ -196,7 +196,7 @@ void CheckPathForImport(
 void CheckPathForRun(
     const NConsoleClient::TClientCommand::TConfig& connectionConfig,
     const TString& path,
-    int exptectedWhCount) noexcept
+    int expectedWhCount) noexcept
 {
     auto connectionConfigCopy = connectionConfig;
     TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
@@ -213,13 +213,13 @@ void CheckPathForRun(
     // 3. Check the number of warehouses
 
     int whCount = GetWarehouseCount(driver, path);
-    if (whCount != exptectedWhCount) {
+    if (whCount != expectedWhCount) {
         if (whCount == 0) {
             Cerr << "Empty warehouse table (and maybe missing other TPC-C data), run import first" << Endl;
             std::exit(1);
         }
-        if (whCount < exptectedWhCount) {
-            Cerr << "Expected data for " << exptectedWhCount << " warehouses, but found for " << whCount << Endl;
+        if (whCount < expectedWhCount) {
+            Cerr << "Expected data for " << expectedWhCount << " warehouses, but found for " << whCount << Endl;
             std::exit(1);
         }
     }

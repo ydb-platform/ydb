@@ -362,10 +362,7 @@ class S3Response(BaseResponse):
         #
         # Workaround - manually reverse the encoding.
         # Keep the + encoded, ensuring that parse_qsl doesn't replace it, and parse_qsl will unquote it afterwards
-        #
-        # YQ-1825: Replace was commented out as the version of `Werkzeug`
-        # that we are using is 2.0.3 (lesser than 2.1.0) and workaround is not needed
-        qs = (parsed_url.query or "") #.replace("+", "%2B")
+        qs = (parsed_url.query or "").replace("+", "%2B")
         return parse_qs(qs, keep_blank_values=True)
 
     def _bucket_response_head(

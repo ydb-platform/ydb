@@ -171,12 +171,14 @@
 
 #include <ydb/core/ymq/actor/serviceid.h>
 
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/logs/log.h>
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -206,7 +208,6 @@
 #include <ydb/services/ext_index/service/executor.h>
 
 #include <ydb/library/actors/protos/services_common.pb.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -2127,10 +2128,12 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories,
-        IGlobalObjectStorage& globalObjects)
+        IGlobalObjectStorage& globalObjects,
+        NFq::IYqSharedResources::TPtr yqSharedResources)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , GlobalObjects(globalObjects)
+    , YqSharedResources(yqSharedResources)
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -2184,6 +2187,44 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        const auto& checkpointConfig = Config.GetQueryServiceConfig().GetCheckpointsConfig();
+        if (checkpointConfig.GetEnabled()) {
+            const auto& config = Config.GetQueryServiceConfig().GetCheckpointsConfig();
+            NFq::NConfig::TCommonConfig commonConfig;
+            commonConfig.SetIdsPrefix("cs");
+            NFq::NConfig::TCheckpointCoordinatorConfig tmpConfig;
+            tmpConfig.SetEnabled(checkpointConfig.GetEnabled());
+            auto& storageConfig = *tmpConfig.MutableStorage();
+            const auto& externalStorage = checkpointConfig.GetExternalStorage();
+            storageConfig.SetEndpoint(externalStorage.HasEndpoint() ? externalStorage.GetEndpoint() : GetEnv("YDB_ENDPOINT"));
+            storageConfig.SetDatabase(externalStorage.HasDatabase() ? externalStorage.GetDatabase() : GetEnv("YDB_DATABASE"));
+            storageConfig.SetOAuthFile(externalStorage.GetOAuthFile());
+            storageConfig.SetToken(externalStorage.GetToken());
+            storageConfig.SetTablePrefix(externalStorage.GetTablePrefix());
+            storageConfig.SetCertificateFile(externalStorage.GetCertificateFile());
+            storageConfig.SetIamEndpoint(externalStorage.GetIamEndpoint());
+            storageConfig.SetSaKeyFile(externalStorage.GetSaKeyFile());
+            storageConfig.SetUseLocalMetadataService(externalStorage.GetUseLocalMetadataService());
+            storageConfig.SetClientTimeoutSec(externalStorage.GetClientTimeoutSec());
+            storageConfig.SetOperationTimeoutSec(externalStorage.GetOperationTimeoutSec());
+            storageConfig.SetCancelAfterSec(externalStorage.GetCancelAfterSec());
+            storageConfig.SetUseSsl(externalStorage.GetUseSsl());
+            const auto& gc = config.GetCheckpointGarbageConfig();
+            auto& gcConfig = *tmpConfig.MutableCheckpointGarbageConfig();
+            gcConfig.SetEnabled(gc.GetEnabled());
+
+            auto service = NFq::NewCheckpointStorageService(
+                tmpConfig,
+                commonConfig,
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                NFq::TYqSharedResources::Cast(YqSharedResources),
+                appData->Counters);
+
+            setup->LocalServices.push_back(std::make_pair(
+                NYql::NDq::MakeCheckpointStorageID(),
+                TActorSetupCmd(service.release(), TMailboxType::HTSwap, appData->UserPoolId)));
+        }
     }
 }
 

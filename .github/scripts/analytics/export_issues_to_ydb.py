@@ -331,37 +331,40 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
 # --- branch version helpers ---
 def parse_branch(label):
     if label == 'main':
-        return ('main', 0, 0, 0)
-    if label.startswith('stable-'):
-        parts = label.split('-')
-        nums = [int(x) for x in parts[1:]]
-        while len(nums) < 3:
-            nums.append(0)
-        return ('stable', *nums)
+        return (0, 0, 0, 0, 0)  # main — всегда минимальный
     if label.startswith('prestable-'):
         parts = label.split('-')
-        nums = [int(x) for x in parts[1:]]
+        nums = [int(x) for x in parts[1:] if x.isdigit()]
         while len(nums) < 3:
             nums.append(0)
-        return ('prestable', *nums)
-    return (None, 0, 0, 0)
+        return (1, *nums, 0)  # prestable < analytics < stable
+    if label.startswith('stable-'):
+        parts = label.split('-')
+        nums = []
+        analytics = 0
+        for x in parts[1:]:
+            if x.isdigit():
+                nums.append(int(x))
+            elif x == 'analytics':
+                analytics = 1
+        while len(nums) < 3:
+            nums.append(0)
+        if analytics:
+            # analytics-лейбл: всегда меньше любого stable с числовым патчем, но больше prestable
+            return (2, *nums, 0)  # analytics = 2
+        else:
+            return (3, *nums, 1)  # обычный stable = 3, всегда больше analytics
+    return (-1, 0, 0, 0, 0)  # некорректные/другие — минимальные
 
 def get_max_branch(branch_labels):
-    stable = []
-    prestable = []
+    best = None
+    best_key = (-2, 0, 0, 0, 0)  # всегда меньше любого корректного branch
     for label in branch_labels:
-        kind, major, minor, patch = parse_branch(label)
-        if kind == 'stable':
-            stable.append((major, minor, patch, label))
-        elif kind == 'prestable':
-            prestable.append((major, minor, patch, label))
-    if stable:
-        return max(stable)[-1]
-    if prestable:
-        return max(prestable)[-1]
-    if 'main' in branch_labels:
-        return 'main'
-    return None
+        key = parse_branch(label)
+        if key > best_key:
+            best = label
+            best_key = key
+    return best
 
 def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optional[Dict[int, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """Transform GitHub issues data for YDB storage"""

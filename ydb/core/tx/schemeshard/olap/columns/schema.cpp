@@ -57,7 +57,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
             Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
         }
         if (!newColumn.GetSerializer().HasObject() && !columnFamilies.GetColumnFamilies().empty() &&
-            !newColumn.ApplySerializerFromColumnFamily(columnFamilies, errors)) {
+            !newColumn.ApplyColumnFamily(columnFamilies, errors)) {
             return false;
         }
 
@@ -116,8 +116,8 @@ bool TOlapColumnsDescription::ApplyUpdate(
                 return false;
             }
             ui32 id = column.GetColumnFamilyId().value();
-            if (alterColumnFamiliesId.contains(id)) {
-                column.SetSerializer(columnFamilies.GetByIdVerified(id)->GetSerializerContainer());
+            if (!column.ApplyColumnFamily(*columnFamilies.GetByIdVerified(id), errors)) {
+                return false;
             }
         }
     }

@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
+#include <ydb/core/tx/schemeshard/olap/column_family/column_family.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -559,9 +560,8 @@ public:
         }
 
         auto mutableSchema = createDescription.MutableSchema();
-        auto defaultFamily = mutableSchema->AddColumnFamilies();
-        defaultFamily->SetName("default");
-        defaultFamily->SetId(0);
+        *mutableSchema->AddColumnFamilies() = TColumnFamily::GetDefaultColumnFamily();
+
 
         for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
             if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {

@@ -313,6 +313,7 @@ void TYdbControlPlaneStorageActor::CreateMappingsTable()
         .AddNullableColumn(SUBJECT_TYPE_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(SUBJECT_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(VTENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(NODE_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({SUBJECT_TYPE_COLUMN_NAME, SUBJECT_ID_COLUMN_NAME})
         .Build();
 

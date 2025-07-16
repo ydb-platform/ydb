@@ -128,7 +128,7 @@ private:
                 builder.AddText(
                     "SELECT `" TENANT_COLUMN_NAME "`, `" VTENANT_COLUMN_NAME "`, `" COMMON_COLUMN_NAME "`, `" STATE_COLUMN_NAME "`, `" STATE_TIME_COLUMN_NAME "`\n"
                     "FROM `" TENANTS_TABLE_NAME "`;\n"
-                    "SELECT `" SUBJECT_TYPE_COLUMN_NAME "`, `" SUBJECT_ID_COLUMN_NAME "`, `" VTENANT_COLUMN_NAME "`\n"
+                    "SELECT `" SUBJECT_TYPE_COLUMN_NAME "`, `" SUBJECT_ID_COLUMN_NAME "`, `" VTENANT_COLUMN_NAME "`, `" NODE_COLUMN_NAME "`\n"
                     "FROM `" MAPPINGS_TABLE_NAME "`;\n"
                 );
             },
@@ -168,7 +168,8 @@ private:
                         auto subject_type = *parser.ColumnParser(SUBJECT_TYPE_COLUMN_NAME).GetOptionalString();
                         auto subject_id = *parser.ColumnParser(SUBJECT_ID_COLUMN_NAME).GetOptionalString();
                         auto vtenant = *parser.ColumnParser(VTENANT_COLUMN_NAME).GetOptionalString();
-                        info.SubjectMapping[subject_type].emplace(subject_id, vtenant);
+                        auto node = *parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
+                        info.SubjectMapping[subject_type].emplace(subject_id, TTenantInfo::TMapping{TString(vtenant), TString(node)});
                     }
                 }
             },

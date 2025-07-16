@@ -26,7 +26,12 @@ struct TTenantInfo {
 
     using TPtr = std::shared_ptr<TTenantInfo>;
 
-    THashMap<TString /* subject type */, THashMap<TString /* subject id */, TString /* vtenant */>> SubjectMapping;
+    struct TMapping {
+        TString Vtenant;
+        TString Node;       // empty - all nodes.
+    };
+
+    THashMap<TString /* subject type */, THashMap<TString /* subject id */, TMapping /* mapping */>> SubjectMapping;
     TVector<TString> CommonVTenants;
     THashMap<TString /* vtenant */, TString /* tenant */> TenantMapping;
     THashMap<TString /* tenant */, ui32 /* state */> TenantState;
@@ -40,28 +45,29 @@ struct TTenantInfo {
     {}
 
     // this method must be thread safe
-    TString Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {
+    std::pair<TString, TString> Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {
         auto pinTenants = ComputeConfig.GetPinTenantNames(queryType, scope);
         if (pinTenants) {
-            return pinTenants[MultiHash(cloudId) % pinTenants.size()];
+            return std::make_pair(pinTenants[MultiHash(cloudId) % pinTenants.size()], "");
         }
 
+        TMapping empty;
         auto it = SubjectMapping.find(SUBJECT_TYPE_SCOPE);
-        auto vTenant = it == SubjectMapping.end() ? "" : it->second.Value(scope, "");
+        auto vTenant = it == SubjectMapping.end() ? empty : it->second.Value(scope, empty);
 
-        if (!vTenant) {
+        if (!vTenant.Vtenant) {
             auto it = SubjectMapping.find(SUBJECT_TYPE_CLOUD);
-            vTenant = it == SubjectMapping.end() ? "" : it->second.Value(cloudId, "");
+            vTenant = it == SubjectMapping.end() ? empty : it->second.Value(cloudId, empty);
         }
 
-        if (!vTenant && CommonVTenants.size()) {
-            vTenant = CommonVTenants[MultiHash(cloudId) % CommonVTenants.size()];
+        if (!vTenant.Vtenant && CommonVTenants.size()) {
+            vTenant.Vtenant = CommonVTenants[MultiHash(cloudId) % CommonVTenants.size()];
         }
 
-        auto tenant = vTenant ? TenantMapping.Value(vTenant, DefaultTenantName) : DefaultTenantName;
+        auto tenant = vTenant.Vtenant ? TenantMapping.Value(vTenant.Vtenant, DefaultTenantName) : DefaultTenantName;
         // CPS_LOG_D("AssignTenantName: {" << cloudId << ", " << scope << "} => " << tenant);
         // Cerr << "AssignTenantName: {" << cloudId << ", " << scope << "} => " << tenant << Endl;
-        return tenant;
+        return std::make_pair(tenant, vTenant.Node);
     }
 };
 

@@ -308,7 +308,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         response->second.After.ConstructInPlace().CopyFrom(query);
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(write)");
-        writeQueryBuilder.AddString("tenant", tenant);
+        writeQueryBuilder.AddString("tenant", tenant.first);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddString("name", query.content().name());
@@ -1047,7 +1047,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         response->second.CloudId = internal.cloud_id();
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyQuery(write)");
-        writeQueryBuilder.AddString("tenant", tenant);
+        writeQueryBuilder.AddString("tenant", tenant.first);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddUint64("max_count_jobs", Config->Proto.GetMaxCountJobs());

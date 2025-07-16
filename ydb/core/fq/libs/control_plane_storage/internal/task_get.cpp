@@ -194,10 +194,10 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
 
         if (tenantInfo) {
             auto tenant = tenantInfo->Assign(taskInternal.Task.Internal.cloud_id(), task.Scope, taskInternal.Task.Query.content().type(), taskInternal.TenantName);
-            if (tenant != taskInternal.TenantName) {
+            if (tenant.first != taskInternal.TenantName) {
                 // mapping changed, reassign tenant
                 taskInternal.ShouldSkipTask = true;
-                taskInternal.NewTenantName = tenant;
+                taskInternal.NewTenantName = tenant.first;
             }
         }
 

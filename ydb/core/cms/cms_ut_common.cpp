@@ -658,7 +658,9 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         for (ui32 i = 1; i <= GetNodeCount(); ++i) {
             ringGroupIdToNodeIds[i % options.PileCount].push_back(i - 1);
         }
-        auto setuper = CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
+        auto setuper = options.EnableSimpleStateStorageConfig 
+                                              ? CreateCustomStateStorageSetupper(ringGroups, 3) 
+                                              : CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
 
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             setuper(*this, nodeIndex);

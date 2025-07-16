@@ -1,7 +1,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
 Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
@@ -402,5 +405,155 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
     Y_UNIT_TEST(block42) {
         ScrubTest(TBlobStorageGroupType::Erasure4Plus2Block);
     }
+}
 
+Y_UNIT_TEST_SUITE(DeepScrubbing) {
+
+    enum EBlobSize : ui32 {
+        Val_SmallBlob = 100,
+        Val_HugeBlob = 4_MB,
+    };
+
+    enum ECorruptionMask : ui32 {
+        Val_OneCorrupted = 0b1,
+        Val_TwoCorrruptedMain = 0b1001,
+        Val_OneCorruptedMainOneCorruptedHandoff = 0b10001,
+        Val_TwoCorruptedHandoff = 0b000011,
+        Val_TwoCorrruptedInSameDc = 0b11,
+    };
+
+    struct TTestCtx : public TTestCtxBase {
+        TTestCtx(TBlobStorageGroupType erasure, EBlobSize blobSize, ECorruptionMask partCorruptionMask)
+            : TTestCtxBase(TEnvironmentSetup::TSettings{
+                .NodeCount = erasure.BlobSubgroupSize() + 1,
+                .Erasure = erasure,
+                .EnableDeepScrubbing = true,
+            })
+            , BlobSize(blobSize)
+            , PartCorruptionMask(partCorruptionMask)
+        {}
+
+        void RunTest() {
+            Initialize();
+            AllocateEdgeActor(true);
+
+            ui64 tabletId = 5000;
+            ui32 channel = 1;
+            ui32 generation = 1;
+            ui32 step = 1;
+            ui32 blobSize = (ui32)BlobSize;
+            ui32 cookie = 1;
+            TString data = MakeData(blobSize, 1);
+            TIntrusivePtr<TBlobStorageGroupInfo> groupInfo = Env->GetGroupInfo(GroupId);
+
+            ui32 nodesWithCorruptedPartsMask = 0;
+            ui32 disabledNodesMask = 0;
+
+            auto makePrefix = [&] {
+                return TStringBuilder() << "CorruptedParts# " << Bin(PartCorruptionMask) << " NodesWithCorruptedParts# "
+                        << Bin(nodesWithCorruptedPartsMask) << " DisabledNodes# " << Bin(disabledNodesMask) << " : ";
+            };
+
+            TLogoBlobID blobId(tabletId, generation, step, channel, blobSize, cookie);
+
+            Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVPut::EventType) {
+                    if (ev->Sender.NodeId() == ev->Recipient.NodeId()) {
+                        return true;
+                    }
+                    auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
+                    TLogoBlobID partId = LogoBlobIDFromLogoBlobID(vput->Record.GetBlobID());
+                    if (PartCorruptionMask & (1 << partId.PartId())) {
+                        vput->Record.SetBuffer(MakeData(vput->GetBuffer().size(), 2));
+                        nodesWithCorruptedPartsMask |= (1 << (ev->Recipient.NodeId() - 1));
+                    }
+                }
+                return true;
+            };
+
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                TString data = MakeData(blobSize, 1);
+                SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max()));
+            });
+            auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(Edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_UNEQUAL(nodesWithCorruptedPartsMask, 0);
+
+            WriteCompressedData({
+                .GroupId = GroupId,
+                .TotalSize = blobSize * 100,
+                .BlobSize = blobSize,
+            });
+
+            Env->Runtime->FilterFunction = {};
+
+            // wait for full scrub cycle to finish
+            for (ui32 orderNumber = 0; orderNumber < Erasure.BlobSubgroupSize(); ++orderNumber) {
+                TActorId vdiskActorId = groupInfo->GetActorId(orderNumber);
+                const ui32 nodeId = vdiskActorId.NodeId();
+                TActorId edge = Env->Runtime->AllocateEdgeActor(nodeId);
+                if ((1 << (nodeId - 1)) & nodesWithCorruptedPartsMask == 0) {
+                    continue;
+                }
+                while (true) {
+                    const ui64 cookie = RandomNumber<ui64>();
+                    Env->Runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr, cookie), nodeId);
+                    auto ev = Env->WaitForEdgeActorEvent<TEvScrubNotify>(edge);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie);
+                    if (ev->Get()->Success) {
+                        break;
+                    }
+                }
+            }
+
+            std::vector<ui32> pdiskLayout = MakePDiskLayout(BaseConfig, groupInfo->GetTopology(), GroupId);
+
+            ui64 blobsScrubbed =
+                    Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
+                            GroupId, pdiskLayout, "deepScrubbing", "SmallBlobsChecked", false) +
+                    Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
+                            GroupId, pdiskLayout, "deepScrubbing", "HugeBlobsChecked", false);
+
+            ui64 dataIssues =
+                    Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
+                            GroupId, pdiskLayout, "deepScrubbing", "DataIssuesSmallBlobs", false) +
+                    Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
+                            GroupId, pdiskLayout, "deepScrubbing", "DataIssuesHugeBlobs", false);
+
+            UNIT_ASSERT_VALUES_UNEQUAL_C(blobsScrubbed, 0, makePrefix());
+            UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, makePrefix()
+        );
+        }
+
+    private:
+        ui32 BlobSize;
+        ui32 PartCorruptionMask;
+    };
+
+    void Test(TBlobStorageGroupType erasure, EBlobSize blobSize, ECorruptionMask partCorruptionMask) {
+        TTestCtx ctx(erasure, blobSize, partCorruptionMask);
+        ctx.RunTest();
+    }
+
+    #define DEEP_SCRUBBING_TEST(erasure, blobSize, corruptionMask)                  \
+    Y_UNIT_TEST(Test##erasure##blobSize##corruptionMask) {                          \
+        Test(TBlobStorageGroupType::Erasure##erasure, EBlobSize::Val_##blobSize,    \
+                ECorruptionMask::Val_##corruptionMask);                             \
+    }
+
+    // TODO: fix and uncomment the tests below
+    // DEEP_SCRUBBING_TEST(4Plus2Block, SmallBlob, OneCorrupted);
+    // DEEP_SCRUBBING_TEST(4Plus2Block, HugeBlob, OneCorrupted);
+    DEEP_SCRUBBING_TEST(4Plus2Block, SmallBlob, TwoCorrruptedMain);
+    DEEP_SCRUBBING_TEST(4Plus2Block, HugeBlob, TwoCorrruptedMain);
+    DEEP_SCRUBBING_TEST(4Plus2Block, SmallBlob, OneCorruptedMainOneCorruptedHandoff);
+    DEEP_SCRUBBING_TEST(4Plus2Block, HugeBlob, OneCorruptedMainOneCorruptedHandoff);
+    DEEP_SCRUBBING_TEST(4Plus2Block, SmallBlob, TwoCorruptedHandoff);
+    DEEP_SCRUBBING_TEST(4Plus2Block, HugeBlob, TwoCorruptedHandoff);
+    // DEEP_SCRUBBING_TEST(Mirror3dc, SmallBlob, OneCorrupted);
+    // DEEP_SCRUBBING_TEST(Mirror3dc, HugeBlob, OneCorrupted);
+    // DEEP_SCRUBBING_TEST(Mirror3dc, SmallBlob, TwoCorrruptedInSameDc);
+    // DEEP_SCRUBBING_TEST(Mirror3dc, HugeBlob, TwoCorrruptedInSameDc);
+
+    #undef DEEP_SCRUBBING_TEST
 }

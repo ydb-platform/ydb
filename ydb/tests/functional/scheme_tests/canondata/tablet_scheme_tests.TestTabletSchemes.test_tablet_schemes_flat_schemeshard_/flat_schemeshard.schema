@@ -93,8 +93,8 @@
             },
             {
                 "ColumnId": 18,
-                "ColumnName": "TempDirOwnerActorIdProto",
-                "ColumnType": "String"
+                "ColumnName": "TempDirOwnerId",
+                "ColumnType": "ActorID"
             }
         ],
         "ColumnsDropped": [],
@@ -3630,8 +3630,8 @@
             },
             {
                 "ColumnId": 18,
-                "ColumnName": "TempDirOwnerActorIdProto",
-                "ColumnType": "String"
+                "ColumnName": "TempDirOwnerId",
+                "ColumnType": "ActorID"
             }
         ],
         "ColumnsDropped": [],

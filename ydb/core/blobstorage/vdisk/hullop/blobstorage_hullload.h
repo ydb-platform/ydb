@@ -224,14 +224,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
-
-            TString errorString = TStringBuilder() << "{Origin# '" << Origin << "'}";
-            if (!VCtx->CheckPDiskResponse(ctx, *ev->Get(), errorString) ||
-                !VCtx->CheckPDiskResponseReadable(ctx, *ev->Get(), errorString)) {
-                this->Send(Recipient, new TEvents::TEvActorDied);
-                this->PassAway();
-                return;
-            }
+            CHECK_PDISK_RESPONSE_READABLE_MSG(VCtx, ev, ctx, TStringBuilder() << "{Origin# '" << Origin << "'}");
 
             const TBufferWithGaps &data = msg->Data;
             LevelSegment->IndexParts.push_back({msg->ChunkIdx, msg->Offset, msg->Data.Size()});
@@ -394,23 +387,15 @@ namespace NKikimr {
             Process(ctx);
         }
 
-        void HandlePoison() {
-            ActiveActors.KillAndClear(TActivationContext::AsActorContext());
-            this->PassAway();
-        }
-
-        void Handle(const TEvents::TEvActorDied::TPtr&) {
-            // One LevelSegmentLoader termintaed unsuccessfully
-            // send TEvActorDied to the parent and Die
-            // This actor only has one child actor at a time, no need to clear ActiveActors
-            this->Send(Recipient, new TEvents::TEvActorDied);
-            this->PassAway();
+        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ev);
+            ActiveActors.KillAndClear(ctx);
+            TThis::Die(ctx);
         }
 
         STRICT_STFUNC(StateFunc,
             HTemplFunc(THullSegLoaded, Handle)
-            hFunc(TEvents::TEvActorDied, Handle)
-            cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
         )
 
     public:
@@ -481,23 +466,15 @@ namespace NKikimr {
             Process(ctx);
         }
 
-        void HandlePoison() {
-            ActiveActors.KillAndClear(TActivationContext::AsActorContext());
-            this->PassAway();
-        }
-
-        void Handle(const TEvents::TEvActorDied::TPtr&) {
-            // One LevelSegmentLoader termintaed unsuccessfully, kill all other actors,
-            // send TEvActorDied to the parent and Die
-            // This actor only has one child actor at a time, no need to clear ActiveActors
-            this->Send(Recipient, new TEvents::TEvActorDied);
-            this->PassAway();
+        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ev);
+            ActiveActors.KillAndClear(ctx);
+            TThis::Die(ctx);
         }
 
         STRICT_STFUNC(StateFunc,
             HTemplFunc(THullSegLoaded, Handle)
-            hFunc(TEvents::TEvActorDied, Handle)
-            cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
         )
 
     public:
@@ -581,23 +558,15 @@ namespace NKikimr {
             Process(ctx);
         }
 
-        void HandlePoison() {
-            ActiveActors.KillAndClear(TActivationContext::AsActorContext());
-            this->PassAway();
-        }
-
-        void Handle(const TEvents::TEvActorDied::TPtr&) {
-            // One LevelSegmentLoader termintaed unsuccessfully, kill all other actors,
-            // send TEvActorDied to the parent and Die
-            // This actor only has one child actor at a time, no need to clear ActiveActors
-            this->Send(Recipient, new TEvents::TEvActorDied);
-            this->PassAway();
+        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ev);
+            ActiveActors.KillAndClear(ctx);
+            TThis::Die(ctx);
         }
 
         STRICT_STFUNC(StateFunc,
             HTemplFunc(THullSegLoaded, Handle)
-            hFunc(TEvents::TEvActorDied, Handle)
-            cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
         )
 
     public:

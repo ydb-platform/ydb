@@ -3,13 +3,9 @@
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 
-#include "ut_helpers.h"
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <google/protobuf/text_format.h>
-
-using namespace NKikimr;
 
 Y_UNIT_TEST_SUITE(CompatibilityInfo) {
     using EComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
@@ -234,82 +230,5 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
     Y_UNIT_TEST(BSControllerMigration) {
         TestMigration(TVersion{ 23, 3, 13, 0 }, TVersion{ 23, 4, 1, 0 }, TVersion{ 23, 5, 1, 0 }, componentBSController, ValidateForBSController);
     }
-}
 
-
-Y_UNIT_TEST_SUITE(VDiskRecovery) {
-    struct TTestCtx : public TTestCtxBase {
-        TTestCtx()
-            : TTestCtxBase(TEnvironmentSetup::TSettings{
-                .NodeCount = 8,
-                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                .ControllerNodeId = 1,
-            })
-        {}
-
-        void RestartNode() {
-            Env->StopNode(NodeToRestart);
-            Env->Sim(TDuration::Minutes(1));
-            Env->StartNode(NodeToRestart);
-        }
-
-        ui32 NodeToRestart = 2;
-    };
-
-    void TestVDiskRecovery() {
-        TTestCtx ctx;
-        ctx.Initialize();
-        TVDiskID vdiskId;
-        for (const auto& vslot : ctx.BaseConfig.GetVSlot()) {
-            if (vslot.GetVSlotId().GetNodeId() == ctx.NodeToRestart) {
-                vdiskId = TVDiskID(vslot.GetGroupId(), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
-                        vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
-                break;
-            } 
-        }
-
-        ctx.WriteCompressedData(TTestCtxBase::TDataProfile{
-            .GroupId = ctx.GroupId,
-            .TotalSize = 10_MB,
-            .BlobSize = 100,
-        });
-
-        ctx.WriteCompressedData(TTestCtxBase::TDataProfile{
-            .GroupId = ctx.GroupId,
-            .TotalBlobs = 100,
-            .BlobSize = 4_MB,
-        });
-
-        ctx.Env->Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            if (nodeId == ctx.NodeToRestart) {
-                if (ev->GetTypeRewrite() == NPDisk::TEvChunkReadResult::EventType) {
-                    NPDisk::TEvChunkReadResult* result = ev->Get<NPDisk::TEvChunkReadResult>();
-                    result->Status = NKikimrProto::ERROR;
-                }
-            }
-
-            return true;
-        };
-
-        ctx.RestartNode();
-
-        ctx.Env->Sim(TDuration::Minutes(5));
-
-        NKikimrBlobStorage::EVDiskQueueId queueId = NKikimrBlobStorage::GetFastRead;
-
-        TAutoPtr<TEventHandle<TEvBlobStorage::TEvVStatusResult>> res;
-        ctx.Env->WithQueueId(vdiskId, queueId, [&](const TActorId& actorId) {
-            ctx.Env->Runtime->Send(new IEventHandle(actorId, ctx.Edge, new TEvBlobStorage::TEvVStatus()), actorId.NodeId());
-            res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(ctx.Edge, false, ctx.Env->Now() + TDuration::Seconds(10));
-        });
-
-        UNIT_ASSERT(res);
-        Cerr << res->Get()->ToString() << Endl;
-        NKikimrProto::EReplyStatus status = res->Get()->Record.GetStatus();
-        UNIT_ASSERT_C(status == NKikimrProto::VDISK_ERROR_STATE, res->Get()->ToString());
-    }
-
-    Y_UNIT_TEST(ChunkReadErrorOnVDiskRecovery) {
-        TestVDiskRecovery();
-    }
 }

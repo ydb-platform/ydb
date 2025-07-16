@@ -65,17 +65,35 @@ public:
         Become(&TThis::StateWork);
         NActors::TMon* mon = AppData(ctx)->Mon;
         if (mon) {
+            TVector<TString> databaseAllowedSIDs;
             TVector<TString> viewerAllowedSIDs;
             TVector<TString> monitoringAllowedSIDs;
             {
+                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetDatabaseAllowedSIDs();
+                for (const auto& sid : protoAllowedSIDs) {
+                    databaseAllowedSIDs.emplace_back(sid);
+                }
+            }
+            {
                 const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetViewerAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
+                    databaseAllowedSIDs.emplace_back(sid);
                     viewerAllowedSIDs.emplace_back(sid);
                 }
             }
             {
                 const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetMonitoringAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
+                    databaseAllowedSIDs.emplace_back(sid);
+                    viewerAllowedSIDs.emplace_back(sid);
+                    monitoringAllowedSIDs.emplace_back(sid);
+                }
+            }
+            {
+                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs();
+                for (const auto& sid : protoAllowedSIDs) {
+                    databaseAllowedSIDs.emplace_back(sid);
+                    viewerAllowedSIDs.emplace_back(sid);
                     monitoringAllowedSIDs.emplace_back(sid);
                 }
             }
@@ -84,7 +102,7 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = viewerAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "viewer/capabilities",
@@ -150,14 +168,14 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = viewerAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = viewerAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
@@ -229,6 +247,18 @@ public:
             }
         }
         return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+    }
+
+    bool CheckAccessViewer(const TRequestState& request) override {
+        auto userTokenObject = request.GetUserTokenObject();
+        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
+                return true;
+            }
+        }
+        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs())
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs())
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
     }
 
     static bool IsStaticGroup(ui32 groupId) {

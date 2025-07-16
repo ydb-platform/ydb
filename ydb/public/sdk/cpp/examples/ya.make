@@ -1,6 +1,7 @@
 RECURSE(
     basic_example
     bulk_upsert_simple
+    executor
     pagination
     secondary_index
     secondary_index_builtin

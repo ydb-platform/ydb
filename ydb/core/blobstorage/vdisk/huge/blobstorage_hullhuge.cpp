@@ -201,6 +201,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             const ui32 storedBlobSize = Item->Data.GetSize();
             const ui32 writtenSize = AlignUpAppendBlockSize(storedBlobSize, HugeKeeperCtx->PDiskCtx->Dsk->AppendBlockSize);
+            Cerr << "hull huge writer " << Item->LogoBlobId << " buffSize# " << storedBlobSize << " writtenSize# " << writtenSize << Endl;
             Y_VERIFY_S(writtenSize <= HugeSlot.GetSize(), HugeKeeperCtx->VCtx->VDiskLogPrefix);
 
             NPDisk::TEvChunkWrite::TPartsPtr partsPtr(new NPDisk::TEvChunkWrite::TRopeAlignedParts(std::move(Item->Data), writtenSize));

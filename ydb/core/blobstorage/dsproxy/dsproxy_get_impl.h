@@ -204,7 +204,11 @@ public:
             ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
 
             // Currently CRC can be checked only if blob part is fully read
+            //Y_VERIFY(resultShift == 0);
+            //Y_VERIFY(resultBuffer.size() == Info->Type.PartSize(blobId));
+            Cerr << blobId << " shift# " << resultShift << " buffSize# " << resultBuffer.size() << " partSize# " << Info->Type.PartSize(blobId) << Endl;
             if (resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId)) {
+                Y_VERIFY(false);
                 bool isCrcOk = CheckCrcAtTheEnd((TErasureType::ECrcMode)blobId.CrcMode(), resultBuffer);
                 if (!isCrcOk) {
                     DSP_LOG_ERROR_SX(logCtx, "BPG66", "Error in CheckCrcAtTheEnd on TEvVGetResult, blobId# " << blobId

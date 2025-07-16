@@ -40,6 +40,7 @@ namespace NKikimr {
                 void *cookie = &*it;
 
                 // create request
+                Cerr << __PRETTY_FUNCTION__ << " size# " << it->Part.Size << Endl;
                 std::unique_ptr<NPDisk::TEvChunkRead> msg(new NPDisk::TEvChunkRead(Ctx->PDiskCtx->Dsk->Owner,
                             Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
                             Priority, cookie));

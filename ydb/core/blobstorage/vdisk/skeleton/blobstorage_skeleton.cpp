@@ -759,6 +759,7 @@ namespace NKikimr {
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             TVPutInfo info(id, ev->Get()->GetBuffer(), record.MutableExtraBlockChecks(), std::move(ev->TraceId));
             const ui64 bufSize = info.Buffer.GetSize();
+            Cerr << "vdisk vput " << id << " buffSize# " << bufSize << Endl;
 
             try {
                 info.IsHugeBlob = ev->Get()->RewriteBlob || // if we are rewriting a huge blob, keep it that way

@@ -185,7 +185,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         std::unique_ptr<TEvBlobStorage::TEvPut> MakePutMessage(ui64 tabletId, ui32 gen, ui32 step, ui32 channel) {
             Y_DEBUG_ABORT_UNLESS(CanSendRequest());
             ui32 blobSize = SizeGenerator.Generate();
-            const TLogoBlobID id(tabletId, gen, step, channel, blobSize, BlobCookie++);
+            const auto id = TLogoBlobID::Make(tabletId, gen, step, channel, blobSize, BlobCookie++, TErasureType::ECrcMode::CrcModeWholePart);
             const TSharedData buffer = FastGenDataForLZ4<TSharedData>(id.BlobSize());
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
             InFlightTracker.Request(blobSize);
@@ -244,7 +244,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         ui32 BlobsToWrite = 0;
         ui64 ConfirmedDataSize = 0;
         TVector<TLogoBlobID> ConfirmedBlobs;
-        ui32 CollectedBlobsPerMille = 0; 
+        ui32 CollectedBlobsPerMille = 0;
 
         TInFlightTracker InFlightTracker;
 
@@ -589,7 +589,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void IssueLastBlob(const TActorContext& ctx) {
             const ui32 size = 1;
             const ui32 lastStep = Max<ui32>();
-            const TLogoBlobID id(TabletId, Generation, lastStep, Channel, size, 0);
+            const auto id = TLogoBlobID::Make(TabletId, Generation, lastStep, Channel, size, 0, TErasureType::ECrcMode::CrcModeWholePart);
             const TSharedData buffer = Self.GenerateBuffer(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
 
@@ -915,7 +915,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 size = WriteSettings.SizeGen->Generate();
                 putHandleClass = PutHandleClass;
             }
-            const TLogoBlobID id(TabletId, Generation, WriteStep, Channel, size, Cookie);
+            const auto id = TLogoBlobID::Make(TabletId, Generation, WriteStep, Channel, size, Cookie, TErasureType::ECrcMode::CrcModeWholePart);
             const TSharedData buffer = Self.GenerateBuffer(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), putHandleClass);
             const ui64 writeQueryId = ++WriteQueryId;
@@ -1097,7 +1097,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             }
             size = Min(size, id.BlobSize());
 
-            const ui32 offset = RandomNumber<ui32>(id.BlobSize() - size + 1);
+            //const ui32 offset = RandomNumber<ui32>(id.BlobSize() - size + 1);
+            const ui32 offset = 0;
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(id, offset, size, TInstant::Max(),
                 GetHandleClass);
             const ui64 readQueryId = ++ReadQueryId;

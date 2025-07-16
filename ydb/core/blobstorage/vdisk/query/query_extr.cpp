@@ -108,7 +108,7 @@ namespace NKikimr {
             TQuery *query = nullptr;
             while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) {
                 // only full blobs (w/o specifying a part) are allowed
-                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix); 
+                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
                 ResultSize.AddLogoBlobIndex();
                 if (!BlobInIndex) {
@@ -255,6 +255,7 @@ namespace NKikimr {
                                     IngrPtr, Keep, DoNotKeep);
                             }
                             void operator()(const TRope& data) const {
+                                Cerr << "query_extr; " << Id << " buffSuze# " << data.size() << Endl;
                                 Result->AddResult(NKikimrProto::OK, Id, Shift, TRope(data), CookiePtr,
                                     IngrPtr, Keep, DoNotKeep);
                             }
@@ -344,6 +345,7 @@ namespace NKikimr {
 
                 ResultSize.AddLogoBlobIndex();
                 if (BlobInIndex) {
+                    //Y_VERIFY_S(GType.PartSize(partId) == query->Size, "part " << GType.PartSize(partId) << " query " << query->Size);
                     ResultSize.AddLogoBlobData(GType.PartSize(partId), query->Shift, query->Size);
                     Batcher.StartTraverse(fullId, query, query->PartId, query->Shift, query->Size);
                     ForwardIt->PutToMerger(&Merger);

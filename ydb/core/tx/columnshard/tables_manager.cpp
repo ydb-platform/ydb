@@ -456,8 +456,7 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , TabletId(tabletId)
     , GenerateInternalPathId(AppData()->ColumnShardConfig.GetGenerateInternalPathId() ||
                              NYDBTest::TControllers::GetColumnShardController()->IsForcedGenerateInternalPathId())
-    , MaxInternalPathId(GetInitialMaxInternalPathId(TabletId))
-{
+    , MaxInternalPathId(GetInitialMaxInternalPathId(TabletId)) {
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const TInternalPathId pathId) const {

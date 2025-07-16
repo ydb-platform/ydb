@@ -253,8 +253,7 @@ public:
 
         TSchemaAddress(const ui32 presetId, const NOlap::TSnapshot& snapshot)
             : PresetId(presetId)
-            , Snapshot(snapshot)
-        {
+            , Snapshot(snapshot) {
         }
 
         explicit operator size_t() const {
@@ -288,8 +287,7 @@ public:
 
         TSchemasChain(const std::set<TSchemaAddress>& toRemove, const TSchemaAddress& finish)
             : ToRemove(toRemove)
-            , Finish(finish)
-        {
+            , Finish(finish) {
             AFL_VERIFY(toRemove.size());
             AFL_VERIFY(*ToRemove.rbegin() < Finish);
         }

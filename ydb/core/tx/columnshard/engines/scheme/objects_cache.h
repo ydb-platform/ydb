@@ -87,8 +87,7 @@ private:
     public:
         TColumnOwnerId(const TPathId& tenant, const NColumnShard::TInternalPathId owner)
             : Tenant(tenant)
-            , Owner(owner)
-        {
+            , Owner(owner) {
             AFL_VERIFY(!!Owner);
         }
 

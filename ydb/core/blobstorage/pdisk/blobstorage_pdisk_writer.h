@@ -33,6 +33,7 @@ private:
     public:
         TBlockDeviceAction(const TReqId& ReqId) : ReqId(ReqId) {}
         virtual void DoCall(IBlockDevice &BlockDevice) = 0;
+        virtual TCompletionAction* GetCompletionAction() = 0;
         virtual ~TBlockDeviceAction() = default;
     };
     class TBlockDeviceWrite : public TBlockDeviceAction {
@@ -44,12 +45,14 @@ private:
         NWilson::TTraceId TraceId;
         TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr&& buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId);
         virtual void DoCall(IBlockDevice &BlockDevice) override;
+        virtual TCompletionAction* GetCompletionAction() override;
     };
     class TBlockDeviceFlush : public TBlockDeviceAction {
     public:
         TCompletionAction *CompletionAction;
         TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction *CompletionAction);
         virtual void DoCall(IBlockDevice &BlockDevice) override;
+        virtual TCompletionAction* GetCompletionAction() override;
     };
 protected:
     ui64 SectorSize;

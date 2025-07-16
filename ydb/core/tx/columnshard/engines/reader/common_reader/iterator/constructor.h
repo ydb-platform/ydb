@@ -2,6 +2,7 @@
 #include "fetching.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
@@ -17,6 +18,7 @@ private:
     NArrow::NAccessor::TAccessorsCollection& Accessors;
     NIndexes::TIndexesCollection& Indexes;
     std::shared_ptr<IDataSource> Source;
+    std::optional<std::shared_ptr<NArrow::TColumnFilter>> AppliedFilter;
 
 public:
     NArrow::NAccessor::TAccessorsCollection& GetAccessors() {
@@ -28,12 +30,24 @@ public:
     const std::shared_ptr<IDataSource>& GetSource() const {
         return Source;
     }
-    TFetchingResultContext(
-        NArrow::NAccessor::TAccessorsCollection& accessors, NIndexes::TIndexesCollection& indexes, const std::shared_ptr<IDataSource>& source)
+    ui32 GetRecordsCount() const {
+        return Source->GetStageData().GetPortionAccessor().GetPortionInfo().GetRecordsCount();
+    }
+
+    const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
+        if (AppliedFilter) {
+            return *AppliedFilter;
+        } else {
+            return Source->GetStageData().GetAppliedFilter();
+        }
+    }
+
+    TFetchingResultContext(NArrow::NAccessor::TAccessorsCollection& accessors, NIndexes::TIndexesCollection& indexes,
+        const std::shared_ptr<IDataSource>& source, const std::optional<std::shared_ptr<NArrow::TColumnFilter>>& appliedFilter = std::nullopt)
         : Accessors(accessors)
         , Indexes(indexes)
         , Source(source)
-    {
+        , AppliedFilter(appliedFilter) {
     }
 };
 

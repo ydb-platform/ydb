@@ -58,6 +58,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         ------
         READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
         EXPECTED: [[1u;#];[2u;#];[3u;#];[4u;#];[11u;#];[12u;#];[13u;#];[14u;#]]
+        ------
+        READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` ORDER BY InternalEntityId, ChunkIdx;
 
     )";
     Y_UNIT_TEST_STRING_VARIATOR(EmptyVariants, scriptEmptyVariants) {
@@ -114,6 +116,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         ------
         READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "a2" ORDER BY Col1;
         EXPECTED: [[2u;["{\"a.b.c\":\"a2\"}"]]]
+        ------
+        READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` ORDER BY InternalEntityId, ChunkIdx;
 
     )";
     Y_UNIT_TEST_STRING_VARIATOR(QuotedFilterVariants, scriptQuotedFilterVariants) {

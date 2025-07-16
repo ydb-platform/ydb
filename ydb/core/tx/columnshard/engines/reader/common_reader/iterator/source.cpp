@@ -19,6 +19,9 @@ TConclusion<bool> IDataSource::DoStartFetch(
     for (auto&& i : fetchersExt) {
         fetchers.emplace_back(std::static_pointer_cast<IKernelFetchLogic>(i));
     }
+    if (fetchers.empty()) {
+        return false;
+    }
     return DoStartFetchImpl(context, fetchers);
 }
 

@@ -1,5 +1,6 @@
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
@@ -39,8 +40,7 @@ public:
 
 }   // namespace
 
-bool TSourceData::DoStartFetchingAccessor(
-    const std::shared_ptr<IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
+bool TSourceData::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
     AFL_VERIFY(!GetStageData().HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
@@ -61,28 +61,28 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == 2) {
         return NArrow::TStatusValidator::GetValid(
             arrow::MakeArrayFromScalar(arrow::StringScalar(::ToString(GetPortion()->GetProduced())), recordsCount));
-    }
+        }
     if (columnId == 3) {
         return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetTabletId()), recordsCount));
     }
     if (columnId == 4) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRecordsCount());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRecordsCount());
+            }
         for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetRecordsCount());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetRecordsCount());
+            }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == 5) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRawBytes());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRawBytes());
+            }
         for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetRawBytes());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetRawBytes());
+            }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == 6) {
@@ -91,10 +91,10 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == 7) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
-        }
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
+            }
         for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
+                NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -162,7 +162,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == 13) {
-        if (GetPortion()->IsRemovedFor(GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())) {
+        if (Portion->HasRemoveSnapshot()) {
             return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(0), recordsCount));
         } else {
             return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(1), recordsCount));
@@ -194,8 +194,119 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
+    if (columnId == 16) {
+        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        const auto& records = GetStageData().GetPortionAccessor().GetRecordsVerified();
+        for (auto it = records.begin(); it != records.end();) {
+            auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(it->GetEntityId()) : nullptr;
+            const ui32 entityId = it->GetEntityId();
+            if (!accessor) {
+                while (it != records.end() && it->GetEntityId() == entityId) {
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+                    ++it;
+                }
+            } else {
+                const auto addChunkInfo = [&builder](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
+                    AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
+                    const NArrow::NAccessor::TSubColumnsPartialArray* arr =
+                        static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get());
+                    const TString data = arr->GetHeader().DebugJson().GetStringRobust();
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+                };
+
+                AFL_VERIFY(it->GetChunkIdx() == 0);
+                if (accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
+                    const NArrow::NAccessor::TCompositeChunkedArray* composite =
+                        static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(accessor.get());
+                    for (auto&& i : composite->GetChunks()) {
+                        AFL_VERIFY(it != records.end());
+                        AFL_VERIFY(it->GetChunkIdx() < composite->GetChunks().size());
+                        AFL_VERIFY(it->GetEntityId() == entityId);
+                        addChunkInfo(i);
+                        ++it;
+                    }
+
+                } else {
+                    AFL_VERIFY(it->GetChunkIdx() == 0);
+                    addChunkInfo(accessor);
+                    ++it;
+                }
+                AFL_VERIFY(it == records.end() || it->GetEntityId() != entityId)("it", it->GetEntityId())("from", entityId);
+            }
+        }
+        for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
+            Y_UNUSED(i);
+            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+        }
+        return NArrow::FinishBuilder(std::move(builder));
+    }
     AFL_VERIFY(false)("column_id", columnId);
     return nullptr;
+}
+
+TConclusion<bool> TSourceData::DoStartFetchImpl(
+    const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
+    AFL_VERIFY(fetchersExt.size());
+    if (!OriginalData) {
+        OriginalData = std::make_shared<NArrow::NAccessor::TAccessorsCollection>();
+    }
+
+    TReadActionsCollection readActions;
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    NCommon::TFetchingResultContext contextFetch(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+    for (auto&& i : fetchersExt) {
+        i->Start(readActions, contextFetch);
+    }
+    if (readActions.IsEmpty()) {
+        for (auto&& i : fetchersExt) {
+            NBlobOperations::NRead::TCompositeReadBlobs blobs;
+            i->OnDataReceived(readActions, blobs);
+            MutableStageData().AddFetcher(i);
+            AFL_VERIFY(readActions.IsEmpty());
+        }
+        return false;
+    }
+    THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
+    for (auto&& i : fetchersExt) {
+        AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
+    }
+    NActors::TActivationContext::AsActorContext().Register(
+        new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
+            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
+    return true;
+}
+
+TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetchData(
+    const NArrow::NSSA::TProcessorContext& /*context*/, const NArrow::NSSA::IDataSource::TDataAddress& addr) {
+    if (addr.GetColumnId() == 16) {
+        THashSet<ui32> entityIds;
+        for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
+            if (!entityIds.emplace(i.GetEntityId()).second) {
+                continue;
+            }
+            if (Schema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
+                NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+                return std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,
+                    GetContext()->GetCommonContext()->GetStoragesManager(),
+                    GetStageData().GetPortionAccessor().GetPortionInfo().GetRecordsCount(), std::vector<TString>());
+            }
+        }
+    }
+    return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
+}
+
+void TSourceData::DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+    if (columnId == 16) {
+        auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+        for (auto&& i : GetStageData().GetPortionAccessor().GetRecordsVerified()) {
+            if (auto fetcher = MutableStageData().ExtractFetcherOptional(i.GetEntityId())) {
+                AFL_VERIFY(OriginalData);
+                NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+                fetcher->OnDataCollected(fetchContext);
+            }
+        }
+    }
+    TBase::DoAssembleAccessor(context, columnId, subColumnName);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks

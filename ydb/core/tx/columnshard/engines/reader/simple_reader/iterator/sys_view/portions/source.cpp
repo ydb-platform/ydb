@@ -68,8 +68,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == 10) {
         auto builder = NArrow::MakeBuilder(arrow::uint8());
         for (auto&& i : Portions) {
-            NArrow::Append<arrow::UInt8Type>(
-                *builder, i->IsRemovedFor(GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot()) ? 0 : 1);
+            NArrow::Append<arrow::UInt8Type>(*builder, i->HasRemoveSnapshot() ? 0 : 1);
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

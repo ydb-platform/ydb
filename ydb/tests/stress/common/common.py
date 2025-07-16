@@ -107,7 +107,7 @@ class WorkloadBase:
             t.start()
             self.workload_threads.append(t)
 
-    def join(self, timeout = None):
+    def join(self, timeout=None):
         for t in self.workload_threads:
             t.join(timeout)
 

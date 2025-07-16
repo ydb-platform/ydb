@@ -176,7 +176,6 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         TPathId sourcePathId{1, 2};
         TPathId targetPathId{3, 4};
         ui64 txId = 1337;
-        ui64 schemeShardTabletId = 72057594046644480;
 
         auto* scan = CreateIncrementalRestoreScan(
             sender,
@@ -187,8 +186,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
             table,
             targetPathId,
             txId,
-            schemeShardTabletId,
-            {}).Release();
+            NStreamScan::TLimits()).Release();
 
         TDriverMock driver;
 

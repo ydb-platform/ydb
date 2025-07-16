@@ -69,6 +69,7 @@ public:
     ~TTable();
 
     void PrepareRollback();
+    void PrepareTruncate();
     void RollbackChanges();
     void CommitChanges(TArrayRef<const TMemGlob> blobs);
     void CommitNewTable(TArrayRef<const TMemGlob> blobs);
@@ -437,6 +438,7 @@ private:
         bool MutableExisted;
         bool MutableUpdated;
         bool DisableEraseCache;
+        bool Truncated;
 
         TRollbackState(TEpoch epoch)
             : Epoch(epoch)

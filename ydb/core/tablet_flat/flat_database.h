@@ -202,6 +202,7 @@ public:
     TAlter& Alter(); /* Begin DDL ALTER script */
 
     TEpoch TxSnapTable(ui32 table);
+    void Truncate(ui32 table);
 
     const TScheme& GetScheme() const noexcept;
 

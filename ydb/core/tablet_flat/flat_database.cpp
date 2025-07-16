@@ -569,6 +569,13 @@ TEpoch TDatabase::TxSnapTable(ui32 table)
     return DatabaseImpl->FlushTable(table);
 }
 
+void TDatabase::Truncate(ui32 table)
+{
+    Y_ENSURE(Redo, "Cannot Truncate outside a transaction");
+    ++Change->Snapshots;
+    DatabaseImpl->TruncateTable(table);
+}
+
 TAutoPtr<TSubset> TDatabase::CompactionSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle) const
 {
     return Require(table)->CompactionSubset(before, bundle);
@@ -778,6 +785,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
         Change->Garbage = std::move(DatabaseImpl->Garbage);
         Change->Deleted = std::move(DatabaseImpl->Deleted);
+        Change->Truncated = std::move(DatabaseImpl->Truncated);
         Change->Affects = DatabaseImpl->GrabAffects();
         Change->Annex = std::move(annex);
 

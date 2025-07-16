@@ -36,6 +36,15 @@ void TTable::PrepareRollback()
     state.MutableExisted = bool(Mutable);
     state.MutableUpdated = false;
     state.DisableEraseCache = false;
+    state.Truncated = false;
+}
+
+void TTable::PrepareTruncate()
+{
+    Y_ENSURE(RollbackState);
+    // Make sure we don't populate erase cache with keys that may rollback
+    RollbackState->DisableEraseCache = true;
+    RollbackState->Truncated = true;
 }
 
 void TTable::RollbackChanges()
@@ -1217,22 +1226,24 @@ TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, 
         dbIter->Push(TMemIter::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
-    if (MutableBackup) {
-        dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
-    }
+    if (!RollbackState || !RollbackState->Truncated) {
+        if (MutableBackup) {
+            dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        }
 
-    for (auto& fti : Frozen) {
-        const TMemTable* memTable = fti.Get();
+        for (auto& fti : Frozen) {
+            const TMemTable* memTable = fti.Get();
 
-        dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
-    }
+            dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        }
 
-    if (Flatten) {
-        for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+        if (Flatten) {
+            for (const auto& run : GetLevels()) {
+                auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
-            if (iter->Seek(key, seek) != EReady::Gone)
-                dbIter->Push(std::move(iter));
+                if (iter->Seek(key, seek) != EReady::Gone)
+                    dbIter->Push(std::move(iter));
+            }
         }
     }
 
@@ -1269,22 +1280,24 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
         dbIter->Push(TMemIter::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
-    if (MutableBackup) {
-        dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
-    }
+    if (!RollbackState || !RollbackState->Truncated) {
+        if (MutableBackup) {
+            dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        }
 
-    for (auto& fti : Frozen) {
-        const TMemTable* memTable = fti.Get();
+        for (auto& fti : Frozen) {
+            const TMemTable* memTable = fti.Get();
 
-        dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
-    }
+            dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        }
 
-    if (Flatten) {
-        for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+        if (Flatten) {
+            for (const auto& run : GetLevels()) {
+                auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
-            if (iter->SeekReverse(key, seek) != EReady::Gone)
-                dbIter->Push(std::move(iter));
+                if (iter->SeekReverse(key, seek) != EReady::Gone)
+                    dbIter->Push(std::move(iter));
+            }
         }
     }
 
@@ -1343,69 +1356,72 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
         }
     }
 
-    // Mutable data that is transitioning to frozen
-    if (MutableBackup && !row.IsFinalized()) {
-        lastEpoch = MutableBackup->Epoch;
-        if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
-                // N.B. stop looking for snapshot after the first hit
-                snapshotFound = true;
-                it->Apply(row, committed, observer);
-            }
-        }
-    }
-
-    // Frozen are sorted by epoch, apply in reverse order
-    for (auto pos = Frozen.rbegin(); !row.IsFinalized() && pos != Frozen.rend(); ++pos) {
-        const auto& memTable = *pos;
-        Y_ENSURE(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
-        lastEpoch = memTable->Epoch;
-        if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
-                // N.B. stop looking for snapshot after the first hit
-                snapshotFound = true;
-                it->Apply(row, committed, observer);
-            }
-        }
-    }
-
     bool ready = true;
-    if (!row.IsFinalized() && Flatten) {
-        // Levels are ordered from newest to oldest, apply in order
-        for (const auto& run : GetLevels()) {
-            auto pos = run.Find(key);
-            if (pos != run.end()) {
-                const auto* part = pos->Part.Get();
-                if ((flg & EHint::NoByKey) ||
-                    part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
-                {
-                    ++stats.Sieved;
-                    TPartIter& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
-                    it.SetBounds(pos->Slice);
-                    auto res = it.Seek(key, ESeek::Exact);
-                    if (res == EReady::Data) {
-                        Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
-                        lastEpoch = part->Epoch;
-                        if (!snapshotFound) {
-                            res = it.SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions);
-                            if (res == EReady::Data) {
-                                // N.B. stop looking for snapshot after the first hit
-                                snapshotFound = true;
-                            }
-                        }
-                    }
-                    if (ready = ready && bool(res)) {
+
+    if (!RollbackState || !RollbackState->Truncated) {
+        // Mutable data that is transitioning to frozen
+        if (MutableBackup && !row.IsFinalized()) {
+            lastEpoch = MutableBackup->Epoch;
+            if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+                if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
+                    // N.B. stop looking for snapshot after the first hit
+                    snapshotFound = true;
+                    it->Apply(row, committed, observer);
+                }
+            }
+        }
+
+        // Frozen are sorted by epoch, apply in reverse order
+        for (auto pos = Frozen.rbegin(); !row.IsFinalized() && pos != Frozen.rend(); ++pos) {
+            const auto& memTable = *pos;
+            Y_ENSURE(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
+            lastEpoch = memTable->Epoch;
+            if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+                if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
+                    // N.B. stop looking for snapshot after the first hit
+                    snapshotFound = true;
+                    it->Apply(row, committed, observer);
+                }
+            }
+        }
+
+        if (!row.IsFinalized() && Flatten) {
+            // Levels are ordered from newest to oldest, apply in order
+            for (const auto& run : GetLevels()) {
+                auto pos = run.Find(key);
+                if (pos != run.end()) {
+                    const auto* part = pos->Part.Get();
+                    if ((flg & EHint::NoByKey) ||
+                        part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+                    {
+                        ++stats.Sieved;
+                        TPartIter& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
+                        it.SetBounds(pos->Slice);
+                        auto res = it.Seek(key, ESeek::Exact);
                         if (res == EReady::Data) {
-                            it.Apply(row, committed, observer);
-                            if (row.IsFinalized()) {
-                                break;
+                            Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
+                            lastEpoch = part->Epoch;
+                            if (!snapshotFound) {
+                                res = it.SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions);
+                                if (res == EReady::Data) {
+                                    // N.B. stop looking for snapshot after the first hit
+                                    snapshotFound = true;
+                                }
                             }
-                        } else {
-                            ++stats.NoKey;
                         }
+                        if (ready = ready && bool(res)) {
+                            if (res == EReady::Data) {
+                                it.Apply(row, committed, observer);
+                                if (row.IsFinalized()) {
+                                    break;
+                                }
+                            } else {
+                                ++stats.NoKey;
+                            }
+                        }
+                    } else {
+                        ++stats.Weeded;
                     }
-                } else {
-                    ++stats.Weeded;
                 }
             }
         }
@@ -1469,52 +1485,55 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         }
     }
 
-    // Mutable data that is transitioning to frozen
-    if (MutableBackup) {
-        lastEpoch = MutableBackup->Epoch;
-        if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid()) {
-                if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
-                    return *rowVersion;
-                }
-            }
-        }
-    }
-
-    // Frozen are sorted by epoch, apply in reverse order
-    for (auto pos = Frozen.rbegin(); pos != Frozen.rend(); ++pos) {
-        const auto& memTable = *pos;
-        Y_ENSURE(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
-        lastEpoch = memTable->Epoch;
-        if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid()) {
-                if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
-                    return *rowVersion;
-                }
-            }
-        }
-    }
-
-    // Levels are ordered from newest to oldest, apply in order
     bool ready = true;
-    for (const auto& run : GetLevels()) {
-        auto pos = run.Find(key);
-        if (pos != run.end()) {
-            const auto* part = pos->Part.Get();
-            if ((readFlags & EHint::NoByKey) ||
-                part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
-            {
-                TPartIter it(part, { }, Scheme->Keys, env);
-                it.SetBounds(pos->Slice);
-                auto res = it.Seek(key, ESeek::Exact);
-                if (res == EReady::Data && ready) {
-                    Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
-                    lastEpoch = part->Epoch;
-                    if (auto rowVersion = it.SkipToCommitted(committed, observer)) {
+
+    if (!RollbackState || !RollbackState->Truncated) {
+        // Mutable data that is transitioning to frozen
+        if (MutableBackup) {
+            lastEpoch = MutableBackup->Epoch;
+            if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+                if (it->IsValid()) {
+                    if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
                         return *rowVersion;
                     }
                 }
-                ready = ready && bool(res);
+            }
+        }
+
+        // Frozen are sorted by epoch, apply in reverse order
+        for (auto pos = Frozen.rbegin(); pos != Frozen.rend(); ++pos) {
+            const auto& memTable = *pos;
+            Y_ENSURE(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
+            lastEpoch = memTable->Epoch;
+            if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+                if (it->IsValid()) {
+                    if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
+                        return *rowVersion;
+                    }
+                }
+            }
+        }
+
+        // Levels are ordered from newest to oldest, apply in order
+        for (const auto& run : GetLevels()) {
+            auto pos = run.Find(key);
+            if (pos != run.end()) {
+                const auto* part = pos->Part.Get();
+                if ((readFlags & EHint::NoByKey) ||
+                    part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+                {
+                    TPartIter it(part, { }, Scheme->Keys, env);
+                    it.SetBounds(pos->Slice);
+                    auto res = it.Seek(key, ESeek::Exact);
+                    if (res == EReady::Data && ready) {
+                        Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
+                        lastEpoch = part->Epoch;
+                        if (auto rowVersion = it.SkipToCommitted(committed, observer)) {
+                            return *rowVersion;
+                        }
+                    }
+                    ready = ready && bool(res);
+                }
             }
         }
     }

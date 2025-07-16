@@ -150,7 +150,7 @@ message TXdsBootstrap {
 
         optional string ServerUri = 1;
         repeated TChannelCred ChannelCreds = 2;
-        repeated string ChannelFeatures = 3;
+        repeated string ServerFeatures = 3;
     }
 
     message TNode {

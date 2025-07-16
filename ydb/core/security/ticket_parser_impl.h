@@ -23,6 +23,9 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <util/generic/queue.h>
 #include <util/stream/file.h>
@@ -30,6 +33,8 @@
 #include <util/system/env.h>
 
 #include <util/string/join.h>
+
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 
@@ -349,6 +354,8 @@ private:
     TPriorityQueue<TTokenRefreshRecord> RefreshQueue;
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;
+
+    THolder<TEvInterconnect::TNodeInfo> NodeInfo = nullptr;
 
     TDerived* GetDerived() {
         return static_cast<TDerived*>(this);
@@ -1550,6 +1557,11 @@ private:
         Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
     }
 
+    void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
+        NodeInfo.Reset(ev->Get()->Node);
+        BuildXdsBootstrapConfig();
+    }
+
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         const auto& params = ev->Get()->Request.GetParams();
         TStringBuilder html;
@@ -2084,9 +2096,52 @@ protected:
                                                          NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
     }
 
-    void SetXdsBootstrapConfig() const {
+    void BuildNodeFieldInXdsBootstrapConfig(NJson::TJsonValue* json) const {
+        NJson::TJsonValue& nodeJson = (*json)["node"];
+        if (Config.GetXdsBootstrap().GetNode().HasMeta()) {
+            nodeJson.EraseValue("meta");
+            NJson::TJsonValue metadataJson;
+            NJson::TJsonReaderConfig jsonConfig;
+            if (NJson::ReadJsonTree(Config.GetXdsBootstrap().GetNode().GetMeta(), &jsonConfig, &metadataJson)) {
+                nodeJson["metadata"] = metadataJson;
+            }
+        }
+        if (!Config.GetXdsBootstrap().GetNode().HasId()) {
+            nodeJson["id"] = ToString(this->SelfId().NodeId());
+        }
+        if (!Config.GetXdsBootstrap().GetNode().GetLocality().HasZone()) {
+            nodeJson["locality"]["zone"] = NodeInfo->Location.GetDataCenterId();
+        }
+    }
+
+    void BuildFieldXdsServersInXdsBootstrapConfig(NJson::TJsonValue* json) const {
+        NJson::TJsonValue& xdsServersJson = *json;
+        NJson::TJsonValue::TArray xdsServers;
+        xdsServersJson["xds_servers"].GetArray(&xdsServers);
+        xdsServersJson.EraseValue("xds_servers");
+        for (auto& xdsServerJson : xdsServers) {
+            NJson::TJsonValue::TArray channelCreds;
+            xdsServerJson["channel_creds"].GetArray(&channelCreds);
+            xdsServerJson.EraseValue("channel_creds");
+            for (auto& channelCredJson : channelCreds) {
+                NJson::TJsonValue typeConfigJson;
+                NJson::TJsonReaderConfig jsonConfig;
+                if (NJson::ReadJsonTree(channelCredJson["config"].GetString(), &jsonConfig, &typeConfigJson)) {
+                    channelCredJson["config"] = typeConfigJson;
+                }
+                xdsServerJson["channel_creds"].AppendValue(channelCredJson);
+            }
+            xdsServersJson["xds_servers"].AppendValue(xdsServerJson);
+        }
+    }
+
+    void BuildXdsBootstrapConfig() const {
         static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
-        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, TString(Config.GetXdsBootstrap().AsJSON()));
+        NJson::TJsonValue xdsBootstrapConfigJson;
+        NProtobufJson::Proto2Json(Config.GetXdsBootstrap(), xdsBootstrapConfigJson, {.FieldNameMode = NProtobufJson::TProto2JsonConfig::FldNameMode::FieldNameSnakeCaseDense});
+        BuildNodeFieldInXdsBootstrapConfig(&xdsBootstrapConfigJson);
+        BuildFieldXdsServersInXdsBootstrapConfig(&xdsBootstrapConfigJson);
+        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, NJson::WriteJson(xdsBootstrapConfigJson));
     }
 
     void FillAccessServiceSettings(NGrpcActorClient::TGrpcClientSettings& settings) {
@@ -2098,7 +2153,8 @@ protected:
         settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
 
         if (settings.Endpoint.StartsWith("xds://")) {
-            SetXdsBootstrapConfig();
+            const TActorId nameserviceId = GetNameserviceActorId();
+            Send(nameserviceId, new TEvInterconnect::TEvGetNode(this->SelfId().NodeId()));
         }
     }
 
@@ -2244,6 +2300,7 @@ public:
             hFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse, Handle);
             hFunc(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
             hFunc(NNebiusCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
+            hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleRefresh);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
